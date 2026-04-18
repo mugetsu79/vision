@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Traffic Monitor</title>
+    <!-- Bootstrap CSS for modern styling -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Flatpickr CSS for datetime picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <!-- Custom Styles -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        #video-feed {
+            width: 640px;
+            height: 360px;
+            object-fit: cover;
+            background-color: #f0f0f0;
+        }
+        .card {
+            margin-top: 20px;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px; /* Adjusted height for charts */
+            width: 100%;
+        }
+        .btn {
+            margin: 5px;
+        }
+        .alert {
+            margin-top: 20px;
+        }
+        .date-picker {
+            margin-bottom: 10px;
+        }
+        .date-picker label {
+            margin-right: 10px;
+        }
+        .date-picker input {
+            margin-right: 20px;
+        }
+        #video-feed-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f0f0f0;
+            color: #666;
+            width: 640px;
+            height: 360px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Title -->
+        <h1 class="text-center my-4">Awesome Yann's Traffic Monitor 🚗</h1>
+
+        <!-- Video Feed Card -->
+        <div class="card">
+            <div class="card-header">
+                Live Traffic Feed
+            </div>
+            <div class="card-body text-center">
+                <div id="video-container" class="d-flex justify-content-center">
+                    <img id="video-feed" src="" alt="Click 'Start Tracking' to begin." />
+                </div>
+                <!-- Real-Time Graph -->
+                <div class="chart-container mt-3">
+                    <canvas id="real-time-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Card -->
+        <div class="card mt-3">
+            <div class="card-header">
+                Controls
+            </div>
+            <div class="card-body text-center">
+                <button id="start-tracking" class="btn btn-success">Start Tracking</button>
+                <button id="stop-tracking" class="btn btn-danger">Stop Tracking</button>
+            </div>
+        </div>
+
+        <!-- Historical Data Card -->
+        <div class="card mt-3">
+            <div class="card-header">
+                Historical Data
+            </div>
+            <div class="card-body">
+                <div class="date-picker">
+                    <label for="start-date">Start Date and Time:</label>
+                    <input type="text" id="start-date" placeholder="Select start date and time">
+                </div>
+                <div class="date-picker">
+                    <label for="end-date">End Date and Time:</label>
+                    <input type="text" id="end-date" placeholder="Select end date and time">
+                </div>
+                <div class="granularity-picker">
+                    <label for="granularity">Granularity:</label>
+                    <select id="granularity">
+                        <option value="5">5 Minutes</option>
+                        <option value="30">30 Minutes</option>
+                        <option value="60" selected>1 Hour</option>
+                    </select>
+                </div>
+                <button id="fetch-data" class="btn btn-primary mt-2">Show Data</button>
+            </div>
+        </div>
+
+        <!-- Traffic Statistics Card -->
+        <div class="card mt-3">
+            <div class="card-header">
+                Traffic Statistics
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="traffic-chart"></canvas>
+                </div>
+                <p>Total Cars: <span id="total-cars">0</span></p>
+            </div>
+        </div>
+    </div>
+        <!-- Include Required Scripts -->
+        <!-- jQuery -->
+        <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+        <!-- Socket.IO -->
+        <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+        <!-- Chart.js -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1"></script>
+        <!-- Luxon -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/luxon/3.0.1/luxon.min.js"></script>
+        <!-- Chart.js Date Adapter for Luxon -->
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.1.0"></script>
+        <!-- Flatpickr -->
+        <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+        <!-- Custom Script -->
+        <script src="{{ url_for('static', filename='app.js') }}"></script>
+    </body>
+</html>
+

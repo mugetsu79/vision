@@ -1,0 +1,23 @@
+# requirements.txt
+
+numpy==1.23.5
+torch>=1.7.0
+torchvision>=0.8.0
+opencv-python>=4.5.1.48
+pyyaml>=5.3.1
+tqdm>=4.41.0
+scipy>=1.4.1
+easydict
+cython
+cython-bbox
+onnxruntime>=1.17.1
+onnx>=1.9.0
+tensorboardX
+scikit-learn
+loguru
+flask
+flask-socketio
+eventlet
+matplotlib
+filterpy
+
