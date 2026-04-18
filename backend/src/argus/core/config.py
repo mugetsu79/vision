@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_prefix: str = "/api/v1"
 
-    db_url: str = "postgresql+asyncpg://traffic_monitor:traffic_monitor@localhost:5432/traffic_monitor"
+    db_url: str = "postgresql+asyncpg://argus:argus@localhost:5432/argus"
     redis_url: str = "redis://localhost:6379/0"
     nats_url: str = "nats://127.0.0.1:4222"
     nats_nkey_seed: SecretStr | None = None
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     keycloak_server_url: str = "http://localhost:8080"
     keycloak_public_server_url: str | None = None
-    keycloak_issuer: str = "http://localhost:8080/realms/traffic-monitor-dev"
+    keycloak_issuer: str = "http://localhost:8080/realms/argus-dev"
     keycloak_platform_realm: str = "platform-admin"
     keycloak_jwks_cache_ttl_seconds: int = 3600
 
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     edge_api_key_header: str = "X-Edge-Key"
 
     model_config = SettingsConfigDict(
-        env_prefix="TRAFFIC_MONITOR_",
+        env_prefix="ARGUS_",
         env_file=(".env", ".env.local"),
         secrets_dir="/run/secrets",
         extra="ignore",

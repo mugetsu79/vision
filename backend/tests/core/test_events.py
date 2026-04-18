@@ -19,7 +19,7 @@ class CameraCommand(BaseModel):
 async def test_publish_and_receive_message_via_nats() -> None:
     settings = Settings(
         _env_file=None,
-        nats_url=os.getenv("TRAFFIC_MONITOR_TEST_NATS_URL", "nats://127.0.0.1:4222"),
+        nats_url=os.getenv("ARGUS_TEST_NATS_URL", "nats://127.0.0.1:4222"),
         rtsp_encryption_key="argus-dev-rtsp-key",
     )
     events_client = NatsJetStreamClient(settings)

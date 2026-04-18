@@ -6,19 +6,19 @@ from argus.core.config import Settings
 def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:
     secrets_dir = tmp_path / "secrets"
     secrets_dir.mkdir()
-    (secrets_dir / "TRAFFIC_MONITOR_RTSP_ENCRYPTION_KEY").write_text(
+    (secrets_dir / "ARGUS_RTSP_ENCRYPTION_KEY").write_text(
         "argus-secret-key",
         encoding="utf-8",
     )
 
     monkeypatch.setenv(
-        "TRAFFIC_MONITOR_DB_URL",
+        "ARGUS_DB_URL",
         "postgresql+asyncpg://argus:argus@db.internal:5432/argus",
     )
-    monkeypatch.setenv("TRAFFIC_MONITOR_NATS_URL", "nats://nats.internal:4222")
-    monkeypatch.setenv("TRAFFIC_MONITOR_LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("ARGUS_NATS_URL", "nats://nats.internal:4222")
+    monkeypatch.setenv("ARGUS_LLM_PROVIDER", "ollama")
     monkeypatch.setenv(
-        "TRAFFIC_MONITOR_KEYCLOAK_PUBLIC_SERVER_URL",
+        "ARGUS_KEYCLOAK_PUBLIC_SERVER_URL",
         "https://auth.argus.example",
     )
 

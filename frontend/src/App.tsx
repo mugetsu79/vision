@@ -13,7 +13,7 @@ export default function App() {
                 Prompt 1
               </p>
               <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-                Traffic Monitor V4
+                Argus | The OmniSight Platform
               </h1>
               <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
                 Prompt 1 scaffold ready for backend, frontend, and infra.
@@ -88,4 +88,3 @@ export default function App() {
     </main>
   );
 }
-

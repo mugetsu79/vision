@@ -2,9 +2,9 @@ services:
   postgres:
     image: timescale/timescaledb:latest-pg16
     environment:
-      POSTGRES_DB: traffic_monitor
-      POSTGRES_USER: traffic_monitor
-      POSTGRES_PASSWORD: traffic_monitor
+      POSTGRES_DB: argus
+      POSTGRES_USER: argus
+      POSTGRES_PASSWORD: argus
     ports:
       - "5432:5432"
     volumes:
@@ -28,8 +28,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: traffic-monitor
-      MINIO_ROOT_PASSWORD: traffic-monitor
+      MINIO_ROOT_USER: argus
+      MINIO_ROOT_PASSWORD: argus
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -109,12 +109,12 @@ services:
     environment:
       PYTHONPATH: /workspace/backend/src
       UV_PROJECT_ENVIRONMENT: /tmp/argus-backend-venv
-      TRAFFIC_MONITOR_DB_URL: postgresql+asyncpg://traffic_monitor:traffic_monitor@postgres:5432/traffic_monitor
-      TRAFFIC_MONITOR_REDIS_URL: redis://redis:6379/0
-      TRAFFIC_MONITOR_NATS_URL: nats://nats:4222
-      TRAFFIC_MONITOR_KEYCLOAK_SERVER_URL: http://keycloak:8080
-      TRAFFIC_MONITOR_KEYCLOAK_PUBLIC_SERVER_URL: http://127.0.0.1:8080
-      TRAFFIC_MONITOR_KEYCLOAK_ISSUER: http://keycloak:8080/realms/traffic-monitor-dev
+      ARGUS_DB_URL: postgresql+asyncpg://argus:argus@postgres:5432/argus
+      ARGUS_REDIS_URL: redis://redis:6379/0
+      ARGUS_NATS_URL: nats://nats:4222
+      ARGUS_KEYCLOAK_SERVER_URL: http://keycloak:8080
+      ARGUS_KEYCLOAK_PUBLIC_SERVER_URL: http://127.0.0.1:8080
+      ARGUS_KEYCLOAK_ISSUER: http://keycloak:8080/realms/argus-dev
     ports:
       - "8000:8000"
     volumes:

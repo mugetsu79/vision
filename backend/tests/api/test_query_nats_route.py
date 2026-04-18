@@ -89,7 +89,7 @@ async def test_query_route_publishes_nats_command_within_one_second() -> None:
         enable_startup_services=False,
         enable_nats=True,
         enable_tracing=False,
-        nats_url=os.getenv("TRAFFIC_MONITOR_TEST_NATS_URL", "nats://127.0.0.1:4222"),
+        nats_url=os.getenv("ARGUS_TEST_NATS_URL", "nats://127.0.0.1:4222"),
         rtsp_encryption_key="argus-dev-rtsp-key",
     )
     events = NatsJetStreamClient(settings)
@@ -111,15 +111,15 @@ async def test_query_route_publishes_nats_command_within_one_second() -> None:
         subject="operator-1",
         email="operator@argus.local",
         role=RoleEnum.OPERATOR,
-        issuer="http://localhost:8080/realms/traffic-monitor-dev",
-        realm="traffic-monitor-dev",
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
         is_superadmin=False,
         tenant_context=str(uuid4()),
         claims={},
     )
     tenant_context = TenantContext(
         tenant_id=UUID(str(user.tenant_context)),
-        tenant_slug="traffic-monitor-dev",
+        tenant_slug="argus-dev",
         user=user,
     )
     app = create_app(settings=settings)

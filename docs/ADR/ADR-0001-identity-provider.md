@@ -3,11 +3,11 @@
 **Status:** Accepted
 **Date:** 2026-04-18
 **Deciders:** Platform owner (Yann), backend lead, security reviewer
-**Related:** `traffic_monitor_v4_spec.md` §7 (Security & Privacy), §12 (Resolved & Open Decisions)
+**Related:** `argus_v4_spec.md` §7 (Security & Privacy), §12 (Resolved & Open Decisions)
 
 ## Context
 
-Traffic Monitor V3 is a multi-tenant VMS targeting 5–50 sites and 25–250 cameras, sold to municipalities, transportation authorities, industrial worksites, and private-security integrators. Authentication requirements:
+Argus is a multi-tenant VMS targeting 5–50 sites and 25–250 cameras, sold to municipalities, transportation authorities, industrial worksites, and private-security integrators. Authentication requirements:
 
 - **OIDC + PKCE** for the React SPA.
 - **RBAC** with four roles (`viewer`, `operator`, `admin`, `superadmin`) and multi-tenant isolation — one realm per tenant, or tenant-scoped groups.
@@ -108,7 +108,7 @@ Authentik remains attractive if the customer base shifts toward developer-native
 
 ## Action Items
 
-1. [ ] Stand up Keycloak in `infra/docker-compose.dev.yml` with a seed realm `traffic-monitor-dev` and four demo roles.
+1. [ ] Stand up Keycloak in `infra/docker-compose.dev.yml` with a seed realm `argus-dev` and four demo roles.
 2. [ ] Commit `infra/keycloak/realm-export.json` covering clients for SPA (PKCE), backend (confidential), and edge-node registration.
 3. [ ] Implement the FastAPI JWKS validator + `CurrentUser` dependency (see blueprint Prompt 2).
 4. [ ] Add a `docs/auth.md` primer covering realms, clients, roles, and the tenant-onboarding runbook.

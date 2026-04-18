@@ -11,7 +11,7 @@ from argus.core.db import DatabaseManager
 async def test_database_manager_exposes_async_sessions() -> None:
     settings = Settings(
         _env_file=None,
-        db_url="postgresql+asyncpg://traffic_monitor:traffic_monitor@localhost:5432/traffic_monitor",
+        db_url="postgresql+asyncpg://argus:argus@localhost:5432/argus",
         rtsp_encryption_key="argus-dev-rtsp-key",
     )
     database_manager = DatabaseManager(settings)

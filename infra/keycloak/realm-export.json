@@ -1,5 +1,5 @@
 {
-  "realm": "traffic-monitor-dev",
+  "realm": "argus-dev",
   "enabled": true,
   "displayName": "Argus | The OmniSight Platform",
   "roles": {
@@ -11,7 +11,7 @@
   },
   "clients": [
     {
-      "clientId": "traffic-monitor-frontend",
+      "clientId": "argus-frontend",
       "name": "Argus Frontend",
       "enabled": true,
       "publicClient": true,

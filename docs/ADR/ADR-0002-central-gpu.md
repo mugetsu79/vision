@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-04-18
 **Deciders:** Platform owner (Yann), infra lead, finance (capex sign-off)
-**Related:** `traffic_monitor_v4_spec.md` §2.2 (process model), §3.2 (edge hardware), §3.3 (central hardware), `ADR-0001-identity-provider.md`
+**Related:** `argus_v4_spec.md` §2.2 (process model), §3.2 (edge hardware), §3.3 (central hardware), `ADR-0001-identity-provider.md`
 
 ## Context
 

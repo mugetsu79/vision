@@ -60,7 +60,7 @@ class NullAuditLogger:
 async def test_query_service_publishes_camera_commands_over_nats() -> None:
     settings = Settings(
         _env_file=None,
-        nats_url=os.getenv("TRAFFIC_MONITOR_TEST_NATS_URL", "nats://127.0.0.1:4222"),
+        nats_url=os.getenv("ARGUS_TEST_NATS_URL", "nats://127.0.0.1:4222"),
         rtsp_encryption_key="argus-dev-rtsp-key",
     )
     events = NatsJetStreamClient(settings)
@@ -93,13 +93,13 @@ async def test_query_service_publishes_camera_commands_over_nats() -> None:
     )
     tenant_context = TenantContext(
         tenant_id=uuid4(),
-        tenant_slug="traffic-monitor-dev",
+        tenant_slug="argus-dev",
         user=AuthenticatedUser(
             subject="operator-1",
             email="operator@argus.local",
             role=RoleEnum.OPERATOR,
-            issuer="http://localhost:8080/realms/traffic-monitor-dev",
-            realm="traffic-monitor-dev",
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
             is_superadmin=False,
             tenant_context=None,
             claims={},

@@ -1,6 +1,6 @@
-# Traffic Monitor V4 — Architecture & Implementation Design
+# Argus V4 — Architecture & Implementation Design
 
-> **Status:** Supersedes [archive/traffic_monitor_v3_spec.md](/Users/yann.moren/vision/archive/traffic_monitor_v3_spec.md). Retains V3's domain-agnostic, hybrid edge/central vision while resolving the V3 draft's mismatches around edge privacy/streaming, auth tenancy, and control-plane APIs.
+> **Status:** Supersedes the archived V3 spec. Retains V3's domain-agnostic, hybrid edge/central vision while resolving the V3 draft's mismatches around edge privacy/streaming, auth tenancy, and control-plane APIs.
 >
 > **Scope target:** mid-scale commercial VMS — 5–50 sites, 25–250 cameras.
 >
@@ -398,7 +398,7 @@ src/
 ## 6. Folder Structure
 
 ```
-traffic-monitor-v4/
+argus-v4/
 ├── backend/
 │   ├── pyproject.toml                     # uv-managed
 │   ├── uv.lock
@@ -424,7 +424,7 @@ traffic-monitor-v4/
 ├── infra/
 │   ├── docker-compose.dev.yml             # all services, hot reload
 │   ├── docker-compose.edge.yml            # edge subset
-│   ├── helm/traffic-monitor/              # prod chart
+│   ├── helm/argus/                        # prod chart
 │   ├── mediamtx/mediamtx.yml
 │   ├── nats/nats.conf
 │   ├── keycloak/realm-export.json

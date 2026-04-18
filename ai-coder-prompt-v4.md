@@ -1,17 +1,17 @@
-# Traffic Monitor V4 — AI Coder Prompt Blueprint
+# Argus V4 — AI Coder Prompt Blueprint
 
-> Paired with `traffic_monitor_v4_spec.md`. Feed that spec first, then this file prompt-by-prompt to Codex / Claude Code. **Do not skip the verification gates between prompts.**
+> Paired with `argus_v4_spec.md`. Feed that spec first, then this file prompt-by-prompt to Codex / Claude Code. **Do not skip the verification gates between prompts.**
 
 ---
 
 ## Bootstrapping instruction (paste first, once)
 
-> You are going to build `Traffic Monitor V4`, a **domain-agnostic** hybrid edge/central video analytics platform for 5–50 sites and 25–250 cameras. The name is a legacy artefact; the product is **not a car counter**. Spec §10 enumerates the capability surface: all 80 COCO classes are built-in, and any custom ONNX detector or secondary attribute classifier (PPE, forklifts, weapons, ANPR, uniforms, wildlife, fire/smoke, abandoned objects, etc.) plugs in with config only — no code changes. A single deployment can run traffic counting, worksite PPE compliance, retail analytics, and perimeter security on different cameras of the same tenant, simultaneously. Counting / measurement modes include instantaneous, cumulative, line-crossing, speed, dwell, density, trajectory, proximity, attribute combinations, loitering, and abandoned-object detection. Reference edge hardware is the **NVIDIA Jetson Orin Nano Super 8 GB** on JetPack 6.2; reference central hardware is an **NVIDIA L4 24 GB** GPU. Before writing any code, read `traffic_monitor_v4_spec.md` end-to-end and reply with a one-paragraph acknowledgment that lists: (a) the three processing modes, (b) the five supported LLM providers / adapters, (c) the four RBAC roles, (d) the five green gates that must pass between prompts, (e) the two ADRs under `docs/ADR/` and their decisions, and (f) at least four verticals from spec §10.4 that this codebase must support at feature-parity. Do not generate code yet.
+> You are going to build `Argus V4`, a **domain-agnostic** hybrid edge/central video analytics platform for 5–50 sites and 25–250 cameras. The product is **not a car counter**. Spec §10 enumerates the capability surface: all 80 COCO classes are built-in, and any custom ONNX detector or secondary attribute classifier (PPE, forklifts, weapons, ANPR, uniforms, wildlife, fire/smoke, abandoned objects, etc.) plugs in with config only — no code changes. A single deployment can run traffic counting, worksite PPE compliance, retail analytics, and perimeter security on different cameras of the same tenant, simultaneously. Counting / measurement modes include instantaneous, cumulative, line-crossing, speed, dwell, density, trajectory, proximity, attribute combinations, loitering, and abandoned-object detection. Reference edge hardware is the **NVIDIA Jetson Orin Nano Super 8 GB** on JetPack 6.2; reference central hardware is an **NVIDIA L4 24 GB** GPU. Before writing any code, read `argus_v4_spec.md` end-to-end and reply with a one-paragraph acknowledgment that lists: (a) the three processing modes, (b) the five supported LLM providers / adapters, (c) the four RBAC roles, (d) the five green gates that must pass between prompts, (e) the two ADRs under `docs/ADR/` and their decisions, and (f) at least four verticals from spec §10.4 that this codebase must support at feature-parity. Do not generate code yet.
 >
 > **Absolute rule — no V1 reuse:** a `/v1/` directory may exist in the repo as historical reference. You must not read it, port it, copy it, or import from it. If you find yourself tempted to reuse Flask / Flask-SocketIO / eventlet / MobileNet-SSD / SORT / jQuery / Bootstrap / the V1 SQLite schema, stop and rewrite from first principles using V4's stack.
 >
 > Ground rules for every prompt:
-> - Always obey `traffic_monitor_v4_spec.md`. If a prompt conflicts with the spec, the spec wins and you must ask before diverging.
+> - Always obey `argus_v4_spec.md`. If a prompt conflicts with the spec, the spec wins and you must ask before diverging.
 > - Python 3.12, `uv` for deps, Ruff + mypy --strict, Pydantic v2, SQLAlchemy 2.x async.
 > - Frontend: React 19 + Vite 6 + TypeScript strict + Tailwind v4 + shadcn/ui + TanStack Query.
 > - All Docker images are multi-arch (`linux/amd64` + `linux/arm64`); the edge image is built against `nvcr.io/nvidia/l4t-jetpack:r36.4.0` and must boot on Jetson Orin Nano Super 8 GB at the 25 W power mode.
@@ -196,7 +196,7 @@
 ## Prompt 10 — DevOps hardening: Docker, k3s, observability dashboards, CI/CD, secrets
 
 > 1. Multi-stage Dockerfiles. **Backend/central** image: distroless base, non-root, `linux/amd64`. **Edge/Jetson** image: base `nvcr.io/nvidia/l4t-jetpack:r36.4.0`, `linux/arm64`, includes GStreamer + `onnxruntime-gpu` Jetson wheel + TensorRT runtime + non-root user. Frontend image: nginx, `linux/amd64`. Drive all builds via `buildx` and a `Makefile` target `build-multiarch`.
-> 2. Helm chart in `infra/helm/traffic-monitor/` with values for `central` and `edge` profiles. The `edge` profile sets `publishProfile: jetson-nano`, disables NVENC-dependent features, and pins resource limits suited to 8 GB unified memory.
+> 2. Helm chart in `infra/helm/argus/` with values for `central` and `edge` profiles. The `edge` profile sets `publishProfile: jetson-nano`, disables NVENC-dependent features, and pins resource limits suited to 8 GB unified memory.
 > 3. `infra/docker-compose.edge.yml` for single-node edge with only `inference-worker`, `mediamtx`, `nats-leaf`, `otel-collector`. Include a `device_cgroup_rules` / `runtime: nvidia` block so the worker gets GPU access on Jetson.
 > 4. Confirm bootability on Jetson Orin Nano Super 8 GB: document the one-liner (`sudo nvpmodel -m 2 && sudo jetson_clocks`) to enable the 25 W Super mode, and include a `scripts/jetson-preflight.sh` that checks JetPack 6.2, CUDA 12.6, TRT 10.x, NVDEC present, NVENC absent, Docker + nvidia-container-toolkit. CI must run at least a `docker build --platform linux/arm64` of the edge image, and the release workflow must produce signed arm64 images.
 > 5. Grafana dashboards committed under `infra/grafana/dashboards/`: `fleet-overview.json`, `per-camera-health.json`, `inference-perf.json`, `llm-cost-latency.json`, `privacy-enforcement.json`.
@@ -223,7 +223,7 @@
 3. Paste **Prompt 1** verbatim. After Codex finishes, run the five gates locally yourself as a sanity check.
 4. Commit (`feat: scaffold v4 monorepo`), then paste **Prompt 2**. Repeat.
 5. Never skip the gates between prompts — debt compounds fast in a multi-service system like this.
-6. If Codex proposes a change that conflicts with `traffic_monitor_v4_spec.md`, it must stop and ask. Reject silent divergence.
+6. If Codex proposes a change that conflicts with `argus_v4_spec.md`, it must stop and ask. Reject silent divergence.
 
 ---
 

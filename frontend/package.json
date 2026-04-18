@@ -1,5 +1,5 @@
 {
-  "name": "traffic-monitor-frontend",
+  "name": "argus-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
