@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: traffic-monitor
+    orgId: 1
+    folder: Traffic Monitor
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

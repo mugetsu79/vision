@@ -1,0 +1,27 @@
+{
+  "name": "pedestrian_scene",
+  "width": 128,
+  "height": 128,
+  "background": {
+    "top_bgr": [120, 150, 120],
+    "bottom_bgr": [70, 80, 60]
+  },
+  "zones": [
+    {
+      "id": "walkway",
+      "polygon": [[0, 24], [127, 24], [127, 127], [0, 127]]
+    },
+    {
+      "id": "restricted",
+      "polygon": [[80, 0], [127, 0], [127, 127], [80, 127]]
+    }
+  ],
+  "objects": [
+    {
+      "class_name": "person",
+      "bbox": [42, 18, 86, 112],
+      "color_bgr": [180, 120, 90],
+      "face_bbox": [54, 26, 74, 44]
+    }
+  ]
+}

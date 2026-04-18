@@ -1,0 +1,39 @@
+{
+  "realm": "platform-admin",
+  "enabled": true,
+  "displayName": "Argus Platform Admin",
+  "roles": {
+    "realm": [
+      { "name": "superadmin" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "argus-admin-cli",
+      "name": "Argus Admin CLI",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "superadmin-dev",
+      "firstName": "Superadmin",
+      "lastName": "Dev",
+      "enabled": true,
+      "email": "superadmin-dev@argus.local",
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "argus-superadmin-pass",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["superadmin"]
+    }
+  ]
+}

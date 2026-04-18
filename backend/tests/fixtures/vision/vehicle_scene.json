@@ -1,0 +1,29 @@
+{
+  "name": "vehicle_scene",
+  "width": 160,
+  "height": 96,
+  "background": {
+    "top_bgr": [190, 170, 140],
+    "bottom_bgr": [110, 90, 70]
+  },
+  "zones": [
+    {
+      "id": "roadway",
+      "polygon": [[0, 32], [159, 32], [159, 95], [0, 95]]
+    }
+  ],
+  "objects": [
+    {
+      "class_name": "car",
+      "bbox": [18, 48, 58, 74],
+      "color_bgr": [50, 60, 230],
+      "plate_bbox": [28, 64, 42, 70]
+    },
+    {
+      "class_name": "truck",
+      "bbox": [82, 38, 146, 78],
+      "color_bgr": [60, 190, 240],
+      "plate_bbox": [108, 64, 128, 70]
+    }
+  ]
+}

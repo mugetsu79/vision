@@ -1,0 +1,85 @@
+[project]
+name = "traffic-monitor-backend"
+version = "0.1.0"
+description = "Argus | The OmniSight Platform backend"
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+runtime = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2",
+  "pydantic-settings>=2",
+  "sqlalchemy[asyncio]>=2.0",
+  "asyncpg>=0.30",
+  "alembic>=1.14",
+  "redis>=5.2",
+  "nats-py>=2.9",
+  "httpx>=0.28",
+  "structlog>=24.4",
+  "opentelemetry-api>=1.28",
+  "opentelemetry-sdk>=1.28",
+  "opentelemetry-exporter-otlp>=1.28",
+  "opentelemetry-instrumentation-fastapi>=0.49b0",
+  "opentelemetry-instrumentation-httpx>=0.49b0",
+  "opentelemetry-instrumentation-sqlalchemy>=0.49b0",
+  "python-jose[cryptography]>=3.3",
+  "passlib[argon2]>=1.7",
+  "cryptography>=43",
+  "prometheus-client>=0.21",
+]
+dev = [
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "testcontainers[postgres,redis,nats]>=4.8",
+  "playwright>=1.49",
+]
+vision = [
+  "opencv-python-headless>=4.10",
+  "onnxruntime-gpu>=1.20; sys_platform == 'linux'",
+  "onnxruntime>=1.20; sys_platform == 'darwin'",
+  "ultralytics>=8.3",
+  "numpy<2",
+  "Pillow>=11",
+  "shapely>=2.0",
+]
+llm = [
+  "litellm>=1.52",
+  "instructor>=1.7",
+  "ollama>=0.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/traffic_monitor"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "UP",
+  "B",
+  "ASYNC",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["traffic_monitor"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

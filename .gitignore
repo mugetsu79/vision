@@ -1,3 +1,10 @@
 .DS_Store
 __pycache__/
 *.pyc
+backend/.venv/
+frontend/node_modules/
+frontend/.pnpm-store/
+frontend/dist/
+frontend/*.tsbuildinfo
+models/*
+!models/.gitkeep

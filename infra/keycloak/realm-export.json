@@ -1,0 +1,51 @@
+{
+  "realm": "traffic-monitor-dev",
+  "enabled": true,
+  "displayName": "Argus | The OmniSight Platform",
+  "roles": {
+    "realm": [
+      { "name": "viewer" },
+      { "name": "operator" },
+      { "name": "admin" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "traffic-monitor-frontend",
+      "name": "Argus Frontend",
+      "enabled": true,
+      "publicClient": true,
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "argus-cli",
+      "name": "Argus CLI",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "viewer-dev",
+      "firstName": "Viewer",
+      "lastName": "Dev",
+      "enabled": true,
+      "email": "viewer-dev@argus.local",
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "argus-viewer-pass",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["viewer"]
+    }
+  ]
+}

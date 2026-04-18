@@ -1,0 +1,27 @@
+{
+  "name": "ppe_scene",
+  "width": 128,
+  "height": 128,
+  "background": {
+    "top_bgr": [160, 170, 150],
+    "bottom_bgr": [85, 92, 80]
+  },
+  "zones": [
+    {
+      "id": "yard",
+      "polygon": [[0, 20], [127, 20], [127, 127], [0, 127]]
+    }
+  ],
+  "objects": [
+    {
+      "class_name": "hi_vis_worker",
+      "bbox": [36, 16, 92, 116],
+      "color_bgr": [40, 220, 220],
+      "face_bbox": [54, 22, 74, 40],
+      "attributes": {
+        "hi_vis": true,
+        "hard_hat": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: traffic_monitor
+      POSTGRES_USER: traffic_monitor
+      POSTGRES_PASSWORD: traffic_monitor
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  nats:
+    image: nats:2.10
+    command: ["-js", "-c", "/etc/nats/nats.conf"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: traffic-monitor
+      MINIO_ROOT_PASSWORD: traffic-monitor
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8554:8554"
+      - "8888:8888"
+      - "8889:8889"
+      - "9997:9997"
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.122.1
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./otel-collector/config.yml:/etc/otelcol-contrib/config.yaml:ro
+
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  loki:
+    image: grafana/loki:3.4.2
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    ports:
+      - "3200:3200"
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  backend:
+    image: python:3.12-slim
+    working_dir: /workspace/backend
+    command:
+      - /bin/sh
+      - -lc
+      - >
+        python -m pip install uv &&
+        python -m uv sync --group runtime --group dev &&
+        python -m uv run uvicorn traffic_monitor.main:app --reload --reload-dir src --host 0.0.0.0 --port 8000
+    environment:
+      PYTHONPATH: /workspace/backend/src
+      TRAFFIC_MONITOR_DB_URL: postgresql+asyncpg://traffic_monitor:traffic_monitor@postgres:5432/traffic_monitor
+      TRAFFIC_MONITOR_REDIS_URL: redis://redis:6379/0
+      TRAFFIC_MONITOR_NATS_URL: nats://nats:4222
+      TRAFFIC_MONITOR_KEYCLOAK_SERVER_URL: http://keycloak:8080
+      TRAFFIC_MONITOR_KEYCLOAK_PUBLIC_SERVER_URL: http://127.0.0.1:8080
+      TRAFFIC_MONITOR_KEYCLOAK_ISSUER: http://keycloak:8080/realms/traffic-monitor-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/workspace/backend
+    depends_on:
+      - postgres
+      - redis
+      - nats
+
+  frontend:
+    image: node:22-bookworm-slim
+    working_dir: /workspace/frontend
+    command:
+      - /bin/sh
+      - -lc
+      - >
+        corepack enable &&
+        pnpm install --force &&
+        pnpm dev --host 0.0.0.0 --port 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/workspace/frontend
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  minio-data:

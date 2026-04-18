@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 420"
+     role="img"
+     aria-label="Argus — The OmniSight Platform">
+  <title>Argus | The OmniSight Platform</title>
+  <desc>Watchful eye fused with an omnidirectional radar network. Cerulean-to-violet gradient icon set against a deep obsidian background, paired with a bold sans-serif wordmark and a spaced tagline.</desc>
+
+  <!-- ============================================================= -->
+  <!-- DEFINITIONS                                                    -->
+  <!-- ============================================================= -->
+  <defs>
+    <style type="text/css"><![CDATA[
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;800&amp;display=swap');
+      .argus-word  { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-weight: 800; letter-spacing: -0.012em; }
+      .argus-tag   { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-weight: 500; letter-spacing: 0.32em; }
+      .argus-bar   { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-weight: 300; }
+    ]]></style>
+
+    <radialGradient id="bgGradient" cx="50%" cy="50%" r="75%">
+      <stop offset="0%"   stop-color="#0b0c18"/>
+      <stop offset="60%"  stop-color="#07070f"/>
+      <stop offset="100%" stop-color="#020205"/>
+    </radialGradient>
+
+    <linearGradient id="beamGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#22C6FF"/>
+      <stop offset="50%"  stop-color="#1E7BFF"/>
+      <stop offset="100%" stop-color="#7A3BFF"/>
+    </linearGradient>
+
+    <radialGradient id="irisGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="18%"  stop-color="#EAF6FF"/>
+      <stop offset="42%"  stop-color="#22C6FF"/>
+      <stop offset="78%"  stop-color="#1E4FFF"/>
+      <stop offset="100%" stop-color="#3A0FA0"/>
+    </radialGradient>
+
+    <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#22C6FF" stop-opacity="0"/>
+      <stop offset="30%"  stop-color="#22C6FF" stop-opacity="0.9"/>
+      <stop offset="70%"  stop-color="#7A3BFF" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#7A3BFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="wordGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#FDFEFF"/>
+      <stop offset="60%"  stop-color="#EEF3FA"/>
+      <stop offset="100%" stop-color="#C9D4E3"/>
+    </linearGradient>
+
+    <linearGradient id="tagGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#8FA0B8"/>
+      <stop offset="100%" stop-color="#B6C3D6"/>
+    </linearGradient>
+
+    <filter id="bloom" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur1"/>
+      <feGaussianBlur stdDeviation="14" in="SourceGraphic" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="nodeGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="3" result="nodeBlur"/>
+      <feMerge>
+        <feMergeNode in="nodeBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <symbol id="beam" overflow="visible">
+      <path d="M 0 -10 L 6 -70 L 0 -180 L -6 -70 Z"
+            fill="url(#beamGradient)" opacity="0.85"/>
+    </symbol>
+  </defs>
+
+  <!-- ============================================================= -->
+  <!-- BACKGROUND                                                     -->
+  <!-- ============================================================= -->
+  <rect x="0" y="0" width="1200" height="420" fill="url(#bgGradient)"/>
+
+  <g opacity="0.25" fill="#9CC3FF">
+    <circle cx="80"   cy="60"  r="0.8"/>
+    <circle cx="160"  cy="340" r="0.6"/>
+    <circle cx="950"  cy="80"  r="0.7"/>
+    <circle cx="1100" cy="370" r="0.8"/>
+    <circle cx="1050" cy="180" r="0.5"/>
+    <circle cx="540"  cy="40"  r="0.5"/>
+    <circle cx="620"  cy="400" r="0.6"/>
+    <circle cx="820"  cy="310" r="0.5"/>
+  </g>
+
+  <!-- ============================================================= -->
+  <!-- ICON (centered at 220, 210)                                    -->
+  <!-- ============================================================= -->
+  <g transform="translate(220 210)">
+    <circle cx="0" cy="0" r="178" fill="none" stroke="url(#ringGradient)" stroke-width="0.8" opacity="0.55"/>
+    <circle cx="0" cy="0" r="150" fill="none" stroke="url(#ringGradient)" stroke-width="0.9" opacity="0.65"/>
+    <circle cx="0" cy="0" r="118" fill="none" stroke="url(#ringGradient)" stroke-width="1.1" opacity="0.8"/>
+
+    <g filter="url(#bloom)" opacity="0.9">
+      <use href="#beam" transform="rotate(0)"/>
+      <use href="#beam" transform="rotate(45)"/>
+      <use href="#beam" transform="rotate(90)"/>
+      <use href="#beam" transform="rotate(135)"/>
+      <use href="#beam" transform="rotate(180)"/>
+      <use href="#beam" transform="rotate(225)"/>
+      <use href="#beam" transform="rotate(270)"/>
+      <use href="#beam" transform="rotate(315)"/>
+    </g>
+
+    <g fill="none" stroke-linecap="round">
+      <path d="M -110 0 Q 0 -95 110 0" stroke="url(#beamGradient)" stroke-width="3" opacity="0.95" filter="url(#bloom)"/>
+      <path d="M -110 0 Q 0  95 110 0" stroke="url(#beamGradient)" stroke-width="3" opacity="0.95" filter="url(#bloom)"/>
+      <path d="M -92 0 Q 0 -78 92 0"   stroke="#EAF6FF" stroke-width="0.8" opacity="0.45"/>
+      <path d="M -92 0 Q 0  78 92 0"   stroke="#EAF6FF" stroke-width="0.8" opacity="0.45"/>
+    </g>
+
+    <g filter="url(#bloom)">
+      <circle cx="0" cy="0" r="46" fill="url(#irisGradient)"/>
+    </g>
+    <circle cx="0" cy="0" r="18" fill="#05060F"/>
+    <circle cx="0" cy="0" r="18" fill="url(#irisGradient)" opacity="0.18"/>
+    <circle cx="-5" cy="-6" r="3.2" fill="#FFFFFF" opacity="0.85"/>
+
+    <g filter="url(#nodeGlow)">
+      <circle cx="0"    cy="-150" r="4.2" fill="#22C6FF"/>
+      <circle cx="150"  cy="0"    r="4.2" fill="#5FA8FF"/>
+      <circle cx="0"    cy="150"  r="4.2" fill="#7A3BFF"/>
+      <circle cx="-150" cy="0"    r="4.2" fill="#5FA8FF"/>
+      <circle cx="106"  cy="-106" r="3.6" fill="#22C6FF"/>
+      <circle cx="106"  cy="106"  r="3.6" fill="#7A3BFF"/>
+      <circle cx="-106" cy="106"  r="3.6" fill="#7A3BFF"/>
+      <circle cx="-106" cy="-106" r="3.6" fill="#22C6FF"/>
+    </g>
+
+    <g stroke="url(#beamGradient)" stroke-width="0.7" stroke-opacity="0.35" fill="none">
+      <line x1="0"    y1="-150" x2="150"  y2="0"/>
+      <line x1="150"  y1="0"    x2="0"    y2="150"/>
+      <line x1="0"    y1="150"  x2="-150" y2="0"/>
+      <line x1="-150" y1="0"    x2="0"    y2="-150"/>
+      <line x1="106"  y1="-106" x2="-106" y2="106"/>
+      <line x1="-106" y1="-106" x2="106"  y2="106"/>
+    </g>
+  </g>
+
+  <!-- ============================================================= -->
+  <!-- WORDMARK (stacked lockup, left-aligned to icon's right edge)   -->
+  <!-- ============================================================= -->
+  <g transform="translate(460 0)">
+
+    <!-- "Argus" — luminous, confident, the anchor -->
+    <text x="0" y="215"
+          class="argus-word"
+          font-size="140"
+          fill="url(#wordGradient)">Argus</text>
+
+    <!-- Hairline accent bar echoing the beam gradient -->
+    <line x1="6" y1="248" x2="82" y2="248"
+          stroke="url(#beamGradient)"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          opacity="0.9"/>
+
+    <!-- Vertical bar separator + tagline -->
+    <text x="98" y="258"
+          class="argus-bar"
+          font-size="26"
+          fill="#5F6A80"
+          opacity="0.85">|</text>
+
+    <text x="118" y="258"
+          class="argus-tag"
+          font-size="22"
+          fill="url(#tagGradient)">THE OMNISIGHT PLATFORM</text>
+
+  </g>
+</svg>

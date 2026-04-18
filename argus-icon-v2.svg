@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512"
+     role="img"
+     aria-label="Argus">
+  <title>Argus — Icon</title>
+  <desc>Watchful eye medallion with faceted crystalline shards. Favicon / app-tile variant.</desc>
+
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="75%">
+      <stop offset="0%"   stop-color="#0b0c18"/>
+      <stop offset="70%"  stop-color="#07070f"/>
+      <stop offset="100%" stop-color="#020205"/>
+    </radialGradient>
+
+    <linearGradient id="beam" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#22C6FF"/>
+      <stop offset="55%"  stop-color="#5B5DFF"/>
+      <stop offset="100%" stop-color="#9A4EFF"/>
+    </linearGradient>
+
+    <linearGradient id="shardLit" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%"   stop-color="#BFE2FF"/>
+      <stop offset="40%"  stop-color="#6AA8FF"/>
+      <stop offset="100%" stop-color="#3B4FE0"/>
+    </linearGradient>
+
+    <linearGradient id="shardShadow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%"   stop-color="#7A3BFF"/>
+      <stop offset="60%"  stop-color="#4B1CA0"/>
+      <stop offset="100%" stop-color="#2A0B66"/>
+    </linearGradient>
+
+    <linearGradient id="ringFrame" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%"   stop-color="#8FC6FF"/>
+      <stop offset="45%"  stop-color="#5B5DFF"/>
+      <stop offset="100%" stop-color="#6B2BD9"/>
+    </linearGradient>
+
+    <radialGradient id="iris" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="18%"  stop-color="#EAF6FF"/>
+      <stop offset="42%"  stop-color="#22C6FF"/>
+      <stop offset="78%"  stop-color="#1E4FFF"/>
+      <stop offset="100%" stop-color="#3A0FA0"/>
+    </radialGradient>
+
+    <linearGradient id="radarArc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#22C6FF" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#7A3BFF" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#22C6FF" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="bloom" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="b1"/>
+      <feGaussianBlur stdDeviation="12" in="SourceGraphic" result="b2"/>
+      <feMerge>
+        <feMergeNode in="b2"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="nodeGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="2.4"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <symbol id="shard" overflow="visible">
+      <path d="M 0 -170 L 0 -52 L -16 -108 Z" fill="url(#shardLit)"/>
+      <path d="M 0 -170 L 0 -52 L 16 -108 Z"  fill="url(#shardShadow)"/>
+      <path d="M 0 -170 L -16 -108"
+            stroke="#E6F3FF" stroke-width="0.9" stroke-opacity="0.8" fill="none"/>
+      <line x1="0" y1="-168" x2="0" y2="-55"
+            stroke="#C9D4FF" stroke-width="0.6" stroke-opacity="0.55"/>
+    </symbol>
+  </defs>
+
+  <!-- Rounded square background (app-icon friendly) -->
+  <rect x="0" y="0" width="512" height="512" rx="96" ry="96" fill="url(#bg)"/>
+
+  <g opacity="0.25" fill="#9CC3FF">
+    <circle cx="70"  cy="90"  r="1.1"/>
+    <circle cx="440" cy="120" r="0.9"/>
+    <circle cx="80"  cy="420" r="0.9"/>
+    <circle cx="430" cy="430" r="1.1"/>
+  </g>
+
+  <g transform="translate(256 256)">
+
+    <!-- Soft outer aura -->
+    <circle cx="0" cy="0" r="195" fill="#22C6FF" opacity="0.05"/>
+
+    <!-- Medallion ring -->
+    <circle cx="0" cy="0" r="178" fill="none" stroke="url(#ringFrame)" stroke-width="6" filter="url(#softGlow)"/>
+    <circle cx="0" cy="0" r="172" fill="none" stroke="#9CC3FF" stroke-width="0.6" stroke-opacity="0.35"/>
+    <circle cx="0" cy="0" r="183" fill="none" stroke="#3B2B80" stroke-width="0.6" stroke-opacity="0.55"/>
+
+    <!-- Inner radar rings -->
+    <circle cx="0" cy="0" r="132" fill="none" stroke="url(#radarArc)" stroke-width="0.9" opacity="0.8"/>
+    <circle cx="0" cy="0" r="96"  fill="none" stroke="url(#radarArc)" stroke-width="0.9" opacity="0.7"/>
+
+    <!-- Six faceted shards -->
+    <g filter="url(#softGlow)">
+      <g transform="rotate(15)">  <use href="#shard"/></g>
+      <g transform="rotate(75)">  <use href="#shard"/></g>
+      <g transform="rotate(135)"> <use href="#shard"/></g>
+      <g transform="rotate(195)"> <use href="#shard"/></g>
+      <g transform="rotate(255)"> <use href="#shard"/></g>
+      <g transform="rotate(315)"> <use href="#shard"/></g>
+    </g>
+
+    <!-- Almond eye -->
+    <g filter="url(#bloom)" fill="none" stroke-linecap="round">
+      <path d="M -120 4 Q 0 -102 120 4" stroke="#2A0B66" stroke-width="5" opacity="0.65"/>
+      <path d="M -120 -4 Q 0 102 120 -4" stroke="#2A0B66" stroke-width="5" opacity="0.65"/>
+      <path d="M -118 0 Q 0 -98 118 0" stroke="url(#beam)" stroke-width="3.4"/>
+      <path d="M -118 0 Q 0  98 118 0" stroke="url(#beam)" stroke-width="3.4"/>
+    </g>
+    <g fill="none" stroke="#EAF6FF" stroke-width="0.9" stroke-opacity="0.55">
+      <path d="M -100 -2 Q 0 -82 100 -2"/>
+      <path d="M -100  2 Q 0  82 100  2"/>
+    </g>
+
+    <!-- Iris + pupil + catchlight -->
+    <g filter="url(#bloom)">
+      <circle cx="0" cy="0" r="42" fill="url(#iris)"/>
+    </g>
+    <circle cx="0" cy="0" r="16" fill="#05060F"/>
+    <circle cx="0" cy="0" r="16" fill="url(#iris)" opacity="0.2"/>
+    <circle cx="-5" cy="-6" r="3" fill="#FFFFFF" opacity="0.9"/>
+
+    <!-- Four cardinal nodes on the ring -->
+    <g filter="url(#nodeGlow)">
+      <circle cx="0"    cy="-178" r="4.8" fill="#BFE2FF"/>
+      <circle cx="178"  cy="0"    r="4.8" fill="#9A4EFF"/>
+      <circle cx="0"    cy="178"  r="4.8" fill="#9A4EFF"/>
+      <circle cx="-178" cy="0"    r="4.8" fill="#BFE2FF"/>
+    </g>
+  </g>
+</svg>

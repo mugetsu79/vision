@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 420"
+     role="img"
+     aria-label="Argus — The OmniSight Platform">
+  <title>Argus | The OmniSight Platform</title>
+  <desc>Watchful eye inside a circular medallion frame, pierced by six faceted crystalline shards in cerulean-to-violet gradient. Paired with a bold sans-serif wordmark and spaced tagline on a deep obsidian field.</desc>
+
+  <defs>
+    <style type="text/css"><![CDATA[
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;800&amp;display=swap');
+      .argus-word { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-weight: 800; letter-spacing: -0.012em; }
+      .argus-tag  { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-weight: 500; letter-spacing: 0.32em; }
+      .argus-bar  { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; font-weight: 300; }
+    ]]></style>
+
+    <!-- Backgrounds -->
+    <radialGradient id="bgGradient" cx="50%" cy="50%" r="75%">
+      <stop offset="0%"   stop-color="#0b0c18"/>
+      <stop offset="60%"  stop-color="#07070f"/>
+      <stop offset="100%" stop-color="#020205"/>
+    </radialGradient>
+
+    <!-- Core brand gradient (cerulean → violet) -->
+    <linearGradient id="beamGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#22C6FF"/>
+      <stop offset="55%"  stop-color="#5B5DFF"/>
+      <stop offset="100%" stop-color="#9A4EFF"/>
+    </linearGradient>
+
+    <!-- Shard light face (the "lit" facet) -->
+    <linearGradient id="shardLit" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%"   stop-color="#BFE2FF"/>
+      <stop offset="40%"  stop-color="#6AA8FF"/>
+      <stop offset="100%" stop-color="#3B4FE0"/>
+    </linearGradient>
+
+    <!-- Shard shadow face (the "unlit" facet) -->
+    <linearGradient id="shardShadow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%"   stop-color="#7A3BFF"/>
+      <stop offset="60%"  stop-color="#4B1CA0"/>
+      <stop offset="100%" stop-color="#2A0B66"/>
+    </linearGradient>
+
+    <!-- Medallion ring gradient (bright arc on top-left, deeper on bottom-right) -->
+    <linearGradient id="ringFrame" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%"   stop-color="#8FC6FF"/>
+      <stop offset="45%"  stop-color="#5B5DFF"/>
+      <stop offset="100%" stop-color="#6B2BD9"/>
+    </linearGradient>
+
+    <!-- Iris gradient -->
+    <radialGradient id="irisGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="18%"  stop-color="#EAF6FF"/>
+      <stop offset="42%"  stop-color="#22C6FF"/>
+      <stop offset="78%"  stop-color="#1E4FFF"/>
+      <stop offset="100%" stop-color="#3A0FA0"/>
+    </radialGradient>
+
+    <!-- Subtle radar ring -->
+    <linearGradient id="radarArc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#22C6FF" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#7A3BFF" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#22C6FF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Wordmark -->
+    <linearGradient id="wordGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#FDFEFF"/>
+      <stop offset="60%"  stop-color="#EEF3FA"/>
+      <stop offset="100%" stop-color="#C9D4E3"/>
+    </linearGradient>
+    <linearGradient id="tagGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#8FA0B8"/>
+      <stop offset="100%" stop-color="#B6C3D6"/>
+    </linearGradient>
+
+    <!-- Filters -->
+    <filter id="bloom" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur1"/>
+      <feGaussianBlur stdDeviation="14" in="SourceGraphic" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="nodeGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="2.6"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- ONE faceted shard, reused 6x via rotation.
+         Outer tip at (0, -172), widest at y=-105, inner vertex at y=-52.
+         Two triangles: lit face (left half) + shadow face (right half). -->
+    <symbol id="shard" overflow="visible">
+      <!-- Lit (left) facet -->
+      <path d="M 0 -172 L 0 -52 L -16 -108 Z"
+            fill="url(#shardLit)"/>
+      <!-- Shadow (right) facet -->
+      <path d="M 0 -172 L 0 -52 L 16 -108 Z"
+            fill="url(#shardShadow)"/>
+      <!-- Outer edge highlight -->
+      <path d="M 0 -172 L -16 -108"
+            stroke="#E6F3FF" stroke-width="0.9" stroke-opacity="0.8" fill="none"/>
+      <!-- Spine accent -->
+      <line x1="0" y1="-170" x2="0" y2="-55"
+            stroke="#C9D4FF" stroke-width="0.6" stroke-opacity="0.55"/>
+    </symbol>
+  </defs>
+
+  <!-- ============================================================= -->
+  <!-- BACKGROUND                                                     -->
+  <!-- ============================================================= -->
+  <rect x="0" y="0" width="1200" height="420" fill="url(#bgGradient)"/>
+
+  <g opacity="0.25" fill="#9CC3FF">
+    <circle cx="80"   cy="60"  r="0.8"/>
+    <circle cx="160"  cy="340" r="0.6"/>
+    <circle cx="950"  cy="80"  r="0.7"/>
+    <circle cx="1100" cy="370" r="0.8"/>
+    <circle cx="1050" cy="180" r="0.5"/>
+    <circle cx="540"  cy="40"  r="0.5"/>
+    <circle cx="620"  cy="400" r="0.6"/>
+    <circle cx="820"  cy="310" r="0.5"/>
+  </g>
+
+  <!-- ============================================================= -->
+  <!-- ICON — circular medallion w/ faceted shards + eye              -->
+  <!-- Center: (220, 210)                                             -->
+  <!-- ============================================================= -->
+  <g transform="translate(220 210)">
+
+    <!-- Soft outer aura -->
+    <circle cx="0" cy="0" r="190" fill="#22C6FF" opacity="0.04"/>
+
+    <!-- Medallion ring — thicker, gradient-stroked -->
+    <circle cx="0" cy="0" r="175"
+            fill="none"
+            stroke="url(#ringFrame)"
+            stroke-width="6"
+            opacity="0.95"
+            filter="url(#softGlow)"/>
+    <!-- Inner hairline for dimension -->
+    <circle cx="0" cy="0" r="170"
+            fill="none"
+            stroke="#9CC3FF"
+            stroke-width="0.6"
+            stroke-opacity="0.35"/>
+    <circle cx="0" cy="0" r="180"
+            fill="none"
+            stroke="#3B2B80"
+            stroke-width="0.6"
+            stroke-opacity="0.55"/>
+
+    <!-- Secondary concentric radar rings inside the medallion -->
+    <circle cx="0" cy="0" r="132" fill="none" stroke="url(#radarArc)" stroke-width="0.8" opacity="0.8"/>
+    <circle cx="0" cy="0" r="96"  fill="none" stroke="url(#radarArc)" stroke-width="0.8" opacity="0.7"/>
+
+    <!-- Six faceted crystalline shards (60° apart), offset 15° so the
+         eye lids land cleanly between two shards -->
+    <g filter="url(#softGlow)">
+      <g transform="rotate(15)">   <use href="#shard"/></g>
+      <g transform="rotate(75)">   <use href="#shard"/></g>
+      <g transform="rotate(135)">  <use href="#shard"/></g>
+      <g transform="rotate(195)">  <use href="#shard"/></g>
+      <g transform="rotate(255)">  <use href="#shard"/></g>
+      <g transform="rotate(315)">  <use href="#shard"/></g>
+    </g>
+
+    <!-- Almond eye: two sweeping lids, slightly dimensional -->
+    <g filter="url(#bloom)" fill="none" stroke-linecap="round">
+      <!-- Back-shadow lid -->
+      <path d="M -120 4 Q 0 -102 120 4" stroke="#2A0B66" stroke-width="5" opacity="0.65"/>
+      <path d="M -120 -4 Q 0 102 120 -4" stroke="#2A0B66" stroke-width="5" opacity="0.65"/>
+      <!-- Front lit lid -->
+      <path d="M -118 0 Q 0 -98 118 0" stroke="url(#beamGradient)" stroke-width="3.4" opacity="1"/>
+      <path d="M -118 0 Q 0  98 118 0" stroke="url(#beamGradient)" stroke-width="3.4" opacity="1"/>
+    </g>
+    <!-- Inner specular highlight strokes -->
+    <g fill="none" stroke="#EAF6FF" stroke-width="0.9" stroke-opacity="0.55">
+      <path d="M -100 -2 Q 0 -82 100 -2"/>
+      <path d="M -100  2 Q 0  82 100  2"/>
+    </g>
+
+    <!-- Iris core (luminous) -->
+    <g filter="url(#bloom)">
+      <circle cx="0" cy="0" r="42" fill="url(#irisGradient)"/>
+    </g>
+    <!-- Pupil -->
+    <circle cx="0" cy="0" r="16" fill="#05060F"/>
+    <circle cx="0" cy="0" r="16" fill="url(#irisGradient)" opacity="0.18"/>
+    <!-- Catchlight -->
+    <circle cx="-5" cy="-6" r="3" fill="#FFFFFF" opacity="0.9"/>
+
+    <!-- Four discrete network nodes sitting ON the medallion ring -->
+    <g filter="url(#nodeGlow)">
+      <circle cx="0"    cy="-175" r="4.6" fill="#BFE2FF"/>
+      <circle cx="175"  cy="0"    r="4.6" fill="#9A4EFF"/>
+      <circle cx="0"    cy="175"  r="4.6" fill="#9A4EFF"/>
+      <circle cx="-175" cy="0"    r="4.6" fill="#BFE2FF"/>
+    </g>
+
+  </g>
+
+  <!-- ============================================================= -->
+  <!-- WORDMARK — stacked, left of icon's vertical centerline         -->
+  <!-- ============================================================= -->
+  <g transform="translate(460 0)">
+
+    <text x="0" y="215"
+          class="argus-word"
+          font-size="140"
+          fill="url(#wordGradient)">Argus</text>
+
+    <!-- Hairline accent echoes the beam gradient -->
+    <line x1="6" y1="248" x2="82" y2="248"
+          stroke="url(#beamGradient)"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          opacity="0.95"/>
+
+    <text x="98" y="258"
+          class="argus-bar"
+          font-size="26"
+          fill="#5F6A80"
+          opacity="0.85">|</text>
+
+    <text x="118" y="258"
+          class="argus-tag"
+          font-size="22"
+          fill="url(#tagGradient)">THE OMNISIGHT PLATFORM</text>
+
+  </g>
+</svg>
