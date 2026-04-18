@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from traffic_monitor.vision.zones import Zones
+from argus.vision.zones import Zones
 
 
 def test_zones_map_points_to_expected_polygons(pedestrian_scene) -> None:

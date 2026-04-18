@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from traffic_monitor.vision.detector import DetectionModelConfig, YoloDetector
+from argus.vision.detector import DetectionModelConfig, YoloDetector
 
 
 @dataclass(slots=True)

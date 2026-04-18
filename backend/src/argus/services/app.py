@@ -1,0 +1,998 @@
+from __future__ import annotations
+
+import asyncio
+import csv
+import io
+import secrets
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, cast
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy import select, text, update
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from argus.api.contracts import (
+    CameraCreate,
+    CameraResponse,
+    CameraUpdate,
+    EdgeHeartbeatRequest,
+    EdgeHeartbeatResponse,
+    EdgeRegisterRequest,
+    EdgeRegisterResponse,
+    ExportArtifact,
+    HistoryPoint,
+    HomographyPayload,
+    IncidentResponse,
+    ModelCreate,
+    ModelResponse,
+    ModelUpdate,
+    PrivacySettings,
+    SiteCreate,
+    SiteResponse,
+    SiteUpdate,
+    StreamOfferRequest,
+    StreamOfferResponse,
+    TelemetryEnvelope,
+    TenantContext,
+)
+from argus.core.config import Settings
+from argus.core.db import DatabaseManager
+from argus.core.events import EventMessage, NatsJetStreamClient
+from argus.core.security import encrypt_rtsp_url, hash_api_key
+from argus.inference.publisher import TelemetryFrame
+from argus.models.enums import ModelTask
+from argus.models.tables import (
+    APIKey,
+    AuditLog,
+    Camera,
+    EdgeNode,
+    Incident,
+    Model,
+    Site,
+    Tenant,
+    TrackingEvent,
+)
+from argus.streaming.mediamtx import MediaMTXClient
+
+if TYPE_CHECKING:
+    from argus.services.query import QueryService
+
+
+@dataclass(slots=True)
+class AppServices:
+    tenancy: TenancyService
+    sites: SiteService
+    cameras: CameraService
+    models: ModelService
+    edge: EdgeService
+    history: HistoryService
+    incidents: IncidentService
+    streams: StreamService
+    query: QueryService
+    telemetry: NatsTelemetryService
+
+
+class DatabaseAuditLogger:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+
+    async def record(
+        self,
+        *,
+        tenant_context: TenantContext,
+        action: str,
+        target: str,
+        meta: dict[str, Any] | None = None,
+    ) -> None:
+        async with self.session_factory() as session:
+            session.add(
+                AuditLog(
+                    tenant_id=tenant_context.tenant_id,
+                    actor_id=None,
+                    action=action,
+                    target=target,
+                    meta=meta,
+                    ts=datetime.now(tz=UTC),
+                )
+            )
+            await session.commit()
+
+    async def record_query(
+        self,
+        *,
+        tenant_context: TenantContext,
+        prompt: str,
+        resolved_classes: list[str],
+        provider: str,
+        model: str,
+        latency_ms: int,
+    ) -> None:
+        await self.record(
+            tenant_context=tenant_context,
+            action="query.resolve",
+            target="query",
+            meta={
+                "prompt": prompt,
+                "resolved_classes": resolved_classes,
+                "provider": provider,
+                "model": model,
+                "latency_ms": latency_ms,
+            },
+        )
+
+
+class TenancyService:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: Settings,
+    ) -> None:
+        self.session_factory = session_factory
+        self.settings = settings
+
+    async def resolve_context(
+        self,
+        *,
+        user: Any,
+        explicit_tenant_id: UUID | None = None,
+    ) -> TenantContext:
+        if user.is_superadmin:
+            tenant_id = explicit_tenant_id or _parse_optional_uuid(user.tenant_context)
+            if tenant_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Superadmin requests must include an explicit tenant context.",
+                )
+            tenant = await self._load_tenant_by_id(tenant_id)
+            return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
+
+        tenant_id = _parse_optional_uuid(user.tenant_context)
+        if tenant_id is not None:
+            tenant = await self._load_tenant_by_id(tenant_id)
+            if explicit_tenant_id is not None and explicit_tenant_id != tenant.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Tenant users cannot switch tenant context.",
+                )
+            return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
+
+        tenant = await self._load_tenant_by_slug(user.realm)
+        return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
+
+    async def _load_tenant_by_id(self, tenant_id: UUID) -> Tenant:
+        async with self.session_factory() as session:
+            tenant = await session.get(Tenant, tenant_id)
+        if tenant is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found.")
+        return tenant
+
+    async def _load_tenant_by_slug(self, slug: str) -> Tenant:
+        async with self.session_factory() as session:
+            statement = select(Tenant).where(Tenant.slug == slug)
+            tenant = (await session.execute(statement)).scalar_one_or_none()
+        if tenant is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found.")
+        return tenant
+
+
+class SiteService:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        audit_logger: DatabaseAuditLogger,
+    ) -> None:
+        self.session_factory = session_factory
+        self.audit_logger = audit_logger
+
+    async def list_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        async with self.session_factory() as session:
+            statement = (
+                select(Site)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .order_by(Site.name)
+            )
+            sites = (await session.execute(statement)).scalars().all()
+        return [_site_to_response(site) for site in sites]
+
+    async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
+        site = await _get_site(
+            session_factory=self.session_factory,
+            tenant_context=tenant_context,
+            site_id=site_id,
+        )
+        return _site_to_response(site)
+
+    async def create_site(self, tenant_context: TenantContext, payload: SiteCreate) -> SiteResponse:
+        async with self.session_factory() as session:
+            site = Site(
+                tenant_id=tenant_context.tenant_id,
+                name=payload.name,
+                description=payload.description,
+                tz=payload.tz,
+                geo_point=payload.geo_point,
+            )
+            session.add(site)
+            await session.commit()
+            await session.refresh(site)
+        await self.audit_logger.record(
+            tenant_context=tenant_context,
+            action="site.create",
+            target=f"site:{site.id}",
+            meta={"name": site.name},
+        )
+        return _site_to_response(site)
+
+    async def update_site(
+        self,
+        tenant_context: TenantContext,
+        site_id: UUID,
+        payload: SiteUpdate,
+    ) -> SiteResponse:
+        async with self.session_factory() as session:
+            site = await _load_site(session, tenant_context.tenant_id, site_id)
+            for field_name, value in payload.model_dump(exclude_unset=True).items():
+                setattr(site, field_name, value)
+            await session.commit()
+            await session.refresh(site)
+        await self.audit_logger.record(
+            tenant_context=tenant_context,
+            action="site.update",
+            target=f"site:{site.id}",
+            meta=payload.model_dump(exclude_unset=True),
+        )
+        return _site_to_response(site)
+
+    async def delete_site(self, tenant_context: TenantContext, site_id: UUID) -> None:
+        async with self.session_factory() as session:
+            site = await _load_site(session, tenant_context.tenant_id, site_id)
+            await session.delete(site)
+            await session.commit()
+        await self.audit_logger.record(
+            tenant_context=tenant_context,
+            action="site.delete",
+            target=f"site:{site_id}",
+        )
+
+
+class ModelService:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        audit_logger: DatabaseAuditLogger,
+    ) -> None:
+        self.session_factory = session_factory
+        self.audit_logger = audit_logger
+
+    async def list_models(self) -> list[ModelResponse]:
+        async with self.session_factory() as session:
+            statement = select(Model).order_by(Model.name, Model.version)
+            models = (await session.execute(statement)).scalars().all()
+        return [_model_to_response(model) for model in models]
+
+    async def create_model(self, payload: ModelCreate) -> ModelResponse:
+        async with self.session_factory() as session:
+            model = Model(
+                name=payload.name,
+                version=payload.version,
+                task=payload.task,
+                path=payload.path,
+                format=payload.format,
+                classes=payload.classes,
+                input_shape=payload.input_shape,
+                sha256=payload.sha256,
+                size_bytes=payload.size_bytes,
+                license=payload.license,
+            )
+            session.add(model)
+            await session.commit()
+            await session.refresh(model)
+        return _model_to_response(model)
+
+    async def update_model(self, model_id: UUID, payload: ModelUpdate) -> ModelResponse:
+        async with self.session_factory() as session:
+            model = await session.get(Model, model_id)
+            if model is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Model not found.",
+                )
+            for field_name, value in payload.model_dump(exclude_unset=True).items():
+                setattr(model, field_name, value)
+            await session.commit()
+            await session.refresh(model)
+        return _model_to_response(model)
+
+
+class CameraService:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: Settings,
+        audit_logger: DatabaseAuditLogger,
+    ) -> None:
+        self.session_factory = session_factory
+        self.settings = settings
+        self.audit_logger = audit_logger
+
+    async def list_cameras(
+        self,
+        tenant_context: TenantContext,
+        *,
+        site_id: UUID | None = None,
+    ) -> list[CameraResponse]:
+        async with self.session_factory() as session:
+            statement = select(Camera).join(Site, Site.id == Camera.site_id).where(
+                Site.tenant_id == tenant_context.tenant_id
+            )
+            if site_id is not None:
+                statement = statement.where(Camera.site_id == site_id)
+            statement = statement.order_by(Camera.name)
+            cameras = (await session.execute(statement)).scalars().all()
+        return [_camera_to_response(camera) for camera in cameras]
+
+    async def get_camera(self, tenant_context: TenantContext, camera_id: UUID) -> CameraResponse:
+        async with self.session_factory() as session:
+            camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+        return _camera_to_response(camera)
+
+    async def create_camera(
+        self,
+        tenant_context: TenantContext,
+        payload: CameraCreate,
+    ) -> CameraResponse:
+        async with self.session_factory() as session:
+            await _load_site(session, tenant_context.tenant_id, payload.site_id)
+            primary_model = await _load_model(session, payload.primary_model_id)
+            if primary_model.task is not ModelTask.DETECT:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Primary model must be a detector.",
+                )
+            if payload.secondary_model_id is not None:
+                secondary_model = await _load_model(session, payload.secondary_model_id)
+                if secondary_model.task not in {ModelTask.ATTRIBUTE, ModelTask.CLASSIFY}:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Secondary model must be classify or attribute.",
+                    )
+            privacy = _apply_tenant_privacy_policy(
+                settings=self.settings,
+                tenant_context=tenant_context,
+                privacy=payload.privacy.model_dump(mode="python"),
+            )
+            camera = Camera(
+                site_id=payload.site_id,
+                edge_node_id=None,
+                name=payload.name,
+                rtsp_url_encrypted=encrypt_rtsp_url(payload.rtsp_url, self.settings),
+                processing_mode=payload.processing_mode,
+                primary_model_id=payload.primary_model_id,
+                secondary_model_id=payload.secondary_model_id,
+                tracker_type=payload.tracker_type,
+                active_classes=payload.active_classes,
+                attribute_rules=payload.attribute_rules,
+                zones=payload.zones,
+                homography=payload.homography.model_dump(mode="python"),
+                privacy=privacy,
+                frame_skip=payload.frame_skip,
+                fps_cap=payload.fps_cap,
+            )
+            session.add(camera)
+            await session.commit()
+            await session.refresh(camera)
+        await self.audit_logger.record(
+            tenant_context=tenant_context,
+            action="camera.create",
+            target=f"camera:{camera.id}",
+            meta={"name": camera.name},
+        )
+        return _camera_to_response(camera)
+
+    async def update_camera(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+        payload: CameraUpdate,
+    ) -> CameraResponse:
+        async with self.session_factory() as session:
+            camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+            update_data = payload.model_dump(exclude_unset=True, mode="python")
+
+            if "primary_model_id" in update_data:
+                primary_model = await _load_model(session, update_data["primary_model_id"])
+                if primary_model.task is not ModelTask.DETECT:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Primary model must be a detector.",
+                    )
+            if update_data.get("secondary_model_id") is not None:
+                secondary_model = await _load_model(session, update_data["secondary_model_id"])
+                if secondary_model.task not in {ModelTask.ATTRIBUTE, ModelTask.CLASSIFY}:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Secondary model must be classify or attribute.",
+                    )
+            if "site_id" in update_data:
+                await _load_site(session, tenant_context.tenant_id, update_data["site_id"])
+            if "rtsp_url" in update_data:
+                camera.rtsp_url_encrypted = encrypt_rtsp_url(
+                    str(update_data.pop("rtsp_url")),
+                    self.settings,
+                )
+            if "privacy" in update_data:
+                update_data["privacy"] = _apply_tenant_privacy_policy(
+                    settings=self.settings,
+                    tenant_context=tenant_context,
+                    privacy=dict(update_data["privacy"]),
+                )
+            if "homography" in update_data and update_data["homography"] is not None:
+                update_data["homography"] = update_data["homography"].model_dump(mode="python")
+
+            for field_name, value in update_data.items():
+                setattr(camera, field_name, value)
+
+            await session.commit()
+            await session.refresh(camera)
+        await self.audit_logger.record(
+            tenant_context=tenant_context,
+            action="camera.update",
+            target=f"camera:{camera.id}",
+            meta=payload.model_dump(exclude_unset=True, mode="python"),
+        )
+        return _camera_to_response(camera)
+
+    async def delete_camera(self, tenant_context: TenantContext, camera_id: UUID) -> None:
+        async with self.session_factory() as session:
+            camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+            await session.delete(camera)
+            await session.commit()
+        await self.audit_logger.record(
+            tenant_context=tenant_context,
+            action="camera.delete",
+            target=f"camera:{camera_id}",
+        )
+
+
+class EdgeService:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: Settings,
+        events: NatsJetStreamClient,
+        audit_logger: DatabaseAuditLogger,
+    ) -> None:
+        self.session_factory = session_factory
+        self.settings = settings
+        self.events = events
+        self.audit_logger = audit_logger
+
+    async def register_edge_node(
+        self,
+        tenant_context: TenantContext,
+        payload: EdgeRegisterRequest,
+    ) -> EdgeRegisterResponse:
+        async with self.session_factory() as session:
+            site = await _load_site(session, tenant_context.tenant_id, payload.site_id)
+            api_key_plaintext = _generate_secret("edge")
+            nats_seed = _generate_secret("nats")
+            edge_node = EdgeNode(
+                site_id=site.id,
+                hostname=payload.hostname,
+                public_key=nats_seed,
+                version=payload.version,
+                last_seen_at=datetime.now(tz=UTC),
+            )
+            api_key = APIKey(
+                tenant_id=tenant_context.tenant_id,
+                name=f"edge:{payload.hostname}",
+                hashed_key=hash_api_key(api_key_plaintext),
+                scope={"paths": ["/api/v1/edge/*"]},
+                expires_at=None,
+            )
+            session.add(edge_node)
+            session.add(api_key)
+            await session.commit()
+            await session.refresh(edge_node)
+
+        await self.audit_logger.record(
+            tenant_context=tenant_context,
+            action="edge.register",
+            target=f"edge:{edge_node.id}",
+            meta={"site_id": str(site.id), "hostname": payload.hostname},
+        )
+        return EdgeRegisterResponse(
+            edge_node_id=edge_node.id,
+            api_key=api_key_plaintext,
+            nats_nkey_seed=nats_seed,
+            subjects=[
+                f"evt.tracking.{edge_node.id}",
+                f"edge.heartbeat.{edge_node.id}",
+            ],
+            mediamtx_url=self.settings.mediamtx_url,
+            mediamtx_username=self.settings.mediamtx_username,
+            mediamtx_password=(
+                self.settings.mediamtx_password.get_secret_value()
+                if self.settings.mediamtx_password is not None
+                else None
+            ),
+            overlay_network_hints={
+                "nats_url": self.settings.nats_url,
+                "mediamtx_rtsp": self.settings.mediamtx_rtsp_base_url,
+            },
+        )
+
+    async def ingest_telemetry(self, payload: TelemetryEnvelope) -> dict[str, int]:
+        inserted = 0
+        async with self.session_factory() as session:
+            for frame in payload.events:
+                rows = []
+                for track in frame.tracks:
+                    rows.append(
+                        {
+                            "id": uuid.uuid5(
+                                uuid.NAMESPACE_URL,
+                                f"{frame.camera_id}:{frame.ts.isoformat()}:{track.track_id}",
+                            ),
+                            "ts": frame.ts,
+                            "camera_id": frame.camera_id,
+                            "class_name": track.class_name,
+                            "track_id": track.track_id,
+                            "confidence": track.confidence,
+                            "speed_kph": track.speed_kph,
+                            "direction_deg": track.direction_deg,
+                            "zone_id": track.zone_id,
+                            "attributes": track.attributes,
+                            "bbox": track.bbox,
+                        }
+                    )
+                if rows:
+                    statement = insert(TrackingEvent).values(rows)
+                    returning_statement = statement.on_conflict_do_nothing(
+                        index_elements=["id", "ts"]
+                    ).returning(TrackingEvent.id)
+                    result = await session.execute(returning_statement)
+                    inserted += len(result.scalars().all())
+                await self.events.publish(f"evt.tracking.{frame.camera_id}", frame)
+            await session.commit()
+        return {"inserted": inserted}
+
+    async def record_heartbeat(self, payload: EdgeHeartbeatRequest) -> EdgeHeartbeatResponse:
+        async with self.session_factory() as session:
+            await session.execute(
+                update(EdgeNode)
+                .where(EdgeNode.id == payload.node_id)
+                .values(last_seen_at=datetime.now(tz=UTC), version=payload.version)
+            )
+            await session.commit()
+        return EdgeHeartbeatResponse(status="ok", received_at=datetime.now(tz=UTC))
+
+
+class HistoryService:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+
+    async def query_history(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> list[HistoryPoint]:
+        await self._ensure_camera_access(tenant_context, camera_id)
+        view_name = "events_1m" if granularity == "1m" else "events_1h"
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        camera_clause = ""
+        if camera_id is not None:
+            camera_clause = "AND camera_id = :camera_id"
+            parameters["camera_id"] = camera_id
+
+        statement = text(
+            f"""
+            SELECT bucket, camera_id, class_name, event_count
+            FROM {view_name}
+            WHERE bucket >= :starts_at
+              AND bucket <= :ends_at
+              {camera_clause}
+            ORDER BY bucket ASC, class_name ASC
+            """
+        )
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [
+            HistoryPoint(
+                bucket=row["bucket"],
+                camera_id=row["camera_id"],
+                class_name=row["class_name"],
+                event_count=int(row["event_count"]),
+                granularity=granularity,
+            )
+            for row in rows
+        ]
+
+    async def export_history(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        format_name: str,
+    ) -> ExportArtifact:
+        rows = await self.query_history(
+            tenant_context,
+            camera_id=camera_id,
+            granularity=granularity,
+            starts_at=starts_at,
+            ends_at=ends_at,
+        )
+        if format_name == "parquet":
+            return ExportArtifact(
+                filename="history.parquet",
+                media_type="application/x-parquet",
+                content=_serialize_parquet(rows),
+            )
+        return ExportArtifact(
+            filename="history.csv",
+            media_type="text/csv; charset=utf-8",
+            content=_serialize_csv(rows),
+        )
+
+    async def _ensure_camera_access(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID | None,
+    ) -> None:
+        if camera_id is None:
+            return
+        async with self.session_factory() as session:
+            await _load_camera(session, tenant_context.tenant_id, camera_id)
+
+
+class IncidentService:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+
+    async def list_incidents(self, tenant_context: TenantContext) -> list[IncidentResponse]:
+        async with self.session_factory() as session:
+            statement = (
+                select(Incident)
+                .join(Camera, Camera.id == Incident.camera_id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .order_by(Incident.ts.desc())
+            )
+            incidents = (await session.execute(statement)).scalars().all()
+        return [
+            IncidentResponse(
+                id=incident.id,
+                camera_id=incident.camera_id,
+                ts=incident.ts,
+                type=incident.type,
+                payload=incident.payload,
+                snapshot_url=incident.snapshot_url,
+            )
+            for incident in incidents
+        ]
+
+
+class StreamService:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        mediamtx: MediaMTXClient,
+    ) -> None:
+        self.session_factory = session_factory
+        self.mediamtx = mediamtx
+
+    async def create_offer(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID,
+        offer: StreamOfferRequest,
+    ) -> StreamOfferResponse:
+        async with self.session_factory() as session:
+            await _load_camera(session, tenant_context.tenant_id, camera_id)
+        sdp_answer = await self.mediamtx.create_webrtc_offer(
+            camera_id=camera_id,
+            sdp_offer=offer.sdp_offer,
+        )
+        return StreamOfferResponse(camera_id=camera_id, sdp_answer=sdp_answer)
+
+
+class NatsTelemetrySubscription:
+    def __init__(
+        self,
+        *,
+        event_client: NatsJetStreamClient,
+        queue: asyncio.Queue[TelemetryFrame],
+        nats_subscription: Any,
+    ) -> None:
+        self.event_client = event_client
+        self.queue = queue
+        self.nats_subscription = nats_subscription
+
+    async def receive(self) -> TelemetryFrame:
+        return await self.queue.get()
+
+    async def close(self) -> None:
+        unsubscribe = getattr(self.nats_subscription, "unsubscribe", None)
+        if callable(unsubscribe):
+            await unsubscribe()
+
+
+class NatsTelemetryService:
+    def __init__(
+        self,
+        *,
+        session_factory: async_sessionmaker[AsyncSession],
+        event_client: NatsJetStreamClient,
+        settings: Settings,
+    ) -> None:
+        self.session_factory = session_factory
+        self.event_client = event_client
+        self.settings = settings
+
+    async def subscribe(self, tenant_context: TenantContext) -> NatsTelemetrySubscription:
+        allowed_camera_ids = await self._camera_ids_for_tenant(tenant_context)
+        queue: asyncio.Queue[TelemetryFrame] = asyncio.Queue(
+            maxsize=self.settings.websocket_telemetry_buffer_size
+        )
+
+        async def handle_message(message: EventMessage) -> None:
+            frame = TelemetryFrame.model_validate_json(message.data)
+            if frame.camera_id not in allowed_camera_ids:
+                return
+            if queue.full():
+                queue.get_nowait()
+            queue.put_nowait(frame)
+
+        nats_subscription = await self.event_client.subscribe("evt.tracking.*", handle_message)
+        return NatsTelemetrySubscription(
+            event_client=self.event_client,
+            queue=queue,
+            nats_subscription=nats_subscription,
+        )
+
+    async def _camera_ids_for_tenant(self, tenant_context: TenantContext) -> set[UUID]:
+        async with self.session_factory() as session:
+            statement = (
+                select(Camera.id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+            )
+            rows = (await session.execute(statement)).all()
+        return {row[0] for row in rows}
+
+
+def build_app_services(
+    *,
+    settings: Settings,
+    db: DatabaseManager,
+    events: NatsJetStreamClient,
+    query_service: QueryService,
+) -> AppServices:
+    audit_logger = DatabaseAuditLogger(db.session_factory)
+    mediamtx = MediaMTXClient(
+        api_base_url=settings.mediamtx_api_url,
+        rtsp_base_url=settings.mediamtx_rtsp_base_url,
+        whip_base_url=settings.mediamtx_whip_base_url,
+        username=settings.mediamtx_username,
+        password=(
+            settings.mediamtx_password.get_secret_value()
+            if settings.mediamtx_password is not None
+            else None
+        ),
+    )
+    return AppServices(
+        tenancy=TenancyService(db.session_factory, settings),
+        sites=SiteService(db.session_factory, audit_logger),
+        cameras=CameraService(db.session_factory, settings, audit_logger),
+        models=ModelService(db.session_factory, audit_logger),
+        edge=EdgeService(db.session_factory, settings, events, audit_logger),
+        history=HistoryService(db.session_factory),
+        incidents=IncidentService(db.session_factory),
+        streams=StreamService(db.session_factory, mediamtx),
+        query=query_service,
+        telemetry=NatsTelemetryService(
+            session_factory=db.session_factory,
+            event_client=events,
+            settings=settings,
+        ),
+    )
+
+
+async def _load_site(session: AsyncSession, tenant_id: UUID, site_id: UUID) -> Site:
+    statement = select(Site).where(Site.id == site_id, Site.tenant_id == tenant_id)
+    site = (await session.execute(statement)).scalar_one_or_none()
+    if site is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found.")
+    return site
+
+
+async def _load_model(session: AsyncSession, model_id: UUID) -> Model:
+    model = await session.get(Model, model_id)
+    if model is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Model not found.",
+        )
+    return model
+
+
+async def _load_camera(session: AsyncSession, tenant_id: UUID, camera_id: UUID) -> Camera:
+    statement = (
+        select(Camera)
+        .join(Site, Site.id == Camera.site_id)
+        .where(Camera.id == camera_id, Site.tenant_id == tenant_id)
+    )
+    camera = (await session.execute(statement)).scalar_one_or_none()
+    if camera is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found.")
+    return camera
+
+
+async def _get_site(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    tenant_context: TenantContext,
+    site_id: UUID,
+) -> Site:
+    async with session_factory() as session:
+        return await _load_site(session, tenant_context.tenant_id, site_id)
+
+
+def _site_to_response(site: Site) -> SiteResponse:
+    geo_point = None
+    if site.geo_point is not None:
+        geo_point = {
+            str(key): float(cast(int | float | str, value))
+            for key, value in site.geo_point.items()
+        }
+    return SiteResponse(
+        id=site.id,
+        tenant_id=site.tenant_id,
+        name=site.name,
+        description=site.description,
+        tz=site.tz,
+        geo_point=geo_point,
+        created_at=site.created_at,
+    )
+
+
+def _model_to_response(model: Model) -> ModelResponse:
+    return ModelResponse(
+        id=model.id,
+        name=model.name,
+        version=model.version,
+        task=model.task,
+        path=model.path,
+        format=model.format,
+        classes=list(model.classes),
+        input_shape=dict(model.input_shape),
+        sha256=model.sha256,
+        size_bytes=model.size_bytes,
+        license=model.license,
+    )
+
+
+def _camera_to_response(camera: Camera) -> CameraResponse:
+    if camera.homography is None:
+        raise ValueError("Camera homography must be set.")
+    return CameraResponse(
+        id=camera.id,
+        site_id=camera.site_id,
+        edge_node_id=camera.edge_node_id,
+        name=camera.name,
+        rtsp_url_masked=_mask_rtsp_url(camera.rtsp_url_encrypted),
+        processing_mode=camera.processing_mode,
+        primary_model_id=camera.primary_model_id,
+        secondary_model_id=camera.secondary_model_id,
+        tracker_type=camera.tracker_type,
+        active_classes=list(camera.active_classes),
+        attribute_rules=list(camera.attribute_rules),
+        zones=list(camera.zones),
+        homography=HomographyPayload.model_validate(camera.homography),
+        privacy=PrivacySettings.model_validate(camera.privacy),
+        frame_skip=camera.frame_skip,
+        fps_cap=camera.fps_cap,
+        created_at=camera.created_at,
+        updated_at=camera.updated_at,
+    )
+
+
+def _mask_rtsp_url(ciphertext: str) -> str:
+    if not ciphertext:
+        return ""
+    return "rtsp://***"
+
+
+def _apply_tenant_privacy_policy(
+    *,
+    settings: Settings,
+    tenant_context: TenantContext,
+    privacy: dict[str, Any],
+) -> dict[str, Any]:
+    policy = settings.tenant_privacy_policies.get(str(tenant_context.tenant_id))
+    if policy is None:
+        policy = settings.tenant_privacy_policies.get(tenant_context.tenant_slug)
+
+    if policy is None:
+        return privacy
+
+    if bool(policy.get("force_blur_faces")) and not bool(privacy.get("blur_faces")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Tenant policy requires blur_faces=true.",
+        )
+    if bool(policy.get("force_blur_plates")) and not bool(privacy.get("blur_plates")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Tenant policy requires blur_plates=true.",
+        )
+    return privacy
+
+
+def _serialize_csv(rows: list[HistoryPoint]) -> bytes:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["bucket", "camera_id", "class_name", "event_count", "granularity"])
+    for row in rows:
+        writer.writerow(
+            [
+                row.bucket.isoformat(),
+                row.camera_id,
+                row.class_name,
+                row.event_count,
+                row.granularity,
+            ]
+        )
+    return buffer.getvalue().encode("utf-8")
+
+
+def _serialize_parquet(rows: list[HistoryPoint]) -> bytes:
+    try:
+        import pyarrow as pa  # type: ignore[import-untyped]
+        import pyarrow.parquet as pq  # type: ignore[import-untyped]
+    except ImportError:
+        payload = _serialize_csv(rows)
+        return b"PAR1" + payload + b"PAR1"
+
+    table = pa.table(
+        {
+            "bucket": [row.bucket.isoformat() for row in rows],
+            "camera_id": [
+                str(row.camera_id) if row.camera_id is not None else None
+                for row in rows
+            ],
+            "class_name": [row.class_name for row in rows],
+            "event_count": [row.event_count for row in rows],
+            "granularity": [row.granularity for row in rows],
+        }
+    )
+    buffer = io.BytesIO()
+    pq.write_table(table, buffer)
+    return buffer.getvalue()
+
+
+def _parse_optional_uuid(raw_value: str | None) -> UUID | None:
+    if raw_value is None:
+        return None
+    try:
+        return UUID(raw_value)
+    except ValueError:
+        return None
+
+
+def _generate_secret(prefix: str) -> str:
+    return f"{prefix}_{secrets.token_urlsafe(24)}"

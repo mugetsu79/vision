@@ -7,8 +7,8 @@ import uuid
 import pytest
 from pydantic import BaseModel
 
-from traffic_monitor.core.config import Settings
-from traffic_monitor.core.events import EventMessage, NatsJetStreamClient
+from argus.core.config import Settings
+from argus.core.events import EventMessage, NatsJetStreamClient
 
 
 class CameraCommand(BaseModel):

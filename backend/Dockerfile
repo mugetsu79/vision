@@ -14,4 +14,4 @@ WORKDIR /app
 
 COPY --from=builder /app /app
 
-CMD ["/app/.venv/bin/uvicorn", "traffic_monitor.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/.venv/bin/uvicorn", "argus.main:app", "--host", "0.0.0.0", "--port", "8000"]

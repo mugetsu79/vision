@@ -7,7 +7,7 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
-from traffic_monitor.inference.engine import (
+from argus.inference.engine import (
     CameraSettings,
     EngineConfig,
     InferenceEngine,
@@ -16,15 +16,15 @@ from traffic_monitor.inference.engine import (
     StreamSettings,
     TrackerSettings,
 )
-from traffic_monitor.inference.publisher import TelemetryFrame
-from traffic_monitor.models.enums import ProcessingMode, TrackerType
-from traffic_monitor.streaming.mediamtx import (
+from argus.inference.publisher import TelemetryFrame
+from argus.models.enums import ProcessingMode, TrackerType
+from argus.streaming.mediamtx import (
     PrivacyPolicy,
     PublishProfile,
     StreamMode,
     StreamRegistration,
 )
-from traffic_monitor.vision.types import Detection
+from argus.vision.types import Detection
 
 
 class _SingleFrameSource:

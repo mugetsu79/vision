@@ -269,7 +269,7 @@ audit_log(id, tenant_id, actor_id, action, target, meta jsonb, ts)
 
 ## 5. Module Specifications
 
-### 5.1 Vision pipeline (`src/traffic_monitor/vision/`)
+### 5.1 Vision pipeline (`src/argus/vision/`)
 
 1. **Capture** (`camera.py`): hardware-aware factory.
    * Jetson Orin, MIPI-CSI: GStreamer `nvarguscamerasrc ! ... ! appsink`.
@@ -283,7 +283,7 @@ audit_log(id, tenant_id, actor_id, action, target, meta jsonb, ts)
 6. **Privacy** (`privacy.py`): run face + plate detectors on decoded frames / relevant crops and composite Gaussian blur or pixelate onto **any frame variant that can leave the worker**. Invariant: if privacy is required, raw passthrough is disabled and only privacy-filtered preview / annotated variants may be published. On Orin Nano this means canvas-over-passthrough is allowed only when privacy is off; privacy-on cameras switch to a filtered preview stream.
 7. **Secondary classifier / attribute detection** (`attributes.py`): optional second-stage model keyed off the camera's `secondary_model_id`. For each tracked detection of configured interest (e.g. every `person`), the bbox crop is passed through the secondary ONNX model (classifier or multi-label head) to emit `attributes` such as `hi_vis: true/false`, `hard_hat: true/false`, `uniform_color: "orange"`, etc. Attributes are persisted on `tracking_events.attributes` and are consumable by `detection_rules` (e.g. *"person in zone_A without hi_vis → alert"*). Models pluggable via `models` table; V4 ships with an Ultralytics-fine-tuned PPE model as a reference. Zero code changes are required to swap in a new domain model — drop the ONNX file, register it in `models`, point a camera at it.
 
-### 5.2 Inference engine (`src/traffic_monitor/inference/engine.py`)
+### 5.2 Inference engine (`src/argus/inference/engine.py`)
 
 A single async process per camera; same binary for central and edge. Config is a Pydantic model loaded from env + API:
 
@@ -309,7 +309,7 @@ Streaming policy:
 * `jetson-nano` + privacy on → JSON telemetry + privacy-filtered CPU preview stream; raw passthrough disabled.
 * `central-gpu` → JSON telemetry + optional privacy-safe annotated stream via NVENC.
 
-### 5.3 API (`src/traffic_monitor/api/v1/`)
+### 5.3 API (`src/argus/api/v1/`)
 
 ```
 GET    /api/v1/sites
@@ -343,7 +343,7 @@ GET    /healthz  /readyz
 
 All endpoints auth-gated except `/healthz`, `/readyz`, `/metrics` (internal). RBAC: `viewer` read-only, `operator` can issue commands (`/query`, start/stop), `admin` full CRUD, `superadmin` cross-tenant. Tenant users authenticate in tenant realms; `superadmin` authenticates in a dedicated `platform-admin` realm and assumes tenant context explicitly.
 
-### 5.4 LLM adapter (`src/traffic_monitor/llm/`)
+### 5.4 LLM adapter (`src/argus/llm/`)
 
 ```python
 class LLMClient(Protocol):
@@ -361,7 +361,7 @@ providers/vllm.py      # local OpenAI-compatible server
 
 `ClassFilterResponse` is a Pydantic model with JSON-Schema response format; the adapter validates the LLM reply and, on failure, retries once then falls back to a deterministic keyword matcher. Prompt and system message are versioned and stored alongside model outputs for reproducibility.
 
-### 5.5 Streaming (`src/traffic_monitor/streaming/` + MediaMTX)
+### 5.5 Streaming (`src/argus/streaming/` + MediaMTX)
 
 Default path depends on deployment profile. For `central-gpu`, the worker may push annotated, privacy-filtered frames to **MediaMTX** via `rtsp://mediamtx:8554/cameras/<id>` using its `whip` or RTSP-push plugin. For `jetson-nano`, the default is MediaMTX passthrough plus browser canvas overlays **only when privacy is off**; if privacy is on, the worker must disable raw passthrough and publish a privacy-filtered preview stream instead. Clients pull via WebRTC (preferred), LL-HLS (iOS/fallback), or MJPEG (forensic only, and never as a privacy bypass). Overlays (bbox, class, speed) may be drawn in the worker for preview streams, and a parallel JSON telemetry stream lets the React canvas re-draw precise overlays on top of the decoded video for interactive UX.
 
@@ -403,7 +403,7 @@ traffic-monitor-v4/
 │   ├── pyproject.toml                     # uv-managed
 │   ├── uv.lock
 │   ├── alembic.ini
-│   ├── src/traffic_monitor/
+│   ├── src/argus/
 │   │   ├── main.py                        # app factory
 │   │   ├── config.py                      # pydantic-settings
 │   │   ├── api/v1/                        # routers

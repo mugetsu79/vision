@@ -8,14 +8,14 @@ import pytest
 from httpx import AsyncClient, MockTransport, Request, Response
 from pydantic import BaseModel
 
-from traffic_monitor.inference.publisher import (
+from argus.inference.publisher import (
     HttpPublisher,
     NatsPublisher,
     ResilientPublisher,
     TelemetryFrame,
     TelemetryTrack,
 )
-from traffic_monitor.streaming.mediamtx import PublishProfile, StreamMode
+from argus.streaming.mediamtx import PublishProfile, StreamMode
 
 
 class _FailingNatsClient:

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from traffic_monitor.models.enums import TrackerType
-from traffic_monitor.vision.tracker import TrackerConfig, create_tracker
-from traffic_monitor.vision.types import Detection
+from argus.models.enums import TrackerType
+from argus.vision.tracker import TrackerConfig, create_tracker
+from argus.vision.types import Detection
 
 
 class _FakeTrackerBackend:

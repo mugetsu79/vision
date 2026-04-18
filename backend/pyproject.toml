@@ -1,5 +1,5 @@
 [project]
-name = "traffic-monitor-backend"
+name = "argus-backend"
 version = "0.1.0"
 description = "Argus | The OmniSight Platform backend"
 requires-python = ">=3.12,<3.13"
@@ -33,6 +33,7 @@ runtime = [
   "passlib[argon2]>=1.7",
   "cryptography>=43",
   "prometheus-client>=0.21",
+  "pyarrow>=23.0.1",
 ]
 dev = [
   "ruff>=0.8",
@@ -44,8 +45,8 @@ dev = [
 ]
 vision = [
   "opencv-python-headless>=4.10",
-  "onnxruntime-gpu>=1.20; sys_platform == 'linux'",
-  "onnxruntime>=1.20; sys_platform == 'darwin'",
+  "onnxruntime-gpu>=1.20; sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "onnxruntime>=1.20; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine != 'x86_64')",
   "ultralytics>=8.3",
   "numpy<2",
   "Pillow>=11",
@@ -58,7 +59,7 @@ llm = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/traffic_monitor"]
+packages = ["src/argus"]
 
 [tool.ruff]
 line-length = 100
@@ -78,7 +79,7 @@ select = [
 python_version = "3.12"
 strict = true
 mypy_path = "src"
-packages = ["traffic_monitor"]
+packages = ["argus"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

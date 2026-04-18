@@ -5,8 +5,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from traffic_monitor.inference.scheduler import CameraWorkerRecord, Scheduler
-from traffic_monitor.models.enums import ProcessingMode
+from argus.inference.scheduler import CameraWorkerRecord, Scheduler
+from argus.models.enums import ProcessingMode
 
 
 @dataclass(slots=True)

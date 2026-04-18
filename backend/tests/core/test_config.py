@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from traffic_monitor.core.config import Settings
+from argus.core.config import Settings
 
 
 def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:

@@ -9,8 +9,8 @@ from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient, Request, Response
 from jose import jwt
 
-from traffic_monitor.core.config import Settings
-from traffic_monitor.core.security import (
+from argus.core.config import Settings
+from argus.core.security import (
     AuthenticatedUser,
     EdgeKeyMiddleware,
     SecurityService,
@@ -18,7 +18,7 @@ from traffic_monitor.core.security import (
     encrypt_rtsp_url,
     require,
 )
-from traffic_monitor.models.enums import RoleEnum
+from argus.models.enums import RoleEnum
 
 ViewerUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.VIEWER))]
 AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]

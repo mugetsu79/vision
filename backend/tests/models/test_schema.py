@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from traffic_monitor.models import Base
+from argus.models import Base
 
 EXPECTED_TABLES = {
     "api_keys",

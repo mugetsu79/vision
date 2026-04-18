@@ -104,10 +104,11 @@ services:
       - -lc
       - >
         python -m pip install uv &&
-        python -m uv sync --group runtime --group dev &&
-        python -m uv run uvicorn traffic_monitor.main:app --reload --reload-dir src --host 0.0.0.0 --port 8000
+        python -m uv sync --group runtime --group dev --group llm &&
+        python -m uv run uvicorn argus.main:app --reload --reload-dir src --host 0.0.0.0 --port 8000
     environment:
       PYTHONPATH: /workspace/backend/src
+      UV_PROJECT_ENVIRONMENT: /tmp/argus-backend-venv
       TRAFFIC_MONITOR_DB_URL: postgresql+asyncpg://traffic_monitor:traffic_monitor@postgres:5432/traffic_monitor
       TRAFFIC_MONITOR_REDIS_URL: redis://redis:6379/0
       TRAFFIC_MONITOR_NATS_URL: nats://nats:4222

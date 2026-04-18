@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from traffic_monitor.vision.privacy import PrivacyConfig, PrivacyFilter
+from argus.vision.privacy import PrivacyConfig, PrivacyFilter
 
 
 class _StaticDetector:

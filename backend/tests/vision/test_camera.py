@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from traffic_monitor.vision.camera import CameraSourceConfig, PlatformInfo, create_camera_source
+from argus.vision.camera import CameraSourceConfig, PlatformInfo, create_camera_source
 
 
 class _FakeCapture:

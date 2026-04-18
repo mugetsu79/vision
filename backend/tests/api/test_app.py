@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from traffic_monitor.core.config import Settings
-from traffic_monitor.main import create_app
+from argus.core.config import Settings
+from argus.main import create_app
 
 
 @pytest.mark.asyncio

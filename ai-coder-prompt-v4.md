@@ -28,7 +28,7 @@
 >
 > In `frontend/`, bootstrap Vite + React 19 + TS strict + Tailwind v4 + shadcn/ui. Configure ESLint (flat config) + Prettier. Add `vitest` + `playwright`.
 >
-> In `backend/src/traffic_monitor/models/`, implement SQLAlchemy 2.x models for every table in spec §4 — including `models` (primary + secondary), `detection_rules`, `rule_events`, and the per-camera `zones`/`attribute_rules`/`secondary_model_id` columns. Create the first Alembic migration. Make both `tracking_events` and `rule_events` TimescaleDB hypertables (use raw-SQL ops in the migration: `SELECT create_hypertable('tracking_events','ts');` and same for `rule_events`). Create two continuous aggregates, `events_1m` and `events_1h`, from `tracking_events` only, grouped by `camera_id, class_name`.
+> In `backend/src/argus/models/`, implement SQLAlchemy 2.x models for every table in spec §4 — including `models` (primary + secondary), `detection_rules`, `rule_events`, and the per-camera `zones`/`attribute_rules`/`secondary_model_id` columns. Create the first Alembic migration. Make both `tracking_events` and `rule_events` TimescaleDB hypertables (use raw-SQL ops in the migration: `SELECT create_hypertable('tracking_events','ts');` and same for `rule_events`). Create two continuous aggregates, `events_1m` and `events_1h`, from `tracking_events` only, grouped by `camera_id, class_name`.
 >
 > Add `infra/docker-compose.dev.yml` with: `postgres` (timescale/timescaledb:latest-pg16), `redis:7`, `nats:2.10` (JetStream enabled), `minio`, `keycloak` (dev realm auto-imported from `infra/keycloak/realm-export.json`), `mediamtx` (latest), `otel-collector`, `prometheus`, `loki`, `tempo`, `grafana` (pre-provisioned dashboards). Mount source dirs for hot reload.
 >
@@ -96,7 +96,7 @@
 >
 > Implement `streaming/mediamtx.py` — three modes: (a) RTSP passthrough (register a pull source for the camera's RTSP URL), used only when jetson-nano privacy is off; (b) privacy-filtered CPU preview stream, used when jetson-nano privacy is on; (c) WHIP push of annotated frames, used by central-gpu profile.
 >
-> Add a CLI `python -m traffic_monitor.inference.engine --camera-id <uuid>` that loads config from the API and runs the worker. Add a `scheduler.py` on the master that reads the `cameras` table on startup and spawns one worker per `central` or `hybrid` camera (subprocess with a supervision loop).
+> Add a CLI `python -m argus.inference.engine --camera-id <uuid>` that loads config from the API and runs the worker. Add a `scheduler.py` on the master that reads the `cameras` table on startup and spawns one worker per `central` or `hybrid` camera (subprocess with a supervision loop).
 >
 > **Verification:** gates; end-to-end test: seed a camera row pointing at a looping test RTSP published by MediaMTX → worker runs → `tracking_events` rows accumulate → MediaMTX exposes the expected stream variant. Run the end-to-end test three ways: (1) x86 `central-gpu` profile with annotated stream, (2) Jetson `jetson-nano` with privacy off and passthrough + canvas, and (3) Jetson `jetson-nano` with privacy on and only the filtered preview stream exposed.
 

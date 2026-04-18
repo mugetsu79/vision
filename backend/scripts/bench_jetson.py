@@ -6,17 +6,17 @@ import time
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from traffic_monitor.models.enums import RuleAction, TrackerType
-from traffic_monitor.vision.benchmarking import (
+from argus.models.enums import RuleAction, TrackerType
+from argus.vision.benchmarking import (
     build_synthetic_detector,
     build_synthetic_frame,
     synthetic_tracker_backend_factory,
 )
-from traffic_monitor.vision.homography import Homography
-from traffic_monitor.vision.rules import RuleDefinition, RuleEngine
-from traffic_monitor.vision.tracker import TrackerConfig, create_tracker
-from traffic_monitor.vision.types import Detection
-from traffic_monitor.vision.zones import Zones
+from argus.vision.homography import Homography
+from argus.vision.rules import RuleDefinition, RuleEngine
+from argus.vision.tracker import TrackerConfig, create_tracker
+from argus.vision.types import Detection
+from argus.vision.zones import Zones
 
 
 class _JetsonPublisher:

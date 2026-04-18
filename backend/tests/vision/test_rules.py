@@ -5,9 +5,9 @@ from uuid import uuid4
 
 import pytest
 
-from traffic_monitor.models.enums import RuleAction
-from traffic_monitor.vision.rules import RuleDefinition, RuleEngine
-from traffic_monitor.vision.types import Detection
+from argus.models.enums import RuleAction
+from argus.vision.rules import RuleDefinition, RuleEngine
+from argus.vision.types import Detection
 
 
 class _RecordingPublisher:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from traffic_monitor.vision.homography import Homography
+from argus.vision.homography import Homography
 
 
 def test_homography_maps_pixels_and_estimates_speed() -> None:

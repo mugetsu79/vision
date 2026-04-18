@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from traffic_monitor.vision.preprocess import (
+from argus.vision.preprocess import (
     apply_clahe,
     apply_dark_channel_dehaze,
     apply_tonemap_drago,

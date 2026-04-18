@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from traffic_monitor.core.config import Settings
-from traffic_monitor.core.db import DatabaseManager
+from argus.core.config import Settings
+from argus.core.db import DatabaseManager
 
 
 @pytest.mark.asyncio

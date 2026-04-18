@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from traffic_monitor.vision.attributes import AttributeClassifier, AttributeModelConfig
-from traffic_monitor.vision.types import Detection
+from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
+from argus.vision.types import Detection
 
 
 @dataclass(slots=True)

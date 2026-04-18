@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient, Request, Response
 
-from traffic_monitor.streaming.mediamtx import (
+from argus.streaming.mediamtx import (
     MediaMTXClient,
     PrivacyPolicy,
     PublishProfile,

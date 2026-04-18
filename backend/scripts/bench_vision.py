@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 
-from traffic_monitor.models.enums import TrackerType
-from traffic_monitor.vision.benchmarking import (
+from argus.models.enums import TrackerType
+from argus.vision.benchmarking import (
     benchmark_async,
     benchmark_sync,
     build_synthetic_attribute_classifier,
@@ -14,15 +14,15 @@ from traffic_monitor.vision.benchmarking import (
     fresh_rule_evaluation,
     synthetic_tracker_backend_factory,
 )
-from traffic_monitor.vision.homography import Homography
-from traffic_monitor.vision.preprocess import (
+from argus.vision.homography import Homography
+from argus.vision.preprocess import (
     apply_clahe,
     apply_dark_channel_dehaze,
     apply_tonemap_drago,
 )
-from traffic_monitor.vision.privacy import PrivacyConfig, PrivacyFilter
-from traffic_monitor.vision.tracker import TrackerConfig, create_tracker
-from traffic_monitor.vision.zones import Zones
+from argus.vision.privacy import PrivacyConfig, PrivacyFilter
+from argus.vision.tracker import TrackerConfig, create_tracker
+from argus.vision.zones import Zones
 
 
 def parse_args() -> argparse.Namespace:
