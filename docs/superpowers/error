@@ -226,3 +226,59 @@ sh: openapi-typescript: command not found
  ELIFECYCLE  Command failed.
 morya@printer frontend % 
 
+
+--------------------------------
+
+This is much better: your stack is basically up now. Keycloak is healthy, migrations worked, and the remaining issue is just the **local frontend CLI linkage**.
+
+The important part:
+- `Ignored build scripts: esbuild` is **not** the reason `openapi-typescript` is missing.
+- `openapi-typescript: command not found` means your local `frontend/node_modules/.bin` setup is still not usable from the host shell.
+
+Use this exact sequence:
+
+```bash
+cd "$HOME/vision/frontend"
+
+corepack pnpm install --force
+corepack pnpm exec openapi-typescript --version
+corepack pnpm generate:api
+```
+
+If `corepack pnpm exec openapi-typescript --version` works, `generate:api` should work too.
+
+Then fix the `esbuild` warning so local Vite/dev/build doesn’t bite you later:
+
+```bash
+cd "$HOME/vision/frontend"
+corepack pnpm approve-builds
+```
+
+Approve `esbuild`, then run:
+
+```bash
+corepack pnpm rebuild esbuild
+```
+
+After that, verify the frontend toolchain:
+
+```bash
+corepack pnpm build
+```
+
+A couple of notes:
+- `make dev-up` already runs `docker compose -f infra/docker-compose.dev.yml up -d`, so you don’t need to run the compose command again right after it.
+- Your Alembic output is fine. The duplicate log lines are noisy, but not the blocker.
+
+If `corepack pnpm exec openapi-typescript --version` still says not found after `pnpm install --force`, run these two checks and send me the output:
+
+```bash
+cd "$HOME/vision/frontend"
+ls -la node_modules/.bin/openapi-typescript
+corepack pnpm list openapi-typescript
+```
+
+If you want, I can also patch the repo so local setup is less fragile by:
+- making `generate:api` use a more robust invocation
+- adding a `make setup-local` target
+- documenting the `pnpm approve-builds` step in the new `README.md`
