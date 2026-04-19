@@ -109,3 +109,60 @@ If you want the shortest next move, run these two commands and paste the outputs
 echo "TOKEN set? ${TOKEN:+yes}"; echo "$MODEL_PATH"; echo "$MODEL_SHA"; echo "$MODEL_SIZE"
 curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
 ```
+-----------------------------------------------------------------
+
+morya@printer vision % echo "TOKEN set? ${TOKEN:+yes}"
+echo "MODEL_PATH=$MODEL_PATH"
+echo "MODEL_SHA=$MODEL_SHA"
+echo "MODEL_SIZE=$MODEL_SIZE"
+TOKEN set? yes
+MODEL_PATH=/Users/morya/vision/models/yolo12n.onnx
+MODEL_SHA=e9c543348a6a849002ab0d1028cfe99ad0c5d90985091dbc50a07cbb66bd8f3e
+MODEL_SIZE=10705841
+morya@printer vision % curl -sS http://127.0.0.1:8000/healthz
+{"status":"ok"}%                                                                                             morya@printer vision % curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  http://127.0.0.1:8000/api/v1/models \
+  -d "{
+    \"name\": \"YOLO12n iMac\",
+    \"version\": \"lab-imac\",
+    \"task\": \"detect\",
+    \"path\": \"$MODEL_PATH\",
+    \"format\": \"onnx\",
+    \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
+    \"input_shape\": {\"width\": 640, \"height\": 640},
+    \"sha256\": \"$MODEL_SHA\",
+    \"size_bytes\": $MODEL_SIZE,
+    \"license\": \"lab\"
+  }" | python3 -m json.tool
+Expecting value: line 1 column 1 (char 0)
+morya@printer vision % curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  http://127.0.0.1:8000/api/v1/models \
+  -d "{
+    \"name\": \"YOLO12n iMac\",
+    \"version\": \"lab-imac\",
+    \"task\": \"detect\",
+    \"path\": \"$MODEL_PATH\",
+    \"format\": \"onnx\",
+    \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
+    \"input_shape\": {\"width\": 640, \"height\": 640},
+    \"sha256\": \"$MODEL_SHA\",
+    \"size_bytes\": $MODEL_SIZE,
+    \"license\": \"lab\"
+  }" | python3 -m json.tool
+Expecting value: line 1 column 1 (char 0)
+morya@printer vision % echo "TOKEN set? ${TOKEN:+yes}"; echo "$MODEL_PATH"; echo "$MODEL_SHA"; echo "$MODEL_SIZE"
+curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
+TOKEN set? yes
+/Users/morya/vision/models/yolo12n.onnx
+e9c543348a6a849002ab0d1028cfe99ad0c5d90985091dbc50a07cbb66bd8f3e
+10705841
+{
+    "detail": "Token verification failed."
+}
+morya@printer vision % 
