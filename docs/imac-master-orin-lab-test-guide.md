@@ -137,6 +137,40 @@ The Jetson must be able to reach these iMac ports:
 - `7422` NATS leaf upstream
 - `9000` MinIO
 
+### 1.9 Check for port conflicts before you start the stack
+
+Before you run Argus for the first time, make sure nothing else on the iMac is already using the most important local ports.
+
+Run:
+
+```bash
+for PORT in 3000 5432 6379 7422 8000 8080 9000 9001; do
+  echo "Checking port $PORT"
+  lsof -nP -iTCP:$PORT -sTCP:LISTEN || true
+done
+```
+
+What good looks like:
+
+- ideally, the command prints nothing except the `Checking port ...` lines
+
+If you see a process already using one of those ports:
+
+1. stop that process before continuing
+2. if it is an old Docker container, list running containers with:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Ports}}'
+```
+
+3. stop the conflicting container or old stack
+
+Do this especially for:
+
+- `8080` because Keycloak needs it
+- `9001` because the MinIO console needs it
+- `8000` because the backend needs it
+
 ## 2. Test A: iMac Only
 
 This test keeps everything on the iMac. Both cameras use `central` mode.
@@ -169,12 +203,12 @@ What good looks like:
 
 - the installer finishes without error
 
-#### Step 3: Install Git, Python, and Node
+#### Step 3: Install Git, Python, Node, and Helm
 
 Run:
 
 ```bash
-brew install git python@3.12 node
+brew install git python@3.12 node helm
 ```
 
 #### Step 4: Install uv and enable Corepack
@@ -224,6 +258,41 @@ cd "$HOME/vision"
 git pull --rebase origin main
 ```
 
+Now install the local host-side dependencies that the guide uses later for migrations and API generation.
+
+Run:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv sync --group runtime --group dev --group llm
+
+cd "$HOME/vision/frontend"
+corepack pnpm install
+```
+
+Verify the two host-side tools that matter most for this guide:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run alembic --help >/dev/null
+
+cd "$HOME/vision/frontend"
+corepack pnpm exec openapi-typescript --version
+```
+
+What good looks like:
+
+- the Alembic command finishes without an error
+- `openapi-typescript` prints a version number
+
+If `openapi-typescript` is not found:
+
+1. stay in `frontend/`
+2. run `corepack pnpm install --force`
+3. run `corepack pnpm exec openapi-typescript --version` again
+
+If `pnpm install` warns that `esbuild` build scripts were ignored, that is not the blocker for API generation. You can continue with the guide.
+
 ### 2.3 Put the model file in the repository
 
 Create the models directory:
@@ -258,12 +327,43 @@ From the repository root:
 ```bash
 cd "$HOME/vision"
 make dev-up
-cd backend && python3 -m uv run alembic upgrade head
-cd ../frontend && corepack pnpm generate:api
-cd ..
 ```
 
-Wait about 30 to 60 seconds on the first run.
+Important:
+
+- `make dev-up` already runs `docker compose -f infra/docker-compose.dev.yml up -d`
+- do **not** run `docker compose ... up -d` again right after `make dev-up`
+
+Wait for the core services to become reachable:
+
+```bash
+for i in {1..60}; do
+  curl -fsS http://127.0.0.1:8000/healthz && break
+  sleep 1
+done
+
+for i in {1..60}; do
+  curl -fsS http://127.0.0.1:8080/realms/argus-dev/.well-known/openid-configuration >/dev/null && break
+  sleep 1
+done
+
+for i in {1..60}; do
+  curl -fsS http://127.0.0.1:9001 >/dev/null && break
+  sleep 1
+done
+```
+
+Then run the host-side commands:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run alembic upgrade head
+
+cd "$HOME/vision/frontend"
+corepack pnpm generate:api
+
+cd "$HOME/vision"
+```
 
 Now check the main pages in your browser:
 
@@ -278,6 +378,9 @@ What good looks like:
 - the health URL returns `{"status":"ok"}`
 - the Keycloak page opens
 - the MinIO console opens
+- the MinIO console accepts:
+  - username: `argus`
+  - password: `argus-dev-secret`
 
 If the health URL does not work:
 
@@ -286,6 +389,18 @@ cd "$HOME/vision"
 docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
+
+If the MinIO console at `127.0.0.1:9001` does not work:
+
+```bash
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.dev.yml logs --tail 40 minio
+```
+
+What good looks like in the MinIO logs:
+
+- no `Invalid credentials` error
+- a line showing `WebUI: http://127.0.0.1:9001`
 
 ### 2.5 Get the model metadata
 
@@ -808,6 +923,8 @@ export ARGUS_API_BASE_URL="http://$IMAC_IP:8000"
 export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
 export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@$IMAC_IP:5432/argus"
 export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
+export ARGUS_MINIO_ACCESS_KEY="argus"
+export ARGUS_MINIO_SECRET_KEY="argus-dev-secret"
 export ARGUS_EDGE_CAMERA_ID="$CAMERA_TWO_ID"
 docker compose -f infra/docker-compose.edge.yml up -d --build
 ```
@@ -959,7 +1076,43 @@ docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
 
-### 4.8 What to do after a successful lab
+### 4.8 If local API generation says `openapi-typescript: command not found`
+
+This means the host-side frontend dependencies were not installed cleanly.
+
+Run:
+
+```bash
+cd "$HOME/vision/frontend"
+corepack pnpm install --force
+corepack pnpm exec openapi-typescript --version
+corepack pnpm generate:api
+```
+
+What good looks like:
+
+- `openapi-typescript --version` prints a version
+- `generate:api` writes `src/lib/api.generated.ts` without error
+
+### 4.9 If `127.0.0.1:9001` does not open
+
+This means MinIO is not healthy yet.
+
+Run:
+
+```bash
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.dev.yml logs --tail 40 minio
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate minio backend
+curl -I http://127.0.0.1:9001
+```
+
+What good looks like:
+
+- MinIO logs no longer show `Invalid credentials`
+- `curl -I` returns an HTTP response instead of connection refused
+
+### 4.10 What to do after a successful lab
 
 If both tests pass:
 
@@ -968,7 +1121,7 @@ If both tests pass:
 3. add cameras gradually, not all at once
 4. move on to a more production-like deployment only after the Jetson path stays stable
 
-### 4.9 Clean shutdown
+### 4.11 Clean shutdown
 
 When you are done testing:
 
