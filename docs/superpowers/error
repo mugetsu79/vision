@@ -1,40 +1,25 @@
-Don’t pipe to `json.tool` yet. We need the raw HTTP response first.
-
-Use the simpler auth-check route:
-
-```bash
-TOKEN="$(
+morya@printer vision % TOKEN="$(
   curl -sS \
     --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
     http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 )"
-
-curl -i -sS \
+morya@printer vision % curl -i -sS \
   -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/debug/protected
-```
+HTTP/1.1 200 OK
+date: Sun, 19 Apr 2026 19:26:24 GMT
+server: uvicorn
+content-length: 135
+content-type: application/json
 
-This is the key next step.
-
-What it means:
-- `200 OK` with JSON: auth is fine, and the problem is specific to `/api/v1/models`
-- `401` or `403`: auth is still the blocker
-- `500`: backend is erroring and we need logs
-
-If it is not `200`, run these two and paste the outputs:
-
-```bash
-python3 -c 'import os,base64,json; t=os.environ["TOKEN"].split("."); p=t[1] + "="*(-len(t[1])%4); print(json.dumps(json.loads(base64.urlsafe_b64decode(p)), indent=2))'
-docker compose -f infra/docker-compose.dev.yml logs --tail 60 backend
-```
-
-If `/api/v1/debug/protected` does return `200`, then test models raw, still without `json.tool`:
-
-```bash
-curl -i -sS \
+{"sub":"3d31139e-4a8c-4329-9e0d-33503e91cb58","email":"admin-dev@argus.local","role":"admin","realm":"argus-dev","is_superadmin":false}%                                                                                  morya@printer vision % curl -i -sS \
   -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/models
-```
+HTTP/1.1 500 Internal Server Error
+date: Sun, 19 Apr 2026 19:26:51 GMT
+server: uvicorn
+content-length: 21
+content-type: text/plain; charset=utf-8
 
-Paste that raw output next. That will tell us exactly whether this is still auth or a backend error behind the models route.
+Internal Server Error%                                                                                       morya@printer vision % 
