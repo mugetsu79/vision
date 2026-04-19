@@ -1,84 +1,40 @@
-That narrows it down cleanly: the problem is just the token.
+Don’t pipe to `json.tool` yet. We need the raw HTTP response first.
 
-`TOKEN set? yes` only means the variable is non-empty. The backend is explicitly telling us the token is invalid:
-
-```json
-{"detail":"Token verification failed."}
-```
-
-Most likely cause:
-- your `TOKEN` was created before the last Keycloak/container restart, so it’s stale now
-
-Do this next.
-
-First, fetch a fresh token and inspect the response:
-
-```bash
-TOKEN_RESPONSE="$(
-  curl -sS \
-    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
-    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token
-)"
-echo "$TOKEN_RESPONSE" | python3 -m json.tool
-```
-
-Then set `TOKEN` again from that fresh response:
+Use the simpler auth-check route:
 
 ```bash
 TOKEN="$(
-  printf '%s' "$TOKEN_RESPONSE" |
+  curl -sS \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 )"
-echo "${TOKEN:0:32}..."
-```
 
-Then verify auth before trying to create the model:
-
-```bash
-curl -sS \
+curl -i -sS \
   -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
+  http://127.0.0.1:8000/api/v1/debug/protected
 ```
 
-If that works, then create the model again:
+This is the key next step.
+
+What it means:
+- `200 OK` with JSON: auth is fine, and the problem is specific to `/api/v1/models`
+- `401` or `403`: auth is still the blocker
+- `500`: backend is erroring and we need logs
+
+If it is not `200`, run these two and paste the outputs:
 
 ```bash
-IMAC_MODEL_ID="$(
-  curl -sS \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -X POST \
-    http://127.0.0.1:8000/api/v1/models \
-    -d "{
-      \"name\": \"YOLO12n iMac\",
-      \"version\": \"lab-imac\",
-      \"task\": \"detect\",
-      \"path\": \"$MODEL_PATH\",
-      \"format\": \"onnx\",
-      \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
-      \"input_shape\": {\"width\": 640, \"height\": 640},
-      \"sha256\": \"$MODEL_SHA\",
-      \"size_bytes\": $MODEL_SIZE,
-      \"license\": \"lab\"
-    }" |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'
-)"
-echo "$IMAC_MODEL_ID"
+python3 -c 'import os,base64,json; t=os.environ["TOKEN"].split("."); p=t[1] + "="*(-len(t[1])%4); print(json.dumps(json.loads(base64.urlsafe_b64decode(p)), indent=2))'
+docker compose -f infra/docker-compose.dev.yml logs --tail 60 backend
 ```
 
-If the `GET /api/v1/models` call still says token verification failed after refreshing, paste the output of:
+If `/api/v1/debug/protected` does return `200`, then test models raw, still without `json.tool`:
 
 ```bash
-echo "$TOKEN_RESPONSE" | python3 -m json.tool
-```
-
-That will tell us whether Keycloak is returning a token at all or returning an auth error instead.
-
-
----------------------
-
-morya@printer vision % curl -sS \
+curl -i -sS \
   -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
-Expecting value: line 1 column 1 (char 0)
+  http://127.0.0.1:8000/api/v1/models
+```
 
+Paste that raw output next. That will tell us exactly whether this is still auth or a backend error behind the models route.
