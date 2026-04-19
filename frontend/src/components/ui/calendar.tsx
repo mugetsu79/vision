@@ -14,8 +14,9 @@ export function Calendar({
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col gap-6 sm:flex-row sm:gap-8",
-        month: "space-y-4",
+        // Keep months stacked so narrow side panels don't crop the final weekday columns.
+        months: "flex flex-col gap-6",
+        month: "space-y-4 min-w-[17.5rem]",
         month_caption: "flex items-center justify-center gap-3 pt-1",
         caption_label: "text-sm font-semibold tracking-[0.04em] text-[#eef4ff]",
         nav: "flex items-center gap-2",

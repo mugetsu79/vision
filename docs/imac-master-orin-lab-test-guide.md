@@ -353,17 +353,23 @@ for i in {1..60}; do
 done
 ```
 
-Then run the host-side commands:
+Then run the setup commands:
 
 ```bash
-cd "$HOME/vision/backend"
-python3 -m uv run alembic upgrade head
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  /tmp/argus-backend-venv/bin/alembic upgrade head
 
 cd "$HOME/vision/frontend"
 corepack pnpm generate:api
 
 cd "$HOME/vision"
 ```
+
+Why this guide uses the container command:
+
+- it guarantees Alembic talks to the same database URL as the running backend
+- it avoids host-versus-container configuration drift on first-time lab setups
 
 Now check the main pages in your browser:
 
