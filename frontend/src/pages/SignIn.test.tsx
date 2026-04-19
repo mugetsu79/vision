@@ -41,4 +41,14 @@ describe("SignInPage", () => {
 
     expect(signIn).toHaveBeenCalledTimes(1);
   });
+
+  test("renders the shared product lockup and a single primary sign-in action", () => {
+    render(<SignInPage />);
+
+    expect(
+      screen.getByRole("img", { name: /argus product lockup/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    expect(screen.getByText(/vigilant intelligence/i)).toBeInTheDocument();
+  });
 });

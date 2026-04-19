@@ -14,9 +14,9 @@
 
 ### New Files
 
-- `frontend/public/brand/argus-lockup-ui.png`
+- `frontend/public/brand/argus-lockup-ui.svg`
   - Product/UI lockup copied from the approved attached logo direction.
-- `frontend/public/brand/argus-symbol-ui.png`
+- `frontend/public/brand/argus-symbol-ui.svg`
   - Square symbol crop for the icon rail and compact contexts.
 - `frontend/src/components/layout/ProductLockup.tsx`
   - Central brand/logo component for the shell and sign-in.
@@ -97,8 +97,8 @@
 ## Task 1: Establish Brand Assets And Shared Matte UI Foundations
 
 **Files:**
-- Create: `frontend/public/brand/argus-lockup-ui.png`
-- Create: `frontend/public/brand/argus-symbol-ui.png`
+- Create: `frontend/public/brand/argus-lockup-ui.svg`
+- Create: `frontend/public/brand/argus-symbol-ui.svg`
 - Create: `frontend/src/components/layout/ProductLockup.tsx`
 - Modify: `frontend/src/index.css`
 - Modify: `frontend/src/components/ui/button.tsx`
@@ -164,7 +164,7 @@ export function ProductLockup({
   if (symbolOnly) {
     return (
       <img
-        src="/brand/argus-symbol-ui.png"
+        src="/brand/argus-symbol-ui.svg"
         alt="Argus symbol"
         className={className ?? "h-11 w-11 rounded-[0.95rem]"}
       />
@@ -173,7 +173,7 @@ export function ProductLockup({
 
   return (
     <img
-      src="/brand/argus-lockup-ui.png"
+      src="/brand/argus-lockup-ui.svg"
       alt="Argus product lockup"
       className={
         className ??
@@ -231,7 +231,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/public/brand/argus-lockup-ui.png frontend/public/brand/argus-symbol-ui.png frontend/src/components/layout/ProductLockup.tsx frontend/src/index.css frontend/src/components/ui/button.tsx frontend/src/components/ui/badge.tsx frontend/src/components/ui/input.tsx frontend/src/components/ui/select.tsx frontend/src/components/ui/table.tsx frontend/src/components/ui/dialog.tsx frontend/src/pages/SignIn.test.tsx
+git add frontend/public/brand/argus-lockup-ui.svg frontend/public/brand/argus-symbol-ui.svg frontend/src/components/layout/ProductLockup.tsx frontend/src/index.css frontend/src/components/ui/button.tsx frontend/src/components/ui/badge.tsx frontend/src/components/ui/input.tsx frontend/src/components/ui/select.tsx frontend/src/components/ui/table.tsx frontend/src/components/ui/dialog.tsx frontend/src/pages/SignIn.test.tsx
 git commit -m "feat: add Argus matte UI foundations"
 ```
 

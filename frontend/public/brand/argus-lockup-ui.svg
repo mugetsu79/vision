@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-label="Argus product lockup">
+  <title>Argus product lockup</title>
+  <desc>Clean in-product lockup with the approved Argus symbol and wordmark on a transparent background.</desc>
+  <defs>
+    <style>
+      .word { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; font-weight: 800; letter-spacing: -0.035em; }
+      .tag { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; font-weight: 500; letter-spacing: 0.18em; }
+    </style>
+    <linearGradient id="arc" x1="12%" y1="8%" x2="88%" y2="88%">
+      <stop offset="0%" stop-color="#4ed4ff"/>
+      <stop offset="55%" stop-color="#64b4ff"/>
+      <stop offset="100%" stop-color="#a37cff"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fdfefe"/>
+      <stop offset="100%" stop-color="#dbe3ef"/>
+    </linearGradient>
+    <linearGradient id="tagline" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#94a3bb"/>
+      <stop offset="100%" stop-color="#c2cddd"/>
+    </linearGradient>
+    <radialGradient id="iris" cx="50%" cy="44%" r="56%">
+      <stop offset="0%" stop-color="#dff6ff"/>
+      <stop offset="34%" stop-color="#5fd2ff"/>
+      <stop offset="74%" stop-color="#3f93ff"/>
+      <stop offset="100%" stop-color="#936dff"/>
+    </radialGradient>
+    <filter id="subtleGlow" x="-22%" y="-22%" width="144%" height="144%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feColorMatrix
+        in="blur"
+        type="matrix"
+        values="1 0 0 0 0
+                0 1 0 0 0
+                0 0 1 0 0
+                0 0 0 0.12 0"
+      />
+    </filter>
+  </defs>
+
+  <g transform="translate(180 180)">
+    <circle
+      cx="0"
+      cy="0"
+      r="116"
+      fill="none"
+      stroke="url(#arc)"
+      stroke-width="14"
+      stroke-linecap="round"
+      stroke-dasharray="126 48 88 48 126 48 88 48"
+      opacity="0.82"
+      filter="url(#subtleGlow)"
+    />
+
+    <path
+      d="M-86 0c20-35 56-58 86-58s66 23 86 58c-20 35-56 58-86 58S-66 35-86 0Z"
+      fill="none"
+      stroke="url(#arc)"
+      stroke-width="14"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <path
+      d="M-22-144h20L-12-55l-22 199h-20l32-199v-89Z"
+      fill="url(#arc)"
+      opacity="0.96"
+    />
+    <path
+      d="M117-94 132-79 45 6l-95 87-15-15 95-87 87-85Z"
+      fill="url(#arc)"
+      opacity="0.92"
+    />
+
+    <circle cx="0" cy="0" r="38" fill="url(#iris)"/>
+    <circle cx="0" cy="0" r="15" fill="#08111b"/>
+    <circle cx="-9" cy="-11" r="5.5" fill="#f8fcff" opacity="0.86"/>
+  </g>
+
+  <g transform="translate(348 0)">
+    <text x="0" y="193" class="word" font-size="126" fill="url(#word)">Argus</text>
+    <text x="350" y="195" class="tag" font-size="26" fill="#7e8ba2">|</text>
+    <text x="392" y="168" class="tag" font-size="22" fill="url(#tagline)">THE OMNISIGHT</text>
+    <text x="392" y="208" class="tag" font-size="22" fill="url(#tagline)">PLATFORM</text>
+  </g>
+</svg>
