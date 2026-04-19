@@ -35,3 +35,77 @@ Traceback (most recent call last):
 json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 
 morya@printer vision % 
+
+
+--------------------
+
+The JSON parser error means the API call did **not** return the model JSON body. Most likely it returned nothing because one of these is true:
+
+- the backend isn’t reachable
+- `TOKEN` is empty or expired
+- one of `MODEL_PATH`, `MODEL_SHA`, or `MODEL_SIZE` is empty
+- the API returned an error page/body you didn’t inspect first
+
+Do this in order.
+
+First, confirm the required variables are actually set in this shell:
+
+```bash
+echo "TOKEN set? ${TOKEN:+yes}"
+echo "MODEL_PATH=$MODEL_PATH"
+echo "MODEL_SHA=$MODEL_SHA"
+echo "MODEL_SIZE=$MODEL_SIZE"
+```
+
+Then confirm the backend is alive:
+
+```bash
+curl -sS http://127.0.0.1:8000/healthz
+```
+
+Then inspect the raw API response instead of piping straight into Python:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  http://127.0.0.1:8000/api/v1/models \
+  -d "{
+    \"name\": \"YOLO12n iMac\",
+    \"version\": \"lab-imac\",
+    \"task\": \"detect\",
+    \"path\": \"$MODEL_PATH\",
+    \"format\": \"onnx\",
+    \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
+    \"input_shape\": {\"width\": 640, \"height\": 640},
+    \"sha256\": \"$MODEL_SHA\",
+    \"size_bytes\": $MODEL_SIZE,
+    \"license\": \"lab\"
+  }" | python3 -m json.tool
+```
+
+If that says `401` or auth-related detail, refresh the token:
+
+```bash
+TOKEN="$(
+  curl -sS \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
+```
+
+If the model already exists, list models and reuse the id:
+
+```bash
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
+```
+
+If you want the shortest next move, run these two commands and paste the outputs:
+
+```bash
+echo "TOKEN set? ${TOKEN:+yes}"; echo "$MODEL_PATH"; echo "$MODEL_SHA"; echo "$MODEL_SIZE"
+curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
+```
