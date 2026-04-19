@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -53,7 +53,7 @@ describe("AppShell", () => {
     });
   });
 
-  test("renders the fixed top nav and admin secondary links", () => {
+  test("renders the unified left rail workspace shell", () => {
     render(
       <QueryClientProvider client={createQueryClient()}>
         <MemoryRouter
@@ -69,13 +69,25 @@ describe("AppShell", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Live" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "History" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Incidents" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sites" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Cameras" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /primary workspace/i }),
+    ).toBeInTheDocument();
+    const operationsNav = screen.getByRole("navigation", { name: /operations/i });
+    const configurationNav = screen.getByRole("navigation", { name: /configuration/i });
+
+    expect(operationsNav).toBeInTheDocument();
+    expect(configurationNav).toBeInTheDocument();
+    expect(within(operationsNav).getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(within(operationsNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
+    expect(within(operationsNav).getByRole("link", { name: "History" })).toBeInTheDocument();
+    expect(within(operationsNav).getByRole("link", { name: "Incidents" })).toBeInTheDocument();
+    expect(within(configurationNav).getByRole("link", { name: "Settings" })).toBeInTheDocument();
+    expect(within(configurationNav).getByRole("link", { name: "Sites" })).toBeInTheDocument();
+    expect(within(configurationNav).getByRole("link", { name: "Cameras" })).toBeInTheDocument();
+    expect(screen.queryByText(/management/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/configuration surfaces stay one step away/i),
+    ).not.toBeInTheDocument();
   });
 
   test("routes authenticated users through the shell on dashboard paths", async () => {
@@ -84,9 +96,11 @@ describe("AppShell", () => {
     const { default: App } = await import("@/App");
     render(<App />);
 
-    expect(await screen.findByRole("link", { name: "Dashboard" })).toBeInTheDocument();
-    expect(
-      screen.getByText(/operator-grade visibility without native-bandwidth waste/i),
-    ).toBeInTheDocument();
+    const primaryWorkspaceNav = await screen.findByRole("navigation", {
+      name: /primary workspace/i,
+    });
+
+    expect(primaryWorkspaceNav).toBeInTheDocument();
+    expect(within(primaryWorkspaceNav).getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
   });
 });
