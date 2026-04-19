@@ -1,0 +1,4 @@
+creation_rules:
+  - path_regex: infra/secrets/.*\.(enc\.ya?ml|enc\.json|enc\.env)$
+    encrypted_regex: "^(data|stringData|env)$"
+    age: age1replacewithyourteamrecipientandrotatebeforeproduction0000000000000

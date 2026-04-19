@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          semantic_version: 24
+          extra_plugins: |
+            @semantic-release/github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        uses: sigstore/cosign-installer@v3
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        uses: anchore/sbom-action/download-syft@v0
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        uses: azure/setup-helm@v4
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        name: Prepare release output directory
+        run: mkdir -p dist/release
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        id: backend_build
+        name: Publish central backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/argus-backend:${{ steps.semantic.outputs.new_release_version }}
+            ghcr.io/${{ github.repository }}/argus-backend:latest
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        id: edge_build
+        name: Publish edge image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.edge
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/argus-edge:${{ steps.semantic.outputs.new_release_version }}
+            ghcr.io/${{ github.repository }}/argus-edge:latest
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        id: frontend_build
+        name: Publish frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/argus-frontend:${{ steps.semantic.outputs.new_release_version }}
+            ghcr.io/${{ github.repository }}/argus-frontend:latest
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        name: Sign release images
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign ghcr.io/${GITHUB_REPOSITORY}/argus-backend:${{ steps.semantic.outputs.new_release_version }}
+          cosign sign ghcr.io/${GITHUB_REPOSITORY}/argus-edge:${{ steps.semantic.outputs.new_release_version }}
+          cosign sign ghcr.io/${GITHUB_REPOSITORY}/argus-frontend:${{ steps.semantic.outputs.new_release_version }}
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        name: Generate image SBOMs
+        run: |
+          syft registry:ghcr.io/${GITHUB_REPOSITORY}/argus-backend:${{ steps.semantic.outputs.new_release_version }} -o spdx-json=dist/release/argus-backend.spdx.json
+          syft registry:ghcr.io/${GITHUB_REPOSITORY}/argus-edge:${{ steps.semantic.outputs.new_release_version }} -o spdx-json=dist/release/argus-edge.spdx.json
+          syft registry:ghcr.io/${GITHUB_REPOSITORY}/argus-frontend:${{ steps.semantic.outputs.new_release_version }} -o spdx-json=dist/release/argus-frontend.spdx.json
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        name: Publish Helm chart to GHCR OCI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm package infra/helm/argus \
+            --version "${{ steps.semantic.outputs.new_release_version }}" \
+            --app-version "${{ steps.semantic.outputs.new_release_version }}" \
+            --destination dist/release
+          helm push dist/release/argus-${{ steps.semantic.outputs.new_release_version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+      - if: steps.semantic.outputs.new_release_published == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ steps.semantic.outputs.new_release_version }}
+          path: dist/release

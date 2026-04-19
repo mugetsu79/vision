@@ -52,9 +52,20 @@ class Settings(BaseSettings):
     llm_ollama_base_url: str = "http://localhost:11434"
     llm_vllm_base_url: str = "http://localhost:8001"
 
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = "argus"
+    minio_secret_key: SecretStr = SecretStr("argus")
+    minio_secure: bool = False
+    minio_incidents_bucket: str = "incidents"
+    incident_clip_pre_seconds: int = 10
+    incident_clip_post_seconds: int = 10
+    incident_clip_fps: int = 10
+
     otel_service_name: str = "argus-backend"
     otlp_endpoint: str = "http://localhost:4318"
     metrics_namespace: str = "argus"
+    enable_worker_metrics_server: bool = False
+    worker_metrics_port: int = 9108
     publish_profile: str | None = None
     websocket_telemetry_buffer_size: int = 32
     video_feed_max_concurrent_per_user: int = 10

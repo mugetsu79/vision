@@ -1,0 +1,16 @@
+{{- if and .Values.central.enabled .Values.central.frontend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-frontend
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.central.frontend.service.port }}
+      targetPort: http
+{{- end }}

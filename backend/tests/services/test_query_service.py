@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException, status
 
 from argus.api.contracts import QueryRequest, TenantContext
 from argus.core.config import Settings
@@ -56,6 +57,21 @@ class NullAuditLogger:
         return None
 
 
+@dataclass
+class AllowAllQuotaEnforcer:
+    async def assert_query_allowed(self, *, tenant_context: TenantContext) -> None:
+        return None
+
+
+@dataclass
+class RejectingQuotaEnforcer:
+    async def assert_query_allowed(self, *, tenant_context: TenantContext) -> None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Tenant query rate limit exceeded.",
+        )
+
+
 @pytest.mark.asyncio
 async def test_query_service_publishes_camera_commands_over_nats() -> None:
     settings = Settings(
@@ -90,6 +106,7 @@ async def test_query_service_publishes_camera_commands_over_nats() -> None:
         ),
         events=events,
         audit_logger=NullAuditLogger(),
+        quota_enforcer=AllowAllQuotaEnforcer(),
     )
     tenant_context = TenantContext(
         tenant_id=uuid4(),
@@ -122,3 +139,47 @@ async def test_query_service_publishes_camera_commands_over_nats() -> None:
 
     await subscription.unsubscribe()
     await events.close()
+
+
+@pytest.mark.asyncio
+async def test_query_service_rejects_requests_when_tenant_rate_limit_is_exceeded() -> None:
+    camera_id = uuid4()
+    service = QueryService(
+        inventory=StubInventory(allowed_classes=["bus", "car", "truck"]),
+        parser=StubParser(
+            QueryServiceResult(
+                resolved_classes=["bus"],
+                provider="keyword-fallback",
+                model="fallback",
+                latency_ms=4,
+            )
+        ),
+        events=None,  # type: ignore[arg-type]
+        audit_logger=NullAuditLogger(),
+        quota_enforcer=RejectingQuotaEnforcer(),
+    )
+    tenant_context = TenantContext(
+        tenant_id=uuid4(),
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="operator-1",
+            email="operator@argus.local",
+            role=RoleEnum.OPERATOR,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.resolve_query(
+            tenant_context,
+            QueryRequest(
+                prompt="only watch buses",
+                camera_ids=[camera_id],
+            ),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_429_TOO_MANY_REQUESTS

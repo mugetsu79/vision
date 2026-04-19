@@ -119,14 +119,13 @@ class SecurityService:
             await self.http_client.aclose()
 
     async def authenticate_request(self, request: Request) -> AuthenticatedUser:
-        authorization_header = request.headers.get("Authorization")
-        if not authorization_header or not authorization_header.startswith("Bearer "):
+        token = _extract_bearer_token(request.headers.get("Authorization"))
+        if token is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Missing bearer token.",
             )
 
-        token = authorization_header.removeprefix("Bearer ").strip()
         return await self.validate_token(token)
 
     async def validate_token(self, token: str) -> AuthenticatedUser:
@@ -241,6 +240,22 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
 CurrentUserDependency = Annotated[AuthenticatedUser, Depends(get_current_user)]
 
 
+async def get_current_media_user(request: Request) -> AuthenticatedUser:
+    security_service: SecurityService = request.app.state.security
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    if token is None:
+        token = request.query_params.get("access_token")
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token.",
+        )
+    return await security_service.validate_token(token)
+
+
+CurrentMediaUserDependency = Annotated[AuthenticatedUser, Depends(get_current_media_user)]
+
+
 async def get_current_websocket_user(websocket: WebSocket) -> AuthenticatedUser:
     security_service: SecurityService = websocket.app.state.security
     authorization_header = websocket.headers.get("Authorization")
@@ -261,14 +276,18 @@ def require(required_role: RoleEnum) -> Callable[[AuthenticatedUser], Any]:
     async def dependency(
         current_user: CurrentUserDependency,
     ) -> AuthenticatedUser:
-        if ROLE_RANK[current_user.role] < ROLE_RANK[required_role]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient role.",
-            )
-        return current_user
+        return enforce_role(current_user, required_role)
 
     return dependency
+
+
+def enforce_role(current_user: AuthenticatedUser, required_role: RoleEnum) -> AuthenticatedUser:
+    if ROLE_RANK[current_user.role] < ROLE_RANK[required_role]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient role.",
+        )
+    return current_user
 
 
 class EdgeKeyMiddleware(BaseHTTPMiddleware):
@@ -342,6 +361,12 @@ def _extract_edge_key_from_authorization(header_value: str | None) -> str | None
     if header_value is None or not header_value.startswith("EdgeKey "):
         return None
     return header_value.removeprefix("EdgeKey ").strip()
+
+
+def _extract_bearer_token(header_value: str | None) -> str | None:
+    if header_value is None or not header_value.startswith("Bearer "):
+        return None
+    return header_value.removeprefix("Bearer ").strip()
 
 
 def hash_api_key(raw_key: str) -> str:

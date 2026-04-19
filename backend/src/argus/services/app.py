@@ -12,7 +12,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
-from sqlalchemy import select, text, update
+from sqlalchemy import bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -28,6 +28,8 @@ from argus.api.contracts import (
     EdgeRegisterResponse,
     ExportArtifact,
     HistoryPoint,
+    HistorySeriesResponse,
+    HistorySeriesRow,
     HomographyPayload,
     IncidentResponse,
     ModelCreate,
@@ -621,34 +623,20 @@ class HistoryService:
         self,
         tenant_context: TenantContext,
         *,
-        camera_id: UUID | None,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
     ) -> list[HistoryPoint]:
-        await self._ensure_camera_access(tenant_context, camera_id)
-        view_name = "events_1m" if granularity == "1m" else "events_1h"
-        parameters: dict[str, Any] = {
-            "starts_at": starts_at,
-            "ends_at": ends_at,
-        }
-        camera_clause = ""
-        if camera_id is not None:
-            camera_clause = "AND camera_id = :camera_id"
-            parameters["camera_id"] = camera_id
-
-        statement = text(
-            f"""
-            SELECT bucket, camera_id, class_name, event_count
-            FROM {view_name}
-            WHERE bucket >= :starts_at
-              AND bucket <= :ends_at
-              {camera_clause}
-            ORDER BY bucket ASC, class_name ASC
-            """
+        await self._ensure_camera_access(tenant_context, camera_ids)
+        rows = await self._fetch_history_rows(
+            camera_ids=camera_ids,
+            class_names=class_names,
+            granularity=granularity,
+            starts_at=starts_at,
+            ends_at=ends_at,
         )
-        async with self.session_factory() as session:
-            rows = (await session.execute(statement, parameters)).mappings().all()
         return [
             HistoryPoint(
                 bucket=row["bucket"],
@@ -660,11 +648,67 @@ class HistoryService:
             for row in rows
         ]
 
+    async def query_series(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> HistorySeriesResponse:
+        await self._ensure_camera_access(tenant_context, camera_ids)
+        rows = await self._fetch_series_rows(
+            camera_ids=camera_ids,
+            class_names=class_names,
+            granularity=granularity,
+            starts_at=starts_at,
+            ends_at=ends_at,
+        )
+
+        points_by_bucket: dict[datetime, dict[str, int]] = {}
+        ordered_classes: list[str] = []
+        seen_classes: set[str] = set()
+        for row in rows:
+            bucket = cast(datetime, row["bucket"])
+            class_name = cast(str, row["class_name"])
+            event_count = int(row["event_count"])
+            values = points_by_bucket.setdefault(bucket, {})
+            values[class_name] = event_count
+            if class_name not in seen_classes:
+                seen_classes.add(class_name)
+                ordered_classes.append(class_name)
+
+        if class_names:
+            selected_classes = [
+                class_name for class_name in class_names if class_name in seen_classes
+            ]
+        else:
+            selected_classes = ordered_classes
+
+        return HistorySeriesResponse(
+            granularity=granularity,
+            class_names=selected_classes,
+            rows=[
+                HistorySeriesRow(
+                    bucket=bucket,
+                    values={
+                        class_name: values.get(class_name, 0)
+                        for class_name in selected_classes
+                    },
+                    total_count=sum(values.values()),
+                )
+                for bucket, values in sorted(points_by_bucket.items())
+            ],
+        )
+
     async def export_history(
         self,
         tenant_context: TenantContext,
         *,
-        camera_id: UUID | None,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
@@ -672,7 +716,8 @@ class HistoryService:
     ) -> ExportArtifact:
         rows = await self.query_history(
             tenant_context,
-            camera_id=camera_id,
+            camera_ids=camera_ids,
+            class_names=class_names,
             granularity=granularity,
             starts_at=starts_at,
             ends_at=ends_at,
@@ -692,38 +737,147 @@ class HistoryService:
     async def _ensure_camera_access(
         self,
         tenant_context: TenantContext,
-        camera_id: UUID | None,
+        camera_ids: list[UUID] | None,
     ) -> None:
-        if camera_id is None:
+        if not camera_ids:
             return
         async with self.session_factory() as session:
-            await _load_camera(session, tenant_context.tenant_id, camera_id)
+            for camera_id in camera_ids:
+                await _load_camera(session, tenant_context.tenant_id, camera_id)
+
+    async def _fetch_history_rows(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> list[dict[str, Any]]:
+        view_name, bucket_expr = _history_view_and_bucket_expr(granularity)
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+        if class_names:
+            filters.append("AND class_name IN :class_names")
+            parameters["class_names"] = class_names
+
+        statement = text(
+            f"""
+            SELECT
+              {bucket_expr} AS bucket,
+              camera_id,
+              class_name,
+              SUM(event_count)::bigint AS event_count
+            FROM {view_name}
+            WHERE bucket >= :starts_at
+              AND bucket <= :ends_at
+              {' '.join(filters)}
+            GROUP BY 1, 2, 3
+            ORDER BY 1 ASC, 3 ASC, 2 ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+        if class_names:
+            statement = statement.bindparams(bindparam("class_names", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _fetch_series_rows(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> list[dict[str, Any]]:
+        view_name, bucket_expr = _history_view_and_bucket_expr(granularity)
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+        if class_names:
+            filters.append("AND class_name IN :class_names")
+            parameters["class_names"] = class_names
+
+        statement = text(
+            f"""
+            SELECT
+              {bucket_expr} AS bucket,
+              class_name,
+              SUM(event_count)::bigint AS event_count
+            FROM {view_name}
+            WHERE bucket >= :starts_at
+              AND bucket <= :ends_at
+              {' '.join(filters)}
+            GROUP BY 1, 2
+            ORDER BY 1 ASC, 2 ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+        if class_names:
+            statement = statement.bindparams(bindparam("class_names", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
 
 
 class IncidentService:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
-    async def list_incidents(self, tenant_context: TenantContext) -> list[IncidentResponse]:
+    async def list_incidents(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID | None,
+        incident_type: str | None,
+        limit: int,
+    ) -> list[IncidentResponse]:
         async with self.session_factory() as session:
+            if camera_id is not None:
+                await _load_camera(session, tenant_context.tenant_id, camera_id)
             statement = (
-                select(Incident)
+                select(Incident, Camera.name)
                 .join(Camera, Camera.id == Incident.camera_id)
                 .join(Site, Site.id == Camera.site_id)
                 .where(Site.tenant_id == tenant_context.tenant_id)
                 .order_by(Incident.ts.desc())
+                .limit(limit)
             )
-            incidents = (await session.execute(statement)).scalars().all()
+            if camera_id is not None:
+                statement = statement.where(Incident.camera_id == camera_id)
+            if incident_type is not None:
+                statement = statement.where(Incident.type == incident_type)
+            incidents = (await session.execute(statement)).all()
         return [
             IncidentResponse(
                 id=incident.id,
                 camera_id=incident.camera_id,
+                camera_name=camera_name,
                 ts=incident.ts,
                 type=incident.type,
                 payload=incident.payload,
                 snapshot_url=incident.snapshot_url,
+                clip_url=incident.clip_url,
+                storage_bytes=incident.storage_bytes,
             )
-            for incident in incidents
+            for incident, camera_name in incidents
         ]
 
 
@@ -1123,6 +1277,18 @@ def _serialize_parquet(rows: list[HistoryPoint]) -> bytes:
     buffer = io.BytesIO()
     pq.write_table(table, buffer)
     return buffer.getvalue()
+
+
+def _history_view_and_bucket_expr(granularity: str) -> tuple[str, str]:
+    if granularity == "1m":
+        return ("events_1m", "bucket")
+    if granularity == "5m":
+        return ("events_1m", "time_bucket(INTERVAL '5 minutes', bucket)")
+    if granularity == "1h":
+        return ("events_1h", "bucket")
+    if granularity == "1d":
+        return ("events_1h", "time_bucket(INTERVAL '1 day', bucket)")
+    raise ValueError(f"Unsupported history granularity: {granularity}")
 
 
 def _tenant_name_from_slug(slug: str) -> str:

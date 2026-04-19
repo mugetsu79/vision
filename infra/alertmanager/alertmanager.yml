@@ -1,0 +1,17 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  routes:
+    - receiver: edge-ops
+      matchers:
+        - alertname=~"Edge.*|InferenceFPSLow|PrivacyFilterErrors"
+    - receiver: platform-ops
+      matchers:
+        - alertname=~"DatabaseWriteErrors|WebSocketDisconnectStorm"
+
+receivers:
+  - name: default
+  - name: edge-ops
+  - name: platform-ops

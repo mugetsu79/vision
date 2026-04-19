@@ -1,0 +1,16 @@
+{{- if .Values.edge.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-edge-worker
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: edge-worker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: metrics
+      port: 9108
+      targetPort: metrics
+{{- end }}

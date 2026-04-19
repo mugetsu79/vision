@@ -1,0 +1,18 @@
+central:
+  enabled: false
+
+edge:
+  enabled: true
+  publishProfile: jetson-nano
+  worker:
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+        nvidia.com/gpu: "1"
+
+natsLeaf:
+  enabled: true

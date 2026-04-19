@@ -1,0 +1,159 @@
+import fs from "node:fs/promises";
+
+import { expect, test } from "@playwright/test";
+
+function cameraPayload() {
+  return {
+    id: "11111111-1111-1111-1111-111111111111",
+    site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    edge_node_id: null,
+    name: "Forklift Gate",
+    rtsp_url_masked: "rtsp://***",
+    processing_mode: "central",
+    primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    secondary_model_id: null,
+    tracker_type: "botsort",
+    active_classes: ["car", "bus"],
+    attribute_rules: [],
+    zones: [],
+    homography: null,
+    privacy: {
+      blur_faces: true,
+      blur_plates: true,
+      method: "gaussian",
+      strength: 7,
+    },
+    browser_delivery: {
+      default_profile: "720p10",
+      allow_native_on_demand: true,
+      profiles: [],
+    },
+    frame_skip: 1,
+    fps_cap: 25,
+    created_at: "2026-04-18T10:00:00Z",
+    updated_at: "2026-04-18T10:00:00Z",
+  };
+}
+
+function historySeriesPayload() {
+  const rows = [];
+  const start = Date.parse("2026-04-12T00:00:00Z");
+  for (let index = 0; index < 168; index += 1) {
+    const bucket = new Date(start + index * 60 * 60 * 1000).toISOString();
+    const car = 12 + (index % 8);
+    const bus = 3 + (index % 3);
+    rows.push({
+      bucket,
+      values: { car, bus },
+      total_count: car + bus,
+    });
+  }
+  return {
+    granularity: "1h",
+    class_names: ["car", "bus"],
+    rows,
+  };
+}
+
+test("history renders quickly, CSV export works, and incidents show signed previews", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/cameras", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([cameraPayload()]),
+    });
+  });
+
+  await page.route("**/api/v1/history/series**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(historySeriesPayload()),
+    });
+  });
+
+  await page.route("**/api/v1/export**", async (route) => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get("format")).toBe("csv");
+
+    const from = new Date(url.searchParams.get("from") ?? "");
+    const to = new Date(url.searchParams.get("to") ?? "");
+    const hours = Math.round((to.getTime() - from.getTime()) / (60 * 60 * 1000));
+    expect(hours).toBeLessThanOrEqual(25);
+
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="history.csv"',
+      },
+      body: "bucket,class_name,event_count\n2026-04-18T00:00:00Z,car,16\n",
+    });
+  });
+
+  await page.route("**/api/v1/incidents**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "99999999-9999-9999-9999-999999999999",
+          camera_id: "11111111-1111-1111-1111-111111111111",
+          ts: "2026-04-18T10:15:00Z",
+          type: "ppe-missing",
+          payload: { hard_hat: false, severity: "high" },
+          snapshot_url: "https://minio.local/signed/incidents/forklift-gate.jpg",
+        },
+      ]),
+    });
+  });
+
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.locator("#username").fill("admin-dev");
+  await page.locator("#password").fill("argus-admin-pass");
+  await page.locator("#kc-login").click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Warm the dev server route chunk before measuring the history render budget.
+  await page.getByRole("link", { name: "History" }).click();
+  await expect(page).toHaveURL(/\/history$/);
+  await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.evaluate(() => {
+    (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart = performance.now();
+  });
+  await page.getByRole("link", { name: "History" }).click();
+  await expect(page).toHaveURL(/\/history$/);
+  await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
+  const historyRenderMs = await page.evaluate(() => {
+    const startedAt = (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart;
+    if (typeof startedAt !== "number") {
+      throw new Error("Missing history render start mark.");
+    }
+    return performance.now() - startedAt;
+  });
+  expect(historyRenderMs).toBeLessThan(500);
+
+  await page.getByRole("button", { name: "Last 24h" }).click();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download CSV" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("history.csv");
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  if (!downloadPath) {
+    throw new Error("Expected a CSV download path.");
+  }
+  const csv = await fs.readFile(downloadPath, "utf-8");
+  expect(csv).toContain("bucket,class_name,event_count");
+
+  await page.getByRole("link", { name: "Incidents" }).click();
+  await expect(page).toHaveURL(/\/incidents$/);
+  await expect(
+    page.getByRole("img", { name: /incident preview for forklift gate/i }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Forklift Gate" })).toBeVisible();
+});

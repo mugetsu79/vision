@@ -1,0 +1,40 @@
+{{- if .Values.natsLeaf.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-nats-leaf
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: nats-leaf
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "argus.labels" . | nindent 8 }}
+        app.kubernetes.io/component: nats-leaf
+    spec:
+      containers:
+        - name: nats-leaf
+          image: {{ .Values.natsLeaf.image.repository }}:{{ .Values.natsLeaf.image.tag }}
+          args:
+            - "-js"
+            - "-c"
+            - "/etc/nats/nats.conf"
+          ports:
+            - containerPort: {{ .Values.natsLeaf.service.natsPort }}
+              name: nats
+            - containerPort: {{ .Values.natsLeaf.service.monitorPort }}
+              name: monitor
+          volumeMounts:
+            - name: nats-config
+              mountPath: /etc/nats/nats.conf
+              subPath: nats.conf
+      volumes:
+        - name: nats-config
+          configMap:
+            name: {{ include "argus.fullname" . }}-nats-leaf
+{{- end }}

@@ -41,6 +41,11 @@ STREAM_DEFINITIONS = (
         subjects=["edge.heartbeat.*"],
         description="Edge node heartbeat messages",
     ),
+    js_api.StreamConfig(
+        name="ARGUS_INCIDENTS",
+        subjects=["incident.triggered.*"],
+        description="Incident trigger messages",
+    ),
 )
 
 

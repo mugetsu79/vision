@@ -1,0 +1,11 @@
+{{- if .Values.natsLeaf.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus.fullname" . }}-nats-leaf
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+data:
+  nats.conf: |
+{{ .Values.natsLeaf.config | indent 4 }}
+{{- end }}

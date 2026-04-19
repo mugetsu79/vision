@@ -1,0 +1,22 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-otel-collector
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: otel-collector
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+    - name: metrics
+      port: {{ .Values.otelCollector.service.metricsPort }}
+      targetPort: metrics
+{{- end }}

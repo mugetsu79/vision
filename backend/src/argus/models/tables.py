@@ -32,6 +32,14 @@ class Tenant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    query_requests_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    incident_storage_quota_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=10 * 1024 * 1024 * 1024,
+    )
+    anpr_store_plaintext: Mapped[bool] = mapped_column(nullable=False, default=False)
+    anpr_plaintext_justification: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -227,6 +235,8 @@ class Incident(UUIDPrimaryKeyMixin, Base):
     type: Mapped[str] = mapped_column(String(255), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     snapshot_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clip_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
 class AuditLog(UUIDPrimaryKeyMixin, Base):

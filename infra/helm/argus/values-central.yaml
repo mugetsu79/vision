@@ -1,0 +1,8 @@
+central:
+  enabled: true
+
+edge:
+  enabled: false
+
+natsLeaf:
+  enabled: false

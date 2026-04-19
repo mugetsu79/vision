@@ -266,6 +266,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/history/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History Series */
+        get: operations["get_history_series_api_v1_history_series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -374,10 +391,17 @@ export interface components {
     schemas: {
         /** BrowserDeliverySettings */
         BrowserDeliverySettings: {
-            /** Default Profile */
-            default_profile?: "native" | "1080p15" | "720p10" | "540p5";
-            /** Allow Native On Demand */
-            allow_native_on_demand?: boolean;
+            /**
+             * Default Profile
+             * @default 720p10
+             * @enum {string}
+             */
+            default_profile: "native" | "1080p15" | "720p10" | "540p5";
+            /**
+             * Allow Native On Demand
+             * @default true
+             */
+            allow_native_on_demand: boolean;
             /** Profiles */
             profiles?: {
                 [key: string]: unknown;
@@ -593,6 +617,29 @@ export interface components {
             /** Granularity */
             granularity: string;
         };
+        /** HistorySeriesResponse */
+        HistorySeriesResponse: {
+            /** Granularity */
+            granularity: string;
+            /** Class Names */
+            class_names: string[];
+            /** Rows */
+            rows: components["schemas"]["HistorySeriesRow"][];
+        };
+        /** HistorySeriesRow */
+        HistorySeriesRow: {
+            /**
+             * Bucket
+             * Format: date-time
+             */
+            bucket: string;
+            /** Values */
+            values: {
+                [key: string]: number;
+            };
+            /** Total Count */
+            total_count: number;
+        };
         /** HomographyPayload */
         HomographyPayload: {
             /** Src */
@@ -614,6 +661,8 @@ export interface components {
              * Format: uuid
              */
             camera_id: string;
+            /** Camera Name */
+            camera_name?: string | null;
             /**
              * Ts
              * Format: date-time
@@ -627,6 +676,13 @@ export interface components {
             };
             /** Snapshot Url */
             snapshot_url?: string | null;
+            /** Clip Url */
+            clip_url?: string | null;
+            /**
+             * Storage Bytes
+             * @default 0
+             */
+            storage_bytes: number;
         };
         /** ModelCreate */
         ModelCreate: {
@@ -1560,6 +1616,8 @@ export interface operations {
                 from: string;
                 to: string;
                 camera_id?: string | null;
+                camera_ids?: string[] | null;
+                class_names?: string[] | null;
                 granularity?: string;
             };
             header?: {
@@ -1590,12 +1648,52 @@ export interface operations {
             };
         };
     };
+    get_history_series_api_v1_history_series_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                camera_id?: string | null;
+                camera_ids?: string[] | null;
+                class_names?: string[] | null;
+                granularity?: string;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistorySeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_history_api_v1_export_get: {
         parameters: {
             query: {
                 from: string;
                 to: string;
                 camera_id?: string | null;
+                camera_ids?: string[] | null;
+                class_names?: string[] | null;
                 granularity?: string;
                 format?: string;
             };
@@ -1629,7 +1727,11 @@ export interface operations {
     };
     list_incidents_api_v1_incidents_get: {
         parameters: {
-            query?: never;
+            query?: {
+                camera_id?: string | null;
+                type?: string | null;
+                limit?: number;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
@@ -1697,7 +1799,9 @@ export interface operations {
     };
     get_hls_playlist_api_v1_streams__camera_id__hls_m3u8_get: {
         parameters: {
-            query?: never;
+            query?: {
+                tenant_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
@@ -1730,7 +1834,9 @@ export interface operations {
     };
     get_video_feed_video_feed__camera_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                tenant_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };

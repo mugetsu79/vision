@@ -21,6 +21,7 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
+      - "7422:7422"
     volumes:
       - ./nats/nats.conf:/etc/nats/nats.conf:ro
 
@@ -55,6 +56,7 @@ services:
       - "8889:8889"
       - "8189:8189/udp"
       - "9997:9997"
+      - "9998:9998"
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
 
@@ -64,6 +66,7 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
+      - "9464:9464"
     volumes:
       - ./otel-collector/config.yml:/etc/otelcol-contrib/config.yaml:ro
 
@@ -75,6 +78,16 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
 
   loki:
     image: grafana/loki:3.4.2
@@ -113,6 +126,16 @@ services:
       ARGUS_DB_URL: postgresql+asyncpg://argus:argus@postgres:5432/argus
       ARGUS_REDIS_URL: redis://redis:6379/0
       ARGUS_NATS_URL: nats://nats:4222
+      ARGUS_OTLP_ENDPOINT: http://otel-collector:4318
+      ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
+      ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      ARGUS_MEDIAMTX_HLS_BASE_URL: http://mediamtx:8888
+      ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889
+      ARGUS_MINIO_ENDPOINT: minio:9000
+      ARGUS_MINIO_ACCESS_KEY: argus
+      ARGUS_MINIO_SECRET_KEY: argus
+      ARGUS_MINIO_SECURE: "false"
+      ARGUS_MINIO_INCIDENTS_BUCKET: incidents
       ARGUS_KEYCLOAK_SERVER_URL: http://keycloak:8080
       ARGUS_KEYCLOAK_PUBLIC_SERVER_URL: http://127.0.0.1:8080
       ARGUS_KEYCLOAK_ISSUER: http://keycloak:8080/realms/argus-dev
@@ -121,6 +144,7 @@ services:
     volumes:
       - ../backend:/workspace/backend
     depends_on:
+      - minio
       - postgres
       - redis
       - nats
@@ -147,6 +171,10 @@ services:
       - ../frontend:/workspace/frontend
     depends_on:
       - backend
+      - prometheus
+      - loki
+      - tempo
+      - alertmanager
 
 volumes:
   postgres-data:

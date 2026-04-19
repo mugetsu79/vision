@@ -347,7 +347,8 @@ class FakeHistoryService:
         self,
         context: TenantContext,
         *,
-        camera_id: UUID | None,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
@@ -355,18 +356,42 @@ class FakeHistoryService:
         return [
             HistoryPoint(
                 bucket=starts_at,
-                camera_id=camera_id,
-                class_name="truck",
+                camera_id=camera_ids[0] if camera_ids else None,
+                class_name=(class_names or ["truck"])[0],
                 event_count=12,
                 granularity=granularity,
             )
         ]
 
+    async def query_series(
+        self,
+        context: TenantContext,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> dict[str, object]:
+        selected_classes = class_names or ["truck"]
+        return {
+            "granularity": granularity,
+            "class_names": selected_classes,
+            "rows": [
+                {
+                    "bucket": starts_at.isoformat(),
+                    "values": {selected_classes[0]: 12},
+                    "total_count": 12,
+                }
+            ],
+        }
+
     async def export_history(
         self,
         context: TenantContext,
         *,
-        camera_id: UUID | None,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
@@ -386,17 +411,25 @@ class FakeHistoryService:
 
 
 class FakeIncidentService:
-    async def list_incidents(self, context: TenantContext) -> list[IncidentResponse]:
+    async def list_incidents(
+        self,
+        context: TenantContext,
+        *,
+        camera_id: UUID | None = None,
+        incident_type: str | None = None,
+        limit: int = 50,
+    ) -> list[IncidentResponse]:
         return [
             IncidentResponse(
                 id=uuid4(),
-                camera_id=uuid4(),
+                camera_id=camera_id or uuid4(),
+                camera_name="North Gate",
                 ts=datetime.now(tz=UTC),
-                type="ppe-missing",
+                type=incident_type or "ppe-missing",
                 payload={"hard_hat": False},
                 snapshot_url="https://minio.local/snapshots/1.jpg",
             )
-        ]
+        ][:limit]
 
 
 class FakeStreamService:

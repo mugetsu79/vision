@@ -1,0 +1,42 @@
+{{- if .Values.mediamtx.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-mediamtx
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mediamtx
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "argus.labels" . | nindent 8 }}
+        app.kubernetes.io/component: mediamtx
+    spec:
+      containers:
+        - name: mediamtx
+          image: {{ .Values.mediamtx.image.repository }}:{{ .Values.mediamtx.image.tag }}
+          ports:
+            - containerPort: {{ .Values.mediamtx.service.rtspPort }}
+              name: rtsp
+            - containerPort: {{ .Values.mediamtx.service.hlsPort }}
+              name: hls
+            - containerPort: {{ .Values.mediamtx.service.webrtcPort }}
+              name: webrtc
+            - containerPort: {{ .Values.mediamtx.service.apiPort }}
+              name: api
+            - containerPort: {{ .Values.mediamtx.service.metricsPort }}
+              name: metrics
+          volumeMounts:
+            - name: mediamtx-config
+              mountPath: /mediamtx.yml
+              subPath: mediamtx.yml
+      volumes:
+        - name: mediamtx-config
+          configMap:
+            name: {{ include "argus.fullname" . }}-mediamtx
+{{- end }}

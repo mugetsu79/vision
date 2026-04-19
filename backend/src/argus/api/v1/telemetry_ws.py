@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from argus.api.contracts import TenantContext
 from argus.api.dependencies import get_websocket_services, get_websocket_tenant_context
+from argus.core.metrics import WEBSOCKET_CONNECTIONS, WEBSOCKET_DISCONNECTS_TOTAL
 from argus.services.app import AppServices
 
 router = APIRouter(tags=["telemetry"])
@@ -19,13 +20,17 @@ async def telemetry_websocket(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> None:
+    tenant_label = str(tenant_context.tenant_id)
     await websocket.accept()
+    WEBSOCKET_CONNECTIONS.labels(tenant=tenant_label).inc()
     subscription = await services.telemetry.subscribe(tenant_context)
     try:
         while True:
             payload = await subscription.receive()
             await websocket.send_json(payload.model_dump(mode="json"))
     except WebSocketDisconnect:
+        WEBSOCKET_DISCONNECTS_TOTAL.labels(tenant=tenant_label).inc()
         return
     finally:
+        WEBSOCKET_CONNECTIONS.labels(tenant=tenant_label).dec()
         await subscription.close()

@@ -1,0 +1,28 @@
+{{- if .Values.mediamtx.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-mediamtx
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: mediamtx
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: rtsp
+      port: {{ .Values.mediamtx.service.rtspPort }}
+      targetPort: rtsp
+    - name: hls
+      port: {{ .Values.mediamtx.service.hlsPort }}
+      targetPort: hls
+    - name: webrtc
+      port: {{ .Values.mediamtx.service.webrtcPort }}
+      targetPort: webrtc
+    - name: api
+      port: {{ .Values.mediamtx.service.apiPort }}
+      targetPort: api
+    - name: metrics
+      port: {{ .Values.mediamtx.service.metricsPort }}
+      targetPort: metrics
+{{- end }}

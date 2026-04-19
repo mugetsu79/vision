@@ -7,6 +7,8 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
+from argus.core.metrics import PRIVACY_FILTER_OPERATIONS_TOTAL
+
 
 class RegionDetector(Protocol):
     def detect(self, frame: NDArray[np.uint8]) -> list[tuple[int, int, int, int]]: ...
@@ -34,21 +36,26 @@ class PrivacyFilter:
         self._applied_regions: dict[int, set[tuple[str, int, int, int, int]]] = {}
 
     def apply(self, frame: NDArray[np.uint8]) -> NDArray[np.uint8]:
-        frame_key = id(frame)
-        applied = self._applied_regions.setdefault(frame_key, set())
-        if len(self._applied_regions) > 64:
-            self._applied_regions.clear()
-            self._applied_regions[frame_key] = applied
+        try:
+            frame_key = id(frame)
+            applied = self._applied_regions.setdefault(frame_key, set())
+            if len(self._applied_regions) > 64:
+                self._applied_regions.clear()
+                self._applied_regions[frame_key] = applied
 
-        if self.config.blur_faces and self.face_detector is not None:
-            for bbox in self.face_detector.detect(frame):
-                self._apply_region(frame, bbox, "face", applied)
+            if self.config.blur_faces and self.face_detector is not None:
+                for bbox in self.face_detector.detect(frame):
+                    self._apply_region(frame, bbox, "face", applied)
 
-        if self.config.blur_plates and self.plate_detector is not None:
-            for bbox in self.plate_detector.detect(frame):
-                self._apply_region(frame, bbox, "plate", applied)
+            if self.config.blur_plates and self.plate_detector is not None:
+                for bbox in self.plate_detector.detect(frame):
+                    self._apply_region(frame, bbox, "plate", applied)
 
-        return frame
+            PRIVACY_FILTER_OPERATIONS_TOTAL.labels(result="success").inc()
+            return frame
+        except Exception:
+            PRIVACY_FILTER_OPERATIONS_TOTAL.labels(result="error").inc()
+            raise
 
     def _apply_region(
         self,

@@ -1,0 +1,49 @@
+{{- if .Values.edge.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-edge-worker
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: edge-worker
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "argus.labels" . | nindent 8 }}
+        app.kubernetes.io/component: edge-worker
+    spec:
+      containers:
+        - name: edge-worker
+          image: {{ include "argus.image" (dict "registry" .Values.global.imageRegistry "repository" .Values.edge.worker.image.repository "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          args:
+            - "--camera-id"
+            - {{ .Values.edge.worker.cameraId | quote }}
+          env:
+            - name: ARGUS_PUBLISH_PROFILE
+              value: {{ .Values.edge.publishProfile | quote }}
+            - name: ARGUS_NATS_URL
+              value: nats://{{ include "argus.fullname" . }}-nats-leaf:4222
+            - name: ARGUS_OTLP_ENDPOINT
+              value: http://{{ include "argus.fullname" . }}-otel-collector:4318
+            - name: ARGUS_MEDIAMTX_API_URL
+              value: http://{{ include "argus.fullname" . }}-mediamtx:9997
+            - name: ARGUS_MEDIAMTX_RTSP_BASE_URL
+              value: rtsp://{{ include "argus.fullname" . }}-mediamtx:8554
+            - name: ARGUS_MEDIAMTX_WHIP_BASE_URL
+              value: http://{{ include "argus.fullname" . }}-mediamtx:8889
+            {{- range $name, $value := .Values.edge.worker.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - containerPort: 9108
+              name: metrics
+          resources:
+            {{- toYaml .Values.edge.worker.resources | nindent 12 }}
+{{- end }}

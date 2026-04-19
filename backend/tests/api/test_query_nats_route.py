@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException, status
 from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import TenantContext
@@ -82,6 +83,15 @@ class QueryOnlyServices:
     query: QueryService
 
 
+@dataclass
+class RejectingQuotaEnforcer:
+    async def assert_query_allowed(self, *, tenant_context: TenantContext) -> None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Tenant query rate limit exceeded.",
+        )
+
+
 @pytest.mark.asyncio
 async def test_query_route_publishes_nats_command_within_one_second() -> None:
     settings = Settings(
@@ -156,3 +166,57 @@ async def test_query_route_publishes_nats_command_within_one_second() -> None:
 
     await subscription.unsubscribe()
     await events.close()
+
+
+@pytest.mark.asyncio
+async def test_query_route_returns_429_when_tenant_rate_limit_is_exceeded() -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    user = AuthenticatedUser(
+        subject="operator-1",
+        email="operator@argus.local",
+        role=RoleEnum.OPERATOR,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=str(uuid4()),
+        claims={},
+    )
+    tenant_context = TenantContext(
+        tenant_id=UUID(str(user.tenant_context)),
+        tenant_slug="argus-dev",
+        user=user,
+    )
+    app = create_app(settings=settings)
+    app.state.services = QueryOnlyServices(
+        tenancy=StubTenancy(tenant_context),
+        query=QueryService(
+            inventory=StubInventory(),
+            parser=StubParser(),
+            events=None,
+            audit_logger=NullAuditLogger(),
+            quota_enforcer=RejectingQuotaEnforcer(),
+        ),
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_websocket_user] = lambda: user
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query",
+            json={
+                "prompt": "show me buses only",
+                "camera_ids": [str(uuid4())],
+            },
+        )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Tenant query rate limit exceeded."

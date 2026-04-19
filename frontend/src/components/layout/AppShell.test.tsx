@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -23,6 +24,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { AppShell } from "@/components/layout/AppShell";
+import { createQueryClient } from "@/app/query-client";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
@@ -53,16 +55,18 @@ describe("AppShell", () => {
 
   test("renders the fixed top nav and admin secondary links", () => {
     render(
-      <MemoryRouter
-        future={{
-          v7_relativeSplatPath: true,
-          v7_startTransition: true,
-        }}
-      >
-        <AppShell>
-          <div>Page body</div>
-        </AppShell>
-      </MemoryRouter>,
+      <QueryClientProvider client={createQueryClient()}>
+        <MemoryRouter
+          future={{
+            v7_relativeSplatPath: true,
+            v7_startTransition: true,
+          }}
+        >
+          <AppShell>
+            <div>Page body</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
 
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
@@ -81,6 +85,8 @@ describe("AppShell", () => {
     render(<App />);
 
     expect(await screen.findByRole("link", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByText(/fleet overview becomes live in prompt 8/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/operator-grade visibility without native-bandwidth waste/i),
+    ).toBeInTheDocument();
   });
 });

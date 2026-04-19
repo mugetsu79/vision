@@ -7,13 +7,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from argus.api.v1 import router as api_router
 from argus.core.config import Settings
@@ -24,27 +18,12 @@ from argus.core.logging import (
     clear_request_context,
     configure_logging,
 )
+from argus.core.metrics import APP_INFO, HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 from argus.core.security import EdgeKeyMiddleware, SecurityService
 from argus.core.tracing import TracingManager
 from argus.llm.parser import ClassFilterParser
 from argus.services.app import DatabaseAuditLogger, build_app_services
-from argus.services.query import QueryService, SQLCameraClassInventory
-
-REQUEST_COUNT = Counter(
-    "argus_http_requests_total",
-    "Total number of HTTP requests handled by the backend.",
-    ["method", "path", "status_code"],
-)
-REQUEST_DURATION = Histogram(
-    "argus_http_request_duration_seconds",
-    "Latency of HTTP requests handled by the backend.",
-    ["method", "path"],
-)
-APP_INFO = Gauge(
-    "argus_app_info",
-    "Argus application metadata.",
-    ["app_name", "environment"],
-)
+from argus.services.query import QueryService, SQLCameraClassInventory, SQLQueryQuotaEnforcer
 
 
 @asynccontextmanager
@@ -87,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         parser=ClassFilterParser(settings),
         events=app.state.events,
         audit_logger=audit_logger,
+        quota_enforcer=SQLQueryQuotaEnforcer(app.state.db.session_factory),
     )
     app.state.services = build_app_services(
         settings=settings,
@@ -133,12 +113,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             duration = time.perf_counter() - started_at
             status_code = response.status_code if response is not None else 500
-            REQUEST_COUNT.labels(
+            HTTP_REQUESTS_TOTAL.labels(
                 method=request.method,
                 path=request.url.path,
                 status_code=str(status_code),
             ).inc()
-            REQUEST_DURATION.labels(
+            HTTP_REQUEST_DURATION_SECONDS.labels(
                 method=request.method,
                 path=request.url.path,
             ).observe(duration)

@@ -11,11 +11,16 @@ from uuid import UUID
 import httpx
 import numpy as np
 from numpy.typing import NDArray
+from prometheus_client import start_http_server
 from pydantic import BaseModel, ConfigDict, Field
 
 from argus.core.config import Settings
 from argus.core.db import DatabaseManager, TrackingEventStore
 from argus.core.events import EventMessage, NatsJetStreamClient
+from argus.core.metrics import (
+    INFERENCE_FRAME_DURATION_SECONDS,
+    INFERENCE_FRAMES_PROCESSED_TOTAL,
+)
 from argus.inference.publisher import (
     HttpPublisher,
     NatsPublisher,
@@ -23,7 +28,13 @@ from argus.inference.publisher import (
     TelemetryFrame,
     TelemetryTrack,
 )
-from argus.models.enums import ProcessingMode, TrackerType
+from argus.models.enums import ProcessingMode, RuleAction, TrackerType
+from argus.services.incident_capture import (
+    IncidentClipCaptureService,
+    IncidentTriggeredEvent,
+    SQLIncidentRepository,
+)
+from argus.services.object_store import MinioObjectStore
 from argus.streaming.mediamtx import (
     MediaMTXClient,
     PrivacyPolicy,
@@ -33,6 +44,7 @@ from argus.streaming.mediamtx import (
     default_profile_probe,
     probe_publish_profile,
 )
+from argus.vision.anpr import LineCrossingAnprProcessor
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
 from argus.vision.detector import DetectionModelConfig, YoloDetector
@@ -150,6 +162,8 @@ class RuleEvaluator(Protocol):
 class EventSubscriber(Protocol):
     async def subscribe(self, subject: str, handler: Any) -> Any: ...
 
+    async def publish(self, subject: str, payload: BaseModel) -> Any: ...
+
 
 class StreamClient(Protocol):
     async def register_stream(
@@ -193,6 +207,8 @@ class InferenceEngine:
         event_client: EventSubscriber,
         stream_client: StreamClient,
         attribute_classifier: AttributeClassifier | None = None,
+        anpr_processor: LineCrossingAnprProcessor | None = None,
+        incident_capture: IncidentClipCaptureService | None = None,
         homography: Homography | None = None,
         privacy_filter: PrivacyFilter | None = None,
         preprocessor: Preprocessor | None = None,
@@ -207,6 +223,8 @@ class InferenceEngine:
         self.event_client = event_client
         self.stream_client = stream_client
         self.attribute_classifier = attribute_classifier
+        self.anpr_processor = anpr_processor
+        self.incident_capture = incident_capture
         self.homography = homography or _build_homography(config.homography)
         self.preprocessor = preprocessor or _identity_preprocessor
         self.privacy_filter = privacy_filter or PrivacyFilter(
@@ -241,9 +259,16 @@ class InferenceEngine:
             f"cmd.camera.{self.config.camera_id}",
             self._handle_command_message,
         )
+        if self.incident_capture is not None:
+            await self.incident_capture.start(
+                camera_id=self.config.camera_id,
+                event_bus=self.event_client,
+            )
         self._started = True
 
     async def close(self) -> None:
+        if self.incident_capture is not None:
+            await self.incident_capture.close()
         await self.publisher.close()
         self.frame_source.close()
 
@@ -256,8 +281,15 @@ class InferenceEngine:
     async def run_once(self, *, ts: datetime | None = None) -> TelemetryFrame:
         if not self._started:
             await self.start()
+        started_at = asyncio.get_running_loop().time()
         current_ts = ts or datetime.now(tz=UTC)
         frame = self.frame_source.next_frame()
+        if self.incident_capture is not None:
+            await self.incident_capture.record_frame(
+                camera_id=self.config.camera_id,
+                frame=frame,
+                ts=current_ts,
+            )
         processed = self.preprocessor(frame.copy())
         detections = self.detector.detect(processed, self.active_classes)
         filtered = [
@@ -269,11 +301,26 @@ class InferenceEngine:
         tracked = self._apply_speed(tracked)
         tracked = self._apply_attributes(processed, tracked)
         tracked = self._apply_zones(tracked)
-        await self.rule_engine.evaluate(
+        rule_events = await self.rule_engine.evaluate(
             camera_id=self.config.camera_id,
             detections=tracked,
             ts=current_ts,
         )
+        incident_events: list[IncidentTriggeredEvent] = []
+        incident_events.extend(self._rule_events_to_incidents(rule_events))
+        if self.anpr_processor is not None:
+            incident_events.extend(
+                self.anpr_processor.process(
+                    camera_id=self.config.camera_id,
+                    ts=current_ts,
+                    detections=tracked,
+                )
+            )
+        for incident_event in incident_events:
+            await self.event_client.publish(
+                f"incident.triggered.{self.config.camera_id}",
+                incident_event,
+            )
         stream_frame = self._build_stream_frame(frame)
         if (
             self._stream_registration is not None
@@ -298,6 +345,14 @@ class InferenceEngine:
         )
         await self.publisher.publish(telemetry)
         await self.tracking_store.record(self.config.camera_id, current_ts, tracked)
+        INFERENCE_FRAMES_PROCESSED_TOTAL.labels(
+            camera_id=str(self.config.camera_id),
+            profile=self.profile.value,
+            stream_mode=telemetry.stream_mode.value,
+        ).inc()
+        INFERENCE_FRAME_DURATION_SECONDS.labels(camera_id=str(self.config.camera_id)).observe(
+            asyncio.get_running_loop().time() - started_at
+        )
         return telemetry
 
     async def apply_command(self, command: CameraCommand) -> None:
@@ -397,6 +452,27 @@ class InferenceEngine:
             return frame
         return self.privacy_filter.apply(frame.copy())
 
+    def _rule_events_to_incidents(self, events: list[object]) -> list[IncidentTriggeredEvent]:
+        incidents: list[IncidentTriggeredEvent] = []
+        for event in events:
+            action = getattr(event, "action", None)
+            if action is None or action is RuleAction.COUNT:
+                continue
+            ts = getattr(event, "ts", datetime.now(tz=UTC))
+            incidents.append(
+                IncidentTriggeredEvent(
+                    camera_id=self.config.camera_id,
+                    ts=ts,
+                    type=f"rule.{action.value}",
+                    payload={
+                        "name": getattr(event, "name", "rule-triggered"),
+                        "action": action.value,
+                        "detection": getattr(event, "detection", {}),
+                    },
+                )
+            )
+        return incidents
+
 
 async def load_engine_config(
     camera_id: UUID,
@@ -422,6 +498,7 @@ def build_runtime_engine(
     events_client: NatsJetStreamClient,
     tracking_store: TrackingStore | None = None,
     rule_engine: RuleEvaluator | None = None,
+    incident_capture: IncidentClipCaptureService | None = None,
 ) -> InferenceEngine:
     frame_source = create_camera_source(
         CameraSourceConfig(
@@ -461,6 +538,17 @@ def build_runtime_engine(
     else:
         attribute_classifier = None
 
+    line_definitions = [
+        zone
+        for zone in config.zones
+        if str(zone.get("type", "")).lower() == "line"
+    ]
+    anpr_processor = (
+        LineCrossingAnprProcessor(line_definitions=line_definitions)
+        if line_definitions
+        else None
+    )
+
     primary_publisher = NatsPublisher(
         events_client,
         subject_prefix=config.publish.subject_prefix,
@@ -495,11 +583,15 @@ def build_runtime_engine(
             ),
         ),
         attribute_classifier=attribute_classifier,
+        anpr_processor=anpr_processor,
+        incident_capture=incident_capture,
     )
 
 
 async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = None) -> None:
     resolved_settings = settings or Settings()
+    if resolved_settings.enable_worker_metrics_server:
+        start_http_server(resolved_settings.worker_metrics_port)
     events_client = NatsJetStreamClient(resolved_settings)
     db_manager = DatabaseManager(resolved_settings)
     await events_client.connect()
@@ -515,6 +607,13 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         settings=resolved_settings,
         events_client=events_client,
         tracking_store=TrackingEventStore(db_manager.session_factory),
+        incident_capture=IncidentClipCaptureService(
+            object_store=MinioObjectStore(resolved_settings),
+            repository=SQLIncidentRepository(db_manager.session_factory),
+            pre_seconds=resolved_settings.incident_clip_pre_seconds,
+            post_seconds=resolved_settings.incident_clip_post_seconds,
+            fps=resolved_settings.incident_clip_fps,
+        ),
     )
     await engine.start()
     try:

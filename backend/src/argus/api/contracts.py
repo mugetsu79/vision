@@ -224,13 +224,28 @@ class HistoryPoint(BaseModel):
     granularity: str
 
 
+class HistorySeriesRow(BaseModel):
+    bucket: datetime
+    values: dict[str, int]
+    total_count: int
+
+
+class HistorySeriesResponse(BaseModel):
+    granularity: str
+    class_names: list[str]
+    rows: list[HistorySeriesRow]
+
+
 class IncidentResponse(BaseModel):
     id: UUID
     camera_id: UUID
+    camera_name: str | None = None
     ts: datetime
     type: str
     payload: dict[str, Any]
     snapshot_url: str | None = None
+    clip_url: str | None = None
+    storage_bytes: int = 0
 
 
 class StreamOfferRequest(BaseModel):

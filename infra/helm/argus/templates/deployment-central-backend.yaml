@@ -1,0 +1,42 @@
+{{- if .Values.central.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-backend
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.central.backend.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "argus.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: backend
+          image: {{ include "argus.image" (dict "registry" .Values.global.imageRegistry "repository" .Values.central.backend.image.repository "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.central.backend.service.port }}
+              name: http
+          env:
+            - name: ARGUS_OTLP_ENDPOINT
+              value: http://{{ include "argus.fullname" . }}-otel-collector:4318
+            - name: ARGUS_MEDIAMTX_API_URL
+              value: http://{{ include "argus.fullname" . }}-mediamtx:9997
+            - name: ARGUS_MEDIAMTX_RTSP_BASE_URL
+              value: rtsp://{{ include "argus.fullname" . }}-mediamtx:8554
+            - name: ARGUS_MEDIAMTX_WHIP_BASE_URL
+              value: http://{{ include "argus.fullname" . }}-mediamtx:8889
+            {{- range $name, $value := .Values.central.backend.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.central.backend.resources | nindent 12 }}
+{{- end }}

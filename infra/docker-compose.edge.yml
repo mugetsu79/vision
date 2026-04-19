@@ -1,14 +1,70 @@
 services:
   inference-worker:
-    image: python:3.12-slim
-    command: ["sleep", "infinity"]
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.edge
+    image: ghcr.io/mugetsu79/vision/argus-edge:${ARGUS_EDGE_TAG:-local}
+    command: ["--camera-id", "${ARGUS_EDGE_CAMERA_ID:-00000000-0000-0000-0000-000000000001}"]
+    environment:
+      ARGUS_API_BASE_URL: ${ARGUS_API_BASE_URL:-http://host.docker.internal:8000}
+      ARGUS_DB_URL: ${ARGUS_DB_URL:-postgresql+asyncpg://argus:argus@host.docker.internal:5432/argus}
+      ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}
+      ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
+      ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889
+      ARGUS_MINIO_ENDPOINT: ${ARGUS_MINIO_ENDPOINT:-host.docker.internal:9000}
+      ARGUS_MINIO_ACCESS_KEY: ${ARGUS_MINIO_ACCESS_KEY:-argus}
+      ARGUS_MINIO_SECRET_KEY: ${ARGUS_MINIO_SECRET_KEY:-argus}
+      ARGUS_MINIO_SECURE: ${ARGUS_MINIO_SECURE:-false}
+      ARGUS_MINIO_INCIDENTS_BUCKET: ${ARGUS_MINIO_INCIDENTS_BUCKET:-incidents}
+      ARGUS_OTLP_ENDPOINT: http://otel-collector:4318
+      ARGUS_ENABLE_WORKER_METRICS_SERVER: "true"
+      ARGUS_WORKER_METRICS_PORT: "9108"
+      ARGUS_PUBLISH_PROFILE: jetson-nano
+    ports:
+      - "9108:9108"
+    volumes:
+      - ../models:/models:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - mediamtx
+      - nats-leaf
+      - otel-collector
+    runtime: nvidia
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 508:* rmw"
 
   mediamtx:
     image: bluenviron/mediamtx:latest
+    ports:
+      - "8554:8554"
+      - "8888:8888"
+      - "8889:8889"
+      - "8189:8189/udp"
+      - "9997:9997"
+      - "9998:9998"
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
 
   nats-leaf:
     image: nats:2.10
-    command: ["-js"]
+    command: ["-js", "-c", "/etc/nats/nats.conf"]
+    ports:
+      - "4223:4222"
+      - "8223:8222"
+    volumes:
+      - ./nats/leaf.conf:/etc/nats/nats.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.122.1
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+    volumes:
+      - ./otel-collector/config.yml:/etc/otelcol-contrib/config.yaml:ro

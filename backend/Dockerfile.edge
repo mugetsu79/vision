@@ -1,0 +1,42 @@
+FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
+
+ARG JETSON_ORT_WHEEL_URL=""
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PYTHONPATH=/app/src
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        curl \
+        ca-certificates \
+        git \
+        gstreamer1.0-tools \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-bad \
+        gstreamer1.0-libav \
+        python3-gst-1.0 \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml uv.lock alembic.ini README.md ./
+COPY src ./src
+
+RUN python3 -m pip install --no-cache-dir uv \
+    && uv sync --locked --no-dev --group runtime --group llm --group vision \
+    && if [ -n "$JETSON_ORT_WHEEL_URL" ]; then /app/.venv/bin/pip install --no-cache-dir "$JETSON_ORT_WHEEL_URL"; fi \
+    && groupadd --system --gid 10001 argus \
+    && useradd --system --uid 10001 --gid 10001 --create-home argus \
+    && chown -R argus:argus /app
+
+USER argus
+
+ENTRYPOINT ["/app/.venv/bin/python", "-m", "argus.inference.engine"]

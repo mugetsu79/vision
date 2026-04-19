@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from argus.core.config import Settings
+from argus.core.metrics import TRACKING_EVENT_WRITE_FAILURES_TOTAL
 from argus.models.tables import TrackingEvent
 from argus.vision.types import Detection
 
@@ -73,8 +74,12 @@ class TrackingEventStore:
         ]
 
         async with self.session_factory() as session:
-            session.add_all(rows)
-            await session.commit()
+            try:
+                session.add_all(rows)
+                await session.commit()
+            except Exception:
+                TRACKING_EVENT_WRITE_FAILURES_TOTAL.labels(store="tracking-events").inc()
+                raise
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:

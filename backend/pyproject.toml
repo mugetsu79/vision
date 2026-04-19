@@ -34,6 +34,7 @@ runtime = [
   "cryptography>=43",
   "prometheus-client>=0.21",
   "pyarrow>=23.0.1",
+  "minio>=7.2.20",
 ]
 dev = [
   "ruff>=0.8",

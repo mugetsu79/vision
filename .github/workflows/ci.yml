@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    tags:
+      - "v*"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: python3 -m pip install --user uv
+
+      - name: Sync backend dependencies
+        working-directory: backend
+        run: python3 -m uv sync --group runtime --group dev --group llm --group vision
+
+      - name: Ruff
+        working-directory: backend
+        run: python3 -m uv run ruff check .
+
+      - name: Mypy
+        working-directory: backend
+        run: python3 -m uv run mypy --strict src
+
+      - name: Pytest
+        working-directory: backend
+        run: python3 -m uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+
+      - name: Unit tests
+        working-directory: frontend
+        run: pnpm test
+
+      - name: Build
+        working-directory: frontend
+        run: pnpm build
+
+  docker-images:
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - frontend
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: vars
+        name: Compute image metadata
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "image_tag=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
+            echo "push=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "image_tag=${GITHUB_SHA::12}" >> "${GITHUB_OUTPUT}"
+            echo "push=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - if: steps.vars.outputs.push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build central backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          platforms: linux/amd64
+          push: ${{ steps.vars.outputs.push == 'true' }}
+          tags: |
+            ghcr.io/${{ github.repository }}/argus-backend:${{ steps.vars.outputs.image_tag }}
+            ${{ steps.vars.outputs.push == 'true' && format('ghcr.io/{0}/argus-backend:latest', github.repository) || '' }}
+
+      - name: Build edge image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.edge
+          platforms: linux/arm64
+          push: ${{ steps.vars.outputs.push == 'true' }}
+          tags: |
+            ghcr.io/${{ github.repository }}/argus-edge:${{ steps.vars.outputs.image_tag }}
+            ${{ steps.vars.outputs.push == 'true' && format('ghcr.io/{0}/argus-edge:latest', github.repository) || '' }}
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          platforms: linux/amd64
+          push: ${{ steps.vars.outputs.push == 'true' }}
+          tags: |
+            ghcr.io/${{ github.repository }}/argus-frontend:${{ steps.vars.outputs.image_tag }}
+            ${{ steps.vars.outputs.push == 'true' && format('ghcr.io/{0}/argus-frontend:latest', github.repository) || '' }}
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        spec:
+          - frontend/e2e/prompt7-auth-and-camera.spec.ts
+          - frontend/e2e/prompt8-live-dashboard.spec.ts
+          - frontend/e2e/prompt9-history-and-incidents.spec.ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install uv
+        run: python3 -m pip install --user uv
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python3 -m uv sync --group runtime --group dev --group llm --group vision
+
+      - name: Start compose stack
+        run: docker compose -f infra/docker-compose.dev.yml up -d
+
+      - name: Run database migrations
+        working-directory: backend
+        env:
+          ARGUS_DB_URL: postgresql+asyncpg://argus:argus@127.0.0.1:5432/argus
+          ARGUS_RTSP_ENCRYPTION_KEY: argus-dev-rtsp-key
+        run: python3 -m uv run alembic upgrade head
+
+      - name: Wait for backend
+        run: |
+          for attempt in {1..40}; do
+            if curl -sf http://127.0.0.1:8000/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose -f infra/docker-compose.dev.yml logs backend
+          exit 1
+
+      - name: Wait for frontend
+        run: |
+          for attempt in {1..40}; do
+            if curl -sfI http://127.0.0.1:3000 >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose -f infra/docker-compose.dev.yml logs frontend
+          exit 1
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright spec
+        working-directory: frontend
+        run: pnpm exec playwright test ${{ matrix.spec }}
+
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose -f infra/docker-compose.dev.yml down -v

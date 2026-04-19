@@ -1,5 +1,12 @@
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { NavLink } from "react-router-dom";
 
+import {
+  createDefaultHistoryFilters,
+  historySeriesQueryOptions,
+} from "@/hooks/use-history";
+import { getStreamRuntimeHints } from "@/lib/stream-playback";
 import { cn } from "@/lib/utils";
 
 const primaryNav = [
@@ -10,13 +17,62 @@ const primaryNav = [
   { label: "Settings", to: "/settings" },
 ] as const;
 
+function prefetchRoute(route: string) {
+  if (route === "/history") {
+    void import("@/pages/History");
+    void import("@/components/history/HistoryTrendChart");
+  }
+
+  if (route === "/incidents") {
+    void import("@/pages/Incidents");
+  }
+}
+
 export function TopNav() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (getStreamRuntimeHints().lowPower) {
+      return;
+    }
+
+    prefetchRoute("/history");
+    prefetchRoute("/incidents");
+    void queryClient.prefetchQuery(
+      historySeriesQueryOptions(createDefaultHistoryFilters()),
+    );
+  }, [queryClient]);
+
   return (
     <nav className="flex flex-wrap items-center gap-2" aria-label="Primary">
       {primaryNav.map((item) => (
         <NavLink
           key={item.label}
           to={item.to}
+          onFocus={() => {
+            prefetchRoute(item.to);
+            if (item.to === "/history") {
+              void queryClient.prefetchQuery(
+                historySeriesQueryOptions(createDefaultHistoryFilters()),
+              );
+            }
+          }}
+          onMouseEnter={() => {
+            prefetchRoute(item.to);
+            if (item.to === "/history") {
+              void queryClient.prefetchQuery(
+                historySeriesQueryOptions(createDefaultHistoryFilters()),
+              );
+            }
+          }}
+          onPointerDown={() => {
+            prefetchRoute(item.to);
+            if (item.to === "/history") {
+              void queryClient.prefetchQuery(
+                historySeriesQueryOptions(createDefaultHistoryFilters()),
+              );
+            }
+          }}
           className={({ isActive }) =>
             cn(
               "rounded-full px-4 py-2 text-sm font-medium transition duration-200",

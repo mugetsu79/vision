@@ -18,13 +18,15 @@ from argus.inference.engine import (
     TrackerSettings,
 )
 from argus.inference.publisher import TelemetryFrame
-from argus.models.enums import ProcessingMode, TrackerType
+from argus.models.enums import ProcessingMode, RuleAction, TrackerType
+from argus.services.incident_capture import IncidentTriggeredEvent
 from argus.streaming.mediamtx import (
     PrivacyPolicy,
     PublishProfile,
     StreamMode,
     StreamRegistration,
 )
+from argus.vision.rules import RuleEventRecord
 from argus.vision.types import Detection
 
 
@@ -99,9 +101,13 @@ class _FakeRuleEngine:
 class _FakeEventClient:
     def __init__(self) -> None:
         self.handlers: dict[str, object] = {}
+        self.published: list[tuple[str, object]] = []
 
     async def subscribe(self, subject: str, handler: object) -> None:
         self.handlers[subject] = handler
+
+    async def publish(self, subject: str, payload: object) -> None:
+        self.published.append((subject, payload))
 
 
 class _FakeStreamClient:
@@ -140,6 +146,30 @@ class _FakeStreamClient:
         ts: datetime,
     ) -> None:
         self.pushed_modes.append(registration.mode)
+
+
+class _RuleIncidentEngine:
+    async def evaluate(
+        self,
+        *,
+        camera_id: UUID,
+        detections: list[Detection],
+        ts: datetime,
+    ) -> list[RuleEventRecord]:
+        return [
+            RuleEventRecord(
+                rule_id=uuid4(),
+                camera_id=camera_id,
+                action=RuleAction.ALERT,
+                name="wrong-way",
+                ts=ts,
+                detection={
+                    "class_name": "car",
+                    "track_id": 1,
+                    "bbox": {"x1": 10, "y1": 10, "x2": 30, "y2": 30},
+                },
+            )
+        ]
 
 
 def _engine_config(camera_id: UUID) -> EngineConfig:
@@ -239,3 +269,29 @@ async def test_engine_registers_filtered_stream_when_privacy_is_required_on_jets
     assert stream_client.registrations == [
         (PublishProfile.JETSON_NANO, PrivacyPolicy(blur_faces=True, blur_plates=False))
     ]
+
+
+@pytest.mark.asyncio
+async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> None:
+    camera_id = uuid4()
+    event_client = _FakeEventClient()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_RuleIncidentEngine(),
+        event_client=event_client,
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 19, 12, 10, tzinfo=UTC))
+
+    assert len(event_client.published) == 1
+    subject, payload = event_client.published[0]
+    assert subject == f"incident.triggered.{camera_id}"
+    assert isinstance(payload, IncidentTriggeredEvent)
+    assert payload.type == "rule.alert"

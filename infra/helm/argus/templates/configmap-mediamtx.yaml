@@ -1,0 +1,11 @@
+{{- if .Values.mediamtx.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus.fullname" . }}-mediamtx
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+data:
+  mediamtx.yml: |
+{{ .Values.mediamtx.config | indent 4 }}
+{{- end }}

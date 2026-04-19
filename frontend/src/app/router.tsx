@@ -4,13 +4,7 @@ import { AppProviders } from "@/app/providers";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthCallbackPage } from "@/pages/AuthCallback";
-import { CamerasPage } from "@/pages/Cameras";
-import { DashboardPage } from "@/pages/Dashboard";
-import { HistoryPage } from "@/pages/History";
-import { IncidentsPage } from "@/pages/Incidents";
-import { SettingsPage } from "@/pages/Settings";
 import { SignInPage } from "@/pages/SignIn";
-import { SitesPage } from "@/pages/Sites";
 
 const shellLayoutElement = (
   <RequireAuth>
@@ -46,13 +40,48 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },
-      { path: "dashboard", element: <DashboardPage /> },
-      { path: "live", element: <DashboardPage /> },
-      { path: "history", element: <HistoryPage /> },
-      { path: "incidents", element: <IncidentsPage /> },
-      { path: "settings", element: <SettingsPage /> },
-      { path: "sites", element: <SitesPage /> },
-      { path: "cameras", element: <CamerasPage /> },
+      {
+        path: "dashboard",
+        lazy: async () => ({
+          Component: (await import("@/pages/Dashboard")).DashboardPage,
+        }),
+      },
+      {
+        path: "live",
+        lazy: async () => ({
+          Component: (await import("@/pages/Dashboard")).DashboardPage,
+        }),
+      },
+      {
+        path: "history",
+        lazy: async () => ({
+          Component: (await import("@/pages/History")).HistoryPage,
+        }),
+      },
+      {
+        path: "incidents",
+        lazy: async () => ({
+          Component: (await import("@/pages/Incidents")).IncidentsPage,
+        }),
+      },
+      {
+        path: "settings",
+        lazy: async () => ({
+          Component: (await import("@/pages/Settings")).SettingsPage,
+        }),
+      },
+      {
+        path: "sites",
+        lazy: async () => ({
+          Component: (await import("@/pages/Sites")).SitesPage,
+        }),
+      },
+      {
+        path: "cameras",
+        lazy: async () => ({
+          Component: (await import("@/pages/Cameras")).CamerasPage,
+        }),
+      },
     ],
   },
   { path: "*", element: <Navigate to="/signin" replace /> },

@@ -1,0 +1,48 @@
+groups:
+  - name: argus-platform
+    rules:
+      - alert: EdgeNodeOffline
+        expr: up{job="inference-worker-edge"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: edge
+        annotations:
+          summary: "Edge inference worker offline"
+          description: "The Jetson edge inference worker has not been scrapeable for more than 5 minutes."
+      - alert: InferenceFPSLow
+        expr: rate(argus_inference_frames_processed_total[5m]) < 5
+        for: 5m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "Inference FPS below threshold"
+          description: "A worker is processing fewer than 5 frames/sec over the last 5 minutes."
+      - alert: PrivacyFilterErrors
+        expr: increase(argus_privacy_filter_operations_total{result="error"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: privacy
+        annotations:
+          summary: "Privacy filter errors detected"
+          description: "At least one privacy filter operation failed during the last 5 minutes."
+      - alert: DatabaseWriteErrors
+        expr: increase(argus_tracking_event_write_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "Tracking event writes are failing"
+          description: "The backend observed tracking event persistence failures during the last 5 minutes."
+      - alert: WebSocketDisconnectStorm
+        expr: increase(argus_websocket_disconnects_total[5m]) > 25
+        for: 0m
+        labels:
+          severity: warning
+          service: websocket
+        annotations:
+          summary: "Telemetry websocket disconnect storm"
+          description: "More than 25 telemetry websocket disconnects occurred during the last 5 minutes."

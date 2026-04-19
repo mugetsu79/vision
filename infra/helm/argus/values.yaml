@@ -1,0 +1,151 @@
+global:
+  imageRegistry: ghcr.io/mugetsu79/vision
+  imageTag: latest
+  pullPolicy: IfNotPresent
+
+central:
+  enabled: true
+  backend:
+    replicas: 1
+    image:
+      repository: argus-backend
+    service:
+      port: 8000
+    env:
+      ARGUS_DB_URL: postgresql+asyncpg://argus:argus@postgresql:5432/argus
+      ARGUS_NATS_URL: nats://nats:4222
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  frontend:
+    enabled: true
+    image:
+      repository: argus-frontend
+    service:
+      port: 8080
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+edge:
+  enabled: false
+  publishProfile: jetson-nano
+  worker:
+    image:
+      repository: argus-edge
+    cameraId: "00000000-0000-0000-0000-000000000001"
+    env:
+      ARGUS_API_BASE_URL: http://argus-backend:8000
+      ARGUS_ENABLE_WORKER_METRICS_SERVER: "true"
+      ARGUS_WORKER_METRICS_PORT: "9108"
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+        nvidia.com/gpu: "1"
+
+mediamtx:
+  enabled: true
+  image:
+    repository: bluenviron/mediamtx
+    tag: latest
+  service:
+    rtspPort: 8554
+    hlsPort: 8888
+    webrtcPort: 8889
+    apiPort: 9997
+    metricsPort: 9998
+  config: |
+    logLevel: info
+    api: yes
+    apiAddress: :9997
+    metrics: yes
+    metricsAddress: :9998
+    webrtc: yes
+    webrtcAddress: :8889
+    hls: yes
+    hlsAddress: :8888
+    pathDefaults:
+      source: publisher
+    paths:
+      "~^cameras/[^/]+/annotated$":
+        source: publisher
+      "~^cameras/[^/]+/preview$":
+        source: publisher
+      "~^cameras/[^/]+/passthrough$":
+        source: publisher
+
+otelCollector:
+  enabled: true
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: 0.122.1
+  service:
+    metricsPort: 9464
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: otel-collector
+              static_configs:
+                - targets: ["0.0.0.0:9464"]
+    processors:
+      batch:
+    exporters:
+      debug:
+        verbosity: basic
+      prometheus:
+        endpoint: 0.0.0.0:9464
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [debug]
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [batch]
+          exporters: [debug, prometheus]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [debug]
+
+natsLeaf:
+  enabled: false
+  image:
+    repository: nats
+    tag: "2.10"
+  service:
+    natsPort: 4222
+    monitorPort: 8222
+  config: |
+    server_name: argus-edge-leaf
+    jetstream {
+      store_dir: /data/jetstream
+    }
+    http: 0.0.0.0:8222
+    listen: 0.0.0.0:4222
+    leafnodes {
+      remotes = [
+        {
+          urls: ["nats://nats:7422"]
+        }
+      ]
+    }

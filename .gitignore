@@ -7,5 +7,11 @@ frontend/.pnpm-store/
 frontend/dist/
 frontend/*.tsbuildinfo
 frontend/test-results/
+dist/
+infra/secrets/*.dec.yaml
+infra/secrets/*.dec.yml
+infra/secrets/*.dec.json
+infra/secrets/*.dec.env
+playwright-report/
 models/*
 !models/.gitkeep

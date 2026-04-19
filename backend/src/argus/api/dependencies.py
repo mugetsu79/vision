@@ -3,12 +3,13 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Header, Request, WebSocket
+from fastapi import Depends, Header, Query, Request, WebSocket
 
 from argus.api.contracts import TenantContext
 from argus.core.security import (
     AuthenticatedUser,
     CurrentUserDependency,
+    get_current_media_user,
     get_current_websocket_user,
 )
 from argus.services.app import AppServices
@@ -36,6 +37,18 @@ async def get_tenant_context(
     return await services.tenancy.resolve_context(
         user=current_user,
         explicit_tenant_id=_parse_explicit_tenant_id(x_tenant_id),
+    )
+
+
+async def get_media_tenant_context(
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_media_user)],
+    services: Annotated[AppServices, Depends(get_app_services)],
+    x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
+    tenant_id: Annotated[str | None, Query()] = None,
+) -> TenantContext:
+    return await services.tenancy.resolve_context(
+        user=current_user,
+        explicit_tenant_id=_parse_explicit_tenant_id(x_tenant_id or tenant_id),
     )
 
 

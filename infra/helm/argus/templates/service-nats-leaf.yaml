@@ -1,0 +1,19 @@
+{{- if .Values.natsLeaf.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-nats-leaf
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: nats-leaf
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: nats
+      port: {{ .Values.natsLeaf.service.natsPort }}
+      targetPort: nats
+    - name: monitor
+      port: {{ .Values.natsLeaf.service.monitorPort }}
+      targetPort: monitor
+{{- end }}

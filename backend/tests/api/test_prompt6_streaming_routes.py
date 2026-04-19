@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import StreamOfferRequest, StreamOfferResponse, TenantContext
 from argus.core.config import Settings
-from argus.core.security import AuthenticatedUser, get_current_user
+from argus.core.security import AuthenticatedUser, get_current_media_user, get_current_user
 from argus.main import create_app
 from argus.models.enums import RoleEnum
 
@@ -116,6 +117,7 @@ async def test_hls_route_redirects_to_signed_mediamtx_playlist() -> None:
         streams=FakeStreamService(),
     )
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
     camera_id = uuid4()
 
     async with AsyncClient(
@@ -124,6 +126,39 @@ async def test_hls_route_redirects_to_signed_mediamtx_playlist() -> None:
         follow_redirects=False,
     ) as client:
         response = await client.get(f"/api/v1/streams/{camera_id}/hls.m3u8")
+
+    assert response.status_code in {302, 307}
+    assert response.headers["location"].endswith("index.m3u8?jwt=test-token")
+
+
+@pytest.mark.asyncio
+async def test_hls_route_accepts_access_token_query_for_browser_media_requests() -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=FakeStreamService(),
+    )
+    app.state.security = SimpleNamespace(validate_token=AsyncMock(return_value=user))
+    camera_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        follow_redirects=False,
+    ) as client:
+        response = await client.get(
+            f"/api/v1/streams/{camera_id}/hls.m3u8",
+            params={"access_token": "viewer-token"},
+        )
 
     assert response.status_code in {302, 307}
     assert response.headers["location"].endswith("index.m3u8?jwt=test-token")
@@ -146,6 +181,7 @@ async def test_video_feed_route_proxies_mjpeg_content() -> None:
         streams=FakeStreamService(),
     )
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
     camera_id = uuid4()
 
     async with AsyncClient(
@@ -159,6 +195,39 @@ async def test_video_feed_route_proxies_mjpeg_content() -> None:
     assert response.headers["cache-control"] == "no-store"
     assert b"frame-one" in response.content
     assert b"frame-two" in response.content
+
+
+@pytest.mark.asyncio
+async def test_video_feed_route_accepts_access_token_query_for_browser_media_requests() -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=FakeStreamService(),
+    )
+    app.state.security = SimpleNamespace(validate_token=AsyncMock(return_value=user))
+    camera_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(
+            f"/video_feed/{camera_id}",
+            params={"access_token": "viewer-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("multipart/x-mixed-replace")
+    assert b"frame-one" in response.content
 
 
 @pytest.mark.asyncio

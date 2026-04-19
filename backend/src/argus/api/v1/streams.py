@@ -8,14 +8,21 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from argus.api.contracts import StreamOfferRequest, StreamOfferResponse, TenantContext
-from argus.api.dependencies import get_app_services, get_tenant_context
-from argus.core.security import AuthenticatedUser, require
+from argus.api.dependencies import get_app_services, get_media_tenant_context, get_tenant_context
+from argus.core.security import (
+    AuthenticatedUser,
+    enforce_role,
+    get_current_media_user,
+    require,
+)
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
 
 router = APIRouter(tags=["streams"])
 ViewerUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.VIEWER))]
+MediaUser = Annotated[AuthenticatedUser, Depends(get_current_media_user)]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
+MediaTenantDependency = Annotated[TenantContext, Depends(get_media_tenant_context)]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 
 WEBRTC_TEST_PAGE = """<!doctype html>
@@ -125,10 +132,11 @@ async def create_stream_offer(
 @router.get("/api/v1/streams/{camera_id}/hls.m3u8")
 async def get_hls_playlist(
     camera_id: UUID,
-    current_user: ViewerUser,
-    tenant_context: TenantDependency,
+    current_user: MediaUser,
+    tenant_context: MediaTenantDependency,
     services: ServicesDependency,
 ) -> RedirectResponse:
+    enforce_role(current_user, RoleEnum.VIEWER)
     playlist_url = await services.streams.get_hls_playlist_url(
         tenant_context,
         camera_id=camera_id,
@@ -139,10 +147,11 @@ async def get_hls_playlist(
 @router.get("/video_feed/{camera_id}")
 async def get_video_feed(
     camera_id: UUID,
-    current_user: ViewerUser,
-    tenant_context: TenantDependency,
+    current_user: MediaUser,
+    tenant_context: MediaTenantDependency,
     services: ServicesDependency,
 ) -> StreamingResponse:
+    enforce_role(current_user, RoleEnum.VIEWER)
     proxy_stream = await services.streams.open_mjpeg_proxy(
         tenant_context,
         camera_id=camera_id,
