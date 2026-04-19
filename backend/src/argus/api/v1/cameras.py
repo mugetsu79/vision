@@ -10,6 +10,7 @@ from argus.api.contracts import (
     CameraResponse,
     CameraUpdate,
     TenantContext,
+    WorkerConfigResponse,
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
@@ -42,6 +43,16 @@ async def get_camera(
     services: ServicesDependency,
 ) -> CameraResponse:
     return await services.cameras.get_camera(tenant_context, camera_id)
+
+
+@router.get("/{camera_id}/worker-config", response_model=WorkerConfigResponse)
+async def get_camera_worker_config(
+    camera_id: UUID,
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> WorkerConfigResponse:
+    return await services.cameras.get_worker_config(tenant_context, camera_id)
 
 
 @router.post("", response_model=CameraResponse, status_code=status.HTTP_201_CREATED)

@@ -117,6 +117,56 @@ class BrowserDeliverySettings(BaseModel):
     profiles: list[dict[str, Any]] = Field(default_factory=_default_browser_delivery_profiles)
 
 
+class WorkerCameraSettings(BaseModel):
+    rtsp_url: str = Field(min_length=1)
+    frame_skip: int = Field(default=1, ge=1)
+    fps_cap: int = Field(default=25, ge=1)
+
+
+class WorkerPublishSettings(BaseModel):
+    subject_prefix: str = "evt.tracking"
+    http_fallback_url: str | None = None
+
+
+class WorkerStreamSettings(BaseModel):
+    pass
+
+
+class WorkerModelSettings(BaseModel):
+    name: str
+    path: str
+    classes: list[str]
+    input_shape: dict[str, int]
+    confidence_threshold: float = 0.25
+    iou_threshold: float = 0.45
+
+
+class WorkerTrackerSettings(BaseModel):
+    tracker_type: TrackerType
+    frame_rate: int = Field(default=25, ge=1)
+
+
+class WorkerPrivacySettings(BaseModel):
+    blur_faces: bool = True
+    blur_plates: bool = True
+
+
+class WorkerConfigResponse(BaseModel):
+    camera_id: UUID
+    mode: ProcessingMode
+    camera: WorkerCameraSettings
+    publish: WorkerPublishSettings = Field(default_factory=WorkerPublishSettings)
+    stream: WorkerStreamSettings = Field(default_factory=WorkerStreamSettings)
+    model: WorkerModelSettings
+    secondary_model: WorkerModelSettings | None = None
+    tracker: WorkerTrackerSettings
+    privacy: WorkerPrivacySettings = Field(default_factory=WorkerPrivacySettings)
+    active_classes: list[str] = Field(default_factory=list)
+    attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
+    zones: list[dict[str, Any]] = Field(default_factory=list)
+    homography: dict[str, Any] | None = None
+
+
 class CameraCreate(BaseModel):
     site_id: UUID
     name: str = Field(min_length=1, max_length=255)

@@ -33,6 +33,7 @@ from argus.api.contracts import (
     StreamOfferResponse,
     TelemetryEnvelope,
     TenantContext,
+    WorkerConfigResponse,
 )
 from argus.core.config import Settings
 from argus.core.security import (
@@ -305,6 +306,52 @@ class FakeCameraService:
 
     async def delete_camera(self, context: TenantContext, camera_id: UUID) -> None:
         self.cameras.pop(camera_id)
+
+    async def get_worker_config(
+        self,
+        context: TenantContext,
+        camera_id: UUID,
+    ) -> WorkerConfigResponse:
+        camera = self.cameras[camera_id]
+        return WorkerConfigResponse(
+            camera_id=camera.id,
+            mode=camera.processing_mode,
+            camera={
+                "rtsp_url": "rtsp://example.local/live",
+                "frame_skip": camera.frame_skip,
+                "fps_cap": camera.fps_cap,
+            },
+            publish={
+                "subject_prefix": "evt.tracking",
+                "http_fallback_url": None,
+            },
+            stream={},
+            model={
+                "name": "Argus YOLO",
+                "path": "/models/argus.onnx",
+                "classes": ["bus", "car", "person", "truck"],
+                "input_shape": {"width": 640, "height": 640},
+                "confidence_threshold": 0.25,
+                "iou_threshold": 0.45,
+            },
+            secondary_model=None,
+            tracker={
+                "tracker_type": camera.tracker_type,
+                "frame_rate": camera.fps_cap,
+            },
+            privacy={
+                "blur_faces": camera.privacy.blur_faces,
+                "blur_plates": camera.privacy.blur_plates,
+            },
+            active_classes=camera.active_classes,
+            attribute_rules=camera.attribute_rules,
+            zones=camera.zones,
+            homography={
+                "src_points": camera.homography.src,
+                "dst_points": camera.homography.dst,
+                "ref_distance_m": camera.homography.ref_distance_m,
+            },
+        )
 
 
 class FakeEdgeService:
@@ -718,6 +765,76 @@ async def test_camera_routes_validate_policy_and_crud() -> None:
     assert patch_response.status_code == 200
     assert patch_response.json()["active_classes"] == ["person"]
     assert delete_response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_camera_worker_config_route_returns_engine_ready_payload() -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    site = _site_response(context.tenant_id)
+    model = _model_response()
+    site_service = FakeSiteService(context.tenant_id)
+    site_service.sites[site.id] = site
+    model_service = FakeModelService()
+    model_service.models[model.id] = model
+    camera_service = FakeCameraService()
+    payload = _camera_payload(site.id, model.id)
+    camera = await camera_service.create_camera(context, payload)
+    services = FakeServices(
+        tenancy=FakeTenancyService(context),
+        sites=site_service,
+        cameras=camera_service,
+        models=model_service,
+        edge=FakeEdgeService(),
+        history=FakeHistoryService(),
+        incidents=FakeIncidentService(),
+        streams=FakeStreamService(),
+        query=FakeQueryService(),
+        telemetry=FakeTelemetryService(
+            TelemetryFrame(
+                camera_id=uuid4(),
+                ts=datetime.now(tz=UTC),
+                profile=PublishProfile.CENTRAL_GPU,
+                stream_mode=StreamMode.ANNOTATED_WHIP,
+                counts={},
+                tracks=[],
+            )
+        ),
+    )
+    app = create_app(
+        Settings(
+            _env_file=None,
+            enable_startup_services=False,
+            enable_nats=False,
+            enable_tracing=False,
+            rtsp_encryption_key="argus-dev-rtsp-key",
+        )
+    )
+    app.state.services = services
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_websocket_user] = lambda: user
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(f"/api/v1/cameras/{camera.id}/worker-config")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["camera_id"] == str(camera.id)
+    assert payload["mode"] == "central"
+    assert payload["camera"]["rtsp_url"] == "rtsp://example.local/live"
+    assert payload["publish"]["subject_prefix"] == "evt.tracking"
+    assert payload["publish"]["http_fallback_url"] is None
+    assert payload["tracker"]["tracker_type"] == "botsort"
+    assert payload["tracker"]["frame_rate"] == 25
+    assert payload["privacy"] == {"blur_faces": True, "blur_plates": False}
+    assert payload["homography"] == {
+        "src_points": [[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]],
+        "dst_points": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]],
+        "ref_distance_m": 12.5,
+    }
 
 
 @pytest.mark.asyncio

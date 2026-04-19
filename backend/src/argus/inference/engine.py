@@ -480,13 +480,20 @@ async def load_engine_config(
     settings: Settings,
     http_client: httpx.AsyncClient | None = None,
 ) -> EngineConfig:
+    headers = _worker_api_headers(settings)
     if http_client is not None:
-        response = await http_client.get(f"/api/v1/cameras/{camera_id}/worker-config")
+        response = await http_client.get(
+            f"/api/v1/cameras/{camera_id}/worker-config",
+            headers=headers or None,
+        )
         response.raise_for_status()
         return EngineConfig.model_validate(response.json())
 
     async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
-        response = await client.get(f"/api/v1/cameras/{camera_id}/worker-config")
+        response = await client.get(
+            f"/api/v1/cameras/{camera_id}/worker-config",
+            headers=headers or None,
+        )
         response.raise_for_status()
         return EngineConfig.model_validate(response.json())
 
@@ -697,3 +704,9 @@ if __name__ == "__main__":  # pragma: no cover
 
 def _identity_preprocessor(frame: Frame) -> Frame:
     return frame
+
+
+def _worker_api_headers(settings: Settings) -> dict[str, str]:
+    if settings.api_bearer_token is None:
+        return {}
+    return {"Authorization": f"Bearer {settings.api_bearer_token.get_secret_value()}"}

@@ -43,11 +43,18 @@ from argus.api.contracts import (
     StreamOfferResponse,
     TelemetryEnvelope,
     TenantContext,
+    WorkerCameraSettings,
+    WorkerConfigResponse,
+    WorkerModelSettings,
+    WorkerPrivacySettings,
+    WorkerPublishSettings,
+    WorkerStreamSettings,
+    WorkerTrackerSettings,
 )
 from argus.core.config import Settings
 from argus.core.db import DatabaseManager
 from argus.core.events import EventMessage, NatsJetStreamClient
-from argus.core.security import encrypt_rtsp_url, hash_api_key
+from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import ModelTask
 from argus.models.tables import (
@@ -377,6 +384,27 @@ class CameraService:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
         return _camera_to_response(camera)
+
+    async def get_worker_config(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+    ) -> WorkerConfigResponse:
+        async with self.session_factory() as session:
+            camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+            primary_model = await _load_model(session, camera.primary_model_id)
+            secondary_model = None
+            if camera.secondary_model_id is not None:
+                secondary_model = await _load_model(session, camera.secondary_model_id)
+
+        rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
+        return _camera_to_worker_config(
+            camera=camera,
+            primary_model=primary_model,
+            secondary_model=secondary_model,
+            settings=self.settings,
+            rtsp_url=rtsp_url,
+        )
 
     async def create_camera(
         self,
@@ -1203,6 +1231,74 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         created_at=camera.created_at,
         updated_at=camera.updated_at,
     )
+
+
+def _camera_to_worker_config(
+    *,
+    camera: Camera,
+    primary_model: Model,
+    secondary_model: Model | None,
+    settings: Settings,
+    rtsp_url: str,
+) -> WorkerConfigResponse:
+    return WorkerConfigResponse(
+        camera_id=camera.id,
+        mode=camera.processing_mode,
+        camera=WorkerCameraSettings(
+            rtsp_url=rtsp_url,
+            frame_skip=camera.frame_skip,
+            fps_cap=camera.fps_cap,
+        ),
+        publish=WorkerPublishSettings(
+            subject_prefix="evt.tracking",
+            http_fallback_url=None,
+        ),
+        stream=WorkerStreamSettings(),
+        model=_model_to_worker_settings(primary_model),
+        secondary_model=(
+            _model_to_worker_settings(secondary_model)
+            if secondary_model is not None
+            else None
+        ),
+        tracker=WorkerTrackerSettings(
+            tracker_type=camera.tracker_type,
+            frame_rate=camera.fps_cap,
+        ),
+        privacy=WorkerPrivacySettings(
+            blur_faces=bool(camera.privacy.get("blur_faces", True)),
+            blur_plates=bool(camera.privacy.get("blur_plates", True)),
+        ),
+        active_classes=list(camera.active_classes),
+        attribute_rules=list(camera.attribute_rules),
+        zones=list(camera.zones),
+        homography=_homography_to_worker_payload(camera.homography),
+    )
+
+
+def _model_to_worker_settings(model: Model) -> WorkerModelSettings:
+    return WorkerModelSettings(
+        name=model.name,
+        path=model.path,
+        classes=list(model.classes),
+        input_shape=dict(model.input_shape),
+    )
+
+
+def _homography_to_worker_payload(
+    homography: dict[str, object] | None,
+) -> dict[str, object] | None:
+    if homography is None:
+        return None
+    src_points = homography.get("src")
+    dst_points = homography.get("dst")
+    ref_distance_m = homography.get("ref_distance_m")
+    if src_points is None or dst_points is None or ref_distance_m is None:
+        return None
+    return {
+        "src_points": src_points,
+        "dst_points": dst_points,
+        "ref_distance_m": ref_distance_m,
+    }
 
 
 def _mask_rtsp_url(ciphertext: str) -> str:

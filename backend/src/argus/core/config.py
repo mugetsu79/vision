@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     nats_connect_timeout_seconds: float = 5.0
 
     api_base_url: str = "http://localhost:8000"
+    api_bearer_token: SecretStr | None = None
     cors_allowed_origins: tuple[str, ...] = (
         "http://localhost:3000",
         "http://127.0.0.1:3000",

@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from uuid import uuid4
+
+import httpx
+import pytest
+
+from argus.core.config import Settings
+from argus.inference.engine import load_engine_config
+
+
+@pytest.mark.asyncio
+async def test_load_engine_config_sends_bearer_token_when_configured() -> None:
+    camera_id = uuid4()
+    seen_authorization: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_authorization.append(request.headers.get("Authorization"))
+        return httpx.Response(
+            200,
+            json={
+                "camera_id": str(camera_id),
+                "mode": "central",
+                "camera": {
+                    "rtsp_url": "rtsp://lab-camera.local/live",
+                    "frame_skip": 1,
+                    "fps_cap": 10,
+                },
+                "publish": {
+                    "subject_prefix": "evt.tracking",
+                    "http_fallback_url": None,
+                },
+                "stream": {},
+                "model": {
+                    "name": "YOLO12n",
+                    "path": "/models/yolo12n.onnx",
+                    "classes": ["car", "bus"],
+                    "input_shape": {"width": 640, "height": 640},
+                    "confidence_threshold": 0.25,
+                    "iou_threshold": 0.45,
+                },
+                "tracker": {
+                    "tracker_type": "botsort",
+                    "frame_rate": 10,
+                },
+                "privacy": {
+                    "blur_faces": True,
+                    "blur_plates": False,
+                },
+                "active_classes": ["bus"],
+                "attribute_rules": [],
+                "zones": [],
+                "homography": None,
+            },
+        )
+
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        api_base_url="http://testserver",
+        api_bearer_token="worker-token",
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url=settings.api_base_url,
+    ) as client:
+        config = await load_engine_config(camera_id, settings=settings, http_client=client)
+
+    assert config.camera_id == camera_id
+    assert seen_authorization == ["Bearer worker-token"]

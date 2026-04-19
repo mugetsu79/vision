@@ -7,6 +7,7 @@ services:
     command: ["--camera-id", "${ARGUS_EDGE_CAMERA_ID:-00000000-0000-0000-0000-000000000001}"]
     environment:
       ARGUS_API_BASE_URL: ${ARGUS_API_BASE_URL:-http://host.docker.internal:8000}
+      ARGUS_API_BEARER_TOKEN: ${ARGUS_API_BEARER_TOKEN:-}
       ARGUS_DB_URL: ${ARGUS_DB_URL:-postgresql+asyncpg://argus:argus@host.docker.internal:5432/argus}
       ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}
       ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
