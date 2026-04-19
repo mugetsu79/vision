@@ -1,25 +1,43 @@
-morya@printer vision % TOKEN="$(
-  curl -sS \
-    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
-    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
-)"
-morya@printer vision % curl -i -sS \
-  -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8000/api/v1/debug/protected
-HTTP/1.1 200 OK
-date: Sun, 19 Apr 2026 19:26:24 GMT
-server: uvicorn
-content-length: 135
-content-type: application/json
+We’ve isolated it well:
 
-{"sub":"3d31139e-4a8c-4329-9e0d-33503e91cb58","email":"admin-dev@argus.local","role":"admin","realm":"argus-dev","is_superadmin":false}%                                                                                  morya@printer vision % curl -i -sS \
+- auth works
+- backend health works
+- `/api/v1/models` is throwing a real backend 500
+
+So the right next move is to capture the stack trace for that route.
+
+Run this in one terminal:
+
+```bash
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.dev.yml logs -f backend
+```
+
+Then, in a second terminal, trigger the failing route again:
+
+```bash
+cd "$HOME/vision"
+curl -i -sS \
   -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/models
-HTTP/1.1 500 Internal Server Error
-date: Sun, 19 Apr 2026 19:26:51 GMT
-server: uvicorn
-content-length: 21
-content-type: text/plain; charset=utf-8
+```
 
-Internal Server Error%                                                                                       morya@printer vision % 
+Then copy the error traceback that appears in the backend logs.
+
+If you want a second useful check at the same time, run these too:
+
+```bash
+docker exec infra-postgres-1 psql -U argus -d argus -c '\d models'
+docker exec infra-postgres-1 psql -U argus -d argus -c 'select id, name, version, task, format, input_shape, license from models;'
+```
+
+Why this is the right next step:
+- the models route code is simple, so one traceback should identify the exact failure
+- at this point, guessing would be worse than reading the real exception
+- the `psql` output will tell us whether the table/schema or existing row data is the problem
+
+Paste back:
+1. the backend traceback from `logs -f backend`
+2. the two `psql` outputs
+
+With that, I should be able to tell you the exact fix.
