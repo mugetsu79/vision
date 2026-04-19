@@ -73,3 +73,12 @@ echo "$TOKEN_RESPONSE" | python3 -m json.tool
 ```
 
 That will tell us whether Keycloak is returning a token at all or returning an auth error instead.
+
+
+---------------------
+
+morya@printer vision % curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
+Expecting value: line 1 column 1 (char 0)
+
