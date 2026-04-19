@@ -395,3 +395,47 @@ dist/assets/hls-Cxumxs-1.js                525.03 kB │ gzip: 162.15 kB
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
 ✓ built in 5.15s
 
+----------------------------
+
+The frontend part is fine now. `openapi-typescript` is working, and the remaining `9001` issue was a real repo bug.
+
+Root cause:
+- MinIO was crashing because the repo used `MINIO_ROOT_PASSWORD=argus`
+- current MinIO requires the root password to be at least 8 characters
+- so `127.0.0.1:9001` had nothing listening behind it
+
+I fixed that in the repo and pushed it to `main`:
+
+- commit: `f9145a5`
+- message: `fix: use valid minio dev credentials`
+
+What to do on your iMac now:
+
+```bash
+cd "$HOME/vision"
+git pull --rebase origin main
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate minio backend
+docker compose -f infra/docker-compose.dev.yml logs --tail 20 minio
+curl -I http://127.0.0.1:9001
+```
+
+What you should see:
+- MinIO logs should no longer show `Invalid credentials`
+- the logs should mention `WebUI: http://127.0.0.1:9001`
+- `curl -I http://127.0.0.1:9001` should return an HTTP response instead of connection refused
+
+If it still acts weird, do a clean local-dev restart:
+
+```bash
+cd "$HOME/vision"
+make dev-down
+make dev-up
+```
+
+One note on the `pnpm approve-builds` step: since `pnpm build` already succeeded, that warning is not your blocker right now. The real blocker was MinIO.
+
+If you want, after you restart MinIO, I can walk you through the next exact validation steps for:
+1. `3000`
+2. `8000`
+3. `9001`
+4. first login into Argus
