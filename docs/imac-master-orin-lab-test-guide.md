@@ -402,6 +402,24 @@ What good looks like in the MinIO logs:
 - no `Invalid credentials` error
 - a line showing `WebUI: http://127.0.0.1:9001`
 
+If a later API call such as `GET /api/v1/models` returns `500 Internal Server Error`
+and the backend logs mention `relation "models" does not exist`, rerun the migration
+against the same database the backend container uses:
+
+```bash
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  /tmp/argus-backend-venv/bin/alembic upgrade head
+
+docker exec infra-postgres-1 psql -U argus -d argus -c '\dt'
+docker exec infra-postgres-1 psql -U argus -d argus -c 'select * from alembic_version;'
+```
+
+What good looks like:
+
+- the `models` table appears in `\dt`
+- `alembic_version` shows `0003_prompt11_quota`
+
 ### 2.5 Get the model metadata
 
 Argus needs the model hash and file size when you register a model.
