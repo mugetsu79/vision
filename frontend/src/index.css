@@ -1,12 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  color: #0f172a;
+  color: #eef4ff;
   background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.65)),
-    linear-gradient(135deg, #dbeafe 0%, #fef3c7 45%, #ffe4e6 100%);
+    radial-gradient(circle at top, rgba(42, 108, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 84% 14%, rgba(132, 88, 255, 0.16), transparent 28%),
+    linear-gradient(180deg, #05070c 0%, #0a1018 48%, #121927 100%);
   font-family:
-    "Inter",
+    "Avenir Next",
+    "Suisse Intl",
+    "Poppins",
     "Segoe UI",
     sans-serif;
   line-height: 1.5;
@@ -15,6 +18,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color-scheme: dark;
 }
 
 * {
@@ -25,6 +29,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: transparent;
 }
 
 button,
@@ -37,4 +42,3 @@ select {
 #root {
   min-height: 100vh;
 }
-

@@ -1,14 +1,45 @@
 logLevel: info
 
+authMethod: jwt
+authJWTJWKS: http://backend:8000/.well-known/argus/mediamtx/jwks.json
+authJWTIssuer: argus-mediamtx
+authJWTAudience: mediamtx
+authJWTExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+
 api: yes
 apiAddress: :9997
+apiAllowOrigins:
+  - http://127.0.0.1:3000
+  - http://localhost:3000
 
 webrtc: yes
 webrtcAddress: :8889
+webrtcAllowOrigins:
+  - http://127.0.0.1:3000
+  - http://localhost:3000
+webrtcIPsFromInterfaces: false
+webrtcAdditionalHosts:
+  - 127.0.0.1
+  - localhost
 
 hls: yes
 hlsAddress: :8888
+hlsAllowOrigins:
+  - http://127.0.0.1:3000
+  - http://localhost:3000
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+
+pathDefaults:
+  source: publisher
 
 paths:
-  all:
+  "~^cameras/[^/]+/annotated$":
+    source: publisher
+  "~^cameras/[^/]+/preview$":
+    source: publisher
+  "~^cameras/[^/]+/passthrough$":
     source: publisher

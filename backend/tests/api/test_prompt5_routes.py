@@ -149,6 +149,7 @@ def _camera_response(payload: CameraCreate) -> CameraResponse:
         zones=payload.zones,
         homography=payload.homography,
         privacy=payload.privacy,
+        browser_delivery=payload.browser_delivery,
         frame_skip=payload.frame_skip,
         fps_cap=payload.fps_cap,
         created_at=datetime.now(tz=UTC),
@@ -678,6 +679,7 @@ async def test_camera_routes_validate_policy_and_crud() -> None:
 
     assert policy_response.status_code == 422
     assert create_response.status_code == 201
+    assert create_response.json()["browser_delivery"]["default_profile"] == "720p10"
     assert list_response.status_code == 200
     assert detail_response.status_code == 200
     assert patch_response.status_code == 200

@@ -162,16 +162,17 @@ This is the **canonical edge device for V4**. Everything must boot on it.
 | ONNX Runtime                  | `onnxruntime-gpu` for Jetson, prebuilt wheel from Jetson Zoo or NVIDIA NGC; TRT EP first |
 | Overlay network               | Tailscale (preferred) or WireGuard back to HQ                        |
 
-**NVENC-free edge streaming strategy.** Because Orin Nano lacks a hardware encoder, V4 does *not* make "annotated re-encode at the edge" the default path. Instead the worker chooses one of these privacy-aware delivery modes:
+**NVENC-free edge streaming strategy.** Because Orin Nano lacks a hardware encoder, V4 does *not* make "annotated re-encode at the edge" the default path. V4 distinguishes **native ingest** (what analytics runs on) from **browser delivery renditions** (what operators watch). Instead the worker chooses one of these privacy-aware delivery modes:
 
 1. Decodes RTSP with NVDEC.
 2. Runs YOLO + tracker on the decoded frames (GPU).
 3. **Publishes JSON telemetry events** to NATS (`evt.tracking.<camera_id>`) — typically a few KB/s per camera.
-4. If the camera's privacy policy does **not** require anonymization, MediaMTX may re-serve the original RTSP as a passthrough stream and the React client draws boxes / labels / speeds on an HTML `<canvas>` over the decoded `<video>`.
-5. If the camera's privacy policy **does** require anonymization, raw passthrough is disabled for that camera. The worker applies blur / pixelation and publishes only a privacy-filtered low-res preview stream using CPU H.264 (`x264 ultrafast, zerolatency`) with capped resolution / fps. No unfiltered frame is exposed outside the worker.
-6. For `central-gpu` cameras at HQ, the worker may also push a privacy-safe annotated stream via NVENC.
+4. If the camera's privacy policy does **not** require anonymization, MediaMTX may re-serve the original RTSP as a native passthrough delivery option and the React client draws boxes / labels / speeds on an HTML `<canvas>` over the decoded `<video>`.
+5. If bandwidth reduction is desired, the worker may also publish one or more **preview/transcode renditions** for browser delivery, such as `1080p15`, `720p10`, or `540p5`. This optional path does **not** change the native ingest used for analytics.
+6. If the camera's privacy policy **does** require anonymization, raw passthrough is disabled for that camera. The worker applies blur / pixelation and publishes only privacy-filtered preview / annotated renditions using capped resolution / fps. No unfiltered frame is exposed outside the worker.
+7. For `central-gpu` cameras at HQ, the worker may also push privacy-safe annotated streams via NVENC, including multiple browser-oriented renditions where useful.
 
-This keeps Orin Nano inside its thermal and bandwidth envelope while preserving the live-overlay UX. The expensive CPU preview path is conditional on privacy-required edge cameras, not the universal default.
+This keeps Orin Nano inside its thermal and bandwidth envelope while preserving the live-overlay UX. The optional preview/transcode path exists both for privacy enforcement and for bandwidth control; native passthrough remains available where policy allows it.
 
 **Performance envelope (observed on Orin Nano Super @ 25 W).**
 
@@ -224,6 +225,7 @@ cameras(
   zones jsonb,                        -- [{id, name, polygon:[[x,y],...], kind}]
   homography jsonb,                   -- {src:[[x,y]*4], dst:[[x,y]*4], ref_distance_m}
   privacy jsonb,                      -- {blur_faces:bool, blur_plates:bool, method:'gaussian'|'pixelate'}
+  browser_delivery jsonb,             -- {default_profile:'720p10', allow_native_on_demand:true, profiles:[{id:'native', kind:'passthrough'},{id:'1080p15', w:1920, h:1080, fps:15},{id:'720p10', w:1280, h:720, fps:10},{id:'540p5', w:960, h:540, fps:5}]}
   frame_skip int, fps_cap int,
   created_at, updated_at
 )
@@ -280,8 +282,9 @@ audit_log(id, tenant_id, actor_id, action, target, meta jsonb, ts)
 3. **Detect** (`detector.py`): `YOLO12` ONNX session, provider priority `TensorrtExecutionProvider → CUDAExecutionProvider → OpenVINOExecutionProvider → CoreMLExecutionProvider → CPUExecutionProvider`. Dynamic `active_classes` filter applied pre-tracker.
 4. **Track** (`tracker.py`): BoT-SORT by default (configurable) via `ultralytics.trackers`. Output: list of `Track(id, class, bbox, conf, features)`.
 5. **Speed** (`homography.py`): `cv2.getPerspectiveTransform(src, dst)` at camera config time, cached. Bottom-center of bbox → world plane → speed via moving-average over last N frames (configurable).
-6. **Privacy** (`privacy.py`): run face + plate detectors on decoded frames / relevant crops and composite Gaussian blur or pixelate onto **any frame variant that can leave the worker**. Invariant: if privacy is required, raw passthrough is disabled and only privacy-filtered preview / annotated variants may be published. On Orin Nano this means canvas-over-passthrough is allowed only when privacy is off; privacy-on cameras switch to a filtered preview stream.
-7. **Secondary classifier / attribute detection** (`attributes.py`): optional second-stage model keyed off the camera's `secondary_model_id`. For each tracked detection of configured interest (e.g. every `person`), the bbox crop is passed through the secondary ONNX model (classifier or multi-label head) to emit `attributes` such as `hi_vis: true/false`, `hard_hat: true/false`, `uniform_color: "orange"`, etc. Attributes are persisted on `tracking_events.attributes` and are consumable by `detection_rules` (e.g. *"person in zone_A without hi_vis → alert"*). Models pluggable via `models` table; V4 ships with an Ultralytics-fine-tuned PPE model as a reference. Zero code changes are required to swap in a new domain model — drop the ONNX file, register it in `models`, point a camera at it.
+6. **Privacy** (`privacy.py`): run face + plate detectors on decoded frames / relevant crops and composite Gaussian blur or pixelate onto **any frame variant that can leave the worker**. Invariant: if privacy is required, raw passthrough is disabled and only privacy-filtered preview / annotated variants may be published. On Orin Nano this means canvas-over-passthrough is allowed only when privacy is off; privacy-on cameras switch to filtered preview renditions.
+7. **Delivery renditions** (`streaming/mediamtx.py` + worker config): each camera may publish multiple browser delivery profiles independent of native ingest, with presets such as `native`, `1080p15`, `720p10`, and `540p5`. For privacy-off Jetson cameras, reduced-bandwidth delivery profiles use an optional preview/transcode path; for privacy-on cameras, only filtered renditions may be published. The selected default profile lives in `cameras.browser_delivery`.
+8. **Secondary classifier / attribute detection** (`attributes.py`): optional second-stage model keyed off the camera's `secondary_model_id`. For each tracked detection of configured interest (e.g. every `person`), the bbox crop is passed through the secondary ONNX model (classifier or multi-label head) to emit `attributes` such as `hi_vis: true/false`, `hard_hat: true/false`, `uniform_color: "orange"`, etc. Attributes are persisted on `tracking_events.attributes` and are consumable by `detection_rules` (e.g. *"person in zone_A without hi_vis → alert"*). Models pluggable via `models` table; V4 ships with an Ultralytics-fine-tuned PPE model as a reference. Zero code changes are required to swap in a new domain model — drop the ONNX file, register it in `models`, point a camera at it.
 
 ### 5.2 Inference engine (`src/argus/inference/engine.py`)
 
@@ -292,7 +295,7 @@ class EngineConfig(BaseModel):
     camera_id: UUID
     mode: Literal["central", "edge", "hybrid"]
     publish: PublishConfig              # nats url, subject, tls, api key
-    stream: StreamConfig                # mediamtx push target
+    stream: StreamConfig                # mediamtx targets + browser delivery renditions
     model: ModelRef
     tracker: TrackerConfig
     privacy: PrivacyConfig
@@ -305,9 +308,9 @@ Control plane: subscribe to NATS subject `cmd.camera.<id>` for live updates to `
 
 Streaming policy:
 
-* `jetson-nano` + privacy off → JSON telemetry + MediaMTX passthrough + browser canvas overlay.
-* `jetson-nano` + privacy on → JSON telemetry + privacy-filtered CPU preview stream; raw passthrough disabled.
-* `central-gpu` → JSON telemetry + optional privacy-safe annotated stream via NVENC.
+* `jetson-nano` + privacy off → JSON telemetry + native MediaMTX passthrough and/or optional lower-bitrate preview renditions for browser delivery + browser canvas overlay.
+* `jetson-nano` + privacy on → JSON telemetry + privacy-filtered preview renditions; raw passthrough disabled.
+* `central-gpu` → JSON telemetry + optional privacy-safe annotated stream via NVENC, potentially with multiple browser renditions.
 
 ### 5.3 API (`src/argus/api/v1/`)
 
@@ -331,8 +334,8 @@ GET    /api/v1/history                      ?camera_id=&from=&to=&granularity=
 GET    /api/v1/export                       -- CSV / Parquet
 GET    /api/v1/incidents
 
-POST   /api/v1/streams/{camera_id}/offer    -- WebRTC SDP offer (returns answer)
-GET    /api/v1/streams/{camera_id}/hls.m3u8 -- LL-HLS fallback
+POST   /api/v1/streams/{camera_id}/offer    -- WebRTC SDP offer (returns answer); optional `profile=<rendition_id>`
+GET    /api/v1/streams/{camera_id}/hls.m3u8 -- LL-HLS fallback; optional `profile=<rendition_id>`
 GET    /video_feed/{camera_id}              -- MJPEG forensic fallback
 
 WS     /ws/telemetry                        -- fan-out, subscribes to tenant's cameras
@@ -341,7 +344,7 @@ GET    /metrics                             -- Prometheus
 GET    /healthz  /readyz
 ```
 
-All endpoints auth-gated except `/healthz`, `/readyz`, `/metrics` (internal). RBAC: `viewer` read-only, `operator` can issue commands (`/query`, start/stop), `admin` full CRUD, `superadmin` cross-tenant. Tenant users authenticate in tenant realms; `superadmin` authenticates in a dedicated `platform-admin` realm and assumes tenant context explicitly.
+All endpoints auth-gated except `/healthz`, `/readyz`, `/metrics` (internal). RBAC: `viewer` read-only, `operator` can issue commands (`/query`, start/stop), `admin` full CRUD, `superadmin` cross-tenant. Tenant users authenticate in tenant realms; `superadmin` authenticates in a dedicated `platform-admin` realm and assumes tenant context explicitly. Tokens with missing or unrecognized role claims must be rejected rather than silently downgraded.
 
 ### 5.4 LLM adapter (`src/argus/llm/`)
 
@@ -363,7 +366,7 @@ providers/vllm.py      # local OpenAI-compatible server
 
 ### 5.5 Streaming (`src/argus/streaming/` + MediaMTX)
 
-Default path depends on deployment profile. For `central-gpu`, the worker may push annotated, privacy-filtered frames to **MediaMTX** via `rtsp://mediamtx:8554/cameras/<id>` using its `whip` or RTSP-push plugin. For `jetson-nano`, the default is MediaMTX passthrough plus browser canvas overlays **only when privacy is off**; if privacy is on, the worker must disable raw passthrough and publish a privacy-filtered preview stream instead. Clients pull via WebRTC (preferred), LL-HLS (iOS/fallback), or MJPEG (forensic only, and never as a privacy bypass). Overlays (bbox, class, speed) may be drawn in the worker for preview streams, and a parallel JSON telemetry stream lets the React canvas re-draw precise overlays on top of the decoded video for interactive UX.
+Default path depends on deployment profile, but the core rule is that **native ingest and browser delivery are decoupled**. For `central-gpu`, the worker may push annotated, privacy-filtered frames to **MediaMTX** via `rtsp://mediamtx:8554/cameras/<id>` using its `whip` or RTSP-push plugin, including multiple operator renditions where helpful. For `jetson-nano`, MediaMTX may expose the original camera stream as a native passthrough option **only when privacy is off**; when bandwidth savings are preferred, the worker may additionally publish lower-bitrate preview/transcode renditions for browser delivery. If privacy is on, the worker must disable raw passthrough and publish only privacy-filtered preview renditions instead. Clients pull via WebRTC (preferred), LL-HLS (iOS/fallback), or MJPEG (forensic only, and never as a privacy bypass). Overlays (bbox, class, speed) may be drawn in the worker for preview streams, and a parallel JSON telemetry stream lets the React canvas re-draw precise overlays on top of the decoded video for interactive UX.
 
 ### 5.6 Frontend (`frontend/src/`)
 
@@ -452,9 +455,9 @@ argus-v4/
 
 * **Transport:** TLS everywhere. Edge ↔ HQ over Tailscale/WireGuard; NATS with nkey auth; MediaMTX with per-stream JWT.
 * **At rest:** RTSP URLs encrypted in DB (AES-GCM with key from env/KMS). Postgres disk encryption at the infra level.
-* **Auth:** OIDC via Keycloak; PKCE for SPA; short-lived access tokens (15 min) + refresh. Default topology is one tenant realm per tenant plus a dedicated `platform-admin` realm for `superadmin` users. Edge nodes use scoped API keys + rotating NATS credentials.
+* **Auth:** OIDC via Keycloak; PKCE for SPA; short-lived access tokens (15 min) + refresh. Default topology is one tenant realm per tenant plus a dedicated `platform-admin` realm for `superadmin` users. Edge nodes use scoped API keys + rotating NATS credentials. Auth flows must fail closed: callback/session processing errors return the user to sign-in, and tokens without a recognized Argus role are rejected.
 * **RBAC:** `viewer | operator | admin | superadmin`, enforced by a FastAPI dependency. Audit log on every state-changing call.
-* **Privacy enforcement:** anonymization runs in the inference worker *before* frames hit MediaMTX. A per-tenant policy can force `blur_faces=true, blur_plates=true` and prevent an operator from disabling it. If privacy is required on an edge camera, raw passthrough is disabled and only privacy-filtered stream variants may be exposed. Retention policy on `tracking_events` is configurable per tenant (default 90 days).
+* **Privacy enforcement:** anonymization runs in the inference worker *before* frames hit MediaMTX. A per-tenant policy can force `blur_faces=true, blur_plates=true` and prevent an operator from disabling it. If privacy is required on an edge camera, raw passthrough is disabled and only privacy-filtered stream variants may be exposed. When privacy is not required, operators may still prefer lower-bitrate delivery renditions for bandwidth control without changing the native ingest used by analytics. Retention policy on `tracking_events` is configurable per tenant (default 90 days).
 * **Supply chain:** pinned deps via `uv.lock` + `pnpm-lock.yaml`, SBOM generated per release (syft), container image signing (cosign).
 
 ---

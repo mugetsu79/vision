@@ -20,9 +20,18 @@ class Settings(BaseSettings):
     mediamtx_url: str = "http://localhost:8889"
     mediamtx_api_url: str = "http://localhost:9997"
     mediamtx_rtsp_base_url: str = "rtsp://localhost:8554"
+    mediamtx_webrtc_base_url: str = "http://localhost:8889"
+    mediamtx_hls_base_url: str = "http://localhost:8888"
+    mediamtx_mjpeg_base_url: str = "http://localhost:8888"
+    mediamtx_mjpeg_path_template: str = "{base}/{path}/mjpeg"
     mediamtx_whip_base_url: str = "http://localhost:8889"
     mediamtx_username: str | None = None
     mediamtx_password: SecretStr | None = None
+    mediamtx_jwt_issuer: str = "argus-mediamtx"
+    mediamtx_jwt_audience: str = "mediamtx"
+    mediamtx_jwt_ttl_seconds: int = 60
+    mediamtx_jwt_key_id: str = "argus-mediamtx-dev"
+    mediamtx_jwt_private_key_pem: SecretStr | None = None
 
     keycloak_server_url: str = "http://localhost:8080"
     keycloak_public_server_url: str | None = None
@@ -42,6 +51,7 @@ class Settings(BaseSettings):
     metrics_namespace: str = "argus"
     publish_profile: str | None = None
     websocket_telemetry_buffer_size: int = 32
+    video_feed_max_concurrent_per_user: int = 10
 
     enable_startup_services: bool = True
     enable_nats: bool = True

@@ -10,12 +10,14 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
+    BrowserDeliverySettings,
     CameraCreate,
     CameraResponse,
     CameraUpdate,
@@ -57,6 +59,15 @@ from argus.models.tables import (
     TrackingEvent,
 )
 from argus.streaming.mediamtx import MediaMTXClient
+from argus.streaming.webrtc import (
+    ConcurrencyLimitExceeded,
+    MediaMTXTokenIssuer,
+    StreamAccess,
+    UpstreamProxyStream,
+    UserConcurrencyLimiter,
+    WebRTCNegotiator,
+    resolve_stream_access,
+)
 
 if TYPE_CHECKING:
     from argus.services.query import QueryService
@@ -74,6 +85,9 @@ class AppServices:
     streams: StreamService
     query: QueryService
     telemetry: NatsTelemetryService
+
+    async def close(self) -> None:
+        await self.streams.close()
 
 
 class DatabaseAuditLogger:
@@ -378,6 +392,7 @@ class CameraService:
                 zones=payload.zones,
                 homography=payload.homography.model_dump(mode="python"),
                 privacy=privacy,
+                browser_delivery=payload.browser_delivery.model_dump(mode="python"),
                 frame_skip=payload.frame_skip,
                 fps_cap=payload.fps_cap,
             )
@@ -428,6 +443,10 @@ class CameraService:
                     settings=self.settings,
                     tenant_context=tenant_context,
                     privacy=dict(update_data["privacy"]),
+                )
+            if "browser_delivery" in update_data and update_data["browser_delivery"] is not None:
+                update_data["browser_delivery"] = update_data["browser_delivery"].model_dump(
+                    mode="python"
                 )
             if "homography" in update_data and update_data["homography"] is not None:
                 update_data["homography"] = update_data["homography"].model_dump(mode="python")
@@ -690,9 +709,22 @@ class StreamService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         mediamtx: MediaMTXClient,
+        settings: Settings,
+        negotiator: WebRTCNegotiator | None = None,
+        token_issuer: MediaMTXTokenIssuer | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.mediamtx = mediamtx
+        self.settings = settings
+        self.token_issuer = token_issuer or MediaMTXTokenIssuer.from_settings(settings)
+        self.negotiator = negotiator or WebRTCNegotiator(token_issuer=self.token_issuer)
+        self.video_feed_limiter = UserConcurrencyLimiter(
+            limit=settings.video_feed_max_concurrent_per_user
+        )
+
+    async def close(self) -> None:
+        await self.negotiator.close()
+        await self.mediamtx.close()
 
     async def create_offer(
         self,
@@ -701,13 +733,95 @@ class StreamService:
         camera_id: UUID,
         offer: StreamOfferRequest,
     ) -> StreamOfferResponse:
-        async with self.session_factory() as session:
-            await _load_camera(session, tenant_context.tenant_id, camera_id)
-        sdp_answer = await self.mediamtx.create_webrtc_offer(
+        access = await self._resolve_stream_access(tenant_context, camera_id)
+        sdp_answer = await self.negotiator.negotiate_offer(
+            access=access,
             camera_id=camera_id,
+            subject=tenant_context.user.subject,
             sdp_offer=offer.sdp_offer,
         )
         return StreamOfferResponse(camera_id=camera_id, sdp_answer=sdp_answer)
+
+    async def get_hls_playlist_url(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID,
+    ) -> str:
+        access = await self._resolve_stream_access(tenant_context, camera_id)
+        return self.token_issuer.build_hls_url(
+            subject=tenant_context.user.subject,
+            camera_id=camera_id,
+            access=access,
+        )
+
+    async def open_mjpeg_proxy(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID,
+        user: Any,
+    ) -> UpstreamProxyStream:
+        access = await self._resolve_stream_access(tenant_context, camera_id)
+        try:
+            await self.video_feed_limiter.acquire(user.subject)
+        except ConcurrencyLimitExceeded as exc:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many concurrent MJPEG feeds for this user.",
+            ) from exc
+
+        try:
+            upstream = await self.negotiator.open_mjpeg_stream(
+                access=access,
+                camera_id=camera_id,
+                subject=user.subject,
+            )
+        except httpx.HTTPError as exc:
+            await self.video_feed_limiter.release(user.subject)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Unable to open MediaMTX MJPEG stream.",
+            ) from exc
+
+        upstream.headers.setdefault("Cache-Control", "no-store")
+        upstream.on_close = self._release_video_feed_slot(user.subject, upstream.on_close)
+        return upstream
+
+    def jwks(self) -> dict[str, list[dict[str, str]]]:
+        return self.token_issuer.jwks()
+
+    async def _resolve_stream_access(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+    ) -> StreamAccess:
+        async with self.session_factory() as session:
+            camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+        return resolve_stream_access(
+            camera_id=camera.id,
+            processing_mode=camera.processing_mode,
+            edge_node_id=camera.edge_node_id,
+            privacy=camera.privacy,
+            webrtc_base_url=self.settings.mediamtx_webrtc_base_url,
+            hls_base_url=self.settings.mediamtx_hls_base_url,
+            mjpeg_base_url=self.settings.mediamtx_mjpeg_base_url,
+            mjpeg_path_template=self.settings.mediamtx_mjpeg_path_template,
+        )
+
+    def _release_video_feed_slot(
+        self,
+        subject: str,
+        next_callback: Any,
+    ) -> Any:
+        async def callback() -> None:
+            try:
+                if next_callback is not None:
+                    await next_callback()
+            finally:
+                await self.video_feed_limiter.release(subject)
+
+        return callback
 
 
 class NatsTelemetrySubscription:
@@ -802,7 +916,7 @@ def build_app_services(
         edge=EdgeService(db.session_factory, settings, events, audit_logger),
         history=HistoryService(db.session_factory),
         incidents=IncidentService(db.session_factory),
-        streams=StreamService(db.session_factory, mediamtx),
+        streams=StreamService(db.session_factory, mediamtx, settings),
         query=query_service,
         telemetry=NatsTelemetryService(
             session_factory=db.session_factory,
@@ -904,6 +1018,9 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         zones=list(camera.zones),
         homography=HomographyPayload.model_validate(camera.homography),
         privacy=PrivacySettings.model_validate(camera.privacy),
+        browser_delivery=BrowserDeliverySettings.model_validate(
+            camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+        ),
         frame_skip=camera.frame_skip,
         fps_cap=camera.fps_cap,
         created_at=camera.created_at,

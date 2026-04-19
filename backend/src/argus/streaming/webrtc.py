@@ -1,0 +1,360 @@
+from __future__ import annotations
+
+import asyncio
+import base64
+from collections import defaultdict
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+from urllib.parse import urlencode, urlsplit, urlunsplit
+from uuid import UUID, uuid4
+
+import httpx
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jose import jwt  # type: ignore[import-untyped]
+
+from argus.models.enums import ProcessingMode
+from argus.streaming.mediamtx import StreamMode
+
+if TYPE_CHECKING:
+    from argus.core.config import Settings
+
+
+DEFAULT_MEDIAMTX_DEV_PRIVATE_KEY_PEM = """-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDkqxELjSR/UZg/
+nIFGRKKB3OAbSY88GpXC7ymQ98gNPlj7lIX7qrCoFjfnjaqzgqmf73fpeBStFnAj
+v99yfaEjFKPkW9RBK4XvWGMbuwViYWss+sLq+LkxmhwGOdjVzObPUJdRwYOb/dBD
+30BMnboNZ74K8DpDtJb5BgloRXvRJdJBZhrdp/4tyCTv01y4tWJSCReL68P5KU+v
+Ex4XJx1DND2OLBcL4M8FCWN8p1VVqSqAPkm9F+9L0m1v41JAYwJ5CIp9Og489Eg+
+sgmdKaa7qNeg+lc2HHuLiWIiydoCJii8DNShN1DfxtS8UqaOeaCvfe0lkcyXaMSu
+AX/DW3RXAgMBAAECggEAI+Wc8+YbhtHYJ5LvPQjfmqkCFME2ofX/G6PFhTNOAueO
+OtRP4jhN/4fEDUQmj4P2vUZFBJrWuBiv0FTkhDR88Xph2M1M+VFr9wJg8Jn/7Y1N
+22Oe6hnTTMTyGvdwIZlx2bVqQ9SFT3LdWRejdZjvJlU/treL61QJZ/IO06vQv6i3
+DwOnnE+JRKHD239s1koPGtuQMbe6+uizn3B5ujq48kdmxvQzRpU7DUvB+QbTORAP
+5FZRxMef0lkyB8bf7EK7PK5b4Ws3KtpC06fUKr6LEPq4j8NRWBBpVLZA4na6nzc4
+raLcm8okLc/9k5iEAYnkoaeLGV60kWzpVHsYxAOy9QKBgQD/6c2F0gfDfJg4hRQR
+tEzL0F4wOQlOEgACI08nuOqCcuVihIHMY1NO8s/Sn3KGE38K4BG8MfzbfYLmciuX
+VOLAhpenijxP+C/4wAXGhdsbWhKGJI5Ni+KBYwwBCigwrdmSo3GXOIfg2ShTUVgv
+lV9gTCBoXe6DOOIN2PSIi05q3QKBgQDkvuaN0mmEmk+Gbon8Q//hAQbdlmkY6XIw
+PiYhOVHpoWQPA3hLyrVlkOeS8WqRMeJN3Wfd+Z4nc6DhiWV5fbBNcOTNX3Y+vvTU
+/FP09fzJtVLY3tU9f8QBa8EstUIyIx0VT0PVGIblUBT1n4/jdQ4rtp+cGwm15auT
+eeocaXxmwwKBgGOM+ewytd5v228xJYt1jeJDHkC4D0yVZ/ds8N/M6TzxoRXf4fY2
+NTQi9IFEkXJipyr92yhQccKYYpFunFJ0LPkj4l7EQY4CR/cGC7kcXQ2YzlfsZIb6
+AZS/iO3mm5fEKT0H46olzYXENBGlNR7dhoqZUooG8D+PozAr04RCXLDpAoGBAJzP
+XX/1sY5Mtp2io4dDGmOl743yMYP5bOUzhbIa+FNf5xb/uvTCNs40ovux8estNkVI
+tY6PM2M6OhzCssSxbC36aW98tLPY9kAX5no0M6IXYn73a1lof/a1Zsz+SS3TsnlM
+SGUKFleXKXckdmBoe1luLUa3plWC57cGyX3Gtpg/AoGADptWit7m6dRYeF+6VYIu
+asfoZR+s0DFHcaUKNkdq45xDctKlEJW3fn4QpqX3QXapTYM/X65C6gHnDjeP8RNV
+hen+6DNpPkO2h1Cts+a5+hSktutoyJJqJTUzInbabRqV6JZrWCzObvLcwZ5rsGDw
+0BSCO5Y9XJ1g34uzpaLsNns=
+-----END PRIVATE KEY-----"""
+
+
+@dataclass(slots=True, frozen=True)
+class StreamAccess:
+    camera_id: UUID
+    mode: StreamMode
+    path_name: str
+    whep_url: str
+    hls_url: str
+    mjpeg_url: str
+
+
+@dataclass(slots=True)
+class UpstreamProxyStream:
+    response: httpx.Response
+    headers: dict[str, str] = field(default_factory=dict)
+    on_close: Callable[[], Awaitable[None]] | None = None
+
+    @property
+    def media_type(self) -> str:
+        content_type = self.response.headers.get("Content-Type")
+        if content_type is None:
+            return "application/octet-stream"
+        return str(content_type)
+
+    async def iter_bytes(self) -> AsyncIterator[bytes]:
+        try:
+            async for chunk in self.response.aiter_bytes():
+                yield chunk
+        finally:
+            await self.response.aclose()
+            if self.on_close is not None:
+                await self.on_close()
+
+
+class ConcurrencyLimitExceeded(RuntimeError):
+    """Raised when a user exceeds the allowed concurrent proxy sessions."""
+
+
+class UserConcurrencyLimiter:
+    def __init__(self, *, limit: int) -> None:
+        self.limit = limit
+        self._counts: dict[str, int] = defaultdict(int)
+        self._lock = asyncio.Lock()
+
+    async def acquire(self, key: str) -> None:
+        async with self._lock:
+            current = self._counts[key]
+            if current >= self.limit:
+                raise ConcurrencyLimitExceeded(key)
+            self._counts[key] = current + 1
+
+    async def release(self, key: str) -> None:
+        async with self._lock:
+            current = self._counts.get(key, 0)
+            if current <= 1:
+                self._counts.pop(key, None)
+                return
+            self._counts[key] = current - 1
+
+
+class MediaMTXTokenIssuer:
+    def __init__(
+        self,
+        *,
+        private_key_pem: str = DEFAULT_MEDIAMTX_DEV_PRIVATE_KEY_PEM,
+        issuer: str = "argus-mediamtx",
+        audience: str = "mediamtx",
+        key_id: str = "argus-mediamtx-dev",
+        ttl_seconds: int = 60,
+    ) -> None:
+        self.private_key_pem = private_key_pem
+        self.issuer = issuer
+        self.audience = audience
+        self.key_id = key_id
+        self.ttl_seconds = ttl_seconds
+        private_key = serialization.load_pem_private_key(
+            private_key_pem.encode("utf-8"),
+            password=None,
+        )
+        if not isinstance(private_key, rsa.RSAPrivateKey):
+            raise TypeError("MediaMTX JWT signing requires an RSA private key.")
+        self._private_key = private_key
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> MediaMTXTokenIssuer:
+        private_key_pem = DEFAULT_MEDIAMTX_DEV_PRIVATE_KEY_PEM
+        if settings.mediamtx_jwt_private_key_pem is not None:
+            private_key_pem = settings.mediamtx_jwt_private_key_pem.get_secret_value()
+        return cls(
+            private_key_pem=private_key_pem,
+            issuer=settings.mediamtx_jwt_issuer,
+            audience=settings.mediamtx_jwt_audience,
+            key_id=settings.mediamtx_jwt_key_id,
+            ttl_seconds=settings.mediamtx_jwt_ttl_seconds,
+        )
+
+    def issue_read_token(
+        self,
+        *,
+        subject: str,
+        camera_id: UUID,
+        access: StreamAccess,
+    ) -> str:
+        return self._issue_token(
+            subject=subject,
+            camera_id=camera_id,
+            permissions=[{"action": "read", "path": access.path_name}],
+        )
+
+    def issue_publish_token(
+        self,
+        *,
+        subject: str,
+        camera_id: UUID,
+        path_name: str,
+    ) -> str:
+        return self._issue_token(
+            subject=subject,
+            camera_id=camera_id,
+            permissions=[{"action": "publish", "path": path_name}],
+        )
+
+    def build_hls_url(
+        self,
+        *,
+        subject: str,
+        camera_id: UUID,
+        access: StreamAccess,
+    ) -> str:
+        token = self.issue_read_token(
+            subject=subject,
+            camera_id=camera_id,
+            access=access,
+        )
+        return _append_query_parameter(access.hls_url, key="jwt", value=token)
+
+    def jwks(self) -> dict[str, list[dict[str, str]]]:
+        public_numbers = self._private_key.public_key().public_numbers()
+        return {
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "kid": self.key_id,
+                    "use": "sig",
+                    "alg": "RS256",
+                    "n": _b64url_uint(public_numbers.n),
+                    "e": _b64url_uint(public_numbers.e),
+                }
+            ]
+        }
+
+    def _issue_token(
+        self,
+        *,
+        subject: str,
+        camera_id: UUID,
+        permissions: list[dict[str, str]],
+    ) -> str:
+        now = datetime.now(tz=UTC)
+        claims = {
+            "sub": subject,
+            "iss": self.issuer,
+            "aud": self.audience,
+            "iat": int(now.timestamp()),
+            "nbf": int(now.timestamp()),
+            "exp": int((now + timedelta(seconds=self.ttl_seconds)).timestamp()),
+            "jti": str(uuid4()),
+            "camera_id": str(camera_id),
+            "mediamtx_permissions": permissions,
+        }
+        return str(
+            jwt.encode(
+                claims,
+                self.private_key_pem,
+                algorithm="RS256",
+                headers={"kid": self.key_id},
+            )
+        )
+
+
+class WebRTCNegotiator:
+    def __init__(
+        self,
+        *,
+        token_issuer: MediaMTXTokenIssuer,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self.token_issuer = token_issuer
+        self._owned_client = http_client is None
+        self._http_client = http_client or httpx.AsyncClient(timeout=10.0)
+
+    async def close(self) -> None:
+        if self._owned_client:
+            await self._http_client.aclose()
+
+    async def negotiate_offer(
+        self,
+        *,
+        access: StreamAccess,
+        camera_id: UUID,
+        subject: str,
+        sdp_offer: str,
+    ) -> str:
+        token = self.token_issuer.issue_read_token(
+            subject=subject,
+            camera_id=camera_id,
+            access=access,
+        )
+        response = await self._http_client.post(
+            access.whep_url,
+            content=sdp_offer.encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/sdp",
+                "Content-Type": "application/sdp",
+            },
+        )
+        response.raise_for_status()
+        return response.text
+
+    async def open_mjpeg_stream(
+        self,
+        *,
+        access: StreamAccess,
+        camera_id: UUID,
+        subject: str,
+    ) -> UpstreamProxyStream:
+        token = self.token_issuer.issue_read_token(
+            subject=subject,
+            camera_id=camera_id,
+            access=access,
+        )
+        request = self._http_client.build_request(
+            "GET",
+            access.mjpeg_url,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response = await self._http_client.send(request, stream=True)
+        response.raise_for_status()
+        return UpstreamProxyStream(response=response)
+
+
+def resolve_stream_access(
+    *,
+    camera_id: UUID,
+    processing_mode: ProcessingMode,
+    edge_node_id: UUID | None,
+    privacy: Mapping[str, object] | None,
+    webrtc_base_url: str,
+    hls_base_url: str,
+    mjpeg_base_url: str,
+    mjpeg_path_template: str = "{base}/{path}/mjpeg",
+) -> StreamAccess:
+    if _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id):
+        mode = StreamMode.ANNOTATED_WHIP
+        variant = "annotated"
+    elif _privacy_requires_filtering(privacy):
+        mode = StreamMode.FILTERED_PREVIEW
+        variant = "preview"
+    else:
+        mode = StreamMode.PASSTHROUGH
+        variant = "passthrough"
+
+    path_name = f"cameras/{camera_id}/{variant}"
+    webrtc_base = webrtc_base_url.rstrip("/")
+    hls_base = hls_base_url.rstrip("/")
+    mjpeg_base = mjpeg_base_url.rstrip("/")
+    mjpeg_url = mjpeg_path_template.format(base=mjpeg_base, path=path_name)
+    return StreamAccess(
+        camera_id=camera_id,
+        mode=mode,
+        path_name=path_name,
+        whep_url=f"{webrtc_base}/{path_name}/whep",
+        hls_url=f"{hls_base}/{path_name}/index.m3u8",
+        mjpeg_url=mjpeg_url,
+    )
+
+
+def _append_query_parameter(url: str, *, key: str, value: str) -> str:
+    split_url = urlsplit(url)
+    query = split_url.query
+    suffix = urlencode({key: value})
+    combined = suffix if query == "" else f"{query}&{suffix}"
+    return urlunsplit(
+        (split_url.scheme, split_url.netloc, split_url.path, combined, split_url.fragment)
+    )
+
+
+def _b64url_uint(value: int) -> str:
+    byte_length = max(1, (value.bit_length() + 7) // 8)
+    return base64.urlsafe_b64encode(value.to_bytes(byte_length, "big")).rstrip(b"=").decode(
+        "utf-8"
+    )
+
+
+def _privacy_requires_filtering(privacy: Mapping[str, object] | None) -> bool:
+    if privacy is None:
+        return False
+    return bool(privacy.get("blur_faces")) or bool(privacy.get("blur_plates"))
+
+
+def _uses_central_delivery(
+    *,
+    processing_mode: ProcessingMode,
+    edge_node_id: UUID | None,
+) -> bool:
+    return processing_mode is ProcessingMode.CENTRAL and edge_node_id is None

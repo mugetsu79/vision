@@ -65,6 +65,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         if settings_object.enable_startup_services and settings_object.enable_nats:
             await app.state.events.close()
+        close_services = getattr(app.state.services, "close", None)
+        if callable(close_services):
+            await close_services()
         await app.state.security.close()
         await app.state.db.dispose()
 

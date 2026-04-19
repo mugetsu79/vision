@@ -1,0 +1,104 @@
+<h2>Prompt 7 Shell Direction</h2>
+<p class="subtitle">
+  Pick the overall shell direction for Argus. All three keep the required top navigation,
+  but they differ in density, focus, and how “ops-heavy” the product feels.
+</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. Operator Console</div>
+        <div class="mockup-body">
+          <div class="mock-nav">Argus | Dashboard | Live | History | Incidents | Settings</div>
+          <div style="display:flex; gap:12px; margin-top:12px;">
+            <div class="mock-sidebar" style="width:180px;">Sites<br>Fleet Health<br>Cameras</div>
+            <div class="mock-content" style="flex:1;">
+              <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; margin-bottom:12px;">
+                <div class="placeholder">Online Cameras</div>
+                <div class="placeholder">Incidents</div>
+                <div class="placeholder">Latency</div>
+              </div>
+              <div class="placeholder" style="height:140px;">Dense management table</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Operator Console</h3>
+      <p>Denser and more infrastructure-forward. Best if Argus should feel like a monitoring cockpit first.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. Product Workspace</div>
+        <div class="mockup-body">
+          <div class="mock-nav">Argus | Dashboard | Live | History | Incidents | Settings</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:14px 0 10px;">
+            <div>
+              <div class="label">Sites</div>
+              <h3 style="margin:6px 0 0;">Fleet and camera management</h3>
+            </div>
+            <button class="mock-button">Add Site</button>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <div class="placeholder" style="height:110px;">Create / edit dialog zone</div>
+            <div class="placeholder" style="height:110px;">Summary card / help</div>
+          </div>
+          <div class="placeholder" style="height:120px; margin-top:12px;">Primary data table</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Product Workspace</h3>
+      <p>Cleaner and more polished. Best if Prompt 7 should feel like a configurable SaaS product before the live dashboard grows in Prompt 8.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. Hybrid Command Center</div>
+        <div class="mockup-body">
+          <div class="mock-nav">Argus | Dashboard | Live | History | Incidents | Settings</div>
+          <div style="display:grid; grid-template-columns: 1fr 280px; gap:12px; margin-top:12px;">
+            <div>
+              <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin-bottom:12px;">
+                <div class="placeholder">Fleet summary</div>
+                <div class="placeholder">Role / tenant context</div>
+              </div>
+              <div class="placeholder" style="height:130px;">Sites or cameras table</div>
+            </div>
+            <div class="placeholder" style="height:196px;">Context panel<br>Details, actions, status</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Hybrid Command Center</h3>
+      <p>Balanced between product polish and operator usefulness. Good if you want CRUD pages to feel premium without losing the control-room character.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>My recommendation</h4>
+      <ul>
+        <li><strong>C</strong> is the strongest default for Argus.</li>
+        <li>It gives us a polished app shell for Prompt 7 and a natural bridge into Prompt 8’s live telemetry dashboard.</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Watch-out</h4>
+      <ul>
+        <li><strong>A</strong> can feel too infrastructure-heavy for routine CRUD flows.</li>
+        <li><strong>B</strong> risks feeling too generic unless we deliberately preserve Argus’s monitoring identity.</li>
+      </ul>
+    </div>
+  </div>
+</div>

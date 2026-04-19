@@ -1,4 +1,59 @@
-export type AuthState = "anonymous";
+import { UserManager, WebStorageStateStore, type User } from "oidc-client-ts";
 
-export const authState: AuthState = "anonymous";
+import { frontendConfig } from "@/lib/config";
 
+export type ArgusRole = "viewer" | "operator" | "admin" | "superadmin";
+
+export interface SessionUser {
+  sub: string;
+  email: string | null;
+  role: ArgusRole;
+  realm: string;
+  tenantId: string | null;
+  isSuperadmin: boolean;
+}
+
+const rolePriority: ArgusRole[] = ["superadmin", "admin", "operator", "viewer"];
+
+export const oidcManager = new UserManager({
+  authority: frontendConfig.oidcAuthority,
+  client_id: frontendConfig.oidcClientId,
+  redirect_uri: frontendConfig.oidcRedirectUri,
+  post_logout_redirect_uri: frontendConfig.oidcPostLogoutRedirectUri,
+  response_type: "code",
+  scope: "openid profile email",
+  userStore: new WebStorageStateStore({ store: window.localStorage }),
+});
+
+function getRealmRoles(user: User): string[] {
+  const realmAccess = user.profile.realm_access as { roles?: unknown } | undefined;
+
+  return Array.isArray(realmAccess?.roles)
+    ? realmAccess.roles.filter((role): role is string => typeof role === "string")
+    : [];
+}
+
+export function mapOidcUser(user: User): SessionUser {
+  const roles = getRealmRoles(user);
+  const role = rolePriority.find((candidate) => roles.includes(candidate));
+  const issuer = typeof user.profile.iss === "string" ? user.profile.iss : "";
+  const realm = issuer.split("/").filter(Boolean).at(-1) ?? "argus-dev";
+
+  if (!role) {
+    throw new Error("OIDC user is missing a recognized Argus role.");
+  }
+
+  return {
+    sub: String(user.profile.sub ?? ""),
+    email: typeof user.profile.email === "string" ? user.profile.email : null,
+    role,
+    realm,
+    tenantId:
+      typeof user.profile.tenant_id === "string"
+        ? user.profile.tenant_id
+        : typeof user.profile.tenant === "string"
+          ? user.profile.tenant
+          : null,
+    isSuperadmin: realm === "platform-admin" && role === "superadmin",
+  };
+}

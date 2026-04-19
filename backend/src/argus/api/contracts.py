@@ -99,6 +99,24 @@ class PrivacySettings(BaseModel):
     strength: int = Field(default=7, ge=1, le=100)
 
 
+BrowserDeliveryProfileId = Literal["native", "1080p15", "720p10", "540p5"]
+
+
+def _default_browser_delivery_profiles() -> list[dict[str, Any]]:
+    return [
+        {"id": "native", "kind": "passthrough"},
+        {"id": "1080p15", "kind": "transcode", "w": 1920, "h": 1080, "fps": 15},
+        {"id": "720p10", "kind": "transcode", "w": 1280, "h": 720, "fps": 10},
+        {"id": "540p5", "kind": "transcode", "w": 960, "h": 540, "fps": 5},
+    ]
+
+
+class BrowserDeliverySettings(BaseModel):
+    default_profile: BrowserDeliveryProfileId = "720p10"
+    allow_native_on_demand: bool = True
+    profiles: list[dict[str, Any]] = Field(default_factory=_default_browser_delivery_profiles)
+
+
 class CameraCreate(BaseModel):
     site_id: UUID
     name: str = Field(min_length=1, max_length=255)
@@ -112,11 +130,13 @@ class CameraCreate(BaseModel):
     zones: list[dict[str, Any]] = Field(default_factory=list)
     homography: HomographyPayload
     privacy: PrivacySettings = Field(default_factory=PrivacySettings)
+    browser_delivery: BrowserDeliverySettings = Field(default_factory=BrowserDeliverySettings)
     frame_skip: int = Field(default=1, ge=1)
     fps_cap: int = Field(default=25, ge=1)
 
 
 class CameraUpdate(BaseModel):
+    site_id: UUID | None = None
     name: str | None = Field(default=None, min_length=1, max_length=255)
     rtsp_url: str | None = Field(default=None, min_length=1)
     processing_mode: ProcessingMode | None = None
@@ -128,6 +148,7 @@ class CameraUpdate(BaseModel):
     zones: list[dict[str, Any]] | None = None
     homography: HomographyPayload | None = None
     privacy: PrivacySettings | None = None
+    browser_delivery: BrowserDeliverySettings | None = None
     frame_skip: int | None = Field(default=None, ge=1)
     fps_cap: int | None = Field(default=None, ge=1)
 
@@ -147,6 +168,7 @@ class CameraResponse(BaseModel):
     zones: list[dict[str, Any]]
     homography: HomographyPayload
     privacy: PrivacySettings
+    browser_delivery: BrowserDeliverySettings
     frame_skip: int
     fps_cap: int
     created_at: datetime

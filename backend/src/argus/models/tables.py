@@ -150,6 +150,11 @@ class Camera(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     zones: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False, default=list)
     homography: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     privacy: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    browser_delivery: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
     frame_skip: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     fps_cap: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
 

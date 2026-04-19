@@ -44,7 +44,7 @@
 >
 > Implement `core/events.py`: a thin NATS JetStream client wrapper with `publish(subject, payload: BaseModel)` and `subscribe(subject, handler)`. Subjects: `evt.tracking.<camera_id>`, `cmd.camera.<camera_id>`, `edge.heartbeat.<node_id>`. Ensure JetStream streams are declared idempotently on startup.
 >
-> Implement `core/security.py`: OIDC validator for Keycloak (JWKS cached 1h), FastAPI `CurrentUser` dependency, RBAC decorator `require(role)`, support for tenant realms plus a dedicated `platform-admin` realm for `superadmin`, and edge-key middleware that validates scoped API keys for `/api/v1/edge/*`. RTSP URL encryption helpers (AES-GCM).
+> Implement `core/security.py`: OIDC validator for Keycloak (JWKS cached 1h), FastAPI `CurrentUser` dependency, RBAC decorator `require(role)`, support for tenant realms plus a dedicated `platform-admin` realm for `superadmin`, and edge-key middleware that validates scoped API keys for `/api/v1/edge/*`. Tokens with missing or unrecognized role claims must be rejected, not silently downgraded. RTSP URL encryption helpers (AES-GCM).
 >
 > Implement `core/logging.py` (structlog JSON + trace_id correlation) and `core/tracing.py` (OTel auto-instrumentation of FastAPI + SQLAlchemy + httpx + NATS). Expose `/metrics` via `prometheus_client`.
 >
@@ -86,19 +86,19 @@
 >
 > **Dual publish profiles (critical for Orin Nano):**
 >
-> - `profile=jetson-nano` (default on `arm64` when NVENC is absent): publish JSON events to NATS. If `privacy.blur_faces=false` and `privacy.blur_plates=false`, MediaMTX may re-serve the original RTSP as passthrough and the browser overlays boxes on an HTML canvas using the JSON events.
-> - `profile=jetson-nano` with privacy required: raw passthrough is forbidden for that camera. The worker must publish only a privacy-filtered low-res preview stream via CPU x264 (`ultrafast`,`zerolatency`) with capped resolution / fps.
-> - `profile=central-gpu`: the worker runs on HQ's L4 GPU and MAY also push an annotated stream to MediaMTX via WHIP (hardware H.264 via NVENC on the L4).
+> - `profile=jetson-nano` (default on `arm64` when NVENC is absent): publish JSON events to NATS. If `privacy.blur_faces=false` and `privacy.blur_plates=false`, MediaMTX may re-serve the original RTSP as a native passthrough option and the browser overlays boxes on an HTML canvas using the JSON events. The worker may also publish optional lower-bitrate preview/transcode renditions such as `1080p15`, `720p10`, or `540p5` for bandwidth-sensitive viewing.
+> - `profile=jetson-nano` with privacy required: raw passthrough is forbidden for that camera. The worker must publish only privacy-filtered preview renditions via CPU x264 (`ultrafast`,`zerolatency`) with capped resolution / fps.
+> - `profile=central-gpu`: the worker runs on HQ's L4 GPU and MAY also push an annotated stream to MediaMTX via WHIP (hardware H.264 via NVENC on the L4), including multiple browser-oriented renditions when useful.
 >
 > The profile is auto-detected at startup by probing `nvidia-smi` encoder capabilities; an explicit env var `PUBLISH_PROFILE` overrides.
 >
 > Implement `inference/publisher.py` with two transports: `NatsPublisher` (default) and `HttpPublisher` (fallback to `POST /api/v1/edge/telemetry` when NATS is unreachable, batches events with a 500ms flush).
 >
-> Implement `streaming/mediamtx.py` — three modes: (a) RTSP passthrough (register a pull source for the camera's RTSP URL), used only when jetson-nano privacy is off; (b) privacy-filtered CPU preview stream, used when jetson-nano privacy is on; (c) WHIP push of annotated frames, used by central-gpu profile.
+> Implement `streaming/mediamtx.py` — three modes: (a) native RTSP passthrough (register a pull source for the camera's RTSP URL), used only when jetson-nano privacy is off; (b) preview/transcode renditions for browser delivery, used when bandwidth reduction is preferred and always privacy-filtered when privacy is required; (c) WHIP push of annotated frames, used by central-gpu profile.
 >
 > Add a CLI `python -m argus.inference.engine --camera-id <uuid>` that loads config from the API and runs the worker. Add a `scheduler.py` on the master that reads the `cameras` table on startup and spawns one worker per `central` or `hybrid` camera (subprocess with a supervision loop).
 >
-> **Verification:** gates; end-to-end test: seed a camera row pointing at a looping test RTSP published by MediaMTX → worker runs → `tracking_events` rows accumulate → MediaMTX exposes the expected stream variant. Run the end-to-end test three ways: (1) x86 `central-gpu` profile with annotated stream, (2) Jetson `jetson-nano` with privacy off and passthrough + canvas, and (3) Jetson `jetson-nano` with privacy on and only the filtered preview stream exposed.
+> **Verification:** gates; end-to-end test: seed a camera row pointing at a looping test RTSP published by MediaMTX → worker runs → `tracking_events` rows accumulate → MediaMTX exposes the expected stream variant. Run the end-to-end test four ways: (1) x86 `central-gpu` profile with annotated stream, (2) Jetson `jetson-nano` with privacy off and native passthrough + canvas, (3) Jetson `jetson-nano` with privacy off and a lower-bitrate preview/transcode rendition selected for browser delivery, and (4) Jetson `jetson-nano` with privacy on and only filtered preview renditions exposed.
 
 ---
 
@@ -136,13 +136,13 @@
 
 ## Prompt 6 — Streaming UX: MediaMTX wiring, WebRTC signaling, MJPEG fallback
 
-> Finalize MediaMTX configuration in `infra/mediamtx/mediamtx.yml`: auth via JWT, enable WebRTC + LL-HLS + MJPEG, CORS for the SPA origin, per-stream publish auth keyed off the camera's id, and stream-level policy so privacy-required edge cameras never expose raw passthrough variants.
+> Finalize MediaMTX configuration in `infra/mediamtx/mediamtx.yml`: auth via JWT, enable WebRTC + LL-HLS + MJPEG, CORS for the SPA origin, per-stream publish auth keyed off the camera's id, and stream-level policy so privacy-required edge cameras never expose raw passthrough variants while privacy-off cameras can optionally expose bandwidth-optimized preview/transcode renditions.
 >
-> In the backend, implement `streaming/webrtc.py` with a `negotiate_offer(camera_id, sdp_offer)` that returns the SDP answer after checking auth and issuing a short-lived JWT for MediaMTX.
+> In the backend, implement `streaming/webrtc.py` with a `negotiate_offer(camera_id, sdp_offer, profile?)` that returns the SDP answer after checking auth, resolving the requested delivery profile, and issuing a short-lived JWT for MediaMTX.
 >
 > Add `GET /video_feed/{camera_id}` as a server-side proxy to MediaMTX's MJPEG endpoint (kept for forensic use); apply rate-limiting (10 concurrent per user).
 >
-> **Verification:** gates; opening the MediaMTX web UI shows the expected stream variant for a running camera (annotated on `central-gpu`, passthrough on `jetson-nano` with privacy off, filtered preview on `jetson-nano` with privacy on); a plain HTML test page consumes the WebRTC offer route successfully.
+> **Verification:** gates; opening the MediaMTX web UI shows the expected stream variant for a running camera (annotated on `central-gpu`, native passthrough or bandwidth-optimized preview on `jetson-nano` with privacy off depending on profile, filtered preview on `jetson-nano` with privacy on); a plain HTML test page consumes the WebRTC offer route successfully.
 
 ---
 
@@ -151,9 +151,9 @@
 > In `frontend/`:
 >
 > 1. Generate a TypeScript API client from the OpenAPI schema (`openapi-typescript` + `openapi-fetch`). Wire TanStack Query with typed hooks (`useSites`, `useCameras`, etc.).
-> 2. Implement OIDC PKCE login via `oidc-client-ts` against Keycloak. Store the user in a Zustand store. Add a `<RequireAuth>` boundary and a `<RequireRole role>` component.
-> 3. Build the app shell: top nav (Dashboard, Live, History, Incidents, Settings), tenant switcher (only for `superadmin` users authenticated via the `platform-admin` realm), user menu with logout.
-> 4. Implement `pages/Sites.tsx` and `pages/Cameras.tsx` as shadcn data tables with create/edit dialogs. The camera form must include: processing-mode select (central / edge / hybrid), RTSP URL (masked), primary / secondary model selectors, tracker type, privacy toggles, and a `HomographyEditor` component for 4 src + 4 dst points on a frame snapshot + ref distance.
+> 2. Implement OIDC PKCE login via `oidc-client-ts` against Keycloak. Store the user in a Zustand store. Add a `<RequireAuth>` boundary and a `<RequireRole role>` component. Frontend auth must fail closed: callback/session failures return the user to sign-in, and tokens without a recognized Argus role must be rejected instead of defaulting to `viewer`.
+> 3. Build the app shell: top nav (Dashboard, Live, History, Incidents, Settings), tenant switcher (only for `superadmin` users authenticated via the `platform-admin` realm), user menu with logout. The visual system must be dark-first and clearly aligned to the Argus brand brief: obsidian / charcoal surfaces, luminous off-white typography, restrained cerulean-to-violet glow accents, premium geometric sans styling, and a matte-screen control-room feel. Avoid generic light SaaS visuals.
+> 4. Implement `pages/Sites.tsx` and `pages/Cameras.tsx` as shadcn data tables with create/edit dialogs. The camera form must include: processing-mode select (central / edge / hybrid), RTSP URL (masked), primary / secondary model selectors, tracker type, privacy toggles, browser delivery profile selection (`native`, `1080p15`, `720p10`, `540p5`) with clear native-ingest versus browser-delivery messaging, and a `HomographyEditor` component for 4 src + 4 dst points on a frame snapshot + ref distance.
 >
 > **Verification:** gates; Playwright test: login → create site → create camera with homography → verify it shows on the Cameras table.
 
@@ -163,6 +163,7 @@
 
 > Implement `components/VideoStream.tsx`:
 > - Try WebRTC first (via `POST /api/v1/streams/{id}/offer`); fall back to LL-HLS via `hls.js`; final fallback is MJPEG `<img>`.
+> - Request the camera's default browser delivery profile by default and keep the path open for later user-selectable quality escalation.
 > - Render a `<canvas>` absolutely positioned over the `<video>`/`<img>` sized to match.
 >
 > Implement `components/TelemetryCanvas.tsx` that subscribes to `/ws/telemetry` and draws bounding boxes, class labels, track IDs, and speed (if present) on the canvas. Throttle redraw to `requestAnimationFrame`; decouple from video decode.

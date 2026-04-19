@@ -10,8 +10,8 @@ Build the first real Argus frontend foundation around four outcomes:
 
 1. Real OIDC PKCE authentication against local Keycloak with no mock-auth bypass.
 2. A typed frontend data layer generated from the backend OpenAPI schema.
-3. A production-shaped app shell that matches the chosen "Hybrid Command Center" direction.
-4. Working `Sites` and `Cameras` management pages, including a guided stepped camera setup flow with homography editing.
+3. A production-shaped app shell that matches the chosen "Hybrid Command Center" direction and the Argus visual identity.
+4. Working `Sites` and `Cameras` management pages, including a guided stepped camera setup flow with homography editing and browser delivery-profile configuration.
 
 This prompt establishes the product frame for later prompts. It should make Prompt 8's live dashboard, Prompt 9's history pages, and future admin flows feel like natural extensions of the same app rather than disconnected screens.
 
@@ -24,6 +24,33 @@ The design is based on these confirmed decisions:
 - The frontend shell follows direction `C`: "Hybrid Command Center".
 - Camera setup uses the heavier `C` editing pattern rather than a basic modal or drawer.
 - Camera create/edit is a stepped setup flow inside that split surface, not a single long form.
+
+## Argus Visual System
+
+Prompt 7 must establish the product's dark-first visual language, not just its route structure.
+
+The UI should feel aligned with the approved Argus identity:
+
+- deep obsidian and charcoal surfaces, not white-first SaaS scaffolding
+- restrained cerulean-to-violet illumination used as a purposeful accent, not decorative noise
+- luminous off-white typography for primary product copy
+- geometric, modern, premium-feeling sans-serif typography
+- subtle depth, matte-screen surfaces, and soft glow rather than flat blocks
+- a vigilant, technical, premium B2B tone across sign-in, shell, tables, dialogs, and the camera wizard
+
+This is not a logo-only requirement. The sign-in page, shell chrome, action surfaces, tables, and setup flows must all feel like they belong to the same Argus product family.
+
+## Delivery Rendition Constraint
+
+Prompt 7 does not need to build live playback yet, but the camera workflow should already reflect the streaming model we intend to ship.
+
+The frontend should represent these truths clearly:
+
+- analytics ingest may remain native even when operator viewing is bandwidth-optimized
+- browser delivery can default to a lower-bitrate rendition such as `1080p15`, `720p10`, or `540p5`
+- `native` remains available where policy and infrastructure allow it
+- choosing a non-native browser delivery profile may activate an optional preview/transcode path, especially on Jetson deployments where bandwidth reduction is desired
+- privacy-required cameras can only expose privacy-safe renditions
 
 ## Non-Goals
 
@@ -65,6 +92,7 @@ The shell should reflect the approved "Hybrid Command Center" direction:
 - a right-side identity cluster with tenant context, user menu, and logout
 - a main content region that supports both operational views and admin tables
 - a secondary contextual area or panel language that can support summaries, actions, and setup guidance
+- dark-first control-room styling that still works for CRUD-heavy management views
 
 `Sites` and `Cameras` should not be added to the primary top nav, because Prompt 7 already fixes that surface. They should remain direct routes (`/sites`, `/cameras`) but be reached through admin-oriented secondary navigation inside the authenticated shell, with `Settings` as the main management entry point for human navigation.
 
@@ -108,6 +136,7 @@ Frontend route and UI gating should follow backend RBAC:
 - `operator` - command-capable areas later
 - `admin` - Prompt 7 CRUD capability
 - `superadmin` - sees tenant switcher only when authenticated from the `platform-admin` realm
+- missing or unrecognized role claims must fail closed rather than silently downgrading to `viewer`
 
 `RequireRole` should gate admin-only screens or actions without coupling that logic to page internals.
 
@@ -160,6 +189,7 @@ This keeps data ownership simple and predictable before Prompt 8 adds richer liv
 - short description of the platform
 - one clear `Sign in` action
 - lightweight status messaging for callback/login errors
+- the same obsidian, luminous, premium visual language as the authenticated shell
 
 It should feel intentional, not like a placeholder or debug screen.
 
@@ -215,11 +245,13 @@ Right side:
    - secondary model
    - tracker type
 
-3. **Privacy & Processing**
+3. **Privacy, Processing & Delivery**
    - blur toggles
    - method and strength
    - frame skip
    - fps cap
+   - browser delivery profile (`native`, `1080p15`, `720p10`, `540p5`)
+   - clear explanation that non-native browser delivery may use an optional preview/transcode path while analytics ingest remains native
    - policy-forced fields shown clearly and locked where required
 
 4. **Calibration**
@@ -241,6 +273,17 @@ For existing cameras:
 - operators may explicitly replace the RTSP URL when needed
 
 This preserves the prompt requirement for masked RTSP handling while keeping edits practical.
+
+## Delivery Profile UX
+
+Prompt 7 should make the bandwidth-control model understandable before Prompt 8 adds playback.
+
+The camera workflow should therefore:
+
+- expose a default browser delivery profile at create/edit time
+- explain the difference between native ingest and operator delivery in plain product language
+- avoid framing bandwidth optimization as a degradation of analytics quality
+- preserve room for future per-view overrides without requiring a redesign of the camera form
 
 ## Homography Editor Design
 
@@ -286,6 +329,7 @@ Prompt 7 should explicitly handle the following failure cases:
 - sign-in initiation failure
 - callback/token processing failure
 - expired or missing session on app boot
+- tokens with missing or unrecognized Argus roles
 - unauthorized role access to CRUD routes or actions
 - API request failures for sites, cameras, and models
 - validation errors during camera setup
@@ -347,6 +391,14 @@ Mitigation:
 - defer advanced calibration polish
 - keep the homography editor functional rather than overdesigned
 
+### Risk: Visual design collapses into generic SaaS patterns
+
+Mitigation:
+
+- treat the Argus visual system as a prompt requirement, not optional polish
+- establish dark-first tokens and shell styling before page-level CRUD work
+- keep glow accents restrained so the interface still feels precise and trustworthy
+
 ### Risk: Over-abstraction before later prompts prove reuse
 
 Mitigation:
@@ -360,12 +412,13 @@ Implement Prompt 7 as a focused vertical foundation:
 
 - real Keycloak PKCE auth
 - branded sign-in route
+- strong dark-first Argus visual system
 - OpenAPI-generated typed client
 - TanStack Query data layer
 - Zustand auth/session store
 - hybrid command-center shell
 - Sites CRUD
-- Cameras CRUD with a stepped split configuration flow
+- Cameras CRUD with a stepped split configuration flow and delivery-profile controls
 - real Playwright login and creation flow
 
 This is the smallest design that still gives Argus a credible product foundation and avoids rework in Prompts 8 and 9.

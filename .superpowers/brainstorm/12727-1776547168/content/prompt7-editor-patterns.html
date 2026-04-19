@@ -1,0 +1,99 @@
+<h2>Sites & Cameras Editing Pattern</h2>
+<p class="subtitle">
+  Prompt 7 requires create and edit dialogs. The main choice is how heavy those dialogs should feel,
+  especially for the camera form with homography, privacy, and model selection.
+</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. Center Modal</div>
+        <div class="mockup-body">
+          <div class="placeholder" style="height:140px;">Sites / cameras table in background</div>
+          <div style="margin:-112px auto 0; width:78%; border-radius:16px; background:#fff; border:1px solid #d7dde6; padding:14px; box-shadow:0 14px 40px rgba(0,0,0,0.14);">
+            <div class="label">Create camera</div>
+            <div class="placeholder" style="height:34px; margin-top:8px;">Name / processing mode / RTSP</div>
+            <div class="placeholder" style="height:34px; margin-top:8px;">Primary / secondary model / tracker</div>
+            <div class="placeholder" style="height:72px; margin-top:8px;">Homography editor</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Center Modal</h3>
+      <p>Familiar and compact. Best if create/edit stays short and focused, but it can feel tight for the camera workflow.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. Right Drawer</div>
+        <div class="mockup-body">
+          <div style="display:grid; grid-template-columns: 1fr 320px; gap:12px;">
+            <div class="placeholder" style="height:182px;">Sites / cameras table remains visible</div>
+            <div style="border-radius:16px; background:#fff; border:1px solid #d7dde6; padding:14px;">
+              <div class="label">Edit camera</div>
+              <div class="placeholder" style="height:30px; margin-top:8px;">General fields</div>
+              <div class="placeholder" style="height:30px; margin-top:8px;">Privacy toggles</div>
+              <div class="placeholder" style="height:64px; margin-top:8px;">Homography snapshot</div>
+              <div class="placeholder" style="height:28px; margin-top:8px;">Actions</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Right Drawer</h3>
+      <p>Keeps context visible while giving the form more height and a steadier workflow. Strong fit for table-driven CRUD.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. Split Dialog</div>
+        <div class="mockup-body">
+          <div style="margin:12px auto 0; width:88%; border-radius:16px; background:#fff; border:1px solid #d7dde6; padding:14px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+              <div>
+                <div class="label">Form</div>
+                <div class="placeholder" style="height:30px; margin-top:8px;">Identity + processing</div>
+                <div class="placeholder" style="height:30px; margin-top:8px;">Models + tracker</div>
+                <div class="placeholder" style="height:30px; margin-top:8px;">Privacy</div>
+              </div>
+              <div>
+                <div class="label">Calibration</div>
+                <div class="placeholder" style="height:96px; margin-top:8px;">Homography editor panel</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Split Dialog</h3>
+      <p>More premium and task-focused. Best if the camera form is treated like a serious configuration workflow rather than a quick edit.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>My recommendation</h4>
+      <ul>
+        <li><strong>B</strong> for Sites and most Camera edits.</li>
+        <li><strong>C</strong> only if you want the homography workflow to feel like a dedicated setup experience from day one.</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Watch-out</h4>
+      <ul>
+        <li><strong>A</strong> is simplest but most cramped once we include calibration.</li>
+        <li><strong>C</strong> is strongest visually, but it costs more implementation time during Prompt 7.</li>
+      </ul>
+    </div>
+  </div>
+</div>

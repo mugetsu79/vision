@@ -15,8 +15,8 @@
       "name": "Argus Frontend",
       "enabled": true,
       "publicClient": true,
-      "redirectUris": ["http://localhost:3000/*"],
-      "webOrigins": ["http://localhost:3000"],
+      "redirectUris": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
+      "webOrigins": ["http://localhost:3000", "http://127.0.0.1:3000"],
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false
     },
@@ -46,6 +46,23 @@
         }
       ],
       "realmRoles": ["viewer"]
+    },
+    {
+      "username": "admin-dev",
+      "firstName": "Admin",
+      "lastName": "Dev",
+      "enabled": true,
+      "email": "admin-dev@argus.local",
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "argus-admin-pass",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"]
     }
   ]
 }
