@@ -57,3 +57,76 @@ sh: openapi-typescript: command not found
  ELIFECYCLE  Command failed.
  WARN   Local package.json exists, but node_modules missing, did you mean to install?
 morya@printer vision % 
+
+
+
+
+The first real problem is the `8080` port clash. Everything after that is secondary fallout.
+
+What happened:
+1. `make dev-up` already ran `docker compose -f infra/docker-compose.dev.yml up -d`.
+2. Keycloak could not start because `0.0.0.0:8080` is already in use on your iMac.
+3. Because the stack never came up cleanly, the later commands ran in a half-broken state.
+4. `alembic` was then missing because your local backend `.venv` had just been created but not synced with the repo’s dependency groups.
+5. `openapi-typescript` was missing because `frontend/node_modules` does not exist yet, so `pnpm generate:api` had nothing to run.
+
+The clean fix is:
+
+```bash
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+```
+
+Stop whatever is holding `8080`. If it’s a Docker container, this helps:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Ports}}'
+```
+
+Then reset and bring the repo up in the right order:
+
+```bash
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.dev.yml down
+```
+
+Install local deps once:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv sync --group runtime --group dev --group llm
+
+cd "$HOME/vision/frontend"
+corepack pnpm install
+```
+
+Now start the stack again:
+
+```bash
+cd "$HOME/vision"
+make dev-up
+```
+
+Wait until these work:
+
+```bash
+curl -s http://127.0.0.1:8000/healthz
+curl -s http://127.0.0.1:8080/realms/argus-dev/.well-known/openid-configuration | head
+```
+
+Then run:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run alembic upgrade head
+
+cd "$HOME/vision/frontend"
+corepack pnpm generate:api
+```
+
+Two important notes:
+- Don’t run `docker compose ... up -d` again after `make dev-up`; `make dev-up` already does that.
+- `pnpm generate:api` only works after the backend is healthy and `pnpm install` has been run.
+
+If you want, I can also make the local onboarding less fragile by patching the repo so:
+- `make dev-up` checks for the `8080` conflict up front
+- backend/frontend local setup is easier and doesn’t assume prior dependency install
