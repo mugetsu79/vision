@@ -502,7 +502,7 @@ ARGUS_DB_URL="postgresql+asyncpg://argus:argus@127.0.0.1:5432/argus" \
 ARGUS_NATS_URL="nats://127.0.0.1:4222" \
 ARGUS_MINIO_ENDPOINT="127.0.0.1:9000" \
 ARGUS_MINIO_ACCESS_KEY="argus" \
-ARGUS_MINIO_SECRET_KEY="argus" \
+ARGUS_MINIO_SECRET_KEY="argus-dev-secret" \
 ARGUS_MINIO_SECURE="false" \
 python3 -m uv run python -m argus.inference.engine --camera-id "$CAMERA_ONE_ID"
 ```
@@ -523,7 +523,7 @@ ARGUS_DB_URL="postgresql+asyncpg://argus:argus@127.0.0.1:5432/argus" \
 ARGUS_NATS_URL="nats://127.0.0.1:4222" \
 ARGUS_MINIO_ENDPOINT="127.0.0.1:9000" \
 ARGUS_MINIO_ACCESS_KEY="argus" \
-ARGUS_MINIO_SECRET_KEY="argus" \
+ARGUS_MINIO_SECRET_KEY="argus-dev-secret" \
 ARGUS_MINIO_SECURE="false" \
 python3 -m uv run python -m argus.inference.engine --camera-id "$CAMERA_TWO_ID"
 ```

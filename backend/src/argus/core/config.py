@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "argus"
-    minio_secret_key: SecretStr = SecretStr("argus")
+    minio_secret_key: SecretStr = SecretStr("argus-dev-secret")
     minio_secure: bool = False
     minio_incidents_bucket: str = "incidents"
     incident_clip_pre_seconds: int = 10
