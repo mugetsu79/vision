@@ -8,7 +8,7 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node", "@playwright/test"]
   },
-  "include": ["vite.config.ts", "playwright.config.ts"]
+  "include": ["e2e/**/*.ts"]
 }

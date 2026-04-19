@@ -41,7 +41,7 @@ export function AppShell({ children }: PropsWithChildren) {
         </header>
       </div>
 
-      <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-[1500px] flex-col gap-6 pt-[15rem] xl:pt-[9.75rem]">
+      <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-[1500px] flex-col gap-6 pt-[17rem] xl:pt-[13.25rem]">
         <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
           <section className="min-w-0">{children}</section>
           <aside className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,16,26,0.96),rgba(7,10,17,0.94))] shadow-[0_24px_70px_-48px_rgba(0,0,0,0.92)] backdrop-blur-xl xl:sticky xl:top-32 xl:h-fit">

@@ -14,6 +14,7 @@ import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
@@ -174,7 +175,7 @@ class TenancyService:
                 )
             return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
 
-        tenant = await self._load_tenant_by_slug(user.realm)
+        tenant = await self._load_or_bootstrap_tenant_by_slug(user.realm)
         return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
 
     async def _load_tenant_by_id(self, tenant_id: UUID) -> Tenant:
@@ -191,6 +192,28 @@ class TenancyService:
         if tenant is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found.")
         return tenant
+
+    async def _load_or_bootstrap_tenant_by_slug(self, slug: str) -> Tenant:
+        try:
+            return await self._load_tenant_by_slug(slug)
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_404_NOT_FOUND:
+                raise
+            if self.settings.environment != "development":
+                raise
+
+        async with self.session_factory() as session:
+            tenant = Tenant(name=_tenant_name_from_slug(slug), slug=slug)
+            session.add(tenant)
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+            else:
+                await session.refresh(tenant)
+                return tenant
+
+        return await self._load_tenant_by_slug(slug)
 
 
 class SiteService:
@@ -1100,6 +1123,13 @@ def _serialize_parquet(rows: list[HistoryPoint]) -> bytes:
     buffer = io.BytesIO()
     pq.write_table(table, buffer)
     return buffer.getvalue()
+
+
+def _tenant_name_from_slug(slug: str) -> str:
+    tokens = [token for token in slug.replace("_", "-").split("-") if token]
+    if not tokens:
+        return "Tenant"
+    return " ".join(token.capitalize() for token in tokens)
 
 
 def _parse_optional_uuid(raw_value: str | None) -> UUID | None:

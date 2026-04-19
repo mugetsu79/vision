@@ -25,11 +25,38 @@ export const oidcManager = new UserManager({
   userStore: new WebStorageStateStore({ store: window.localStorage }),
 });
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const [, payload] = token.split(".");
+
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    return JSON.parse(globalThis.atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 function getRealmRoles(user: User): string[] {
   const realmAccess = user.profile.realm_access as { roles?: unknown } | undefined;
 
-  return Array.isArray(realmAccess?.roles)
-    ? realmAccess.roles.filter((role): role is string => typeof role === "string")
+  if (Array.isArray(realmAccess?.roles)) {
+    return realmAccess.roles.filter((role): role is string => typeof role === "string");
+  }
+
+  if (!user.access_token) {
+    return [];
+  }
+
+  const tokenClaims = decodeJwtPayload(user.access_token);
+  const accessTokenRealmAccess = tokenClaims?.realm_access as { roles?: unknown } | undefined;
+
+  return Array.isArray(accessTokenRealmAccess?.roles)
+    ? accessTokenRealmAccess.roles.filter((role): role is string => typeof role === "string")
     : [];
 }
 

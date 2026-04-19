@@ -30,5 +30,20 @@ def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:
     assert settings.rtsp_encryption_key.get_secret_value() == "argus-secret-key"
     assert settings.keycloak_trusted_realms_base_urls == (
         "http://localhost:8080/realms",
+        "http://127.0.0.1:8080/realms",
         "https://auth.argus.example/realms",
+    )
+
+
+def test_loopback_keycloak_public_url_trusts_both_localhost_and_127() -> None:
+    settings = Settings(
+        _env_file=None,
+        keycloak_server_url="http://keycloak:8080",
+        keycloak_public_server_url="http://127.0.0.1:8080",
+    )
+
+    assert settings.keycloak_trusted_realms_base_urls == (
+        "http://keycloak:8080/realms",
+        "http://localhost:8080/realms",
+        "http://127.0.0.1:8080/realms",
     )

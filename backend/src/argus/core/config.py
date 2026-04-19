@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit, urlunsplit
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,6 +18,10 @@ class Settings(BaseSettings):
     nats_connect_timeout_seconds: float = 5.0
 
     api_base_url: str = "http://localhost:8000"
+    cors_allowed_origins: tuple[str, ...] = (
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    )
 
     mediamtx_url: str = "http://localhost:8889"
     mediamtx_api_url: str = "http://localhost:9997"
@@ -76,9 +82,11 @@ class Settings(BaseSettings):
 
     @property
     def keycloak_trusted_realms_base_urls(self) -> tuple[str, ...]:
-        trusted_urls = [self.keycloak_realms_base_url]
+        trusted_urls = _loopback_aliases(self.keycloak_realms_base_url)
         if self.keycloak_public_server_url is not None:
-            trusted_urls.append(f"{self.keycloak_public_server_url.rstrip('/')}/realms")
+            trusted_urls.extend(
+                _loopback_aliases(f"{self.keycloak_public_server_url.rstrip('/')}/realms")
+            )
         return tuple(dict.fromkeys(trusted_urls))
 
     @property
@@ -87,3 +95,21 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _loopback_aliases(url: str) -> list[str]:
+    parsed = urlsplit(url)
+    hostname = parsed.hostname
+
+    if hostname not in {"localhost", "127.0.0.1"}:
+        return [url]
+
+    aliases: list[str] = []
+    for candidate_host in ("localhost", "127.0.0.1"):
+        netloc = candidate_host
+        if parsed.port is not None:
+            netloc = f"{netloc}:{parsed.port}"
+        aliases.append(
+            urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+        )
+    return aliases

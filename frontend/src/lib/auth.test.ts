@@ -48,4 +48,38 @@ describe("mapOidcUser", () => {
       isSuperadmin: false,
     });
   });
+
+  test("falls back to access token claims when realm roles are absent from the ID token profile", () => {
+    const accessTokenPayload = {
+      iss: "http://127.0.0.1:8080/realms/argus-dev",
+      realm_access: {
+        roles: ["admin"],
+      },
+    };
+    const encodedPayload = btoa(JSON.stringify(accessTokenPayload))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/u, "");
+    const accessToken = [
+      "header",
+      encodedPayload,
+      "signature",
+    ].join(".");
+    const user = {
+      profile: {
+        sub: "admin-2",
+        email: "admin-two@argus.local",
+        iss: "http://127.0.0.1:8080/realms/argus-dev",
+      },
+      access_token: accessToken,
+    } as unknown as User;
+
+    expect(mapOidcUser(user)).toMatchObject({
+      sub: "admin-2",
+      email: "admin-two@argus.local",
+      role: "admin",
+      realm: "argus-dev",
+      isSuperadmin: false,
+    });
+  });
 });
