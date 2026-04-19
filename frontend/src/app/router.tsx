@@ -49,7 +49,7 @@ export const router = createBrowserRouter([
       {
         path: "live",
         lazy: async () => ({
-          Component: (await import("@/pages/Dashboard")).DashboardPage,
+          Component: (await import("@/pages/Live")).LivePage,
         }),
       },
       {

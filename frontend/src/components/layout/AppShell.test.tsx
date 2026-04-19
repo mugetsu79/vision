@@ -90,7 +90,7 @@ describe("AppShell", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("routes authenticated users through the shell on dashboard paths", async () => {
+  test("routes authenticated users into the refreshed operations workspace", async () => {
     window.history.pushState({}, "", "/dashboard");
 
     const { default: App } = await import("@/App");
@@ -99,8 +99,20 @@ describe("AppShell", () => {
     const primaryWorkspaceNav = await screen.findByRole("navigation", {
       name: /primary workspace/i,
     });
-
-    expect(primaryWorkspaceNav).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /live command surface/i })).toBeInTheDocument();
+    expect(
+      screen.queryByText(/operator-grade visibility without native-bandwidth waste/i),
+    ).not.toBeInTheDocument();
     expect(within(primaryWorkspaceNav).getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", {
+        name: /operations/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", {
+        name: /configuration/i,
+      }),
+    ).toBeInTheDocument();
   });
 });

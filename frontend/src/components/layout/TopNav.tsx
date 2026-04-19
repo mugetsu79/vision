@@ -11,10 +11,6 @@ import {
   Video,
 } from "lucide-react";
 
-import {
-  createDefaultHistoryFilters,
-  historySeriesQueryOptions,
-} from "@/hooks/use-history";
 import { getStreamRuntimeHints } from "@/lib/stream-playback";
 
 export type WorkspaceNavItem = {
@@ -48,13 +44,24 @@ export const workspaceNavGroups = [
   },
 ] as const satisfies readonly WorkspaceNavGroup[];
 
+async function prefetchHistoryQuery(queryClient: QueryClient) {
+  const { createDefaultHistoryFilters, historySeriesQueryOptions } = await import(
+    "@/hooks/use-history"
+  );
+
+  await queryClient.prefetchQuery(
+    historySeriesQueryOptions(createDefaultHistoryFilters()),
+  );
+}
+
 export function prefetchWorkspaceRoute(route: string, queryClient?: QueryClient) {
   if (route === "/history") {
     void import("@/pages/History");
     void import("@/components/history/HistoryTrendChart");
-    void queryClient?.prefetchQuery(
-      historySeriesQueryOptions(createDefaultHistoryFilters()),
-    );
+
+    if (queryClient) {
+      void prefetchHistoryQuery(queryClient);
+    }
   }
 
   if (route === "/incidents") {
