@@ -1,5 +1,10 @@
 # Argus Runbook
 
+See also:
+
+- [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
+- [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
+
 ## Secrets With SOPS And Age
 
 Argus stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.

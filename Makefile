@@ -4,7 +4,7 @@ REGISTRY ?= ghcr.io/mugetsu79/vision
 TAG ?= local
 BUILD_PLATFORMS ?= linux/amd64,linux/arm64
 
-.PHONY: fmt lint test models dev-up dev-down migrate revision build-multiarch build-central build-edge build-frontend helm-template
+.PHONY: fmt lint test models dev-up dev-down migrate revision build-multiarch build-central build-edge build-frontend helm-template verify-all
 
 fmt:
 	cd backend && $(UV) run ruff format .
@@ -77,3 +77,6 @@ build-multiarch:
 
 helm-template:
 	helm template argus infra/helm/argus
+
+verify-all:
+	./scripts/run-full-validation.sh
