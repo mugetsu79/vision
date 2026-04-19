@@ -1,5 +1,50 @@
-morya@printer vision % IMAC_MODEL_ID="$(
-  curl -s \
+That narrows it down cleanly: the problem is just the token.
+
+`TOKEN set? yes` only means the variable is non-empty. The backend is explicitly telling us the token is invalid:
+
+```json
+{"detail":"Token verification failed."}
+```
+
+Most likely cause:
+- your `TOKEN` was created before the last Keycloak/container restart, so it’s stale now
+
+Do this next.
+
+First, fetch a fresh token and inspect the response:
+
+```bash
+TOKEN_RESPONSE="$(
+  curl -sS \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token
+)"
+echo "$TOKEN_RESPONSE" | python3 -m json.tool
+```
+
+Then set `TOKEN` again from that fresh response:
+
+```bash
+TOKEN="$(
+  printf '%s' "$TOKEN_RESPONSE" |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
+echo "${TOKEN:0:32}..."
+```
+
+Then verify auth before trying to create the model:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
+```
+
+If that works, then create the model again:
+
+```bash
+IMAC_MODEL_ID="$(
+  curl -sS \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -X POST \
@@ -19,150 +64,12 @@ morya@printer vision % IMAC_MODEL_ID="$(
   python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'
 )"
 echo "$IMAC_MODEL_ID"
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/json/__init__.py", line 293, in load
-    return loads(fp.read(),
-           ^^^^^^^^^^^^^^^^
-  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/json/__init__.py", line 346, in loads
-    return _default_decoder.decode(s)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/json/decoder.py", line 337, in decode
-    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/json/decoder.py", line 355, in raw_decode
-    raise JSONDecodeError("Expecting value", s, err.value) from None
-json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
-
-morya@printer vision % 
-
-
---------------------
-
-The JSON parser error means the API call did **not** return the model JSON body. Most likely it returned nothing because one of these is true:
-
-- the backend isn’t reachable
-- `TOKEN` is empty or expired
-- one of `MODEL_PATH`, `MODEL_SHA`, or `MODEL_SIZE` is empty
-- the API returned an error page/body you didn’t inspect first
-
-Do this in order.
-
-First, confirm the required variables are actually set in this shell:
-
-```bash
-echo "TOKEN set? ${TOKEN:+yes}"
-echo "MODEL_PATH=$MODEL_PATH"
-echo "MODEL_SHA=$MODEL_SHA"
-echo "MODEL_SIZE=$MODEL_SIZE"
 ```
 
-Then confirm the backend is alive:
+If the `GET /api/v1/models` call still says token verification failed after refreshing, paste the output of:
 
 ```bash
-curl -sS http://127.0.0.1:8000/healthz
+echo "$TOKEN_RESPONSE" | python3 -m json.tool
 ```
 
-Then inspect the raw API response instead of piping straight into Python:
-
-```bash
-curl -sS \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -X POST \
-  http://127.0.0.1:8000/api/v1/models \
-  -d "{
-    \"name\": \"YOLO12n iMac\",
-    \"version\": \"lab-imac\",
-    \"task\": \"detect\",
-    \"path\": \"$MODEL_PATH\",
-    \"format\": \"onnx\",
-    \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
-    \"input_shape\": {\"width\": 640, \"height\": 640},
-    \"sha256\": \"$MODEL_SHA\",
-    \"size_bytes\": $MODEL_SIZE,
-    \"license\": \"lab\"
-  }" | python3 -m json.tool
-```
-
-If that says `401` or auth-related detail, refresh the token:
-
-```bash
-TOKEN="$(
-  curl -sS \
-    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
-    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
-)"
-```
-
-If the model already exists, list models and reuse the id:
-
-```bash
-curl -sS -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
-```
-
-If you want the shortest next move, run these two commands and paste the outputs:
-
-```bash
-echo "TOKEN set? ${TOKEN:+yes}"; echo "$MODEL_PATH"; echo "$MODEL_SHA"; echo "$MODEL_SIZE"
-curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
-```
------------------------------------------------------------------
-
-morya@printer vision % echo "TOKEN set? ${TOKEN:+yes}"
-echo "MODEL_PATH=$MODEL_PATH"
-echo "MODEL_SHA=$MODEL_SHA"
-echo "MODEL_SIZE=$MODEL_SIZE"
-TOKEN set? yes
-MODEL_PATH=/Users/morya/vision/models/yolo12n.onnx
-MODEL_SHA=e9c543348a6a849002ab0d1028cfe99ad0c5d90985091dbc50a07cbb66bd8f3e
-MODEL_SIZE=10705841
-morya@printer vision % curl -sS http://127.0.0.1:8000/healthz
-{"status":"ok"}%                                                                                             morya@printer vision % curl -sS \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -X POST \
-  http://127.0.0.1:8000/api/v1/models \
-  -d "{
-    \"name\": \"YOLO12n iMac\",
-    \"version\": \"lab-imac\",
-    \"task\": \"detect\",
-    \"path\": \"$MODEL_PATH\",
-    \"format\": \"onnx\",
-    \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
-    \"input_shape\": {\"width\": 640, \"height\": 640},
-    \"sha256\": \"$MODEL_SHA\",
-    \"size_bytes\": $MODEL_SIZE,
-    \"license\": \"lab\"
-  }" | python3 -m json.tool
-Expecting value: line 1 column 1 (char 0)
-morya@printer vision % curl -sS \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -X POST \
-  http://127.0.0.1:8000/api/v1/models \
-  -d "{
-    \"name\": \"YOLO12n iMac\",
-    \"version\": \"lab-imac\",
-    \"task\": \"detect\",
-    \"path\": \"$MODEL_PATH\",
-    \"format\": \"onnx\",
-    \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
-    \"input_shape\": {\"width\": 640, \"height\": 640},
-    \"sha256\": \"$MODEL_SHA\",
-    \"size_bytes\": $MODEL_SIZE,
-    \"license\": \"lab\"
-  }" | python3 -m json.tool
-Expecting value: line 1 column 1 (char 0)
-morya@printer vision % echo "TOKEN set? ${TOKEN:+yes}"; echo "$MODEL_PATH"; echo "$MODEL_SHA"; echo "$MODEL_SIZE"
-curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
-TOKEN set? yes
-/Users/morya/vision/models/yolo12n.onnx
-e9c543348a6a849002ab0d1028cfe99ad0c5d90985091dbc50a07cbb66bd8f3e
-10705841
-{
-    "detail": "Token verification failed."
-}
-morya@printer vision % 
+That will tell us whether Keycloak is returning a token at all or returning an auth error instead.
