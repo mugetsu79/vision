@@ -1,165 +1,28 @@
-morya@printer vision % curl -sS http://127.0.0.1:8000/healthz
-{"status":"ok"}%                                                                                                             morya@printer vision % docker compose -f infra/docker-compose.dev.yml exec backend \
-  /tmp/argus-backend-venv/bin/alembic upgrade head
-Traceback (most recent call last):
-  File "/tmp/argus-backend-venv/bin/alembic", line 10, in <module>
-    sys.exit(main())
-             ^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/alembic/config.py", line 1047, in main
-    CommandLine(prog=prog).main(argv=argv)
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/alembic/config.py", line 1037, in main
-    self.run_cmd(cfg, options)
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/alembic/config.py", line 971, in run_cmd
-    fn(
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/alembic/command.py", line 483, in upgrade
-    script.run_env()
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/alembic/script/base.py", line 545, in run_env
-    util.load_python_file(self.dir, "env.py")
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/alembic/util/pyfiles.py", line 116, in load_python_file
-    module = load_module_py(module_id, path)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/alembic/util/pyfiles.py", line 136, in load_module_py
-    spec.loader.exec_module(module)  # type: ignore
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap_external>", line 999, in exec_module
-  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
-  File "/workspace/backend/src/argus/migrations/env.py", line 67, in <module>
-    run_migrations_online()
-  File "/workspace/backend/src/argus/migrations/env.py", line 61, in run_migrations_online
-    asyncio.run(run_async_migrations())
-  File "/usr/local/lib/python3.12/asyncio/runners.py", line 195, in run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.12/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/workspace/backend/src/argus/migrations/env.py", line 54, in run_async_migrations
-    async with connectable.connect() as connection:
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/ext/asyncio/base.py", line 121, in __aenter__
-    return await self.start(is_ctxmanager=True)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/ext/asyncio/engine.py", line 275, in start
-    await greenlet_spawn(self.sync_engine.connect)
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 201, in greenlet_spawn
-    result = context.throw(*sys.exc_info())
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3293, in connect
-    return self._connection_cls(self)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 143, in __init__
-    self._dbapi_connection = engine.raw_connection()
-                             ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3317, in raw_connection
-    return self.pool.connect()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 448, in connect
-    return _ConnectionFairy._checkout(self)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 1272, in _checkout
-    fairy = _ConnectionRecord.checkout(pool)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
-    rec = pool._do_get()
-          ^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py", line 306, in _do_get
-    return self._create_connection()
-           ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 389, in _create_connection
-    return _ConnectionRecord(self)
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
-    self.__connect()
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 121, in __exit__
-    raise exc_value.with_traceback(exc_tb)
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
-    self.dbapi_connection = connection = pool._invoke_creator(self)
-                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/engine/create.py", line 667, in connect
-    return dialect.connect(*cargs_tup, **cparams)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 630, in connect
-    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 955, in connect
-    await_only(creator_fn(*arg, **kw)),
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
-    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
-    value = await result
-            ^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/asyncpg/connection.py", line 2443, in connect
-    return await connect_utils._connect(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 1249, in _connect
-    raise last_error or exceptions.TargetServerAttributeNotMatched(
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 1218, in _connect
-    conn = await _connect_addr(
-           ^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 1054, in _connect_addr
-    return await __connect_addr(params, True, *args)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 1099, in __connect_addr
-    tr, pr = await connector
-             ^^^^^^^^^^^^^^^
-  File "/tmp/argus-backend-venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 969, in _create_ssl_connection
-    tr, pr = await loop.create_connection(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.12/asyncio/base_events.py", line 1140, in create_connection
-    raise OSError('Multiple exceptions: {}'.format(
-OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 5432, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 5432)
-morya@printer vision % 
+The failure was a real repo bug, and it’s fixed now on `origin/main`.
 
+What was wrong: the Alembic config inside Docker always used `backend/alembic.ini`’s `localhost:5432`, so when you ran migration commands in the backend container it tried to connect to the container itself instead of the `postgres` service. I fixed Alembic to honor `ARGUS_DB_URL`, added a regression test, and updated the lab guide with the exact schema-repair step.
 
+Pushed commit: `fa23889`  
+Message: `fix: honor ARGUS_DB_URL in alembic`
 
-
-------------------------------------------
-
-
-We’ve got the root cause now: your running dev Postgres does **not** have the `models` table. The `/api/v1/models` failures are a database-state problem, not an auth problem anymore.
-
-The fastest clean fix for a fresh lab setup is to reset the dev volumes and then run the migration **inside the backend container** so it definitely hits the same database as the app.
-
-Run this exactly:
+Run this now on your iMac:
 
 ```bash
 cd "$HOME/vision"
-make dev-down
-make dev-up
-```
+git pull --rebase origin main
 
-Wait for the backend to come back:
-
-```bash
-curl -sS http://127.0.0.1:8000/healthz
-```
-
-Then run the migration inside the container:
-
-```bash
 docker compose -f infra/docker-compose.dev.yml exec backend \
   /tmp/argus-backend-venv/bin/alembic upgrade head
-```
 
-Now verify the schema in the actual Docker Postgres:
-
-```bash
 docker exec infra-postgres-1 psql -U argus -d argus -c '\dt'
 docker exec infra-postgres-1 psql -U argus -d argus -c 'select * from alembic_version;'
 ```
 
-What you should see:
-- `models` listed in `\dt`
-- Alembic revision: `0003_prompt11_quota`
+What you want to see:
+- `models` appears in `\dt`
+- `alembic_version` shows `0003_prompt11_quota`
 
-After that, fetch a **fresh** token again, because Keycloak/backend restarts can invalidate the old one:
+Then get a fresh token and confirm the models route is healthy again:
 
 ```bash
 TOKEN="$(
@@ -168,27 +31,17 @@ TOKEN="$(
     http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 )"
-```
 
-Then confirm models works before creating one:
-
-```bash
 curl -sS \
   -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
 ```
 
-If the reset worked, that should return `[]` or a valid JSON list, not a 500.
+I verified the fix locally with:
+- `python3 -m uv run pytest tests/migrations/test_alembic_config.py tests/core/test_config.py` → `4 passed`
 
-Then retry your model creation command.
+If you paste the `\dt`, `alembic_version`, and `/api/v1/models` outputs after this, I’ll take you straight into the successful model-registration command.
 
-Two notes:
-- `make dev-down` wipes local dev data/volumes. For this stage, that’s the right move.
-- The `otel-collector` name-resolution warnings are noisy but **not** the blocker for model creation.
-
-If you want, after you run those 5 steps, paste back:
-1. the `\dt` output
-2. the `alembic_version` output
-3. the new `GET /api/v1/models` output
-
-and I’ll walk you straight into the next model-registration step.
+::git-stage{cwd="/Users/yann.moren/vision"}
+::git-commit{cwd="/Users/yann.moren/vision"}
+::git-push{cwd="/Users/yann.moren/vision" branch="main"}
