@@ -130,3 +130,99 @@ Two important notes:
 If you want, I can also make the local onboarding less fragile by patching the repo so:
 - `make dev-up` checks for the `8080` conflict up front
 - backend/frontend local setup is easier and doesn’t assume prior dependency install
+
+
+
+
+
+---------------------
+
+devDependencies:
++ @eslint/js 9.39.4
++ @playwright/test 1.59.1
++ @tailwindcss/vite 4.2.2
++ @testing-library/jest-dom 6.9.1
++ @testing-library/react 16.3.2
++ @testing-library/user-event 14.6.1
++ @types/node 22.19.17
++ @types/react 19.2.14
++ @types/react-dom 19.2.3
++ @vitejs/plugin-react 4.7.0
++ eslint 9.39.4
++ eslint-plugin-react-hooks 5.2.0
++ eslint-plugin-react-refresh 0.4.26
++ jsdom 25.0.1
++ openapi-typescript 7.13.0
++ prettier 3.8.3
++ tailwindcss 4.2.2
++ typescript 5.9.3
++ typescript-eslint 8.58.2
++ vite 6.4.2
++ vitest 2.1.9
+
+╭ Warning ───────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                            │
+│   Ignored build scripts: esbuild.                                                          │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.   │
+│                                                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
+
+Done in 16.9s using pnpm v10.11.0
+morya@printer frontend % cd "$HOME/vision"
+make dev-up
+docker compose -f infra/docker-compose.dev.yml up -d
+[+] Running 15/15
+ ✔ Network infra_default             Created                                                            0.0s 
+ ✔ Container infra-minio-1           Started                                                            1.3s 
+ ✔ Container infra-otel-collector-1  Started                                                            1.5s 
+ ✔ Container infra-redis-1           Started                                                            1.4s 
+ ✔ Container infra-tempo-1           Started                                                            1.2s 
+ ✔ Container infra-keycloak-1        Started                                                            1.2s 
+ ✔ Container infra-nats-1            Started                                                            1.2s 
+ ✔ Container infra-grafana-1         Started                                                            1.4s 
+ ✔ Container infra-prometheus-1      Started                                                            1.4s 
+ ✔ Container infra-postgres-1        Started                                                            1.3s 
+ ✔ Container infra-mediamtx-1        Started                                                            1.4s 
+ ✔ Container infra-loki-1            Started                                                            1.5s 
+ ✔ Container infra-alertmanager-1    Started                                                            1.4s 
+ ✔ Container infra-backend-1         Started                                                            1.4s 
+ ✔ Container infra-frontend-1        Started                                                            1.5s 
+morya@printer vision % curl -s http://127.0.0.1:8000/healthz
+curl -s http://127.0.0.1:8080/realms/argus-dev/.well-known/openid-configuration | head
+{"issuer":"http://127.0.0.1:8080/realms/argus-dev","authorization_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/auth","token_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token","introspection_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token/introspect","userinfo_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/userinfo","end_session_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/logout","frontchannel_logout_session_supported":true,"frontchannel_logout_supported":true,"jwks_uri":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/certs","check_session_iframe":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/login-status-iframe.html","grant_types_supported":["authorization_code","client_credentials","implicit","password","refresh_token","urn:ietf:params:oauth:grant-type:device_code","urn:ietf:params:oauth:grant-type:token-exchange","urn:ietf:params:oauth:grant-type:uma-ticket","urn:openid:params:grant-type:ciba"],"acr_values_supported":["0","1"],"response_types_supported":["code","none","id_token","token","id_token token","code id_token","code token","code id_token token"],"subject_types_supported":["public","pairwise"],"prompt_values_supported":["none","login","consent"],"id_token_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","HS256","HS512","ES256","RS256","HS384","ES512","PS256","PS512","RS512"],"id_token_encryption_alg_values_supported":["ECDH-ES+A256KW","ECDH-ES+A192KW","ECDH-ES+A128KW","RSA-OAEP","RSA-OAEP-256","RSA1_5","ECDH-ES"],"id_token_encryption_enc_values_supported":["A256GCM","A192GCM","A128GCM","A128CBC-HS256","A192CBC-HS384","A256CBC-HS512"],"userinfo_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","HS256","HS512","ES256","RS256","HS384","ES512","PS256","PS512","RS512","none"],"userinfo_encryption_alg_values_supported":["ECDH-ES+A256KW","ECDH-ES+A192KW","ECDH-ES+A128KW","RSA-OAEP","RSA-OAEP-256","RSA1_5","ECDH-ES"],"userinfo_encryption_enc_values_supported":["A256GCM","A192GCM","A128GCM","A128CBC-HS256","A192CBC-HS384","A256CBC-HS512"],"request_object_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","HS256","HS512","ES256","RS256","HS384","ES512","PS256","PS512","RS512","none"],"request_object_encryption_alg_values_supported":["ECDH-ES+A256KW","ECDH-ES+A192KW","ECDH-ES+A128KW","RSA-OAEP","RSA-OAEP-256","RSA1_5","ECDH-ES"],"request_object_encryption_enc_values_supported":["A256GCM","A192GCM","A128GCM","A128CBC-HS256","A192CBC-HS384","A256CBC-HS512"],"response_modes_supported":["query","fragment","form_post","query.jwt","fragment.jwt","form_post.jwt","jwt"],"registration_endpoint":"http://127.0.0.1:8080/realms/argus-dev/clients-registrations/openid-connect","token_endpoint_auth_methods_supported":["private_key_jwt","client_secret_basic","client_secret_post","tls_client_auth","client_secret_jwt"],"token_endpoint_auth_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","HS256","HS512","ES256","RS256","HS384","ES512","PS256","PS512","RS512"],"introspection_endpoint_auth_methods_supported":["private_key_jwt","client_secret_basic","client_secret_post","tls_client_auth","client_secret_jwt"],"introspection_endpoint_auth_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","HS256","HS512","ES256","RS256","HS384","ES512","PS256","PS512","RS512"],"authorization_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","HS256","HS512","ES256","RS256","HS384","ES512","PS256","PS512","RS512"],"authorization_encryption_alg_values_supported":["ECDH-ES+A256KW","ECDH-ES+A192KW","ECDH-ES+A128KW","RSA-OAEP","RSA-OAEP-256","RSA1_5","ECDH-ES"],"authorization_encryption_enc_values_supported":["A256GCM","A192GCM","A128GCM","A128CBC-HS256","A192CBC-HS384","A256CBC-HS512"],"claims_supported":["aud","sub","iss","auth_time","name","given_name","family_name","preferred_username","email","acr"],"claim_types_supported":["normal"],"claims_parameter_supported":true,"scopes_supported":["openid","profile","organization","microprofile-jwt","address","service_account","web-origins","basic","email","roles","phone","offline_access","acr"],"request_parameter_supported":true,"request_uri_parameter_supported":true,"require_request_uri_registration":true,"code_challenge_methods_supported":["plain","S256"],"tls_client_certificate_bound_access_tokens":true,"revocation_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/revoke","revocation_endpoint_auth_methods_supported":["private_key_jwt","client_secret_basic","client_secret_post","tls_client_auth","client_secret_jwt"],"revocation_endpoint_auth_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","HS256","HS512","ES256","RS256","HS384","ES512","PS256","PS512","RS512"],"backchannel_logout_supported":true,"backchannel_logout_session_supported":true,"device_authorization_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/auth/device","backchannel_token_delivery_modes_supported":["poll","ping"],"backchannel_authentication_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/ext/ciba/auth","backchannel_authentication_request_signing_alg_values_supported":["PS384","RS384","EdDSA","ES384","ES256","RS256","ES512","PS256","PS512","RS512"],"require_pushed_authorization_requests":false,"pushed_authorization_request_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/ext/par/request","mtls_endpoint_aliases":{"token_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token","revocation_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/revoke","introspection_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token/introspect","device_authorization_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/auth/device","registration_endpoint":"http://127.0.0.1:8080/realms/argus-dev/clients-registrations/openid-connect","userinfo_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/userinfo","pushed_authorization_request_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/ext/par/request","backchannel_authentication_endpoint":"http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/ext/ciba/auth"},"authorization_response_iss_parameter_supported":true}%                                                                                                     morya@printer vision % cd "$HOME/vision/backend"
+python3 -m uv run alembic upgrade head
+
+cd "$HOME/vision/frontend"
+corepack pnpm generate:api
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_prompt_one_initial_schema, Prompt 1 initial schema.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_prompt_one_initial_schema, Prompt 1 initial schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001_prompt_one_initial_schema -> 0002_add_camera_browser_delivery, Add browser delivery settings to cameras.
+INFO  [alembic.runtime.migration] Running upgrade 0001_prompt_one_initial_schema -> 0002_add_camera_browser_delivery, Add browser delivery settings to cameras.
+INFO  [alembic.runtime.migration] Running upgrade 0002_add_camera_browser_delivery -> 0003_prompt11_quota, Add Prompt 11 tenant quota and incident clip columns.
+INFO  [alembic.runtime.migration] Running upgrade 0002_add_camera_browser_delivery -> 0003_prompt11_quota, Add Prompt 11 tenant quota and incident clip columns.
+
+> argus-frontend@0.1.0 generate:api /Users/morya/vision/frontend
+> openapi-typescript http://127.0.0.1:8000/openapi.json -o src/lib/api.generated.ts
+
+sh: openapi-typescript: command not found
+ ELIFECYCLE  Command failed.
+morya@printer frontend % cd "$HOME/vision/backend"
+python3 -m uv run alembic upgrade head
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+morya@printer backend % cd "$HOME/vision/frontend"
+corepack pnpm generate:api
+
+> argus-frontend@0.1.0 generate:api /Users/morya/vision/frontend
+> openapi-typescript http://127.0.0.1:8000/openapi.json -o src/lib/api.generated.ts
+
+sh: openapi-typescript: command not found
+ ELIFECYCLE  Command failed.
+morya@printer frontend % 
+
