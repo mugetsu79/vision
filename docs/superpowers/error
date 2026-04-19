@@ -1,47 +1,71 @@
-The failure was a real repo bug, and it’s fixed now on `origin/main`.
-
-What was wrong: the Alembic config inside Docker always used `backend/alembic.ini`’s `localhost:5432`, so when you ran migration commands in the backend container it tried to connect to the container itself instead of the `postgres` service. I fixed Alembic to honor `ARGUS_DB_URL`, added a regression test, and updated the lab guide with the exact schema-repair step.
-
-Pushed commit: `fa23889`  
-Message: `fix: honor ARGUS_DB_URL in alembic`
-
-Run this now on your iMac:
-
-```bash
-cd "$HOME/vision"
+orya@printer vision % cd "$HOME/vision"
 git pull --rebase origin main
-
-docker compose -f infra/docker-compose.dev.yml exec backend \
+erreur : impossible de tirer avec un rebasage : vous avez des modifications non indexées.
+erreur : Veuillez les valider ou les remiser.
+morya@printer vision % git pull origin main
+remote: Enumerating objects: 88, done.
+remote: Counting objects: 100% (88/88), done.
+remote: Compressing objects: 100% (68/68), done.
+remote: Total 77 (delta 40), reused 16 (delta 9), pack-reused 0 (from 0)
+Dépaquetage des objets: 100% (77/77), 30.78 KiO | 750.00 KiO/s, fait.
+Depuis https://github.com/mugetsu79/vision
+ * branch            main       -> FETCH_HEAD
+   dac0128..3b1542a  main       -> origin/main
+Mise à jour dac0128..3b1542a
+Fast-forward
+ backend/src/argus/migrations/alembic_config.py  |  12 ++
+ backend/src/argus/migrations/env.py             |   2 +
+ backend/tests/migrations/test_alembic_config.py |  30 +++++
+ docs/imac-master-orin-lab-test-guide.md         | 187 +++++++++++++++++++++++++++--
+ docs/superpowers/error                          | 452 +++++----------------------------------------------------------------
+ 5 files changed, 252 insertions(+), 431 deletions(-)
+ create mode 100644 backend/src/argus/migrations/alembic_config.py
+ create mode 100644 backend/tests/migrations/test_alembic_config.py
+morya@printer vision % docker compose -f infra/docker-compose.dev.yml exec backend \
   /tmp/argus-backend-venv/bin/alembic upgrade head
-
-docker exec infra-postgres-1 psql -U argus -d argus -c '\dt'
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_prompt_one_initial_schema, Prompt 1 initial schema.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_prompt_one_initial_schema, Prompt 1 initial schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001_prompt_one_initial_schema -> 0002_add_camera_browser_delivery, Add browser delivery settings to cameras.
+INFO  [alembic.runtime.migration] Running upgrade 0001_prompt_one_initial_schema -> 0002_add_camera_browser_delivery, Add browser delivery settings to cameras.
+INFO  [alembic.runtime.migration] Running upgrade 0002_add_camera_browser_delivery -> 0003_prompt11_quota, Add Prompt 11 tenant quota and incident clip columns.
+INFO  [alembic.runtime.migration] Running upgrade 0002_add_camera_browser_delivery -> 0003_prompt11_quota, Add Prompt 11 tenant quota and incident clip columns.
+morya@printer vision % docker exec infra-postgres-1 psql -U argus -d argus -c '\dt'
 docker exec infra-postgres-1 psql -U argus -d argus -c 'select * from alembic_version;'
-```
+            List of relations
+ Schema |      Name       | Type  | Owner 
+--------+-----------------+-------+-------
+ public | alembic_version | table | argus
+ public | api_keys        | table | argus
+ public | audit_log       | table | argus
+ public | cameras         | table | argus
+ public | detection_rules | table | argus
+ public | edge_nodes      | table | argus
+ public | incidents       | table | argus
+ public | models          | table | argus
+ public | rule_events     | table | argus
+ public | sites           | table | argus
+ public | tenants         | table | argus
+ public | tracking_events | table | argus
+ public | users           | table | argus
+(13 rows)
 
-What you want to see:
-- `models` appears in `\dt`
-- `alembic_version` shows `0003_prompt11_quota`
+     version_num     
+---------------------
+ 0003_prompt11_quota
+(1 row)
 
-Then get a fresh token and confirm the models route is healthy again:
-
-```bash
-TOKEN="$(
+morya@printer vision % TOKEN="$(
   curl -sS \
     --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
     http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 )"
-
-curl -sS \
+morya@printer vision % curl -sS \
   -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
-```
-
-I verified the fix locally with:
-- `python3 -m uv run pytest tests/migrations/test_alembic_config.py tests/core/test_config.py` → `4 passed`
-
-If you paste the `\dt`, `alembic_version`, and `/api/v1/models` outputs after this, I’ll take you straight into the successful model-registration command.
-
-::git-stage{cwd="/Users/yann.moren/vision"}
-::git-commit{cwd="/Users/yann.moren/vision"}
-::git-push{cwd="/Users/yann.moren/vision" branch="main"}
+[]
+morya@printer vision % 
