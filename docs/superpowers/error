@@ -1,0 +1,59 @@
+morya@printer models % cd "$HOME/vision"
+make dev-up
+cd backend && python3 -m uv run alembic upgrade head
+cd ../frontend && corepack pnpm generate:api
+cd ..
+docker compose -f infra/docker-compose.dev.yml up -d
+[+] Running 111/18
+ ✔ backend Pulled                                                         97.5s 
+ ✔ mediamtx Pulled                                                       162.9s 
+ ✔ minio Pulled                                                          200.6s 
+ ✔ loki Pulled                                                           181.6s 
+ ✔ prometheus Pulled                                                     263.1s 
+ ✔ nats Pulled                                                            61.4s 
+ ✔ alertmanager Pulled                                                   146.5s 
+ ✔ redis Pulled                                                          176.1s 
+ ✔ otel-collector Pulled                                                 303.5s 
+ ✔ grafana Pulled                                                        328.9s 
+ ✔ postgres Pulled                                                       349.2s 
+ ✔ keycloak Pulled                                                       348.0s 
+ ✔ frontend Pulled                                                       219.9s 
+ ✔ tempo Pulled                                                          231.7s 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+[+] Running 16/17
+ ✔ Network infra_default             Created                               0.0s 
+ ✔ Volume "infra_minio-data"         Create...                             0.0s 
+ ✔ Volume "infra_postgres-data"      Cre...                                0.0s 
+ ✔ Container infra-grafana-1         Starte...                             2.6s 
+ ✔ Container infra-minio-1           Started                               2.6s 
+ ✔ Container infra-loki-1            Started                               2.6s 
+ ✔ Container infra-nats-1            Started                               2.5s 
+ ✔ Container infra-redis-1           Started                               2.4s 
+ ✔ Container infra-postgres-1        Start...                              2.6s 
+ ⠏ Container infra-keycloak-1        Start...                              2.6s 
+ ✔ Container infra-otel-collector-1  Started                               2.5s 
+ ✔ Container infra-mediamtx-1        Start...                              2.6s 
+ ✔ Container infra-prometheus-1      Sta...                                2.6s 
+ ✔ Container infra-tempo-1           Started                               2.4s 
+ ✔ Container infra-alertmanager-1    S...                                  2.5s 
+ ✔ Container infra-backend-1         Create...                             0.2s 
+ ✔ Container infra-frontend-1        Creat...                              0.1s 
+Error response from daemon: Ports are not available: exposing port TCP 0.0.0.0:8080 -> 0.0.0.0:0: listen tcp 0.0.0.0:8080: bind: address already in use
+make: *** [dev-up] Error 1
+Using CPython 3.12.4 interpreter at: /Library/Frameworks/Python.framework/Versions/3.12/bin/python3
+Creating virtual environment at: .venv
+      Built argus-backend @ file:///Users/morya/vision/backend
+Installed 27 packages in 42ms
+error: Failed to spawn: `alembic`
+  Caused by: No such file or directory (os error 2)
+
+> argus-frontend@0.1.0 generate:api /Users/morya/vision/frontend
+> openapi-typescript http://127.0.0.1:8000/openapi.json -o src/lib/api.generated.ts
+
+sh: openapi-typescript: command not found
+ ELIFECYCLE  Command failed.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+morya@printer vision % 
