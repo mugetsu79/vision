@@ -48,6 +48,7 @@ class StreamRegistration:
     read_path: str
     publish_path: str | None = None
     path_name: str | None = None
+    managed_path_config: bool = False
 
 
 class MediaMTXClient:
@@ -92,6 +93,7 @@ class MediaMTXClient:
         )
         if (
             previous is not None
+            and previous.managed_path_config
             and previous.path_name is not None
             and previous.path_name != registration.path_name
         ):
@@ -139,7 +141,6 @@ class MediaMTXClient:
     ) -> StreamRegistration:
         if profile is PublishProfile.CENTRAL_GPU:
             path_name = f"cameras/{camera_id}/annotated"
-            await self._ensure_path(path_name, source="publisher", source_on_demand=False)
             return StreamRegistration(
                 camera_id=camera_id,
                 mode=StreamMode.ANNOTATED_WHIP,
@@ -150,7 +151,6 @@ class MediaMTXClient:
 
         if privacy.requires_filtering:
             path_name = f"cameras/{camera_id}/preview"
-            await self._ensure_path(path_name, source="publisher", source_on_demand=False)
             return StreamRegistration(
                 camera_id=camera_id,
                 mode=StreamMode.FILTERED_PREVIEW,
@@ -166,6 +166,7 @@ class MediaMTXClient:
             mode=StreamMode.PASSTHROUGH,
             path_name=path_name,
             read_path=f"{self.rtsp_base_url}/{path_name}",
+            managed_path_config=True,
         )
 
     async def _ensure_path(self, path_name: str, *, source: str, source_on_demand: bool) -> None:
