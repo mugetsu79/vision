@@ -146,7 +146,7 @@ export function HomographyEditor({
       </div>
 
       <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-        Source points: {src.length} / 4. Destination points: {dst.length} / 4. Argus
+        Source points: {src.length} / 4. Destination points: {dst.length} / 4. Vezor
         uses this calibration to translate image motion into real-world distance and
         direction later in the pipeline.
       </p>

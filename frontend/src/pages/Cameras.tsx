@@ -80,7 +80,7 @@ function CamerasContent() {
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
                 Camera setup defines native ingest for analytics, the default browser
-                rendition for operators, and the calibration Argus uses to understand
+                rendition for operators, and the calibration Vezor uses to understand
                 movement inside each scene.
               </p>
             </div>

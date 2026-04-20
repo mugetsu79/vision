@@ -274,7 +274,7 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
   await expect(page.getByText("bus")).toBeVisible();
   await expect(page.getByText(/online/i).first()).toBeVisible();
 
-  await page.getByLabel("Query Argus").fill("only show cars");
+  await page.getByLabel("Query Vezor").fill("only show cars");
   await page.getByRole("button", { name: "Apply query" }).click();
 
   await expect(page.getByText("query-rules-v1").first()).toBeVisible();

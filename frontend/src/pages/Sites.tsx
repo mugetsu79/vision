@@ -33,7 +33,7 @@ function SitesContent() {
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
                 Sites anchor camera placement, time zones, and the fleet context used
-                throughout Argus operations.
+                throughout Vezor operations.
               </p>
             </div>
             <Button onClick={() => setDialogOpen(true)}>Add site</Button>

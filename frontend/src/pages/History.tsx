@@ -87,7 +87,7 @@ export function HistoryPage() {
                 Fleet history without reshaping penalties in the browser.
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                Argus delivers chart-ready time buckets directly from the backend so long
+                Vezor delivers chart-ready time buckets directly from the backend so long
                 forensic ranges stay fast even when operators pivot across classes and
                 cameras.
               </p>

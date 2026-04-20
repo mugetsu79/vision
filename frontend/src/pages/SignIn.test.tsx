@@ -46,7 +46,13 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     expect(
-      screen.getByRole("img", { name: /argus product lockup/i }),
+      screen.getByRole("img", { name: /vezor product lockup/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/operate vezor from a premium/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/use your vezor identity provider account to continue\./i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
     expect(screen.getByText(/vigilant intelligence/i)).toBeInTheDocument();

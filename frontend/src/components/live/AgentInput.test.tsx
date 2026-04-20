@@ -85,7 +85,7 @@ describe("AgentInput", () => {
       </QueryClientProvider>,
     );
 
-    await user.type(screen.getByLabelText(/query argus/i), "only watch cars and trucks");
+    await user.type(screen.getByLabelText(/query vezor/i), "only watch cars and trucks");
     await user.click(screen.getByRole("button", { name: /apply query/i }));
 
     await waitFor(() =>

@@ -66,7 +66,7 @@ export function AgentInput({
       });
 
       if (error || !data) {
-        throw toApiError(error, "Failed to resolve the Argus query.");
+        throw toApiError(error, "Failed to resolve the query.");
       }
 
       startTransition(() => {
@@ -74,7 +74,7 @@ export function AgentInput({
       });
       onResolved(data, selectedScope);
     } catch (error) {
-      setErrorMessage(toApiError(error, "Failed to resolve the Argus query.").message);
+      setErrorMessage(toApiError(error, "Failed to resolve the query.").message);
     } finally {
       setIsSubmitting(false);
     }
@@ -90,7 +90,7 @@ export function AgentInput({
           Shape the live wall with natural language.
         </h3>
         <p className="mt-2 text-sm text-[#8ca2c5]">
-          Resolve classes once, then let Argus trim the operator view while the backend
+          Resolve classes once, then let Vezor trim the operator view while the backend
           applies the same intent to the running pipeline.
         </p>
       </div>
@@ -117,10 +117,10 @@ export function AgentInput({
 
           <label className="space-y-2 text-sm text-[#d9e5f7]">
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
-              Query Argus
+              Query Vezor
             </span>
             <Input
-              aria-label="Query Argus"
+              aria-label="Query Vezor"
               placeholder="only show cars"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}

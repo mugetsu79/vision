@@ -18,7 +18,7 @@ export function SignInPage() {
               Vigilant intelligence, fleet-wide.
             </h1>
             <p className="max-w-xl text-lg text-[var(--argus-text-muted)]">
-              Monitor cameras, manage configuration, and operate Argus from a premium
+              Monitor cameras, manage configuration, and operate Vezor from a premium
               command center built for continuous observation.
             </p>
           </div>
@@ -29,7 +29,7 @@ export function SignInPage() {
           </p>
           <h2 className="mt-4 text-2xl font-semibold text-[var(--argus-text)]">Sign in</h2>
           <p className="mt-2 text-sm text-[var(--argus-text-muted)]">
-            Use your Argus identity provider account to continue.
+            Use your Vezor identity provider account to continue.
           </p>
           <Button
             className="mt-6 w-full border-transparent bg-[linear-gradient(135deg,#35b8ff_0%,#6d84ff_100%)] text-[#06111a] shadow-[0_18px_38px_-24px_rgba(53,184,255,0.55)] hover:border-transparent hover:brightness-110"

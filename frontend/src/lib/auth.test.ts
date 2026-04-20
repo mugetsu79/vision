@@ -27,7 +27,7 @@ describe("mapOidcUser", () => {
       },
     });
 
-    expect(() => mapOidcUser(user)).toThrow(/missing a recognized argus role/i);
+    expect(() => mapOidcUser(user)).toThrow(/recognized platform role/i);
   });
 
   test("maps a recognized realm role into the session user", () => {
