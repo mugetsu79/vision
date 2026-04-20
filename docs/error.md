@@ -1,4 +1,42 @@
-morya@printer vision % cd "$HOME/vision/backend"
+morya@printer backend % ffmpeg -rtsp_transport tcp -i "rtsp://admin:787469@192.168.1.175:554/live/profile.1" -f null -
+
+ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers
+  built with Apple clang version 16.0.0 (clang-1600.0.26.6)
+  configuration: --prefix=/usr/local/Cellar/ffmpeg/8.1_1 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags= --enable-ffplay --enable-gpl --enable-libsvtav1 --enable-libopus --enable-libx264 --enable-libmp3lame --enable-libdav1d --enable-libvmaf --enable-libvpx --enable-libx265 --enable-openssl --enable-videotoolbox --enable-audiotoolbox
+  libavutil      60. 26.100 / 60. 26.100
+  libavcodec     62. 28.100 / 62. 28.100
+  libavformat    62. 12.100 / 62. 12.100
+  libavdevice    62.  3.100 / 62.  3.100
+  libavfilter    11. 14.100 / 11. 14.100
+  libswscale      9.  5.100 /  9.  5.100
+  libswresample   6.  3.100 /  6.  3.100
+Input #0, rtsp, from 'rtsp://admin:787469@192.168.1.175:554/live/profile.1':
+  Metadata:
+    title           : Session streamed by D-Link
+    comment         : live/profile.1
+  Duration: N/A, start: 0.000000, bitrate: N/A
+  Stream #0:0: Video: h264 (High), yuvj420p(pc, bt709, progressive), 1280x720, 15 fps, 25 tbr, 90k tbn, start 0.040000
+  Stream #0:1: Audio: aac (LC), 16000 Hz, mono, fltp
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> wrapped_avframe (native))
+  Stream #0:1 -> #0:1 (aac (native) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    title           : Session streamed by D-Link
+    comment         : live/profile.1
+    encoder         : Lavf62.12.100
+  Stream #0:0: Video: wrapped_avframe, yuvj420p(pc, bt709, progressive), 1280x720, q=2-31, 200 kb/s, 15 fps, 15 tbn
+    Metadata:
+      encoder         : Lavc62.28.100 wrapped_avframe
+  Stream #0:1: Audio: pcm_s16le, 16000 Hz, mono, s16, 256 kb/s
+    Metadata:
+      encoder         : Lavc62.28.100 pcm_s16le
+[out#0/null @ 0x7fd6a380c200] video:75KiB audio:398KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=  182 fps= 18 q=-0.0 Lsize=N/A time=00:00:12.13 bitrate=N/A speed=1.17x elapsed=0:00:10.34    
+Exiting normally, received signal 2.
+morya@printer backend % cd "$HOME/vision/backend"
+OPENCV_FFMPEG_CAPTURE_OPTIONS="rtsp_transport;tcp" \
 ARGUS_API_BASE_URL="http://127.0.0.1:8000" \
 ARGUS_API_BEARER_TOKEN="$TOKEN" \
 ARGUS_DB_URL="postgresql+asyncpg://argus:argus@127.0.0.1:5432/argus" \
@@ -10,31 +48,30 @@ ARGUS_MINIO_SECURE="false" \
 python3 -m uv run python -m argus.inference.engine --camera-id "876c8d43-3cd4-4cfa-8414-98b48666497b"
 /Users/morya/vision/backend/.venv/lib/python3.12/site-packages/pydantic_settings/sources/providers/secrets.py:67: UserWarning: directory "/run/secrets" does not exist
   warnings.warn(f'directory "{path}" does not exist')
-2026-04-20 21:09:28.377199 [W:onnxruntime:, coreml_execution_provider.cc:81 GetCapability] CoreMLExecutionProvider::GetCapability, number of partitions supported by CoreML: 30 number of nodes in the graph: 496 number of nodes supported by CoreML: 465
-2026-04-20 21:09:28.929517 [W:onnxruntime:, session_state.cc:1166 VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.
-2026-04-20 21:09:28.929533 [W:onnxruntime:, session_state.cc:1168 VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
-[ WARN:0@49.296] global cap_ffmpeg_impl.hpp:453 _opencv_ffmpeg_interrupt_callback Stream timeout triggered after 30000.004628 ms
-[ WARN:0@110.647] global cap_ffmpeg_impl.hpp:453 _opencv_ffmpeg_interrupt_callback Stream timeout triggered after 30000.689365 ms
-[h264 @ 0x7f94845bde00] left block unavailable for requested intra4x4 mode -1
-[h264 @ 0x7f94845bde00] error while decoding MB 0 2, bytestream 3882
-
-backend-1  | Failed to export span batch due to timeout, max retries or shutdown.
-backend-1  | INFO:     172.18.0.13:47720 - "GET /metrics HTTP/1.1" 200 OK
-backend-1  | INFO:     172.18.0.13:46826 - "GET /metrics HTTP/1.1" 200 OK
-backend-1  | INFO:     172.18.0.13:46650 - "GET /metrics HTTP/1.1" 200 OK
-backend-1  | INFO:     172.18.0.1:55282 - "GET /api/v1/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/worker-config HTTP/1.1" 200 OK
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 1.13s.
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 2.20s.
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 3.32s.
-backend-1  | Failed to export span batch due to timeout, max retries or shutdown.
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 1.11s.
-backend-1  | INFO:     172.18.0.13:48818 - "GET /metrics HTTP/1.1" 200 OK
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 1.98s.
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 4.35s.
-backend-1  | Failed to export span batch due to timeout, max retries or shutdown.
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 0.95s.
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 2.32s.
-backend-1  | Transient error HTTPConnectionPool(host='otel-collector', port=4318): Max retries exceeded with url: /v1/traces (Caused by NameResolutionError("HTTPConnection(host='otel-collector', port=4318): Failed to resolve 'otel-collector' ([Errno -2] Name or service not known)")) encountered while exporting span batch, retrying in 3.56s.
-backend-1  | INFO:     172.18.0.13:57552 - "GET /metrics HTTP/1.1" 200 OK
-backend-1  | Failed to export span batch due to timeout, max retries or shutdown.
-morya@printer vision % 
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/morya/vision/backend/src/argus/inference/engine.py", line 754, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/Users/morya/vision/backend/src/argus/inference/engine.py", line 739, in main
+    asyncio.run(run_engine_for_camera(args.camera_id))
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/morya/vision/backend/src/argus/inference/engine.py", line 647, in run_engine_for_camera
+    config = await load_engine_config(camera_id, settings=resolved_settings)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/morya/vision/backend/src/argus/inference/engine.py", line 532, in load_engine_config
+    response.raise_for_status()
+  File "/Users/morya/vision/backend/.venv/lib/python3.12/site-packages/httpx/_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Client error '401 Unauthorized' for url 'http://127.0.0.1:8000/api/v1/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/worker-config'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+morya@printer backend % 
