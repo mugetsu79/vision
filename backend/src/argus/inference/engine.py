@@ -698,10 +698,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
-
-
 def _identity_preprocessor(frame: Frame) -> Frame:
     return frame
 
@@ -710,3 +706,7 @@ def _worker_api_headers(settings: Settings) -> dict[str, str]:
     if settings.api_bearer_token is None:
         return {}
     return {"Authorization": f"Bearer {settings.api_bearer_token.get_secret_value()}"}
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

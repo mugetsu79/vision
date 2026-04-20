@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -7,6 +8,8 @@ import pytest
 
 from argus.core.config import Settings
 from argus.inference.engine import load_engine_config
+
+ENGINE_PATH = Path(__file__).resolve().parents[2] / "src" / "argus" / "inference" / "engine.py"
 
 
 @pytest.mark.asyncio
@@ -69,3 +72,9 @@ async def test_load_engine_config_sends_bearer_token_when_configured() -> None:
 
     assert config.camera_id == camera_id
     assert seen_authorization == ["Bearer worker-token"]
+
+
+def test_worker_api_headers_is_defined_before_main_guard() -> None:
+    source = ENGINE_PATH.read_text(encoding="utf-8")
+
+    assert source.index("def _worker_api_headers") < source.index('if __name__ == "__main__"')
