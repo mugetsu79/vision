@@ -17,6 +17,7 @@ from argus.streaming.mediamtx import (
     PublishProfile,
     StreamRegistration,
     StreamMode,
+    _FFmpegFramePublisher,
     _prepare_frame_for_publish,
     probe_publish_profile,
 )
@@ -450,6 +451,69 @@ def test_prepare_frame_for_publish_only_requires_opencv_when_resize_is_needed(
 
     with pytest.raises(RuntimeError, match="OpenCV is required for browser-delivery transcode"):
         _prepare_frame_for_publish(registration=registration, frame=frame)
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_frame_publisher_uses_short_gop_for_low_latency_hls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_command: list[str] = []
+
+    class _FakeStdin:
+        def write(self, data: bytes) -> None:
+            return None
+
+        async def drain(self) -> None:
+            return None
+
+        def is_closing(self) -> bool:
+            return False
+
+        def close(self) -> None:
+            return None
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = _FakeStdin()
+            self.returncode: int | None = None
+
+        async def wait(self) -> int:
+            self.returncode = 0
+            return 0
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> _FakeProcess:
+        del kwargs
+        captured_command.extend(command)
+        return _FakeProcess()
+
+    monkeypatch.setattr(
+        "argus.streaming.mediamtx.asyncio.create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    registration = StreamRegistration(
+        camera_id=uuid4(),
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        publish_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        path_name="cameras/example/annotated",
+        target_fps=10,
+    )
+
+    publisher = await _FFmpegFramePublisher.create(
+        registration=registration,
+        frame=np.zeros((720, 1280, 3), dtype=np.uint8),
+        publish_url=registration.publish_path,
+    )
+
+    assert captured_command[captured_command.index("-g") + 1] == "10"
+    assert captured_command[captured_command.index("-keyint_min") + 1] == "10"
+    assert captured_command[captured_command.index("-sc_threshold") + 1] == "0"
+
+    await publisher.close()
 
 
 def _transport(handler: Callable[[Request], Response | object]):

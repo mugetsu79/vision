@@ -103,6 +103,7 @@ class _FFmpegFramePublisher:
     ) -> _FFmpegFramePublisher:
         width, height = _frame_dimensions(frame)
         frame_shape = tuple(int(value) for value in frame.shape)
+        keyframe_interval = max(1, registration.target_fps)
         command = [
             "ffmpeg",
             "-loglevel",
@@ -124,6 +125,12 @@ class _FFmpegFramePublisher:
             "veryfast",
             "-tune",
             "zerolatency",
+            "-g",
+            str(keyframe_interval),
+            "-keyint_min",
+            str(keyframe_interval),
+            "-sc_threshold",
+            "0",
             "-pix_fmt",
             "yuv420p",
             "-rtsp_transport",
