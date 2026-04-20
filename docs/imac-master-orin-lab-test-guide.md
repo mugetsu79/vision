@@ -1,21 +1,21 @@
-# Argus Lab Guide: iMac Master And Jetson Orin Edge
+# Vezor Lab Guide: iMac Master And Jetson Orin Edge
 
 Date: 2026-04-19
 
-This guide is written for a first lab rollout of Argus on:
+This guide is written for a first lab rollout of Vezor on:
 
-- a **2019 iMac i9 with Radeon 580 8 GB** as the Argus master node
-- a **Jetson Orin Nano Super 8 GB** on Ubuntu installed on NVMe as the Argus edge node
+- a **2019 iMac i9 with Radeon 580 8 GB** as the Vezor master node
+- a **Jetson Orin Nano Super 8 GB** on Ubuntu installed on NVMe as the Vezor edge node
 - **2 RTSP cameras**
 
 It walks through two tests:
 
 1. **Test A: iMac only**
-   The iMac runs the full Argus stack and both camera workers.
+   The iMac runs the full Vezor stack and both camera workers.
 2. **Test B: iMac master + Jetson edge**
    The iMac stays the master node, camera 1 stays central, and camera 2 moves to the Jetson.
 
-The goal is not to prove final production performance. The goal is to prove that the full Argus workflow works on your hardware from sign-in to live view to history and incidents.
+The goal is not to prove final production performance. The goal is to prove that the full Vezor workflow works on your hardware from sign-in to live view to history and incidents.
 
 Related documents:
 
@@ -31,7 +31,7 @@ You need all of the following before you begin:
 
 - administrator access on the iMac
 - administrator access on the Jetson
-- the Argus repository on both machines
+- the Vezor repository on both machines
 - 2 working RTSP camera URLs
 - 1 detector model file in ONNX format
 - both machines and both cameras on the same local network
@@ -43,7 +43,7 @@ This guide assumes the model file is called `yolo12n.onnx`. If your file has a d
 
 After you finish:
 
-- you can sign in to Argus
+- you can sign in to Vezor
 - you can create a site
 - you can create cameras
 - you can run inference workers
@@ -54,13 +54,13 @@ After you finish:
 ### 1.3 Important limits of this lab
 
 - The iMac is being used as a **lab master node**, not the final reference production inference server.
-- The Radeon 580 is **not** the hardened central GPU target for Argus.
+- The Radeon 580 is **not** the hardened central GPU target for Vezor.
 - This guide assumes you are doing a **functional test with 2 cameras**, not a scale test.
-- The Jetson portion is the more realistic Argus architecture test.
+- The Jetson portion is the more realistic Vezor architecture test.
 
 ### 1.4 A few words explained in plain language
 
-- **Master node**: the main Argus machine. It hosts the web UI, API, database, auth, storage, and orchestration.
+- **Master node**: the main Vezor machine. It hosts the web UI, API, database, auth, storage, and orchestration.
 - **Edge node**: a machine near the camera that runs inference locally.
 - **RTSP URL**: the camera stream address.
 - **Terminal**: the text window where you paste commands.
@@ -131,7 +131,7 @@ On the iMac:
 
 The Jetson must be able to reach these iMac ports:
 
-- `8000` Argus backend API
+- `8000` Vezor backend API
 - `8080` Keycloak
 - `5432` PostgreSQL
 - `7422` NATS leaf upstream
@@ -139,7 +139,7 @@ The Jetson must be able to reach these iMac ports:
 
 ### 1.9 Check for port conflicts before you start the stack
 
-Before you run Argus for the first time, make sure nothing else on the iMac is already using the most important local ports.
+Before you run Vezor for the first time, make sure nothing else on the iMac is already using the most important local ports.
 
 Run:
 
@@ -238,7 +238,7 @@ What good looks like:
 
 - both commands print a version number
 
-### 2.2 Clone the Argus repository on the iMac
+### 2.2 Clone the Vezor repository on the iMac
 
 Choose a simple location. This guide uses `$HOME/vision`.
 
@@ -320,7 +320,7 @@ What good looks like:
 
 - you can see the model file in the list
 
-### 2.4 Start the Argus control plane on the iMac
+### 2.4 Start the Vezor control plane on the iMac
 
 From the repository root:
 
@@ -428,7 +428,7 @@ What good looks like:
 
 ### 2.5 Get the model metadata
 
-Argus needs the model hash and file size when you register a model.
+Vezor needs the model hash and file size when you register a model.
 
 Run:
 
@@ -447,9 +447,9 @@ What good looks like:
 - the second line is a long SHA-256 hash
 - the third line is a file size number
 
-### 2.6 Get an Argus admin token on the iMac
+### 2.6 Get a Vezor admin token on the iMac
 
-Argus ships with a seeded local development admin user:
+Vezor ships with a seeded local development admin user:
 
 - username: `admin-dev`
 - password: `argus-admin-pass`
@@ -522,7 +522,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | 
 2. find the existing `YOLO12n iMac` entry
 3. reuse its `id`
 
-### 2.8 Sign in to the Argus UI
+### 2.8 Sign in to the Vezor UI
 
 1. Open [http://127.0.0.1:3000](http://127.0.0.1:3000)
 2. Click **Sign in**
@@ -533,7 +533,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | 
 
 What good looks like:
 
-- you land in the Argus app shell
+- you land in the Vezor app shell
 
 ### 2.9 Create the site in the UI
 
@@ -541,7 +541,7 @@ What good looks like:
 2. Click **Add site**
 3. Enter:
    - Site name: `Lab Site`
-   - Description: `Initial Argus lab site`
+   - Description: `Initial Vezor lab site`
    - Time zone: `Europe/Zurich`
 4. Click **Save site**
 
@@ -859,7 +859,7 @@ What good looks like:
 
 - the command prints a UUID
 
-### 3.4 Edit camera 2 in the Argus UI
+### 3.4 Edit camera 2 in the Vezor UI
 
 Back in the browser on the iMac:
 

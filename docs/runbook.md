@@ -1,4 +1,4 @@
-# Argus Runbook
+# Vezor Runbook
 
 See also:
 
@@ -7,7 +7,7 @@ See also:
 
 ## Secrets With SOPS And Age
 
-Argus stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.
+Vezor stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.
 
 Before the first production deployment:
 

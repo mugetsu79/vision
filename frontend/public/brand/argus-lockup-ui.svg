@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-label="Argus product lockup">
-  <title>Argus product lockup</title>
-  <desc>Clean in-product lockup with the approved Argus symbol and wordmark on a transparent background.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-label="Vezor product lockup">
+  <title>Vezor product lockup</title>
+  <desc>Clean in-product lockup with the approved Vezor symbol and wordmark on a transparent background.</desc>
   <defs>
     <style>
       .word { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; font-weight: 800; letter-spacing: -0.035em; }
@@ -79,7 +79,7 @@
   </g>
 
   <g transform="translate(348 0)">
-    <text x="0" y="193" class="word" font-size="126" fill="url(#word)">Argus</text>
+    <text x="0" y="193" class="word" font-size="126" fill="url(#word)">Vezor</text>
     <text x="350" y="195" class="tag" font-size="26" fill="#7e8ba2">|</text>
     <text x="392" y="168" class="tag" font-size="22" fill="url(#tagline)">THE OMNISIGHT</text>
     <text x="392" y="208" class="tag" font-size="22" fill="url(#tagline)">PLATFORM</text>

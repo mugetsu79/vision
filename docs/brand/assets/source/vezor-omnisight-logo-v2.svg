@@ -2,8 +2,8 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 1200 420"
      role="img"
-     aria-label="Argus — The OmniSight Platform">
-  <title>Argus | The OmniSight Platform</title>
+     aria-label="Vezor — The OmniSight Platform">
+  <title>Vezor | The OmniSight Platform</title>
   <desc>Watchful eye inside a circular medallion frame, pierced by six faceted crystalline shards in cerulean-to-violet gradient. Paired with a bold sans-serif wordmark and spaced tagline on a deep obsidian field.</desc>
 
   <defs>
@@ -222,7 +222,7 @@
     <text x="0" y="215"
           class="argus-word"
           font-size="140"
-          fill="url(#wordGradient)">Argus</text>
+          fill="url(#wordGradient)">Vezor</text>
 
     <!-- Hairline accent echoes the beam gradient -->
     <line x1="6" y1="248" x2="82" y2="248"

@@ -1,6 +1,6 @@
-# Argus | The OmniSight Platform
+# Vezor | The OmniSight Platform
 
-Argus is a hybrid video analytics platform for multi-camera operations. It is designed to run as a central control plane with optional edge inference nodes, giving operators one system for live visibility, configuration, history, incidents, and streaming-aware delivery.
+Vezor is a hybrid video analytics platform for multi-camera operations. It is designed to run as a central control plane with optional edge inference nodes, giving operators one system for live visibility, configuration, history, incidents, and streaming-aware delivery.
 
 The project supports three processing modes:
 
@@ -8,7 +8,7 @@ The project supports three processing modes:
 - `edge`: a site-local node performs inference and sends events, telemetry, clips, and optional preview streams back to the master
 - `hybrid`: edge handles primary detection while the master adds heavier downstream analytics
 
-Argus separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, or `540p5`.
+Vezor separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, or `540p5`.
 
 ## What’s In This Repo
 
@@ -193,8 +193,8 @@ This currently covers:
 
 Brand guidance lives in:
 
-- [docs/brand/argus-logo-brand-spec.md](/Users/yann.moren/vision/docs/brand/argus-logo-brand-spec.md)
-- [docs/brand/usage-guide.md](/Users/yann.moren/vision/docs/brand/usage-guide.md)
+- [docs/brand/logo-brand-spec.md](/Users/yann.moren/vision/docs/brand/logo-brand-spec.md)
+- [docs/brand/logo-usage-guide.md](/Users/yann.moren/vision/docs/brand/logo-usage-guide.md)
 - [docs/brand/logo-generation-prompts.md](/Users/yann.moren/vision/docs/brand/logo-generation-prompts.md)
 
 ## License And Usage

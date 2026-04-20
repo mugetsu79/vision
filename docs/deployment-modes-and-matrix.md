@@ -1,6 +1,6 @@
-# Argus Deployment Modes And Matrix
+# Vezor Deployment Modes And Matrix
 
-This document explains how to choose between `central`, `edge`, and `hybrid` camera processing in Argus, then maps those choices onto practical deployment shapes.
+This document explains how to choose between `central`, `edge`, and `hybrid` camera processing in Vezor, then maps those choices onto practical deployment shapes.
 
 It is the short decision document.
 
@@ -8,8 +8,8 @@ For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Us
 
 ## Core Terms
 
-- `master node` / `HQ node`: the central Argus control plane and primary services node. It runs the API, PostgreSQL/TimescaleDB, Keycloak, NATS JetStream, MediaMTX, the frontend, and central workers.
-- `edge node`: a site-local compute box that can run an Argus inference worker, local MediaMTX, a NATS leaf node, and an OTEL collector.
+- `master node` / `HQ node`: the central Vezor control plane and primary services node. It runs the API, PostgreSQL/TimescaleDB, Keycloak, NATS JetStream, MediaMTX, the frontend, and central workers.
+- `edge node`: a site-local compute box that can run a Vezor inference worker, local MediaMTX, a NATS leaf node, and an OTEL collector.
 - `camera native ingest`: the stream the analytics pipeline uses internally.
 - `browser delivery`: the stream variant operators watch in the UI. This can be lower resolution or lower FPS than native ingest.
 
@@ -84,7 +84,7 @@ Operationally, though:
 
 ## Browser Delivery Model
 
-Argus separates analytics ingest from operator viewing:
+Vezor separates analytics ingest from operator viewing:
 
 - analytics can keep using the native stream
 - browsers can receive a lower-bitrate rendition such as `1080p15`, `720p10`, or `540p5`
