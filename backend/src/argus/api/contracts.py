@@ -129,7 +129,11 @@ class WorkerPublishSettings(BaseModel):
 
 
 class WorkerStreamSettings(BaseModel):
-    pass
+    profile_id: BrowserDeliveryProfileId = "native"
+    kind: Literal["passthrough", "transcode"] = "passthrough"
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
+    fps: int = Field(default=25, ge=1)
 
 
 class WorkerModelSettings(BaseModel):

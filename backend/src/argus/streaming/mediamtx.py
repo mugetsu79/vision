@@ -12,6 +12,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
+import cv2
 from pydantic import BaseModel, ConfigDict
 
 
@@ -54,6 +55,8 @@ class StreamRegistration:
     path_name: str | None = None
     managed_path_config: bool = False
     target_fps: int = 25
+    target_width: int | None = None
+    target_height: int | None = None
 
 
 class FramePublisher(Protocol):
@@ -73,6 +76,7 @@ class _PublisherState:
     publish_path: str
     frame_shape: tuple[int, ...]
     publisher: FramePublisher
+    last_published_at: datetime | None = None
 
 
 class _PublisherRestartRequired(RuntimeError):
@@ -208,6 +212,8 @@ class MediaMTXClient:
         profile: PublishProfile,
         privacy: PrivacyPolicy,
         target_fps: int = 25,
+        target_width: int | None = None,
+        target_height: int | None = None,
     ) -> StreamRegistration:
         previous = self._registrations.get(camera_id)
         registration = await self._build_registration(
@@ -216,6 +222,8 @@ class MediaMTXClient:
             profile=profile,
             privacy=privacy,
             target_fps=target_fps,
+            target_width=target_width,
+            target_height=target_height,
         )
         if (
             previous is not None
@@ -247,17 +255,33 @@ class MediaMTXClient:
     ) -> None:
         if registration.mode is StreamMode.PASSTHROUGH:
             return
-        publisher = await self._ensure_publisher(registration=registration, frame=frame)
+        prepared_frame = _prepare_frame_for_publish(registration=registration, frame=frame)
+        publisher_state = await self._ensure_publisher(
+            registration=registration,
+            frame=prepared_frame,
+        )
+        if not _should_publish_frame(
+            last_published_at=publisher_state.last_published_at,
+            ts=ts,
+            target_fps=registration.target_fps,
+        ):
+            return
+        publisher = publisher_state.publisher
         try:
-            await publisher.push_frame(frame, ts=ts)
+            await publisher.push_frame(prepared_frame, ts=ts)
         except _PublisherRestartRequired:
             await publisher.close()
             self._publishers.pop(registration.camera_id, None)
-            publisher = await self._ensure_publisher(registration=registration, frame=frame)
-            await publisher.push_frame(frame, ts=ts)
+            publisher_state = await self._ensure_publisher(
+                registration=registration,
+                frame=prepared_frame,
+            )
+            publisher = publisher_state.publisher
+            await publisher.push_frame(prepared_frame, ts=ts)
+        publisher_state.last_published_at = ts
         self._pushed_frames[registration.camera_id] = {
             "mode": registration.mode,
-            "shape": tuple(int(value) for value in frame.shape),
+            "shape": tuple(int(value) for value in prepared_frame.shape),
             "ts": ts.isoformat(),
         }
 
@@ -283,6 +307,8 @@ class MediaMTXClient:
         profile: PublishProfile,
         privacy: PrivacyPolicy,
         target_fps: int,
+        target_width: int | None,
+        target_height: int | None,
     ) -> StreamRegistration:
         if profile is PublishProfile.CENTRAL_GPU:
             path_name = f"cameras/{camera_id}/annotated"
@@ -293,6 +319,8 @@ class MediaMTXClient:
                 read_path=f"{self.rtsp_base_url}/{path_name}",
                 publish_path=f"{self.rtsp_base_url}/{path_name}",
                 target_fps=max(1, target_fps),
+                target_width=target_width,
+                target_height=target_height,
             )
 
         if privacy.requires_filtering:
@@ -304,6 +332,8 @@ class MediaMTXClient:
                 read_path=f"{self.rtsp_base_url}/{path_name}",
                 publish_path=f"{self.rtsp_base_url}/{path_name}",
                 target_fps=max(1, target_fps),
+                target_width=target_width,
+                target_height=target_height,
             )
 
         path_name = f"cameras/{camera_id}/passthrough"
@@ -315,6 +345,8 @@ class MediaMTXClient:
             read_path=f"{self.rtsp_base_url}/{path_name}",
             managed_path_config=True,
             target_fps=max(1, target_fps),
+            target_width=target_width,
+            target_height=target_height,
         )
 
     async def _ensure_publisher(
@@ -340,7 +372,7 @@ class MediaMTXClient:
             self._publishers.pop(registration.camera_id, None)
             existing = None
         if existing is not None:
-            return existing.publisher
+            return existing
 
         publish_url = registration.publish_path
         if self._publish_token_factory is not None:
@@ -354,13 +386,14 @@ class MediaMTXClient:
             frame=frame,
             publish_url=publish_url,
         )
-        self._publishers[registration.camera_id] = _PublisherState(
+        state = _PublisherState(
             path_name=registration.path_name,
             publish_path=registration.publish_path,
             frame_shape=frame_shape,
             publisher=publisher,
         )
-        return publisher
+        self._publishers[registration.camera_id] = state
+        return state
 
     async def _ensure_path(self, path_name: str, *, source: str, source_on_demand: bool) -> None:
         await self._request(
@@ -453,6 +486,36 @@ def _frame_dimensions(frame: Frame) -> tuple[int, int]:
     if len(frame.shape) != 3 or int(frame.shape[2]) != 3:
         raise RuntimeError("only BGR uint8 frames are supported for live publishing")
     return int(frame.shape[1]), int(frame.shape[0])
+
+
+def _prepare_frame_for_publish(*, registration: StreamRegistration, frame: Frame) -> Any:
+    if registration.target_width is None or registration.target_height is None:
+        return frame
+    current_width, current_height = _frame_dimensions(frame)
+    if (
+        current_width == registration.target_width
+        and current_height == registration.target_height
+    ):
+        return frame
+    return cv2.resize(
+        frame,
+        (registration.target_width, registration.target_height),
+        interpolation=cv2.INTER_LINEAR,
+    )
+
+
+def _should_publish_frame(
+    *,
+    last_published_at: datetime | None,
+    ts: datetime,
+    target_fps: int,
+) -> bool:
+    if last_published_at is None:
+        return True
+    delta = (ts - last_published_at).total_seconds()
+    if delta < 0:
+        return True
+    return delta >= (1.0 / max(1, target_fps))
 
 
 def _append_query_parameter(url: str, *, key: str, value: str) -> str:

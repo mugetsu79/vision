@@ -115,6 +115,7 @@ class _FakeStreamClient:
         self.registrations: list[tuple[PublishProfile, PrivacyPolicy]] = []
         self.pushed_modes: list[StreamMode] = []
         self.pushed_frames: list[np.ndarray] = []
+        self.register_stream_calls: list[dict[str, object]] = []
 
     async def register_stream(
         self,
@@ -124,8 +125,16 @@ class _FakeStreamClient:
         profile: PublishProfile,
         privacy: PrivacyPolicy,
         target_fps: int,
+        target_width: int | None = None,
+        target_height: int | None = None,
     ) -> StreamRegistration:
-        del target_fps
+        self.register_stream_calls.append(
+            {
+                "target_fps": target_fps,
+                "target_width": target_width,
+                "target_height": target_height,
+            }
+        )
         self.registrations.append((profile, privacy))
         mode = (
             StreamMode.FILTERED_PREVIEW
@@ -297,6 +306,44 @@ async def test_engine_draws_annotations_for_central_stream_frames() -> None:
 
     assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
     assert np.any(stream_client.pushed_frames[0] != 0)
+
+
+@pytest.mark.asyncio
+async def test_engine_registers_browser_delivery_dimensions_and_fps() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.close()
+
+    assert stream_client.register_stream_calls == [{
+        "target_fps": 10,
+        "target_width": 1280,
+        "target_height": 720,
+    }]
 
 
 @pytest.mark.asyncio

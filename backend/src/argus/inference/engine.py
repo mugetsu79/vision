@@ -80,7 +80,11 @@ class PublishSettings(BaseModel):
 
 
 class StreamSettings(BaseModel):
-    pass
+    profile_id: str = "native"
+    kind: str = "passthrough"
+    width: int | None = Field(default=None, ge=1)
+    height: int | None = Field(default=None, ge=1)
+    fps: int = Field(default=25, ge=1)
 
 
 class TrackerSettings(BaseModel):
@@ -176,6 +180,8 @@ class StreamClient(Protocol):
         profile: PublishProfile,
         privacy: PrivacyPolicy,
         target_fps: int,
+        target_width: int | None = None,
+        target_height: int | None = None,
     ) -> StreamRegistration: ...
 
     async def push_frame(
@@ -257,7 +263,9 @@ class InferenceEngine:
             rtsp_url=self.config.camera.rtsp_url,
             profile=self.profile,
             privacy=self._state.privacy,
-            target_fps=self.config.camera.fps_cap,
+            target_fps=self.config.stream.fps,
+            target_width=self.config.stream.width,
+            target_height=self.config.stream.height,
         )
         await self.event_client.subscribe(
             f"cmd.camera.{self.config.camera_id}",
@@ -379,7 +387,9 @@ class InferenceEngine:
                     rtsp_url=self.config.camera.rtsp_url,
                     profile=self.profile,
                     privacy=self._state.privacy,
-                    target_fps=self.config.camera.fps_cap,
+                    target_fps=self.config.stream.fps,
+                    target_width=self.config.stream.width,
+                    target_height=self.config.stream.height,
                 )
         if command.attribute_rules is not None:
             self._state.attribute_rules = list(command.attribute_rules)

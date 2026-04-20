@@ -375,6 +375,55 @@ async def test_mediamtx_client_close_shuts_down_active_publishers() -> None:
     assert created_publishers[0].closed is True
 
 
+@pytest.mark.asyncio
+async def test_mediamtx_client_push_frame_applies_resize_and_cadence_limits() -> None:
+    created_publishers: list[_FakeFramePublisher] = []
+    camera_id = uuid4()
+
+    async def publisher_factory(
+        *,
+        registration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _FakeFramePublisher:
+        publisher = _FakeFramePublisher()
+        created_publishers.append(publisher)
+        return publisher
+
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        publisher_factory=publisher_factory,
+    )
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
+        target_fps=10,
+        target_width=1280,
+        target_height=720,
+    )
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+    await client.push_frame(registration, frame, ts=datetime(2026, 4, 20, 18, 0, tzinfo=UTC))
+    await client.push_frame(
+        registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 0, 0, 50_000, tzinfo=UTC),
+    )
+    await client.push_frame(
+        registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 0, 0, 110_000, tzinfo=UTC),
+    )
+
+    assert created_publishers[0].frames == [(720, 1280, 3), (720, 1280, 3)]
+
+    await client.close()
+
+
 def _transport(handler: Callable[[Request], Response | object]):
     async def wrapped(request: Request) -> Response:
         response = handler(request)

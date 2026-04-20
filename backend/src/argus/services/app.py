@@ -1239,6 +1239,9 @@ def _camera_to_worker_config(
     settings: Settings,
     rtsp_url: str,
 ) -> WorkerConfigResponse:
+    browser_delivery = BrowserDeliverySettings.model_validate(
+        camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+    )
     return WorkerConfigResponse(
         camera_id=camera.id,
         mode=camera.processing_mode,
@@ -1251,7 +1254,10 @@ def _camera_to_worker_config(
             subject_prefix="evt.tracking",
             http_fallback_url=None,
         ),
-        stream=WorkerStreamSettings(),
+        stream=_resolve_worker_stream_settings(
+            browser_delivery=browser_delivery,
+            fps_cap=camera.fps_cap,
+        ),
         model=_model_to_worker_settings(primary_model),
         secondary_model=(
             _model_to_worker_settings(secondary_model)
@@ -1279,6 +1285,43 @@ def _model_to_worker_settings(model: Model) -> WorkerModelSettings:
         path=model.path,
         classes=list(model.classes),
         input_shape=dict(model.input_shape),
+    )
+
+
+def _resolve_worker_stream_settings(
+    *,
+    browser_delivery: BrowserDeliverySettings,
+    fps_cap: int,
+) -> WorkerStreamSettings:
+    profiles_by_id = {
+        str(profile["id"]): dict(profile)
+        for profile in BrowserDeliverySettings().profiles
+    }
+    profiles_by_id.update(
+        {
+            str(profile["id"]): dict(profile)
+            for profile in browser_delivery.profiles
+            if "id" in profile
+        }
+    )
+    selected = profiles_by_id.get(browser_delivery.default_profile)
+    if selected is None:
+        selected = profiles_by_id["native"]
+    kind = str(selected.get("kind", "passthrough"))
+    if kind == "transcode":
+        return WorkerStreamSettings(
+            profile_id=browser_delivery.default_profile,
+            kind="transcode",
+            width=int(selected["w"]),
+            height=int(selected["h"]),
+            fps=min(max(1, fps_cap), int(selected["fps"])),
+        )
+    return WorkerStreamSettings(
+        profile_id=browser_delivery.default_profile,
+        kind="passthrough",
+        width=None,
+        height=None,
+        fps=max(1, fps_cap),
     )
 
 

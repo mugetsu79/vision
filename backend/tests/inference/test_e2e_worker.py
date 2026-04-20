@@ -109,8 +109,10 @@ class _RecordingStreamClient:
         profile: PublishProfile,
         privacy: PrivacyPolicy,
         target_fps: int,
+        target_width: int | None = None,
+        target_height: int | None = None,
     ) -> StreamRegistration:
-        del target_fps
+        del target_fps, target_width, target_height
         if profile is PublishProfile.CENTRAL_GPU:
             mode = StreamMode.ANNOTATED_WHIP
         elif privacy.blur_faces or privacy.blur_plates:
