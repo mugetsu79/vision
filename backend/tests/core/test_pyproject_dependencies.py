@@ -26,3 +26,16 @@ def test_vision_group_uses_intel_macos_compatible_onnxruntime() -> None:
         "onnxruntime>=1.20; sys_platform == 'darwin' and platform_machine != 'x86_64'"
         in vision_dependencies
     )
+
+
+def test_vision_group_uses_intel_macos_compatible_torch_stack() -> None:
+    vision_dependencies = _vision_dependencies()
+
+    assert (
+        "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'"
+        in vision_dependencies
+    )
+    assert (
+        "torchvision==0.17.2; sys_platform == 'darwin' and platform_machine == 'x86_64'"
+        in vision_dependencies
+    )

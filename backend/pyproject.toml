@@ -52,6 +52,10 @@ vision = [
   "onnxruntime==1.17.3; sys_platform == 'darwin' and platform_machine == 'x86_64'",
   "onnxruntime>=1.20; sys_platform == 'darwin' and platform_machine != 'x86_64'",
   "onnxruntime>=1.20; sys_platform == 'linux' and platform_machine != 'x86_64'",
+  # Ultralytics pulls torch/torchvision, and current upstream releases have
+  # dropped Intel macOS wheels. Keep a compatible pair for local iMac workers.
+  "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torchvision==0.17.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
   "ultralytics>=8.3",
   "numpy<2",
   "Pillow>=11",

@@ -285,9 +285,9 @@ What good looks like:
 - the Alembic command finishes without an error
 - `openapi-typescript` prints a version number
 
-The `vision` group is required on the iMac host if you want to run the local inference worker later in this guide. That group installs packages such as `numpy`, `onnxruntime`, and `opencv-python-headless`.
+The `vision` group is required on the iMac host if you want to run the local inference worker later in this guide. That group installs packages such as `numpy`, `onnxruntime`, `torch`, `torchvision`, and `opencv-python-headless`.
 
-On Intel Macs, the repository pins a compatible `onnxruntime` build for the host worker because newer upstream wheels are no longer published for macOS `x86_64`.
+On Intel Macs, the repository pins compatible `onnxruntime`, `torch`, and `torchvision` builds for the host worker because newer upstream wheels are no longer published for macOS `x86_64`.
 
 If `openapi-typescript` is not found:
 
