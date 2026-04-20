@@ -286,7 +286,7 @@ async def test_mediamtx_client_push_frame_starts_and_reuses_publisher() -> None:
 
     assert len(created_publishers) == 1
     assert len(created_publishers[0].frames) == 2
-    token = published_urls[0].split("token=", maxsplit=1)[1]
+    token = published_urls[0].split("jwt=", maxsplit=1)[1]
     claims = jwt.get_unverified_claims(token)
     assert claims["mediamtx_permissions"] == [
         {"action": "publish", "path": f"cameras/{camera_id}/annotated"}

@@ -378,7 +378,7 @@ class MediaMTXClient:
         if self._publish_token_factory is not None:
             publish_url = _append_query_parameter(
                 publish_url,
-                key="token",
+                key="jwt",
                 value=self._publish_token_factory(registration.camera_id, registration.path_name),
             )
         publisher = await self._publisher_factory(
