@@ -1,33 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-label="Vezor product lockup">
   <title>Vezor product lockup</title>
-  <desc>Clean in-product lockup with the approved Vezor symbol and wordmark on a transparent background.</desc>
+  <desc>Approved Vezor product lockup that pairs the rebuilt eye-and-radar symbol with the existing wordmark and descriptor.</desc>
   <defs>
     <style>
       .word { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; font-weight: 800; letter-spacing: -0.035em; }
       .tag { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; font-weight: 500; letter-spacing: 0.18em; }
     </style>
-    <linearGradient id="arc" x1="12%" y1="8%" x2="88%" y2="88%">
-      <stop offset="0%" stop-color="#4ed4ff"/>
-      <stop offset="55%" stop-color="#64b4ff"/>
-      <stop offset="100%" stop-color="#a37cff"/>
+    <linearGradient id="ringGradient" x1="14%" y1="10%" x2="86%" y2="88%">
+      <stop offset="0%" stop-color="#54d7ff"/>
+      <stop offset="52%" stop-color="#5fb6ff"/>
+      <stop offset="100%" stop-color="#a584ff"/>
     </linearGradient>
-    <linearGradient id="word" x1="0%" y1="0%" x2="0%" y2="100%">
+    <linearGradient id="wordGradient" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#fdfefe"/>
       <stop offset="100%" stop-color="#dbe3ef"/>
     </linearGradient>
-    <linearGradient id="tagline" x1="0%" y1="0%" x2="100%" y2="0%">
+    <linearGradient id="taglineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#94a3bb"/>
       <stop offset="100%" stop-color="#c2cddd"/>
     </linearGradient>
-    <radialGradient id="iris" cx="50%" cy="44%" r="56%">
-      <stop offset="0%" stop-color="#dff6ff"/>
-      <stop offset="34%" stop-color="#5fd2ff"/>
-      <stop offset="74%" stop-color="#3f93ff"/>
-      <stop offset="100%" stop-color="#936dff"/>
+    <radialGradient id="coreGradient" cx="50%" cy="46%" r="56%">
+      <stop offset="0%" stop-color="#baf1ff"/>
+      <stop offset="38%" stop-color="#56d0ff"/>
+      <stop offset="74%" stop-color="#3298ff"/>
+      <stop offset="100%" stop-color="#8d72ff"/>
     </radialGradient>
-    <filter id="subtleGlow" x="-22%" y="-22%" width="144%" height="144%">
-      <feGaussianBlur stdDeviation="7" result="blur"/>
+    <filter id="symbolGlow" x="-24%" y="-24%" width="148%" height="148%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
       <feColorMatrix
         in="blur"
         type="matrix"
@@ -39,49 +39,50 @@
     </filter>
   </defs>
 
-  <g transform="translate(180 180)">
-    <circle
-      cx="0"
-      cy="0"
-      r="116"
-      fill="none"
-      stroke="url(#arc)"
-      stroke-width="14"
-      stroke-linecap="round"
-      stroke-dasharray="126 48 88 48 126 48 88 48"
-      opacity="0.82"
-      filter="url(#subtleGlow)"
-    />
+  <g id="vezor-symbol-mark" transform="translate(180 180) scale(0.7)">
+    <g id="symbol-ring" filter="url(#symbolGlow)">
+      <circle
+        cx="0"
+        cy="0"
+        r="162"
+        fill="none"
+        stroke="url(#ringGradient)"
+        stroke-width="16"
+        stroke-linecap="round"
+        stroke-dasharray="94 24 58 24 94 24 58 24 94 24 58 24 94 24 58 24"
+        opacity="0.86"
+      />
+    </g>
 
-    <path
-      d="M-86 0c20-35 56-58 86-58s66 23 86 58c-20 35-56 58-86 58S-66 35-86 0Z"
-      fill="none"
-      stroke="url(#arc)"
-      stroke-width="14"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
+    <g id="symbol-eye">
+      <path
+        d="M-146 0c34-54 92-90 146-90s112 36 146 90c-34 54-92 90-146 90S-112 54-146 0Z"
+        fill="none"
+        stroke="url(#ringGradient)"
+        stroke-width="16"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </g>
 
-    <path
-      d="M-22-144h20L-12-55l-22 199h-20l32-199v-89Z"
-      fill="url(#arc)"
-      opacity="0.96"
-    />
-    <path
-      d="M117-94 132-79 45 6l-95 87-15-15 95-87 87-85Z"
-      fill="url(#arc)"
-      opacity="0.92"
-    />
+    <g id="symbol-blades" fill="url(#ringGradient)">
+      <path d="M-32-210h22L1-116l-26 324h-22l15-324Z" opacity="0.98" />
+      <path d="M146-132 164-114 46 10l-116 108-18-18L28-24 146-132Z" opacity="0.94" />
+      <path d="M-166-118l18-18 118 112 116 124-18 18L-50 10-166-118Z" opacity="0.88" />
+      <path d="M12-10c44 6 84 36 104 82l-28 11C72 47 42 25 7 21L12-10Z" opacity="0.9" />
+    </g>
 
-    <circle cx="0" cy="0" r="38" fill="url(#iris)"/>
-    <circle cx="0" cy="0" r="15" fill="#08111b"/>
-    <circle cx="-9" cy="-11" r="5.5" fill="#f8fcff" opacity="0.86"/>
+    <g id="symbol-core">
+      <circle cx="18" cy="6" r="72" fill="url(#coreGradient)" />
+      <circle cx="18" cy="6" r="33" fill="#0a111a" />
+      <circle cx="2" cy="-14" r="11" fill="#effbff" opacity="0.9" />
+    </g>
   </g>
 
   <g transform="translate(348 0)">
-    <text x="0" y="193" class="word" font-size="126" fill="url(#word)">Vezor</text>
+    <text x="0" y="193" class="word" font-size="126" fill="url(#wordGradient)">Vezor</text>
     <text x="350" y="195" class="tag" font-size="26" fill="#7e8ba2">|</text>
-    <text x="392" y="168" class="tag" font-size="22" fill="url(#tagline)">THE OMNISIGHT</text>
-    <text x="392" y="208" class="tag" font-size="22" fill="url(#tagline)">PLATFORM</text>
+    <text x="392" y="168" class="tag" font-size="22" fill="url(#taglineGradient)">THE OMNISIGHT</text>
+    <text x="392" y="208" class="tag" font-size="22" fill="url(#taglineGradient)">PLATFORM</text>
   </g>
 </svg>
