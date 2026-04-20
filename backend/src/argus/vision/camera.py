@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import platform
+import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -191,6 +193,14 @@ def _resolve_capture_spec(
 
 
 def _default_capture_factory(source: str | int, backend: int | None) -> CaptureHandle:
+    if _should_use_ffmpeg_rawvideo_capture(source=source, backend=backend):
+        try:
+            return _FFmpegRawVideoCapture.create(cast(str, source))
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            LOGGER.warning(
+                "FFmpeg rawvideo capture unavailable, falling back to OpenCV",
+                extra={"source_uri": source},
+            )
     if (
         backend == cv2.CAP_FFMPEG
         and isinstance(source, str)
@@ -200,3 +210,102 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
     capture = cv2.VideoCapture(source, backend) if backend is not None else cv2.VideoCapture(source)
     return cast(CaptureHandle, capture)
+
+
+@dataclass(slots=True)
+class _FFmpegRawVideoCapture:
+    _process: subprocess.Popen[bytes]
+    _width: int
+    _height: int
+
+    @classmethod
+    def create(cls, source_uri: str) -> _FFmpegRawVideoCapture:
+        width, height = _probe_video_dimensions(source_uri)
+        command = [
+            "ffmpeg",
+            "-loglevel",
+            "error",
+            "-rtsp_transport",
+            "tcp",
+            "-i",
+            source_uri,
+            "-map",
+            "0:v:0",
+            "-an",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "pipe:1",
+        ]
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=max(1, width * height * 3 * 2),
+        )
+        return cls(_process=process, _width=width, _height=height)
+
+    def read(self) -> tuple[bool, Frame | None]:
+        if self._process.poll() is not None or self._process.stdout is None:
+            return False, None
+
+        frame_size = self._width * self._height * 3
+        payload = self._process.stdout.read(frame_size)
+        if len(payload) != frame_size:
+            return False, None
+
+        frame = np.frombuffer(payload, dtype=np.uint8).reshape((self._height, self._width, 3))
+        return True, frame.copy()
+
+    def release(self) -> None:
+        if self._process.poll() is not None:
+            return
+        self._process.terminate()
+        try:
+            self._process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            self._process.wait(timeout=2.0)
+
+
+def _should_use_ffmpeg_rawvideo_capture(*, source: str | int, backend: int | None) -> bool:
+    return (
+        backend == cv2.CAP_FFMPEG
+        and isinstance(source, str)
+        and source.startswith(("rtsp://", "rtsps://"))
+        and platform.system() == "Darwin"
+        and platform.machine().lower() == "x86_64"
+    )
+
+
+def _probe_video_dimensions(source_uri: str) -> tuple[int, int]:
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-rtsp_transport",
+        "tcp",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "json",
+        source_uri,
+    ]
+    completed = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+    streams = payload.get("streams", [])
+    if not streams:
+        raise RuntimeError("ffprobe did not return a video stream.")
+    width = int(streams[0]["width"])
+    height = int(streams[0]["height"])
+    if width <= 0 or height <= 0:
+        raise RuntimeError("ffprobe returned invalid video dimensions.")
+    return width, height

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from collections import deque
 from dataclasses import dataclass
 
 import numpy as np
 import cv2
+import pytest
 
+import argus.vision.camera as camera_module
 from argus.vision.camera import (
     CameraSourceConfig,
     PlatformInfo,
@@ -154,3 +157,77 @@ def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -
     assert calls[0].source == "rtsp://camera.internal/live"
     assert calls[0].backend == cv2.CAP_FFMPEG
     assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == "rtsp_transport;tcp"
+
+
+def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.arange(2 * 4 * 3, dtype=np.uint8).reshape(2, 4, 3)
+    created_commands: list[list[str]] = []
+
+    class _FakeStdout:
+        def __init__(self, chunks: list[bytes]) -> None:
+            self._chunks = deque(chunks)
+
+        def read(self, size: int) -> bytes:
+            if not self._chunks:
+                return b""
+            chunk = self._chunks.popleft()
+            assert len(chunk) == size
+            return chunk
+
+    class _FakeProcess:
+        def __init__(self, payload: bytes) -> None:
+            self.stdout = _FakeStdout([payload])
+            self._returncode: int | None = None
+
+        def poll(self) -> int | None:
+            return self._returncode
+
+        def terminate(self) -> None:
+            self._returncode = 0
+
+        def wait(self, timeout: float | None = None) -> int:
+            self._returncode = 0
+            return 0
+
+        def kill(self) -> None:
+            self._returncode = -9
+
+    def fake_run(command: list[str], check: bool, capture_output: bool, text: bool):
+        assert check is True
+        assert capture_output is True
+        assert text is True
+        assert command[:4] == ["ffprobe", "-v", "error", "-rtsp_transport"]
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"streams":[{"width":4,"height":2}]}',
+            stderr="",
+        )
+
+    def fake_popen(command: list[str], stdout: object, stderr: object, bufsize: int):
+        del stdout, stderr, bufsize
+        created_commands.append(command)
+        return _FakeProcess(frame.tobytes())
+
+    monkeypatch.setattr(camera_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(camera_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(camera_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(camera_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        cv2,
+        "VideoCapture",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("OpenCV VideoCapture should not be used on Intel macOS RTSP.")
+        ),
+    )
+
+    capture = _default_capture_factory("rtsp://camera.internal/live", cv2.CAP_FFMPEG)
+    ok, decoded = capture.read()
+
+    assert ok is True
+    assert decoded is not None
+    np.testing.assert_array_equal(decoded, frame)
+    capture.release()
+    assert created_commands[0][:4] == ["ffmpeg", "-loglevel", "error", "-rtsp_transport"]
