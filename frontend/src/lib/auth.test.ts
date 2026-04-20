@@ -20,7 +20,7 @@ function createUser(profile: Record<string, unknown>): User {
 }
 
 describe("mapOidcUser", () => {
-  test(`throws when the token is missing any recognized ${productBrand.name} role`, () => {
+  test("throws when the token is missing any recognized platform role", () => {
     const user = createUser({
       sub: "user-1",
       iss: "http://127.0.0.1:8080/realms/argus-dev",
