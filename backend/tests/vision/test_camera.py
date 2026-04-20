@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import os
 from collections import deque
 from dataclasses import dataclass
 
 import numpy as np
+import cv2
 
-from argus.vision.camera import CameraSourceConfig, PlatformInfo, create_camera_source
+from argus.vision.camera import (
+    CameraSourceConfig,
+    PlatformInfo,
+    _default_capture_factory,
+    create_camera_source,
+)
 
 
 class _FakeCapture:
@@ -130,3 +137,20 @@ def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
     assert int(second[0, 0, 0]) == 3
     assert sleep_calls == [0.5, 1.0]
     assert source.reconnect_attempts == 0
+
+
+def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -> None:
+    calls: list[_CaptureCall] = []
+
+    def fake_video_capture(source: str | int, backend: int | None = None) -> _FakeCapture:
+        calls.append(_CaptureCall(source=source, backend=backend))
+        return _FakeCapture([])
+
+    monkeypatch.setattr(cv2, "VideoCapture", fake_video_capture)
+    monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
+
+    _default_capture_factory("rtsp://camera.internal/live", cv2.CAP_FFMPEG)
+
+    assert calls[0].source == "rtsp://camera.internal/live"
+    assert calls[0].backend == cv2.CAP_FFMPEG
+    assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == "rtsp_transport;tcp"

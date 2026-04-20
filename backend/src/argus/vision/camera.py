@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import platform
 import time
 from collections.abc import Callable
@@ -190,5 +191,12 @@ def _resolve_capture_spec(
 
 
 def _default_capture_factory(source: str | int, backend: int | None) -> CaptureHandle:
+    if (
+        backend == cv2.CAP_FFMPEG
+        and isinstance(source, str)
+        and source.startswith(("rtsp://", "rtsps://"))
+        and "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ
+    ):
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
     capture = cv2.VideoCapture(source, backend) if backend is not None else cv2.VideoCapture(source)
     return cast(CaptureHandle, capture)

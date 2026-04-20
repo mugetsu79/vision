@@ -10,6 +10,7 @@ from uuid import UUID
 
 import httpx
 import numpy as np
+import cv2
 from numpy.typing import NDArray
 from prometheus_client import start_http_server
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,6 +45,7 @@ from argus.streaming.mediamtx import (
     default_profile_probe,
     probe_publish_profile,
 )
+from argus.streaming.webrtc import MediaMTXTokenIssuer
 from argus.vision.anpr import LineCrossingAnprProcessor
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
@@ -173,6 +175,7 @@ class StreamClient(Protocol):
         rtsp_url: str,
         profile: PublishProfile,
         privacy: PrivacyPolicy,
+        target_fps: int,
     ) -> StreamRegistration: ...
 
     async def push_frame(
@@ -254,6 +257,7 @@ class InferenceEngine:
             rtsp_url=self.config.camera.rtsp_url,
             profile=self.profile,
             privacy=self._state.privacy,
+            target_fps=self.config.camera.fps_cap,
         )
         await self.event_client.subscribe(
             f"cmd.camera.{self.config.camera_id}",
@@ -321,7 +325,7 @@ class InferenceEngine:
                 f"incident.triggered.{self.config.camera_id}",
                 incident_event,
             )
-        stream_frame = self._build_stream_frame(frame)
+        stream_frame = self._build_stream_frame(frame, tracked)
         if (
             self._stream_registration is not None
             and self._stream_registration.mode is not StreamMode.PASSTHROUGH
@@ -375,6 +379,7 @@ class InferenceEngine:
                     rtsp_url=self.config.camera.rtsp_url,
                     profile=self.profile,
                     privacy=self._state.privacy,
+                    target_fps=self.config.camera.fps_cap,
                 )
         if command.attribute_rules is not None:
             self._state.attribute_rules = list(command.attribute_rules)
@@ -443,14 +448,34 @@ class InferenceEngine:
             enriched.append(detection.with_updates(speed_kph=speed_kph))
         return enriched
 
-    def _build_stream_frame(self, frame: Frame) -> Frame:
-        should_filter = self._state.privacy.requires_filtering and (
-            self._stream_registration is not None
-            and self._stream_registration.mode is not StreamMode.PASSTHROUGH
-        )
-        if not should_filter:
+    def _build_stream_frame(self, frame: Frame, detections: list[Detection]) -> Frame:
+        if self._stream_registration is None or self._stream_registration.mode is StreamMode.PASSTHROUGH:
             return frame
-        return self.privacy_filter.apply(frame.copy())
+        stream_frame = frame.copy()
+        if self._state.privacy.requires_filtering:
+            stream_frame = self.privacy_filter.apply(stream_frame)
+        if self._stream_registration.mode is StreamMode.ANNOTATED_WHIP:
+            self._draw_annotations(stream_frame, detections)
+        return stream_frame
+
+    def _draw_annotations(self, frame: Frame, detections: list[Detection]) -> None:
+        for detection in detections:
+            x1, y1, x2, y2 = (int(value) for value in detection.bbox)
+            color = (255, 196, 64)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            label = detection.class_name
+            if detection.track_id is not None:
+                label = f"{label} #{detection.track_id}"
+            cv2.putText(
+                frame,
+                label,
+                (x1, max(18, y1 - 6)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
 
     def _rule_events_to_incidents(self, events: list[object]) -> list[IncidentTriggeredEvent]:
         incidents: list[IncidentTriggeredEvent] = []
@@ -569,6 +594,8 @@ def build_runtime_engine(
     else:
         publisher = primary_publisher
 
+    token_issuer = MediaMTXTokenIssuer.from_settings(settings)
+
     return InferenceEngine(
         config=config,
         frame_source=frame_source,
@@ -587,6 +614,11 @@ def build_runtime_engine(
                 settings.mediamtx_password.get_secret_value()
                 if settings.mediamtx_password is not None
                 else None
+            ),
+            publish_token_factory=lambda camera_id, path_name: token_issuer.issue_publish_token(
+                subject=f"worker-{camera_id}",
+                camera_id=camera_id,
+                path_name=path_name,
             ),
         ),
         attribute_classifier=attribute_classifier,

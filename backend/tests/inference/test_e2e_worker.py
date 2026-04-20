@@ -108,7 +108,9 @@ class _RecordingStreamClient:
         rtsp_url: str,
         profile: PublishProfile,
         privacy: PrivacyPolicy,
+        target_fps: int,
     ) -> StreamRegistration:
+        del target_fps
         if profile is PublishProfile.CENTRAL_GPU:
             mode = StreamMode.ANNOTATED_WHIP
         elif privacy.blur_faces or privacy.blur_plates:

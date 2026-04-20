@@ -114,6 +114,7 @@ class _FakeStreamClient:
     def __init__(self) -> None:
         self.registrations: list[tuple[PublishProfile, PrivacyPolicy]] = []
         self.pushed_modes: list[StreamMode] = []
+        self.pushed_frames: list[np.ndarray] = []
 
     async def register_stream(
         self,
@@ -122,7 +123,9 @@ class _FakeStreamClient:
         rtsp_url: str,
         profile: PublishProfile,
         privacy: PrivacyPolicy,
+        target_fps: int,
     ) -> StreamRegistration:
+        del target_fps
         self.registrations.append((profile, privacy))
         mode = (
             StreamMode.FILTERED_PREVIEW
@@ -145,6 +148,7 @@ class _FakeStreamClient:
         *,
         ts: datetime,
     ) -> None:
+        self.pushed_frames.append(frame.copy())
         self.pushed_modes.append(registration.mode)
 
 
@@ -269,6 +273,30 @@ async def test_engine_registers_filtered_stream_when_privacy_is_required_on_jets
     assert stream_client.registrations == [
         (PublishProfile.JETSON_NANO, PrivacyPolicy(blur_faces=True, blur_plates=False))
     ]
+
+
+@pytest.mark.asyncio
+async def test_engine_draws_annotations_for_central_stream_frames() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
+    assert np.any(stream_client.pushed_frames[0] != 0)
 
 
 @pytest.mark.asyncio
