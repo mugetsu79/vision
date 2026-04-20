@@ -1,69 +1,181 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Vezor symbol">
   <title>Vezor symbol</title>
-  <desc>Approved eye-and-radar symbol for the Vezor platform, rebuilt as a crisp product SVG.</desc>
+  <desc>Vezor product symbol with a medallion ring, faceted shards, and luminous eye core on a transparent background.</desc>
   <defs>
-    <linearGradient id="ringGradient" x1="14%" y1="10%" x2="86%" y2="88%">
-      <stop offset="0%" stop-color="#54d7ff"/>
-      <stop offset="52%" stop-color="#5fb6ff"/>
-      <stop offset="100%" stop-color="#a584ff"/>
+    <linearGradient id="beamGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22c6ff"/>
+      <stop offset="55%" stop-color="#5b5dff"/>
+      <stop offset="100%" stop-color="#9a4eff"/>
     </linearGradient>
-    <radialGradient id="coreGradient" cx="50%" cy="46%" r="56%">
-      <stop offset="0%" stop-color="#baf1ff"/>
-      <stop offset="38%" stop-color="#56d0ff"/>
-      <stop offset="74%" stop-color="#3298ff"/>
-      <stop offset="100%" stop-color="#8d72ff"/>
+    <linearGradient id="shardLit" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#bfe2ff"/>
+      <stop offset="40%" stop-color="#6aa8ff"/>
+      <stop offset="100%" stop-color="#3b4fe0"/>
+    </linearGradient>
+    <linearGradient id="shardShadow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#7a3bff"/>
+      <stop offset="60%" stop-color="#4b1ca0"/>
+      <stop offset="100%" stop-color="#2a0b66"/>
+    </linearGradient>
+    <linearGradient id="ringFrame" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#8fc6ff"/>
+      <stop offset="45%" stop-color="#5b5dff"/>
+      <stop offset="100%" stop-color="#6b2bd9"/>
+    </linearGradient>
+    <radialGradient id="irisGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="18%" stop-color="#eaf6ff"/>
+      <stop offset="42%" stop-color="#22c6ff"/>
+      <stop offset="78%" stop-color="#1e4fff"/>
+      <stop offset="100%" stop-color="#3a0fa0"/>
     </radialGradient>
-    <filter id="symbolGlow" x="-24%" y="-24%" width="148%" height="148%">
-      <feGaussianBlur stdDeviation="8" result="blur"/>
-      <feColorMatrix
-        in="blur"
-        type="matrix"
-        values="1 0 0 0 0
-                0 1 0 0 0
-                0 0 1 0 0
-                0 0 0 0.14 0"
-      />
+    <linearGradient id="radarArc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22c6ff" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#7a3bff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#22c6ff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="bloom" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="nodeGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="2.4"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <symbol id="shard" overflow="visible">
+      <path d="M 0 -170 L 0 -52 L -16 -108 Z" fill="url(#shardLit)"/>
+      <path d="M 0 -170 L 0 -52 L 16 -108 Z" fill="url(#shardShadow)"/>
+      <path
+        d="M 0 -170 L -16 -108"
+        fill="none"
+        stroke="#e6f3ff"
+        stroke-opacity="0.8"
+        stroke-width="0.9"
+      />
+      <line
+        x1="0"
+        y1="-168"
+        x2="0"
+        y2="-55"
+        stroke="#c9d4ff"
+        stroke-opacity="0.55"
+        stroke-width="0.6"
+      />
+    </symbol>
   </defs>
 
   <g id="vezor-symbol-mark" transform="translate(256 256)">
-    <g id="symbol-ring" filter="url(#symbolGlow)">
+    <g id="symbol-ring">
+      <circle cx="0" cy="0" r="195" fill="#22c6ff" opacity="0.05"/>
       <circle
         cx="0"
         cy="0"
-        r="162"
+        r="178"
         fill="none"
-        stroke="url(#ringGradient)"
-        stroke-width="16"
-        stroke-linecap="round"
-        stroke-dasharray="94 24 58 24 94 24 58 24 94 24 58 24 94 24 58 24"
-        opacity="0.86"
+        filter="url(#softGlow)"
+        opacity="0.95"
+        stroke="url(#ringFrame)"
+        stroke-width="6"
       />
+      <circle
+        cx="0"
+        cy="0"
+        r="172"
+        fill="none"
+        stroke="#9cc3ff"
+        stroke-opacity="0.35"
+        stroke-width="0.6"
+      />
+      <circle
+        cx="0"
+        cy="0"
+        r="183"
+        fill="none"
+        stroke="#3b2b80"
+        stroke-opacity="0.55"
+        stroke-width="0.6"
+      />
+      <circle
+        cx="0"
+        cy="0"
+        r="132"
+        fill="none"
+        opacity="0.8"
+        stroke="url(#radarArc)"
+        stroke-width="0.9"
+      />
+      <circle
+        cx="0"
+        cy="0"
+        r="96"
+        fill="none"
+        opacity="0.7"
+        stroke="url(#radarArc)"
+        stroke-width="0.9"
+      />
+      <g filter="url(#nodeGlow)">
+        <circle cx="0" cy="-178" r="4.8" fill="#bfe2ff"/>
+        <circle cx="178" cy="0" r="4.8" fill="#9a4eff"/>
+        <circle cx="0" cy="178" r="4.8" fill="#9a4eff"/>
+        <circle cx="-178" cy="0" r="4.8" fill="#bfe2ff"/>
+      </g>
+    </g>
+
+    <g id="symbol-shards" filter="url(#softGlow)">
+      <g transform="rotate(15)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(75)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(135)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(195)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(255)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(315)">
+        <use href="#shard"/>
+      </g>
     </g>
 
     <g id="symbol-eye">
-      <path
-        d="M-146 0c34-54 92-90 146-90s112 36 146 90c-34 54-92 90-146 90S-112 54-146 0Z"
-        fill="none"
-        stroke="url(#ringGradient)"
-        stroke-width="16"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </g>
-
-    <g id="symbol-blades" fill="url(#ringGradient)">
-      <path d="M-32-210h22L1-116l-26 324h-22l15-324Z" opacity="0.98" />
-      <path d="M146-132 164-114 46 10l-116 108-18-18L28-24 146-132Z" opacity="0.94" />
-      <path d="M-166-118l18-18 118 112 116 124-18 18L-50 10-166-118Z" opacity="0.88" />
-      <path d="M12-10c44 6 84 36 104 82l-28 11C72 47 42 25 7 21L12-10Z" opacity="0.9" />
+      <g fill="none" filter="url(#bloom)" stroke-linecap="round">
+        <path d="M -120 4 Q 0 -102 120 4" opacity="0.65" stroke="#2a0b66" stroke-width="5"/>
+        <path d="M -120 -4 Q 0 102 120 -4" opacity="0.65" stroke="#2a0b66" stroke-width="5"/>
+        <path d="M -118 0 Q 0 -98 118 0" stroke="url(#beamGradient)" stroke-width="3.4"/>
+        <path d="M -118 0 Q 0 98 118 0" stroke="url(#beamGradient)" stroke-width="3.4"/>
+      </g>
+      <g fill="none" stroke="#eaf6ff" stroke-opacity="0.55" stroke-width="0.9">
+        <path d="M -100 -2 Q 0 -82 100 -2"/>
+        <path d="M -100 2 Q 0 82 100 2"/>
+      </g>
     </g>
 
     <g id="symbol-core">
-      <circle cx="18" cy="6" r="72" fill="url(#coreGradient)" />
-      <circle cx="18" cy="6" r="33" fill="#0a111a" />
-      <circle cx="2" cy="-14" r="11" fill="#effbff" opacity="0.9" />
+      <circle cx="0" cy="0" r="42" fill="url(#irisGradient)" filter="url(#bloom)"/>
+      <circle cx="0" cy="0" r="16" fill="#05060f"/>
+      <circle cx="0" cy="0" r="16" fill="url(#irisGradient)" opacity="0.18"/>
+      <circle cx="-5" cy="-6" r="3" fill="#ffffff" opacity="0.9"/>
     </g>
   </g>
 </svg>

@@ -14,11 +14,13 @@ This is a focused brand-asset update, not a broader logo redesign.
 
 The approved direction is:
 
-- use the attached logo's **symbol**
-- rebuild that symbol as **SVG**
+- use the uploaded base symbol from `argus-icon-from-upload.svg` as the source geometry
+- rebuild that base symbol as **SVG**
+- refine the edges and joins for product use
+- keep the brand palette in the current Vezor cerulean-to-violet system
 - use the rebuilt SVG in product assets instead of the current simplified symbol
 
-The user explicitly chose SVG reconstruction instead of using the PNG directly so the mark remains crisp in compact UI placements.
+The user explicitly chose SVG reconstruction instead of using the uploaded raster-like base directly so the mark remains crisp in compact UI placements.
 
 ## Why SVG Reconstruction
 
@@ -70,7 +72,7 @@ The existing asset routing in the frontend should stay unchanged. The goal is to
 
 ### Symbol
 
-The rebuilt symbol should faithfully follow the attached eye-and-radar mark:
+The rebuilt symbol should faithfully follow the uploaded base eye-and-radar mark:
 
 - same overall silhouette
 - same vigilant eye structure
@@ -78,13 +80,34 @@ The rebuilt symbol should faithfully follow the attached eye-and-radar mark:
 - same cerulean-to-violet gradient character
 - same disciplined premium dark-mode feel
 
-The reconstruction should preserve the recognizable shape rather than reinterpreting it into a flatter or more generic icon.
+The reconstruction should preserve the recognizable uploaded shape rather than reinterpreting it into a flatter or more generic icon.
+
+The specific approved direction is:
+
+- closer to the uploaded base than to the currently shipped symbol
+- slightly refined for product use
+- smoother at the blade joints and ring cuts
+- cleaner at small sizes
+- exported on transparent background for runtime use
+
+What should be refined:
+
+- edge cleanup on the outer ring segments
+- smoother vector joins where the diagonal blades meet the eye/ring structure
+- slightly cleaner silhouette for small-size rendering
+
+What should not change:
+
+- the recognizable uploaded medallion composition
+- the inner core placement and energy
+- the overall eye-and-radar silhouette
+- the Vezor brand palette and dark-mode-native tone
 
 ### Lockup
 
 The full lockup should combine:
 
-- the rebuilt attached symbol
+- the rebuilt uploaded-base symbol
 - the current `Vezor` wordmark
 - the current `THE OMNISIGHT PLATFORM` descriptor treatment
 
@@ -101,11 +124,12 @@ No new placement rules are needed in this change.
 
 ## Implementation Notes
 
-- Rebuild the symbol as vector SVG rather than embedding raster artwork.
+- Rebuild the uploaded-base symbol as vector SVG rather than embedding raster artwork.
 - Keep metadata (`title`, `desc`, `aria-label`) aligned with `Vezor`.
 - Preserve transparent-background product usage.
 - Keep the symbol legible at compact UI sizes.
-- Avoid adding extra glow, sparkle, or hero-presentation artifacts beyond what the attached symbol already implies.
+- Avoid adding extra glow, sparkle, or hero-presentation artifacts beyond what the uploaded base already implies.
+- Keep the final product asset closer to the uploaded base than to the currently shipped symbol.
 
 ## Verification
 
@@ -120,7 +144,7 @@ Implementation should verify:
 
 This refresh is successful if:
 
-1. the app visibly uses the attached symbol direction instead of the old simplified symbol
+1. the app visibly uses the uploaded-base symbol direction instead of the old simplified symbol
 2. the symbol remains crisp in compact and full lockup contexts
 3. the `Vezor` rename remains intact
 4. no frontend asset wiring or brand metadata regressions are introduced
