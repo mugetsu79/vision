@@ -386,6 +386,9 @@ async function startHls({
   const client = new Hls({ lowLatencyMode: true });
   client.attachMedia(videoElement);
   client.loadSource(hlsUrl);
+  client.on(Hls.Events.MANIFEST_PARSED, () => {
+    void videoElement.play().catch(() => undefined);
+  });
   client.on(Hls.Events.ERROR, (_event, data) => {
     if (data.fatal) {
       client.destroy();

@@ -13,6 +13,7 @@ export interface HlsClientConstructor {
   new (config?: Record<string, unknown>): HlsClientInstance;
   Events: {
     ERROR: string;
+    MANIFEST_PARSED: string;
   };
   isSupported(): boolean;
 }

@@ -119,7 +119,7 @@ describe("VideoStream", () => {
     loadHlsClientMock.mockResolvedValue({
       isSupported: isSupportedMock,
       Hls: class FakeHls {
-        static Events = { ERROR: "error" };
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
         static isSupported() {
           return true;
         }
@@ -149,6 +149,50 @@ describe("VideoStream", () => {
     expect(screen.getByText(/ll-hls fallback/i)).toBeInTheDocument();
   });
 
+  test("starts playback after the HLS manifest is parsed", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("upstream failed", { status: 502 }),
+    );
+
+    const hlsListeners = new Map<string, (event: string, data?: { fatal?: boolean }) => void>();
+    onMock.mockImplementation((event: string, listener: (event: string) => void) => {
+      hlsListeners.set(event, listener);
+    });
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    render(
+      <VideoStream
+        cameraId="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        cameraName="Warehouse North"
+        defaultProfile="720p10"
+      />,
+    );
+
+    await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
+    const manifestParsedListener = hlsListeners.get("manifestParsed");
+    expect(manifestParsedListener).toBeDefined();
+
+    act(() => {
+      manifestParsedListener?.("manifestParsed");
+    });
+
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
+  });
+
   test("falls back to MJPEG when HLS is unavailable", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),
@@ -157,7 +201,7 @@ describe("VideoStream", () => {
     loadHlsClientMock.mockResolvedValue({
       isSupported: isSupportedMock,
       Hls: class FakeHls {
-        static Events = { ERROR: "error" };
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
         static isSupported() {
           return false;
         }
@@ -197,7 +241,7 @@ describe("VideoStream", () => {
     loadHlsClientMock.mockResolvedValue({
       isSupported: isSupportedMock,
       Hls: class FakeHls {
-        static Events = { ERROR: "error" };
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
         static isSupported() {
           return true;
         }
@@ -260,7 +304,7 @@ describe("VideoStream", () => {
     loadHlsClientMock.mockResolvedValue({
       isSupported: isSupportedMock,
       Hls: class FakeHls {
-        static Events = { ERROR: "error" };
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
         static isSupported() {
           return true;
         }
