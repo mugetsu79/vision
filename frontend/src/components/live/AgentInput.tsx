@@ -2,6 +2,7 @@ import { startTransition, type FormEvent, useMemo, useState } from "react";
 
 import { apiClient, toApiError } from "@/lib/api";
 import type { components } from "@/lib/api.generated";
+import { productBrand } from "@/brand/product";
 import { useAuthStore } from "@/stores/auth-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export function AgentInput({
   cameras: Array<{ id: string; name: string }>;
   onResolved: (response: QueryResponse, scope: LiveQueryScope) => void;
 }) {
+  const brandName = productBrand.name;
   const user = useAuthStore((state) => state.user);
   const [prompt, setPrompt] = useState("");
   const [scopeValue, setScopeValue] = useState("all");
@@ -90,7 +92,7 @@ export function AgentInput({
           Shape the live wall with natural language.
         </h3>
         <p className="mt-2 text-sm text-[#8ca2c5]">
-          Resolve classes once, then let Vezor trim the operator view while the backend
+          Resolve classes once, then let {brandName} trim the operator view while the backend
           applies the same intent to the running pipeline.
         </p>
       </div>
@@ -117,10 +119,10 @@ export function AgentInput({
 
           <label className="space-y-2 text-sm text-[#d9e5f7]">
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
-              Query Vezor
+              Query {brandName}
             </span>
             <Input
-              aria-label="Query Vezor"
+              aria-label={`Query ${brandName}`}
               placeholder="only show cars"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}

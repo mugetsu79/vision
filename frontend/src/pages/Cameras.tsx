@@ -4,6 +4,7 @@ import { RequireRole } from "@/components/auth/RequireRole";
 import { CameraWizard } from "@/components/cameras/CameraWizard";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { productBrand } from "@/brand/product";
 import {
   useCameras,
   useCreateCamera,
@@ -25,6 +26,7 @@ export function CamerasPage() {
 }
 
 function CamerasContent() {
+  const brandName = productBrand.name;
   const [wizardMode, setWizardMode] = useState<"create" | "edit" | null>(null);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const { data: cameras = [], isLoading: camerasLoading } = useCameras();
@@ -80,7 +82,7 @@ function CamerasContent() {
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
                 Camera setup defines native ingest for analytics, the default browser
-                rendition for operators, and the calibration Vezor uses to understand
+                rendition for operators, and the calibration {brandName} uses to understand
                 movement inside each scene.
               </p>
             </div>

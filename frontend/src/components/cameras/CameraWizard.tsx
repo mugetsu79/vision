@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { productBrand } from "@/brand/product";
 import { CameraStepSummary } from "@/components/cameras/CameraStepSummary";
 import { HomographyEditor } from "@/components/cameras/HomographyEditor";
 import { Button } from "@/components/ui/button";
@@ -168,6 +169,7 @@ export function CameraWizard({
   initialCamera?: Camera | null;
   rtspUrlPlaceholder?: string;
 }) {
+  const brandName = productBrand.name;
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -194,15 +196,15 @@ export function CameraWizard({
   const contextPanel = useMemo(() => {
     switch (stepTitle) {
       case "Identity":
-        return "Choose the fleet location, processing posture, and ingest stream Vezor should bind to this camera.";
+        return `Choose the fleet location, processing posture, and ingest stream ${brandName} should bind to this camera.`;
       case "Models & Tracking":
         return "Primary and secondary models shape what the camera observes, while the tracker stabilizes entity identity across frames.";
       case "Privacy, Processing & Delivery":
         return "Analytics ingest remains native. Lower browser delivery profiles may activate an optional preview/transcode path to reduce bandwidth without changing inference quality.";
       case "Calibration":
-        return "Calibrate four source points, four destination points, and a real-world distance so Vezor can map image motion into the physical scene.";
+        return `Calibrate four source points, four destination points, and a real-world distance so ${brandName} can map image motion into the physical scene.`;
       case "Review":
-        return "Confirm the camera configuration before Vezor saves it. RTSP stays masked unless you explicitly replace it.";
+        return `Confirm the camera configuration before ${brandName} saves it. RTSP stays masked unless you explicitly replace it.`;
       default:
         return "Configuration guidance appears here.";
     }
@@ -394,7 +396,7 @@ export function CameraWizard({
               </label>
               {isEditMode ? (
                 <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-                  Vezor keeps the stored RTSP address masked. Leave this field empty to
+                  {brandName} keeps the stored RTSP address masked. Leave this field empty to
                   retain the current stream, or enter a new URL to replace it.
                 </p>
               ) : null}
