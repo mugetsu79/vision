@@ -146,7 +146,9 @@ async def get_hls_playlist(
         tenant_context,
         camera_id=camera_id,
     )
-    payload, headers = await _fetch_hls_upstream(playlist_url)
+    payload, headers = await _fetch_hls_upstream(
+        _merge_upstream_playlist_query(playlist_url, request=request)
+    )
     rewritten_playlist = _rewrite_hls_playlist(
         playlist=payload.decode("utf-8"),
         camera_id=camera_id,
@@ -263,6 +265,21 @@ def _media_request_query_params(request: Request) -> dict[str, str]:
         if value:
             values[key] = value
     return values
+
+
+def _merge_upstream_playlist_query(url: str, *, request: Request) -> str:
+    split_url = urlsplit(url)
+    query_items = list(parse_qsl(split_url.query, keep_blank_values=True))
+    auth_keys = {"access_token", "tenant_id"}
+    query_items.extend(
+        (key, value)
+        for key, value in request.query_params.multi_items()
+        if key not in auth_keys
+    )
+    query = urlencode(query_items)
+    return urlunsplit(
+        (split_url.scheme, split_url.netloc, split_url.path, query, split_url.fragment)
+    )
 
 
 def _build_hls_proxy_uri(

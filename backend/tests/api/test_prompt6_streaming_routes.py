@@ -122,7 +122,11 @@ async def test_hls_route_proxies_playlist_and_rewrites_media_uris(monkeypatch: p
     camera_id = uuid4()
 
     async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
-        assert url.endswith("index.m3u8?jwt=test-token")
+        assert (
+            url
+            == "http://mediamtx.internal:8888/cameras/"
+            f"{camera_id}/preview/index.m3u8?jwt=test-token&_HLS_msn=42&_HLS_part=2"
+        )
         return (
             (
                 "#EXTM3U\n"
@@ -143,7 +147,12 @@ async def test_hls_route_proxies_playlist_and_rewrites_media_uris(monkeypatch: p
     ) as client:
         response = await client.get(
             f"/api/v1/streams/{camera_id}/hls.m3u8",
-            params={"access_token": "viewer-token", "tenant_id": str(context.tenant_id)},
+            params={
+                "access_token": "viewer-token",
+                "tenant_id": str(context.tenant_id),
+                "_HLS_msn": "42",
+                "_HLS_part": "2",
+            },
         )
 
     assert response.status_code == 200
