@@ -213,6 +213,67 @@ async def test_hls_route_accepts_access_token_query_for_browser_media_requests()
 
 
 @pytest.mark.asyncio
+async def test_hls_asset_route_rewrites_nested_playlist_uris(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=FakeStreamService(),
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
+    camera_id = uuid4()
+
+    async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
+        assert (
+            url
+            == "http://mediamtx.internal:8888/cameras/"
+            f"{camera_id}/preview/video1_stream.m3u8?jwt=test-token&_HLS_msn=7"
+        )
+        return (
+            (
+                "#EXTM3U\n"
+                "#EXT-X-MAP:URI=\"17ecb351ac5d_video1_init.mp4\"\n"
+                "#EXTINF:1.0,\n"
+                "17ecb351ac5d_video1_seg0.mp4\n"
+            ).encode("utf-8"),
+            {"content-type": "application/vnd.apple.mpegurl"},
+        )
+
+    monkeypatch.setattr(streams_module, "_fetch_hls_upstream", fake_fetch)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(
+            f"/api/v1/streams/{camera_id}/hls/video1_stream.m3u8",
+            params={"access_token": "viewer-token", "_HLS_msn": "7"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.apple.mpegurl")
+    assert (
+        f"/api/v1/streams/{camera_id}/hls/17ecb351ac5d_video1_init.mp4?access_token=viewer-token"
+        in response.text
+    )
+    assert (
+        f"/api/v1/streams/{camera_id}/hls/17ecb351ac5d_video1_seg0.mp4?access_token=viewer-token"
+        in response.text
+    )
+
+
+@pytest.mark.asyncio
 async def test_hls_asset_route_proxies_signed_media_resource(monkeypatch: pytest.MonkeyPatch) -> None:
     user = _sample_user()
     context = _tenant_context(user)

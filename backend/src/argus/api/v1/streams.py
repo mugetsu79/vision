@@ -166,6 +166,7 @@ async def get_hls_playlist(
 
 @router.get("/api/v1/streams/{camera_id}/hls/{resource_path:path}")
 async def get_hls_resource(
+    request: Request,
     camera_id: UUID,
     resource_path: str,
     current_user: MediaUser,
@@ -178,10 +179,25 @@ async def get_hls_resource(
         camera_id=camera_id,
     )
     upstream_url = _build_hls_resource_url(playlist_url, resource_path)
-    payload, headers = await _fetch_hls_upstream(upstream_url)
+    payload, headers = await _fetch_hls_upstream(
+        _merge_upstream_playlist_query(upstream_url, request=request)
+        if _looks_like_hls_playlist(resource_path)
+        else upstream_url
+    )
     response_headers = _passthrough_upstream_headers(headers)
     response_headers["Cache-Control"] = "no-store"
     media_type = headers.get("content-type", "application/octet-stream")
+    if _is_hls_playlist_content_type(media_type) or _looks_like_hls_playlist(resource_path):
+        rewritten_playlist = _rewrite_hls_playlist(
+            playlist=payload.decode("utf-8"),
+            camera_id=camera_id,
+            request=request,
+        )
+        return Response(
+            content=rewritten_playlist,
+            media_type=media_type,
+            headers=response_headers,
+        )
     return Response(content=payload, media_type=media_type, headers=response_headers)
 
 
@@ -343,3 +359,17 @@ def _passthrough_upstream_headers(headers: Mapping[str, str]) -> dict[str, str]:
         for key, value in headers.items()
         if key.lower() in allowed_headers and key.lower() != "content-type"
     }
+
+
+def _looks_like_hls_playlist(resource_path: str) -> bool:
+    return resource_path.endswith(".m3u8")
+
+
+def _is_hls_playlist_content_type(content_type: str | None) -> bool:
+    if content_type is None:
+        return False
+    normalized = content_type.lower()
+    return (
+        "application/vnd.apple.mpegurl" in normalized
+        or "application/x-mpegurl" in normalized
+    )
