@@ -13,8 +13,8 @@ function renderWizard(props?: Partial<Parameters<typeof CameraWizard>[0]>) {
       <CameraWizard
         sites={[{ id: "site-1", name: "HQ" }]}
         models={[
-          { id: "model-1", name: "Argus YOLO", version: "1.0.0" },
-          { id: "model-2", name: "Argus PPE", version: "1.0.0" },
+          { id: "model-1", name: "Vezor YOLO", version: "1.0.0" },
+          { id: "model-2", name: "Vezor PPE", version: "1.0.0" },
         ]}
         {...props}
       />
