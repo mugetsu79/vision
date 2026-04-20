@@ -1,4 +1,5 @@
 import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -31,6 +32,7 @@ const initialAuthState = useAuthStore.getState();
 
 describe("AppShell", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     act(() => {
       useAuthStore.setState({
         status: "authenticated",
@@ -88,6 +90,42 @@ describe("AppShell", () => {
     expect(
       screen.queryByText(/configuration surfaces stay one step away/i),
     ).not.toBeInTheDocument();
+  });
+
+  test("lets operators collapse the grouped section rail without losing the icon rail", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <MemoryRouter
+          future={{
+            v7_relativeSplatPath: true,
+            v7_startTransition: true,
+          }}
+        >
+          <AppShell>
+            <div>Page body</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole("navigation", { name: /primary workspace/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /operations/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /configuration/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /hide section rail/i }));
+
+    expect(screen.getByRole("navigation", { name: /primary workspace/i })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: /operations/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: /configuration/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /show section rail/i }));
+
+    expect(screen.getByRole("navigation", { name: /operations/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /configuration/i })).toBeInTheDocument();
   });
 
   test("routes authenticated users into the refreshed operations workspace", async () => {

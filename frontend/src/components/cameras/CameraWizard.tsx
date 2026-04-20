@@ -159,12 +159,18 @@ function toUpdatePayload(data: CameraWizardData): UpdateCameraInput {
 export function CameraWizard({
   sites,
   models,
+  modelsLoading = false,
+  modelsError = null,
+  onRetryModels,
   onSubmit,
   initialCamera = null,
   rtspUrlPlaceholder,
 }: {
   sites: SiteOption[];
   models: ModelOption[];
+  modelsLoading?: boolean;
+  modelsError?: string | null;
+  onRetryModels?: () => void;
   onSubmit?: (payload: CreateCameraInput | UpdateCameraInput) => Promise<void>;
   initialCamera?: Camera | null;
   rtspUrlPlaceholder?: string;
@@ -241,6 +247,15 @@ export function CameraWizard({
     }
 
     if (stepTitle === "Models & Tracking") {
+      if (modelsLoading) {
+        return "Models are still loading. Wait for the list to finish updating.";
+      }
+      if (modelsError) {
+        return "Models failed to load. Retry the model lookup and try again.";
+      }
+      if (models.length === 0) {
+        return "No models are available yet. Register or refresh models before continuing.";
+      }
       if (!data.primaryModelId) {
         return "Primary model is required.";
       }
@@ -405,10 +420,47 @@ export function CameraWizard({
 
           {stepTitle === "Models & Tracking" ? (
             <>
+              {modelsLoading ? (
+                <div className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                  Loading the latest registered models...
+                </div>
+              ) : null}
+
+              {modelsError ? (
+                <div className="rounded-[1.15rem] border border-[#5a2330] bg-[#241118] px-4 py-3 text-sm text-[#ffc2cd]">
+                  <p>{modelsError}</p>
+                  {onRetryModels ? (
+                    <button
+                      className="mt-3 rounded-full border border-[#7b3142] bg-[#311722] px-3 py-1.5 text-xs font-medium text-[#ffe1e7] transition hover:bg-[#3b1b28]"
+                      type="button"
+                      onClick={onRetryModels}
+                    >
+                      Retry model lookup
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!modelsLoading && !modelsError && models.length === 0 ? (
+                <div className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                  <p>No models are available yet. Register a model, then refresh this step.</p>
+                  {onRetryModels ? (
+                    <button
+                      className="mt-3 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                      type="button"
+                      onClick={onRetryModels}
+                    >
+                      Refresh models
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
               <label className="grid gap-2 text-sm text-[#d8e2f2]">
                 <span>Primary model</span>
                 <Select
                   aria-label="Primary model"
+                  disabled={modelsLoading || Boolean(modelsError) || models.length === 0}
                   value={data.primaryModelId}
                   onChange={(event) => updateData("primaryModelId", event.target.value)}
                 >
@@ -424,6 +476,7 @@ export function CameraWizard({
                 <span>Secondary model</span>
                 <Select
                   aria-label="Secondary model"
+                  disabled={modelsLoading || Boolean(modelsError) || models.length === 0}
                   value={data.secondaryModelId}
                   onChange={(event) => updateData("secondaryModelId", event.target.value)}
                 >
