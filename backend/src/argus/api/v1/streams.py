@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 import posixpath
 import re
@@ -8,7 +9,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from argus.api.contracts import StreamOfferRequest, StreamOfferResponse, TenantContext
@@ -239,10 +240,23 @@ async def webrtc_test_page() -> HTMLResponse:
 
 
 async def _fetch_hls_upstream(url: str) -> tuple[bytes, dict[str, str]]:
+    retry_delays = (0.25, 0.5, 1.0, 1.0) if _looks_like_hls_playlist_url(url) else ()
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        return await response.aread(), dict(response.headers)
+        attempt = 0
+        while True:
+            response = await client.get(url)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if (
+                    exc.response.status_code == status.HTTP_404_NOT_FOUND
+                    and attempt < len(retry_delays)
+                ):
+                    await asyncio.sleep(retry_delays[attempt])
+                    attempt += 1
+                    continue
+                raise _translate_hls_upstream_error(exc, url=url) from exc
+            return await response.aread(), dict(response.headers)
 
 
 def _rewrite_hls_playlist(*, playlist: str, camera_id: UUID, request: Request) -> str:
@@ -365,6 +379,10 @@ def _looks_like_hls_playlist(resource_path: str) -> bool:
     return resource_path.endswith(".m3u8")
 
 
+def _looks_like_hls_playlist_url(url: str) -> bool:
+    return _looks_like_hls_playlist(urlsplit(url).path)
+
+
 def _is_hls_playlist_content_type(content_type: str | None) -> bool:
     if content_type is None:
         return False
@@ -372,4 +390,19 @@ def _is_hls_playlist_content_type(content_type: str | None) -> bool:
     return (
         "application/vnd.apple.mpegurl" in normalized
         or "application/x-mpegurl" in normalized
+    )
+
+
+def _translate_hls_upstream_error(exc: httpx.HTTPStatusError, *, url: str) -> HTTPException:
+    if exc.response.status_code == status.HTTP_404_NOT_FOUND:
+        detail = (
+            "Stream playlist is not ready yet."
+            if _looks_like_hls_playlist_url(url)
+            else "Stream resource is unavailable."
+        )
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to load upstream stream asset.",
     )

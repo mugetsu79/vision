@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from fastapi import HTTPException
+from httpx import ASGITransport, AsyncClient, Request, Response as HTTPXResponse
 
 from argus.api.contracts import StreamOfferRequest, StreamOfferResponse, TenantContext
 from argus.core.config import Settings
@@ -99,6 +100,83 @@ class FakeStreamService:
                 b"--frame\r\nContent-Type: image/jpeg\r\n\r\nframe-two\r\n",
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_fetch_hls_upstream_retries_playlist_404s_before_succeeding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url = "http://mediamtx.internal:8888/cameras/test/preview/index.m3u8?jwt=test-token"
+    responses = [
+        HTTPXResponse(status_code=404, request=Request("GET", url)),
+        HTTPXResponse(
+            status_code=200,
+            request=Request("GET", url),
+            content=b"#EXTM3U\n",
+            headers={"content-type": "application/vnd.apple.mpegurl"},
+        ),
+    ]
+    requested_urls: list[str] = []
+    sleep_delays: list[float] = []
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 10.0
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, requested_url: str) -> HTTPXResponse:
+            requested_urls.append(requested_url)
+            return responses.pop(0)
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr(streams_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(streams_module.asyncio, "sleep", fake_sleep)
+
+    payload, headers = await streams_module._fetch_hls_upstream(url)
+
+    assert payload == b"#EXTM3U\n"
+    assert headers["content-type"] == "application/vnd.apple.mpegurl"
+    assert requested_urls == [url, url]
+    assert sleep_delays == [0.25]
+
+
+@pytest.mark.asyncio
+async def test_fetch_hls_upstream_raises_404_for_unready_playlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url = "http://mediamtx.internal:8888/cameras/test/preview/index.m3u8?jwt=test-token"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 10.0
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, requested_url: str) -> HTTPXResponse:
+            return HTTPXResponse(status_code=404, request=Request("GET", requested_url))
+
+    async def fake_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(streams_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(streams_module.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await streams_module._fetch_hls_upstream(url)
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Stream playlist is not ready yet."
 
 
 @pytest.mark.asyncio
