@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -14,7 +15,9 @@ from argus.streaming.mediamtx import (
     MediaMTXClient,
     PrivacyPolicy,
     PublishProfile,
+    StreamRegistration,
     StreamMode,
+    _prepare_frame_for_publish,
     probe_publish_profile,
 )
 from argus.streaming.webrtc import MediaMTXTokenIssuer
@@ -422,6 +425,31 @@ async def test_mediamtx_client_push_frame_applies_resize_and_cadence_limits() ->
     assert created_publishers[0].frames == [(720, 1280, 3), (720, 1280, 3)]
 
     await client.close()
+
+
+def test_prepare_frame_for_publish_only_requires_opencv_when_resize_is_needed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registration = StreamRegistration(
+        camera_id=uuid4(),
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        publish_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        path_name="cameras/example/annotated",
+        target_width=1280,
+        target_height=720,
+    )
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+    def missing_cv2(name: str):
+        if name == "cv2":
+            raise ModuleNotFoundError("No module named 'cv2'")
+        return importlib.import_module(name)
+
+    monkeypatch.setattr("argus.streaming.mediamtx.importlib.import_module", missing_cv2)
+
+    with pytest.raises(RuntimeError, match="OpenCV is required for browser-delivery transcode"):
+        _prepare_frame_for_publish(registration=registration, frame=frame)
 
 
 def _transport(handler: Callable[[Request], Response | object]):

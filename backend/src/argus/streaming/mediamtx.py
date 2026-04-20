@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 import subprocess
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -12,7 +13,6 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
-import cv2
 from pydantic import BaseModel, ConfigDict
 
 
@@ -497,11 +497,22 @@ def _prepare_frame_for_publish(*, registration: StreamRegistration, frame: Frame
         and current_height == registration.target_height
     ):
         return frame
+    cv2 = _load_cv2()
     return cv2.resize(
         frame,
         (registration.target_width, registration.target_height),
         interpolation=cv2.INTER_LINEAR,
     )
+
+
+def _load_cv2() -> Any:
+    try:
+        return importlib.import_module("cv2")
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "OpenCV is required for browser-delivery transcode resizing. "
+            "Install the backend vision dependencies before starting the worker."
+        ) from exc
 
 
 def _should_publish_frame(
