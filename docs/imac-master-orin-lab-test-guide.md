@@ -264,7 +264,7 @@ Run:
 
 ```bash
 cd "$HOME/vision/backend"
-python3 -m uv sync --group runtime --group dev --group llm
+python3 -m uv sync --group runtime --group dev --group llm --group vision
 
 cd "$HOME/vision/frontend"
 corepack pnpm install
@@ -284,6 +284,10 @@ What good looks like:
 
 - the Alembic command finishes without an error
 - `openapi-typescript` prints a version number
+
+The `vision` group is required on the iMac host if you want to run the local inference worker later in this guide. That group installs packages such as `numpy`, `onnxruntime`, and `opencv-python-headless`.
+
+On Intel Macs, the repository pins a compatible `onnxruntime` build for the host worker because newer upstream wheels are no longer published for macOS `x86_64`.
 
 If `openapi-typescript` is not found:
 
@@ -675,6 +679,15 @@ What good looks like in the worker windows:
 - there is no immediate crash
 - you do not see a `401` error
 - you do not see a missing-model-path error
+
+If the worker crashes immediately with `ModuleNotFoundError: No module named 'numpy'`, go back to the backend directory and install the host-side `vision` dependencies:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv sync --group runtime --group dev --group llm --group vision
+```
+
+Then rerun the worker command.
 
 ### 2.15 Check the live dashboard
 

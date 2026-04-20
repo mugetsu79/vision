@@ -47,7 +47,11 @@ dev = [
 vision = [
   "opencv-python-headless>=4.10",
   "onnxruntime-gpu>=1.20; sys_platform == 'linux' and platform_machine == 'x86_64'",
-  "onnxruntime>=1.20; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine != 'x86_64')",
+  # PyPI no longer ships current Intel macOS wheels, so keep a compatible
+  # universal2 build for local iMac worker development.
+  "onnxruntime==1.17.3; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "onnxruntime>=1.20; sys_platform == 'darwin' and platform_machine != 'x86_64'",
+  "onnxruntime>=1.20; sys_platform == 'linux' and platform_machine != 'x86_64'",
   "ultralytics>=8.3",
   "numpy<2",
   "Pillow>=11",
