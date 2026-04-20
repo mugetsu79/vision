@@ -142,4 +142,4 @@ For most real deployments:
 
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
-- [argus_v4_spec.md](/Users/yann.moren/vision/argus_v4_spec.md)
+- [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md)

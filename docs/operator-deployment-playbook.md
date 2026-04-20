@@ -374,4 +374,4 @@ For reliability, that wrapper starts backend and infrastructure services through
 
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
-- [argus_v4_spec.md](/Users/yann.moren/vision/argus_v4_spec.md)
+- [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md)

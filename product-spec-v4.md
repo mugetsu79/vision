@@ -1,4 +1,4 @@
-# Argus V4 — Architecture & Implementation Design
+# Vezor V4 — Architecture & Implementation Design
 
 > **Status:** Supersedes the archived V3 spec. Retains V3's domain-agnostic, hybrid edge/central vision while resolving the V3 draft's mismatches around edge privacy/streaming, auth tenancy, and control-plane APIs.
 >

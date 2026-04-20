@@ -91,7 +91,7 @@ The full validation flow is implemented in [scripts/run-full-validation.sh](/Use
 
 Start here if you are new to the repo:
 
-- [argus_v4_spec.md](/Users/yann.moren/vision/argus_v4_spec.md): current architecture and product spec
+- [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md): current architecture and product spec
 - [docs/runbook.md](/Users/yann.moren/vision/docs/runbook.md): operations starting point
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance
