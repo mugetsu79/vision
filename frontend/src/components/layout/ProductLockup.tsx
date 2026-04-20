@@ -1,5 +1,6 @@
 import type { ImgHTMLAttributes } from "react";
 
+import { getProductLockupAlt, productBrand } from "@/brand/product";
 import { cn } from "@/lib/utils";
 
 interface ProductLockupProps
@@ -14,8 +15,8 @@ export function ProductLockup({
   symbolOnly = false,
   ...props
 }: ProductLockupProps) {
-  const src = symbolOnly ? "/brand/argus-symbol-ui.svg" : "/brand/argus-lockup-ui.svg";
-  const alt = symbolOnly ? "Argus symbol" : "Argus product lockup";
+  const src = symbolOnly ? productBrand.runtimeAssets.symbol : productBrand.runtimeAssets.lockup;
+  const alt = getProductLockupAlt(symbolOnly);
   const baseClasses = symbolOnly
     ? "h-11 w-11 rounded-[1rem]"
     : compact
