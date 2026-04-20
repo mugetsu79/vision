@@ -187,3 +187,7 @@ async def test_update_camera_accepts_full_wizard_payload(monkeypatch: pytest.Mon
     }
     assert decrypt_rtsp_url(camera.rtsp_url_encrypted, settings) == "rtsp://new-camera/live"
     assert audit_logger.calls[0]["action"] == "camera.update"
+    audit_meta = audit_logger.calls[0]["meta"]
+    assert isinstance(audit_meta, dict)
+    assert audit_meta["site_id"] == str(site_id)
+    assert audit_meta["primary_model_id"] == str(model_id)

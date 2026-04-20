@@ -511,7 +511,7 @@ class CameraService:
             tenant_context=tenant_context,
             action="camera.update",
             target=f"camera:{camera.id}",
-            meta=payload.model_dump(exclude_unset=True, mode="python"),
+            meta=payload.model_dump(exclude_unset=True, mode="json"),
         )
         return _camera_to_response(camera)
 
