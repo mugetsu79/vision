@@ -30,7 +30,7 @@ WEBRTC_TEST_PAGE = """<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Argus WebRTC Test</title>
+    <title>Vezor WebRTC Test</title>
     <style>
       body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 2rem; color: #132238; }
       form { display: grid; gap: 0.75rem; max-width: 52rem; }
@@ -40,7 +40,7 @@ WEBRTC_TEST_PAGE = """<!doctype html>
     </style>
   </head>
   <body>
-    <h1>Argus WebRTC Offer Test</h1>
+    <h1>Vezor WebRTC Offer Test</h1>
     <p>
       Paste a bearer token, choose a camera id, and this page will negotiate
       against <code>/api/v1/streams/&lt;camera_id&gt;/offer</code>.

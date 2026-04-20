@@ -3,6 +3,10 @@ from __future__ import annotations
 from argus.core.config import Settings
 
 
+def test_settings_default_app_name() -> None:
+    assert Settings(_env_file=None).app_name == "Vezor | The OmniSight Platform"
+
+
 def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:
     secrets_dir = tmp_path / "secrets"
     secrets_dir.mkdir()
