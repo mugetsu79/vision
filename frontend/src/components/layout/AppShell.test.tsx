@@ -26,6 +26,7 @@ vi.mock("@/lib/auth", () => ({
 
 import { AppShell } from "@/components/layout/AppShell";
 import { createQueryClient } from "@/app/query-client";
+import { oidcManager } from "@/lib/auth";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
@@ -130,6 +131,16 @@ describe("AppShell", () => {
 
   test("routes authenticated users into the refreshed operations workspace", async () => {
     window.history.pushState({}, "", "/dashboard");
+    vi.mocked(oidcManager.getUser).mockResolvedValue({
+      access_token: "test-token",
+      expired: false,
+      profile: {
+        sub: "admin-1",
+        email: "admin@argus.local",
+        iss: "http://127.0.0.1:8080/realms/argus-dev",
+        realm_access: { roles: ["admin"] },
+      },
+    } as Awaited<ReturnType<typeof oidcManager.getUser>>);
 
     const { default: App } = await import("@/App");
     render(<App />);

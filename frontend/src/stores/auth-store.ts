@@ -1,3 +1,4 @@
+import type { User } from "oidc-client-ts";
 import { create } from "zustand";
 
 import { mapOidcUser, oidcManager, type SessionUser } from "@/lib/auth";
@@ -8,6 +9,8 @@ interface AuthState {
   status: AuthStatus;
   user: SessionUser | null;
   accessToken: string | null;
+  applyOidcUser: (user: User | null) => void;
+  clearSession: () => void;
   signIn: () => Promise<void>;
   completeSignIn: () => Promise<void>;
   restoreSession: () => Promise<void>;
@@ -18,6 +21,21 @@ export const useAuthStore = create<AuthState>((set) => ({
   status: "anonymous",
   user: null,
   accessToken: null,
+  applyOidcUser(user) {
+    if (!user || user.expired) {
+      set({ status: "anonymous", user: null, accessToken: null });
+      return;
+    }
+
+    set({
+      status: "authenticated",
+      user: mapOidcUser(user),
+      accessToken: user.access_token ?? null,
+    });
+  },
+  clearSession() {
+    set({ status: "anonymous", user: null, accessToken: null });
+  },
   async signIn() {
     await oidcManager.signinRedirect();
   },
@@ -25,13 +43,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ status: "loading" });
     try {
       const user = await oidcManager.signinRedirectCallback();
-      set({
-        status: "authenticated",
-        user: mapOidcUser(user),
-        accessToken: user.access_token ?? null,
-      });
+      useAuthStore.getState().applyOidcUser(user);
     } catch (error) {
-      set({ status: "anonymous", user: null, accessToken: null });
+      useAuthStore.getState().clearSession();
       throw error;
     }
   },
@@ -39,23 +53,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ status: "loading" });
     try {
       const user = await oidcManager.getUser();
-
-      if (!user || user.expired) {
-        set({ status: "anonymous", user: null, accessToken: null });
-        return;
-      }
-
-      set({
-        status: "authenticated",
-        user: mapOidcUser(user),
-        accessToken: user.access_token ?? null,
-      });
+      useAuthStore.getState().applyOidcUser(user);
     } catch {
-      set({ status: "anonymous", user: null, accessToken: null });
+      useAuthStore.getState().clearSession();
     }
   },
   async signOut() {
-    set({ status: "anonymous", user: null, accessToken: null });
+    useAuthStore.getState().clearSession();
     await oidcManager.signoutRedirect();
   },
 }));
