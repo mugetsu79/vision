@@ -498,11 +498,9 @@ class CameraService:
                     privacy=dict(update_data["privacy"]),
                 )
             if "browser_delivery" in update_data and update_data["browser_delivery"] is not None:
-                update_data["browser_delivery"] = update_data["browser_delivery"].model_dump(
-                    mode="python"
-                )
+                update_data["browser_delivery"] = dict(update_data["browser_delivery"])
             if "homography" in update_data and update_data["homography"] is not None:
-                update_data["homography"] = update_data["homography"].model_dump(mode="python")
+                update_data["homography"] = dict(update_data["homography"])
 
             for field_name, value in update_data.items():
                 setattr(camera, field_name, value)
