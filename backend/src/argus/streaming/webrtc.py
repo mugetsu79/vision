@@ -371,15 +371,12 @@ def _append_query_parameter(url: str, *, key: str, value: str) -> str:
 MJPEG_BOUNDARY = "argus-frame"
 MJPEG_CONTENT_TYPE = f"multipart/x-mixed-replace; boundary={MJPEG_BOUNDARY}"
 _MJPEG_FRAME_PREFIX = f"--{MJPEG_BOUNDARY}\r\nContent-Type: image/jpeg\r\n\r\n".encode()
+_MJPEG_STARTUP_RETRY_DELAYS_SECONDS = (0.25, 0.25, 0.5, 1.0, 1.0)
 
 
 async def _open_rtsp_mjpeg_stream(rtsp_url: str) -> UpstreamProxyStream:
     cv2 = _load_cv2()
-    capture = await asyncio.to_thread(_open_rtsp_capture, rtsp_url, cv2)
-    first_frame = await asyncio.to_thread(_read_rtsp_frame, capture)
-    if first_frame is None:
-        await asyncio.to_thread(capture.release)
-        raise RuntimeError("Unable to read first RTSP frame for MJPEG bridge.")
+    capture, first_frame = await _open_initial_rtsp_capture(rtsp_url, cv2)
 
     async def iterator() -> AsyncIterator[bytes]:
         current_capture: Any = capture
@@ -412,6 +409,29 @@ async def _open_rtsp_mjpeg_stream(rtsp_url: str) -> UpstreamProxyStream:
         byte_iterator=iterator(),
         media_type_override=MJPEG_CONTENT_TYPE,
     )
+
+
+async def _open_initial_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]:
+    last_error: RuntimeError | None = None
+
+    for attempt in range(len(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS) + 1):
+        try:
+            capture = await asyncio.to_thread(_open_rtsp_capture, rtsp_url, cv2)
+        except RuntimeError as exc:
+            last_error = exc
+        else:
+            first_frame = await asyncio.to_thread(_read_rtsp_frame, capture)
+            if first_frame is not None:
+                return capture, first_frame
+            await asyncio.to_thread(capture.release)
+            last_error = RuntimeError("Unable to read first RTSP frame for MJPEG bridge.")
+
+        if attempt >= len(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS):
+            assert last_error is not None
+            raise last_error
+        await asyncio.sleep(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS[attempt])
+
+    raise RuntimeError("Unable to initialize MJPEG bridge.")
 
 
 def _open_rtsp_capture(rtsp_url: str, cv2: Any) -> Any:

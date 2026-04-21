@@ -8,13 +8,16 @@ import pytest
 from httpx import AsyncClient, Request, Response
 from jose import jwt
 
+import argus.streaming.webrtc as webrtc_module
 from argus.models.enums import ProcessingMode
 from argus.streaming.mediamtx import StreamMode
 from argus.streaming.webrtc import (
+    MJPEG_CONTENT_TYPE,
     ConcurrencyLimitExceeded,
     MediaMTXTokenIssuer,
     UserConcurrencyLimiter,
     WebRTCNegotiator,
+    _open_rtsp_mjpeg_stream,
     resolve_stream_access,
 )
 
@@ -187,6 +190,56 @@ async def test_webrtc_negotiator_builds_rtsp_url_for_mjpeg_bridge() -> None:
     ]
 
     await negotiator.close()
+
+
+@pytest.mark.asyncio
+async def test_open_rtsp_mjpeg_stream_retries_during_startup_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_cv2 = object()
+    open_attempts: list[str] = []
+    sleep_delays: list[float] = []
+
+    class FakeCapture:
+        def __init__(self) -> None:
+            self.release_calls = 0
+
+        def release(self) -> None:
+            self.release_calls += 1
+
+    capture = FakeCapture()
+
+    def fake_load_cv2() -> object:
+        return fake_cv2
+
+    def fake_open_rtsp_capture(rtsp_url: str, cv2: object) -> FakeCapture:
+        assert cv2 is fake_cv2
+        open_attempts.append(rtsp_url)
+        if len(open_attempts) < 3:
+            raise RuntimeError("stream not ready")
+        return capture
+
+    def fake_read_rtsp_frame(current_capture: FakeCapture) -> object | None:
+        assert current_capture is capture
+        return object()
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr(webrtc_module, "_load_cv2", fake_load_cv2)
+    monkeypatch.setattr(webrtc_module, "_open_rtsp_capture", fake_open_rtsp_capture)
+    monkeypatch.setattr(webrtc_module, "_read_rtsp_frame", fake_read_rtsp_frame)
+    monkeypatch.setattr(webrtc_module.asyncio, "sleep", fake_sleep)
+
+    stream = await _open_rtsp_mjpeg_stream("rtsp://mediamtx.internal:8554/cameras/test/annotated")
+
+    assert stream.media_type == MJPEG_CONTENT_TYPE
+    assert open_attempts == [
+        "rtsp://mediamtx.internal:8554/cameras/test/annotated",
+        "rtsp://mediamtx.internal:8554/cameras/test/annotated",
+        "rtsp://mediamtx.internal:8554/cameras/test/annotated",
+    ]
+    assert sleep_delays == [0.25, 0.25]
 
 
 @pytest.mark.asyncio
