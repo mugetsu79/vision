@@ -239,7 +239,10 @@ async def _fetch_hls_upstream(url: str) -> tuple[bytes, dict[str, str]]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         attempt = 0
         while True:
-            response = await client.get(url)
+            try:
+                response = await client.get(url)
+            except httpx.RequestError as exc:
+                raise _translate_hls_upstream_request_error(exc) from exc
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
@@ -400,6 +403,14 @@ def _translate_hls_upstream_error(exc: httpx.HTTPStatusError, *, url: str) -> HT
         )
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to load upstream stream asset.",
+    )
+
+
+def _translate_hls_upstream_request_error(exc: httpx.RequestError) -> HTTPException:
+    del exc
     return HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail="Unable to load upstream stream asset.",

@@ -181,6 +181,37 @@ async def test_fetch_hls_upstream_raises_404_for_unready_playlist(
 
 
 @pytest.mark.asyncio
+async def test_fetch_hls_upstream_translates_request_errors_to_bad_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url = "http://mediamtx.internal:8888/cameras/test/preview/index.m3u8?jwt=test-token"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 10.0
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, requested_url: str) -> HTTPXResponse:
+            raise streams_module.httpx.ConnectError(
+                "All connection attempts failed",
+                request=Request("GET", requested_url),
+            )
+
+    monkeypatch.setattr(streams_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await streams_module._fetch_hls_upstream(url)
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "Unable to load upstream stream asset."
+
+
+@pytest.mark.asyncio
 async def test_hls_route_proxies_playlist_and_rewrites_media_uris(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

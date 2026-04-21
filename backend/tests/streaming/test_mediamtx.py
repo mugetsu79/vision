@@ -490,6 +490,51 @@ async def test_mediamtx_client_times_out_stalled_publisher_and_recovers_on_next_
     await client.close()
 
 
+@pytest.mark.asyncio
+async def test_mediamtx_client_restarts_publisher_after_long_publish_gap() -> None:
+    created_publishers: list[_FakeFramePublisher] = []
+    camera_id = uuid4()
+
+    async def publisher_factory(
+        *,
+        registration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _FakeFramePublisher:
+        del registration, frame, publish_url
+        publisher = _FakeFramePublisher()
+        created_publishers.append(publisher)
+        return publisher
+
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        publisher_factory=publisher_factory,
+        publisher_idle_restart_seconds=5.0,
+    )
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
+    )
+    frame = np.zeros((12, 16, 3), dtype=np.uint8)
+
+    await client.push_frame(registration, frame, ts=datetime(2026, 4, 20, 18, 0, tzinfo=UTC))
+    await client.push_frame(
+        registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 0, 10, tzinfo=UTC),
+    )
+
+    assert len(created_publishers) == 2
+    assert created_publishers[0].closed is True
+    assert created_publishers[1].frames == [(12, 16, 3)]
+
+    await client.close()
+
+
 def test_prepare_frame_for_publish_only_requires_opencv_when_resize_is_needed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -574,6 +619,68 @@ async def test_ffmpeg_frame_publisher_uses_short_gop_for_low_latency_hls(
     assert captured_command[captured_command.index("-g") + 1] == "10"
     assert captured_command[captured_command.index("-keyint_min") + 1] == "10"
     assert captured_command[captured_command.index("-sc_threshold") + 1] == "0"
+
+    await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_frame_publisher_captures_stderr_for_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    class _FakeStdin:
+        def write(self, data: bytes) -> None:
+            return None
+
+        async def drain(self) -> None:
+            return None
+
+        def is_closing(self) -> bool:
+            return False
+
+        def close(self) -> None:
+            return None
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = _FakeStdin()
+            self.stderr = None
+            self.returncode: int | None = None
+
+        async def wait(self) -> int:
+            self.returncode = 0
+            return 0
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> _FakeProcess:
+        del command
+        captured_kwargs.update(kwargs)
+        return _FakeProcess()
+
+    monkeypatch.setattr(
+        "argus.streaming.mediamtx.asyncio.create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    registration = StreamRegistration(
+        camera_id=uuid4(),
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        publish_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        path_name="cameras/example/annotated",
+        target_fps=10,
+    )
+
+    publisher = await _FFmpegFramePublisher.create(
+        registration=registration,
+        frame=np.zeros((720, 1280, 3), dtype=np.uint8),
+        publish_url=registration.publish_path,
+    )
+
+    assert captured_kwargs["stderr"] == asyncio.subprocess.PIPE
 
     await publisher.close()
 

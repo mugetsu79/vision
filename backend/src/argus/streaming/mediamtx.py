@@ -92,9 +92,15 @@ class _FFmpegFramePublisher:
         *,
         process: asyncio.subprocess.Process,
         frame_shape: tuple[int, ...],
+        camera_id: UUID,
+        path_name: str,
+        stderr_task: asyncio.Task[None] | None,
     ) -> None:
         self._process = process
         self._frame_shape = frame_shape
+        self._camera_id = camera_id
+        self._path_name = path_name
+        self._stderr_task = stderr_task
 
     @classmethod
     async def create(
@@ -147,13 +153,29 @@ class _FFmpegFramePublisher:
                 *command,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
             )
         except FileNotFoundError as exc:
             raise RuntimeError(
                 "ffmpeg is required to publish processed live streams into MediaMTX."
             ) from exc
-        return cls(process=process, frame_shape=frame_shape)
+        stderr_task = None
+        stderr_stream = getattr(process, "stderr", None)
+        if stderr_stream is not None:
+            stderr_task = asyncio.create_task(
+                cls._drain_stderr(
+                    stderr_stream,
+                    camera_id=registration.camera_id,
+                    path_name=registration.path_name or "<unknown>",
+                )
+            )
+        return cls(
+            process=process,
+            frame_shape=frame_shape,
+            camera_id=registration.camera_id,
+            path_name=registration.path_name or "<unknown>",
+            stderr_task=stderr_task,
+        )
 
     async def push_frame(self, frame: Frame, *, ts: datetime) -> None:
         del ts
@@ -175,10 +197,36 @@ class _FFmpegFramePublisher:
             self._process.stdin.close()
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(self._process.wait(), timeout=2.0)
-            return
         if self._process.returncode is None:
             self._process.kill()
             await self._process.wait()
+        if self._stderr_task is not None:
+            if not self._stderr_task.done():
+                self._stderr_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._stderr_task
+
+    @staticmethod
+    async def _drain_stderr(
+        stream: asyncio.StreamReader,
+        *,
+        camera_id: UUID,
+        path_name: str,
+    ) -> None:
+        while True:
+            line = await stream.readline()
+            if line == b"":
+                return
+            message = line.decode("utf-8", errors="replace").strip()
+            if message:
+                LOGGER.warning(
+                    "MediaMTX publisher ffmpeg stderr: %s",
+                    message,
+                    extra={
+                        "camera_id": str(camera_id),
+                        "path_name": path_name,
+                    },
+                )
 
 
 class MediaMTXClient:
@@ -194,6 +242,7 @@ class MediaMTXClient:
         publisher_factory: PublisherFactory | None = None,
         publish_token_factory: PublishTokenFactory | None = None,
         publisher_push_timeout_seconds: float = 1.0,
+        publisher_idle_restart_seconds: float = 15.0,
     ) -> None:
         self.api_base_url = api_base_url.rstrip("/")
         self.rtsp_base_url = rtsp_base_url.rstrip("/")
@@ -205,6 +254,7 @@ class MediaMTXClient:
         self._publisher_factory = publisher_factory or _default_publisher_factory
         self._publish_token_factory = publish_token_factory
         self._publisher_push_timeout_seconds = max(0.0, publisher_push_timeout_seconds)
+        self._publisher_idle_restart_seconds = max(0.0, publisher_idle_restart_seconds)
         self._registrations: dict[UUID, StreamRegistration] = {}
         self._publishers: dict[UUID, _PublisherState] = {}
         self._pushed_frames: dict[UUID, dict[str, Any]] = {}
@@ -278,6 +328,25 @@ class MediaMTXClient:
             target_fps=registration.target_fps,
         ):
             return
+        if self._should_restart_idle_publisher(publisher_state=publisher_state, ts=ts):
+            LOGGER.warning(
+                "Recycling MediaMTX publisher after a long frame gap",
+                extra={
+                    "camera_id": str(registration.camera_id),
+                    "path_name": registration.path_name,
+                    "silence_seconds": self._publisher_silence_seconds(
+                        publisher_state=publisher_state,
+                        ts=ts,
+                    ),
+                    "threshold_seconds": self._publisher_idle_restart_seconds,
+                },
+            )
+            await publisher_state.publisher.close()
+            self._publishers.pop(registration.camera_id, None)
+            publisher_state = await self._ensure_publisher(
+                registration=registration,
+                frame=prepared_frame,
+            )
         publisher = publisher_state.publisher
         try:
             await self._push_frame_with_timeout(
@@ -404,7 +473,7 @@ class MediaMTXClient:
         *,
         registration: StreamRegistration,
         frame: Frame,
-    ) -> FramePublisher:
+    ) -> _PublisherState:
         if registration.publish_path is None or registration.path_name is None:
             raise RuntimeError("stream registration is missing publish path details")
         frame_shape = tuple(int(value) for value in frame.shape)
@@ -444,6 +513,29 @@ class MediaMTXClient:
         )
         self._publishers[registration.camera_id] = state
         return state
+
+    def _should_restart_idle_publisher(
+        self,
+        *,
+        publisher_state: _PublisherState,
+        ts: datetime,
+    ) -> bool:
+        if self._publisher_idle_restart_seconds <= 0:
+            return False
+        return (
+            self._publisher_silence_seconds(publisher_state=publisher_state, ts=ts)
+            >= self._publisher_idle_restart_seconds
+        )
+
+    @staticmethod
+    def _publisher_silence_seconds(
+        *,
+        publisher_state: _PublisherState,
+        ts: datetime,
+    ) -> float:
+        if publisher_state.last_published_at is None:
+            return 0.0
+        return max(0.0, (ts - publisher_state.last_published_at).total_seconds())
 
     async def _ensure_path(self, path_name: str, *, source: str, source_on_demand: bool) -> None:
         await self._request(
