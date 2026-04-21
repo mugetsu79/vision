@@ -219,11 +219,16 @@ export function VideoStream({
       setTransport("standby");
 
       if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
-        videoElement.src = hlsUrl;
-        await videoElement.play().catch(() => undefined);
-        if (!disposed) {
-          setTransport("hls");
-        }
+        destroyHls = await startNativeHls({
+          hlsUrl,
+          onFatalError: scheduleHlsRetry,
+          onLoadedData: () => {
+            if (!disposed) {
+              setTransport("hls");
+            }
+          },
+          videoElement,
+        });
         return;
       }
 
@@ -447,6 +452,66 @@ async function startHls({
   return () => {
     window.clearTimeout(startupTimer);
     client.destroy();
+  };
+}
+
+async function startNativeHls({
+  hlsUrl,
+  onFatalError,
+  onLoadedData,
+  videoElement,
+}: {
+  hlsUrl: string;
+  onFatalError: () => void;
+  onLoadedData: () => void;
+  videoElement: HTMLVideoElement;
+}) {
+  let settled = false;
+
+  const cleanup = () => {
+    videoElement.removeEventListener("loadeddata", handleLoadedData);
+    videoElement.removeEventListener("error", handleError);
+    window.clearTimeout(startupTimer);
+  };
+
+  const fail = () => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    cleanup();
+    videoElement.removeAttribute("src");
+    onFatalError();
+  };
+
+  const handleLoadedData = () => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    cleanup();
+    onLoadedData();
+  };
+
+  const handleError = () => {
+    fail();
+  };
+
+  const startupTimer = window.setTimeout(() => {
+    fail();
+  }, HLS_STARTUP_TIMEOUT_MS);
+
+  videoElement.addEventListener("loadeddata", handleLoadedData);
+  videoElement.addEventListener("error", handleError);
+  videoElement.src = hlsUrl;
+  await videoElement.play().catch(() => undefined);
+
+  return () => {
+    settled = true;
+    cleanup();
+    videoElement.removeAttribute("src");
   };
 }
 

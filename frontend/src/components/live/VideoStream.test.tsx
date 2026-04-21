@@ -308,6 +308,53 @@ describe("VideoStream", () => {
     expect(screen.getByText(/mjpeg forensic fallback/i)).toBeInTheDocument();
   });
 
+  test("falls back to MJPEG after repeated native HLS startup stalls", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("upstream failed", { status: 502 }),
+    );
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
+
+    await act(async () => {
+      render(
+        <VideoStream
+          cameraId="dddddddd-dddd-dddd-dddd-dddddddddddd"
+          cameraName="Warehouse East"
+          defaultProfile="720p10"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadHlsClientMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const image = screen.getByRole("img", { name: /warehouse east live stream/i });
+    expect(image).toHaveAttribute(
+      "src",
+      expect.stringContaining("/video_feed/dddddddd-dddd-dddd-dddd-dddddddddddd"),
+    );
+    expect(screen.getByText(/mjpeg forensic fallback/i)).toBeInTheDocument();
+  });
+
   test("falls back to MJPEG when HLS is unavailable", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),
