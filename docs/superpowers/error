@@ -1,25 +1,601 @@
-cd "$HOME/vision"
+morya@printer vision % docker compose -f infra/docker-compose.dev.yml logs -f --since=2m otel-collector backend    
 
-TOKEN="$(
-  curl -sS \
-    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
-    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
-)"
+backend-1         | Collecting uv
+backend-1         |   Downloading uv-0.11.7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (11 kB)
+backend-1         | Downloading uv-0.11.7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (24.9 MB)
+backend-1         |    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 24.9/24.9 MB 6.1 MB/s eta 0:00:00
+backend-1         | Installing collected packages: uv
+backend-1         | Successfully installed uv-0.11.7
+backend-1         | WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+backend-1         | 
+backend-1         | [notice] A new release of pip is available: 25.0.1 -> 26.0.1
+backend-1         | [notice] To update, run: pip install --upgrade pip
+backend-1         | Using CPython 3.12.13 interpreter at: /usr/local/bin/python
+backend-1         | Creating virtual environment at: /tmp/argus-backend-venv
+backend-1         | Resolved 176 packages in 1ms
+backend-1         |    Building argus-backend @ file:///workspace/backend
+backend-1         | Downloading tiktoken (1.1MiB)
+backend-1         | Downloading hf-xet (4.0MiB)
+backend-1         | Downloading cryptography (4.3MiB)
+backend-1         | Downloading pygments (1.2MiB)
+backend-1         | Downloading uvloop (4.2MiB)
+backend-1         | Downloading grpcio (6.5MiB)
+backend-1         | Downloading tokenizers (3.1MiB)
+backend-1         | Downloading openai (1.1MiB)
+backend-1         | Downloading numpy (17.1MiB)
+backend-1         | Downloading ruff (10.8MiB)
+backend-1         | Downloading litellm (14.9MiB)
+backend-1         | Downloading pycryptodome (2.2MiB)
+backend-1         | Downloading sqlalchemy (3.2MiB)
+backend-1         | Downloading mypy (14.0MiB)
+backend-1         | Downloading pydantic-core (2.0MiB)
+backend-1         | Downloading aiohttp (1.7MiB)
+backend-1         | Downloading asyncpg (3.4MiB)
+backend-1         | Downloading playwright (44.1MiB)
+backend-1         | Downloading pyarrow (45.4MiB)
+backend-1         | Downloading opencv-python-headless (47.7MiB)
+backend-1         |  Downloaded openai
+backend-1         |  Downloaded tiktoken
+backend-1         |  Downloaded pygments
+backend-1         |  Downloaded aiohttp
+backend-1         |  Downloaded pydantic-core
+backend-1         |  Downloaded pycryptodome
+backend-1         |       Built argus-backend @ file:///workspace/backend
+otel-collector-1  | 2026-04-21T19:50:47.808Z	info	service@v0.122.1/service.go:193	Setting up own telemetry...
+otel-collector-1  | 2026-04-21T19:50:47.808Z	info	builders/builders.go:26	Development component. May change in the future.	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics"}
+otel-collector-1  | 2026-04-21T19:50:47.810Z	info	builders/builders.go:26	Development component. May change in the future.	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces"}
+otel-collector-1  | 2026-04-21T19:50:47.812Z	info	service@v0.122.1/service.go:260	Starting otelcol-contrib...	{"Version": "0.122.1", "NumCPU": 16}
+otel-collector-1  | 2026-04-21T19:50:47.813Z	info	extensions/extensions.go:40	Starting extensions...
+otel-collector-1  | 2026-04-21T19:50:47.813Z	info	otlpreceiver@v0.122.1/otlp.go:116	Starting GRPC server	{"otelcol.component.id": "otlp", "otelcol.component.kind": "Receiver", "endpoint": "0.0.0.0:4317"}
+otel-collector-1  | 2026-04-21T19:50:47.814Z	info	otlpreceiver@v0.122.1/otlp.go:173	Starting HTTP server	{"otelcol.component.id": "otlp", "otelcol.component.kind": "Receiver", "endpoint": "0.0.0.0:4318"}
+otel-collector-1  | 2026-04-21T19:50:47.815Z	info	prometheusreceiver@v0.122.0/metrics_receiver.go:154	Starting discovery manager	{"otelcol.component.id": "prometheus", "otelcol.component.kind": "Receiver", "otelcol.signal": "metrics"}
+otel-collector-1  | 2026-04-21T19:50:47.815Z	info	targetallocator/manager.go:184	Scrape job added	{"otelcol.component.id": "prometheus", "otelcol.component.kind": "Receiver", "otelcol.signal": "metrics", "jobName": "otel-collector"}
+otel-collector-1  | 2026-04-21T19:50:47.815Z	info	prometheusreceiver@v0.122.0/metrics_receiver.go:224	Starting scrape manager	{"otelcol.component.id": "prometheus", "otelcol.component.kind": "Receiver", "otelcol.signal": "metrics"}
+otel-collector-1  | 2026-04-21T19:50:47.816Z	info	service@v0.122.1/service.go:283	Everything is ready. Begin running and processing data.
+backend-1         |  Downloaded sqlalchemy
+backend-1         |  Downloaded tokenizers
+backend-1         |  Downloaded asyncpg
+backend-1         |  Downloaded hf-xet
+backend-1         |  Downloaded uvloop
+backend-1         |  Downloaded cryptography
+otel-collector-1  | 2026-04-21T19:51:43.187Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 5}
+backend-1         |  Downloaded grpcio
+backend-1         |  Downloaded ruff
+backend-1         |  Downloaded mypy
+backend-1         |  Downloaded litellm
+backend-1         |  Downloaded numpy
+otel-collector-1  | 2026-04-21T19:52:43.184Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 10}
+backend-1         |  Downloaded playwright
+backend-1         |  Downloaded pyarrow
+backend-1         |  Downloaded opencv-python-headless
+backend-1         | Prepared 125 packages in 2m 20s
+backend-1         | Installed 125 packages in 247ms
+backend-1         |  + aiohappyeyeballs==2.6.1
+backend-1         |  + aiohttp==3.13.5
+backend-1         |  + aiosignal==1.4.0
+backend-1         |  + alembic==1.18.4
+backend-1         |  + annotated-doc==0.0.4
+backend-1         |  + annotated-types==0.7.0
+backend-1         |  + anyio==4.13.0
+backend-1         |  + argon2-cffi==25.1.0
+backend-1         |  + argon2-cffi-bindings==25.1.0
+backend-1         |  + argus-backend==0.1.0 (from file:///workspace/backend)
+backend-1         |  + asgiref==3.11.1
+backend-1         |  + asyncpg==0.31.0
+backend-1         |  + attrs==26.1.0
+backend-1         |  + certifi==2026.2.25
+backend-1         |  + cffi==2.0.0
+backend-1         |  + charset-normalizer==3.4.7
+backend-1         |  + click==8.3.2
+backend-1         |  + cryptography==46.0.7
+backend-1         |  + distro==1.9.0
+backend-1         |  + docker==7.1.0
+backend-1         |  + docstring-parser==0.18.0
+backend-1         |  + ecdsa==0.19.2
+backend-1         |  + fastapi==0.136.0
+backend-1         |  + fastuuid==0.14.0
+backend-1         |  + filelock==3.28.0
+backend-1         |  + frozenlist==1.8.0
+backend-1         |  + fsspec==2026.3.0
+backend-1         |  + googleapis-common-protos==1.74.0
+backend-1         |  + greenlet==3.4.0
+backend-1         |  + grpcio==1.80.0
+backend-1         |  + h11==0.16.0
+backend-1         |  + hf-xet==1.4.3
+backend-1         |  + httpcore==1.0.9
+backend-1         |  + httptools==0.7.1
+backend-1         |  + httpx==0.28.1
+backend-1         |  + huggingface-hub==1.11.0
+backend-1         |  + idna==3.11
+backend-1         |  + importlib-metadata==8.7.1
+backend-1         |  + iniconfig==2.3.0
+backend-1         |  + instructor==1.15.1
+backend-1         |  + jinja2==3.1.6
+backend-1         |  + jiter==0.13.0
+backend-1         |  + jsonschema==4.26.0
+backend-1         |  + jsonschema-specifications==2025.9.1
+backend-1         |  + librt==0.9.0
+backend-1         |  + litellm==1.83.0
+backend-1         |  + mako==1.3.11
+backend-1         |  + markdown-it-py==4.0.0
+backend-1         |  + markupsafe==3.0.3
+backend-1         |  + mdurl==0.1.2
+backend-1         |  + minio==7.2.20
+backend-1         |  + multidict==6.7.1
+backend-1         |  + mypy==1.20.1
+backend-1         |  + mypy-extensions==1.1.0
+backend-1         |  + nats-py==2.14.0
+backend-1         |  + numpy==1.26.4
+backend-1         |  + ollama==0.6.1
+backend-1         |  + openai==2.32.0
+backend-1         |  + opencv-python-headless==4.11.0.86
+backend-1         |  + opentelemetry-api==1.41.0
+backend-1         |  + opentelemetry-exporter-otlp==1.41.0
+backend-1         |  + opentelemetry-exporter-otlp-proto-common==1.41.0
+backend-1         |  + opentelemetry-exporter-otlp-proto-grpc==1.41.0
+backend-1         |  + opentelemetry-exporter-otlp-proto-http==1.41.0
+backend-1         |  + opentelemetry-instrumentation==0.62b0
+backend-1         |  + opentelemetry-instrumentation-asgi==0.62b0
+backend-1         |  + opentelemetry-instrumentation-fastapi==0.62b0
+backend-1         |  + opentelemetry-instrumentation-httpx==0.62b0
+backend-1         |  + opentelemetry-instrumentation-sqlalchemy==0.62b0
+backend-1         |  + opentelemetry-proto==1.41.0
+backend-1         |  + opentelemetry-sdk==1.41.0
+backend-1         |  + opentelemetry-semantic-conventions==0.62b0
+backend-1         |  + opentelemetry-util-http==0.62b0
+backend-1         |  + packaging==26.1
+backend-1         |  + passlib==1.7.4
+backend-1         |  + pathspec==1.0.4
+backend-1         |  + playwright==1.58.0
+backend-1         |  + pluggy==1.6.0
+backend-1         |  + prometheus-client==0.25.0
+backend-1         |  + propcache==0.4.1
+backend-1         |  + protobuf==6.33.6
+backend-1         |  + pyarrow==23.0.1
+backend-1         |  + pyasn1==0.6.3
+backend-1         |  + pycparser==3.0
+backend-1         |  + pycryptodome==3.23.0
+backend-1         |  + pydantic==2.13.2
+backend-1         |  + pydantic-core==2.46.2
+backend-1         |  + pydantic-settings==2.13.1
+backend-1         |  + pyee==13.0.1
+backend-1         |  + pygments==2.20.0
+backend-1         |  + pytest==9.0.3
+backend-1         |  + pytest-asyncio==1.3.0
+backend-1         |  + python-dotenv==1.2.2
+backend-1         |  + python-jose==3.5.0
+backend-1         |  + pyyaml==6.0.3
+backend-1         |  + redis==7.4.0
+backend-1         |  + referencing==0.37.0
+backend-1         |  + regex==2026.4.4
+backend-1         |  + requests==2.33.1
+backend-1         |  + rich==14.3.4
+backend-1         |  + rpds-py==0.30.0
+backend-1         |  + rsa==4.9.1
+backend-1         |  + ruff==0.15.11
+backend-1         |  + shellingham==1.5.4
+backend-1         |  + six==1.17.0
+backend-1         |  + sniffio==1.3.1
+backend-1         |  + sqlalchemy==2.0.49
+backend-1         |  + starlette==1.0.0
+backend-1         |  + structlog==25.5.0
+backend-1         |  + tenacity==9.1.4
+backend-1         |  + testcontainers==4.14.2
+backend-1         |  + tiktoken==0.12.0
+backend-1         |  + tokenizers==0.22.2
+backend-1         |  + tqdm==4.67.3
+backend-1         |  + typer==0.24.1
+backend-1         |  + typing-extensions==4.15.0
+backend-1         |  + typing-inspection==0.4.2
+backend-1         |  + urllib3==2.6.3
+backend-1         |  + uvicorn==0.44.0
+backend-1         |  + uvloop==0.22.1
+backend-1         |  + watchfiles==1.1.1
+backend-1         |  + websockets==16.0
+backend-1         |  + wrapt==2.1.2
+backend-1         |  + yarl==1.23.0
+backend-1         |  + zipp==3.23.1
+backend-1         | INFO:     Will watch for changes in these directories: ['/workspace/backend/src']
+backend-1         | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+backend-1         | INFO:     Started reloader process [84] using WatchFiles
+backend-1         | /tmp/argus-backend-venv/lib/python3.12/site-packages/pydantic_settings/sources/providers/secrets.py:67: UserWarning: directory "/run/secrets" does not exist
+backend-1         |   warnings.warn(f'directory "{path}" does not exist')
+backend-1         | /tmp/argus-backend-venv/lib/python3.12/site-packages/pydantic_settings/sources/providers/secrets.py:67: UserWarning: directory "/run/secrets" does not exist
+backend-1         |   warnings.warn(f'directory "{path}" does not exist')
+backend-1         | INFO:     Started server process [86]
+backend-1         | INFO:     Waiting for application startup.
+backend-1         | INFO:     Application startup complete.
+backend-1         | INFO:     172.18.0.12:38066 - "GET /.well-known/argus/mediamtx/jwks.json HTTP/1.1" 200 OK
+backend-1         | HTTP Request: GET http://keycloak:8080/realms/argus-dev/.well-known/openid-configuration "HTTP/1.1 200 OK"
+backend-1         | HTTP Request: GET http://keycloak:8080/realms/argus-dev/protocol/openid-connect/certs "HTTP/1.1 200 OK"
+backend-1         | INFO:     172.18.0.1:56494 - "WebSocket /ws/telemetry?access_token=eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJDOHJ5ZGNBRjBNdk9aQk5LU21wVWhScHpjb3c5VDl2OVRYUllUdnc4Ykk4In0.eyJleHAiOjE3NzY4MDE0ODcsImlhdCI6MTc3NjgwMTE4NywiYXV0aF90aW1lIjoxNzc2ODAwNzA3LCJqdGkiOiJvbnJ0cnQ6MDUzYTFiMDktYjEyNy00ZGY3LWFlNjEtZDhkYTM1MDFlYjcyIiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL3JlYWxtcy9hcmd1cy1kZXYiLCJzdWIiOiJiYjcwNTQyMi05YmY4LTQ4ZGItYmNkMS03N2MzMWIzMDVhYTEiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJhcmd1cy1mcm9udGVuZCIsInNpZCI6IjNjMWE2NzJhLWIwZjctNDRmZC1iOTNiLWU5YTU1ZjdkMDhlNCIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cDovLzEyNy4wLjAuMTozMDAwIiwiaHR0cDovL2xvY2FsaG9zdDozMDAwIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJhZG1pbiJdfSwic2NvcGUiOiJvcGVuaWQgcHJvZmlsZSBlbWFpbCIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiQWRtaW4gRGV2IiwicHJlZmVycmVkX3VzZXJuYW1lIjoiYWRtaW4tZGV2IiwiZ2l2ZW5fbmFtZSI6IkFkbWluIiwiZmFtaWx5X25hbWUiOiJEZXYiLCJlbWFpbCI6ImFkbWluLWRldkBhcmd1cy5sb2NhbCJ9.ZIX_wWvEv9g6gELb5q7cmwjGvHQ-7m7EFTM-aXJ4zMJ7CxwHdPYD8URmSGQTiYeXHQfMTov0IEQ59dYffKdgovRN-NUdauvEJikv4TQGnOPUI1jSdtyh5tg1Ug8NkHOpGhQp2QsEwAL2J-HImBGxLGn4051ZzHI532NBngWWjuAfiX8o93DeXb0pb90VzYrvlwcE-K0shSl65ML_SaDvmHn08WIkSd-tMaCmDTOM25l0dPKLOetUO30CkwdzNkqWRy2KeXW4y2VLWZkQGQQAoTDCh3PkQOhKW_OpIKovxpz8_EqcOtNYdRbo__JK88EgwYCog8o43aUWpY3Rxa146A" [accepted]
+backend-1         | INFO:     connection open
+otel-collector-1  | 2026-04-21T19:53:22.028Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:53:22.229Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:53:22.271Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "2.593689196s"}
+otel-collector-1  | 2026-04-21T19:53:22.271Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "6.981544258s"}
+otel-collector-1  | 2026-04-21T19:53:22.430Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:22.440Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.348181636s"}
+otel-collector-1  | 2026-04-21T19:53:22.632Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:22.641Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.142727802s"}
+otel-collector-1  | 2026-04-21T19:53:22.832Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:22.843Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "5.258282083s"}
+otel-collector-1  | 2026-04-21T19:53:23.034Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:53:23.042Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.271155368s"}
+otel-collector-1  | 2026-04-21T19:53:23.236Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:23.250Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "3.818716862s"}
+otel-collector-1  | 2026-04-21T19:53:23.437Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:23.450Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "3.376844131s"}
+otel-collector-1  | 2026-04-21T19:53:23.638Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:23.648Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "6.047450197s"}
+otel-collector-1  | 2026-04-21T19:53:23.838Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:23.847Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "3.514314592s"}
+backend-1         | INFO:     172.18.0.13:49910 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:53:32.087Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:32.289Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:32.435Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "13.015357346s"}
+otel-collector-1  | 2026-04-21T19:53:32.490Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:53:32.692Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:32.893Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:33.094Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:33.296Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:33.497Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:33.692Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "10.19870023s"}
+otel-collector-1  | 2026-04-21T19:53:33.699Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:53:33.899Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:53:34.454Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.175904125s"}
+otel-collector-1  | 2026-04-21T19:53:34.613Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "9.597669402s"}
+otel-collector-1  | 2026-04-21T19:53:36.774Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.340368718s"}
+otel-collector-1  | 2026-04-21T19:53:37.416Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.357094044s"}
+otel-collector-1  | 2026-04-21T19:53:37.503Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "9.063073569s"}
+backend-1         | INFO:     172.18.0.1:58290 - "OPTIONS /api/v1/streams/876c8d43-3cd4-4cfa-8414-98b48666497b/offer HTTP/1.1" 200 OK
+backend-1         | HTTP Request: POST http://mediamtx:8889/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/annotated/whep "HTTP/1.1 201 Created"
+backend-1         | INFO:     172.18.0.1:58290 - "POST /api/v1/streams/876c8d43-3cd4-4cfa-8414-98b48666497b/offer HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:53:38.045Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "14.248096178s"}
+otel-collector-1  | 2026-04-21T19:53:40.969Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "11.383780327s"}
+backend-1         | INFO:     172.18.0.13:34386 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:53:41.639Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "22.501907027s"}
+otel-collector-1  | 2026-04-21T19:53:43.162Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 15}
+otel-collector-1  | 2026-04-21T19:53:43.901Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "17.524493958s"}
+otel-collector-1  | 2026-04-21T19:53:44.125Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "9.988742096s"}
+otel-collector-1  | 2026-04-21T19:53:44.223Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "14.252192555s"}
+otel-collector-1  | 2026-04-21T19:53:44.781Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "24.754164555s"}
+otel-collector-1  | 2026-04-21T19:53:45.172Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 10}
+otel-collector-1  | 2026-04-21T19:53:45.461Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "21.028842873s"}
+otel-collector-1  | 2026-04-21T19:53:46.032Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "20.541225793s"}
+otel-collector-1  | 2026-04-21T19:53:46.576Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "21.806838875s"}
+otel-collector-1  | 2026-04-21T19:53:52.303Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "19.274368566s"}
+otel-collector-1  | 2026-04-21T19:53:52.361Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "20.716183583s"}
+otel-collector-1  | 2026-04-21T19:53:54.123Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "23.721072204s"}
+backend-1         | INFO:     172.18.0.13:60780 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:53:58.485Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "28.289558s"}
+otel-collector-1  | 2026-04-21T19:54:01.432Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "19.985718911s"}
+backend-1         | HTTP Request: POST http://mediamtx:8889/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/annotated/whep "HTTP/1.1 404 Not Found"
+backend-1         | INFO:     172.18.0.1:58300 - "POST /api/v1/streams/876c8d43-3cd4-4cfa-8414-98b48666497b/offer HTTP/1.1" 404 Not Found
+otel-collector-1  | 2026-04-21T19:54:04.154Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "31.903083195s"}
+otel-collector-1  | 2026-04-21T19:54:05.100Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 5}
+otel-collector-1  | 2026-04-21T19:54:06.498Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "32.720598846s"}
+otel-collector-1  | 2026-04-21T19:54:06.580Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "20.021083453s"}
+otel-collector-1  | 2026-04-21T19:54:08.397Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "27.860345414s"}
+otel-collector-1  | 2026-04-21T19:54:09.543Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "23.568107054s"}
+backend-1         | INFO:     172.18.0.13:55218 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:54:11.585Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "31.915490838s"}
+otel-collector-1  | 2026-04-21T19:54:13.086Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.966118008s"}
+otel-collector-1  | 2026-04-21T19:54:17.854Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "33.101781317s"}
+otel-collector-1  | 2026-04-21T19:54:21.426Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "27.799687565s"}
+backend-1         | INFO:     172.18.0.13:40214 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:54:26.610Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.048655927s"}
+otel-collector-1  | 2026-04-21T19:54:26.783Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "40.814403122s"}
+otel-collector-1  | 2026-04-21T19:54:33.120Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "22.86854851s"}
+otel-collector-1  | 2026-04-21T19:54:36.068Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "29.022621456s"}
+otel-collector-1  | 2026-04-21T19:54:36.267Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "28.172608958s"}
+otel-collector-1  | 2026-04-21T19:54:39.229Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "23.903492163s"}
+backend-1         | INFO:     172.18.0.13:34608 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:54:43.136Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 20}
+otel-collector-1  | 2026-04-21T19:54:43.509Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "29.126572295s"}
+otel-collector-1  | 2026-04-21T19:54:48.063Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "25.074243703s"}
+otel-collector-1  | 2026-04-21T19:54:49.235Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "24.961937937s"}
+otel-collector-1  | 2026-04-21T19:54:50.969Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "28.728630596s"}
+otel-collector-1  | 2026-04-21T19:54:55.997Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "19.7380024s"}
+backend-1         | INFO:     172.18.0.13:47604 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:55:00.669Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "39.333511627s"}
+otel-collector-1  | 2026-04-21T19:55:03.142Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "20.43224466s"}
+otel-collector-1  | 2026-04-21T19:55:04.451Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "17.120603525s"}
+otel-collector-1  | 2026-04-21T19:55:05.103Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "38.174973324s"}
+otel-collector-1  | 2026-04-21T19:55:07.609Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "42.807579116s"}
+backend-1         | INFO:     172.18.0.1:55524 - "GET /api/v1/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/worker-config HTTP/1.1" 401 Unauthorized
+backend-1         | INFO:     172.18.0.13:36998 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:55:12.644Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "17.245554232s"}
+otel-collector-1  | 2026-04-21T19:55:13.146Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "23.867086851s"}
+otel-collector-1  | 2026-04-21T19:55:14.207Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "22.832258067s"}
+otel-collector-1  | 2026-04-21T19:55:15.745Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "24.844589886s"}
+otel-collector-1  | 2026-04-21T19:55:19.709Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "27.260153438s"}
+otel-collector-1  | 2026-04-21T19:55:21.582Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "33.241884941s"}
+otel-collector-1  | 2026-04-21T19:55:23.584Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "30.094966913s"}
+backend-1         | INFO:     172.18.0.13:43224 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:55:29.898Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.718848726s"}
+otel-collector-1  | 2026-04-21T19:55:37.022Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "30.159629445s"}
+otel-collector-1  | 2026-04-21T19:55:37.047Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "38.296222895s"}
+otel-collector-1  | 2026-04-21T19:55:40.012Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "29.566377239s"}
+otel-collector-1  | 2026-04-21T19:55:40.598Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "38.209686706s"}
+backend-1         | INFO:     172.18.0.13:59130 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:55:43.146Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 25}
+otel-collector-1  | 2026-04-21T19:55:43.289Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "29.480710263s"}
+otel-collector-1  | 2026-04-21T19:55:46.979Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "23.460889304s"}
+backend-1         | INFO:     172.18.0.1:62370 - "GET /api/v1/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/worker-config HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:55:50.186Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 5}
+otel-collector-1  | 2026-04-21T19:55:50.429Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "28.882321846s"}
+otel-collector-1  | 2026-04-21T19:55:53.690Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "15.055768044s"}
+otel-collector-1  | 2026-04-21T19:55:54.834Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.006287084s"}
+otel-collector-1  | 2026-04-21T19:55:55.019Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 7}
+backend-1         | INFO:     172.18.0.13:52288 - "GET /metrics HTTP/1.1" 200 OK
+backend-1         | HTTP Request: POST http://mediamtx:8889/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/annotated/whep "HTTP/1.1 201 Created"
+backend-1         | INFO:     172.18.0.1:65238 - "POST /api/v1/streams/876c8d43-3cd4-4cfa-8414-98b48666497b/offer HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:56:00.054Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 44}
+otel-collector-1  | 2026-04-21T19:56:04.627Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "24.944744669s"}
+otel-collector-1  | 2026-04-21T19:56:05.094Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 40}
+otel-collector-1  | 2026-04-21T19:56:07.192Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "44.252218156s"}
+otel-collector-1  | 2026-04-21T19:56:08.757Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "42.380515201s"}
+otel-collector-1  | 2026-04-21T19:56:09.588Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "16.332456364s"}
+otel-collector-1  | 2026-04-21T19:56:10.119Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 40}
+otel-collector-1  | 2026-04-21T19:56:10.450Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "43.339489425s"}
+backend-1         | INFO:     172.18.0.13:37448 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:56:12.783Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "28.198548828s"}
+otel-collector-1  | 2026-04-21T19:56:15.149Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:56:15.353Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "30.609296419s"}
+otel-collector-1  | 2026-04-21T19:56:18.816Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "21.260045695s"}
+otel-collector-1  | 2026-04-21T19:56:19.322Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "22.283772611s"}
+otel-collector-1  | 2026-04-21T19:56:20.174Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:56:25.215Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:56:25.932Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "40.593655403s"}
+backend-1         | INFO:     172.18.0.13:36214 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:56:28.852Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "25.528290595s"}
+otel-collector-1  | 2026-04-21T19:56:29.580Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.685789709s"}
+otel-collector-1  | 2026-04-21T19:56:30.041Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:56:35.070Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:56:40.086Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "41.003136374s"}
+otel-collector-1  | 2026-04-21T19:56:40.098Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:56:40.992Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "37.870418282s"}
+backend-1         | INFO:     172.18.0.13:38010 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:56:41.616Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "16.325495169s"}
+otel-collector-1  | 2026-04-21T19:56:43.316Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 30}
+otel-collector-1  | 2026-04-21T19:56:45.129Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:56:45.972Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "33.674197049s"}
+otel-collector-1  | 2026-04-21T19:56:50.161Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:56:51.147Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "43.783231317s"}
+otel-collector-1  | 2026-04-21T19:56:51.455Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "17.40505034s"}
+otel-collector-1  | 2026-04-21T19:56:53.801Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "40.323200365s"}
+otel-collector-1  | 2026-04-21T19:56:54.390Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "29.664503135s"}
+otel-collector-1  | 2026-04-21T19:56:55.194Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+backend-1         | INFO:     172.18.0.13:35522 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:56:57.950Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "43.906466475s"}
+otel-collector-1  | 2026-04-21T19:57:00.227Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:57:04.275Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "30.884122442s"}
+otel-collector-1  | 2026-04-21T19:57:05.260Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:57:06.537Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "35.324146911s"}
+backend-1         | INFO:     connection closed
+backend-1         | INFO:     172.18.0.1:64690 - "WebSocket /ws/telemetry?access_token=eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJDOHJ5ZGNBRjBNdk9aQk5LU21wVWhScHpjb3c5VDl2OVRYUllUdnc4Ykk4In0.eyJleHAiOjE3NzY4MDE3MjcsImlhdCI6MTc3NjgwMTQyNywiYXV0aF90aW1lIjoxNzc2ODAwNzA3LCJqdGkiOiJvbnJ0cnQ6ZjQxYTgyMjgtMWNiMy00YWI4LWFhYjEtMGQwNzFjYWJjZmRjIiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL3JlYWxtcy9hcmd1cy1kZXYiLCJzdWIiOiJiYjcwNTQyMi05YmY4LTQ4ZGItYmNkMS03N2MzMWIzMDVhYTEiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJhcmd1cy1mcm9udGVuZCIsInNpZCI6IjNjMWE2NzJhLWIwZjctNDRmZC1iOTNiLWU5YTU1ZjdkMDhlNCIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cDovLzEyNy4wLjAuMTozMDAwIiwiaHR0cDovL2xvY2FsaG9zdDozMDAwIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJhZG1pbiJdfSwic2NvcGUiOiJvcGVuaWQgcHJvZmlsZSBlbWFpbCIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiQWRtaW4gRGV2IiwicHJlZmVycmVkX3VzZXJuYW1lIjoiYWRtaW4tZGV2IiwiZ2l2ZW5fbmFtZSI6IkFkbWluIiwiZmFtaWx5X25hbWUiOiJEZXYiLCJlbWFpbCI6ImFkbWluLWRldkBhcmd1cy5sb2NhbCJ9.BMvAdaIUlKGXE6pXpeyOGVgUlqTq9jo6qkdyb0dEFCX0kGuVJLLk52Rnd53CyD4-J6AnyOd6NHOZscKv0cZkjcP6KXFouf_4qHkS8RUwLLjJferxFq_mWb5SK3C2MMHwBUtZtZ7zAyy96e3xD94GsaO9uwB7FcTBfIRz6yZQV-lCgB1gEKqwLVMZ-rwemiOck8W7lJ2r7YE8v0ZZieuXeHBQ3b7xsYj70litf1rYOKul7-iMcWtjhARzJfH85aAWf-8fMrYZKzmLMKrlGdkP7PEX6J_8txq-EIi_revOYA0Jog8VKGgQ9M2RZiAE7QNFo4BSeHkW8k8Yvh0rDgNmvQ" [accepted]
+backend-1         | INFO:     connection open
+otel-collector-1  | 2026-04-21T19:57:07.675Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:07.876Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:08.078Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:57:08.278Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:08.481Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+backend-1         | HTTP Request: POST http://mediamtx:8889/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/annotated/whep "HTTP/1.1 201 Created"
+backend-1         | INFO:     172.18.0.1:64696 - "POST /api/v1/streams/876c8d43-3cd4-4cfa-8414-98b48666497b/offer HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:57:08.682Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:08.870Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "39.922057339s"}
+otel-collector-1  | 2026-04-21T19:57:08.884Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:57:09.085Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:10.291Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:10.493Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:57:10.694Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:10.895Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:11.097Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:11.298Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:11.499Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:11.700Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+backend-1         | INFO:     172.18.0.13:50714 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:57:11.901Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:12.103Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:18.877Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "35.422964289s"}
+otel-collector-1  | 2026-04-21T19:57:19.655Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "18.616022259s"}
+otel-collector-1  | 2026-04-21T19:57:20.350Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:20.551Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 3, "spans": 1536}
+otel-collector-1  | 2026-04-21T19:57:20.751Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 4, "spans": 2048}
+otel-collector-1  | 2026-04-21T19:57:20.952Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:57:21.097Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "35.109865036s"}
+otel-collector-1  | 2026-04-21T19:57:21.153Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 2, "spans": 1024}
+otel-collector-1  | 2026-04-21T19:57:24.066Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "40.77782084s"}
+otel-collector-1  | 2026-04-21T19:57:26.184Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 345}
+backend-1         | INFO:     172.18.0.13:39710 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:57:31.212Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 39}
+otel-collector-1  | 2026-04-21T19:57:34.136Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "23.206863627s"}
+otel-collector-1  | 2026-04-21T19:57:34.940Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "44.978753193s"}
+otel-collector-1  | 2026-04-21T19:57:35.181Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "17.508959664s"}
+otel-collector-1  | 2026-04-21T19:57:36.240Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:57:38.279Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "31.553745276s"}
+otel-collector-1  | 2026-04-21T19:57:41.275Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+backend-1         | INFO:     172.18.0.13:33110 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:57:41.868Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "39.490397739s"}
+otel-collector-1  | 2026-04-21T19:57:41.869Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "24.266904234s"}
+otel-collector-1  | 2026-04-21T19:57:43.274Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 35}
+otel-collector-1  | 2026-04-21T19:57:46.108Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:57:48.804Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 1536}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:57:48.811Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "6.385189808s"}
+otel-collector-1  | 2026-04-21T19:57:51.138Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:57:52.698Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 1024}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:57:52.709Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "3.877153384s"}
+otel-collector-1  | 2026-04-21T19:57:54.310Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 2048}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:57:54.319Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "5.37517613s"}
+otel-collector-1  | 2026-04-21T19:57:55.204Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.499441714s"}
+otel-collector-1  | 2026-04-21T19:57:56.168Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:57:56.216Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 1024}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:57:56.225Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "2.635846597s"}
+backend-1         | INFO:     172.18.0.13:39776 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:57:56.596Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "9.087023297s"}
+otel-collector-1  | 2026-04-21T19:57:57.354Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 2048}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:57:57.363Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.376422607s"}
+otel-collector-1  | 2026-04-21T19:57:58.870Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.991505007s"}
+otel-collector-1  | 2026-04-21T19:57:59.702Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "10.497421464s"}
+otel-collector-1  | 2026-04-21T19:58:01.191Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:58:01.750Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "10.50668717s"}
+otel-collector-1  | 2026-04-21T19:58:02.710Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "12.851518745s"}
+otel-collector-1  | 2026-04-21T19:58:03.870Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.145625114s"}
+otel-collector-1  | 2026-04-21T19:58:04.854Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 2048}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:58:04.861Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.495348869s"}
+otel-collector-1  | 2026-04-21T19:58:05.694Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.452119651s"}
+otel-collector-1  | 2026-04-21T19:58:06.146Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 2048}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:58:06.154Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.459253561s"}
+otel-collector-1  | 2026-04-21T19:58:06.213Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:58:09.365Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "8.309147256s"}
+otel-collector-1  | 2026-04-21T19:58:09.843Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 1024}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:58:09.852Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.484803687s"}
+otel-collector-1  | 2026-04-21T19:58:10.210Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "13.711753598s"}
+otel-collector-1  | 2026-04-21T19:58:10.624Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.767068348s"}
+otel-collector-1  | 2026-04-21T19:58:11.026Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "8.848343029s"}
+otel-collector-1  | 2026-04-21T19:58:11.240Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+backend-1         | INFO:     172.18.0.13:37454 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:58:12.267Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "10.739041801s"}
+otel-collector-1  | 2026-04-21T19:58:13.158Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "16.674550843s"}
+otel-collector-1  | 2026-04-21T19:58:15.401Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "11.037161049s"}
+otel-collector-1  | 2026-04-21T19:58:15.570Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "13.864691674s"}
+otel-collector-1  | 2026-04-21T19:58:16.269Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:58:17.346Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.950367021s"}
+otel-collector-1  | 2026-04-21T19:58:19.884Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "26.313112511s"}
+otel-collector-1  | 2026-04-21T19:58:19.930Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 1536}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:58:19.938Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "4.216659101s"}
+otel-collector-1  | 2026-04-21T19:58:21.301Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:58:21.369Z	error	internal/queue_sender.go:46	Exporting failed. Dropping data.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "no more retries left: failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "dropped_items": 1536}
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal.NewQueueSender.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/queue_sender.go:46
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterhelper/internal/batcher.(*disabledBatcher[...]).Consume
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterhelper/internal/batcher/disabled_batcher.go:23
+otel-collector-1  | go.opentelemetry.io/collector/exporter/exporterqueue.(*asyncQueue[...]).Start.func1
+otel-collector-1  | 	go.opentelemetry.io/collector/exporter@v0.122.1/exporterqueue/async_queue.go:47
+otel-collector-1  | 2026-04-21T19:58:21.376Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "6.09144129s"}
+otel-collector-1  | 2026-04-21T19:58:22.306Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "10.361618507s"}
+otel-collector-1  | 2026-04-21T19:58:23.015Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "20.168185873s"}
+otel-collector-1  | 2026-04-21T19:58:23.811Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "11.627910026s"}
+otel-collector-1  | 2026-04-21T19:58:23.931Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "15.815839941s"}
+otel-collector-1  | 2026-04-21T19:58:24.164Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.652857063s"}
+otel-collector-1  | 2026-04-21T19:58:26.129Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:58:26.448Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "16.737148461s"}
+backend-1         | INFO:     172.18.0.13:58774 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:58:27.475Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "7.1196738s"}
+otel-collector-1  | 2026-04-21T19:58:31.153Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:58:31.825Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "15.384153615s"}
+otel-collector-1  | 2026-04-21T19:58:32.677Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "9.159437594s"}
+otel-collector-1  | 2026-04-21T19:58:34.603Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "16.430506368s"}
+otel-collector-1  | 2026-04-21T19:58:35.446Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "30.5083696s"}
+otel-collector-1  | 2026-04-21T19:58:36.180Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:58:39.758Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "30.695731989s"}
+otel-collector-1  | 2026-04-21T19:58:41.213Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+backend-1         | INFO:     172.18.0.13:41106 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:58:41.847Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "20.121354196s"}
+otel-collector-1  | 2026-04-21T19:58:43.195Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "31.067963902s"}
+otel-collector-1  | 2026-04-21T19:58:43.195Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "26.267899671s"}
+otel-collector-1  | 2026-04-21T19:58:43.212Z	info	Metrics	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "metrics", "resource metrics": 1, "metrics": 5, "data points": 40}
+otel-collector-1  | 2026-04-21T19:58:46.209Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "15.490443614s"}
+otel-collector-1  | 2026-04-21T19:58:46.237Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:58:47.220Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "22.542065806s"}
+otel-collector-1  | 2026-04-21T19:58:49.122Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.145044042s"}
+otel-collector-1  | 2026-04-21T19:58:51.042Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "22.385493003s"}
+otel-collector-1  | 2026-04-21T19:58:51.266Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:58:56.301Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+backend-1         | INFO:     172.18.0.13:36790 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:59:01.334Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:59:01.707Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "32.037267877s"}
+otel-collector-1  | 2026-04-21T19:59:01.977Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "20.41604759s"}
+otel-collector-1  | 2026-04-21T19:59:03.573Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "28.158392899s"}
+otel-collector-1  | 2026-04-21T19:59:05.962Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.419816115s"}
+otel-collector-1  | 2026-04-21T19:59:06.161Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:59:09.476Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "34.689717718s"}
+otel-collector-1  | 2026-04-21T19:59:09.773Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "33.428054038s"}
+otel-collector-1  | 2026-04-21T19:59:10.464Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "22.835323271s"}
+otel-collector-1  | 2026-04-21T19:59:11.190Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+backend-1         | INFO:     172.18.0.13:40574 - "GET /metrics HTTP/1.1" 200 OK
+otel-collector-1  | 2026-04-21T19:59:13.435Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "37.300916218s"}
+otel-collector-1  | 2026-04-21T19:59:14.275Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "26.888995975s"}
+otel-collector-1  | 2026-04-21T19:59:16.215Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 38}
+otel-collector-1  | 2026-04-21T19:59:21.247Z	info	Traces	{"otelcol.component.id": "debug", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "resource spans": 1, "spans": 37}
+otel-collector-1  | 2026-04-21T19:59:22.405Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "29.891941631s"}
+otel-collector-1  | 2026-04-21T19:59:23.279Z	info	internal/retry_sender.go:132	Exporting failed. Will retry the request after interval.	{"otelcol.component.id": "otlphttp/tempo", "otelcol.component.kind": "Exporter", "otelcol.signal": "traces", "error": "failed to make an HTTP request: Post \"http://tempo:4318/v1/traces\": dial tcp: lookup tempo on 127.0.0.11:53: no such host", "interval": "31.89837294s"}
 
-curl -i -sS \
-  -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8000/api/v1/cameras/876c8d43-3cd4-4cfa-8414-98b48666497b/worker-config
-
-
-cd "$HOME/vision/backend"
-OPENCV_FFMPEG_CAPTURE_OPTIONS="rtsp_transport;tcp" \
-ARGUS_API_BASE_URL="http://127.0.0.1:8000" \
-ARGUS_API_BEARER_TOKEN="$TOKEN" \
-ARGUS_DB_URL="postgresql+asyncpg://argus:argus@127.0.0.1:5432/argus" \
-ARGUS_NATS_URL="nats://127.0.0.1:4222" \
-ARGUS_MINIO_ENDPOINT="127.0.0.1:9000" \
-ARGUS_MINIO_ACCESS_KEY="argus" \
-ARGUS_MINIO_SECRET_KEY="argus-dev-secret" \
-ARGUS_MINIO_SECURE="false" \
 python3 -m uv run python -m argus.inference.engine --camera-id "876c8d43-3cd4-4cfa-8414-98b48666497b"
+/Users/morya/vision/backend/.venv/lib/python3.12/site-packages/pydantic_settings/sources/providers/secrets.py:67: UserWarning: directory "/run/secrets" does not exist
+  warnings.warn(f'directory "{path}" does not exist')
+2026-04-21 21:55:50.833166 [W:onnxruntime:, coreml_execution_provider.cc:81 GetCapability] CoreMLExecutionProvider::GetCapability, number of partitions supported by CoreML: 30 number of nodes in the graph: 496 number of nodes supported by CoreML: 465
+2026-04-21 21:55:51.374316 [W:onnxruntime:, session_state.cc:1166 VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.
+2026-04-21 21:55:51.374332 [W:onnxruntime:, session_state.cc:1168 VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+
+
+Last login: Mon Apr 20 16:10:49 on ttys001
+morya@printer ~ % curl -s http://127.0.0.1:9108/metrics | rg 'argus_inference_stage_duration_seconds_(sum|count)'
+
+zsh: command not found: rg
+morya@printer ~ % curl -s http://127.0.0.1:9108/metrics | rg 'stage="(detect|attributes|publish_stream|total)"'
+
+zsh: command not found: rg
+morya@printer ~ % 
+
+
+
+
+
+
+
