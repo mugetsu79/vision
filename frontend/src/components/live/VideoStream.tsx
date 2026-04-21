@@ -15,15 +15,20 @@ type StreamTransport = "connecting" | "standby" | "webrtc" | "hls" | "mjpeg" | "
 const HLS_STARTUP_TIMEOUT_MS = 4_000;
 const HLS_RETRY_DELAY_MS = 1_000;
 const MAX_HLS_STARTUP_RETRIES = 3;
+const STREAM_RECONNECT_BASE_DELAY_MS = 1_000;
+const STREAM_RECONNECT_MAX_DELAY_MS = 5_000;
+const HEARTBEAT_STALE_AFTER_MS = 15_000;
 
 export function VideoStream({
   cameraId,
   cameraName,
   defaultProfile,
+  heartbeatTs = null,
 }: {
   cameraId: string;
   cameraName: string;
   defaultProfile: string;
+  heartbeatTs?: string | null;
 }) {
   const accessToken = useAuthStore((state) => state.accessToken);
   const tenantId = useAuthStore((state) => state.user?.tenantId ?? null);
@@ -33,6 +38,9 @@ export function VideoStream({
   const firstFrameSentRef = useRef(false);
   const playbackStartedAtRef = useRef(0);
   const hlsRetryCountRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const heartbeatStatusRef = useRef<"unknown" | "fresh" | "stale">("unknown");
   const runtimeHints = useMemo(() => getStreamRuntimeHints(), []);
   const [transport, setTransport] = useState<StreamTransport>("connecting");
   const [webrtcFailed, setWebrtcFailed] = useState(false);
@@ -40,22 +48,72 @@ export function VideoStream({
   const [isPageVisible, setIsPageVisible] = useState(() => document.visibilityState !== "hidden");
   const [firstFrameMs, setFirstFrameMs] = useState<number | null>(null);
   const [hlsRetryToken, setHlsRetryToken] = useState(0);
+  const [sessionToken, setSessionToken] = useState(0);
+
+  const clearReconnectTimer = useEffectEvent(() => {
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  });
+
+  const restartSession = useEffectEvent(() => {
+    clearReconnectTimer();
+    firstFrameSentRef.current = false;
+    playbackStartedAtRef.current = performance.now();
+    hlsRetryCountRef.current = 0;
+    setFirstFrameMs(null);
+    setWebrtcFailed(false);
+    setHlsRetryToken(0);
+    setTransport("connecting");
+    setSessionToken((current) => current + 1);
+  });
+
+  const requestSessionRestart = useEffectEvent((mode: "backoff" | "immediate" = "backoff") => {
+    if (!accessToken) {
+      setTransport("error");
+      return;
+    }
+
+    if (mode === "immediate") {
+      reconnectAttemptRef.current = 0;
+      restartSession();
+      return;
+    }
+
+    if (reconnectTimerRef.current !== null) {
+      return;
+    }
+
+    const delay = Math.min(
+      STREAM_RECONNECT_BASE_DELAY_MS * (2 ** reconnectAttemptRef.current),
+      STREAM_RECONNECT_MAX_DELAY_MS,
+    );
+    setTransport("standby");
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      reconnectAttemptRef.current += 1;
+      restartSession();
+    }, delay);
+  });
 
   const hlsUrl = useMemo(
     () =>
       buildApiUrl(`/api/v1/streams/${cameraId}/hls.m3u8`, {
         access_token: accessToken,
+        session_token: String(sessionToken),
         tenant_id: tenantId,
       }),
-    [accessToken, cameraId, tenantId],
+    [accessToken, cameraId, sessionToken, tenantId],
   );
   const mjpegUrl = useMemo(
     () =>
       buildApiUrl(`/video_feed/${cameraId}`, {
         access_token: accessToken,
+        session_token: String(sessionToken),
         tenant_id: tenantId,
       }),
-    [accessToken, cameraId, tenantId],
+    [accessToken, cameraId, sessionToken, tenantId],
   );
 
   const fallbackReady = isVisible && isPageVisible;
@@ -66,6 +124,8 @@ export function VideoStream({
         return;
       }
 
+      clearReconnectTimer();
+      reconnectAttemptRef.current = 0;
       firstFrameSentRef.current = true;
       const durationMs = Math.max(0, Math.round(performance.now() - playbackStartedAtRef.current));
       setFirstFrameMs(durationMs);
@@ -81,6 +141,16 @@ export function VideoStream({
       );
     },
   );
+
+  useEffect(() => {
+    clearReconnectTimer();
+    reconnectAttemptRef.current = 0;
+    heartbeatStatusRef.current = "unknown";
+
+    return () => {
+      clearReconnectTimer();
+    };
+  }, [accessToken, cameraId, tenantId]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -135,6 +205,11 @@ export function VideoStream({
         peerConnection = await startWebRtc({
           accessToken,
           cameraId,
+          onConnectionLost: () => {
+            if (!disposed) {
+              requestSessionRestart();
+            }
+          },
           tenantId,
           videoElement: videoRef.current,
         });
@@ -155,7 +230,7 @@ export function VideoStream({
       disposed = true;
       peerConnection?.close();
     };
-  }, [accessToken, cameraId, tenantId]);
+  }, [accessToken, cameraId, sessionToken, tenantId]);
 
   useEffect(() => {
     if (!accessToken || !webrtcFailed) {
@@ -221,7 +296,12 @@ export function VideoStream({
       if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
         destroyHls = await startNativeHls({
           hlsUrl,
-          onFatalError: scheduleHlsRetry,
+          onRuntimeFailure: () => {
+            if (!disposed) {
+              requestSessionRestart();
+            }
+          },
+          onStartupFailure: scheduleHlsRetry,
           onLoadedData: () => {
             if (!disposed) {
               setTransport("hls");
@@ -244,7 +324,12 @@ export function VideoStream({
         destroyHls = await startHls({
           cameraName,
           hlsUrl,
-          onFatalError: scheduleHlsRetry,
+          onRuntimeFailure: () => {
+            if (!disposed) {
+              requestSessionRestart();
+            }
+          },
+          onStartupFailure: scheduleHlsRetry,
           onManifestParsed: () => {
             if (!disposed) {
               setTransport("hls");
@@ -304,11 +389,62 @@ export function VideoStream({
       emitFirstFrameMetric("mjpeg");
     };
 
+    const handleError = () => {
+      requestSessionRestart();
+    };
+
     imageElement.addEventListener("load", handleLoad);
+    imageElement.addEventListener("error", handleError);
     return () => {
       imageElement.removeEventListener("load", handleLoad);
+      imageElement.removeEventListener("error", handleError);
     };
   }, [emitFirstFrameMetric, transport]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      heartbeatStatusRef.current = "unknown";
+      return;
+    }
+
+    let staleTimer: number | null = null;
+    const parsedHeartbeatTs = heartbeatTs ? Date.parse(heartbeatTs) : Number.NaN;
+    const nextStatus: "unknown" | "fresh" | "stale" = Number.isNaN(parsedHeartbeatTs)
+      ? "unknown"
+      : Date.now() - parsedHeartbeatTs <= HEARTBEAT_STALE_AFTER_MS
+        ? "fresh"
+        : "stale";
+    const previousStatus = heartbeatStatusRef.current;
+    heartbeatStatusRef.current = nextStatus;
+
+    if (previousStatus === "fresh" && nextStatus === "stale") {
+      requestSessionRestart();
+    }
+    if (previousStatus === "stale" && nextStatus === "fresh" && transport !== "connecting") {
+      requestSessionRestart("immediate");
+    }
+
+    if (nextStatus === "fresh") {
+      const remainingFreshMs = Math.max(
+        0,
+        HEARTBEAT_STALE_AFTER_MS - (Date.now() - parsedHeartbeatTs),
+      );
+      staleTimer = window.setTimeout(() => {
+        if (heartbeatStatusRef.current !== "fresh") {
+          return;
+        }
+
+        heartbeatStatusRef.current = "stale";
+        requestSessionRestart();
+      }, remainingFreshMs + 50);
+    }
+
+    return () => {
+      if (staleTimer !== null) {
+        window.clearTimeout(staleTimer);
+      }
+    };
+  }, [accessToken, heartbeatTs, transport]);
 
   return (
     <div
@@ -349,11 +485,13 @@ export function VideoStream({
 async function startWebRtc({
   accessToken,
   cameraId,
+  onConnectionLost,
   tenantId,
   videoElement,
 }: {
   accessToken: string;
   cameraId: string;
+  onConnectionLost: () => void;
   tenantId: string | null;
   videoElement: HTMLVideoElement | null;
 }) {
@@ -370,6 +508,17 @@ async function startWebRtc({
     videoElement.srcObject = event.streams[0];
     void videoElement.play().catch(() => undefined);
   };
+  const handleConnectionLoss = () => {
+    const closedConnectionStates = new Set(["closed", "disconnected", "failed"]);
+    if (
+      closedConnectionStates.has(peerConnection.connectionState) ||
+      closedConnectionStates.has(peerConnection.iceConnectionState)
+    ) {
+      onConnectionLost();
+    }
+  };
+  peerConnection.onconnectionstatechange = handleConnectionLoss;
+  peerConnection.oniceconnectionstatechange = handleConnectionLoss;
 
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
@@ -404,13 +553,15 @@ async function startWebRtc({
 async function startHls({
   cameraName,
   hlsUrl,
-  onFatalError,
+  onRuntimeFailure,
+  onStartupFailure,
   onManifestParsed,
   videoElement,
 }: {
   cameraName: string;
   hlsUrl: string;
-  onFatalError: () => void;
+  onRuntimeFailure: () => void;
+  onStartupFailure: () => void;
   onManifestParsed: () => void;
   videoElement: HTMLVideoElement | null;
 }) {
@@ -431,7 +582,7 @@ async function startHls({
     }
 
     client.destroy();
-    onFatalError();
+    onStartupFailure();
   }, HLS_STARTUP_TIMEOUT_MS);
   client.attachMedia(videoElement);
   client.loadSource(hlsUrl);
@@ -445,7 +596,12 @@ async function startHls({
     if (data.fatal) {
       window.clearTimeout(startupTimer);
       client.destroy();
-      onFatalError();
+      if (manifestParsed) {
+        onRuntimeFailure();
+        return;
+      }
+
+      onStartupFailure();
     }
   });
 
@@ -457,16 +613,19 @@ async function startHls({
 
 async function startNativeHls({
   hlsUrl,
-  onFatalError,
+  onRuntimeFailure,
+  onStartupFailure,
   onLoadedData,
   videoElement,
 }: {
   hlsUrl: string;
-  onFatalError: () => void;
+  onRuntimeFailure: () => void;
+  onStartupFailure: () => void;
   onLoadedData: () => void;
   videoElement: HTMLVideoElement;
 }) {
-  let settled = false;
+  let disposed = false;
+  let startupComplete = false;
 
   const cleanup = () => {
     videoElement.removeEventListener("loadeddata", handleLoadedData);
@@ -474,33 +633,49 @@ async function startNativeHls({
     window.clearTimeout(startupTimer);
   };
 
-  const fail = () => {
-    if (settled) {
+  const failStartup = () => {
+    if (disposed) {
       return;
     }
 
-    settled = true;
+    disposed = true;
     cleanup();
     videoElement.removeAttribute("src");
-    onFatalError();
+    onStartupFailure();
+  };
+
+  const failRuntime = () => {
+    if (disposed) {
+      return;
+    }
+
+    disposed = true;
+    cleanup();
+    videoElement.removeAttribute("src");
+    onRuntimeFailure();
   };
 
   const handleLoadedData = () => {
-    if (settled) {
+    if (disposed || startupComplete) {
       return;
     }
 
-    settled = true;
-    cleanup();
+    startupComplete = true;
+    window.clearTimeout(startupTimer);
     onLoadedData();
   };
 
   const handleError = () => {
-    fail();
+    if (startupComplete) {
+      failRuntime();
+      return;
+    }
+
+    failStartup();
   };
 
   const startupTimer = window.setTimeout(() => {
-    fail();
+    failStartup();
   }, HLS_STARTUP_TIMEOUT_MS);
 
   videoElement.addEventListener("loadeddata", handleLoadedData);
@@ -509,7 +684,7 @@ async function startNativeHls({
   await videoElement.play().catch(() => undefined);
 
   return () => {
-    settled = true;
+    disposed = true;
     cleanup();
     videoElement.removeAttribute("src");
   };

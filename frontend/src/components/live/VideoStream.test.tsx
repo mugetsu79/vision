@@ -394,6 +394,144 @@ describe("VideoStream", () => {
     expect(screen.getByText(/mjpeg forensic fallback/i)).toBeInTheDocument();
   });
 
+  test("restarts the stream session when the MJPEG fallback breaks at runtime", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response("upstream failed", { status: 502 }));
+    isSupportedMock.mockReturnValue(false);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return false;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    render(
+      <VideoStream
+        cameraId="23232323-2323-2323-2323-232323232323"
+        cameraName="Depot Recovery"
+        defaultProfile="540p5"
+      />,
+    );
+
+    const image = await screen.findByRole("img", { name: /depot recovery live stream/i });
+    const initialFetchCount = fetchMock.mock.calls.length;
+
+    act(() => {
+      image.dispatchEvent(new Event("error"));
+    });
+
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount), {
+      timeout: 2_500,
+    });
+  });
+
+  test("restarts from WebRTC after a fatal HLS runtime disconnect", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response("upstream failed", { status: 502 }));
+
+    const hlsListeners = new Map<string, (event: string, data?: { fatal?: boolean }) => void>();
+    onMock.mockImplementation(
+      (event: string, listener: (event: string, data?: { fatal?: boolean }) => void) => {
+        hlsListeners.set(event, listener);
+      },
+    );
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    render(
+      <VideoStream
+        cameraId="34343434-3434-3434-3434-343434343434"
+        cameraName="North Recovery"
+        defaultProfile="720p10"
+      />,
+    );
+
+    await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
+    act(() => {
+      hlsListeners.get("manifestParsed")?.("manifestParsed");
+    });
+    const initialFetchCount = fetchMock.mock.calls.length;
+
+    act(() => {
+      hlsListeners.get("error")?.("error", { fatal: true });
+    });
+
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount), {
+      timeout: 2_500,
+    });
+  });
+
+  test("restarts the live tile when the worker heartbeat recovers after going stale", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response("upstream failed", { status: 502 }));
+    isSupportedMock.mockReturnValue(false);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return false;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    const staleHeartbeatTs = new Date(Date.now() - 20_000).toISOString();
+    const freshHeartbeatTs = new Date().toISOString();
+    const { rerender } = render(
+      <VideoStream
+        cameraId="45454545-4545-4545-4545-454545454545"
+        cameraName="Heartbeat Recovery"
+        defaultProfile="720p10"
+        heartbeatTs={staleHeartbeatTs}
+      />,
+    );
+
+    await screen.findByRole("img", { name: /heartbeat recovery live stream/i });
+    const initialFetchCount = fetchMock.mock.calls.length;
+
+    rerender(
+      <VideoStream
+        cameraId="45454545-4545-4545-4545-454545454545"
+        cameraName="Heartbeat Recovery"
+        defaultProfile="720p10"
+        heartbeatTs={freshHeartbeatTs}
+      />,
+    );
+
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount), {
+      timeout: 2_500,
+    });
+  });
+
   test("waits to start HLS fallback until the live tile is visible", async () => {
     defaultIntersectionVisible = false;
     vi.spyOn(global, "fetch").mockResolvedValue(

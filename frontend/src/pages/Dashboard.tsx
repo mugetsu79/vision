@@ -168,6 +168,7 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
                       cameraId={camera.id}
                       cameraName={camera.name}
                       defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
+                      heartbeatTs={frame?.ts ?? null}
                     />
                     <TelemetryCanvas frame={frame} activeClasses={classFilter} />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
