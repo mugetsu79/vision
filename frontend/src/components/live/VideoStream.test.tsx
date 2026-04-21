@@ -245,6 +245,69 @@ describe("VideoStream", () => {
     expect(loadSourceMock).toHaveBeenCalledTimes(2);
   });
 
+  test("falls back to MJPEG after repeated HLS startup stalls", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("upstream failed", { status: 502 }),
+    );
+
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    await act(async () => {
+      render(
+        <VideoStream
+          cameraId="cccccccc-cccc-cccc-cccc-cccccccccccc"
+          cameraName="Warehouse West"
+          defaultProfile="720p10"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadSourceMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadSourceMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadSourceMock).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const image = screen.getByRole("img", { name: /warehouse west live stream/i });
+    expect(image).toHaveAttribute(
+      "src",
+      expect.stringContaining("/video_feed/cccccccc-cccc-cccc-cccc-cccccccccccc"),
+    );
+    expect(screen.getByText(/mjpeg forensic fallback/i)).toBeInTheDocument();
+  });
+
   test("falls back to MJPEG when HLS is unavailable", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),

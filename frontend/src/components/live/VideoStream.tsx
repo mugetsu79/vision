@@ -14,6 +14,7 @@ type StreamTransport = "connecting" | "standby" | "webrtc" | "hls" | "mjpeg" | "
 
 const HLS_STARTUP_TIMEOUT_MS = 4_000;
 const HLS_RETRY_DELAY_MS = 1_000;
+const MAX_HLS_STARTUP_RETRIES = 3;
 
 export function VideoStream({
   cameraId,
@@ -31,6 +32,7 @@ export function VideoStream({
   const imageRef = useRef<HTMLImageElement | null>(null);
   const firstFrameSentRef = useRef(false);
   const playbackStartedAtRef = useRef(0);
+  const hlsRetryCountRef = useRef(0);
   const runtimeHints = useMemo(() => getStreamRuntimeHints(), []);
   const [transport, setTransport] = useState<StreamTransport>("connecting");
   const [webrtcFailed, setWebrtcFailed] = useState(false);
@@ -114,6 +116,7 @@ export function VideoStream({
   useEffect(() => {
     firstFrameSentRef.current = false;
     playbackStartedAtRef.current = performance.now();
+    hlsRetryCountRef.current = 0;
     setFirstFrameMs(null);
     setWebrtcFailed(false);
     setHlsRetryToken(0);
@@ -178,6 +181,12 @@ export function VideoStream({
 
     const scheduleHlsRetry = () => {
       if (disposed) {
+        return;
+      }
+
+      hlsRetryCountRef.current += 1;
+      if (hlsRetryCountRef.current >= MAX_HLS_STARTUP_RETRIES) {
+        fallbackToMjpeg();
         return;
       }
 
