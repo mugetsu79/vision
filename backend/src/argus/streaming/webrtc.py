@@ -372,6 +372,7 @@ MJPEG_BOUNDARY = "argus-frame"
 MJPEG_CONTENT_TYPE = f"multipart/x-mixed-replace; boundary={MJPEG_BOUNDARY}"
 _MJPEG_FRAME_PREFIX = f"--{MJPEG_BOUNDARY}\r\nContent-Type: image/jpeg\r\n\r\n".encode()
 _MJPEG_STARTUP_RETRY_DELAYS_SECONDS = (0.25, 0.25, 0.5, 1.0, 1.0)
+_MJPEG_RUNTIME_RETRY_DELAYS_SECONDS = (0.25, 0.5, 1.0, 2.0, 2.0, 5.0)
 
 
 async def _open_rtsp_mjpeg_stream(rtsp_url: str) -> UpstreamProxyStream:
@@ -393,15 +394,10 @@ async def _open_rtsp_mjpeg_stream(rtsp_url: str) -> UpstreamProxyStream:
                     continue
 
                 await asyncio.to_thread(current_capture.release)
-                capture_retry_delay_seconds = 0.25
-                await asyncio.sleep(capture_retry_delay_seconds)
-                capture_retry = await asyncio.to_thread(_open_rtsp_capture, rtsp_url, cv2)
-                reopened_frame = await asyncio.to_thread(_read_rtsp_frame, capture_retry)
-                if reopened_frame is None:
-                    await asyncio.to_thread(capture_retry.release)
-                    break
-                current_capture = capture_retry
-                current_frame = reopened_frame
+                current_capture, current_frame = await _reopen_rtsp_capture(
+                    rtsp_url,
+                    cv2,
+                )
         finally:
             await asyncio.to_thread(current_capture.release)
 
@@ -432,6 +428,27 @@ async def _open_initial_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]
         await asyncio.sleep(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS[attempt])
 
     raise RuntimeError("Unable to initialize MJPEG bridge.")
+
+
+async def _reopen_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]:
+    attempt = 0
+
+    while True:
+        try:
+            capture = await asyncio.to_thread(_open_rtsp_capture, rtsp_url, cv2)
+        except RuntimeError:
+            pass
+        else:
+            reopened_frame = await asyncio.to_thread(_read_rtsp_frame, capture)
+            if reopened_frame is not None:
+                return capture, reopened_frame
+            await asyncio.to_thread(capture.release)
+
+        delay_seconds = _MJPEG_RUNTIME_RETRY_DELAYS_SECONDS[
+            min(attempt, len(_MJPEG_RUNTIME_RETRY_DELAYS_SECONDS) - 1)
+        ]
+        attempt += 1
+        await asyncio.sleep(delay_seconds)
 
 
 def _open_rtsp_capture(rtsp_url: str, cv2: Any) -> Any:
