@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import HTTPException, status
 from jose import jwt  # type: ignore[import-untyped]
 
 from argus.models.enums import ProcessingMode
@@ -292,16 +293,24 @@ class WebRTCNegotiator:
             camera_id=camera_id,
             access=access,
         )
-        response = await self._http_client.post(
-            access.whep_url,
-            content=sdp_offer.encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/sdp",
-                "Content-Type": "application/sdp",
-            },
-        )
-        response.raise_for_status()
+        try:
+            response = await self._http_client.post(
+                access.whep_url,
+                content=sdp_offer.encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/sdp",
+                    "Content-Type": "application/sdp",
+                },
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise _translate_webrtc_upstream_status_error(exc) from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Unable to negotiate upstream WebRTC stream.",
+            ) from exc
         return response.text
 
     async def open_mjpeg_stream(
@@ -365,6 +374,19 @@ def _append_query_parameter(url: str, *, key: str, value: str) -> str:
     combined = suffix if query == "" else f"{query}&{suffix}"
     return urlunsplit(
         (split_url.scheme, split_url.netloc, split_url.path, combined, split_url.fragment)
+    )
+
+
+def _translate_webrtc_upstream_status_error(exc: httpx.HTTPStatusError) -> HTTPException:
+    if exc.response.status_code == status.HTTP_404_NOT_FOUND:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="WebRTC stream is not ready yet.",
+        )
+
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to negotiate upstream WebRTC stream.",
     )
 
 

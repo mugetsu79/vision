@@ -4,7 +4,9 @@ from collections.abc import AsyncIterator
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient, Request, Response
 from jose import jwt
 
@@ -144,6 +146,78 @@ async def test_webrtc_negotiator_posts_offer_to_whep_with_short_lived_bearer_tok
     assert claims["mediamtx_permissions"] == [
         {"action": "read", "path": access.path_name}
     ]
+
+    await negotiator.close()
+
+
+@pytest.mark.asyncio
+async def test_webrtc_negotiator_translates_missing_whep_path_to_http_404() -> None:
+    issuer = MediaMTXTokenIssuer()
+    access = resolve_stream_access(
+        camera_id=uuid4(),
+        processing_mode=ProcessingMode.CENTRAL,
+        edge_node_id=None,
+        privacy={"blur_faces": True, "blur_plates": True},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+
+    async def handler(request: Request) -> Response:
+        return Response(404, request=request, text="not found")
+
+    negotiator = WebRTCNegotiator(
+        token_issuer=issuer,
+        http_client=AsyncClient(transport=_transport(handler)),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await negotiator.negotiate_offer(
+            access=access,
+            camera_id=UUID(str(access.camera_id)),
+            subject="viewer-1",
+            sdp_offer="v=0\r\no=browser 1 1 IN IP4 127.0.0.1\r\n",
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "WebRTC stream is not ready yet."
+
+    await negotiator.close()
+
+
+@pytest.mark.asyncio
+async def test_webrtc_negotiator_translates_upstream_request_errors_to_http_502() -> None:
+    issuer = MediaMTXTokenIssuer()
+    access = resolve_stream_access(
+        camera_id=uuid4(),
+        processing_mode=ProcessingMode.CENTRAL,
+        edge_node_id=None,
+        privacy={"blur_faces": True, "blur_plates": True},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+
+    async def transport_handler(request: Request) -> Response:
+        raise httpx.ConnectError("connection failed", request=request)
+
+    negotiator = WebRTCNegotiator(
+        token_issuer=issuer,
+        http_client=AsyncClient(transport=_transport(transport_handler)),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await negotiator.negotiate_offer(
+            access=access,
+            camera_id=UUID(str(access.camera_id)),
+            subject="viewer-1",
+            sdp_offer="v=0\r\no=browser 1 1 IN IP4 127.0.0.1\r\n",
+        )
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "Unable to negotiate upstream WebRTC stream."
 
     await negotiator.close()
 

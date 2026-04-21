@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 import posixpath
 import re
+from collections.abc import Mapping
 from typing import Annotated
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
@@ -14,12 +14,7 @@ from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from argus.api.contracts import StreamOfferRequest, StreamOfferResponse, TenantContext
 from argus.api.dependencies import get_app_services, get_media_tenant_context, get_tenant_context
-from argus.core.security import (
-    AuthenticatedUser,
-    enforce_role,
-    get_current_media_user,
-    require,
-)
+from argus.core.security import AuthenticatedUser, enforce_role, get_current_media_user, require
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
 
@@ -300,11 +295,10 @@ def _media_request_query_params(request: Request) -> dict[str, str]:
 def _merge_upstream_playlist_query(url: str, *, request: Request) -> str:
     split_url = urlsplit(url)
     query_items = list(parse_qsl(split_url.query, keep_blank_values=True))
-    auth_keys = {"access_token", "tenant_id"}
     query_items.extend(
         (key, value)
         for key, value in request.query_params.multi_items()
-        if key not in auth_keys
+        if _should_forward_hls_query_param(key)
     )
     query = urlencode(query_items)
     return urlunsplit(
@@ -332,6 +326,10 @@ def _build_hls_proxy_uri(
             split_resource.fragment,
         )
     )
+
+
+def _should_forward_hls_query_param(key: str) -> bool:
+    return key.startswith("_HLS_")
 
 
 def _build_hls_resource_url(playlist_url: str, resource_path: str) -> str:
