@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from argus.core import metrics as core_metrics
+from argus.inference import engine as engine_module
 from argus.inference.engine import (
     CameraCommand,
     CameraSettings,
@@ -498,12 +499,58 @@ async def test_engine_logs_periodic_stage_timing_summary(caplog: pytest.LogCaptu
         record
         for record in caplog.records
         if record.name == "argus.inference.engine"
-        and record.message == "Inference stage timing summary"
+        and record.message.startswith("Inference stage timing summary")
     ]
 
     assert len(summary_records) == 1
     record = summary_records[0]
+    assert "camera_id=" in record.message
+    assert "stage_avg_ms=" in record.message
+    assert "stage_max_ms=" in record.message
+    assert "detect" in record.message
+    assert "total" in record.message
     assert record.camera_id == str(camera_id)
     assert record.frame_count == 2
     assert "detect" in record.stage_avg_ms
     assert "total" in record.stage_max_ms
+
+
+def test_worker_main_configures_logging_and_reuses_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    fake_settings = object()
+    captured: dict[str, object] = {}
+
+    class _Awaitable:
+        def __await__(self) -> object:
+            if False:
+                yield None
+            return None
+
+    def fake_configure_logging(settings: object) -> None:
+        captured["configured_settings"] = settings
+
+    def fake_run_engine_for_camera(
+        received_camera_id: UUID,
+        *,
+        settings: object | None = None,
+    ) -> _Awaitable:
+        captured["camera_id"] = received_camera_id
+        captured["worker_settings"] = settings
+        return _Awaitable()
+
+    def fake_asyncio_run(awaitable: object) -> None:
+        captured["awaitable"] = awaitable
+        return None
+
+    monkeypatch.setattr(engine_module, "Settings", lambda: fake_settings)
+    monkeypatch.setattr(engine_module, "configure_logging", fake_configure_logging, raising=False)
+    monkeypatch.setattr(engine_module, "run_engine_for_camera", fake_run_engine_for_camera)
+    monkeypatch.setattr(engine_module.asyncio, "run", fake_asyncio_run)
+
+    assert engine_module.main(["--camera-id", str(camera_id)]) == 0
+    assert captured["configured_settings"] is fake_settings
+    assert captured["camera_id"] == camera_id
+    assert captured["worker_settings"] is fake_settings
+    assert captured["awaitable"].__class__.__name__ == "_Awaitable"

@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from argus.core.config import Settings
 from argus.core.db import DatabaseManager, TrackingEventStore
 from argus.core.events import EventMessage, NatsJetStreamClient
+from argus.core.logging import configure_logging
 from argus.core.metrics import (
     INFERENCE_FRAME_DURATION_SECONDS,
     INFERENCE_FRAMES_PROCESSED_TOTAL,
@@ -252,6 +253,13 @@ class _TimingSummaryWindow:
         self.frame_count = 0
         self.stage_totals.clear()
         self.stage_maximums.clear()
+
+
+def _format_stage_timings_ms(stage_timings: dict[str, float]) -> str:
+    return ", ".join(
+        f"{stage_name}={duration_ms:.1f}"
+        for stage_name, duration_ms in stage_timings.items()
+    )
 
 
 class InferenceEngine:
@@ -612,7 +620,12 @@ class InferenceEngine:
             for stage_name, duration in sorted(self._timing_summary.stage_maximums.items())
         }
         logger.info(
-            "Inference stage timing summary",
+            "Inference stage timing summary "
+            "camera_id=%s frame_count=%s stage_avg_ms={%s} stage_max_ms={%s}",
+            str(self.config.camera_id),
+            frame_count,
+            _format_stage_timings_ms(stage_avg_ms),
+            _format_stage_timings_ms(stage_max_ms),
             extra={
                 "camera_id": str(self.config.camera_id),
                 "frame_count": frame_count,
@@ -850,7 +863,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run an Argus inference worker for a camera.")
     parser.add_argument("--camera-id", required=True, type=UUID)
     args = parser.parse_args(argv)
-    asyncio.run(run_engine_for_camera(args.camera_id))
+    settings = Settings()
+    configure_logging(settings)
+    asyncio.run(run_engine_for_camera(args.camera_id, settings=settings))
     return 0
 
 
