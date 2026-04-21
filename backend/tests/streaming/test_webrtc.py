@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from urllib.parse import parse_qs, urlsplit
 from uuid import UUID, uuid4
 
 import pytest
@@ -25,6 +27,7 @@ def test_resolve_stream_access_returns_annotated_variant_for_central_processing(
         processing_mode=ProcessingMode.CENTRAL,
         edge_node_id=None,
         privacy={"blur_faces": True, "blur_plates": True},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
         hls_base_url="http://mediamtx.internal:8888",
         mjpeg_base_url="http://mediamtx.internal:8890",
@@ -32,6 +35,7 @@ def test_resolve_stream_access_returns_annotated_variant_for_central_processing(
 
     assert access.mode is StreamMode.ANNOTATED_WHIP
     assert access.path_name == f"cameras/{camera_id}/annotated"
+    assert access.rtsp_url == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated"
     assert access.whep_url == f"http://mediamtx.internal:8889/cameras/{camera_id}/annotated/whep"
     assert access.hls_url == f"http://mediamtx.internal:8888/cameras/{camera_id}/annotated/index.m3u8"
     assert access.mjpeg_url == f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated/mjpeg"
@@ -45,6 +49,7 @@ def test_resolve_stream_access_disables_passthrough_when_edge_privacy_is_require
         processing_mode=ProcessingMode.EDGE,
         edge_node_id=uuid4(),
         privacy={"blur_faces": True, "blur_plates": False},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
         hls_base_url="http://mediamtx.internal:8888",
         mjpeg_base_url="http://mediamtx.internal:8890",
@@ -62,6 +67,7 @@ def test_mediamtx_token_issuer_emits_jwks_and_path_scoped_read_tokens() -> None:
         processing_mode=ProcessingMode.EDGE,
         edge_node_id=uuid4(),
         privacy={"blur_faces": False, "blur_plates": False},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
         hls_base_url="http://mediamtx.internal:8888",
         mjpeg_base_url="http://mediamtx.internal:8890",
@@ -93,6 +99,7 @@ async def test_webrtc_negotiator_posts_offer_to_whep_with_short_lived_bearer_tok
         processing_mode=ProcessingMode.CENTRAL,
         edge_node_id=None,
         privacy={"blur_faces": True, "blur_plates": True},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
         hls_base_url="http://mediamtx.internal:8888",
         mjpeg_base_url="http://mediamtx.internal:8890",
@@ -139,6 +146,50 @@ async def test_webrtc_negotiator_posts_offer_to_whep_with_short_lived_bearer_tok
 
 
 @pytest.mark.asyncio
+async def test_webrtc_negotiator_builds_rtsp_url_for_mjpeg_bridge() -> None:
+    issuer = MediaMTXTokenIssuer()
+    access = resolve_stream_access(
+        camera_id=uuid4(),
+        processing_mode=ProcessingMode.CENTRAL,
+        edge_node_id=None,
+        privacy={"blur_faces": True, "blur_plates": True},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+    opened_urls: list[str] = []
+
+    async def fake_mjpeg_stream_factory(rtsp_url: str):
+        opened_urls.append(rtsp_url)
+        from argus.streaming.webrtc import UpstreamProxyStream
+
+        return UpstreamProxyStream(byte_iterator=_empty_chunks())
+
+    negotiator = WebRTCNegotiator(
+        token_issuer=issuer,
+        mjpeg_stream_factory=fake_mjpeg_stream_factory,
+    )
+
+    await negotiator.open_mjpeg_stream(
+        access=access,
+        camera_id=UUID(str(access.camera_id)),
+        subject="viewer-1",
+    )
+
+    assert len(opened_urls) == 1
+    split_url = urlsplit(opened_urls[0])
+    assert f"{split_url.scheme}://{split_url.netloc}{split_url.path}" == access.rtsp_url
+    token = parse_qs(split_url.query)["jwt"][0]
+    claims = jwt.get_unverified_claims(token)
+    assert claims["mediamtx_permissions"] == [
+        {"action": "read", "path": access.path_name}
+    ]
+
+    await negotiator.close()
+
+
+@pytest.mark.asyncio
 async def test_user_concurrency_limiter_blocks_eleventh_session() -> None:
     limiter = UserConcurrencyLimiter(limit=10)
 
@@ -162,3 +213,8 @@ def _transport(handler):
     from httpx import MockTransport
 
     return MockTransport(wrapped)
+
+
+async def _empty_chunks() -> AsyncIterator[bytes]:
+    if False:
+        yield b""

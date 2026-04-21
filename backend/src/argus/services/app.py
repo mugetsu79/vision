@@ -980,7 +980,7 @@ class StreamService:
                 camera_id=camera_id,
                 subject=user.subject,
             )
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, RuntimeError) as exc:
             await self.video_feed_limiter.release(user.subject)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -1006,6 +1006,7 @@ class StreamService:
             processing_mode=camera.processing_mode,
             edge_node_id=camera.edge_node_id,
             privacy=camera.privacy,
+            rtsp_base_url=self.settings.mediamtx_rtsp_base_url,
             webrtc_base_url=self.settings.mediamtx_webrtc_base_url,
             hls_base_url=self.settings.mediamtx_hls_base_url,
             mjpeg_base_url=self.settings.mediamtx_mjpeg_base_url,

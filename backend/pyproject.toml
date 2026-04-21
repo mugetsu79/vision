@@ -35,6 +35,7 @@ runtime = [
   "prometheus-client>=0.21",
   "pyarrow>=23.0.1",
   "minio>=7.2.20",
+  "opencv-python-headless>=4.10",
 ]
 dev = [
   "ruff>=0.8",
@@ -45,7 +46,6 @@ dev = [
   "playwright>=1.49",
 ]
 vision = [
-  "opencv-python-headless>=4.10",
   "onnxruntime-gpu>=1.20; sys_platform == 'linux' and platform_machine == 'x86_64'",
   # PyPI no longer ships current Intel macOS wheels, so keep a compatible
   # universal2 build for local iMac worker development.
