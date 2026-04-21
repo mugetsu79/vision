@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from logging import getLogger
 from typing import Any, Protocol
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from uuid import UUID
@@ -22,6 +23,8 @@ class Frame(Protocol):
 
 type CommandRunner = Callable[[list[str]], str]
 type PublishTokenFactory = Callable[[UUID, str], str]
+
+LOGGER = getLogger(__name__)
 
 
 class PublishProfile(StrEnum):
@@ -190,6 +193,7 @@ class MediaMTXClient:
         http_client: httpx.AsyncClient | None = None,
         publisher_factory: PublisherFactory | None = None,
         publish_token_factory: PublishTokenFactory | None = None,
+        publisher_push_timeout_seconds: float = 1.0,
     ) -> None:
         self.api_base_url = api_base_url.rstrip("/")
         self.rtsp_base_url = rtsp_base_url.rstrip("/")
@@ -200,6 +204,7 @@ class MediaMTXClient:
         )
         self._publisher_factory = publisher_factory or _default_publisher_factory
         self._publish_token_factory = publish_token_factory
+        self._publisher_push_timeout_seconds = max(0.0, publisher_push_timeout_seconds)
         self._registrations: dict[UUID, StreamRegistration] = {}
         self._publishers: dict[UUID, _PublisherState] = {}
         self._pushed_frames: dict[UUID, dict[str, Any]] = {}
@@ -275,7 +280,26 @@ class MediaMTXClient:
             return
         publisher = publisher_state.publisher
         try:
-            await publisher.push_frame(prepared_frame, ts=ts)
+            await self._push_frame_with_timeout(
+                publisher=publisher,
+                frame=prepared_frame,
+                ts=ts,
+            )
+        except TimeoutError:
+            LOGGER.warning(
+                (
+                    "Timed out pushing frame to MediaMTX publisher; "
+                    "dropping frame and recycling publisher"
+                ),
+                extra={
+                    "camera_id": str(registration.camera_id),
+                    "path_name": registration.path_name,
+                    "timeout_seconds": self._publisher_push_timeout_seconds,
+                },
+            )
+            await publisher.close()
+            self._publishers.pop(registration.camera_id, None)
+            return
         except _PublisherRestartRequired:
             await publisher.close()
             self._publishers.pop(registration.camera_id, None)
@@ -284,13 +308,32 @@ class MediaMTXClient:
                 frame=prepared_frame,
             )
             publisher = publisher_state.publisher
-            await publisher.push_frame(prepared_frame, ts=ts)
+            await self._push_frame_with_timeout(
+                publisher=publisher,
+                frame=prepared_frame,
+                ts=ts,
+            )
         publisher_state.last_published_at = ts
         self._pushed_frames[registration.camera_id] = {
             "mode": registration.mode,
             "shape": tuple(int(value) for value in prepared_frame.shape),
             "ts": ts.isoformat(),
         }
+
+    async def _push_frame_with_timeout(
+        self,
+        *,
+        publisher: FramePublisher,
+        frame: Frame,
+        ts: datetime,
+    ) -> None:
+        if self._publisher_push_timeout_seconds <= 0:
+            await publisher.push_frame(frame, ts=ts)
+            return
+        await asyncio.wait_for(
+            publisher.push_frame(frame, ts=ts),
+            timeout=self._publisher_push_timeout_seconds,
+        )
 
     async def create_webrtc_offer(self, *, camera_id: UUID, sdp_offer: str) -> str:
         response = await self._http_client.post(

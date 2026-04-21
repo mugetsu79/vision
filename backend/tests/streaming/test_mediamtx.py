@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import json
 from collections.abc import Callable
@@ -15,8 +16,8 @@ from argus.streaming.mediamtx import (
     MediaMTXClient,
     PrivacyPolicy,
     PublishProfile,
-    StreamRegistration,
     StreamMode,
+    StreamRegistration,
     _FFmpegFramePublisher,
     _prepare_frame_for_publish,
     probe_publish_profile,
@@ -195,7 +196,8 @@ async def test_mediamtx_client_registers_whip_target_for_central_profile() -> No
 
 
 @pytest.mark.asyncio
-async def test_mediamtx_client_does_not_delete_preconfigured_preview_when_switching_back_to_passthrough() -> None:
+async def test_mediamtx_client_keeps_preconfigured_preview_when_switching_to_passthrough(
+) -> None:
     requests: list[tuple[str, str, dict[str, object] | None]] = []
 
     async def handler(request: Request) -> Response:
@@ -332,7 +334,11 @@ async def test_mediamtx_client_replaces_publisher_when_path_changes() -> None:
         profile=PublishProfile.JETSON_NANO,
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=False),
     )
-    await client.push_frame(second_registration, frame, ts=datetime(2026, 4, 20, 18, 1, 1, tzinfo=UTC))
+    await client.push_frame(
+        second_registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 1, 1, tzinfo=UTC),
+    )
 
     assert len(created_publishers) == 2
     assert created_publishers[0].closed is True
@@ -424,6 +430,62 @@ async def test_mediamtx_client_push_frame_applies_resize_and_cadence_limits() ->
     )
 
     assert created_publishers[0].frames == [(720, 1280, 3), (720, 1280, 3)]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_mediamtx_client_times_out_stalled_publisher_and_recovers_on_next_frame() -> None:
+    created_publishers: list[_BlockingFramePublisher | _FakeFramePublisher] = []
+    camera_id = uuid4()
+
+    async def publisher_factory(
+        *,
+        registration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _BlockingFramePublisher | _FakeFramePublisher:
+        del registration, frame, publish_url
+        if not created_publishers:
+            publisher = _BlockingFramePublisher()
+        else:
+            publisher = _FakeFramePublisher()
+        created_publishers.append(publisher)
+        return publisher
+
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        publisher_factory=publisher_factory,
+        publisher_push_timeout_seconds=0.01,
+    )
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
+    )
+    frame = np.zeros((12, 16, 3), dtype=np.uint8)
+
+    await asyncio.wait_for(
+        client.push_frame(registration, frame, ts=datetime(2026, 4, 20, 18, 0, tzinfo=UTC)),
+        timeout=0.1,
+    )
+
+    assert len(created_publishers) == 1
+    assert isinstance(created_publishers[0], _BlockingFramePublisher)
+    assert created_publishers[0].closed is True
+
+    await client.push_frame(
+        registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 0, 1, tzinfo=UTC),
+    )
+
+    assert len(created_publishers) == 2
+    assert isinstance(created_publishers[1], _FakeFramePublisher)
+    assert created_publishers[1].frames == [(12, 16, 3)]
 
     await client.close()
 
@@ -535,6 +597,21 @@ class _FakeFramePublisher:
 
     async def push_frame(self, frame: np.ndarray, *, ts: datetime) -> None:
         self.frames.append(tuple(int(value) for value in frame.shape))
+
+    def is_alive(self) -> bool:
+        return not self.closed
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class _BlockingFramePublisher:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def push_frame(self, frame: np.ndarray, *, ts: datetime) -> None:
+        del frame, ts
+        await asyncio.sleep(3600)
 
     def is_alive(self) -> bool:
         return not self.closed
