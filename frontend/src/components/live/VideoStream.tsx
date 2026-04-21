@@ -18,6 +18,8 @@ const MAX_HLS_STARTUP_RETRIES = 3;
 const STREAM_RECONNECT_BASE_DELAY_MS = 1_000;
 const STREAM_RECONNECT_MAX_DELAY_MS = 5_000;
 const HEARTBEAT_STALE_AFTER_MS = 15_000;
+const HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS = 3_000;
+const WEBRTC_DISCONNECT_GRACE_MS = 2_000;
 
 export function VideoStream({
   cameraId,
@@ -69,7 +71,8 @@ export function VideoStream({
     setSessionToken((current) => current + 1);
   });
 
-  const requestSessionRestart = useEffectEvent((mode: "backoff" | "immediate" = "backoff") => {
+  const requestSessionRestart = useEffectEvent(
+    (mode: "backoff" | "immediate" | "recovery" = "backoff") => {
     if (!accessToken) {
       setTransport("error");
       return;
@@ -82,6 +85,15 @@ export function VideoStream({
     }
 
     if (reconnectTimerRef.current !== null) {
+      return;
+    }
+
+    if (mode === "recovery") {
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        reconnectAttemptRef.current = 0;
+        restartSession();
+      }, HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS);
       return;
     }
 
@@ -197,12 +209,12 @@ export function VideoStream({
     }
 
     let disposed = false;
-    let peerConnection: RTCPeerConnection | null = null;
+    let stopWebRtc: (() => void) | null = null;
     setTransport("connecting");
 
     const startStream = async () => {
       try {
-        peerConnection = await startWebRtc({
+        stopWebRtc = await startWebRtc({
           accessToken,
           cameraId,
           onConnectionLost: () => {
@@ -217,7 +229,7 @@ export function VideoStream({
           setTransport("webrtc");
         }
       } catch {
-        peerConnection?.close();
+        stopWebRtc?.();
         if (!disposed) {
           setWebrtcFailed(true);
         }
@@ -228,7 +240,7 @@ export function VideoStream({
 
     return () => {
       disposed = true;
-      peerConnection?.close();
+      stopWebRtc?.();
     };
   }, [accessToken, cameraId, sessionToken, tenantId]);
 
@@ -417,11 +429,13 @@ export function VideoStream({
     const previousStatus = heartbeatStatusRef.current;
     heartbeatStatusRef.current = nextStatus;
 
-    if (previousStatus === "fresh" && nextStatus === "stale") {
-      requestSessionRestart();
-    }
-    if (previousStatus === "stale" && nextStatus === "fresh" && transport !== "connecting") {
-      requestSessionRestart("immediate");
+    if (
+      previousStatus === "stale" &&
+      nextStatus === "fresh" &&
+      transport !== "connecting" &&
+      transport !== "webrtc"
+    ) {
+      requestSessionRestart("recovery");
     }
 
     if (nextStatus === "fresh") {
@@ -435,7 +449,6 @@ export function VideoStream({
         }
 
         heartbeatStatusRef.current = "stale";
-        requestSessionRestart();
       }, remainingFreshMs + 50);
     }
 
@@ -500,6 +513,26 @@ async function startWebRtc({
   }
 
   const peerConnection = new RTCPeerConnection();
+  let disconnectTimer: number | null = null;
+
+  const clearDisconnectTimer = () => {
+    if (disconnectTimer !== null) {
+      window.clearTimeout(disconnectTimer);
+      disconnectTimer = null;
+    }
+  };
+
+  const scheduleConnectionLoss = () => {
+    if (disconnectTimer !== null) {
+      return;
+    }
+
+    disconnectTimer = window.setTimeout(() => {
+      disconnectTimer = null;
+      onConnectionLost();
+    }, WEBRTC_DISCONNECT_GRACE_MS);
+  };
+
   peerConnection.addTransceiver("video", { direction: "recvonly" });
   peerConnection.ontrack = (event) => {
     if (!videoElement) {
@@ -509,12 +542,21 @@ async function startWebRtc({
     void videoElement.play().catch(() => undefined);
   };
   const handleConnectionLoss = () => {
+    const healthyIceStates = new Set(["connected", "completed"]);
+    if (
+      peerConnection.connectionState === "connected" ||
+      healthyIceStates.has(peerConnection.iceConnectionState)
+    ) {
+      clearDisconnectTimer();
+      return;
+    }
+
     const closedConnectionStates = new Set(["closed", "disconnected", "failed"]);
     if (
       closedConnectionStates.has(peerConnection.connectionState) ||
       closedConnectionStates.has(peerConnection.iceConnectionState)
     ) {
-      onConnectionLost();
+      scheduleConnectionLoss();
     }
   };
   peerConnection.onconnectionstatechange = handleConnectionLoss;
@@ -547,7 +589,10 @@ async function startWebRtc({
     sdp: payload.sdp_answer,
   });
 
-  return peerConnection;
+  return () => {
+    clearDisconnectTimer();
+    peerConnection.close();
+  };
 }
 
 async function startHls({

@@ -23,6 +23,43 @@ const loadHlsClientMock = vi.fn<
 const observedElements = new Map<Element, IntersectionObserverCallback>();
 let defaultIntersectionVisible = true;
 
+class FakeRTCPeerConnection {
+  static instances: FakeRTCPeerConnection[] = [];
+
+  connectionState = "connected";
+  iceConnectionState = "connected";
+  onconnectionstatechange: (() => void) | null = null;
+  oniceconnectionstatechange: (() => void) | null = null;
+  ontrack: ((event: { streams: MediaStream[] }) => void) | null = null;
+
+  constructor() {
+    FakeRTCPeerConnection.instances.push(this);
+  }
+
+  static reset() {
+    FakeRTCPeerConnection.instances = [];
+  }
+
+  addTransceiver() {}
+
+  createOffer() {
+    return { sdp: "v=0" };
+  }
+
+  setLocalDescription() {}
+
+  setRemoteDescription() {}
+
+  close() {}
+
+  emitConnectionState(connectionState: string, iceConnectionState = connectionState) {
+    this.connectionState = connectionState;
+    this.iceConnectionState = iceConnectionState;
+    this.onconnectionstatechange?.();
+    this.oniceconnectionstatechange?.();
+  }
+}
+
 vi.mock("@/lib/hls", () => ({
   loadHlsClient: () => loadHlsClientMock(),
 }));
@@ -47,18 +84,8 @@ describe("VideoStream", () => {
       },
     });
 
-    vi.stubGlobal(
-      "RTCPeerConnection",
-      class FakeRTCPeerConnection {
-        addTransceiver() {}
-        createOffer() {
-          return { sdp: "v=0" };
-        }
-        setLocalDescription() {}
-        setRemoteDescription() {}
-        close() {}
-      },
-    );
+    FakeRTCPeerConnection.reset();
+    vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
 
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
     defaultIntersectionVisible = true;
@@ -103,6 +130,7 @@ describe("VideoStream", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    FakeRTCPeerConnection.reset();
     useAuthStore.setState(initialAuthState, true);
     destroyMock.mockReset();
     loadSourceMock.mockReset();
@@ -484,7 +512,8 @@ describe("VideoStream", () => {
     });
   });
 
-  test("restarts the live tile when the worker heartbeat recovers after going stale", async () => {
+  test("restarts the live tile after a short delay when the worker heartbeat recovers after going stale", async () => {
+    vi.useFakeTimers();
     const fetchMock = vi
       .spyOn(global, "fetch")
       .mockResolvedValue(new Response("upstream failed", { status: 502 }));
@@ -506,30 +535,133 @@ describe("VideoStream", () => {
 
     const staleHeartbeatTs = new Date(Date.now() - 20_000).toISOString();
     const freshHeartbeatTs = new Date().toISOString();
-    const { rerender } = render(
-      <VideoStream
-        cameraId="45454545-4545-4545-4545-454545454545"
-        cameraName="Heartbeat Recovery"
-        defaultProfile="720p10"
-        heartbeatTs={staleHeartbeatTs}
-      />,
-    );
+    const { rerender } = await act(async () => {
+      const view = render(
+        <VideoStream
+          cameraId="45454545-4545-4545-4545-454545454545"
+          cameraName="Heartbeat Recovery"
+          defaultProfile="720p10"
+          heartbeatTs={staleHeartbeatTs}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      return view;
+    });
 
-    await screen.findByRole("img", { name: /heartbeat recovery live stream/i });
+    expect(screen.getByRole("img", { name: /heartbeat recovery live stream/i })).toBeInTheDocument();
     const initialFetchCount = fetchMock.mock.calls.length;
 
-    rerender(
-      <VideoStream
-        cameraId="45454545-4545-4545-4545-454545454545"
-        cameraName="Heartbeat Recovery"
-        defaultProfile="720p10"
-        heartbeatTs={freshHeartbeatTs}
-      />,
+    await act(async () => {
+      rerender(
+        <VideoStream
+          cameraId="45454545-4545-4545-4545-454545454545"
+          cameraName="Heartbeat Recovery"
+          defaultProfile="720p10"
+          heartbeatTs={freshHeartbeatTs}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_500);
+    });
+
+    expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount);
+  });
+
+  test("does not restart an active WebRTC session just because telemetry heartbeat becomes stale", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
     );
 
-    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount), {
-      timeout: 2_500,
+    const nearlyStaleHeartbeatTs = new Date(Date.now() - 10_000).toISOString();
+
+    await act(async () => {
+      render(
+        <VideoStream
+          cameraId="56565656-5656-5656-5656-565656565656"
+          cameraName="Stable WebRTC"
+          defaultProfile="720p10"
+          heartbeatTs={nearlyStaleHeartbeatTs}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
     });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_500);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not restart WebRTC on a transient disconnected pulse", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await act(async () => {
+      render(
+        <VideoStream
+          cameraId="67676767-6767-6767-6767-676767676767"
+          cameraName="Transient Disconnect"
+          defaultProfile="720p10"
+          heartbeatTs={new Date().toISOString()}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const peerConnection = FakeRTCPeerConnection.instances[0];
+    expect(peerConnection).toBeDefined();
+
+    act(() => {
+      peerConnection?.emitConnectionState("disconnected");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      peerConnection?.emitConnectionState("connected");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test("waits to start HLS fallback until the live tile is visible", async () => {
