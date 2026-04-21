@@ -237,7 +237,8 @@ async def test_webrtc_negotiator_builds_rtsp_url_for_mjpeg_bridge() -> None:
     )
     opened_urls: list[str] = []
 
-    async def fake_mjpeg_stream_factory(rtsp_url: str):
+    async def fake_mjpeg_stream_factory(rtsp_url_source):
+        rtsp_url = rtsp_url_source() if callable(rtsp_url_source) else rtsp_url_source
         opened_urls.append(rtsp_url)
         from argus.streaming.webrtc import UpstreamProxyStream
 
@@ -385,6 +386,86 @@ async def test_open_rtsp_mjpeg_stream_reconnects_after_runtime_gap(
         "rtsp://mediamtx.internal:8554/cameras/test/annotated",
     ]
     assert initial_capture.release_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_open_rtsp_mjpeg_stream_refreshes_rtsp_url_on_runtime_reconnect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_cv2 = object()
+    issued_urls = iter(
+        (
+            "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=initial",
+            "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=retry-one",
+            "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=retry-two",
+            "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=recovered",
+        )
+    )
+    open_attempts: list[str] = []
+
+    class FakeCapture:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def release(self) -> None:
+            return None
+
+    initial_capture = FakeCapture("initial")
+    recovered_capture = FakeCapture("recovered")
+    frame_reads = {
+        initial_capture.name: [b"frame-one", None],
+        recovered_capture.name: [b"frame-two"],
+    }
+
+    def fake_load_cv2() -> object:
+        return fake_cv2
+
+    def next_url() -> str:
+        return next(issued_urls)
+
+    def fake_open_rtsp_capture(rtsp_url: str, cv2: object) -> FakeCapture:
+        assert cv2 is fake_cv2
+        open_attempts.append(rtsp_url)
+        if rtsp_url.endswith("jwt=initial"):
+            return initial_capture
+        if rtsp_url.endswith(("jwt=retry-one", "jwt=retry-two")):
+            raise RuntimeError("stale token or stream not ready")
+        if rtsp_url.endswith("jwt=recovered"):
+            return recovered_capture
+        raise AssertionError(f"Unexpected RTSP URL: {rtsp_url}")
+
+    def fake_read_rtsp_frame(current_capture: FakeCapture) -> bytes | None:
+        remaining_frames = frame_reads[current_capture.name]
+        if not remaining_frames:
+            return None
+        return remaining_frames.pop(0)
+
+    def fake_encode_mjpeg_frame(_cv2: object, frame: bytes) -> bytes:
+        return frame
+
+    async def fake_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(webrtc_module, "_load_cv2", fake_load_cv2)
+    monkeypatch.setattr(webrtc_module, "_open_rtsp_capture", fake_open_rtsp_capture)
+    monkeypatch.setattr(webrtc_module, "_read_rtsp_frame", fake_read_rtsp_frame)
+    monkeypatch.setattr(webrtc_module, "_encode_mjpeg_frame", fake_encode_mjpeg_frame)
+    monkeypatch.setattr(webrtc_module.asyncio, "sleep", fake_sleep)
+
+    stream = await _open_rtsp_mjpeg_stream(next_url)
+    iterator = stream.iter_bytes()
+
+    assert await anext(iterator) == b"frame-one"
+    assert await anext(iterator) == b"frame-two"
+
+    await iterator.aclose()
+
+    assert open_attempts == [
+        "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=initial",
+        "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=retry-one",
+        "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=retry-two",
+        "rtsp://mediamtx.internal:8554/cameras/test/annotated?jwt=recovered",
+    ]
 
 
 @pytest.mark.asyncio

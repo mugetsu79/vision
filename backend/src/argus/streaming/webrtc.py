@@ -126,7 +126,8 @@ class UserConcurrencyLimiter:
             self._counts[key] = current - 1
 
 
-type MjpegStreamFactory = Callable[[str], Awaitable[UpstreamProxyStream]]
+type RtspUrlSource = str | Callable[[], str]
+type MjpegStreamFactory = Callable[[RtspUrlSource], Awaitable[UpstreamProxyStream]]
 
 
 class MediaMTXTokenIssuer:
@@ -320,12 +321,14 @@ class WebRTCNegotiator:
         camera_id: UUID,
         subject: str,
     ) -> UpstreamProxyStream:
-        rtsp_url = self.token_issuer.build_rtsp_url(
-            subject=subject,
-            camera_id=camera_id,
-            access=access,
-        )
-        return await self._mjpeg_stream_factory(rtsp_url)
+        def rtsp_url_factory() -> str:
+            return self.token_issuer.build_rtsp_url(
+                subject=subject,
+                camera_id=camera_id,
+                access=access,
+            )
+
+        return await self._mjpeg_stream_factory(rtsp_url_factory)
 
 
 def resolve_stream_access(
@@ -397,9 +400,9 @@ _MJPEG_STARTUP_RETRY_DELAYS_SECONDS = (0.25, 0.25, 0.5, 1.0, 1.0)
 _MJPEG_RUNTIME_RETRY_DELAYS_SECONDS = (0.25, 0.5, 1.0, 2.0, 2.0, 5.0)
 
 
-async def _open_rtsp_mjpeg_stream(rtsp_url: str) -> UpstreamProxyStream:
+async def _open_rtsp_mjpeg_stream(rtsp_url_source: RtspUrlSource) -> UpstreamProxyStream:
     cv2 = _load_cv2()
-    capture, first_frame = await _open_initial_rtsp_capture(rtsp_url, cv2)
+    capture, first_frame = await _open_initial_rtsp_capture(rtsp_url_source, cv2)
 
     async def iterator() -> AsyncIterator[bytes]:
         current_capture: Any = capture
@@ -417,7 +420,7 @@ async def _open_rtsp_mjpeg_stream(rtsp_url: str) -> UpstreamProxyStream:
 
                 await asyncio.to_thread(current_capture.release)
                 current_capture, current_frame = await _reopen_rtsp_capture(
-                    rtsp_url,
+                    rtsp_url_source,
                     cv2,
                 )
         finally:
@@ -429,10 +432,11 @@ async def _open_rtsp_mjpeg_stream(rtsp_url: str) -> UpstreamProxyStream:
     )
 
 
-async def _open_initial_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]:
+async def _open_initial_rtsp_capture(rtsp_url_source: RtspUrlSource, cv2: Any) -> tuple[Any, Any]:
     last_error: RuntimeError | None = None
 
     for attempt in range(len(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS) + 1):
+        rtsp_url = _resolve_rtsp_url(rtsp_url_source)
         try:
             capture = await asyncio.to_thread(_open_rtsp_capture, rtsp_url, cv2)
         except RuntimeError as exc:
@@ -456,8 +460,9 @@ async def _reopen_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]:
     attempt = 0
 
     while True:
+        current_rtsp_url = _resolve_rtsp_url(rtsp_url)
         try:
-            capture = await asyncio.to_thread(_open_rtsp_capture, rtsp_url, cv2)
+            capture = await asyncio.to_thread(_open_rtsp_capture, current_rtsp_url, cv2)
         except RuntimeError:
             pass
         else:
@@ -471,6 +476,12 @@ async def _reopen_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]:
         ]
         attempt += 1
         await asyncio.sleep(delay_seconds)
+
+
+def _resolve_rtsp_url(rtsp_url_source: RtspUrlSource) -> str:
+    if callable(rtsp_url_source):
+        return rtsp_url_source()
+    return rtsp_url_source
 
 
 def _open_rtsp_capture(rtsp_url: str, cv2: Any) -> Any:
