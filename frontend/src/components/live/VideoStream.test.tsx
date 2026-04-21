@@ -100,6 +100,7 @@ describe("VideoStream", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     useAuthStore.setState(initialAuthState, true);
@@ -146,7 +147,7 @@ describe("VideoStream", () => {
       "/api/v1/streams/11111111-1111-1111-1111-111111111111/hls.m3u8",
     );
     expect(loadSourceMock.mock.calls[0]?.[0]).toContain("access_token=stream-token");
-    expect(screen.getByText(/ll-hls fallback/i)).toBeInTheDocument();
+    expect(await screen.findByText(/standby preview/i)).toBeInTheDocument();
   });
 
   test("starts playback after the HLS manifest is parsed", async () => {
@@ -191,6 +192,57 @@ describe("VideoStream", () => {
     });
 
     await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
+    expect(screen.getByText(/ll-hls fallback/i)).toBeInTheDocument();
+  });
+
+  test("retries HLS startup when the manifest never becomes available", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("upstream failed", { status: 502 }),
+    );
+
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    await act(async () => {
+      render(
+        <VideoStream
+          cameraId="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          cameraName="Warehouse South"
+          defaultProfile="720p10"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadSourceMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    expect(destroyMock).toHaveBeenCalled();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadSourceMock).toHaveBeenCalledTimes(2);
   });
 
   test("falls back to MJPEG when HLS is unavailable", async () => {
@@ -286,7 +338,7 @@ describe("VideoStream", () => {
     );
 
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(/ll-hls fallback/i)).toBeInTheDocument();
+    expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
   });
 
   test("publishes a first-frame metric when the stream becomes visible", async () => {
@@ -300,6 +352,10 @@ describe("VideoStream", () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),
     );
+    const hlsListeners = new Map<string, (event: string, data?: { fatal?: boolean }) => void>();
+    onMock.mockImplementation((event: string, listener: (event: string) => void) => {
+      hlsListeners.set(event, listener);
+    });
     isSupportedMock.mockReturnValue(true);
     loadHlsClientMock.mockResolvedValue({
       isSupported: isSupportedMock,
@@ -325,6 +381,12 @@ describe("VideoStream", () => {
     );
 
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
+    const manifestParsedListener = hlsListeners.get("manifestParsed");
+    expect(manifestParsedListener).toBeDefined();
+
+    act(() => {
+      manifestParsedListener?.("manifestParsed");
+    });
 
     const video = view.container.querySelector("video");
     if (!video) {

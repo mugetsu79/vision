@@ -12,6 +12,9 @@ import { useAuthStore } from "@/stores/auth-store";
 
 type StreamTransport = "connecting" | "standby" | "webrtc" | "hls" | "mjpeg" | "error";
 
+const HLS_STARTUP_TIMEOUT_MS = 4_000;
+const HLS_RETRY_DELAY_MS = 1_000;
+
 export function VideoStream({
   cameraId,
   cameraName,
@@ -165,11 +168,25 @@ export function VideoStream({
     let unsubscribe: (() => void) | null = null;
     let releaseSlot: (() => void) | null = null;
     let destroyHls: (() => void) | null = null;
+    let retryTimer: number | null = null;
 
     const fallbackToMjpeg = () => {
       if (!disposed) {
         setTransport("mjpeg");
       }
+    };
+
+    const scheduleHlsRetry = () => {
+      if (disposed) {
+        return;
+      }
+
+      setTransport("standby");
+      retryTimer = window.setTimeout(() => {
+        if (!disposed) {
+          setHlsRetryToken((current) => current + 1);
+        }
+      }, HLS_RETRY_DELAY_MS);
     };
 
     const waitForSlot = () => {
@@ -189,6 +206,8 @@ export function VideoStream({
         fallbackToMjpeg();
         return;
       }
+
+      setTransport("standby");
 
       if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
         videoElement.src = hlsUrl;
@@ -211,12 +230,14 @@ export function VideoStream({
         destroyHls = await startHls({
           cameraName,
           hlsUrl,
-          onFatalError: fallbackToMjpeg,
+          onFatalError: scheduleHlsRetry,
+          onManifestParsed: () => {
+            if (!disposed) {
+              setTransport("hls");
+            }
+          },
           videoElement,
         });
-        if (!disposed) {
-          setTransport("hls");
-        }
       } catch {
         fallbackToMjpeg();
       }
@@ -227,6 +248,9 @@ export function VideoStream({
     return () => {
       disposed = true;
       unsubscribe?.();
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+      }
       destroyHls?.();
       releaseSlot?.();
     };
@@ -367,11 +391,13 @@ async function startHls({
   cameraName,
   hlsUrl,
   onFatalError,
+  onManifestParsed,
   videoElement,
 }: {
   cameraName: string;
   hlsUrl: string;
   onFatalError: () => void;
+  onManifestParsed: () => void;
   videoElement: HTMLVideoElement | null;
 }) {
   if (!videoElement) {
@@ -384,19 +410,33 @@ async function startHls({
   }
 
   const client = new Hls({ lowLatencyMode: true });
+  let manifestParsed = false;
+  const startupTimer = window.setTimeout(() => {
+    if (manifestParsed) {
+      return;
+    }
+
+    client.destroy();
+    onFatalError();
+  }, HLS_STARTUP_TIMEOUT_MS);
   client.attachMedia(videoElement);
   client.loadSource(hlsUrl);
   client.on(Hls.Events.MANIFEST_PARSED, () => {
+    manifestParsed = true;
+    window.clearTimeout(startupTimer);
+    onManifestParsed();
     void videoElement.play().catch(() => undefined);
   });
   client.on(Hls.Events.ERROR, (_event, data) => {
     if (data.fatal) {
+      window.clearTimeout(startupTimer);
       client.destroy();
       onFatalError();
     }
   });
 
   return () => {
+    window.clearTimeout(startupTimer);
     client.destroy();
   };
 }
