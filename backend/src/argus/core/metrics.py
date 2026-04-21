@@ -37,6 +37,11 @@ INFERENCE_FRAME_DURATION_SECONDS = Histogram(
     "Per-frame inference duration.",
     ["camera_id"],
 )
+INFERENCE_STAGE_DURATION_SECONDS = Histogram(
+    "argus_inference_stage_duration_seconds",
+    "Per-stage inference duration.",
+    ["camera_id", "stage"],
+)
 PRIVACY_FILTER_OPERATIONS_TOTAL = Counter(
     "argus_privacy_filter_operations_total",
     "Privacy filter operations by result.",

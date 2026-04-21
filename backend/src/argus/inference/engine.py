@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
+import cv2
 import httpx
 import numpy as np
-import cv2
 from numpy.typing import NDArray
 from prometheus_client import start_http_server
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,6 +22,7 @@ from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.metrics import (
     INFERENCE_FRAME_DURATION_SECONDS,
     INFERENCE_FRAMES_PROCESSED_TOTAL,
+    INFERENCE_STAGE_DURATION_SECONDS,
 )
 from argus.inference.publisher import (
     HttpPublisher,
@@ -57,6 +59,8 @@ from argus.vision.types import Detection
 from argus.vision.zones import Zones
 
 type Frame = NDArray[np.uint8]
+
+logger = logging.getLogger(__name__)
 
 
 class ModelSettings(BaseModel):
@@ -202,6 +206,54 @@ class _EngineState:
     zones: list[dict[str, Any]]
 
 
+@dataclass(slots=True)
+class _FrameStageTimer:
+    started_at: float
+    last_mark_at: float
+    durations: dict[str, float]
+
+    @classmethod
+    def start(cls, started_at: float) -> _FrameStageTimer:
+        return cls(
+            started_at=started_at,
+            last_mark_at=started_at,
+            durations={},
+        )
+
+    def record_stage(self, name: str, *, ended_at: float | None = None) -> None:
+        current_at = self.last_mark_at if ended_at is None else ended_at
+        self.durations[name] = max(0.0, current_at - self.last_mark_at)
+        self.last_mark_at = current_at
+
+    def record_skipped_stage(self, name: str) -> None:
+        self.durations[name] = 0.0
+
+    def finish(self, *, ended_at: float) -> dict[str, float]:
+        self.durations["total"] = max(0.0, ended_at - self.started_at)
+        return dict(self.durations)
+
+
+@dataclass(slots=True)
+class _TimingSummaryWindow:
+    frame_count: int = 0
+    stage_totals: dict[str, float] = field(default_factory=dict)
+    stage_maximums: dict[str, float] = field(default_factory=dict)
+
+    def add(self, stage_timings: dict[str, float]) -> None:
+        self.frame_count += 1
+        for stage_name, duration in stage_timings.items():
+            self.stage_totals[stage_name] = self.stage_totals.get(stage_name, 0.0) + duration
+            self.stage_maximums[stage_name] = max(
+                self.stage_maximums.get(stage_name, 0.0),
+                duration,
+            )
+
+    def reset(self) -> None:
+        self.frame_count = 0
+        self.stage_totals.clear()
+        self.stage_maximums.clear()
+
+
 class InferenceEngine:
     def __init__(
         self,
@@ -221,6 +273,7 @@ class InferenceEngine:
         homography: Homography | None = None,
         privacy_filter: PrivacyFilter | None = None,
         preprocessor: Preprocessor | None = None,
+        timing_summary_interval_frames: int = 120,
     ) -> None:
         self.config = config
         self.frame_source = frame_source
@@ -236,6 +289,7 @@ class InferenceEngine:
         self.incident_capture = incident_capture
         self.homography = homography or _build_homography(config.homography)
         self.preprocessor = preprocessor or _identity_preprocessor
+        self._timing_summary_interval_frames = max(0, timing_summary_interval_frames)
         self.privacy_filter = privacy_filter or PrivacyFilter(
             config=PrivacyConfig(
                 blur_faces=config.privacy.blur_faces,
@@ -253,6 +307,8 @@ class InferenceEngine:
         self._zones = Zones(self._state.zones) if self._state.zones else None
         self._stream_registration: StreamRegistration | None = None
         self._track_history: dict[int, list[tuple[float, float]]] = defaultdict(list)
+        self._last_stage_timings: dict[str, float] = {}
+        self._timing_summary = _TimingSummaryWindow()
         self._started = False
 
     async def start(self) -> None:
@@ -290,10 +346,16 @@ class InferenceEngine:
             return self.config.profile
         return PublishProfile.CENTRAL_GPU
 
+    @property
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._last_stage_timings)
+
     async def run_once(self, *, ts: datetime | None = None) -> TelemetryFrame:
         if not self._started:
             await self.start()
-        started_at = asyncio.get_running_loop().time()
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        stage_timer = _FrameStageTimer.start(started_at)
         current_ts = ts or datetime.now(tz=UTC)
         frame = self.frame_source.next_frame()
         if self.incident_capture is not None:
@@ -302,17 +364,24 @@ class InferenceEngine:
                 frame=frame,
                 ts=current_ts,
             )
+        stage_timer.record_stage("capture", ended_at=loop.time())
         processed = self.preprocessor(frame.copy())
+        stage_timer.record_stage("preprocess", ended_at=loop.time())
         detections = self.detector.detect(processed, self.active_classes)
+        stage_timer.record_stage("detect", ended_at=loop.time())
         filtered = [
             detection
             for detection in detections
             if detection.class_name in self.active_classes
         ]
         tracked = self._tracker.update(filtered, frame=processed)
+        stage_timer.record_stage("track", ended_at=loop.time())
         tracked = self._apply_speed(tracked)
+        stage_timer.record_stage("speed", ended_at=loop.time())
         tracked = self._apply_attributes(processed, tracked)
+        stage_timer.record_stage("attributes", ended_at=loop.time())
         tracked = self._apply_zones(tracked)
+        stage_timer.record_stage("zones", ended_at=loop.time())
         rule_events = await self.rule_engine.evaluate(
             camera_id=self.config.camera_id,
             detections=tracked,
@@ -332,8 +401,10 @@ class InferenceEngine:
             await self.event_client.publish(
                 f"incident.triggered.{self.config.camera_id}",
                 incident_event,
-            )
+                )
+        stage_timer.record_stage("rules", ended_at=loop.time())
         stream_frame = self._build_stream_frame(frame, tracked)
+        stage_timer.record_stage("annotate", ended_at=loop.time())
         if (
             self._stream_registration is not None
             and self._stream_registration.mode is not StreamMode.PASSTHROUGH
@@ -343,6 +414,9 @@ class InferenceEngine:
                 stream_frame,
                 ts=current_ts,
             )
+            stage_timer.record_stage("publish_stream", ended_at=loop.time())
+        else:
+            stage_timer.record_skipped_stage("publish_stream")
         telemetry = TelemetryFrame(
             camera_id=self.config.camera_id,
             ts=current_ts,
@@ -356,15 +430,24 @@ class InferenceEngine:
             tracks=[_telemetry_track_from_detection(detection) for detection in tracked],
         )
         await self.publisher.publish(telemetry)
+        stage_timer.record_stage("publish_telemetry", ended_at=loop.time())
         await self.tracking_store.record(self.config.camera_id, current_ts, tracked)
+        stage_timer.record_stage("persist_tracking", ended_at=loop.time())
+        self._last_stage_timings = stage_timer.finish(ended_at=loop.time())
+        for stage_name, duration in self._last_stage_timings.items():
+            INFERENCE_STAGE_DURATION_SECONDS.labels(
+                camera_id=str(self.config.camera_id),
+                stage=stage_name,
+            ).observe(duration)
         INFERENCE_FRAMES_PROCESSED_TOTAL.labels(
             camera_id=str(self.config.camera_id),
             profile=self.profile.value,
             stream_mode=telemetry.stream_mode.value,
         ).inc()
         INFERENCE_FRAME_DURATION_SECONDS.labels(camera_id=str(self.config.camera_id)).observe(
-            asyncio.get_running_loop().time() - started_at
+            self._last_stage_timings["total"]
         )
+        self._record_timing_summary()
         return telemetry
 
     async def apply_command(self, command: CameraCommand) -> None:
@@ -459,7 +542,10 @@ class InferenceEngine:
         return enriched
 
     def _build_stream_frame(self, frame: Frame, detections: list[Detection]) -> Frame:
-        if self._stream_registration is None or self._stream_registration.mode is StreamMode.PASSTHROUGH:
+        if (
+            self._stream_registration is None
+            or self._stream_registration.mode is StreamMode.PASSTHROUGH
+        ):
             return frame
         stream_frame = frame.copy()
         if self._state.privacy.requires_filtering:
@@ -505,8 +591,36 @@ class InferenceEngine:
                         "detection": getattr(event, "detection", {}),
                     },
                 )
-            )
+                )
         return incidents
+
+    def _record_timing_summary(self) -> None:
+        if self._timing_summary_interval_frames <= 0:
+            return
+
+        self._timing_summary.add(self._last_stage_timings)
+        if self._timing_summary.frame_count < self._timing_summary_interval_frames:
+            return
+
+        frame_count = self._timing_summary.frame_count
+        stage_avg_ms = {
+            stage_name: (total / frame_count) * 1000.0
+            for stage_name, total in sorted(self._timing_summary.stage_totals.items())
+        }
+        stage_max_ms = {
+            stage_name: duration * 1000.0
+            for stage_name, duration in sorted(self._timing_summary.stage_maximums.items())
+        }
+        logger.info(
+            "Inference stage timing summary",
+            extra={
+                "camera_id": str(self.config.camera_id),
+                "frame_count": frame_count,
+                "stage_avg_ms": stage_avg_ms,
+                "stage_max_ms": stage_max_ms,
+            },
+        )
+        self._timing_summary.reset()
 
 
 async def load_engine_config(

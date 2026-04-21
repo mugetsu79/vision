@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -7,6 +8,7 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
+from argus.core import metrics as core_metrics
 from argus.inference.engine import (
     CameraCommand,
     CameraSettings,
@@ -77,6 +79,15 @@ class _FakePublisher:
 
     async def close(self) -> None:
         return None
+
+
+class _FakeAttributeClassifier:
+    def classify(
+        self,
+        frame: np.ndarray,
+        detections: list[Detection],
+    ) -> list[dict[str, object]]:
+        return [{"color": "blue"} for _ in detections]
 
 
 class _FakeTrackingStore:
@@ -212,6 +223,14 @@ def _engine_config(camera_id: UUID) -> EngineConfig:
         attribute_rules=[],
         zones=[],
     )
+
+
+def _metric_sample_value(metric: object, sample_name: str, labels: dict[str, str]) -> float:
+    for family in metric.collect():
+        for sample in family.samples:
+            if sample.name == sample_name and sample.labels == labels:
+                return float(sample.value)
+    return 0.0
 
 
 @pytest.mark.asyncio
@@ -370,3 +389,121 @@ async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> 
     assert subject == f"incident.triggered.{camera_id}"
     assert isinstance(payload, IncidentTriggeredEvent)
     assert payload.type == "rule.alert"
+
+
+@pytest.mark.asyncio
+async def test_engine_exposes_last_stage_timings_for_processed_frame() -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 40, tzinfo=UTC))
+
+    assert set(engine.last_stage_timings) >= {
+        "capture",
+        "preprocess",
+        "detect",
+        "track",
+        "speed",
+        "attributes",
+        "zones",
+        "rules",
+        "annotate",
+        "publish_stream",
+        "publish_telemetry",
+        "persist_tracking",
+        "total",
+    }
+    assert engine.last_stage_timings["detect"] >= 0.0
+    assert engine.last_stage_timings["attributes"] >= 0.0
+    assert engine.last_stage_timings["publish_stream"] >= 0.0
+    assert engine.last_stage_timings["total"] >= engine.last_stage_timings["detect"]
+
+
+@pytest.mark.asyncio
+async def test_engine_records_stage_duration_metrics_by_camera_and_stage() -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 41, tzinfo=UTC))
+
+    assert _metric_sample_value(
+        core_metrics.INFERENCE_STAGE_DURATION_SECONDS,
+        "argus_inference_stage_duration_seconds_count",
+        {"camera_id": str(camera_id), "stage": "detect"},
+    ) == 1.0
+    assert _metric_sample_value(
+        core_metrics.INFERENCE_STAGE_DURATION_SECONDS,
+        "argus_inference_stage_duration_seconds_count",
+        {"camera_id": str(camera_id), "stage": "attributes"},
+    ) == 1.0
+    assert _metric_sample_value(
+        core_metrics.INFERENCE_STAGE_DURATION_SECONDS,
+        "argus_inference_stage_duration_seconds_count",
+        {"camera_id": str(camera_id), "stage": "publish_stream"},
+    ) == 1.0
+
+
+@pytest.mark.asyncio
+async def test_engine_logs_periodic_stage_timing_summary(caplog: pytest.LogCaptureFixture) -> None:
+    camera_id = uuid4()
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource(
+            [
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+            ]
+        ),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+        timing_summary_interval_frames=2,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 42, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 42, 1, tzinfo=UTC))
+
+    summary_records = [
+        record
+        for record in caplog.records
+        if record.name == "argus.inference.engine"
+        and record.message == "Inference stage timing summary"
+    ]
+
+    assert len(summary_records) == 1
+    record = summary_records[0]
+    assert record.camera_id == str(camera_id)
+    assert record.frame_count == 2
+    assert "detect" in record.stage_avg_ms
+    assert "total" in record.stage_max_ms
