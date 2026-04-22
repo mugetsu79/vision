@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from argus.models.enums import TrackerType
 from argus.vision.tracker import TrackerConfig, create_tracker
 from argus.vision.types import Detection
@@ -64,3 +66,22 @@ def test_tracker_supports_botsort_selection() -> None:
     )
 
     assert tracker.name == "botsort"
+
+
+def test_real_botsort_backend_accepts_default_tracker_config() -> None:
+    tracker = create_tracker(TrackerConfig(tracker_type=TrackerType.BOTSORT, frame_rate=30))
+
+    tracked = tracker.update(
+        [
+            Detection(
+                class_name="car",
+                confidence=0.93,
+                bbox=(10.0, 12.0, 60.0, 42.0),
+                class_id=2,
+            )
+        ],
+        frame=np.zeros((96, 96, 3), dtype=np.uint8),
+    )
+
+    assert len(tracked) == 1
+    assert tracked[0].class_name == "car"

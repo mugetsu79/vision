@@ -21,6 +21,7 @@ class TrackerConfig:
     new_track_thresh: float = 0.6
     match_thresh: float = 0.8
     track_buffer: int = 30
+    fuse_score: bool = True
     with_reid: bool = False
     model: str = "auto"
     proximity_thresh: float = 0.5
@@ -34,6 +35,7 @@ class TrackerConfig:
             new_track_thresh=self.new_track_thresh,
             match_thresh=self.match_thresh,
             track_buffer=self.track_buffer,
+            fuse_score=self.fuse_score,
             with_reid=self.with_reid,
             model=self.model,
             proximity_thresh=self.proximity_thresh,
