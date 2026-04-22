@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from collections import deque
 from dataclasses import dataclass
 
-import numpy as np
 import cv2
+import numpy as np
 import pytest
 
 import argus.vision.camera as camera_module
@@ -231,3 +232,35 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     np.testing.assert_array_equal(decoded, frame)
     capture.release()
     assert created_commands[0][:4] == ["ffmpeg", "-loglevel", "error", "-rtsp_transport"]
+
+
+def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fallback_capture = _FakeCapture([])
+
+    monkeypatch.setattr(camera_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(camera_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        camera_module._FFmpegRawVideoCapture,
+        "create",
+        classmethod(
+            lambda cls, source_uri: (_ for _ in ()).throw(  # noqa: ARG005
+                RuntimeError("ffprobe did not return a video stream.")
+            )
+        ),
+    )
+    monkeypatch.setattr(cv2, "VideoCapture", lambda source, backend=None: fallback_capture)
+    monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory("rtsp://camera.internal/live", cv2.CAP_FFMPEG)
+
+    assert capture is fallback_capture
+    assert any(
+        "FFmpeg rawvideo capture unavailable, falling back to OpenCV"
+        in record.message
+        and "ffprobe did not return a video stream." in record.message
+        for record in caplog.records
+    )

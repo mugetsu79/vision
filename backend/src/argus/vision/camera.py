@@ -196,9 +196,10 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
     if _should_use_ffmpeg_rawvideo_capture(source=source, backend=backend):
         try:
             return _FFmpegRawVideoCapture.create(cast(str, source))
-        except (OSError, RuntimeError, subprocess.SubprocessError):
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
             LOGGER.warning(
-                "FFmpeg rawvideo capture unavailable, falling back to OpenCV",
+                "FFmpeg rawvideo capture unavailable, falling back to OpenCV: %s",
+                exc,
                 extra={"source_uri": source},
             )
     if (
