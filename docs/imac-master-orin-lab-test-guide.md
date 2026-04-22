@@ -339,6 +339,11 @@ Important:
 
 - `make dev-up` already runs `docker compose -f infra/docker-compose.dev.yml up -d`
 - do **not** run `docker compose ... up -d` again right after `make dev-up`
+- if you just pulled a change that modifies `infra/docker-compose.dev.yml` for the backend, recreate the backend container once so new bind mounts take effect:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
+```
 
 Wait for the core services to become reachable:
 
@@ -1077,7 +1082,43 @@ What to check:
 2. the container model path in the model record is `/models/yolo12n.onnx`
 3. the edge compose worker is using the `../models:/models:ro` volume mount
 
-### 4.5 If the Dashboard tiles stay offline
+### 4.5 If model registration returns `500 Internal Server Error` on the iMac
+
+Most likely causes:
+
+- the backend container cannot read the model file at the path you sent
+- the backend container was not recreated after a compose change that added the local `models/` bind mount
+- the model file path is not under this checkout's `models/` directory
+
+What to do:
+
+1. set `MODEL_PATH` from the repo root:
+
+```bash
+cd "$HOME/vision"
+MODEL_PATH="$PWD/models/yolo12n.onnx"
+```
+
+2. recreate the backend container once:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
+```
+
+3. wait for health again:
+
+```bash
+for i in {1..60}; do
+  curl -fsS http://127.0.0.1:8000/healthz && break
+  sleep 1
+done
+```
+
+4. retry the model registration command
+
+If the backend still rejects the request after that, the response should now be a readable validation error such as an unreadable ONNX path instead of a generic 500.
+
+### 4.6 If the Dashboard tiles stay offline
 
 What to do:
 
@@ -1086,7 +1127,7 @@ What to do:
 3. wait 30 seconds and refresh the Dashboard
 4. check worker logs for connection errors
 
-### 4.6 If the Jetson cannot reach the iMac
+### 4.7 If the Jetson cannot reach the iMac
 
 Check:
 
@@ -1102,7 +1143,7 @@ curl -s "http://$IMAC_IP:8000/healthz"
 curl -s "http://$IMAC_IP:8080/realms/argus-dev/.well-known/openid-configuration" | head
 ```
 
-### 4.7 Advanced: reduced-class custom models
+### 4.8 Advanced: reduced-class custom models
 
 If you are intentionally testing a reduced-class custom model, treat that as an advanced optional workflow:
 
@@ -1113,7 +1154,7 @@ If you are intentionally testing a reduced-class custom model, treat that as an 
 
 If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the model record in Argus was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
 
-### 4.8 If `make verify-all` fails
+### 4.9 If `make verify-all` fails
 
 Run it again and read the first failing section carefully. The most common failure buckets are:
 
@@ -1129,7 +1170,7 @@ docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
 
-### 4.9 If local API generation says `openapi-typescript: command not found`
+### 4.10 If local API generation says `openapi-typescript: command not found`
 
 This means the host-side frontend dependencies were not installed cleanly.
 
@@ -1147,7 +1188,7 @@ What good looks like:
 - `openapi-typescript --version` prints a version
 - `generate:api` writes `src/lib/api.generated.ts` without error
 
-### 4.10 If `127.0.0.1:9001` does not open
+### 4.11 If `127.0.0.1:9001` does not open
 
 This means MinIO is not healthy yet.
 
@@ -1165,7 +1206,7 @@ What good looks like:
 - MinIO logs no longer show `Invalid credentials`
 - `curl -I` returns an HTTP response instead of connection refused
 
-### 4.11 What to do after a successful lab
+### 4.12 What to do after a successful lab
 
 If both tests pass:
 
@@ -1174,7 +1215,7 @@ If both tests pass:
 3. add cameras gradually, not all at once
 4. move on to a more production-like deployment only after the Jetson path stays stable
 
-### 4.12 Clean shutdown
+### 4.13 Clean shutdown
 
 When you are done testing:
 
