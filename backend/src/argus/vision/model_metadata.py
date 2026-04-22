@@ -13,9 +13,17 @@ HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 
 def extract_onnx_classes(path: str, runtime: Any | None = None) -> list[str] | None:
-    ort = runtime or import_onnxruntime()
     try:
+        ort = runtime or import_onnxruntime()
         session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+    except ModuleNotFoundError as exc:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail=(
+                "Install the ONNX model-metadata/runtime dependencies so the backend can "
+                f"inspect '{path}'."
+            ),
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=HTTP_422_UNPROCESSABLE,

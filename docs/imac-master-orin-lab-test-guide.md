@@ -339,7 +339,7 @@ Important:
 
 - `make dev-up` already runs `docker compose -f infra/docker-compose.dev.yml up -d`
 - do **not** run `docker compose ... up -d` again right after `make dev-up`
-- if you just pulled a change that modifies `infra/docker-compose.dev.yml` for the backend, recreate the backend container once so new bind mounts take effect:
+- if you just pulled a change that modifies `infra/docker-compose.dev.yml` for the backend, recreate the backend container once so new bind mounts and dependency-group installs take effect:
 
 ```bash
 docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
@@ -1087,7 +1087,7 @@ What to check:
 Most likely causes:
 
 - the backend container cannot read the model file at the path you sent
-- the backend container was not recreated after a compose change that added the local `models/` bind mount
+- the backend container was not recreated after a compose change that added the local `models/` bind mount or the ONNX model-metadata dependency install
 - the model file path is not under this checkout's `models/` directory
 
 What to do:

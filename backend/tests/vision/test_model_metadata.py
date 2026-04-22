@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from argus.models.enums import ModelFormat
+from argus.vision import model_metadata
 from argus.vision.model_metadata import extract_onnx_classes, resolve_model_classes
 
 
@@ -68,6 +69,21 @@ def test_extract_onnx_classes_raises_422_when_model_path_is_unreadable() -> None
     assert exc_info.value.status_code == 422
     assert "Unable to read ONNX model metadata" in exc_info.value.detail
     assert "/Users/tester/vision/models/yolo12n.onnx" in exc_info.value.detail
+
+
+def test_extract_onnx_classes_raises_422_when_onnxruntime_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_module_not_found() -> None:
+        raise ModuleNotFoundError("No module named 'onnxruntime'")
+
+    monkeypatch.setattr(model_metadata, "import_onnxruntime", raise_module_not_found)
+
+    with pytest.raises(HTTPException) as exc_info:
+        extract_onnx_classes("/Users/tester/vision/models/yolo12n.onnx")
+
+    assert exc_info.value.status_code == 422
+    assert "Install the ONNX model-metadata/runtime dependencies" in exc_info.value.detail
 
 
 def test_resolve_model_classes_uses_embedded_metadata_when_classes_are_omitted() -> None:

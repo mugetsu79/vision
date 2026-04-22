@@ -45,6 +45,13 @@ dev = [
   "testcontainers[postgres,redis,nats]>=4.8",
   "playwright>=1.49",
 ]
+model-metadata = [
+  "onnxruntime>=1.20; sys_platform == 'linux'",
+  # PyPI no longer ships current Intel macOS wheels, so keep a compatible
+  # universal2 build for local iMac development.
+  "onnxruntime==1.17.3; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "onnxruntime>=1.20; sys_platform == 'darwin' and platform_machine != 'x86_64'",
+]
 vision = [
   "onnxruntime-gpu>=1.20; sys_platform == 'linux' and platform_machine == 'x86_64'",
   # PyPI no longer ships current Intel macOS wheels, so keep a compatible

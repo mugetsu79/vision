@@ -162,6 +162,10 @@ llm = [
     { name = "litellm" },
     { name = "ollama" },
 ]
+model-metadata = [
+    { name = "onnxruntime", version = "1.17.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "onnxruntime", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'darwin') or sys_platform == 'linux'" },
+]
 runtime = [
     { name = "alembic" },
     { name = "asyncpg" },
@@ -215,6 +219,11 @@ llm = [
     { name = "instructor", specifier = ">=1.7" },
     { name = "litellm", specifier = ">=1.52" },
     { name = "ollama", specifier = ">=0.4" },
+]
+model-metadata = [
+    { name = "onnxruntime", marker = "platform_machine != 'x86_64' and sys_platform == 'darwin'", specifier = ">=1.20" },
+    { name = "onnxruntime", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==1.17.3" },
+    { name = "onnxruntime", marker = "sys_platform == 'linux'", specifier = ">=1.20" },
 ]
 runtime = [
     { name = "alembic", specifier = ">=1.14" },
