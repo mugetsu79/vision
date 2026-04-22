@@ -24,13 +24,14 @@ from argus.streaming.webrtc import (
 )
 
 
-def test_resolve_stream_access_returns_annotated_variant_for_central_processing() -> None:
+def test_resolve_stream_access_returns_annotated_variant_for_central_transcode_profile() -> None:
     camera_id = uuid4()
 
     access = resolve_stream_access(
         camera_id=camera_id,
         processing_mode=ProcessingMode.CENTRAL,
         edge_node_id=None,
+        stream_kind="transcode",
         privacy={"blur_faces": True, "blur_plates": True},
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
@@ -46,6 +47,29 @@ def test_resolve_stream_access_returns_annotated_variant_for_central_processing(
     assert access.mjpeg_url == f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated/mjpeg"
 
 
+def test_resolve_stream_access_returns_passthrough_variant_for_central_native_profile() -> None:
+    camera_id = uuid4()
+
+    access = resolve_stream_access(
+        camera_id=camera_id,
+        processing_mode=ProcessingMode.CENTRAL,
+        edge_node_id=None,
+        stream_kind="passthrough",
+        privacy={"blur_faces": False, "blur_plates": False},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+
+    assert access.mode is StreamMode.PASSTHROUGH
+    assert access.path_name == f"cameras/{camera_id}/passthrough"
+    assert access.rtsp_url == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
+    assert access.whep_url == f"http://mediamtx.internal:8889/cameras/{camera_id}/passthrough/whep"
+    assert access.hls_url == f"http://mediamtx.internal:8888/cameras/{camera_id}/passthrough/index.m3u8"
+    assert access.mjpeg_url == f"http://mediamtx.internal:8890/cameras/{camera_id}/passthrough/mjpeg"
+
+
 def test_resolve_stream_access_disables_passthrough_when_edge_privacy_is_required() -> None:
     camera_id = uuid4()
 
@@ -53,6 +77,7 @@ def test_resolve_stream_access_disables_passthrough_when_edge_privacy_is_require
         camera_id=camera_id,
         processing_mode=ProcessingMode.EDGE,
         edge_node_id=uuid4(),
+        stream_kind="passthrough",
         privacy={"blur_faces": True, "blur_plates": False},
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
@@ -71,6 +96,7 @@ def test_mediamtx_token_issuer_emits_jwks_and_path_scoped_read_tokens() -> None:
         camera_id=camera_id,
         processing_mode=ProcessingMode.EDGE,
         edge_node_id=uuid4(),
+        stream_kind="passthrough",
         privacy={"blur_faces": False, "blur_plates": False},
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
@@ -103,6 +129,7 @@ async def test_webrtc_negotiator_posts_offer_to_whep_with_short_lived_bearer_tok
         camera_id=uuid4(),
         processing_mode=ProcessingMode.CENTRAL,
         edge_node_id=None,
+        stream_kind="transcode",
         privacy={"blur_faces": True, "blur_plates": True},
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
@@ -157,6 +184,7 @@ async def test_webrtc_negotiator_translates_missing_whep_path_to_http_404() -> N
         camera_id=uuid4(),
         processing_mode=ProcessingMode.CENTRAL,
         edge_node_id=None,
+        stream_kind="transcode",
         privacy={"blur_faces": True, "blur_plates": True},
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
@@ -193,6 +221,7 @@ async def test_webrtc_negotiator_translates_upstream_request_errors_to_http_502(
         camera_id=uuid4(),
         processing_mode=ProcessingMode.CENTRAL,
         edge_node_id=None,
+        stream_kind="transcode",
         privacy={"blur_faces": True, "blur_plates": True},
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",
@@ -229,6 +258,7 @@ async def test_webrtc_negotiator_builds_rtsp_url_for_mjpeg_bridge() -> None:
         camera_id=uuid4(),
         processing_mode=ProcessingMode.CENTRAL,
         edge_node_id=None,
+        stream_kind="transcode",
         privacy={"blur_faces": True, "blur_plates": True},
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         webrtc_base_url="http://mediamtx.internal:8889",

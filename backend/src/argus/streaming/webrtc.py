@@ -336,6 +336,7 @@ def resolve_stream_access(
     camera_id: UUID,
     processing_mode: ProcessingMode,
     edge_node_id: UUID | None,
+    stream_kind: str,
     privacy: Mapping[str, object] | None,
     rtsp_base_url: str,
     webrtc_base_url: str,
@@ -343,7 +344,14 @@ def resolve_stream_access(
     mjpeg_base_url: str,
     mjpeg_path_template: str = "{base}/{path}/mjpeg",
 ) -> StreamAccess:
-    if _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id):
+    if (
+        _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id)
+        and stream_kind == StreamMode.PASSTHROUGH.value
+        and not _privacy_requires_filtering(privacy)
+    ):
+        mode = StreamMode.PASSTHROUGH
+        variant = "passthrough"
+    elif _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id):
         mode = StreamMode.ANNOTATED_WHIP
         variant = "annotated"
     elif _privacy_requires_filtering(privacy):

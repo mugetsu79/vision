@@ -1031,10 +1031,18 @@ class StreamService:
     ) -> StreamAccess:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+        browser_delivery = BrowserDeliverySettings.model_validate(
+            camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+        )
+        stream_settings = _resolve_worker_stream_settings(
+            browser_delivery=browser_delivery,
+            fps_cap=camera.fps_cap,
+        )
         return resolve_stream_access(
             camera_id=camera.id,
             processing_mode=camera.processing_mode,
             edge_node_id=camera.edge_node_id,
+            stream_kind=stream_settings.kind,
             privacy=camera.privacy,
             rtsp_base_url=self.settings.mediamtx_rtsp_base_url,
             webrtc_base_url=self.settings.mediamtx_webrtc_base_url,
