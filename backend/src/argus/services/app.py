@@ -56,7 +56,7 @@ from argus.core.db import DatabaseManager
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
-from argus.models.enums import ModelTask
+from argus.models.enums import ModelFormat, ModelTask
 from argus.models.tables import (
     APIKey,
     AuditLog,
@@ -78,6 +78,9 @@ from argus.streaming.webrtc import (
     WebRTCNegotiator,
     resolve_stream_access,
 )
+from argus.vision.model_metadata import resolve_model_classes
+
+HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 if TYPE_CHECKING:
     from argus.services.query import QueryService
@@ -320,6 +323,7 @@ class ModelService:
         return [_model_to_response(model) for model in models]
 
     async def create_model(self, payload: ModelCreate) -> ModelResponse:
+        resolved_classes, _ = resolve_model_classes(payload.path, payload.format, payload.classes)
         async with self.session_factory() as session:
             model = Model(
                 name=payload.name,
@@ -327,7 +331,7 @@ class ModelService:
                 task=payload.task,
                 path=payload.path,
                 format=payload.format,
-                classes=payload.classes,
+                classes=resolved_classes,
                 input_shape=payload.input_shape,
                 sha256=payload.sha256,
                 size_bytes=payload.size_bytes,
@@ -346,7 +350,25 @@ class ModelService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Model not found.",
                 )
-            for field_name, value in payload.model_dump(exclude_unset=True).items():
+            update_data = payload.model_dump(exclude_unset=True, mode="python")
+            if any(field_name in update_data for field_name in {"path", "format", "classes"}):
+                resolved_format = update_data.get("format", model.format)
+                declared_classes = (
+                    update_data["classes"]
+                    if "classes" in update_data
+                    else None
+                    if resolved_format is ModelFormat.ONNX
+                    else list(model.classes)
+                )
+                resolved_classes = resolve_model_classes(
+                    str(update_data.get("path", model.path)),
+                    resolved_format,
+                    declared_classes,
+                )
+                model.classes = resolved_classes[0]
+            for field_name, value in update_data.items():
+                if field_name == "classes":
+                    continue
                 setattr(model, field_name, value)
             await session.commit()
             await session.refresh(model)
@@ -416,14 +438,18 @@ class CameraService:
             primary_model = await _load_model(session, payload.primary_model_id)
             if primary_model.task is not ModelTask.DETECT:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=HTTP_422_UNPROCESSABLE,
                     detail="Primary model must be a detector.",
                 )
+            _validate_active_classes_subset(
+                active_classes=payload.active_classes,
+                primary_model_classes=primary_model.classes,
+            )
             if payload.secondary_model_id is not None:
                 secondary_model = await _load_model(session, payload.secondary_model_id)
                 if secondary_model.task not in {ModelTask.ATTRIBUTE, ModelTask.CLASSIFY}:
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=HTTP_422_UNPROCESSABLE,
                         detail="Secondary model must be classify or attribute.",
                     )
             privacy = _apply_tenant_privacy_policy(
@@ -469,19 +495,23 @@ class CameraService:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
             update_data = payload.model_dump(exclude_unset=True, mode="python")
-
-            if "primary_model_id" in update_data:
-                primary_model = await _load_model(session, update_data["primary_model_id"])
-                if primary_model.task is not ModelTask.DETECT:
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail="Primary model must be a detector.",
-                    )
+            primary_model_id = update_data.get("primary_model_id", camera.primary_model_id)
+            primary_model = await _load_model(session, primary_model_id)
+            if primary_model.task is not ModelTask.DETECT:
+                raise HTTPException(
+                    status_code=HTTP_422_UNPROCESSABLE,
+                    detail="Primary model must be a detector.",
+                )
+            active_classes = update_data.get("active_classes", camera.active_classes)
+            _validate_active_classes_subset(
+                active_classes=active_classes,
+                primary_model_classes=primary_model.classes,
+            )
             if update_data.get("secondary_model_id") is not None:
                 secondary_model = await _load_model(session, update_data["secondary_model_id"])
                 if secondary_model.task not in {ModelTask.ATTRIBUTE, ModelTask.CLASSIFY}:
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=HTTP_422_UNPROCESSABLE,
                         detail="Secondary model must be classify or attribute.",
                     )
             if "site_id" in update_data:
@@ -1204,6 +1234,34 @@ def _model_to_response(model: Model) -> ModelResponse:
     )
 
 
+def _validate_active_classes_subset(
+    *,
+    active_classes: list[str] | None,
+    primary_model_classes: list[str],
+) -> None:
+    if active_classes is None:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="active_classes cannot be null.",
+        )
+    allowed_classes = set(primary_model_classes)
+    invalid_classes = sorted(
+        {
+            class_name
+            for class_name in active_classes
+            if class_name not in allowed_classes
+        }
+    )
+    if invalid_classes:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail=(
+                "active_classes must be a subset of the selected primary model classes. "
+                f"Unknown classes: {', '.join(invalid_classes)}."
+            ),
+        )
+
+
 def _camera_to_response(camera: Camera) -> CameraResponse:
     if camera.homography is None:
         raise ValueError("Camera homography must be set.")
@@ -1364,12 +1422,12 @@ def _apply_tenant_privacy_policy(
 
     if bool(policy.get("force_blur_faces")) and not bool(privacy.get("blur_faces")):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE,
             detail="Tenant policy requires blur_faces=true.",
         )
     if bool(policy.get("force_blur_plates")) and not bool(privacy.get("blur_plates")):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE,
             detail="Tenant policy requires blur_plates=true.",
         )
     return privacy

@@ -67,6 +67,10 @@ For a single-node edge deployment:
 3. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
 4. Confirm MediaMTX, OTEL Collector, and the worker metrics endpoint are reachable.
 
+## Model Metadata And Scope
+
+`/Users/yann.moren/vision/models/` is only where local model files live; it does not define semantic class scope by itself. When an ONNX model exposes embedded class metadata, treat that as the source of truth for registration and runtime inventory. Use `Camera.active_classes` only to narrow the operational scope. Custom reduced-class models remain an advanced optional path.
+
 ## Authentication Alternative
 
 Keycloak is the default IdP. If an operator standardizes on Authentik instead, keep the same OIDC contract at the SPA and API layers, update the issuer and JWKS configuration, and record the deployment-specific divergence in a new ADR before rollout.

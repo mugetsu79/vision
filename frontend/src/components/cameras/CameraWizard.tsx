@@ -16,7 +16,7 @@ type Point = [number, number];
 type BrowserDeliveryProfile = "native" | "1080p15" | "720p10" | "540p5";
 
 export type SiteOption = { id: string; name: string };
-export type ModelOption = { id: string; name: string; version: string };
+export type ModelOption = { id: string; name: string; version: string; classes: string[] };
 
 export type CameraWizardData = {
   name: string;
@@ -25,6 +25,7 @@ export type CameraWizardData = {
   rtspUrl: string;
   primaryModelId: string;
   secondaryModelId: string;
+  activeClasses: string[];
   trackerType: "botsort" | "bytetrack" | "ocsort";
   blurFaces: boolean;
   blurPlates: boolean;
@@ -66,6 +67,7 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     rtspUrl: "",
     primaryModelId: initialCamera?.primary_model_id ?? "",
     secondaryModelId: initialCamera?.secondary_model_id ?? "",
+    activeClasses: initialCamera?.active_classes ? [...initialCamera.active_classes] : [],
     trackerType: initialCamera?.tracker_type ?? "botsort",
     blurFaces: initialCamera?.privacy.blur_faces ?? true,
     blurPlates: initialCamera?.privacy.blur_plates ?? true,
@@ -96,6 +98,24 @@ function buildBrowserDelivery(defaultProfile: BrowserDeliveryProfile) {
   };
 }
 
+function pruneActiveClasses(activeClasses: string[], allowedClasses: string[]) {
+  if (allowedClasses.length === 0) {
+    return [];
+  }
+
+  const allowed = new Set(allowedClasses);
+
+  return activeClasses.filter((className) => allowed.has(className));
+}
+
+function areStringArraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((item, index) => item === right[index]);
+}
+
 function toCreatePayload(data: CameraWizardData): CreateCameraInput {
   return {
     site_id: data.siteId,
@@ -105,7 +125,7 @@ function toCreatePayload(data: CameraWizardData): CreateCameraInput {
     primary_model_id: data.primaryModelId,
     secondary_model_id: data.secondaryModelId || null,
     tracker_type: data.trackerType,
-    active_classes: [],
+    active_classes: data.activeClasses,
     attribute_rules: [],
     zones: [],
     homography: {
@@ -133,6 +153,7 @@ function toUpdatePayload(data: CameraWizardData): UpdateCameraInput {
     primary_model_id: data.primaryModelId,
     secondary_model_id: data.secondaryModelId || null,
     tracker_type: data.trackerType,
+    active_classes: data.activeClasses,
     homography: {
       src: data.homography.src,
       dst: data.homography.dst,
@@ -185,6 +206,15 @@ export function CameraWizard({
   const isEditMode = initialCamera !== null;
   const maskedRtspPlaceholder = rtspUrlPlaceholder ?? initialCamera?.rtsp_url_masked ?? "";
   const stepTitle = steps[stepIndex];
+  const selectedPrimaryModel = useMemo(
+    () => models.find((model) => model.id === data.primaryModelId) ?? null,
+    [data.primaryModelId, models],
+  );
+  const selectedPrimaryModelClasses = useMemo(
+    () => selectedPrimaryModel?.classes ?? [],
+    [selectedPrimaryModel],
+  );
+  const selectedPrimaryModelClassesKey = selectedPrimaryModelClasses.join("\u0000");
 
   useEffect(() => {
     setData(createDefaultData(initialCamera));
@@ -193,6 +223,46 @@ export function CameraWizard({
     setSubmitError(null);
     setIsSubmitting(false);
   }, [initialCamera]);
+
+  useEffect(() => {
+    setData((current) => {
+      if (!selectedPrimaryModel) {
+        if (modelsLoading || modelsError || models.length === 0) {
+          return current;
+        }
+
+        if (current.activeClasses.length === 0) {
+          return current;
+        }
+
+        return {
+          ...current,
+          activeClasses: [],
+        };
+      }
+
+      const nextActiveClasses = pruneActiveClasses(
+        current.activeClasses,
+        selectedPrimaryModelClasses,
+      );
+
+      if (areStringArraysEqual(current.activeClasses, nextActiveClasses)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        activeClasses: nextActiveClasses,
+      };
+    });
+  }, [
+    models.length,
+    modelsError,
+    modelsLoading,
+    selectedPrimaryModel,
+    selectedPrimaryModelClasses,
+    selectedPrimaryModelClassesKey,
+  ]);
 
   const siteName = useMemo(
     () => sites.find((site) => site.id === data.siteId)?.name ?? "Unassigned site",
@@ -214,7 +284,7 @@ export function CameraWizard({
       default:
         return "Configuration guidance appears here.";
     }
-  }, [stepTitle]);
+  }, [brandName, stepTitle]);
 
   function updateData<Key extends keyof CameraWizardData>(
     key: Key,
@@ -259,6 +329,9 @@ export function CameraWizard({
       if (!data.primaryModelId) {
         return "Primary model is required.";
       }
+      if (!selectedPrimaryModel) {
+        return "Primary model must be selected from the current inventory.";
+      }
       if (!data.trackerType) {
         return "Tracker type is required.";
       }
@@ -292,6 +365,21 @@ export function CameraWizard({
     }
 
     return null;
+  }
+
+  function toggleActiveClass(className: string, checked: boolean) {
+    setData((current) => {
+      const nextActiveClasses = checked
+        ? current.activeClasses.includes(className)
+          ? current.activeClasses
+          : [...current.activeClasses, className]
+        : current.activeClasses.filter((item) => item !== className);
+
+      return {
+        ...current,
+        activeClasses: nextActiveClasses,
+      };
+    });
   }
 
   async function handlePrimaryAction() {
@@ -462,7 +550,20 @@ export function CameraWizard({
                   aria-label="Primary model"
                   disabled={modelsLoading || Boolean(modelsError) || models.length === 0}
                   value={data.primaryModelId}
-                  onChange={(event) => updateData("primaryModelId", event.target.value)}
+                  onChange={(event) => {
+                    const nextPrimaryModelId = event.target.value;
+                    const nextPrimaryModel =
+                      models.find((model) => model.id === nextPrimaryModelId) ?? null;
+
+                    setData((current) => ({
+                      ...current,
+                      primaryModelId: nextPrimaryModelId,
+                      activeClasses: pruneActiveClasses(
+                        current.activeClasses,
+                        nextPrimaryModel?.classes ?? [],
+                      ),
+                    }));
+                  }}
                 >
                   <option value="">Select a model</option>
                   {models.map((model) => (
@@ -472,6 +573,50 @@ export function CameraWizard({
                   ))}
                 </Select>
               </label>
+              {selectedPrimaryModel ? (
+                <div className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-[#eef4ff]">Active class scope</p>
+                      <p className="mt-1 text-sm text-[#9eb2cf]">
+                        Leave every class unchecked to keep the full primary model inventory
+                        active for this camera.
+                      </p>
+                    </div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8ea4c7]">
+                      {selectedPrimaryModelClasses.length} classes
+                    </p>
+                  </div>
+
+                  {selectedPrimaryModelClasses.length > 0 ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {selectedPrimaryModelClasses.map((className) => (
+                        <label
+                          key={className}
+                          className="flex items-start gap-3 rounded-[1rem] border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-[#d8e2f2]"
+                        >
+                          <input
+                            checked={data.activeClasses.includes(className)}
+                            type="checkbox"
+                            onChange={(event) =>
+                              toggleActiveClass(className, event.target.checked)
+                            }
+                          />
+                          <span>{className}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-[#9eb2cf]">
+                      This model does not expose class metadata, so there is nothing to narrow.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                  Select a primary model to choose the persistent class scope for this camera.
+                </p>
+              )}
               <label className="grid gap-2 text-sm text-[#d8e2f2]">
                 <span>Secondary model</span>
                 <Select
@@ -612,6 +757,7 @@ export function CameraWizard({
                 name: data.name || "Pending name",
                 siteName,
                 processingMode: data.processingMode,
+                activeClasses: data.activeClasses,
                 trackerType: data.trackerType,
                 blurFaces: data.blurFaces,
                 blurPlates: data.blurPlates,

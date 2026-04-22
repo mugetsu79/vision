@@ -86,6 +86,7 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
     assert config.camera.fps_cap == 10
     assert config.model.name == "YOLO12n"
     assert config.model.path == "/models/yolo12n.onnx"
+    assert config.model.classes == ["person", "car", "bus", "truck"]
     assert config.secondary_model is not None
     assert config.secondary_model.name == "PPE"
     assert config.publish.subject_prefix == "evt.tracking"
@@ -152,7 +153,11 @@ def test_camera_worker_config_resolves_native_browser_delivery_to_passthrough_st
         size_bytes=123,
         license="lab",
     )
-    settings = Settings(_env_file=None, enable_startup_services=False, rtsp_encryption_key="argus-dev-rtsp-key")
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
 
     config = _camera_to_worker_config(
         camera=camera,
@@ -169,3 +174,4 @@ def test_camera_worker_config_resolves_native_browser_delivery_to_passthrough_st
         "height": None,
         "fps": 17,
     }
+    assert config.model.classes == ["person", "car"]

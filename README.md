@@ -16,7 +16,7 @@ Vezor separates **native ingest for analytics** from **browser delivery for oper
 - `frontend/`: React operator console and admin UI
 - `infra/`: Docker Compose, Helm chart, observability, Keycloak, MediaMTX, NATS, Prometheus, Alertmanager, OTEL
 - `docs/`: deployment guides, runbook, lab guide, ADRs, brand docs
-- `models/`: local model file location for lab and development use
+- `models/`: local ONNX model files for lab and development use
 - `scripts/`: validation and platform helper scripts
 
 ## Architecture At A Glance
@@ -157,6 +157,14 @@ The repo already includes:
 - CI-oriented full validation flow
 
 The most mature operational paths today are `central` and `edge`.
+
+## Model And Camera Scope
+
+- `models/` is just where local ONNX files live during lab and development work.
+- For standard deployment, self-describing ONNX metadata is the source of truth for model classes.
+- `Model.classes` is the full model inventory.
+- `Camera.active_classes` narrows the operational scope for a camera or site.
+- Custom reduced-class models are an advanced optional path, not the default deployment story.
 
 ## Repo Structure
 

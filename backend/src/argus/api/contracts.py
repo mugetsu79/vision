@@ -42,7 +42,7 @@ class ModelCreate(BaseModel):
     task: ModelTask
     path: str = Field(min_length=1)
     format: ModelFormat
-    classes: list[str] = Field(min_length=1)
+    classes: list[str] | None = Field(default=None, min_length=1)
     input_shape: dict[str, int]
     sha256: str = Field(min_length=64, max_length=64)
     size_bytes: int = Field(gt=0)

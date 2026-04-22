@@ -187,6 +187,7 @@ function CamerasContent() {
               id: model.id,
               name: model.name,
               version: model.version,
+              classes: model.classes,
             }))}
             modelsError={
               modelQueryEmpty && modelsError instanceof Error ? modelsError.message : null

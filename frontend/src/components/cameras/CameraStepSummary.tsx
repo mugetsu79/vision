@@ -5,6 +5,7 @@ export function CameraStepSummary({
     name: string;
     siteName: string;
     processingMode: string;
+    activeClasses: string[];
     trackerType: string;
     blurFaces: boolean;
     blurPlates: boolean;
@@ -17,6 +18,13 @@ export function CameraStepSummary({
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {[
+        {
+          label: "Class scope",
+          value:
+            data.activeClasses.length > 0
+              ? data.activeClasses.join(", ")
+              : "All primary model classes",
+        },
         { label: "Camera", value: data.name },
         { label: "Site", value: data.siteName },
         { label: "Processing", value: data.processingMode },

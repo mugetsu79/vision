@@ -37,7 +37,9 @@ You need all of the following before you begin:
 - both machines and both cameras on the same local network
 - enough free disk space for Docker images and logs
 
-This guide assumes the model file is called `yolo12n.onnx`. If your file has a different name, replace it everywhere in the commands below.
+This guide assumes the model file is called `yolo12n.onnx`. If your file has a different name, replace it everywhere in the commands below. Treat it as a standard COCO-style self-describing ONNX model unless you are intentionally following the advanced reduced-class path later in this guide.
+
+This is the default COCO-first flow. The model is treated as a standard self-describing ONNX file, so registration should trust embedded metadata when it is available. You will set the persistent camera class scope in the UI instead of treating the model itself as a reduced-class custom artifact.
 
 ### 1.2 What this lab proves
 
@@ -92,8 +94,8 @@ To keep the commands simple, use these names:
 - Site name: `Lab Site`
 - Camera 1 name: `Lab Camera 1`
 - Camera 2 name: `Lab Camera 2`
-- iMac model record name: `YOLO12n iMac`
-- Jetson model record name: `YOLO12n Edge`
+- iMac model record name: `YOLO12n COCO iMac`
+- Jetson model record name: `YOLO12n COCO Edge`
 
 If you choose different names, you must also change the matching commands later in the guide.
 
@@ -432,7 +434,7 @@ What good looks like:
 
 ### 2.5 Get the model metadata
 
-Vezor needs the model hash and file size when you register a model.
+Vezor needs the model hash and file size when you register a model. For a self-describing ONNX file, the backend will read the embedded class metadata during registration, so you do not need to send `classes` for the default COCO-first path.
 
 Run:
 
@@ -483,7 +485,7 @@ Keep this iMac terminal window open. Later commands in this guide reuse:
 
 ### 2.7 Register the iMac model record
 
-This model record uses the **iMac path** to the model file. It is only for Test A.
+This model record uses the **iMac path** to the model file. It is only for Test A, and it is a standard self-describing COCO ONNX registration.
 
 Run:
 
@@ -495,12 +497,11 @@ IMAC_MODEL_ID="$(
     -X POST \
     http://127.0.0.1:8000/api/v1/models \
     -d "{
-      \"name\": \"YOLO12n iMac\",
+      \"name\": \"YOLO12n COCO iMac\",
       \"version\": \"lab-imac\",
       \"task\": \"detect\",
       \"path\": \"$MODEL_PATH\",
       \"format\": \"onnx\",
-      \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
       \"input_shape\": {\"width\": 640, \"height\": 640},
       \"sha256\": \"$MODEL_SHA\",
       \"size_bytes\": $MODEL_SIZE,
@@ -523,7 +524,7 @@ If you get a message that the model already exists:
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
 ```
 
-2. find the existing `YOLO12n iMac` entry
+2. find the existing `YOLO12n COCO iMac` entry
 3. reuse its `id`
 
 ### 2.8 Sign in to the Vezor UI
@@ -564,7 +565,8 @@ What good looks like:
    - RTSP URL: paste your camera 1 RTSP URL
 4. Click **Continue**
 5. In **Models & Tracking**:
-   - Primary model: `YOLO12n iMac`
+   - Primary model: `YOLO12n COCO iMac`
+   - Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
    - Tracker type: keep `botsort`
    - Secondary model: leave empty
 6. Click **Continue**
@@ -594,7 +596,8 @@ Repeat the same process, but use:
 - Site: `Lab Site`
 - Processing mode: `central`
 - RTSP URL: paste your camera 2 RTSP URL
-- Primary model: `YOLO12n iMac`
+- Primary model: `YOLO12n COCO iMac`
+- Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
 - Tracker type: `botsort`
 - Browser delivery profile: `720p10`
 - Calibration:
@@ -840,7 +843,7 @@ If it ends with one or more `FAIL` lines, stop here and fix those issues before 
 
 ### 3.3 Create the Jetson-specific model record on the iMac
 
-The Jetson container sees the model file at `/models/yolo12n.onnx`, not at your home-directory path. That is why you need a second model record.
+The Jetson container sees the model file at `/models/yolo12n.onnx`, not at your home-directory path. That is why you need a second model record, even though the embedded ONNX class metadata is the same.
 
 Back on the iMac, in any Terminal window where `TOKEN`, `MODEL_SHA`, and `MODEL_SIZE` still exist, run:
 
@@ -852,12 +855,11 @@ EDGE_MODEL_ID="$(
     -X POST \
     http://127.0.0.1:8000/api/v1/models \
     -d "{
-      \"name\": \"YOLO12n Edge\",
+      \"name\": \"YOLO12n COCO Edge\",
       \"version\": \"lab-edge\",
       \"task\": \"detect\",
       \"path\": \"/models/yolo12n.onnx\",
       \"format\": \"onnx\",
-      \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
       \"input_shape\": {\"width\": 640, \"height\": 640},
       \"sha256\": \"$MODEL_SHA\",
       \"size_bytes\": $MODEL_SIZE,
@@ -883,7 +885,8 @@ Back in the browser on the iMac:
 Change these values:
 
 - Processing mode: `edge`
-- Primary model: `YOLO12n Edge`
+- Primary model: `YOLO12n COCO Edge`
+- Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
 
 Keep these values:
 
@@ -1042,8 +1045,8 @@ What to do:
 1. get a fresh token
 2. confirm the camera ID again
 3. confirm the model path is:
-   - the full iMac path for `YOLO12n iMac`
-   - `/models/yolo12n.onnx` for `YOLO12n Edge`
+   - the full iMac path for `YOLO12n COCO iMac`
+   - `/models/yolo12n.onnx` for `YOLO12n COCO Edge`
 4. restart the worker
 
 ### 4.3 If the worker says `401` or `403`
@@ -1097,7 +1100,18 @@ curl -s "http://$IMAC_IP:8000/healthz"
 curl -s "http://$IMAC_IP:8080/realms/argus-dev/.well-known/openid-configuration" | head
 ```
 
-### 4.7 If `make verify-all` fails
+### 4.7 Advanced: reduced-class custom models
+
+If you are intentionally testing a reduced-class custom model, treat that as an advanced optional workflow:
+
+1. use a genuinely custom reduced-class artifact whose embedded metadata already matches the reduced inventory you want to operate, or use a model format that explicitly requires declared classes
+2. choose matching persistent `active_classes` in the camera UI
+3. do not treat the default self-describing `yolo12n.onnx` COCO model as a reduced-class model by manually declaring a smaller class list
+4. do not use that reduced-class setup as the default COCO-first lab path
+
+If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the model record in Argus was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
+
+### 4.8 If `make verify-all` fails
 
 Run it again and read the first failing section carefully. The most common failure buckets are:
 
@@ -1113,7 +1127,7 @@ docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
 
-### 4.8 If local API generation says `openapi-typescript: command not found`
+### 4.9 If local API generation says `openapi-typescript: command not found`
 
 This means the host-side frontend dependencies were not installed cleanly.
 
@@ -1131,7 +1145,7 @@ What good looks like:
 - `openapi-typescript --version` prints a version
 - `generate:api` writes `src/lib/api.generated.ts` without error
 
-### 4.9 If `127.0.0.1:9001` does not open
+### 4.10 If `127.0.0.1:9001` does not open
 
 This means MinIO is not healthy yet.
 
@@ -1149,7 +1163,7 @@ What good looks like:
 - MinIO logs no longer show `Invalid credentials`
 - `curl -I` returns an HTTP response instead of connection refused
 
-### 4.10 What to do after a successful lab
+### 4.11 What to do after a successful lab
 
 If both tests pass:
 
@@ -1158,7 +1172,7 @@ If both tests pass:
 3. add cameras gradually, not all at once
 4. move on to a more production-like deployment only after the Jetson path stays stable
 
-### 4.11 Clean shutdown
+### 4.12 Clean shutdown
 
 When you are done testing:
 
