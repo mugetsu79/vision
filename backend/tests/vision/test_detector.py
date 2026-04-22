@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import pytest
 
 from argus.vision.detector import DetectionModelConfig, YoloDetector
 from argus.vision.runtime import (
@@ -189,6 +190,49 @@ def test_detector_supports_vehicle_person_and_custom_ppe_classes(
     assert [d.class_name for d in ppe_detections] == ["hi_vis_worker"]
 
 
+def test_detector_supports_channel_first_yolo_outputs(vehicle_frame) -> None:
+    model_config = DetectionModelConfig(
+        name="detector",
+        path="tests/fixtures/fake-detector.onnx",
+        classes=["car", "truck", "person", "hi_vis_worker"],
+        input_shape={"width": 640, "height": 640},
+    )
+    runtime = _FakeRuntime(
+        providers=["CPUExecutionProvider"],
+        outputs=[
+            _channel_first_output(
+                [
+                    [38.0, 61.0, 40.0, 26.0, 0.94, 0.03, 0.02, 0.01],
+                    [96.0, 58.0, 64.0, 40.0, 0.02, 0.04, 0.93, 0.01],
+                ],
+                feature_count=8,
+                detection_count=16,
+            )
+        ],
+    )
+
+    detector = YoloDetector(
+        model_config,
+        runtime=runtime,
+        runtime_policy=_runtime_policy(
+            system="darwin",
+            machine="x86_64",
+            cpu_vendor=CpuVendor.INTEL,
+            profile=ExecutionProfile.MACOS_X86_64_INTEL,
+            provider=ExecutionProvider.CPU,
+            available_providers=(ExecutionProvider.CPU.value,),
+        ),
+    )
+
+    detections = detector.detect(vehicle_frame, allowed_classes={"car", "person"})
+
+    assert [detection.class_name for detection in detections] == ["car", "person"]
+    assert detections[0].confidence == pytest.approx(0.94)
+    assert detections[0].bbox == (18.0, 48.0, 58.0, 74.0)
+    assert detections[1].confidence == pytest.approx(0.93)
+    assert detections[1].bbox == (64.0, 38.0, 128.0, 78.0)
+
+
 def test_detector_uses_resolved_runtime_policy_provider_and_thread_overrides(vehicle_frame) -> None:
     model_config = DetectionModelConfig(
         name="detector",
@@ -230,3 +274,16 @@ def test_detector_uses_resolved_runtime_policy_provider_and_thread_overrides(veh
     assert runtime.last_sess_options.inter_op_num_threads == 2
     assert runtime.last_sess_options.intra_op_num_threads == 4
     assert [detection.class_name for detection in detections] == ["car"]
+
+
+def _channel_first_output(
+    rows: list[list[float]],
+    *,
+    feature_count: int,
+    detection_count: int,
+) -> np.ndarray:
+    output = np.zeros((1, feature_count, detection_count), dtype=np.float32)
+    for detection_index, values in enumerate(rows):
+        for feature_index, value in enumerate(values):
+            output[0, feature_index, detection_index] = value
+    return output
