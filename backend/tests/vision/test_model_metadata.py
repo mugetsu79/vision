@@ -30,6 +30,11 @@ class _FakeRuntime:
         return _FakeSession(self._metadata)
 
 
+class _ExplodingRuntime:
+    def InferenceSession(self, path: str, providers: list[str]) -> _FakeSession:  # noqa: N802
+        raise RuntimeError(f"unable to open {path}")
+
+
 def test_extract_onnx_classes_reads_embedded_dict_metadata() -> None:
     runtime = _FakeRuntime({"names": "{0: 'person', 1: 'bicycle', 2: 'car'}"})
     assert extract_onnx_classes("/models/yolo12n.onnx", runtime=runtime) == [
@@ -51,6 +56,18 @@ def test_extract_onnx_classes_sorts_numeric_string_keys_numerically() -> None:
 def test_extract_onnx_classes_returns_none_without_names() -> None:
     runtime = _FakeRuntime({})
     assert extract_onnx_classes("/models/yolo12n.onnx", runtime=runtime) is None
+
+
+def test_extract_onnx_classes_raises_422_when_model_path_is_unreadable() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        extract_onnx_classes(
+            "/Users/tester/vision/models/yolo12n.onnx",
+            runtime=_ExplodingRuntime(),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "Unable to read ONNX model metadata" in exc_info.value.detail
+    assert "/Users/tester/vision/models/yolo12n.onnx" in exc_info.value.detail
 
 
 def test_resolve_model_classes_uses_embedded_metadata_when_classes_are_omitted() -> None:

@@ -161,6 +161,7 @@ The most mature operational paths today are `central` and `edge`.
 ## Model And Camera Scope
 
 - `models/` is just where local ONNX files live during lab and development work.
+- In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later.
 - For standard deployment, self-describing ONNX metadata is the source of truth for model classes.
 - `Model.classes` is the full model inventory.
 - `Camera.active_classes` narrows the operational scope for a camera or site.

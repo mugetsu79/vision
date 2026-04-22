@@ -69,7 +69,7 @@ For a single-node edge deployment:
 
 ## Model Metadata And Scope
 
-`/Users/yann.moren/vision/models/` is only where local model files live; it does not define semantic class scope by itself. When an ONNX model exposes embedded class metadata, treat that as the source of truth for registration and runtime inventory. Use `Camera.active_classes` only to narrow the operational scope. Custom reduced-class models remain an advanced optional path.
+`/Users/yann.moren/vision/models/` is only where local model files live; it does not define semantic class scope by itself. In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later. When an ONNX model exposes embedded class metadata, treat that as the source of truth for registration and runtime inventory. Use `Camera.active_classes` only to narrow the operational scope. Custom reduced-class models remain an advanced optional path.
 
 ## Authentication Alternative
 

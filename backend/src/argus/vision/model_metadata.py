@@ -14,7 +14,16 @@ HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 def extract_onnx_classes(path: str, runtime: Any | None = None) -> list[str] | None:
     ort = runtime or import_onnxruntime()
-    session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+    try:
+        session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+    except Exception as exc:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail=(
+                f"Unable to read ONNX model metadata from '{path}'. "
+                "Ensure the file exists and is readable from the backend runtime."
+            ),
+        ) from exc
     raw_names = session.get_modelmeta().custom_metadata_map.get("names")
     if not raw_names:
         return None

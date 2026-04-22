@@ -436,10 +436,12 @@ What good looks like:
 
 Vezor needs the model hash and file size when you register a model. For a self-describing ONNX file, the backend will read the embedded class metadata during registration, so you do not need to send `classes` for the default COCO-first path.
 
+Use a path under this checkout's `models/` directory. In local Docker development, `make dev-up` bind-mounts that same absolute host path into the backend container so registration-time ONNX validation and the later host-side worker both read the same file.
+
 Run:
 
 ```bash
-MODEL_PATH="$HOME/vision/models/yolo12n.onnx"
+MODEL_PATH="$PWD/models/yolo12n.onnx"
 MODEL_SHA="$(shasum -a 256 "$MODEL_PATH" | awk '{print $1}')"
 MODEL_SIZE="$(stat -f%z "$MODEL_PATH")"
 echo "$MODEL_PATH"
