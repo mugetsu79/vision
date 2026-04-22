@@ -76,6 +76,7 @@ async def test_mediamtx_client_registers_passthrough_for_privacy_off_jetson() ->
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
         privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
     )
 
@@ -126,12 +127,14 @@ async def test_mediamtx_client_registers_filtered_preview_and_deletes_passthroug
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
         privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
     )
     registration = await client.register_stream(
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=False),
     )
 
@@ -181,6 +184,7 @@ async def test_mediamtx_client_registers_whip_target_for_central_profile() -> No
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
     )
 
@@ -222,16 +226,65 @@ async def test_mediamtx_client_keeps_preconfigured_preview_when_switching_to_pas
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=False),
     )
     registration = await client.register_stream(
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
         privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
     )
 
     assert registration.mode is StreamMode.PASSTHROUGH
+    assert requests == [
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/add/cameras/{camera_id}/passthrough",
+            {
+                "name": f"cameras/{camera_id}/passthrough",
+                "source": "rtsp://camera.internal/live",
+                "sourceOnDemand": True,
+            },
+        )
+    ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_mediamtx_client_respects_passthrough_stream_kind_on_central_profile() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        return Response(200, json={"ok": True})
+
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+    )
+
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+
+    assert registration.mode is StreamMode.PASSTHROUGH
+    assert registration.read_path == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
     assert requests == [
         (
             "POST",
@@ -280,6 +333,7 @@ async def test_mediamtx_client_push_frame_starts_and_reuses_publisher() -> None:
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
     )
     frame = np.zeros((12, 16, 3), dtype=np.uint8)
@@ -323,6 +377,7 @@ async def test_mediamtx_client_replaces_publisher_when_path_changes() -> None:
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
     )
     frame = np.zeros((12, 16, 3), dtype=np.uint8)
@@ -332,6 +387,7 @@ async def test_mediamtx_client_replaces_publisher_when_path_changes() -> None:
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=False),
     )
     await client.push_frame(
@@ -372,6 +428,7 @@ async def test_mediamtx_client_close_shuts_down_active_publishers() -> None:
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
     )
 
@@ -410,6 +467,7 @@ async def test_mediamtx_client_push_frame_applies_resize_and_cadence_limits() ->
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
         target_fps=10,
         target_width=1280,
@@ -464,6 +522,7 @@ async def test_mediamtx_client_times_out_stalled_publisher_and_recovers_on_next_
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
     )
     frame = np.zeros((12, 16, 3), dtype=np.uint8)
@@ -517,6 +576,7 @@ async def test_mediamtx_client_restarts_publisher_after_long_publish_gap() -> No
         camera_id=camera_id,
         rtsp_url="rtsp://camera.internal/live",
         profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
         privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
     )
     frame = np.zeros((12, 16, 3), dtype=np.uint8)

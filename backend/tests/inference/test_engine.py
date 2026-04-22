@@ -131,7 +131,7 @@ class _FakeEventClient:
 
 class _FakeStreamClient:
     def __init__(self) -> None:
-        self.registrations: list[tuple[PublishProfile, PrivacyPolicy]] = []
+        self.registrations: list[tuple[PublishProfile, str, PrivacyPolicy]] = []
         self.pushed_modes: list[StreamMode] = []
         self.pushed_frames: list[np.ndarray] = []
         self.register_stream_calls: list[dict[str, object]] = []
@@ -142,6 +142,7 @@ class _FakeStreamClient:
         camera_id: UUID,
         rtsp_url: str,
         profile: PublishProfile,
+        stream_kind: str,
         privacy: PrivacyPolicy,
         target_fps: int,
         target_width: int | None = None,
@@ -149,18 +150,19 @@ class _FakeStreamClient:
     ) -> StreamRegistration:
         self.register_stream_calls.append(
             {
+                "stream_kind": stream_kind,
                 "target_fps": target_fps,
                 "target_width": target_width,
                 "target_height": target_height,
             }
         )
-        self.registrations.append((profile, privacy))
+        self.registrations.append((profile, stream_kind, privacy))
         mode = (
             StreamMode.FILTERED_PREVIEW
             if privacy.blur_faces or privacy.blur_plates
             else StreamMode.PASSTHROUGH
         )
-        if profile is PublishProfile.CENTRAL_GPU:
+        if profile is PublishProfile.CENTRAL_GPU and stream_kind != StreamMode.PASSTHROUGH.value:
             mode = StreamMode.ANNOTATED_WHIP
         return StreamRegistration(
             camera_id=camera_id,
@@ -307,7 +309,11 @@ async def test_engine_registers_filtered_stream_when_privacy_is_required_on_jets
     await engine.start()
 
     assert stream_client.registrations == [
-        (PublishProfile.JETSON_NANO, PrivacyPolicy(blur_faces=True, blur_plates=False))
+        (
+            PublishProfile.JETSON_NANO,
+            "passthrough",
+            PrivacyPolicy(blur_faces=True, blur_plates=False),
+        )
     ]
 
 
@@ -315,8 +321,19 @@ async def test_engine_registers_filtered_stream_when_privacy_is_required_on_jets
 async def test_engine_draws_annotations_for_central_stream_frames() -> None:
     camera_id = uuid4()
     stream_client = _FakeStreamClient()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
     engine = InferenceEngine(
-        config=_engine_config(camera_id),
+        config=config,
         frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
         detector=_FakeDetector(),
         tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
@@ -333,6 +350,50 @@ async def test_engine_draws_annotations_for_central_stream_frames() -> None:
 
     assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
     assert np.any(stream_client.pushed_frames[0] != 0)
+
+
+@pytest.mark.asyncio
+async def test_engine_respects_passthrough_stream_kind_even_on_central_profile() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="native",
+                kind="passthrough",
+                width=None,
+                height=None,
+                fps=25,
+            )
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 22, 19, 45, tzinfo=UTC))
+    await engine.close()
+
+    assert stream_client.register_stream_calls == [{
+        "stream_kind": "passthrough",
+        "target_fps": 25,
+        "target_width": None,
+        "target_height": None,
+    }]
+    assert stream_client.pushed_modes == []
+    assert stream_client.pushed_frames == []
+    assert publisher.frames[0].stream_mode is StreamMode.PASSTHROUGH
 
 
 @pytest.mark.asyncio
@@ -367,6 +428,7 @@ async def test_engine_registers_browser_delivery_dimensions_and_fps() -> None:
     await engine.close()
 
     assert stream_client.register_stream_calls == [{
+        "stream_kind": "transcode",
         "target_fps": 10,
         "target_width": 1280,
         "target_height": 720,

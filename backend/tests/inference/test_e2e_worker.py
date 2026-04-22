@@ -107,13 +107,14 @@ class _RecordingStreamClient:
         camera_id,
         rtsp_url: str,
         profile: PublishProfile,
+        stream_kind: str,
         privacy: PrivacyPolicy,
         target_fps: int,
         target_width: int | None = None,
         target_height: int | None = None,
     ) -> StreamRegistration:
         del target_fps, target_width, target_height
-        if profile is PublishProfile.CENTRAL_GPU:
+        if profile is PublishProfile.CENTRAL_GPU and stream_kind != StreamMode.PASSTHROUGH.value:
             mode = StreamMode.ANNOTATED_WHIP
         elif privacy.blur_faces or privacy.blur_plates:
             mode = StreamMode.FILTERED_PREVIEW
@@ -148,7 +149,17 @@ def _config(camera_id, profile: PublishProfile, privacy: PrivacyPolicy) -> Engin
         profile=profile,
         camera=CameraSettings(rtsp_url="rtsp://camera.internal/live"),
         publish=PublishSettings(subject_prefix="evt.tracking"),
-        stream=StreamSettings(),
+        stream=(
+            StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+            if profile is PublishProfile.CENTRAL_GPU
+            else StreamSettings()
+        ),
         model=ModelSettings(
             name="synthetic",
             path="/models/synthetic.onnx",

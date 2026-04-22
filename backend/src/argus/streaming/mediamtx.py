@@ -272,6 +272,7 @@ class MediaMTXClient:
         camera_id: UUID,
         rtsp_url: str,
         profile: PublishProfile,
+        stream_kind: str,
         privacy: PrivacyPolicy,
         target_fps: int = 25,
         target_width: int | None = None,
@@ -282,6 +283,7 @@ class MediaMTXClient:
             camera_id=camera_id,
             rtsp_url=rtsp_url,
             profile=profile,
+            stream_kind=stream_kind,
             privacy=privacy,
             target_fps=target_fps,
             target_width=target_width,
@@ -424,11 +426,26 @@ class MediaMTXClient:
         camera_id: UUID,
         rtsp_url: str,
         profile: PublishProfile,
+        stream_kind: str,
         privacy: PrivacyPolicy,
         target_fps: int,
         target_width: int | None,
         target_height: int | None,
     ) -> StreamRegistration:
+        if stream_kind == StreamMode.PASSTHROUGH.value and not privacy.requires_filtering:
+            path_name = f"cameras/{camera_id}/passthrough"
+            await self._ensure_path(path_name, source=rtsp_url, source_on_demand=True)
+            return StreamRegistration(
+                camera_id=camera_id,
+                mode=StreamMode.PASSTHROUGH,
+                path_name=path_name,
+                read_path=f"{self.rtsp_base_url}/{path_name}",
+                managed_path_config=True,
+                target_fps=max(1, target_fps),
+                target_width=target_width,
+                target_height=target_height,
+            )
+
         if profile is PublishProfile.CENTRAL_GPU:
             path_name = f"cameras/{camera_id}/annotated"
             return StreamRegistration(
