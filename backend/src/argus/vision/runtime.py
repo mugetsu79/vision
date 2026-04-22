@@ -75,7 +75,10 @@ _PROFILE_PROVIDER_PRIORITY: dict[ExecutionProfile, tuple[ExecutionProvider, ...]
         ExecutionProvider.CPU,
     ),
     ExecutionProfile.LINUX_X86_64_AMD: (ExecutionProvider.CPU,),
-    ExecutionProfile.MACOS_X86_64_INTEL: (ExecutionProvider.CPU,),
+    ExecutionProfile.MACOS_X86_64_INTEL: (
+        ExecutionProvider.COREML,
+        ExecutionProvider.CPU,
+    ),
     ExecutionProfile.CPU_FALLBACK: (ExecutionProvider.CPU,),
 }
 

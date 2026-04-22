@@ -56,6 +56,24 @@ def test_runtime_policy_prefers_coreml_for_macos_arm64_hosts() -> None:
     assert policy.host.cpu_vendor is CpuVendor.APPLE
 
 
+def test_runtime_policy_prefers_coreml_for_macos_x86_hosts_when_available() -> None:
+    policy = resolve_execution_policy(
+        _FakeRuntime(
+            providers=[
+                ExecutionProvider.COREML.value,
+                ExecutionProvider.CPU.value,
+            ]
+        ),
+        system="Darwin",
+        machine="x86_64",
+        cpu_vendor=CpuVendor.INTEL,
+    )
+
+    assert policy.profile is ExecutionProfile.MACOS_X86_64_INTEL
+    assert policy.provider == ExecutionProvider.COREML.value
+    assert policy.host.cpu_vendor is CpuVendor.INTEL
+
+
 def test_runtime_policy_prefers_openvino_for_linux_x86_intel_hosts() -> None:
     policy = resolve_execution_policy(
         _FakeRuntime(
