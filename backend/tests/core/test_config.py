@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from argus.core.config import Settings
+from argus.vision.runtime import ExecutionProfile, ExecutionProvider
 
 
 def test_settings_default_app_name() -> None:
@@ -51,3 +55,26 @@ def test_loopback_keycloak_public_url_trusts_both_localhost_and_127() -> None:
         "http://localhost:8080/realms",
         "http://127.0.0.1:8080/realms",
     )
+
+
+def test_settings_accept_inference_runtime_overrides() -> None:
+    settings = Settings(
+        _env_file=None,
+        inference_execution_provider_override=ExecutionProvider.CPU,
+        inference_execution_profile_override=ExecutionProfile.LINUX_X86_64_INTEL,
+        inference_session_inter_op_threads=2,
+        inference_session_intra_op_threads=4,
+    )
+
+    assert settings.inference_execution_provider_override is ExecutionProvider.CPU
+    assert settings.inference_execution_profile_override is ExecutionProfile.LINUX_X86_64_INTEL
+    assert settings.inference_session_inter_op_threads == 2
+    assert settings.inference_session_intra_op_threads == 4
+
+
+def test_settings_reject_invalid_inference_provider_override() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            inference_execution_provider_override="DefinitelyNotAProvider",
+        )

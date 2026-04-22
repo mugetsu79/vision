@@ -55,6 +55,7 @@ from argus.vision.camera import CameraSourceConfig, create_camera_source
 from argus.vision.detector import DetectionModelConfig, YoloDetector
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
+from argus.vision.runtime import import_onnxruntime, resolve_execution_policy
 from argus.vision.tracker import TrackerConfig, create_tracker
 from argus.vision.types import Detection
 from argus.vision.zones import Zones
@@ -676,6 +677,29 @@ def build_runtime_engine(
             fps_cap=config.camera.fps_cap,
         )
     )
+    runtime = import_onnxruntime()
+    runtime_policy = resolve_execution_policy(
+        runtime,
+        execution_provider_override=settings.inference_execution_provider_override,
+        execution_profile_override=settings.inference_execution_profile_override,
+        inter_op_threads=settings.inference_session_inter_op_threads,
+        intra_op_threads=settings.inference_session_intra_op_threads,
+    )
+    logger.info(
+        "Resolved inference runtime policy "
+        "profile=%s system=%s machine=%s cpu_vendor=%s "
+        "detection_provider=%s attribute_provider=%s "
+        "provider_override=%s profile_override=%s available_providers=%s",
+        runtime_policy.profile.value,
+        runtime_policy.host.system,
+        runtime_policy.host.machine,
+        runtime_policy.host.cpu_vendor.value,
+        runtime_policy.provider,
+        runtime_policy.provider if config.secondary_model is not None else "<disabled>",
+        runtime_policy.provider_overridden,
+        runtime_policy.profile_overridden,
+        list(runtime_policy.available_providers),
+    )
     detector = YoloDetector(
         DetectionModelConfig(
             name=config.model.name,
@@ -684,7 +708,9 @@ def build_runtime_engine(
             input_shape=config.model.input_shape,
             confidence_threshold=config.model.confidence_threshold,
             iou_threshold=config.model.iou_threshold,
-        )
+        ),
+        runtime=runtime,
+        runtime_policy=runtime_policy,
     )
 
     def tracker_factory(tracker_type: TrackerType) -> Tracker:
@@ -702,7 +728,9 @@ def build_runtime_engine(
                 classes=config.secondary_model.classes,
                 input_shape=config.secondary_model.input_shape,
                 target_classes=set(config.active_classes or config.model.classes),
-            )
+            ),
+            runtime=runtime,
+            runtime_policy=runtime_policy,
         )
     else:
         attribute_classifier = None

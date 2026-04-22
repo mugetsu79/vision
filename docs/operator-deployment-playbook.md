@@ -142,6 +142,25 @@ Two supported patterns:
 4. Validate live viewing, telemetry, privacy behavior, incidents, and history.
 5. Only then add the rest of the site’s cameras.
 
+### Inference Runtime Overrides
+
+By default, the worker now chooses an execution-provider policy from host capabilities:
+
+- NVIDIA Linux `amd64`: TensorRT, then CUDA, then CPU
+- Apple Silicon macOS: CoreML, then CPU
+- Intel Linux `amd64`: OpenVINO, then CPU
+- AMD Linux `amd64`: CPU in this first pass
+- Intel macOS: CPU fallback
+
+For controlled benchmarking or mitigation, these environment variables can override the automatic choice:
+
+- `ARGUS_INFERENCE_EXECUTION_PROVIDER_OVERRIDE`
+- `ARGUS_INFERENCE_EXECUTION_PROFILE_OVERRIDE`
+- `ARGUS_INFERENCE_SESSION_INTER_OP_THREADS`
+- `ARGUS_INFERENCE_SESSION_INTRA_OP_THREADS`
+
+Use the overrides sparingly. Prefer the automatic policy for normal deployment, and only force a provider when you are measuring performance or isolating a runtime-specific issue.
+
 ### Success criteria
 
 - operators can log in and view the site

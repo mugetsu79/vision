@@ -30,6 +30,13 @@ from argus.streaming.mediamtx import (
     StreamRegistration,
 )
 from argus.vision.rules import RuleEventRecord
+from argus.vision.runtime import (
+    CpuVendor,
+    ExecutionProfile,
+    ExecutionProvider,
+    HostClassification,
+    RuntimeExecutionPolicy,
+)
 from argus.vision.types import Detection
 
 
@@ -554,3 +561,90 @@ def test_worker_main_configures_logging_and_reuses_settings(
     assert captured["camera_id"] == camera_id
     assert captured["worker_settings"] is fake_settings
     assert captured["awaitable"].__class__.__name__ == "_Awaitable"
+
+
+def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_models(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    fake_runtime = object()
+    runtime_policy = RuntimeExecutionPolicy(
+        host=HostClassification(
+            system="darwin",
+            machine="arm64",
+            cpu_vendor=CpuVendor.APPLE,
+            available_providers=(
+                ExecutionProvider.COREML.value,
+                ExecutionProvider.CPU.value,
+            ),
+            profile=ExecutionProfile.MACOS_APPLE_SILICON,
+            profile_overridden=False,
+        ),
+        provider=ExecutionProvider.COREML.value,
+        available_providers=(
+            ExecutionProvider.COREML.value,
+            ExecutionProvider.CPU.value,
+        ),
+        provider_overridden=False,
+        inter_op_threads=2,
+        intra_op_threads=4,
+    )
+    detector_calls: dict[str, object] = {}
+    attribute_calls: dict[str, object] = {}
+
+    class _FakeResolvedDetector:
+        def __init__(self, model_config: object, runtime: object, runtime_policy: object) -> None:
+            detector_calls["model_config"] = model_config
+            detector_calls["runtime"] = runtime
+            detector_calls["runtime_policy"] = runtime_policy
+
+    class _FakeResolvedAttributeClassifier:
+        def __init__(self, model_config: object, runtime: object, runtime_policy: object) -> None:
+            attribute_calls["model_config"] = model_config
+            attribute_calls["runtime"] = runtime
+            attribute_calls["runtime_policy"] = runtime_policy
+
+    monkeypatch.setattr(
+        engine_module,
+        "create_camera_source",
+        lambda camera_config: _FakeFrameSource([]),
+    )
+    monkeypatch.setattr(engine_module, "import_onnxruntime", lambda: fake_runtime)
+    monkeypatch.setattr(
+        engine_module,
+        "resolve_execution_policy",
+        lambda runtime, **kwargs: runtime_policy,
+    )
+    monkeypatch.setattr(engine_module, "YoloDetector", _FakeResolvedDetector)
+    monkeypatch.setattr(engine_module, "AttributeClassifier", _FakeResolvedAttributeClassifier)
+
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "secondary_model": ModelSettings(
+                name="ppe-attributes",
+                path="/models/ppe-attributes.onnx",
+                classes=["hi_vis", "hard_hat"],
+                input_shape={"width": 64, "height": 64},
+            )
+        }
+    )
+    settings = engine_module.Settings(_env_file=None)
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+
+    engine_module.build_runtime_engine(
+        config,
+        settings=settings,
+        events_client=_FakeEventClient(),
+    )
+
+    assert detector_calls["runtime"] is fake_runtime
+    assert detector_calls["runtime_policy"] is runtime_policy
+    assert attribute_calls["runtime"] is fake_runtime
+    assert attribute_calls["runtime_policy"] is runtime_policy
+    assert any(
+        "Resolved inference runtime policy" in record.message
+        and "detection_provider=CoreMLExecutionProvider" in record.message
+        and "attribute_provider=CoreMLExecutionProvider" in record.message
+        for record in caplog.records
+    )
