@@ -157,3 +157,121 @@ test("history renders quickly, CSV export works, and incidents show signed previ
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Forklift Gate" })).toBeVisible();
 });
+
+test("history filter state survives navigation via URL", async ({ page }) => {
+  await page.route("**/api/v1/cameras", async (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([cameraPayload()]),
+    }),
+  );
+  await page.route("**/api/v1/history/classes**", async (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        from: "2026-04-23T00:00:00Z",
+        to: "2026-04-23T23:00:00Z",
+        classes: [
+          { class_name: "car", event_count: 40, has_speed_data: true },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/v1/history/series**", async (route) => {
+    const url = new URL(route.request().url());
+    const includeSpeed = url.searchParams.get("include_speed") === "true";
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        granularity: "1h",
+        class_names: ["car"],
+        rows: [
+          {
+            bucket: "2026-04-23T00:00:00Z",
+            values: { car: 10 },
+            total_count: 10,
+            speed_p50: includeSpeed ? { car: 42 } : null,
+            speed_p95: includeSpeed ? { car: 55 } : null,
+            speed_sample_count: includeSpeed ? { car: 10 } : null,
+            over_threshold_count:
+              includeSpeed && url.searchParams.get("speed_threshold")
+                ? { car: 3 }
+                : null,
+          },
+        ],
+        granularity_adjusted: false,
+        speed_classes_capped: false,
+        speed_classes_used: includeSpeed ? ["car"] : null,
+      }),
+    });
+  });
+
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.locator("#username").fill("admin-dev");
+  await page.locator("#password").fill("argus-admin-pass");
+  await page.locator("#kc-login").click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.getByRole("link", { name: "History" }).click();
+  await expect(page).toHaveURL(/\/history/);
+
+  await page.getByLabel("Show speed").check();
+  await page.getByLabel("Speed threshold").fill("60");
+
+  await expect(page).toHaveURL(/speed=1/);
+  await expect(page).toHaveURL(/speedThreshold=60/);
+
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/history.*speed=1.*speedThreshold=60/);
+  await expect(page.getByLabel("Show speed")).toBeChecked();
+  await expect(page.getByLabel("Speed threshold")).toHaveValue("60");
+});
+
+test("deep link with speed params applies state on load", async ({ page }) => {
+  await page.route("**/api/v1/cameras", async (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([cameraPayload()]),
+    }),
+  );
+  await page.route("**/api/v1/history/classes**", async (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        from: "2026-04-23T00:00:00Z",
+        to: "2026-04-23T23:00:00Z",
+        classes: [{ class_name: "car", event_count: 40, has_speed_data: true }],
+      }),
+    }),
+  );
+  await page.route("**/api/v1/history/series**", async (route) => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get("include_speed")).toBe("true");
+    expect(url.searchParams.get("speed_threshold")).toBe("60");
+    expect(url.searchParams.get("granularity")).toBe("5m");
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        granularity: "5m",
+        class_names: ["car"],
+        rows: [],
+        granularity_adjusted: false,
+        speed_classes_capped: false,
+        speed_classes_used: ["car"],
+      }),
+    });
+  });
+
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.locator("#username").fill("admin-dev");
+  await page.locator("#password").fill("argus-admin-pass");
+  await page.locator("#kc-login").click();
+
+  await page.goto("/history?speed=1&speedThreshold=60&granularity=5m");
+  await expect(page.getByLabel("Show speed")).toBeChecked();
+  await expect(page.getByLabel("Speed threshold")).toHaveValue("60");
+});
