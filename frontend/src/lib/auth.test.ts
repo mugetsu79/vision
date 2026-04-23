@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import type { User } from "oidc-client-ts";
 
+import { productBrand } from "@/brand/product";
+
 vi.mock("@/lib/config", () => ({
   frontendConfig: {
     apiBaseUrl: "http://127.0.0.1:8000",
@@ -18,7 +20,7 @@ function createUser(profile: Record<string, unknown>): User {
 }
 
 describe("mapOidcUser", () => {
-  test("throws when the token is missing any recognized Argus role", () => {
+  test("throws when the token is missing any recognized platform role", () => {
     const user = createUser({
       sub: "user-1",
       iss: "http://127.0.0.1:8080/realms/argus-dev",
@@ -27,7 +29,7 @@ describe("mapOidcUser", () => {
       },
     });
 
-    expect(() => mapOidcUser(user)).toThrow(/missing a recognized argus role/i);
+    expect(() => mapOidcUser(user)).toThrow(/recognized platform role/i);
   });
 
   test("maps a recognized realm role into the session user", () => {

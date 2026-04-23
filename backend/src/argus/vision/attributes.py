@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from logging import getLogger
 from typing import Any
 
 import cv2
 import numpy as np
 from numpy.typing import NDArray
 
-from argus.vision.runtime import import_onnxruntime, select_execution_provider
+from argus.vision.runtime import (
+    RuntimeExecutionPolicy,
+    create_session_options,
+    import_onnxruntime,
+    resolve_execution_policy,
+)
 from argus.vision.types import Detection
+
+LOGGER = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -23,13 +31,28 @@ class AttributeModelConfig:
 
 
 class AttributeClassifier:
-    def __init__(self, model_config: AttributeModelConfig, runtime: Any | None = None) -> None:
+    def __init__(
+        self,
+        model_config: AttributeModelConfig,
+        runtime: Any | None = None,
+        runtime_policy: RuntimeExecutionPolicy | None = None,
+    ) -> None:
         self.model_config = model_config
         self.runtime = runtime or import_onnxruntime()
-        provider = select_execution_provider(self.runtime)
-        self.session = self.runtime.InferenceSession(model_config.path, providers=[provider])
-        self.selected_provider = provider
+        self.runtime_policy = runtime_policy or resolve_execution_policy(self.runtime)
+        session_options = create_session_options(self.runtime, policy=self.runtime_policy)
+        self.session = self.runtime.InferenceSession(
+            model_config.path,
+            providers=[self.runtime_policy.provider],
+            sess_options=session_options,
+        )
+        self.selected_provider = self.runtime_policy.provider
         self.input_name = self.session.get_inputs()[0].name
+        LOGGER.info(
+            "Loaded attribute model %s with provider %s",
+            self.model_config.name,
+            self.selected_provider,
+        )
 
     def classify(
         self,

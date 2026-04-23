@@ -15,7 +15,7 @@ COPY pyproject.toml uv.lock alembic.ini README.md ./
 COPY src ./src
 
 RUN pip install --no-cache-dir uv \
-    && uv sync --locked --no-dev --group runtime --group llm
+    && uv sync --locked --no-dev --group runtime --group llm --group model-metadata
 
 FROM gcr.io/distroless/python3-debian12:nonroot AS central-runtime
 

@@ -9,7 +9,12 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
-from argus.vision.runtime import import_onnxruntime, select_execution_provider
+from argus.vision.runtime import (
+    RuntimeExecutionPolicy,
+    create_session_options,
+    import_onnxruntime,
+    resolve_execution_policy,
+)
 from argus.vision.types import Detection
 
 LOGGER = getLogger(__name__)
@@ -26,12 +31,22 @@ class DetectionModelConfig:
 
 
 class YoloDetector:
-    def __init__(self, model_config: DetectionModelConfig, runtime: Any | None = None) -> None:
+    def __init__(
+        self,
+        model_config: DetectionModelConfig,
+        runtime: Any | None = None,
+        runtime_policy: RuntimeExecutionPolicy | None = None,
+    ) -> None:
         self.model_config = model_config
         self.runtime = runtime or import_onnxruntime()
-        provider = select_execution_provider(self.runtime)
-        self.session = self.runtime.InferenceSession(model_config.path, providers=[provider])
-        self.selected_provider = provider
+        self.runtime_policy = runtime_policy or resolve_execution_policy(self.runtime)
+        session_options = create_session_options(self.runtime, policy=self.runtime_policy)
+        self.session = self.runtime.InferenceSession(
+            model_config.path,
+            providers=[self.runtime_policy.provider],
+            sess_options=session_options,
+        )
+        self.selected_provider = self.runtime_policy.provider
         self.input_name = self.session.get_inputs()[0].name
         LOGGER.info(
             "Loaded detection model %s with provider %s",
@@ -71,11 +86,19 @@ class YoloDetector:
         frame_height: int,
     ) -> list[Detection]:
         squeezed = np.asarray(predictions, dtype=np.float32)
+        transposed_channel_first = False
         if squeezed.ndim == 3:
             squeezed = np.squeeze(squeezed, axis=0)
 
         if squeezed.ndim != 2:
             raise ValueError("Unexpected detector output shape.")
+
+        if _looks_like_channel_first_layout(
+            squeezed,
+            configured_class_count=len(self.model_config.classes),
+        ):
+            squeezed = squeezed.T
+            transposed_channel_first = True
 
         if squeezed.shape[1] >= 6 and np.all(squeezed[:, 5] == np.floor(squeezed[:, 5])):
             return [
@@ -98,15 +121,55 @@ class YoloDetector:
                 if int(row[5]) < len(self.model_config.classes)
             ]
 
+        if transposed_channel_first:
+            return self._parse_dense_predictions(
+                squeezed,
+                frame_width=frame_width,
+                frame_height=frame_height,
+                has_objectness=False,
+            )
+
+        if squeezed.shape[1] == 4 + len(self.model_config.classes):
+            return self._parse_dense_predictions(
+                squeezed,
+                frame_width=frame_width,
+                frame_height=frame_height,
+                has_objectness=False,
+            )
+
+        if squeezed.shape[1] >= 5 + len(self.model_config.classes):
+            return self._parse_dense_predictions(
+                squeezed,
+                frame_width=frame_width,
+                frame_height=frame_height,
+                has_objectness=True,
+            )
+
         if squeezed.shape[1] < 6:
             raise ValueError("Unexpected detector output columns.")
+        raise ValueError("Unexpected detector output columns.")
 
+    def _parse_dense_predictions(
+        self,
+        predictions: NDArray[np.float32],
+        *,
+        frame_width: int,
+        frame_height: int,
+        has_objectness: bool,
+    ) -> list[Detection]:
         detections: list[Detection] = []
-        class_scores = squeezed[:, 5:]
+        class_offset = 5 if has_objectness else 4
+        class_scores = predictions[:, class_offset:]
+        if class_scores.size == 0:
+            return detections
         class_ids = np.argmax(class_scores, axis=1)
-        confidences = squeezed[:, 4] * class_scores[np.arange(len(class_ids)), class_ids]
+        class_confidences = class_scores[np.arange(len(class_ids)), class_ids]
+        if has_objectness:
+            confidences = predictions[:, 4] * class_confidences
+        else:
+            confidences = class_confidences
         for row, class_id, confidence in zip(
-            squeezed,
+            predictions,
             class_ids.tolist(),
             confidences.tolist(),
             strict=False,
@@ -172,6 +235,17 @@ def _apply_nms(detections: list[Detection], iou_threshold: float) -> list[Detect
                 if _bbox_iou(current.bbox, candidate.bbox) < iou_threshold
             ]
     return kept
+
+
+def _looks_like_channel_first_layout(
+    predictions: NDArray[np.float32],
+    *,
+    configured_class_count: int,
+) -> bool:
+    rows, columns = predictions.shape
+    if rows <= 4 or columns <= rows:
+        return False
+    return (rows - 4 >= configured_class_count) or (rows - 5 >= configured_class_count)
 
 
 def _bbox_iou(

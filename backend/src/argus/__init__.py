@@ -1,1 +1,1 @@
-"""Argus | The OmniSight Platform backend package."""
+"""Vezor | The OmniSight Platform backend package."""

@@ -1,21 +1,21 @@
-# Argus Lab Guide: iMac Master And Jetson Orin Edge
+# Vezor Lab Guide: iMac Master And Jetson Orin Edge
 
 Date: 2026-04-19
 
-This guide is written for a first lab rollout of Argus on:
+This guide is written for a first lab rollout of Vezor on:
 
-- a **2019 iMac i9 with Radeon 580 8 GB** as the Argus master node
-- a **Jetson Orin Nano Super 8 GB** on Ubuntu installed on NVMe as the Argus edge node
+- a **2019 iMac i9 with Radeon 580 8 GB** as the Vezor master node
+- a **Jetson Orin Nano Super 8 GB** on Ubuntu installed on NVMe as the Vezor edge node
 - **2 RTSP cameras**
 
 It walks through two tests:
 
 1. **Test A: iMac only**
-   The iMac runs the full Argus stack and both camera workers.
+   The iMac runs the full Vezor stack and both camera workers.
 2. **Test B: iMac master + Jetson edge**
    The iMac stays the master node, camera 1 stays central, and camera 2 moves to the Jetson.
 
-The goal is not to prove final production performance. The goal is to prove that the full Argus workflow works on your hardware from sign-in to live view to history and incidents.
+The goal is not to prove final production performance. The goal is to prove that the full Vezor workflow works on your hardware from sign-in to live view to history and incidents.
 
 Related documents:
 
@@ -31,19 +31,21 @@ You need all of the following before you begin:
 
 - administrator access on the iMac
 - administrator access on the Jetson
-- the Argus repository on both machines
+- the Vezor repository on both machines
 - 2 working RTSP camera URLs
 - 1 detector model file in ONNX format
 - both machines and both cameras on the same local network
 - enough free disk space for Docker images and logs
 
-This guide assumes the model file is called `yolo12n.onnx`. If your file has a different name, replace it everywhere in the commands below.
+This guide assumes the model file is called `yolo12n.onnx`. If your file has a different name, replace it everywhere in the commands below. Treat it as a standard COCO-style self-describing ONNX model unless you are intentionally following the advanced reduced-class path later in this guide.
+
+This is the default COCO-first flow. The model is treated as a standard self-describing ONNX file, so registration should trust embedded metadata when it is available. You will set the persistent camera class scope in the UI instead of treating the model itself as a reduced-class custom artifact.
 
 ### 1.2 What this lab proves
 
 After you finish:
 
-- you can sign in to Argus
+- you can sign in to Vezor
 - you can create a site
 - you can create cameras
 - you can run inference workers
@@ -54,13 +56,13 @@ After you finish:
 ### 1.3 Important limits of this lab
 
 - The iMac is being used as a **lab master node**, not the final reference production inference server.
-- The Radeon 580 is **not** the hardened central GPU target for Argus.
+- The Radeon 580 is **not** the hardened central GPU target for Vezor.
 - This guide assumes you are doing a **functional test with 2 cameras**, not a scale test.
-- The Jetson portion is the more realistic Argus architecture test.
+- The Jetson portion is the more realistic Vezor architecture test.
 
 ### 1.4 A few words explained in plain language
 
-- **Master node**: the main Argus machine. It hosts the web UI, API, database, auth, storage, and orchestration.
+- **Master node**: the main Vezor machine. It hosts the web UI, API, database, auth, storage, and orchestration.
 - **Edge node**: a machine near the camera that runs inference locally.
 - **RTSP URL**: the camera stream address.
 - **Terminal**: the text window where you paste commands.
@@ -92,8 +94,8 @@ To keep the commands simple, use these names:
 - Site name: `Lab Site`
 - Camera 1 name: `Lab Camera 1`
 - Camera 2 name: `Lab Camera 2`
-- iMac model record name: `YOLO12n iMac`
-- Jetson model record name: `YOLO12n Edge`
+- iMac model record name: `YOLO12n COCO iMac`
+- Jetson model record name: `YOLO12n COCO Edge`
 
 If you choose different names, you must also change the matching commands later in the guide.
 
@@ -131,7 +133,7 @@ On the iMac:
 
 The Jetson must be able to reach these iMac ports:
 
-- `8000` Argus backend API
+- `8000` Vezor backend API
 - `8080` Keycloak
 - `5432` PostgreSQL
 - `7422` NATS leaf upstream
@@ -139,7 +141,7 @@ The Jetson must be able to reach these iMac ports:
 
 ### 1.9 Check for port conflicts before you start the stack
 
-Before you run Argus for the first time, make sure nothing else on the iMac is already using the most important local ports.
+Before you run Vezor for the first time, make sure nothing else on the iMac is already using the most important local ports.
 
 Run:
 
@@ -238,7 +240,7 @@ What good looks like:
 
 - both commands print a version number
 
-### 2.2 Clone the Argus repository on the iMac
+### 2.2 Clone the Vezor repository on the iMac
 
 Choose a simple location. This guide uses `$HOME/vision`.
 
@@ -264,7 +266,7 @@ Run:
 
 ```bash
 cd "$HOME/vision/backend"
-python3 -m uv sync --group runtime --group dev --group llm
+python3 -m uv sync --group runtime --group dev --group llm --group vision
 
 cd "$HOME/vision/frontend"
 corepack pnpm install
@@ -284,6 +286,10 @@ What good looks like:
 
 - the Alembic command finishes without an error
 - `openapi-typescript` prints a version number
+
+The `vision` group is required on the iMac host if you want to run the local inference worker later in this guide. That group installs packages such as `numpy`, `onnxruntime`, `torch`, `torchvision`, and `opencv-python-headless`.
+
+On Intel Macs, the repository pins compatible `onnxruntime`, `torch`, and `torchvision` builds for the host worker because newer upstream wheels are no longer published for macOS `x86_64`.
 
 If `openapi-typescript` is not found:
 
@@ -320,7 +326,7 @@ What good looks like:
 
 - you can see the model file in the list
 
-### 2.4 Start the Argus control plane on the iMac
+### 2.4 Start the Vezor control plane on the iMac
 
 From the repository root:
 
@@ -333,6 +339,11 @@ Important:
 
 - `make dev-up` already runs `docker compose -f infra/docker-compose.dev.yml up -d`
 - do **not** run `docker compose ... up -d` again right after `make dev-up`
+- if you just pulled a change that modifies `infra/docker-compose.dev.yml` for the backend, recreate the backend container once so new bind mounts and dependency-group installs take effect:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
+```
 
 Wait for the core services to become reachable:
 
@@ -428,12 +439,14 @@ What good looks like:
 
 ### 2.5 Get the model metadata
 
-Argus needs the model hash and file size when you register a model.
+Vezor needs the model hash and file size when you register a model. For a self-describing ONNX file, the backend will read the embedded class metadata during registration, so you do not need to send `classes` for the default COCO-first path.
+
+Use a path under this checkout's `models/` directory. In local Docker development, `make dev-up` bind-mounts that same absolute host path into the backend container so registration-time ONNX validation and the later host-side worker both read the same file.
 
 Run:
 
 ```bash
-MODEL_PATH="$HOME/vision/models/yolo12n.onnx"
+MODEL_PATH="$PWD/models/yolo12n.onnx"
 MODEL_SHA="$(shasum -a 256 "$MODEL_PATH" | awk '{print $1}')"
 MODEL_SIZE="$(stat -f%z "$MODEL_PATH")"
 echo "$MODEL_PATH"
@@ -447,9 +460,9 @@ What good looks like:
 - the second line is a long SHA-256 hash
 - the third line is a file size number
 
-### 2.6 Get an Argus admin token on the iMac
+### 2.6 Get a Vezor admin token on the iMac
 
-Argus ships with a seeded local development admin user:
+Vezor ships with a seeded local development admin user:
 
 - username: `admin-dev`
 - password: `argus-admin-pass`
@@ -479,7 +492,7 @@ Keep this iMac terminal window open. Later commands in this guide reuse:
 
 ### 2.7 Register the iMac model record
 
-This model record uses the **iMac path** to the model file. It is only for Test A.
+This model record uses the **iMac path** to the model file. It is only for Test A, and it is a standard self-describing COCO ONNX registration.
 
 Run:
 
@@ -491,12 +504,11 @@ IMAC_MODEL_ID="$(
     -X POST \
     http://127.0.0.1:8000/api/v1/models \
     -d "{
-      \"name\": \"YOLO12n iMac\",
+      \"name\": \"YOLO12n COCO iMac\",
       \"version\": \"lab-imac\",
       \"task\": \"detect\",
       \"path\": \"$MODEL_PATH\",
       \"format\": \"onnx\",
-      \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
       \"input_shape\": {\"width\": 640, \"height\": 640},
       \"sha256\": \"$MODEL_SHA\",
       \"size_bytes\": $MODEL_SIZE,
@@ -519,10 +531,10 @@ If you get a message that the model already exists:
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
 ```
 
-2. find the existing `YOLO12n iMac` entry
+2. find the existing `YOLO12n COCO iMac` entry
 3. reuse its `id`
 
-### 2.8 Sign in to the Argus UI
+### 2.8 Sign in to the Vezor UI
 
 1. Open [http://127.0.0.1:3000](http://127.0.0.1:3000)
 2. Click **Sign in**
@@ -533,7 +545,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | 
 
 What good looks like:
 
-- you land in the Argus app shell
+- you land in the Vezor app shell
 
 ### 2.9 Create the site in the UI
 
@@ -541,7 +553,7 @@ What good looks like:
 2. Click **Add site**
 3. Enter:
    - Site name: `Lab Site`
-   - Description: `Initial Argus lab site`
+   - Description: `Initial Vezor lab site`
    - Time zone: `Europe/Zurich`
 4. Click **Save site**
 
@@ -560,7 +572,8 @@ What good looks like:
    - RTSP URL: paste your camera 1 RTSP URL
 4. Click **Continue**
 5. In **Models & Tracking**:
-   - Primary model: `YOLO12n iMac`
+   - Primary model: `YOLO12n COCO iMac`
+   - Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
    - Tracker type: keep `botsort`
    - Secondary model: leave empty
 6. Click **Continue**
@@ -590,7 +603,8 @@ Repeat the same process, but use:
 - Site: `Lab Site`
 - Processing mode: `central`
 - RTSP URL: paste your camera 2 RTSP URL
-- Primary model: `YOLO12n iMac`
+- Primary model: `YOLO12n COCO iMac`
+- Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
 - Tracker type: `botsort`
 - Browser delivery profile: `720p10`
 - Calibration:
@@ -675,6 +689,15 @@ What good looks like in the worker windows:
 - there is no immediate crash
 - you do not see a `401` error
 - you do not see a missing-model-path error
+
+If the worker crashes immediately with `ModuleNotFoundError: No module named 'numpy'`, go back to the backend directory and install the host-side `vision` dependencies:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv sync --group runtime --group dev --group llm --group vision
+```
+
+Then rerun the worker command.
 
 ### 2.15 Check the live dashboard
 
@@ -827,7 +850,7 @@ If it ends with one or more `FAIL` lines, stop here and fix those issues before 
 
 ### 3.3 Create the Jetson-specific model record on the iMac
 
-The Jetson container sees the model file at `/models/yolo12n.onnx`, not at your home-directory path. That is why you need a second model record.
+The Jetson container sees the model file at `/models/yolo12n.onnx`, not at your home-directory path. That is why you need a second model record, even though the embedded ONNX class metadata is the same.
 
 Back on the iMac, in any Terminal window where `TOKEN`, `MODEL_SHA`, and `MODEL_SIZE` still exist, run:
 
@@ -839,12 +862,11 @@ EDGE_MODEL_ID="$(
     -X POST \
     http://127.0.0.1:8000/api/v1/models \
     -d "{
-      \"name\": \"YOLO12n Edge\",
+      \"name\": \"YOLO12n COCO Edge\",
       \"version\": \"lab-edge\",
       \"task\": \"detect\",
       \"path\": \"/models/yolo12n.onnx\",
       \"format\": \"onnx\",
-      \"classes\": [\"person\", \"car\", \"bus\", \"truck\", \"motorcycle\", \"bicycle\"],
       \"input_shape\": {\"width\": 640, \"height\": 640},
       \"sha256\": \"$MODEL_SHA\",
       \"size_bytes\": $MODEL_SIZE,
@@ -859,7 +881,7 @@ What good looks like:
 
 - the command prints a UUID
 
-### 3.4 Edit camera 2 in the Argus UI
+### 3.4 Edit camera 2 in the Vezor UI
 
 Back in the browser on the iMac:
 
@@ -870,7 +892,8 @@ Back in the browser on the iMac:
 Change these values:
 
 - Processing mode: `edge`
-- Primary model: `YOLO12n Edge`
+- Primary model: `YOLO12n COCO Edge`
+- Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
 
 Keep these values:
 
@@ -1029,8 +1052,8 @@ What to do:
 1. get a fresh token
 2. confirm the camera ID again
 3. confirm the model path is:
-   - the full iMac path for `YOLO12n iMac`
-   - `/models/yolo12n.onnx` for `YOLO12n Edge`
+   - the full iMac path for `YOLO12n COCO iMac`
+   - `/models/yolo12n.onnx` for `YOLO12n COCO Edge`
 4. restart the worker
 
 ### 4.3 If the worker says `401` or `403`
@@ -1059,7 +1082,43 @@ What to check:
 2. the container model path in the model record is `/models/yolo12n.onnx`
 3. the edge compose worker is using the `../models:/models:ro` volume mount
 
-### 4.5 If the Dashboard tiles stay offline
+### 4.5 If model registration returns `500 Internal Server Error` on the iMac
+
+Most likely causes:
+
+- the backend container cannot read the model file at the path you sent
+- the backend container was not recreated after a compose change that added the local `models/` bind mount or the ONNX model-metadata dependency install
+- the model file path is not under this checkout's `models/` directory
+
+What to do:
+
+1. set `MODEL_PATH` from the repo root:
+
+```bash
+cd "$HOME/vision"
+MODEL_PATH="$PWD/models/yolo12n.onnx"
+```
+
+2. recreate the backend container once:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
+```
+
+3. wait for health again:
+
+```bash
+for i in {1..60}; do
+  curl -fsS http://127.0.0.1:8000/healthz && break
+  sleep 1
+done
+```
+
+4. retry the model registration command
+
+If the backend still rejects the request after that, the response should now be a readable validation error such as an unreadable ONNX path instead of a generic 500.
+
+### 4.6 If the Dashboard tiles stay offline
 
 What to do:
 
@@ -1068,7 +1127,7 @@ What to do:
 3. wait 30 seconds and refresh the Dashboard
 4. check worker logs for connection errors
 
-### 4.6 If the Jetson cannot reach the iMac
+### 4.7 If the Jetson cannot reach the iMac
 
 Check:
 
@@ -1084,7 +1143,18 @@ curl -s "http://$IMAC_IP:8000/healthz"
 curl -s "http://$IMAC_IP:8080/realms/argus-dev/.well-known/openid-configuration" | head
 ```
 
-### 4.7 If `make verify-all` fails
+### 4.8 Advanced: reduced-class custom models
+
+If you are intentionally testing a reduced-class custom model, treat that as an advanced optional workflow:
+
+1. use a genuinely custom reduced-class artifact whose embedded metadata already matches the reduced inventory you want to operate, or use a model format that explicitly requires declared classes
+2. choose matching persistent `active_classes` in the camera UI
+3. do not treat the default self-describing `yolo12n.onnx` COCO model as a reduced-class model by manually declaring a smaller class list
+4. do not use that reduced-class setup as the default COCO-first lab path
+
+If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the model record in Argus was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
+
+### 4.9 If `make verify-all` fails
 
 Run it again and read the first failing section carefully. The most common failure buckets are:
 
@@ -1100,7 +1170,7 @@ docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
 
-### 4.8 If local API generation says `openapi-typescript: command not found`
+### 4.10 If local API generation says `openapi-typescript: command not found`
 
 This means the host-side frontend dependencies were not installed cleanly.
 
@@ -1118,7 +1188,7 @@ What good looks like:
 - `openapi-typescript --version` prints a version
 - `generate:api` writes `src/lib/api.generated.ts` without error
 
-### 4.9 If `127.0.0.1:9001` does not open
+### 4.11 If `127.0.0.1:9001` does not open
 
 This means MinIO is not healthy yet.
 
@@ -1136,7 +1206,7 @@ What good looks like:
 - MinIO logs no longer show `Invalid credentials`
 - `curl -I` returns an HTTP response instead of connection refused
 
-### 4.10 What to do after a successful lab
+### 4.12 What to do after a successful lab
 
 If both tests pass:
 
@@ -1145,7 +1215,7 @@ If both tests pass:
 3. add cameras gradually, not all at once
 4. move on to a more production-like deployment only after the Jetson path stays stable
 
-### 4.11 Clean shutdown
+### 4.13 Clean shutdown
 
 When you are done testing:
 

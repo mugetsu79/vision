@@ -67,7 +67,7 @@ export function mapOidcUser(user: User): SessionUser {
   const realm = issuer.split("/").filter(Boolean).at(-1) ?? "argus-dev";
 
   if (!role) {
-    throw new Error("OIDC user is missing a recognized Argus role.");
+    throw new Error("OIDC user is missing a recognized platform role.");
   }
 
   return {

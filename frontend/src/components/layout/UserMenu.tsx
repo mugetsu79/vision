@@ -6,18 +6,21 @@ export function UserMenu() {
   const signOut = useAuthStore((state) => state.signOut);
 
   return (
-    <div className="flex items-center gap-3 rounded-full border border-white/10 bg-[rgba(9,15,24,0.76)] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur-xl">
-      <div className="text-right">
+    <div className="rounded-[1.15rem] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(9,14,21,0.96),rgba(12,17,25,0.92))] px-3 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8fa2be]">
+        Session
+      </p>
+      <div className="mt-2 space-y-1">
         <p className="text-sm font-medium text-[#eef4ff]">{user?.email ?? "Unknown user"}</p>
         <p className="text-[11px] uppercase tracking-[0.2em] text-[#8ea4c7]">
           {user?.role ?? "anonymous"}
         </p>
       </div>
       <Button
-        className="bg-[#121b29] px-3 py-2 text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+        className="mt-3 h-9 w-full rounded-[0.95rem] border border-white/10 bg-white/[0.04] px-3 text-sm text-[#eef4ff] shadow-none hover:border-[#35598d] hover:bg-white/[0.07]"
         onClick={() => void signOut()}
       >
-        Logout
+        Sign out
       </Button>
     </div>
   );

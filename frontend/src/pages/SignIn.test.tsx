@@ -2,6 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { productBrand } from "@/brand/product";
+
 vi.mock("@/lib/auth", () => ({
   mapOidcUser: vi.fn(),
   oidcManager: {
@@ -40,5 +42,23 @@ describe("SignInPage", () => {
     await user.click(screen.getByRole("button", { name: /sign in/i }));
 
     expect(signIn).toHaveBeenCalledTimes(1);
+  });
+
+  test("renders the shared product lockup and a single primary sign-in action", () => {
+    render(<SignInPage />);
+
+    expect(
+      screen.getByRole("img", { name: new RegExp(`${productBrand.name} product lockup`, "i") }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`operate ${productBrand.name} from a premium`, "i")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        new RegExp(`use your ${productBrand.name} identity provider account to continue\\.`, "i"),
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    expect(screen.getByText(/vigilant intelligence/i)).toBeInTheDocument();
   });
 });

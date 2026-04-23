@@ -42,7 +42,7 @@ class ModelCreate(BaseModel):
     task: ModelTask
     path: str = Field(min_length=1)
     format: ModelFormat
-    classes: list[str] = Field(min_length=1)
+    classes: list[str] | None = Field(default=None, min_length=1)
     input_shape: dict[str, int]
     sha256: str = Field(min_length=64, max_length=64)
     size_bytes: int = Field(gt=0)
@@ -129,7 +129,11 @@ class WorkerPublishSettings(BaseModel):
 
 
 class WorkerStreamSettings(BaseModel):
-    pass
+    profile_id: BrowserDeliveryProfileId = "native"
+    kind: Literal["passthrough", "transcode"] = "passthrough"
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
+    fps: int = Field(default=25, ge=1)
 
 
 class WorkerModelSettings(BaseModel):

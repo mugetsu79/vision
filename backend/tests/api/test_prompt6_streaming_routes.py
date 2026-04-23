@@ -7,9 +7,12 @@ from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from fastapi import HTTPException
+from httpx import ASGITransport, AsyncClient, Request
+from httpx import Response as HTTPXResponse
 
 from argus.api.contracts import StreamOfferRequest, StreamOfferResponse, TenantContext
+from argus.api.v1 import streams as streams_module
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, get_current_media_user, get_current_user
 from argus.main import create_app
@@ -101,7 +104,117 @@ class FakeStreamService:
 
 
 @pytest.mark.asyncio
-async def test_hls_route_redirects_to_signed_mediamtx_playlist() -> None:
+async def test_fetch_hls_upstream_retries_playlist_404s_before_succeeding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url = "http://mediamtx.internal:8888/cameras/test/preview/index.m3u8?jwt=test-token"
+    responses = [
+        HTTPXResponse(status_code=404, request=Request("GET", url)),
+        HTTPXResponse(
+            status_code=200,
+            request=Request("GET", url),
+            content=b"#EXTM3U\n",
+            headers={"content-type": "application/vnd.apple.mpegurl"},
+        ),
+    ]
+    requested_urls: list[str] = []
+    sleep_delays: list[float] = []
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 10.0
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, requested_url: str) -> HTTPXResponse:
+            requested_urls.append(requested_url)
+            return responses.pop(0)
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_delays.append(delay)
+
+    monkeypatch.setattr(streams_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(streams_module.asyncio, "sleep", fake_sleep)
+
+    payload, headers = await streams_module._fetch_hls_upstream(url)
+
+    assert payload == b"#EXTM3U\n"
+    assert headers["content-type"] == "application/vnd.apple.mpegurl"
+    assert requested_urls == [url, url]
+    assert sleep_delays == [0.25]
+
+
+@pytest.mark.asyncio
+async def test_fetch_hls_upstream_raises_404_for_unready_playlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url = "http://mediamtx.internal:8888/cameras/test/preview/index.m3u8?jwt=test-token"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 10.0
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, requested_url: str) -> HTTPXResponse:
+            return HTTPXResponse(status_code=404, request=Request("GET", requested_url))
+
+    async def fake_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(streams_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(streams_module.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await streams_module._fetch_hls_upstream(url)
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Stream playlist is not ready yet."
+
+
+@pytest.mark.asyncio
+async def test_fetch_hls_upstream_translates_request_errors_to_bad_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url = "http://mediamtx.internal:8888/cameras/test/preview/index.m3u8?jwt=test-token"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 10.0
+
+        async def __aenter__(self) -> FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, requested_url: str) -> HTTPXResponse:
+            raise streams_module.httpx.ConnectError(
+                "All connection attempts failed",
+                request=Request("GET", requested_url),
+            )
+
+    monkeypatch.setattr(streams_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await streams_module._fetch_hls_upstream(url)
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "Unable to load upstream stream asset."
+
+
+@pytest.mark.asyncio
+async def test_hls_route_proxies_playlist_and_rewrites_media_uris(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     user = _sample_user()
     context = _tenant_context(user)
     settings = Settings(
@@ -120,15 +233,48 @@ async def test_hls_route_redirects_to_signed_mediamtx_playlist() -> None:
     app.dependency_overrides[get_current_media_user] = lambda: user
     camera_id = uuid4()
 
+    async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
+        assert (
+            url
+            == "http://mediamtx.internal:8888/cameras/"
+            f"{camera_id}/preview/index.m3u8?jwt=test-token&_HLS_msn=42&_HLS_part=2"
+        )
+        return (
+            b"#EXTM3U\n"
+            b"#EXT-X-VERSION:9\n"
+            b"#EXT-X-MAP:URI=\"init.mp4\"\n"
+            b"#EXTINF:1.0,\n"
+            b"segment0.mp4\n",
+            {"content-type": "application/vnd.apple.mpegurl"},
+        )
+
+    monkeypatch.setattr(streams_module, "_fetch_hls_upstream", fake_fetch)
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://testserver",
         follow_redirects=False,
     ) as client:
-        response = await client.get(f"/api/v1/streams/{camera_id}/hls.m3u8")
+        response = await client.get(
+            f"/api/v1/streams/{camera_id}/hls.m3u8",
+            params={
+                "access_token": "viewer-token",
+                "tenant_id": str(context.tenant_id),
+                "_HLS_msn": "42",
+                "_HLS_part": "2",
+            },
+        )
 
-    assert response.status_code in {302, 307}
-    assert response.headers["location"].endswith("index.m3u8?jwt=test-token")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.apple.mpegurl")
+    assert (
+        f"/api/v1/streams/{camera_id}/hls/init.mp4?access_token=viewer-token&tenant_id={context.tenant_id}"
+        in response.text
+    )
+    assert (
+        f"/api/v1/streams/{camera_id}/hls/segment0.mp4?access_token=viewer-token&tenant_id={context.tenant_id}"
+        in response.text
+    )
 
 
 @pytest.mark.asyncio
@@ -150,18 +296,187 @@ async def test_hls_route_accepts_access_token_query_for_browser_media_requests()
     app.state.security = SimpleNamespace(validate_token=AsyncMock(return_value=user))
     camera_id = uuid4()
 
+    async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
+        assert url.endswith("index.m3u8?jwt=test-token")
+        return (b"#EXTM3U\n", {"content-type": "application/vnd.apple.mpegurl"})
+
+    from argus.api.v1 import streams as streams_module
+
+    app.state.security = SimpleNamespace(validate_token=AsyncMock(return_value=user))
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(streams_module, "_fetch_hls_upstream", fake_fetch)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+            follow_redirects=False,
+        ) as client:
+            response = await client.get(
+                f"/api/v1/streams/{camera_id}/hls.m3u8",
+                params={"access_token": "viewer-token"},
+            )
+    finally:
+        monkeypatch.undo()
+
+    assert response.status_code == 200
+    assert response.text == "#EXTM3U\n"
+
+
+@pytest.mark.asyncio
+async def test_hls_asset_route_rewrites_nested_playlist_uris(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=FakeStreamService(),
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
+    camera_id = uuid4()
+
+    async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
+        assert (
+            url
+            == "http://mediamtx.internal:8888/cameras/"
+            f"{camera_id}/preview/video1_stream.m3u8?jwt=test-token&_HLS_msn=7"
+        )
+        return (
+            b"#EXTM3U\n"
+            b"#EXT-X-MAP:URI=\"17ecb351ac5d_video1_init.mp4\"\n"
+            b"#EXTINF:1.0,\n"
+            b"17ecb351ac5d_video1_seg0.mp4\n",
+            {"content-type": "application/vnd.apple.mpegurl"},
+        )
+
+    monkeypatch.setattr(streams_module, "_fetch_hls_upstream", fake_fetch)
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://testserver",
-        follow_redirects=False,
     ) as client:
         response = await client.get(
-            f"/api/v1/streams/{camera_id}/hls.m3u8",
-            params={"access_token": "viewer-token"},
+            f"/api/v1/streams/{camera_id}/hls/video1_stream.m3u8",
+            params={"access_token": "viewer-token", "_HLS_msn": "7"},
         )
 
-    assert response.status_code in {302, 307}
-    assert response.headers["location"].endswith("index.m3u8?jwt=test-token")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.apple.mpegurl")
+    assert (
+        f"/api/v1/streams/{camera_id}/hls/17ecb351ac5d_video1_init.mp4?access_token=viewer-token"
+        in response.text
+    )
+    assert (
+        f"/api/v1/streams/{camera_id}/hls/17ecb351ac5d_video1_seg0.mp4?access_token=viewer-token"
+        in response.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_hls_asset_route_does_not_forward_frontend_jwt_to_upstream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=FakeStreamService(),
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
+    camera_id = uuid4()
+
+    async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
+        assert (
+            url
+            == "http://mediamtx.internal:8888/cameras/"
+            f"{camera_id}/preview/video1_stream.m3u8?jwt=test-token&_HLS_msn=7"
+        )
+        return (
+            b"#EXTM3U\n"
+            b"#EXT-X-MAP:URI=\"17ecb351ac5d_video1_init.mp4\"\n"
+            b"#EXTINF:1.0,\n"
+            b"17ecb351ac5d_video1_seg0.mp4\n",
+            {"content-type": "application/vnd.apple.mpegurl"},
+        )
+
+    monkeypatch.setattr(streams_module, "_fetch_hls_upstream", fake_fetch)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(
+            f"/api/v1/streams/{camera_id}/hls/video1_stream.m3u8",
+            params={
+                "access_token": "viewer-token",
+                "jwt": "frontend-jwt",
+                "session_token": "9",
+                "_HLS_msn": "7",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.apple.mpegurl")
+
+
+@pytest.mark.asyncio
+async def test_hls_asset_route_proxies_signed_media_resource(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=FakeStreamService(),
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
+    camera_id = uuid4()
+
+    async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
+        assert (
+            url
+            == f"http://mediamtx.internal:8888/cameras/{camera_id}/preview/segment0.mp4?jwt=test-token"
+        )
+        return (b"segment-bytes", {"content-type": "video/mp4"})
+
+    monkeypatch.setattr(streams_module, "_fetch_hls_upstream", fake_fetch)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(f"/api/v1/streams/{camera_id}/hls/segment0.mp4")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("video/mp4")
+    assert response.content == b"segment-bytes"
 
 
 @pytest.mark.asyncio

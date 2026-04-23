@@ -118,7 +118,7 @@ services:
       - -lc
       - >
         python -m pip install uv &&
-        python -m uv sync --group runtime --group dev --group llm &&
+        python -m uv sync --group runtime --group dev --group llm --group model-metadata &&
         python -m uv run uvicorn argus.main:app --reload --reload-dir src --host 0.0.0.0 --port 8000
     environment:
       PYTHONPATH: /workspace/backend/src
@@ -129,7 +129,9 @@ services:
       ARGUS_OTLP_ENDPOINT: http://otel-collector:4318
       ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
       ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      ARGUS_MEDIAMTX_WEBRTC_BASE_URL: http://mediamtx:8889
       ARGUS_MEDIAMTX_HLS_BASE_URL: http://mediamtx:8888
+      ARGUS_MEDIAMTX_MJPEG_BASE_URL: http://mediamtx:8888
       ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889
       ARGUS_MINIO_ENDPOINT: minio:9000
       ARGUS_MINIO_ACCESS_KEY: argus
@@ -143,6 +145,7 @@ services:
       - "8000:8000"
     volumes:
       - ../backend:/workspace/backend
+      - ${PWD}/models:${PWD}/models:ro
     depends_on:
       - minio
       - postgres

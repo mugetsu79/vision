@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-label="Vezor product lockup">
+  <title>Vezor product lockup</title>
+  <desc>Vezor product lockup pairing the medallion-and-eye symbol with the existing wordmark and descriptor on a transparent background.</desc>
+  <defs>
+    <style>
+      .word { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; font-weight: 800; letter-spacing: -0.03em; }
+      .tag { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; font-weight: 500; letter-spacing: 0.18em; }
+    </style>
+    <linearGradient id="beamGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22c6ff"/>
+      <stop offset="55%" stop-color="#5b5dff"/>
+      <stop offset="100%" stop-color="#9a4eff"/>
+    </linearGradient>
+    <linearGradient id="shardLit" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#bfe2ff"/>
+      <stop offset="40%" stop-color="#6aa8ff"/>
+      <stop offset="100%" stop-color="#3b4fe0"/>
+    </linearGradient>
+    <linearGradient id="shardShadow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#7a3bff"/>
+      <stop offset="60%" stop-color="#4b1ca0"/>
+      <stop offset="100%" stop-color="#2a0b66"/>
+    </linearGradient>
+    <linearGradient id="ringFrame" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#8fc6ff"/>
+      <stop offset="45%" stop-color="#5b5dff"/>
+      <stop offset="100%" stop-color="#6b2bd9"/>
+    </linearGradient>
+    <radialGradient id="irisGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="18%" stop-color="#eaf6ff"/>
+      <stop offset="42%" stop-color="#22c6ff"/>
+      <stop offset="78%" stop-color="#1e4fff"/>
+      <stop offset="100%" stop-color="#3a0fa0"/>
+    </radialGradient>
+    <linearGradient id="radarArc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22c6ff" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#7a3bff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#22c6ff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="wordGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fdfeff"/>
+      <stop offset="60%" stop-color="#eef3fa"/>
+      <stop offset="100%" stop-color="#c9d4e3"/>
+    </linearGradient>
+    <linearGradient id="tagGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8fa0b8"/>
+      <stop offset="100%" stop-color="#b6c3d6"/>
+    </linearGradient>
+    <filter id="bloom" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4.5" result="blur1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.2"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="nodeGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="2.2"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <symbol id="shard" overflow="visible">
+      <path d="M 0 -170 L 0 -52 L -16 -108 Z" fill="url(#shardLit)"/>
+      <path d="M 0 -170 L 0 -52 L 16 -108 Z" fill="url(#shardShadow)"/>
+      <path
+        d="M 0 -170 L -16 -108"
+        fill="none"
+        stroke="#e6f3ff"
+        stroke-opacity="0.8"
+        stroke-width="0.9"
+      />
+      <line
+        x1="0"
+        y1="-168"
+        x2="0"
+        y2="-55"
+        stroke="#c9d4ff"
+        stroke-opacity="0.55"
+        stroke-width="0.6"
+      />
+    </symbol>
+  </defs>
+
+  <g id="vezor-symbol-mark" transform="translate(184 180) scale(0.72)">
+    <g id="symbol-ring">
+      <circle cx="0" cy="0" r="190" fill="#22c6ff" opacity="0.04"/>
+      <circle
+        cx="0"
+        cy="0"
+        r="175"
+        fill="none"
+        filter="url(#softGlow)"
+        opacity="0.95"
+        stroke="url(#ringFrame)"
+        stroke-width="6"
+      />
+      <circle
+        cx="0"
+        cy="0"
+        r="170"
+        fill="none"
+        stroke="#9cc3ff"
+        stroke-opacity="0.35"
+        stroke-width="0.6"
+      />
+      <circle
+        cx="0"
+        cy="0"
+        r="180"
+        fill="none"
+        stroke="#3b2b80"
+        stroke-opacity="0.55"
+        stroke-width="0.6"
+      />
+      <circle
+        cx="0"
+        cy="0"
+        r="132"
+        fill="none"
+        opacity="0.8"
+        stroke="url(#radarArc)"
+        stroke-width="0.8"
+      />
+      <circle
+        cx="0"
+        cy="0"
+        r="96"
+        fill="none"
+        opacity="0.7"
+        stroke="url(#radarArc)"
+        stroke-width="0.8"
+      />
+      <g filter="url(#nodeGlow)">
+        <circle cx="0" cy="-175" r="4.6" fill="#bfe2ff"/>
+        <circle cx="175" cy="0" r="4.6" fill="#9a4eff"/>
+        <circle cx="0" cy="175" r="4.6" fill="#9a4eff"/>
+        <circle cx="-175" cy="0" r="4.6" fill="#bfe2ff"/>
+      </g>
+    </g>
+
+    <g id="symbol-shards" filter="url(#softGlow)">
+      <g transform="rotate(15)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(75)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(135)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(195)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(255)">
+        <use href="#shard"/>
+      </g>
+      <g transform="rotate(315)">
+        <use href="#shard"/>
+      </g>
+    </g>
+
+    <g id="symbol-eye">
+      <g fill="none" filter="url(#bloom)" stroke-linecap="round">
+        <path d="M -120 4 Q 0 -102 120 4" opacity="0.65" stroke="#2a0b66" stroke-width="5"/>
+        <path d="M -120 -4 Q 0 102 120 -4" opacity="0.65" stroke="#2a0b66" stroke-width="5"/>
+        <path d="M -118 0 Q 0 -98 118 0" stroke="url(#beamGradient)" stroke-width="3.4"/>
+        <path d="M -118 0 Q 0 98 118 0" stroke="url(#beamGradient)" stroke-width="3.4"/>
+      </g>
+      <g fill="none" stroke="#eaf6ff" stroke-opacity="0.55" stroke-width="0.9">
+        <path d="M -100 -2 Q 0 -82 100 -2"/>
+        <path d="M -100 2 Q 0 82 100 2"/>
+      </g>
+    </g>
+
+    <g id="symbol-core">
+      <circle cx="0" cy="0" r="42" fill="url(#irisGradient)" filter="url(#bloom)"/>
+      <circle cx="0" cy="0" r="16" fill="#05060f"/>
+      <circle cx="0" cy="0" r="16" fill="url(#irisGradient)" opacity="0.18"/>
+      <circle cx="-5" cy="-6" r="3" fill="#ffffff" opacity="0.9"/>
+    </g>
+  </g>
+
+  <g transform="translate(356 0)">
+    <text x="0" y="194" class="word" fill="url(#wordGradient)" font-size="126">Vezor</text>
+    <text x="346" y="196" class="tag" fill="#7e8ba2" font-size="26">|</text>
+    <text x="388" y="169" class="tag" fill="url(#tagGradient)" font-size="22">THE OMNISIGHT</text>
+    <text x="388" y="209" class="tag" fill="url(#tagGradient)" font-size="22">PLATFORM</text>
+  </g>
+</svg>

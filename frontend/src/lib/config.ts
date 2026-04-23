@@ -5,7 +5,15 @@ type FrontendEnvKey =
   | "VITE_OIDC_REDIRECT_URI"
   | "VITE_OIDC_POST_LOGOUT_REDIRECT_URI";
 
-const runtimeEnv: Record<FrontendEnvKey, string | undefined> = {
+type FrontendRuntimeEnv = Readonly<Partial<Record<FrontendEnvKey, string | undefined>>>;
+
+interface FrontendLocationLike {
+  origin: string;
+  protocol: string;
+  hostname: string;
+}
+
+const runtimeEnv: FrontendRuntimeEnv = {
   VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
   VITE_OIDC_AUTHORITY: import.meta.env.VITE_OIDC_AUTHORITY,
   VITE_OIDC_CLIENT_ID: import.meta.env.VITE_OIDC_CLIENT_ID,
@@ -13,8 +21,44 @@ const runtimeEnv: Record<FrontendEnvKey, string | undefined> = {
   VITE_OIDC_POST_LOGOUT_REDIRECT_URI: import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
 };
 
-function requireEnv(key: FrontendEnvKey): string {
-  const value = runtimeEnv[key];
+const runtimeLocation =
+  typeof window === "undefined"
+    ? undefined
+    : ({
+        origin: window.location.origin,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
+      } satisfies FrontendLocationLike);
+
+function deriveDevDefault(
+  key: FrontendEnvKey,
+  location: FrontendLocationLike | undefined,
+): string | undefined {
+  if (!location) {
+    return undefined;
+  }
+
+  switch (key) {
+    case "VITE_API_BASE_URL":
+      return `${location.protocol}//${location.hostname}:8000`;
+    case "VITE_OIDC_AUTHORITY":
+      return `${location.protocol}//${location.hostname}:8080/realms/argus-dev`;
+    case "VITE_OIDC_CLIENT_ID":
+      return "argus-frontend";
+    case "VITE_OIDC_REDIRECT_URI":
+      return `${location.origin}/auth/callback`;
+    case "VITE_OIDC_POST_LOGOUT_REDIRECT_URI":
+      return `${location.origin}/signin`;
+  }
+}
+
+function requireEnv(
+  key: FrontendEnvKey,
+  env: FrontendRuntimeEnv,
+  location: FrontendLocationLike | undefined,
+  isDev: boolean,
+): string {
+  const value = env[key] ?? (isDev ? deriveDevDefault(key, location) : undefined);
 
   if (!value) {
     throw new Error(`Missing required frontend env var: ${key}`);
@@ -23,10 +67,23 @@ function requireEnv(key: FrontendEnvKey): string {
   return value;
 }
 
-export const frontendConfig = {
-  apiBaseUrl: requireEnv("VITE_API_BASE_URL"),
-  oidcAuthority: requireEnv("VITE_OIDC_AUTHORITY"),
-  oidcClientId: requireEnv("VITE_OIDC_CLIENT_ID"),
-  oidcRedirectUri: requireEnv("VITE_OIDC_REDIRECT_URI"),
-  oidcPostLogoutRedirectUri: requireEnv("VITE_OIDC_POST_LOGOUT_REDIRECT_URI"),
-} as const;
+export function resolveFrontendConfig(
+  env: FrontendRuntimeEnv,
+  location: FrontendLocationLike | undefined = runtimeLocation,
+  isDev = import.meta.env.DEV,
+) {
+  return {
+    apiBaseUrl: requireEnv("VITE_API_BASE_URL", env, location, isDev),
+    oidcAuthority: requireEnv("VITE_OIDC_AUTHORITY", env, location, isDev),
+    oidcClientId: requireEnv("VITE_OIDC_CLIENT_ID", env, location, isDev),
+    oidcRedirectUri: requireEnv("VITE_OIDC_REDIRECT_URI", env, location, isDev),
+    oidcPostLogoutRedirectUri: requireEnv(
+      "VITE_OIDC_POST_LOGOUT_REDIRECT_URI",
+      env,
+      location,
+      isDev,
+    ),
+  } as const;
+}
+
+export const frontendConfig = resolveFrontendConfig(runtimeEnv);

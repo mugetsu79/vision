@@ -4,6 +4,7 @@ import { RequireRole } from "@/components/auth/RequireRole";
 import { CameraWizard } from "@/components/cameras/CameraWizard";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { productBrand } from "@/brand/product";
 import {
   useCameras,
   useCreateCamera,
@@ -25,11 +26,18 @@ export function CamerasPage() {
 }
 
 function CamerasContent() {
+  const brandName = productBrand.name;
   const [wizardMode, setWizardMode] = useState<"create" | "edit" | null>(null);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const { data: cameras = [], isLoading: camerasLoading } = useCameras();
   const { data: sites = [] } = useSites();
-  const { data: models = [] } = useModels();
+  const {
+    data: models = [],
+    error: modelsError,
+    isLoading: modelsLoading,
+    isRefetching: modelsRefreshing,
+    refetch: refetchModels,
+  } = useModels();
   const createCamera = useCreateCamera();
   const updateCamera = useUpdateCamera();
   const deleteCamera = useDeleteCamera();
@@ -38,13 +46,16 @@ function CamerasContent() {
     () => new Map(sites.map((site) => [site.id, site.name])),
     [sites],
   );
+  const modelQueryEmpty = models.length === 0;
 
   function openCreateWizard() {
+    void refetchModels();
     setSelectedCamera(null);
     setWizardMode("create");
   }
 
   function openEditWizard(camera: Camera) {
+    void refetchModels();
     setSelectedCamera(camera);
     setWizardMode("edit");
   }
@@ -80,7 +91,7 @@ function CamerasContent() {
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
                 Camera setup defines native ingest for analytics, the default browser
-                rendition for operators, and the calibration Argus uses to understand
+                rendition for operators, and the calibration {brandName} uses to understand
                 movement inside each scene.
               </p>
             </div>
@@ -176,7 +187,13 @@ function CamerasContent() {
               id: model.id,
               name: model.name,
               version: model.version,
+              classes: model.classes,
             }))}
+            modelsError={
+              modelQueryEmpty && modelsError instanceof Error ? modelsError.message : null
+            }
+            modelsLoading={modelQueryEmpty && (modelsLoading || modelsRefreshing)}
+            onRetryModels={() => void refetchModels()}
             sites={sites.map((site) => ({ id: site.id, name: site.name }))}
             onSubmit={async (payload) => {
               if (wizardMode === "edit" && selectedCamera) {

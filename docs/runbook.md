@@ -1,4 +1,4 @@
-# Argus Runbook
+# Vezor Runbook
 
 See also:
 
@@ -7,7 +7,7 @@ See also:
 
 ## Secrets With SOPS And Age
 
-Argus stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.
+Vezor stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.
 
 Before the first production deployment:
 
@@ -66,6 +66,10 @@ For a single-node edge deployment:
    - `ARGUS_NATS_URL` if the default leaf upstream does not match your HQ
 3. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
 4. Confirm MediaMTX, OTEL Collector, and the worker metrics endpoint are reachable.
+
+## Model Metadata And Scope
+
+`/Users/yann.moren/vision/models/` is only where local model files live; it does not define semantic class scope by itself. In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later. When an ONNX model exposes embedded class metadata, treat that as the source of truth for registration and runtime inventory. Use `Camera.active_classes` only to narrow the operational scope. Custom reduced-class models remain an advanced optional path.
 
 ## Authentication Alternative
 

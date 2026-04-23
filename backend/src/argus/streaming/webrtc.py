@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import importlib
+import os
 from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import HTTPException, status
 from jose import jwt  # type: ignore[import-untyped]
 
 from argus.models.enums import ProcessingMode
@@ -57,6 +60,7 @@ class StreamAccess:
     camera_id: UUID
     mode: StreamMode
     path_name: str
+    rtsp_url: str
     whep_url: str
     hls_url: str
     mjpeg_url: str
@@ -64,12 +68,18 @@ class StreamAccess:
 
 @dataclass(slots=True)
 class UpstreamProxyStream:
-    response: httpx.Response
+    response: httpx.Response | None = None
+    byte_iterator: AsyncIterator[bytes] | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    media_type_override: str | None = None
     on_close: Callable[[], Awaitable[None]] | None = None
 
     @property
     def media_type(self) -> str:
+        if self.media_type_override is not None:
+            return self.media_type_override
+        if self.response is None:
+            return "application/octet-stream"
         content_type = self.response.headers.get("Content-Type")
         if content_type is None:
             return "application/octet-stream"
@@ -77,10 +87,15 @@ class UpstreamProxyStream:
 
     async def iter_bytes(self) -> AsyncIterator[bytes]:
         try:
-            async for chunk in self.response.aiter_bytes():
-                yield chunk
+            if self.byte_iterator is not None:
+                async for chunk in self.byte_iterator:
+                    yield chunk
+            elif self.response is not None:
+                async for chunk in self.response.aiter_bytes():
+                    yield chunk
         finally:
-            await self.response.aclose()
+            if self.response is not None:
+                await self.response.aclose()
             if self.on_close is not None:
                 await self.on_close()
 
@@ -109,6 +124,10 @@ class UserConcurrencyLimiter:
                 self._counts.pop(key, None)
                 return
             self._counts[key] = current - 1
+
+
+type RtspUrlSource = str | Callable[[], str]
+type MjpegStreamFactory = Callable[[RtspUrlSource], Awaitable[UpstreamProxyStream]]
 
 
 class MediaMTXTokenIssuer:
@@ -187,6 +206,20 @@ class MediaMTXTokenIssuer:
         )
         return _append_query_parameter(access.hls_url, key="jwt", value=token)
 
+    def build_rtsp_url(
+        self,
+        *,
+        subject: str,
+        camera_id: UUID,
+        access: StreamAccess,
+    ) -> str:
+        token = self.issue_read_token(
+            subject=subject,
+            camera_id=camera_id,
+            access=access,
+        )
+        return _append_query_parameter(access.rtsp_url, key="jwt", value=token)
+
     def jwks(self) -> dict[str, list[dict[str, str]]]:
         public_numbers = self._private_key.public_key().public_numbers()
         return {
@@ -237,10 +270,12 @@ class WebRTCNegotiator:
         *,
         token_issuer: MediaMTXTokenIssuer,
         http_client: httpx.AsyncClient | None = None,
+        mjpeg_stream_factory: MjpegStreamFactory | None = None,
     ) -> None:
         self.token_issuer = token_issuer
         self._owned_client = http_client is None
         self._http_client = http_client or httpx.AsyncClient(timeout=10.0)
+        self._mjpeg_stream_factory = mjpeg_stream_factory or _open_rtsp_mjpeg_stream
 
     async def close(self) -> None:
         if self._owned_client:
@@ -259,16 +294,24 @@ class WebRTCNegotiator:
             camera_id=camera_id,
             access=access,
         )
-        response = await self._http_client.post(
-            access.whep_url,
-            content=sdp_offer.encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/sdp",
-                "Content-Type": "application/sdp",
-            },
-        )
-        response.raise_for_status()
+        try:
+            response = await self._http_client.post(
+                access.whep_url,
+                content=sdp_offer.encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/sdp",
+                    "Content-Type": "application/sdp",
+                },
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise _translate_webrtc_upstream_status_error(exc) from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Unable to negotiate upstream WebRTC stream.",
+            ) from exc
         return response.text
 
     async def open_mjpeg_stream(
@@ -278,19 +321,14 @@ class WebRTCNegotiator:
         camera_id: UUID,
         subject: str,
     ) -> UpstreamProxyStream:
-        token = self.token_issuer.issue_read_token(
-            subject=subject,
-            camera_id=camera_id,
-            access=access,
-        )
-        request = self._http_client.build_request(
-            "GET",
-            access.mjpeg_url,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        response = await self._http_client.send(request, stream=True)
-        response.raise_for_status()
-        return UpstreamProxyStream(response=response)
+        def rtsp_url_factory() -> str:
+            return self.token_issuer.build_rtsp_url(
+                subject=subject,
+                camera_id=camera_id,
+                access=access,
+            )
+
+        return await self._mjpeg_stream_factory(rtsp_url_factory)
 
 
 def resolve_stream_access(
@@ -298,13 +336,22 @@ def resolve_stream_access(
     camera_id: UUID,
     processing_mode: ProcessingMode,
     edge_node_id: UUID | None,
+    stream_kind: str,
     privacy: Mapping[str, object] | None,
+    rtsp_base_url: str,
     webrtc_base_url: str,
     hls_base_url: str,
     mjpeg_base_url: str,
     mjpeg_path_template: str = "{base}/{path}/mjpeg",
 ) -> StreamAccess:
-    if _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id):
+    if (
+        _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id)
+        and stream_kind == StreamMode.PASSTHROUGH.value
+        and not _privacy_requires_filtering(privacy)
+    ):
+        mode = StreamMode.PASSTHROUGH
+        variant = "passthrough"
+    elif _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id):
         mode = StreamMode.ANNOTATED_WHIP
         variant = "annotated"
     elif _privacy_requires_filtering(privacy):
@@ -315,6 +362,7 @@ def resolve_stream_access(
         variant = "passthrough"
 
     path_name = f"cameras/{camera_id}/{variant}"
+    rtsp_base = rtsp_base_url.rstrip("/")
     webrtc_base = webrtc_base_url.rstrip("/")
     hls_base = hls_base_url.rstrip("/")
     mjpeg_base = mjpeg_base_url.rstrip("/")
@@ -323,6 +371,7 @@ def resolve_stream_access(
         camera_id=camera_id,
         mode=mode,
         path_name=path_name,
+        rtsp_url=f"{rtsp_base}/{path_name}",
         whep_url=f"{webrtc_base}/{path_name}/whep",
         hls_url=f"{hls_base}/{path_name}/index.m3u8",
         mjpeg_url=mjpeg_url,
@@ -337,6 +386,143 @@ def _append_query_parameter(url: str, *, key: str, value: str) -> str:
     return urlunsplit(
         (split_url.scheme, split_url.netloc, split_url.path, combined, split_url.fragment)
     )
+
+
+def _translate_webrtc_upstream_status_error(exc: httpx.HTTPStatusError) -> HTTPException:
+    if exc.response.status_code == status.HTTP_404_NOT_FOUND:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="WebRTC stream is not ready yet.",
+        )
+
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to negotiate upstream WebRTC stream.",
+    )
+
+
+MJPEG_BOUNDARY = "argus-frame"
+MJPEG_CONTENT_TYPE = f"multipart/x-mixed-replace; boundary={MJPEG_BOUNDARY}"
+_MJPEG_FRAME_PREFIX = f"--{MJPEG_BOUNDARY}\r\nContent-Type: image/jpeg\r\n\r\n".encode()
+_MJPEG_STARTUP_RETRY_DELAYS_SECONDS = (0.25, 0.25, 0.5, 1.0, 1.0)
+_MJPEG_RUNTIME_RETRY_DELAYS_SECONDS = (0.25, 0.5, 1.0, 2.0, 2.0, 5.0)
+
+
+async def _open_rtsp_mjpeg_stream(rtsp_url_source: RtspUrlSource) -> UpstreamProxyStream:
+    cv2 = _load_cv2()
+    capture, first_frame = await _open_initial_rtsp_capture(rtsp_url_source, cv2)
+
+    async def iterator() -> AsyncIterator[bytes]:
+        current_capture: Any = capture
+        current_frame: Any = first_frame
+        try:
+            while True:
+                payload = await asyncio.to_thread(_encode_mjpeg_frame, cv2, current_frame)
+                if payload is not None:
+                    yield payload
+
+                next_frame = await asyncio.to_thread(_read_rtsp_frame, current_capture)
+                if next_frame is not None:
+                    current_frame = next_frame
+                    continue
+
+                await asyncio.to_thread(current_capture.release)
+                current_capture, current_frame = await _reopen_rtsp_capture(
+                    rtsp_url_source,
+                    cv2,
+                )
+        finally:
+            await asyncio.to_thread(current_capture.release)
+
+    return UpstreamProxyStream(
+        byte_iterator=iterator(),
+        media_type_override=MJPEG_CONTENT_TYPE,
+    )
+
+
+async def _open_initial_rtsp_capture(rtsp_url_source: RtspUrlSource, cv2: Any) -> tuple[Any, Any]:
+    last_error: RuntimeError | None = None
+
+    for attempt in range(len(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS) + 1):
+        rtsp_url = _resolve_rtsp_url(rtsp_url_source)
+        try:
+            capture = await asyncio.to_thread(_open_rtsp_capture, rtsp_url, cv2)
+        except RuntimeError as exc:
+            last_error = exc
+        else:
+            first_frame = await asyncio.to_thread(_read_rtsp_frame, capture)
+            if first_frame is not None:
+                return capture, first_frame
+            await asyncio.to_thread(capture.release)
+            last_error = RuntimeError("Unable to read first RTSP frame for MJPEG bridge.")
+
+        if attempt >= len(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS):
+            assert last_error is not None
+            raise last_error
+        await asyncio.sleep(_MJPEG_STARTUP_RETRY_DELAYS_SECONDS[attempt])
+
+    raise RuntimeError("Unable to initialize MJPEG bridge.")
+
+
+async def _reopen_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]:
+    attempt = 0
+
+    while True:
+        current_rtsp_url = _resolve_rtsp_url(rtsp_url)
+        try:
+            capture = await asyncio.to_thread(_open_rtsp_capture, current_rtsp_url, cv2)
+        except RuntimeError:
+            pass
+        else:
+            reopened_frame = await asyncio.to_thread(_read_rtsp_frame, capture)
+            if reopened_frame is not None:
+                return capture, reopened_frame
+            await asyncio.to_thread(capture.release)
+
+        delay_seconds = _MJPEG_RUNTIME_RETRY_DELAYS_SECONDS[
+            min(attempt, len(_MJPEG_RUNTIME_RETRY_DELAYS_SECONDS) - 1)
+        ]
+        attempt += 1
+        await asyncio.sleep(delay_seconds)
+
+
+def _resolve_rtsp_url(rtsp_url_source: RtspUrlSource) -> str:
+    if callable(rtsp_url_source):
+        return rtsp_url_source()
+    return rtsp_url_source
+
+
+def _open_rtsp_capture(rtsp_url: str, cv2: Any) -> Any:
+    if "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ:
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+    capture = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+    if not capture.isOpened():
+        capture.release()
+        raise RuntimeError(f"Unable to open RTSP stream {rtsp_url}.")
+    return capture
+
+
+def _read_rtsp_frame(capture: Any) -> Any | None:
+    ok, frame = capture.read()
+    if not ok or frame is None:
+        return None
+    return frame
+
+
+def _encode_mjpeg_frame(cv2: Any, frame: Any) -> bytes | None:
+    ok, encoded = cv2.imencode(".jpg", frame)
+    if not ok:
+        return None
+    return b"".join((_MJPEG_FRAME_PREFIX, encoded.tobytes(), b"\r\n"))
+
+
+def _load_cv2() -> Any:
+    try:
+        return importlib.import_module("cv2")
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "OpenCV is required for the browser MJPEG bridge."
+        ) from exc
 
 
 def _b64url_uint(value: int) -> str:

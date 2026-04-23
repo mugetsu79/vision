@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { productBrand } from "@/brand/product";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogCloseButton, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ interface SiteDialogProps {
 }
 
 export function SiteDialog({ open, onClose, onSubmit }: SiteDialogProps) {
+  const brandName = productBrand.name;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [tz, setTz] = useState("UTC");
@@ -54,7 +56,7 @@ export function SiteDialog({ open, onClose, onSubmit }: SiteDialogProps) {
     <Dialog
       open={open}
       title="Create site"
-      description="Add a deployment location to the Argus fleet and attach its operating time zone."
+      description={`Add a deployment location to the ${brandName} fleet and attach its operating time zone.`}
     >
       <div className="grid gap-4">
         <label className="grid gap-2 text-sm text-[#d8e2f2]">

@@ -1,10 +1,24 @@
 @import "tailwindcss";
 
 :root {
-  color: #eef4ff;
+  --argus-canvas: #05070c;
+  --argus-canvas-raise: #0b1018;
+  --argus-surface: rgba(11, 16, 26, 0.94);
+  --argus-surface-strong: rgba(15, 22, 35, 0.98);
+  --argus-surface-soft: rgba(255, 255, 255, 0.03);
+  --argus-border: rgba(148, 166, 196, 0.16);
+  --argus-border-strong: rgba(148, 166, 196, 0.24);
+  --argus-border-highlight: rgba(121, 159, 240, 0.38);
+  --argus-text: #eef4ff;
+  --argus-text-muted: #97a9c4;
+  --argus-text-subtle: #7386a3;
+  --argus-focus: rgba(124, 166, 255, 0.56);
+  --argus-accent: #74a8ff;
+  --argus-accent-soft: rgba(116, 168, 255, 0.12);
+  color: var(--argus-text);
   background:
-    radial-gradient(circle at top, rgba(42, 108, 255, 0.18), transparent 34%),
-    radial-gradient(circle at 84% 14%, rgba(132, 88, 255, 0.16), transparent 28%),
+    radial-gradient(circle at top, rgba(42, 108, 255, 0.16), transparent 34%),
+    radial-gradient(circle at 84% 14%, rgba(132, 88, 255, 0.14), transparent 28%),
     linear-gradient(180deg, #05070c 0%, #0a1018 48%, #121927 100%);
   font-family:
     "Avenir Next",
@@ -29,7 +43,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: transparent;
+  background: var(--argus-canvas);
+  color: var(--argus-text);
 }
 
 button,
@@ -37,6 +52,11 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+::selection {
+  background: rgba(116, 168, 255, 0.24);
+  color: #f8fbff;
 }
 
 #root {

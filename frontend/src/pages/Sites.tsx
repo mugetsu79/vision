@@ -4,6 +4,7 @@ import { RequireRole } from "@/components/auth/RequireRole";
 import { SiteDialog } from "@/components/sites/SiteDialog";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { productBrand } from "@/brand/product";
 import { useCreateSite, useSites } from "@/hooks/use-sites";
 
 export function SitesPage() {
@@ -15,6 +16,7 @@ export function SitesPage() {
 }
 
 function SitesContent() {
+  const brandName = productBrand.name;
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: sites = [], isLoading } = useSites();
   const createSite = useCreateSite();
@@ -33,7 +35,7 @@ function SitesContent() {
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
                 Sites anchor camera placement, time zones, and the fleet context used
-                throughout Argus operations.
+                throughout {brandName} operations.
               </p>
             </div>
             <Button onClick={() => setDialogOpen(true)}>Add site</Button>

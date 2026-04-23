@@ -13,8 +13,18 @@ function renderWizard(props?: Partial<Parameters<typeof CameraWizard>[0]>) {
       <CameraWizard
         sites={[{ id: "site-1", name: "HQ" }]}
         models={[
-          { id: "model-1", name: "Argus YOLO", version: "1.0.0" },
-          { id: "model-2", name: "Argus PPE", version: "1.0.0" },
+          {
+            id: "model-1",
+            name: "Vezor YOLO",
+            version: "1.0.0",
+            classes: ["person", "car", "bike"],
+          },
+          {
+            id: "model-2",
+            name: "Vezor PPE",
+            version: "1.0.0",
+            classes: ["helmet", "vest"],
+          },
         ]}
         {...props}
       />
@@ -42,6 +52,11 @@ describe("CameraWizard", () => {
     ).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    expect(screen.getByText(/active class scope/i)).toBeInTheDocument();
+    await user.click(screen.getByLabelText("person"));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-2");
+    expect(screen.queryByLabelText("person")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("helmet")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText(/tracker type/i), "botsort");
     await user.click(screen.getByRole("button", { name: /next/i }));
 
@@ -98,6 +113,8 @@ describe("CameraWizard", () => {
     await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.click(screen.getByLabelText("person"));
+    await user.click(screen.getByLabelText("car"));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(
       screen.getByLabelText(/browser delivery profile/i),
@@ -114,6 +131,8 @@ describe("CameraWizard", () => {
     await user.clear(screen.getByLabelText(/reference distance \(m\)/i));
     await user.type(screen.getByLabelText(/reference distance \(m\)/i), "12.5");
     await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(screen.getByText(/class scope/i)).toBeInTheDocument();
+    expect(screen.getByText(/person, car/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /create camera/i }));
 
     const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
@@ -123,6 +142,7 @@ describe("CameraWizard", () => {
     expect(submittedPayload?.name).toBe("Dock Camera");
     expect(submittedPayload?.rtsp_url).toBe("rtsp://camera.local/live");
     expect(submittedPayload?.browser_delivery?.default_profile).toBe("540p5");
+    expect(submittedPayload?.active_classes).toEqual(["person", "car"]);
     expect(submittedPayload?.homography.ref_distance_m).toBe(12.5);
     expect(submittedPayload?.homography.src).toEqual([
       [0, 0],
@@ -205,5 +225,146 @@ describe("CameraWizard", () => {
 
     expect(submittedPayload).toBeDefined();
     expect(submittedPayload).not.toHaveProperty("rtsp_url");
+  });
+
+  test("requires reselecting a primary model when the stored model is no longer in inventory", async () => {
+    const user = userEvent.setup();
+
+    renderWizard({
+      initialCamera: {
+        id: "camera-1",
+        site_id: "site-1",
+        edge_node_id: null,
+        name: "Dock Camera",
+        rtsp_url_masked: "rtsp://***",
+        processing_mode: "central",
+        primary_model_id: "missing-model",
+        secondary_model_id: null,
+        tracker_type: "botsort",
+        active_classes: ["person"],
+        attribute_rules: [],
+        zones: [],
+        homography: {
+          src: [
+            [0, 0],
+            [100, 0],
+            [100, 100],
+            [0, 100],
+          ],
+          dst: [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+          ],
+          ref_distance_m: 12.5,
+        },
+        privacy: {
+          blur_faces: true,
+          blur_plates: true,
+          method: "gaussian",
+          strength: 7,
+        },
+        browser_delivery: {
+          default_profile: "720p10",
+          allow_native_on_demand: true,
+          profiles: [],
+        },
+        frame_skip: 1,
+        fps_cap: 25,
+        created_at: "2026-04-19T00:00:00Z",
+        updated_at: "2026-04-19T00:00:00Z",
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(
+      screen.getByText(/select a primary model to choose the persistent class scope/i),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(
+      screen.getByText(/primary model must be selected from the current inventory/i),
+    ).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    expect(screen.getByLabelText("person")).not.toBeChecked();
+  });
+
+  test("preserves stored active classes while models are still loading in edit mode", async () => {
+    const user = userEvent.setup();
+    const initialCamera = {
+      id: "camera-1",
+      site_id: "site-1",
+      edge_node_id: null,
+      name: "Dock Camera",
+      rtsp_url_masked: "rtsp://***",
+      processing_mode: "central" as const,
+      primary_model_id: "model-1",
+      secondary_model_id: null,
+      tracker_type: "botsort" as const,
+      active_classes: ["person"],
+      attribute_rules: [],
+      zones: [],
+      homography: {
+        src: [
+          [0, 0],
+          [100, 0],
+          [100, 100],
+          [0, 100],
+        ],
+        dst: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+        ],
+        ref_distance_m: 12.5,
+      },
+      privacy: {
+        blur_faces: true,
+        blur_plates: true,
+        method: "gaussian" as const,
+        strength: 7,
+      },
+      browser_delivery: {
+        default_profile: "720p10" as const,
+        allow_native_on_demand: true,
+        profiles: [],
+      },
+      frame_skip: 1,
+      fps_cap: 25,
+      created_at: "2026-04-19T00:00:00Z",
+      updated_at: "2026-04-19T00:00:00Z",
+    };
+
+    const view = renderWizard({
+      initialCamera,
+      models: [],
+      modelsLoading: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(screen.getByText(/loading the latest registered models/i)).toBeInTheDocument();
+
+    view.rerender(
+      <QueryClientProvider client={createQueryClient()}>
+        <CameraWizard
+          initialCamera={initialCamera}
+          sites={[{ id: "site-1", name: "HQ" }]}
+          models={[
+            {
+              id: "model-1",
+              name: "Vezor YOLO",
+              version: "1.0.0",
+              classes: ["person", "car", "bike"],
+            },
+          ]}
+          modelsLoading={false}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByLabelText("person")).toBeChecked();
   });
 });

@@ -1,4 +1,4 @@
-# Argus V4 — Architecture & Implementation Design
+# Vezor V4 — Architecture & Implementation Design
 
 > **Status:** Supersedes the archived V3 spec. Retains V3's domain-agnostic, hybrid edge/central vision while resolving the V3 draft's mismatches around edge privacy/streaming, auth tenancy, and control-plane APIs.
 >
@@ -455,7 +455,7 @@ argus-v4/
 
 * **Transport:** TLS everywhere. Edge ↔ HQ over Tailscale/WireGuard; NATS with nkey auth; MediaMTX with per-stream JWT.
 * **At rest:** RTSP URLs encrypted in DB (AES-GCM with key from env/KMS). Postgres disk encryption at the infra level.
-* **Auth:** OIDC via Keycloak; PKCE for SPA; short-lived access tokens (15 min) + refresh. Default topology is one tenant realm per tenant plus a dedicated `platform-admin` realm for `superadmin` users. Edge nodes use scoped API keys + rotating NATS credentials. Auth flows must fail closed: callback/session processing errors return the user to sign-in, and tokens without a recognized Argus role are rejected.
+* **Auth:** OIDC via Keycloak; PKCE for SPA; short-lived access tokens (15 min) + refresh. Default topology is one tenant realm per tenant plus a dedicated `platform-admin` realm for `superadmin` users. Edge nodes use scoped API keys + rotating NATS credentials. Auth flows must fail closed: callback/session processing errors return the user to sign-in, and tokens without a recognized platform role are rejected.
 * **RBAC:** `viewer | operator | admin | superadmin`, enforced by a FastAPI dependency. Audit log on every state-changing call.
 * **Privacy enforcement:** anonymization runs in the inference worker *before* frames hit MediaMTX. A per-tenant policy can force `blur_faces=true, blur_plates=true` and prevent an operator from disabling it. If privacy is required on an edge camera, raw passthrough is disabled and only privacy-filtered stream variants may be exposed. When privacy is not required, operators may still prefer lower-bitrate delivery renditions for bandwidth control without changing the native ingest used by analytics. Retention policy on `tracking_events` is configurable per tenant (default 90 days).
 * **Supply chain:** pinned deps via `uv.lock` + `pnpm-lock.yaml`, SBOM generated per release (syft), container image signing (cosign).

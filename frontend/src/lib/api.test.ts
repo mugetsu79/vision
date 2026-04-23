@@ -12,6 +12,23 @@ vi.mock("@/lib/config", () => ({
   },
 }));
 
+vi.mock("@/lib/auth", () => ({
+  mapOidcUser: vi.fn(),
+  oidcManager: {
+    getUser: vi.fn(),
+    signinRedirect: vi.fn(),
+    signinRedirectCallback: vi.fn(),
+    signoutRedirect: vi.fn(),
+    events: {
+      addUserLoaded: vi.fn(),
+      addAccessTokenExpired: vi.fn(),
+      addSilentRenewError: vi.fn(),
+      addUserSignedOut: vi.fn(),
+    },
+  },
+}));
+
+import { oidcManager } from "@/lib/auth";
 import { useSites } from "@/hooks/use-sites";
 import { useAuthStore } from "@/stores/auth-store";
 import { createTestQueryWrapper } from "@/test/query-test-utils";
@@ -65,6 +82,8 @@ describe("typed API hooks", () => {
       });
     });
 
+    vi.mocked(oidcManager.getUser).mockResolvedValue(null);
+
     const { result } = renderHook(() => useSites(), {
       wrapper: createTestQueryWrapper(),
     });
@@ -86,5 +105,53 @@ describe("typed API hooks", () => {
 
     expect(requestUrl).toContain("/api/v1/sites");
     expect(mergedHeaders.get("Authorization")).toBe("Bearer test-token");
+  });
+
+  test("useSites prefers the latest OIDC access token over a stale in-memory token", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    vi.mocked(oidcManager.getUser).mockResolvedValue({
+      access_token: "fresh-token",
+      expired: false,
+    } as Awaited<ReturnType<typeof oidcManager.getUser>>);
+
+    act(() => {
+      useAuthStore.setState({
+        status: "authenticated",
+        accessToken: "stale-token",
+        user: {
+          sub: "admin-1",
+          email: "admin@argus.local",
+          role: "admin",
+          realm: "argus-dev",
+          tenantId: "tenant-1",
+          isSuperadmin: false,
+        },
+      });
+    });
+
+    const { result } = renderHook(() => useSites(), {
+      wrapper: createTestQueryWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [input, init] = fetchMock.mock.calls[0] as [
+      RequestInfo | URL,
+      RequestInit | undefined,
+    ];
+    const mergedHeaders = new Headers(input instanceof Request ? input.headers : undefined);
+    const initHeaders = new Headers(init?.headers);
+
+    initHeaders.forEach((value, key) => {
+      mergedHeaders.set(key, value);
+    });
+
+    expect(mergedHeaders.get("Authorization")).toBe("Bearer fresh-token");
   });
 });

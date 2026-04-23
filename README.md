@@ -1,6 +1,6 @@
-# Argus | The OmniSight Platform
+# Vezor | The OmniSight Platform
 
-Argus is a hybrid video analytics platform for multi-camera operations. It is designed to run as a central control plane with optional edge inference nodes, giving operators one system for live visibility, configuration, history, incidents, and streaming-aware delivery.
+Vezor is a hybrid video analytics platform for multi-camera operations. It is designed to run as a central control plane with optional edge inference nodes, giving operators one system for live visibility, configuration, history, incidents, and streaming-aware delivery.
 
 The project supports three processing modes:
 
@@ -8,7 +8,7 @@ The project supports three processing modes:
 - `edge`: a site-local node performs inference and sends events, telemetry, clips, and optional preview streams back to the master
 - `hybrid`: edge handles primary detection while the master adds heavier downstream analytics
 
-Argus separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, or `540p5`.
+Vezor separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, or `540p5`.
 
 ## What’s In This Repo
 
@@ -16,7 +16,7 @@ Argus separates **native ingest for analytics** from **browser delivery for oper
 - `frontend/`: React operator console and admin UI
 - `infra/`: Docker Compose, Helm chart, observability, Keycloak, MediaMTX, NATS, Prometheus, Alertmanager, OTEL
 - `docs/`: deployment guides, runbook, lab guide, ADRs, brand docs
-- `models/`: local model file location for lab and development use
+- `models/`: local ONNX model files for lab and development use
 - `scripts/`: validation and platform helper scripts
 
 ## Architecture At A Glance
@@ -91,7 +91,7 @@ The full validation flow is implemented in [scripts/run-full-validation.sh](/Use
 
 Start here if you are new to the repo:
 
-- [argus_v4_spec.md](/Users/yann.moren/vision/argus_v4_spec.md): current architecture and product spec
+- [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md): current architecture and product spec
 - [docs/runbook.md](/Users/yann.moren/vision/docs/runbook.md): operations starting point
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance
@@ -158,6 +158,15 @@ The repo already includes:
 
 The most mature operational paths today are `central` and `edge`.
 
+## Model And Camera Scope
+
+- `models/` is just where local ONNX files live during lab and development work.
+- In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later.
+- For standard deployment, self-describing ONNX metadata is the source of truth for model classes.
+- `Model.classes` is the full model inventory.
+- `Camera.active_classes` narrows the operational scope for a camera or site.
+- Custom reduced-class models are an advanced optional path, not the default deployment story.
+
 ## Repo Structure
 
 ```text
@@ -193,8 +202,8 @@ This currently covers:
 
 Brand guidance lives in:
 
-- [docs/brand/argus-logo-brand-spec.md](/Users/yann.moren/vision/docs/brand/argus-logo-brand-spec.md)
-- [docs/brand/usage-guide.md](/Users/yann.moren/vision/docs/brand/usage-guide.md)
+- [docs/brand/logo-brand-spec.md](/Users/yann.moren/vision/docs/brand/logo-brand-spec.md)
+- [docs/brand/logo-usage-guide.md](/Users/yann.moren/vision/docs/brand/logo-usage-guide.md)
 - [docs/brand/logo-generation-prompts.md](/Users/yann.moren/vision/docs/brand/logo-generation-prompts.md)
 
 ## License And Usage

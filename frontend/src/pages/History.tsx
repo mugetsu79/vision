@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Select } from "@/components/ui/select";
+import { productBrand } from "@/brand/product";
 import { useCameras } from "@/hooks/use-cameras";
 import { downloadHistoryExport, useHistorySeries } from "@/hooks/use-history";
 
@@ -15,6 +16,7 @@ const HistoryTrendChart = lazy(async () => ({
 }));
 
 export function HistoryPage() {
+  const brandName = productBrand.name;
   const { data: cameras = [] } = useCameras();
   const [granularity, setGranularity] = useState<Granularity>("1h");
   const [selectedCameraIds, setSelectedCameraIds] = useState<string[]>([]);
@@ -87,7 +89,7 @@ export function HistoryPage() {
                 Fleet history without reshaping penalties in the browser.
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                Argus delivers chart-ready time buckets directly from the backend so long
+                {brandName} delivers chart-ready time buckets directly from the backend so long
                 forensic ranges stay fast even when operators pivot across classes and
                 cameras.
               </p>

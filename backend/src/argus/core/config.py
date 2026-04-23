@@ -5,9 +5,11 @@ from urllib.parse import urlsplit, urlunsplit
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from argus.vision.runtime import ExecutionProfile, ExecutionProvider
+
 
 class Settings(BaseSettings):
-    app_name: str = "Argus | The OmniSight Platform"
+    app_name: str = "Vezor | The OmniSight Platform"
     environment: str = "development"
     api_prefix: str = "/api/v1"
 
@@ -67,7 +69,12 @@ class Settings(BaseSettings):
     metrics_namespace: str = "argus"
     enable_worker_metrics_server: bool = False
     worker_metrics_port: int = 9108
+    worker_diagnostics_enabled: bool = False
     publish_profile: str | None = None
+    inference_execution_provider_override: ExecutionProvider | None = None
+    inference_execution_profile_override: ExecutionProfile | None = None
+    inference_session_inter_op_threads: int | None = Field(default=None, ge=1)
+    inference_session_intra_op_threads: int | None = Field(default=None, ge=1)
     websocket_telemetry_buffer_size: int = 32
     video_feed_max_concurrent_per_user: int = 10
 

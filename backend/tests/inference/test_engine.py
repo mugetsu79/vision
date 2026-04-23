@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -7,6 +8,8 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
+from argus.core import metrics as core_metrics
+from argus.inference import engine as engine_module
 from argus.inference.engine import (
     CameraCommand,
     CameraSettings,
@@ -27,6 +30,13 @@ from argus.streaming.mediamtx import (
     StreamRegistration,
 )
 from argus.vision.rules import RuleEventRecord
+from argus.vision.runtime import (
+    CpuVendor,
+    ExecutionProfile,
+    ExecutionProvider,
+    HostClassification,
+    RuntimeExecutionPolicy,
+)
 from argus.vision.types import Detection
 
 
@@ -79,6 +89,15 @@ class _FakePublisher:
         return None
 
 
+class _FakeAttributeClassifier:
+    def classify(
+        self,
+        frame: np.ndarray,
+        detections: list[Detection],
+    ) -> list[dict[str, object]]:
+        return [{"color": "blue"} for _ in detections]
+
+
 class _FakeTrackingStore:
     def __init__(self) -> None:
         self.records: list[tuple[UUID, list[Detection]]] = []
@@ -112,8 +131,10 @@ class _FakeEventClient:
 
 class _FakeStreamClient:
     def __init__(self) -> None:
-        self.registrations: list[tuple[PublishProfile, PrivacyPolicy]] = []
+        self.registrations: list[tuple[PublishProfile, str, PrivacyPolicy]] = []
         self.pushed_modes: list[StreamMode] = []
+        self.pushed_frames: list[np.ndarray] = []
+        self.register_stream_calls: list[dict[str, object]] = []
 
     async def register_stream(
         self,
@@ -121,15 +142,27 @@ class _FakeStreamClient:
         camera_id: UUID,
         rtsp_url: str,
         profile: PublishProfile,
+        stream_kind: str,
         privacy: PrivacyPolicy,
+        target_fps: int,
+        target_width: int | None = None,
+        target_height: int | None = None,
     ) -> StreamRegistration:
-        self.registrations.append((profile, privacy))
+        self.register_stream_calls.append(
+            {
+                "stream_kind": stream_kind,
+                "target_fps": target_fps,
+                "target_width": target_width,
+                "target_height": target_height,
+            }
+        )
+        self.registrations.append((profile, stream_kind, privacy))
         mode = (
             StreamMode.FILTERED_PREVIEW
             if privacy.blur_faces or privacy.blur_plates
             else StreamMode.PASSTHROUGH
         )
-        if profile is PublishProfile.CENTRAL_GPU:
+        if profile is PublishProfile.CENTRAL_GPU and stream_kind != StreamMode.PASSTHROUGH.value:
             mode = StreamMode.ANNOTATED_WHIP
         return StreamRegistration(
             camera_id=camera_id,
@@ -145,6 +178,7 @@ class _FakeStreamClient:
         *,
         ts: datetime,
     ) -> None:
+        self.pushed_frames.append(frame.copy())
         self.pushed_modes.append(registration.mode)
 
 
@@ -199,6 +233,14 @@ def _engine_config(camera_id: UUID) -> EngineConfig:
         attribute_rules=[],
         zones=[],
     )
+
+
+def _metric_sample_value(metric: object, sample_name: str, labels: dict[str, str]) -> float:
+    for family in metric.collect():
+        for sample in family.samples:
+            if sample.name == sample_name and sample.labels == labels:
+                return float(sample.value)
+    return 0.0
 
 
 @pytest.mark.asyncio
@@ -267,8 +309,130 @@ async def test_engine_registers_filtered_stream_when_privacy_is_required_on_jets
     await engine.start()
 
     assert stream_client.registrations == [
-        (PublishProfile.JETSON_NANO, PrivacyPolicy(blur_faces=True, blur_plates=False))
+        (
+            PublishProfile.JETSON_NANO,
+            "passthrough",
+            PrivacyPolicy(blur_faces=True, blur_plates=False),
+        )
     ]
+
+
+@pytest.mark.asyncio
+async def test_engine_draws_annotations_for_central_stream_frames() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
+    assert np.any(stream_client.pushed_frames[0] != 0)
+
+
+@pytest.mark.asyncio
+async def test_engine_respects_passthrough_stream_kind_even_on_central_profile() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="native",
+                kind="passthrough",
+                width=None,
+                height=None,
+                fps=25,
+            )
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 22, 19, 45, tzinfo=UTC))
+    await engine.close()
+
+    assert stream_client.register_stream_calls == [{
+        "stream_kind": "passthrough",
+        "target_fps": 25,
+        "target_width": None,
+        "target_height": None,
+    }]
+    assert stream_client.pushed_modes == []
+    assert stream_client.pushed_frames == []
+    assert publisher.frames[0].stream_mode is StreamMode.PASSTHROUGH
+
+
+@pytest.mark.asyncio
+async def test_engine_registers_browser_delivery_dimensions_and_fps() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.close()
+
+    assert stream_client.register_stream_calls == [{
+        "stream_kind": "transcode",
+        "target_fps": 10,
+        "target_width": 1280,
+        "target_height": 720,
+    }]
 
 
 @pytest.mark.asyncio
@@ -295,3 +459,305 @@ async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> 
     assert subject == f"incident.triggered.{camera_id}"
     assert isinstance(payload, IncidentTriggeredEvent)
     assert payload.type == "rule.alert"
+
+
+@pytest.mark.asyncio
+async def test_engine_exposes_last_stage_timings_for_processed_frame() -> None:
+    camera_id = uuid4()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 40, tzinfo=UTC))
+
+    assert set(engine.last_stage_timings) >= {
+        "capture",
+        "preprocess",
+        "detect",
+        "track",
+        "speed",
+        "attributes",
+        "zones",
+        "rules",
+        "annotate",
+        "publish_stream",
+        "publish_telemetry",
+        "persist_tracking",
+        "total",
+    }
+    assert engine.last_stage_timings["detect"] >= 0.0
+    assert engine.last_stage_timings["attributes"] >= 0.0
+    assert engine.last_stage_timings["publish_stream"] >= 0.0
+    assert engine.last_stage_timings["total"] >= engine.last_stage_timings["detect"]
+
+
+@pytest.mark.asyncio
+async def test_engine_diagnostics_log_frame_stage_boundaries(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        diagnostics_enabled=True,
+    )
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 23, 9, 30, tzinfo=UTC))
+
+    messages = [record.message for record in caplog.records]
+    assert any("Worker frame capture starting" in message for message in messages)
+    assert any("Worker frame capture completed" in message for message in messages)
+    assert any("Worker frame publish_stream starting" in message for message in messages)
+    assert any("Worker frame completed" in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_engine_records_stage_duration_metrics_by_camera_and_stage() -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 41, tzinfo=UTC))
+
+    assert _metric_sample_value(
+        core_metrics.INFERENCE_STAGE_DURATION_SECONDS,
+        "argus_inference_stage_duration_seconds_count",
+        {"camera_id": str(camera_id), "stage": "detect"},
+    ) == 1.0
+    assert _metric_sample_value(
+        core_metrics.INFERENCE_STAGE_DURATION_SECONDS,
+        "argus_inference_stage_duration_seconds_count",
+        {"camera_id": str(camera_id), "stage": "attributes"},
+    ) == 1.0
+    assert _metric_sample_value(
+        core_metrics.INFERENCE_STAGE_DURATION_SECONDS,
+        "argus_inference_stage_duration_seconds_count",
+        {"camera_id": str(camera_id), "stage": "publish_stream"},
+    ) == 1.0
+
+
+@pytest.mark.asyncio
+async def test_engine_logs_periodic_stage_timing_summary(caplog: pytest.LogCaptureFixture) -> None:
+    camera_id = uuid4()
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource(
+            [
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+            ]
+        ),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+        timing_summary_interval_frames=2,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 42, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 21, 19, 42, 1, tzinfo=UTC))
+
+    summary_records = [
+        record
+        for record in caplog.records
+        if record.name == "argus.inference.engine"
+        and record.message.startswith("Inference stage timing summary")
+    ]
+
+    assert len(summary_records) == 1
+    record = summary_records[0]
+    assert "camera_id=" in record.message
+    assert "stage_avg_ms=" in record.message
+    assert "stage_max_ms=" in record.message
+    assert "detect" in record.message
+    assert "total" in record.message
+    assert record.camera_id == str(camera_id)
+    assert record.frame_count == 2
+    assert "detect" in record.stage_avg_ms
+    assert "total" in record.stage_max_ms
+
+
+def test_worker_main_configures_logging_and_reuses_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    fake_settings = object()
+    captured: dict[str, object] = {}
+
+    class _Awaitable:
+        def __await__(self) -> object:
+            if False:
+                yield None
+            return None
+
+    def fake_configure_logging(settings: object) -> None:
+        captured["configured_settings"] = settings
+
+    def fake_run_engine_for_camera(
+        received_camera_id: UUID,
+        *,
+        settings: object | None = None,
+    ) -> _Awaitable:
+        captured["camera_id"] = received_camera_id
+        captured["worker_settings"] = settings
+        return _Awaitable()
+
+    def fake_asyncio_run(awaitable: object) -> None:
+        captured["awaitable"] = awaitable
+        return None
+
+    monkeypatch.setattr(engine_module, "Settings", lambda: fake_settings)
+    monkeypatch.setattr(engine_module, "configure_logging", fake_configure_logging, raising=False)
+    monkeypatch.setattr(engine_module, "run_engine_for_camera", fake_run_engine_for_camera)
+    monkeypatch.setattr(engine_module.asyncio, "run", fake_asyncio_run)
+
+    assert engine_module.main(["--camera-id", str(camera_id)]) == 0
+    assert captured["configured_settings"] is fake_settings
+    assert captured["camera_id"] == camera_id
+    assert captured["worker_settings"] is fake_settings
+    assert captured["awaitable"].__class__.__name__ == "_Awaitable"
+
+
+def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_models(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    fake_runtime = object()
+    runtime_policy = RuntimeExecutionPolicy(
+        host=HostClassification(
+            system="darwin",
+            machine="arm64",
+            cpu_vendor=CpuVendor.APPLE,
+            available_providers=(
+                ExecutionProvider.COREML.value,
+                ExecutionProvider.CPU.value,
+            ),
+            profile=ExecutionProfile.MACOS_APPLE_SILICON,
+            profile_overridden=False,
+        ),
+        provider=ExecutionProvider.COREML.value,
+        available_providers=(
+            ExecutionProvider.COREML.value,
+            ExecutionProvider.CPU.value,
+        ),
+        provider_overridden=False,
+        inter_op_threads=2,
+        intra_op_threads=4,
+    )
+    detector_calls: dict[str, object] = {}
+    attribute_calls: dict[str, object] = {}
+
+    class _FakeResolvedDetector:
+        def __init__(self, model_config: object, runtime: object, runtime_policy: object) -> None:
+            detector_calls["model_config"] = model_config
+            detector_calls["runtime"] = runtime
+            detector_calls["runtime_policy"] = runtime_policy
+
+    class _FakeResolvedAttributeClassifier:
+        def __init__(self, model_config: object, runtime: object, runtime_policy: object) -> None:
+            attribute_calls["model_config"] = model_config
+            attribute_calls["runtime"] = runtime
+            attribute_calls["runtime_policy"] = runtime_policy
+
+    monkeypatch.setattr(
+        engine_module,
+        "create_camera_source",
+        lambda camera_config: _FakeFrameSource([]),
+    )
+    monkeypatch.setattr(engine_module, "import_onnxruntime", lambda: fake_runtime)
+    monkeypatch.setattr(
+        engine_module,
+        "resolve_execution_policy",
+        lambda runtime, **kwargs: runtime_policy,
+    )
+    monkeypatch.setattr(engine_module, "YoloDetector", _FakeResolvedDetector)
+    monkeypatch.setattr(engine_module, "AttributeClassifier", _FakeResolvedAttributeClassifier)
+
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "secondary_model": ModelSettings(
+                name="ppe-attributes",
+                path="/models/ppe-attributes.onnx",
+                classes=["hi_vis", "hard_hat"],
+                input_shape={"width": 64, "height": 64},
+            )
+        }
+    )
+    settings = engine_module.Settings(_env_file=None)
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+
+    engine_module.build_runtime_engine(
+        config,
+        settings=settings,
+        events_client=_FakeEventClient(),
+    )
+
+    assert detector_calls["runtime"] is fake_runtime
+    assert detector_calls["runtime_policy"] is runtime_policy
+    assert attribute_calls["runtime"] is fake_runtime
+    assert attribute_calls["runtime_policy"] is runtime_policy
+    assert any(
+        "Resolved inference runtime policy" in record.message
+        and "detection_provider=CoreMLExecutionProvider" in record.message
+        and "attribute_provider=CoreMLExecutionProvider" in record.message
+        for record in caplog.records
+    )

@@ -281,16 +281,99 @@ describe("DashboardPage", () => {
       });
     });
 
-    await waitFor(() => expect(screen.getAllByText(/online/i).length).toBeGreaterThanOrEqual(2));
+    await waitFor(
+      () => expect(screen.getAllByText(/telemetry live/i).length).toBeGreaterThanOrEqual(2),
+    );
     expect(screen.getByText("car")).toBeInTheDocument();
     expect(screen.getByText("bus")).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/query argus/i), "only show cars");
+    await user.type(screen.getByRole("textbox", { name: /query/i }), "only show cars");
     await user.click(screen.getByRole("button", { name: /apply query/i }));
 
     await waitFor(() =>
       expect(screen.getAllByText(/query-rules-v1/i).length).toBeGreaterThanOrEqual(1),
     );
     await waitFor(() => expect(screen.queryByText("bus")).not.toBeInTheDocument());
+  });
+
+  test("shows telemetry stale instead of offline when the last worker frame is old", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["car", "bus"],
+            attribute_rules: [],
+            zones: [],
+            homography: {
+              src: [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+              ],
+              dst: [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+              ],
+              ref_distance_m: 10,
+            },
+            privacy: {
+              blur_faces: false,
+              blur_plates: false,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "native",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <DashboardPage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
+    );
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit({
+        camera_id: "11111111-1111-1111-1111-111111111111",
+        ts: new Date(Date.now() - 28_000).toISOString(),
+        profile: "central-gpu",
+        stream_mode: "passthrough",
+        counts: {},
+        tracks: [],
+      });
+    });
+
+    expect(await screen.findByText(/telemetry stale/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^offline$/i)).not.toBeInTheDocument();
   });
 });

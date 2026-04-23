@@ -1,14 +1,14 @@
-# Argus Logo Usage Guide
+# Vezor Logo Usage Guide
 
 Date: 2026-04-19
 
-This guide explains how to use the Argus logo system consistently across product, marketing, documentation, and hardware surfaces.
+This guide explains how to use the Vezor logo system consistently across product, marketing, documentation, and hardware surfaces.
 
-Use this alongside [argus-logo-brand-spec.md](/Users/yann.moren/vision/docs/brand/argus-logo-brand-spec.md).
+Use this alongside [logo-brand-spec.md](/Users/yann.moren/vision/docs/brand/logo-brand-spec.md).
 
 ## Approved Logo Variants
 
-The Argus identity should exist in four core variants:
+The Vezor identity should exist in four core variants:
 
 1. **Hero glow lockup**
    - Used for website hero sections, launch graphics, keynote slides, and premium brand moments.
@@ -35,7 +35,7 @@ The Argus identity should exist in four core variants:
 - deep obsidian
 - charcoal
 - dark blue-black
-- subtle matte gradients in the Argus dark palette
+- subtle matte gradients in the Vezor dark palette
 
 ### Acceptable backgrounds
 
@@ -117,11 +117,11 @@ Use when:
 
 The wordmark hierarchy must remain stable:
 
-- `Argus` is the primary reading target
+- `Vezor` is the primary reading target
 - `|` is subtle and structural
 - `THE OMNISIGHT PLATFORM` is secondary
 
-Do not enlarge or bold the tagline to compete with `Argus`.
+Do not enlarge or bold the tagline to compete with `Vezor`.
 
 ## Glow Rules
 
@@ -164,7 +164,7 @@ For etched or embossed applications:
 
 ## Product UI Guidance
 
-Inside the Argus product:
+Inside the Vezor product:
 
 - prefer the flat or low-effect lockup
 - keep the logo on clean dark surfaces
@@ -187,10 +187,10 @@ Before approving any new use of the logo, confirm:
 
 The final approved brand package should include:
 
-- `argus-logo-hero.svg`
-- `argus-logo-ui.svg`
-- `argus-logo-mono-dark.svg`
-- `argus-logo-mono-light.svg`
-- `argus-symbol.svg`
-- `argus-symbol-small.svg`
+- `vezor-logo-hero.svg`
+- `vezor-logo-ui.svg`
+- `vezor-logo-mono-dark.svg`
+- `vezor-logo-mono-light.svg`
+- `vezor-symbol.svg`
+- `vezor-symbol-small.svg`
 - PNG exports at standard app, deck, and documentation sizes

@@ -3,6 +3,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { productBrand } from "@/brand/product";
+
 vi.mock("@/lib/config", () => ({
   frontendConfig: {
     apiBaseUrl: "http://127.0.0.1:8000",
@@ -85,7 +87,10 @@ describe("AgentInput", () => {
       </QueryClientProvider>,
     );
 
-    await user.type(screen.getByLabelText(/query argus/i), "only watch cars and trucks");
+    await user.type(
+      screen.getByLabelText(new RegExp(`query ${productBrand.name}`, "i")),
+      "only watch cars and trucks",
+    );
     await user.click(screen.getByRole("button", { name: /apply query/i }));
 
     await waitFor(() =>

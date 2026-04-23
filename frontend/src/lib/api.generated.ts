@@ -163,6 +163,23 @@ export interface paths {
         patch: operations["update_camera_api_v1_cameras__camera_id__patch"];
         trace?: never;
     };
+    "/api/v1/cameras/{camera_id}/worker-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Camera Worker Config */
+        get: operations["get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/models": {
         parameters: {
             query?: never;
@@ -343,6 +360,23 @@ export interface paths {
         };
         /** Get Hls Playlist */
         get: operations["get_hls_playlist_api_v1_streams__camera_id__hls_m3u8_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/streams/{camera_id}/hls/{resource_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Hls Resource */
+        get: operations["get_hls_resource_api_v1_streams__camera_id__hls__resource_path__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -695,7 +729,7 @@ export interface components {
             path: string;
             format: components["schemas"]["ModelFormat"];
             /** Classes */
-            classes: string[];
+            classes?: string[] | null;
             /** Input Shape */
             input_shape: {
                 [key: string]: number;
@@ -965,6 +999,130 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WorkerCameraSettings */
+        WorkerCameraSettings: {
+            /** Rtsp Url */
+            rtsp_url: string;
+            /**
+             * Frame Skip
+             * @default 1
+             */
+            frame_skip: number;
+            /**
+             * Fps Cap
+             * @default 25
+             */
+            fps_cap: number;
+        };
+        /** WorkerConfigResponse */
+        WorkerConfigResponse: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            mode: components["schemas"]["ProcessingMode"];
+            camera: components["schemas"]["WorkerCameraSettings"];
+            publish?: components["schemas"]["WorkerPublishSettings"];
+            stream?: components["schemas"]["WorkerStreamSettings"];
+            model: components["schemas"]["WorkerModelSettings"];
+            secondary_model?: components["schemas"]["WorkerModelSettings"] | null;
+            tracker: components["schemas"]["WorkerTrackerSettings"];
+            privacy?: components["schemas"]["WorkerPrivacySettings"];
+            /** Active Classes */
+            active_classes?: string[];
+            /** Attribute Rules */
+            attribute_rules?: {
+                [key: string]: unknown;
+            }[];
+            /** Zones */
+            zones?: {
+                [key: string]: unknown;
+            }[];
+            /** Homography */
+            homography?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** WorkerModelSettings */
+        WorkerModelSettings: {
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Classes */
+            classes: string[];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            /**
+             * Confidence Threshold
+             * @default 0.25
+             */
+            confidence_threshold: number;
+            /**
+             * Iou Threshold
+             * @default 0.45
+             */
+            iou_threshold: number;
+        };
+        /** WorkerPrivacySettings */
+        WorkerPrivacySettings: {
+            /**
+             * Blur Faces
+             * @default true
+             */
+            blur_faces: boolean;
+            /**
+             * Blur Plates
+             * @default true
+             */
+            blur_plates: boolean;
+        };
+        /** WorkerPublishSettings */
+        WorkerPublishSettings: {
+            /**
+             * Subject Prefix
+             * @default evt.tracking
+             */
+            subject_prefix: string;
+            /** Http Fallback Url */
+            http_fallback_url?: string | null;
+        };
+        /** WorkerStreamSettings */
+        WorkerStreamSettings: {
+            /**
+             * Profile Id
+             * @default native
+             * @enum {string}
+             */
+            profile_id: "native" | "1080p15" | "720p10" | "540p5";
+            /**
+             * Kind
+             * @default passthrough
+             * @enum {string}
+             */
+            kind: "passthrough" | "transcode";
+            /** Width */
+            width?: number | null;
+            /** Height */
+            height?: number | null;
+            /**
+             * Fps
+             * @default 25
+             */
+            fps: number;
+        };
+        /** WorkerTrackerSettings */
+        WorkerTrackerSettings: {
+            tracker_type: components["schemas"]["TrackerType"];
+            /**
+             * Frame Rate
+             * @default 25
+             */
+            frame_rate: number;
         };
     };
     responses: never;
@@ -1419,6 +1577,39 @@ export interface operations {
             };
         };
     };
+    get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_models_api_v1_models_get: {
         parameters: {
             query?: never;
@@ -1807,6 +1998,42 @@ export interface operations {
             };
             path: {
                 camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_hls_resource_api_v1_streams__camera_id__hls__resource_path__get: {
+        parameters: {
+            query?: {
+                tenant_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+                resource_path: string;
             };
             cookie?: never;
         };

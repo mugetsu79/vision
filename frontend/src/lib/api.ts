@@ -1,13 +1,28 @@
 import createClient from "openapi-fetch";
 
+import { oidcManager } from "@/lib/auth";
 import type { paths } from "@/lib/api.generated";
 import { frontendConfig } from "@/lib/config";
 import { useAuthStore } from "@/stores/auth-store";
 
+async function resolveAccessToken() {
+  try {
+    const user = await oidcManager.getUser();
+
+    if (user?.access_token && !user.expired) {
+      return user.access_token;
+    }
+  } catch {
+    // Fall back to the in-memory auth store when the OIDC store is unavailable.
+  }
+
+  return useAuthStore.getState().accessToken;
+}
+
 export const apiClient = createClient<paths>({
   baseUrl: frontendConfig.apiBaseUrl,
   fetch: async (request: Request) => {
-    const { accessToken } = useAuthStore.getState();
+    const accessToken = await resolveAccessToken();
     const headers = new Headers(request.headers);
 
     if (accessToken) {

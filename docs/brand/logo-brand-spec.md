@@ -1,17 +1,17 @@
-# Argus Logo Brand Spec
+# Vezor Logo Brand Spec
 
 Date: 2026-04-19
 
-This document captures the selected logo direction for **Argus | The OmniSight Platform**, the recommended refinement path, and the handoff materials for image generation, vector execution, and brand-system alignment.
+This document captures the selected logo direction for **Vezor | The OmniSight Platform**, the recommended refinement path, and the handoff materials for image generation, vector execution, and brand-system alignment.
 
 Supporting documents:
 
-- [usage-guide.md](/Users/yann.moren/vision/docs/brand/usage-guide.md)
+- [logo-usage-guide.md](/Users/yann.moren/vision/docs/brand/logo-usage-guide.md)
 - [logo-generation-prompts.md](/Users/yann.moren/vision/docs/brand/logo-generation-prompts.md)
 
 ## Goal
 
-Create a final primary logo for Argus that feels:
+Create a final primary logo for Vezor that feels:
 
 - premium
 - modern
@@ -51,12 +51,12 @@ Use **Image 2** as the primary direction.
 
 ## Alignment With The Brand Intent
 
-The chosen direction already aligns well with the intended Argus identity in the following ways:
+The chosen direction already aligns well with the intended Vezor identity in the following ways:
 
 - strong eye plus network/radar symbolism
 - cerulean intelligence core and violet perimeter shift
 - dark, high-contrast, premium presentation
-- strong prominence of `Argus`
+- strong prominence of `Vezor`
 - modern technology tone appropriate for a vision intelligence platform
 
 The chosen direction is good enough to refine, rather than restart from zero.
@@ -67,14 +67,14 @@ Use **Image 2** as the master direction. Keep **Image 1** only as a reference fo
 
 ### Brand Goal
 
-Create the final primary logo for **Argus | The OmniSight Platform**: a premium, modern B2B identity that communicates vigilant intelligence, universal visibility, and advanced connected technology. The mark should feel trustworthy, future-ready, and strong in dark-mode product UI, hardware labeling, investor decks, and marketing.
+Create the final primary logo for **Vezor | The OmniSight Platform**: a premium, modern B2B identity that communicates vigilant intelligence, universal visibility, and advanced connected technology. The mark should feel trustworthy, future-ready, and strong in dark-mode product UI, hardware labeling, investor decks, and marketing.
 
 ### What To Keep
 
 - The core concept: abstract eye plus radar or network hub.
 - The cerulean center with violet perimeter transition.
 - The dark obsidian presentation.
-- The strong hierarchy of `Argus` first, platform descriptor second.
+- The strong hierarchy of `Vezor` first, platform descriptor second.
 - The overall premium, luminous, high-tech tone.
 
 ### What To Improve
@@ -84,7 +84,7 @@ Create the final primary logo for **Argus | The OmniSight Platform**: a premium,
 - Make the glow more restrained and controlled, especially around the outer perimeter.
 - Reduce the “render/mockup” feel from bevels and shadows.
 - Remove decorative artifacts such as the small sparkle in the corner.
-- Make the tagline clearly secondary to `Argus`.
+- Make the tagline clearly secondary to `Vezor`.
 - Increase distinctiveness in the typography so it feels less generic.
 
 ### Icon Direction
@@ -107,7 +107,7 @@ Create the final primary logo for **Argus | The OmniSight Platform**: a premium,
 
 ### Typography
 
-- `Argus` should remain bold, luminous, and dominant.
+- `Vezor` should remain bold, luminous, and dominant.
 - The separator `|` should stay subtle and elegant.
 - `THE OMNISIGHT PLATFORM` should be lighter weight and slightly smaller.
 - Tighten the brand system so the type feels more signature and less stock.
@@ -133,7 +133,7 @@ Create the final primary logo for **Argus | The OmniSight Platform**: a premium,
 - Do not make it flatter and more generic.
 - Do not increase complexity in the icon.
 - Do not push the violet glow further than Image 1.
-- Do not let the tagline compete with `Argus`.
+- Do not let the tagline compete with `Vezor`.
 - Do not keep obvious AI-generation ornamentation or presentation artifacts.
 
 ### Success Test
@@ -154,11 +154,11 @@ Refine Image 2 into a cleaner, more scalable, premium enterprise master logo wit
 Use this as the primary prompt for image generation:
 
 ```text
-Design a premium enterprise technology logo for “Argus | The OmniSight Platform” on a deep obsidian-to-charcoal dark background. The logo must feature a refined abstract symbol that fuses a vigilant eye with an omnidirectional radar/network hub. The icon should feel geometric, precise, modern, and intelligent, with a clean central cerulean blue glow that softly transitions into ethereal violet at the outer edges. The lighting should feel like controlled digital bioluminescence, not neon signage.
+Design a premium enterprise technology logo for “Vezor | The OmniSight Platform” on a deep obsidian-to-charcoal dark background. The logo must feature a refined abstract symbol that fuses a vigilant eye with an omnidirectional radar/network hub. The icon should feel geometric, precise, modern, and intelligent, with a clean central cerulean blue glow that softly transitions into ethereal violet at the outer edges. The lighting should feel like controlled digital bioluminescence, not neon signage.
 
 Use Image 2 as the visual direction: balanced composition, restrained glow, premium dark-mode presentation, strong brand clarity. Simplify the icon slightly so it scales better and reads faster. Reduce internal clutter and excessive overlap. Keep the eye silhouette immediately recognizable. The symbol should suggest vigilance first and connected intelligence second.
 
-Typography: “Argus” large, bold, luminous off-white, elegant geometric sans-serif, premium and modern. Add a subtle vertical separator “|”. Place “THE OMNISIGHT PLATFORM” as a secondary line or secondary block in smaller, lighter-weight off-white text. The tagline must be clearly subordinate to “Argus”.
+Typography: “Vezor” large, bold, luminous off-white, elegant geometric sans-serif, premium and modern. Add a subtle vertical separator “|”. Place “THE OMNISIGHT PLATFORM” as a secondary line or secondary block in smaller, lighter-weight off-white text. The tagline must be clearly subordinate to “Vezor”.
 
 Style: sophisticated B2B platform identity, future-ready, dark-mode native, premium, confident, elegant, restrained, technical, trustworthy. Avoid consumer/gaming vibes. Avoid cheesy neon, excessive glow, clutter, or ornamental AI artifacts. No sparkle icons, no extra symbols, no busy textures. The final result should look like a real master brand mark for a high-end vision intelligence platform.
 
@@ -204,9 +204,9 @@ Use this for the vector execution pass:
   - square app-icon crop
 - Spacing rules:
   - keep clear space around logo equal to at least the width of the icon core
-  - tagline width should not visually exceed the width of `Argus`
+  - tagline width should not visually exceed the width of `Vezor`
 - Typography direction:
-  - bold geometric sans for `Argus`
+  - bold geometric sans for `Vezor`
   - lighter matching sans for tagline
   - subtle separator
   - no condensed techno font
@@ -216,7 +216,7 @@ Use this for the vector execution pass:
 
 ### Name
 
-- `Argus`
+- `Vezor`
 - descriptor: `The OmniSight Platform`
 
 ### Brand Attributes
@@ -243,7 +243,7 @@ Use this for the vector execution pass:
 
 - wordmark direction: `Sora Bold` or `Space Grotesk Bold`
 - product and UI type: `Inter`, `Manrope`, or `Plus Jakarta Sans`
-- use `Argus` in bold, descriptor in medium or semibold
+- use `Vezor` in bold, descriptor in medium or semibold
 - all-caps descriptor is acceptable if tracking is slightly open
 
 ### Logo Usage

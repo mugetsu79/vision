@@ -1,6 +1,6 @@
-# Argus Operator Deployment Playbook
+# Vezor Operator Deployment Playbook
 
-This is the operator-ready deployment guide for Argus.
+This is the operator-ready deployment guide for Vezor.
 
 Use it when you want to decide what to deploy, where to deploy it, and in what order to validate it.
 
@@ -12,7 +12,7 @@ This is the recommended first deployment for evaluation, local validation, UI re
 
 ### Goal
 
-Bring up the full Argus control plane on one machine, run everything locally, and validate the product end to end before buying or assigning site hardware.
+Bring up the full Vezor control plane on one machine, run everything locally, and validate the product end to end before buying or assigning site hardware.
 
 ### Recommended hardware
 
@@ -82,7 +82,7 @@ This is the recommended first real deployment for one site going into production
 
 ### Goal
 
-Stand up a stable central Argus node and connect one real site with a small number of cameras. Keep the rollout conservative and operationally simple.
+Stand up a stable central Vezor node and connect one real site with a small number of cameras. Keep the rollout conservative and operationally simple.
 
 ### Recommended default choice
 
@@ -142,6 +142,25 @@ Two supported patterns:
 4. Validate live viewing, telemetry, privacy behavior, incidents, and history.
 5. Only then add the rest of the site’s cameras.
 
+### Inference Runtime Overrides
+
+By default, the worker now chooses an execution-provider policy from host capabilities:
+
+- NVIDIA Linux `amd64`: TensorRT, then CUDA, then CPU
+- Apple Silicon macOS: CoreML, then CPU
+- Intel Linux `amd64`: OpenVINO, then CPU
+- AMD Linux `amd64`: CPU in this first pass
+- Intel macOS: CPU fallback
+
+For controlled benchmarking or mitigation, these environment variables can override the automatic choice:
+
+- `ARGUS_INFERENCE_EXECUTION_PROVIDER_OVERRIDE`
+- `ARGUS_INFERENCE_EXECUTION_PROFILE_OVERRIDE`
+- `ARGUS_INFERENCE_SESSION_INTER_OP_THREADS`
+- `ARGUS_INFERENCE_SESSION_INTRA_OP_THREADS`
+
+Use the overrides sparingly. Prefer the automatic policy for normal deployment, and only force a provider when you are measuring performance or isolating a runtime-specific issue.
+
 ### Success criteria
 
 - operators can log in and view the site
@@ -152,17 +171,17 @@ Two supported patterns:
 
 ## 3. Multi-Site Rollout
 
-This is the target Argus topology for a real fleet.
+This is the target Vezor topology for a real fleet.
 
 ### Goal
 
-Operate multiple sites with a single central Argus control plane while allowing each site to choose the right mix of `central`, `edge`, and `hybrid`.
+Operate multiple sites with a single central Vezor control plane while allowing each site to choose the right mix of `central`, `edge`, and `hybrid`.
 
 ### Recommended architecture
 
 #### Central
 
-One central Argus cluster or node runs:
+One central Vezor cluster or node runs:
 
 - API
 - frontend
@@ -284,7 +303,7 @@ Use this when:
 Use this when:
 
 - different sites have different uplink and privacy constraints
-- you want the architecture Argus was fundamentally designed for
+- you want the architecture Vezor was fundamentally designed for
 
 ### Tier E: Advanced hybrid analytics
 
@@ -374,4 +393,4 @@ For reliability, that wrapper starts backend and infrastructure services through
 
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
-- [argus_v4_spec.md](/Users/yann.moren/vision/argus_v4_spec.md)
+- [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md)

@@ -228,6 +228,11 @@ class FakeModelService:
         return list(self.models.values())
 
     async def create_model(self, payload: ModelCreate) -> ModelResponse:
+        classes = self._resolve_classes(
+            path=payload.path,
+            format=payload.format,
+            declared_classes=payload.classes,
+        )
         model = ModelResponse(
             id=uuid4(),
             name=payload.name,
@@ -235,7 +240,7 @@ class FakeModelService:
             task=payload.task,
             path=payload.path,
             format=payload.format,
-            classes=payload.classes,
+            classes=classes,
             input_shape=payload.input_shape,
             sha256=payload.sha256,
             size_bytes=payload.size_bytes,
@@ -246,9 +251,51 @@ class FakeModelService:
 
     async def update_model(self, model_id: UUID, payload: ModelUpdate) -> ModelResponse:
         existing = self.models[model_id]
-        updated = existing.model_copy(update=payload.model_dump(exclude_unset=True))
+        update_data = payload.model_dump(exclude_unset=True, mode="python")
+        if any(field_name in update_data for field_name in {"path", "format", "classes"}):
+            resolved_format = update_data.get("format", existing.format)
+            update_data["classes"] = self._resolve_classes(
+                path=str(update_data.get("path", existing.path)),
+                format=resolved_format,
+                declared_classes=(
+                    update_data["classes"]
+                    if "classes" in update_data
+                    else None
+                    if resolved_format is ModelFormat.ONNX
+                    else existing.classes
+                ),
+            )
+        updated = existing.model_copy(update=update_data)
         self.models[model_id] = updated
         return updated
+
+    @staticmethod
+    def _embedded_classes_for_path(path: str) -> list[str]:
+        if path.endswith("/models/ppe.onnx"):
+            return ["hard_hat", "hi_vis"]
+        return ["bus", "car", "person", "truck"]
+
+    @classmethod
+    def _resolve_classes(
+        cls,
+        *,
+        path: str,
+        format: ModelFormat,
+        declared_classes: list[str] | None,
+    ) -> list[str]:
+        if format is ModelFormat.ONNX:
+            embedded_classes = cls._embedded_classes_for_path(path)
+            if declared_classes is None:
+                return embedded_classes
+            if declared_classes != embedded_classes:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Declared classes do not match the embedded ONNX class metadata.",
+                )
+            return declared_classes
+        if declared_classes is not None:
+            return declared_classes
+        raise HTTPException(status_code=422, detail="classes are required for non-ONNX models.")
 
 
 class FakeCameraService:
@@ -257,10 +304,12 @@ class FakeCameraService:
         *,
         forced_blur_faces: bool = False,
         forced_blur_plates: bool = False,
+        model_classes_by_id: dict[UUID, list[str]] | None = None,
     ) -> None:
         self.cameras: dict[UUID, CameraResponse] = {}
         self.forced_blur_faces = forced_blur_faces
         self.forced_blur_plates = forced_blur_plates
+        self.model_classes_by_id = model_classes_by_id or {}
 
     async def list_cameras(
         self,
@@ -281,6 +330,7 @@ class FakeCameraService:
             raise HTTPException(status_code=422, detail="Tenant policy requires blur_faces=true.")
         if self.forced_blur_plates and not payload.privacy.blur_plates:
             raise HTTPException(status_code=422, detail="Tenant policy requires blur_plates=true.")
+        self._validate_active_classes(payload.primary_model_id, payload.active_classes)
         camera = _camera_response(payload)
         self.cameras[camera.id] = camera
         return camera
@@ -298,6 +348,13 @@ class FakeCameraService:
         ):
             raise HTTPException(status_code=422, detail="Tenant policy requires blur_faces=true.")
         existing = self.cameras[camera_id]
+        primary_model_id = payload.primary_model_id or existing.primary_model_id
+        active_classes = (
+            payload.active_classes
+            if payload.active_classes is not None
+            else existing.active_classes
+        )
+        self._validate_active_classes(primary_model_id, active_classes)
         updated = existing.model_copy(
             update=payload.model_dump(exclude_unset=True, mode="python"),
         )
@@ -352,6 +409,26 @@ class FakeCameraService:
                 "ref_distance_m": camera.homography.ref_distance_m,
             },
         )
+
+    def _validate_active_classes(
+        self,
+        primary_model_id: UUID,
+        active_classes: list[str],
+    ) -> None:
+        allowed_classes = set(self.model_classes_by_id.get(primary_model_id, []))
+        if not allowed_classes:
+            return
+        invalid_classes = sorted(
+            class_name for class_name in active_classes if class_name not in allowed_classes
+        )
+        if invalid_classes:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "active_classes must be a subset of the selected primary model classes. "
+                    f"Unknown classes: {', '.join(invalid_classes)}."
+                ),
+            )
 
 
 class FakeEdgeService:
@@ -664,6 +741,21 @@ async def test_models_routes_contract() -> None:
         transport=ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
+        mismatch_response = await client.post(
+            "/api/v1/models",
+            json={
+                "name": "Argus PPE mismatch",
+                "version": "1.0.0",
+                "task": "attribute",
+                "path": "/models/ppe.onnx",
+                "format": "onnx",
+                "classes": ["person"],
+                "input_shape": {"h": 224, "w": 224, "c": 3},
+                "sha256": "c" * 64,
+                "size_bytes": 2048,
+                "license": "Apache-2.0",
+            },
+        )
         create_response = await client.post(
             "/api/v1/models",
             json={
@@ -672,7 +764,6 @@ async def test_models_routes_contract() -> None:
                 "task": "attribute",
                 "path": "/models/ppe.onnx",
                 "format": "onnx",
-                "classes": ["hard_hat", "hi_vis"],
                 "input_shape": {"h": 224, "w": 224, "c": 3},
                 "sha256": "b" * 64,
                 "size_bytes": 2048,
@@ -686,7 +777,9 @@ async def test_models_routes_contract() -> None:
             json={"license": "MIT"},
         )
 
+    assert mismatch_response.status_code == 422
     assert create_response.status_code == 201
+    assert create_response.json()["classes"] == ["hard_hat", "hi_vis"]
     assert list_response.status_code == 200
     assert len(list_response.json()) == 1
     assert patch_response.status_code == 200
@@ -703,7 +796,10 @@ async def test_camera_routes_validate_policy_and_crud() -> None:
     site_service.sites[site.id] = site
     model_service = FakeModelService()
     model_service.models[model.id] = model
-    camera_service = FakeCameraService(forced_blur_faces=True)
+    camera_service = FakeCameraService(
+        forced_blur_faces=True,
+        model_classes_by_id={model.id: model.classes},
+    )
     services = FakeServices(
         tenancy=FakeTenancyService(context),
         sites=site_service,
@@ -747,6 +843,10 @@ async def test_camera_routes_validate_policy_and_crud() -> None:
         policy_response = await client.post("/api/v1/cameras", json=payload)
 
         payload["privacy"]["blur_faces"] = True
+        payload["active_classes"] = ["airplane"]
+        invalid_classes_response = await client.post("/api/v1/cameras", json=payload)
+
+        payload["active_classes"] = ["bus", "truck"]
         create_response = await client.post("/api/v1/cameras", json=payload)
         camera_id = UUID(create_response.json()["id"])
         list_response = await client.get("/api/v1/cameras", params={"site_id": str(site.id)})
@@ -758,6 +858,7 @@ async def test_camera_routes_validate_policy_and_crud() -> None:
         delete_response = await client.delete(f"/api/v1/cameras/{camera_id}")
 
     assert policy_response.status_code == 422
+    assert invalid_classes_response.status_code == 422
     assert create_response.status_code == 201
     assert create_response.json()["browser_delivery"]["default_profile"] == "720p10"
     assert list_response.status_code == 200
@@ -777,7 +878,7 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
     site_service.sites[site.id] = site
     model_service = FakeModelService()
     model_service.models[model.id] = model
-    camera_service = FakeCameraService()
+    camera_service = FakeCameraService(model_classes_by_id={model.id: model.classes})
     payload = _camera_payload(site.id, model.id)
     camera = await camera_service.create_camera(context, payload)
     services = FakeServices(
