@@ -17,6 +17,8 @@ from numpy.typing import NDArray
 
 LOGGER = getLogger(__name__)
 
+_FFMPEG_RTSP_TIMEOUT_US = "5000000"
+
 type Frame = NDArray[np.uint8]
 type CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
 type MonotonicClock = Callable[[], float]
@@ -228,6 +230,8 @@ class _FFmpegRawVideoCapture:
             "error",
             "-rtsp_transport",
             "tcp",
+            "-timeout",
+            _FFMPEG_RTSP_TIMEOUT_US,
             "-i",
             source_uri,
             "-map",

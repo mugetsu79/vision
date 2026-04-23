@@ -446,6 +446,19 @@ class MediaMTXClient:
                 target_height=target_height,
             )
 
+        if stream_kind == StreamMode.PASSTHROUGH.value and privacy.requires_filtering:
+            LOGGER.warning(
+                (
+                    "Passthrough stream requested, but privacy filtering is enabled; "
+                    "using a processed stream instead."
+                ),
+                extra={
+                    "camera_id": str(camera_id),
+                    "profile": profile.value,
+                    "requested_stream_kind": stream_kind,
+                },
+            )
+
         if profile is PublishProfile.CENTRAL_GPU:
             path_name = f"cameras/{camera_id}/annotated"
             return StreamRegistration(

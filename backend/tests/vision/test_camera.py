@@ -232,6 +232,9 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     np.testing.assert_array_equal(decoded, frame)
     capture.release()
     assert created_commands[0][:4] == ["ffmpeg", "-loglevel", "error", "-rtsp_transport"]
+    assert "-timeout" in created_commands[0]
+    timeout_index = created_commands[0].index("-timeout")
+    assert created_commands[0][timeout_index + 1] == "5000000"
 
 
 def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(

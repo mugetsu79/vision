@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -296,6 +297,42 @@ async def test_mediamtx_client_respects_passthrough_stream_kind_on_central_profi
             },
         )
     ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_mediamtx_client_logs_when_privacy_blocks_passthrough_on_central_profile(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(
+            transport=_transport(lambda request: Response(200, json={"ok": True}))
+        ),
+    )
+    caplog.set_level(logging.WARNING, logger="argus.streaming.mediamtx")
+
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=False),
+    )
+
+    assert registration.mode is StreamMode.ANNOTATED_WHIP
+    assert any(
+        (
+            "Passthrough stream requested, but privacy filtering is enabled; "
+            "using a processed stream instead."
+        )
+        in record.message
+        for record in caplog.records
+    )
 
     await client.close()
 
