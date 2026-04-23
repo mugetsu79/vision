@@ -461,12 +461,14 @@ class MediaMTXClient:
 
         if profile is PublishProfile.CENTRAL_GPU:
             path_name = f"cameras/{camera_id}/annotated"
+            await self._ensure_path(path_name, source="publisher", source_on_demand=False)
             return StreamRegistration(
                 camera_id=camera_id,
                 mode=StreamMode.ANNOTATED_WHIP,
                 path_name=path_name,
                 read_path=f"{self.rtsp_base_url}/{path_name}",
                 publish_path=f"{self.rtsp_base_url}/{path_name}",
+                managed_path_config=True,
                 target_fps=max(1, target_fps),
                 target_width=target_width,
                 target_height=target_height,

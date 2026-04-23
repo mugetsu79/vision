@@ -195,7 +195,18 @@ async def test_mediamtx_client_registers_whip_target_for_central_profile() -> No
         == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated"
     )
     assert registration.path_name == f"cameras/{camera_id}/annotated"
-    assert requests == []
+    assert registration.managed_path_config is True
+    assert requests == [
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/add/cameras/{camera_id}/annotated",
+            {
+                "name": f"cameras/{camera_id}/annotated",
+                "source": "publisher",
+                "sourceOnDemand": False,
+            },
+        ),
+    ]
 
     await client.close()
 
@@ -359,6 +370,7 @@ async def test_mediamtx_client_push_frame_starts_and_reuses_publisher() -> None:
         api_base_url="http://mediamtx.internal:9997",
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
         publisher_factory=publisher_factory,
         publish_token_factory=lambda camera_id, path_name: issuer.issue_publish_token(
             subject="worker-1",
@@ -408,6 +420,7 @@ async def test_mediamtx_client_replaces_publisher_when_path_changes() -> None:
         api_base_url="http://mediamtx.internal:9997",
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
         publisher_factory=publisher_factory,
     )
     first_registration = await client.register_stream(
@@ -459,6 +472,7 @@ async def test_mediamtx_client_close_shuts_down_active_publishers() -> None:
         api_base_url="http://mediamtx.internal:9997",
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
         publisher_factory=publisher_factory,
     )
     registration = await client.register_stream(
@@ -498,6 +512,7 @@ async def test_mediamtx_client_push_frame_applies_resize_and_cadence_limits() ->
         api_base_url="http://mediamtx.internal:9997",
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
         publisher_factory=publisher_factory,
     )
     registration = await client.register_stream(
@@ -552,6 +567,7 @@ async def test_mediamtx_client_times_out_stalled_publisher_and_recovers_on_next_
         api_base_url="http://mediamtx.internal:9997",
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
         publisher_factory=publisher_factory,
         publisher_push_timeout_seconds=0.01,
     )
@@ -606,6 +622,7 @@ async def test_mediamtx_client_restarts_publisher_after_long_publish_gap() -> No
         api_base_url="http://mediamtx.internal:9997",
         rtsp_base_url="rtsp://mediamtx.internal:8554",
         whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
         publisher_factory=publisher_factory,
         publisher_idle_restart_seconds=5.0,
     )
@@ -792,6 +809,10 @@ def _transport(handler: Callable[[Request], Response | object]):
     from httpx import MockTransport
 
     return MockTransport(wrapped)
+
+
+def _ok_transport():
+    return _transport(lambda _request: Response(200, json={"ok": True}))
 
 
 class _FakeFramePublisher:
