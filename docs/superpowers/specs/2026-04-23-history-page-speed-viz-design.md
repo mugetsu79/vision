@@ -50,6 +50,7 @@ The product spec (`product-spec-v4.md`) pins the data model, the endpoint contra
 - Per-track drill-down views.
 - Unit switcher (km/h vs mph).
 - Per-class speed thresholds (single global threshold for first cut; per-class is a follow-up if asked).
+- Attribute-driven filtering ("person with a hat", "truck with high-vis crew", etc.). Covered by a future Spec D that will target either the existing `AttributeClassifier` pipeline (Approach A: fixed-vocab attributes) or open-vocabulary detection (Approach B: YOLO-World / OWL-ViT) depending on hardware feasibility — the Jetson Orin Nano Super on the test bench makes Approach B viable for edge-side inference where the Intel iMac would not.
 - Natural-language filter behaviour beyond making it URL-serialisable alongside the structured filters.
 
 ## Data and API
