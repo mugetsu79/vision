@@ -300,6 +300,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/history/classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History Classes */
+        get: operations["get_history_classes_api_v1_history_classes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -635,6 +652,30 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HistoryClassEntry */
+        HistoryClassEntry: {
+            /** Class Name */
+            class_name: string;
+            /** Event Count */
+            event_count: number;
+            /** Has Speed Data */
+            has_speed_data: boolean;
+        };
+        /** HistoryClassesResponse */
+        HistoryClassesResponse: {
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+            /** Classes */
+            classes: components["schemas"]["HistoryClassEntry"][];
+        };
         /** HistoryPoint */
         HistoryPoint: {
             /**
@@ -659,6 +700,18 @@ export interface components {
             class_names: string[];
             /** Rows */
             rows: components["schemas"]["HistorySeriesRow"][];
+            /**
+             * Granularity Adjusted
+             * @default false
+             */
+            granularity_adjusted: boolean;
+            /**
+             * Speed Classes Capped
+             * @default false
+             */
+            speed_classes_capped: boolean;
+            /** Speed Classes Used */
+            speed_classes_used?: string[] | null;
         };
         /** HistorySeriesRow */
         HistorySeriesRow: {
@@ -673,6 +726,22 @@ export interface components {
             };
             /** Total Count */
             total_count: number;
+            /** Speed P50 */
+            speed_p50?: {
+                [key: string]: number;
+            } | null;
+            /** Speed P95 */
+            speed_p95?: {
+                [key: string]: number;
+            } | null;
+            /** Speed Sample Count */
+            speed_sample_count?: {
+                [key: string]: number;
+            } | null;
+            /** Over Threshold Count */
+            over_threshold_count?: {
+                [key: string]: number;
+            } | null;
         };
         /** HomographyPayload */
         HomographyPayload: {
@@ -1848,6 +1917,8 @@ export interface operations {
                 camera_ids?: string[] | null;
                 class_names?: string[] | null;
                 granularity?: string;
+                include_speed?: boolean;
+                speed_threshold?: number | null;
             };
             header?: {
                 "X-Tenant-ID"?: string | null;
@@ -1864,6 +1935,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistorySeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_classes_api_v1_history_classes_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                camera_id?: string | null;
+                camera_ids?: string[] | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryClassesResponse"];
                 };
             };
             /** @description Validation Error */
