@@ -282,12 +282,31 @@ class HistorySeriesRow(BaseModel):
     bucket: datetime
     values: dict[str, int]
     total_count: int
+    speed_p50: dict[str, float] | None = None
+    speed_p95: dict[str, float] | None = None
+    speed_sample_count: dict[str, int] | None = None
+    over_threshold_count: dict[str, int] | None = None
 
 
 class HistorySeriesResponse(BaseModel):
     granularity: str
     class_names: list[str]
     rows: list[HistorySeriesRow]
+    granularity_adjusted: bool = False
+    speed_classes_capped: bool = False
+    speed_classes_used: list[str] | None = None
+
+
+class HistoryClassEntry(BaseModel):
+    class_name: str
+    event_count: int
+    has_speed_data: bool
+
+
+class HistoryClassesResponse(BaseModel):
+    from_: datetime = Field(serialization_alias="from", validation_alias="from")
+    to: datetime
+    classes: list[HistoryClassEntry]
 
 
 class IncidentResponse(BaseModel):
