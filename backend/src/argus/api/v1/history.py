@@ -6,7 +6,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from argus.api.contracts import HistoryPoint, HistorySeriesResponse, TenantContext
+from argus.api.contracts import (
+    HistoryClassesResponse,
+    HistoryPoint,
+    HistorySeriesResponse,
+    TenantContext,
+)
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
 from argus.models.enums import RoleEnum
@@ -22,6 +27,8 @@ ClassNamesQuery = Annotated[list[str] | None, Query()]
 GranularityQuery = Annotated[str, Query(pattern="^(1m|5m|1h|1d)$")]
 FromQuery = Annotated[datetime, Query(alias="from")]
 ToQuery = Annotated[datetime, Query(alias="to")]
+IncludeSpeedQuery = Annotated[bool, Query()]
+SpeedThresholdQuery = Annotated[float | None, Query(ge=0)]
 
 
 def _normalize_camera_ids(
@@ -36,7 +43,6 @@ def _normalize_camera_ids(
         combined.append(camera_id)
     if not combined:
         return None
-
     unique: list[UUID] = []
     seen: set[UUID] = set()
     for value in combined:
@@ -80,12 +86,34 @@ async def get_history_series(
     camera_ids: CameraIdsQuery = None,
     class_names: ClassNamesQuery = None,
     granularity: GranularityQuery = "1h",
+    include_speed: IncludeSpeedQuery = False,
+    speed_threshold: SpeedThresholdQuery = None,
 ) -> HistorySeriesResponse:
     return await services.history.query_series(
         tenant_context,
         camera_ids=_normalize_camera_ids(camera_id=camera_id, camera_ids=camera_ids),
         class_names=class_names,
         granularity=granularity,
+        starts_at=from_,
+        ends_at=to,
+        include_speed=include_speed,
+        speed_threshold=speed_threshold,
+    )
+
+
+@router.get("/classes", response_model=HistoryClassesResponse)
+async def get_history_classes(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+    from_: FromQuery,
+    to: ToQuery,
+    camera_id: CameraIdQuery = None,
+    camera_ids: CameraIdsQuery = None,
+) -> HistoryClassesResponse:
+    return await services.history.list_classes(
+        tenant_context,
+        camera_ids=_normalize_camera_ids(camera_id=camera_id, camera_ids=camera_ids),
         starts_at=from_,
         ends_at=to,
     )

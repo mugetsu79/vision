@@ -95,6 +95,8 @@ class RecordingHistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        include_speed: bool = False,
+        speed_threshold: float | None = None,
     ) -> dict[str, object]:
         self.last_series_query = {
             "tenant_id": context.tenant_id,
@@ -103,6 +105,8 @@ class RecordingHistoryService:
             "granularity": granularity,
             "starts_at": starts_at,
             "ends_at": ends_at,
+            "include_speed": include_speed,
+            "speed_threshold": speed_threshold,
         }
         return {
             "granularity": granularity,
@@ -288,6 +292,8 @@ async def test_history_series_route_returns_chart_ready_rows() -> None:
         "granularity": "1d",
         "starts_at": starts_at,
         "ends_at": ends_at,
+        "include_speed": False,
+        "speed_threshold": None,
     }
 
 
