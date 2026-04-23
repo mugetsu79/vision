@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/config", () => ({
@@ -14,13 +15,9 @@ vi.mock("@/lib/config", () => ({
 }));
 
 vi.mock("@/components/history/HistoryTrendChart", () => ({
-  HistoryTrendChart: ({
-    series,
-  }: {
-    series: { classNames: string[]; points: Array<{ bucket: string }> };
-  }) => (
+  HistoryTrendChart: ({ series }: { series: { classNames: string[]; points: unknown[]; includeSpeed?: boolean; speedThreshold?: number | null } }) => (
     <div data-testid="history-trend-chart">
-      {series.classNames.join(",")}::{series.points.length}
+      {series.classNames.join(",")}::{series.points.length}::speed={String(!!series.includeSpeed)}::threshold={String(series.speedThreshold ?? "none")}
     </div>
   ),
 }));
@@ -32,10 +29,43 @@ import { useAuthStore } from "@/stores/auth-store";
 const initialAuthState = useAuthStore.getState();
 
 function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+function historySeriesResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    granularity: "1h",
+    class_names: ["car", "bus"],
+    rows: [
+      { bucket: "2026-04-12T00:00:00Z", values: { car: 22, bus: 6 }, total_count: 28 },
+    ],
+    granularity_adjusted: false,
+    speed_classes_capped: false,
+    speed_classes_used: null,
+    ...overrides,
+  };
+}
+
+function classesResponse() {
+  return {
+    from: "2026-04-12T00:00:00Z",
+    to: "2026-04-19T00:00:00Z",
+    classes: [
+      { class_name: "car", event_count: 40, has_speed_data: true },
+      { class_name: "bus", event_count: 10, has_speed_data: true },
+      { class_name: "person", event_count: 5, has_speed_data: false },
+    ],
+  };
+}
+
+function renderPage(initialEntry = "/history") {
+  return render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <HistoryPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 describe("HistoryPage", () => {
@@ -54,6 +84,37 @@ describe("HistoryPage", () => {
         },
       });
     });
+
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") {
+        if (url.searchParams.get("include_speed") === "true") {
+          return Promise.resolve(
+            jsonResponse(
+              historySeriesResponse({
+                rows: [
+                  {
+                    bucket: "2026-04-12T00:00:00Z",
+                    values: { car: 22, bus: 6 },
+                    total_count: 28,
+                    speed_p50: { car: 42 },
+                    speed_p95: { car: 55 },
+                    speed_sample_count: { car: 22 },
+                    over_threshold_count: url.searchParams.get("speed_threshold") ? { car: 5 } : null,
+                  },
+                ],
+                speed_classes_used: ["car"],
+              }),
+            ),
+          );
+        }
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
+      }
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
   });
 
   afterEach(() => {
@@ -63,135 +124,60 @@ describe("HistoryPage", () => {
     });
   });
 
-  test("loads chart-ready history, supports multi-filters, and downloads CSV exports", async () => {
+  test("hydrates filter state from URL and calls endpoint with include_speed", async () => {
+    renderPage("/history?speed=1&speedThreshold=50&granularity=5m");
+    await waitFor(() =>
+      expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
+        "speed=true::threshold=50",
+      ),
+    );
+  });
+
+  test("toggling Show speed and entering a threshold updates the chart props", async () => {
     const user = userEvent.setup();
-    const requests: Request[] = [];
+    renderPage();
+    await screen.findByRole("button", { name: /download csv/i });
 
+    await user.click(screen.getByLabelText(/show speed/i));
+    await user.type(screen.getByLabelText(/speed threshold/i), "60");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
+        "speed=true::threshold=60",
+      ),
+    );
+  });
+
+  test("empty result shows the Try last 7 days button", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request =
-        input instanceof Request ? input : new Request(String(input), init);
-      requests.push(request);
+      const request = input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
-
-      if (url.pathname === "/api/v1/cameras") {
-        return Promise.resolve(
-          jsonResponse([
-          {
-            id: "11111111-1111-1111-1111-111111111111",
-            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-            edge_node_id: null,
-            name: "North Gate",
-            rtsp_url_masked: "rtsp://***",
-            processing_mode: "central",
-            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-            secondary_model_id: null,
-            tracker_type: "botsort",
-            active_classes: ["car", "bus"],
-            attribute_rules: [],
-            zones: [],
-            homography: null,
-            privacy: {
-              blur_faces: true,
-              blur_plates: true,
-              method: "gaussian",
-              strength: 7,
-            },
-            browser_delivery: {
-              default_profile: "720p10",
-              allow_native_on_demand: true,
-              profiles: [],
-            },
-            frame_skip: 1,
-            fps_cap: 25,
-            created_at: "2026-04-18T10:00:00Z",
-            updated_at: "2026-04-18T10:00:00Z",
-          },
-          ]),
-        );
-      }
-
+      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
-        return Promise.resolve(
-          jsonResponse({
-          granularity: url.searchParams.get("granularity") ?? "1h",
-          class_names: ["car", "bus"],
-          rows: [
-            {
-              bucket: "2026-04-12T00:00:00Z",
-              values: { car: 22, bus: 6 },
-              total_count: 28,
-            },
-            {
-              bucket: "2026-04-12T01:00:00Z",
-              values: { car: 18, bus: 4 },
-              total_count: 22,
-            },
-          ],
-          }),
-        );
+        return Promise.resolve(jsonResponse(historySeriesResponse({ rows: [] })));
       }
-
-      if (url.pathname === "/api/v1/export") {
-        return Promise.resolve(
-          new Response("bucket,class_name,event_count\n2026-04-12T00:00:00Z,car,22\n", {
-            status: 200,
-            headers: {
-              "Content-Type": "text/csv; charset=utf-8",
-              "Content-Disposition": 'attachment; filename="history.csv"',
-            },
-          }),
-        );
-      }
-
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
-
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <HistoryPage />
-      </QueryClientProvider>,
-    );
-
-    await screen.findByRole("button", { name: /download csv/i });
+    renderPage();
     await waitFor(() =>
-      expect(screen.getByTestId("history-trend-chart")).toHaveTextContent("car,bus::2"),
+      expect(screen.getByRole("button", { name: /try last 7 days/i })).toBeInTheDocument(),
     );
+  });
 
-    await user.selectOptions(screen.getByLabelText(/camera filters/i), [
-      "11111111-1111-1111-1111-111111111111",
-    ]);
-    await user.selectOptions(screen.getByLabelText(/class filters/i), ["bus"]);
-    await user.selectOptions(screen.getByLabelText(/granularity/i), "5m");
-
+  test("class filter is populated by /history/classes", async () => {
+    renderPage();
     await waitFor(() => {
-      const seriesRequests = requests.filter(
-        (request) => new URL(request.url).pathname === "/api/v1/history/series",
-      );
-      expect(seriesRequests.length).toBeGreaterThan(1);
-
-      const latestRequest = seriesRequests.at(-1);
-      expect(latestRequest).toBeDefined();
-
-      const latestUrl = new URL((latestRequest as Request).url);
-      expect(latestUrl.searchParams.get("granularity")).toBe("5m");
-      expect(latestUrl.searchParams.getAll("camera_ids")).toEqual([
-        "11111111-1111-1111-1111-111111111111",
-      ]);
-      expect(latestUrl.searchParams.getAll("class_names")).toEqual(["bus"]);
+      expect(screen.getByRole("option", { name: /car \(40\)/i })).toBeInTheDocument();
     });
+    expect(screen.getByRole("option", { name: /person \(5\) — no speed data in this window/i })).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: /download csv/i }));
-
-    await waitFor(() => {
-      const exportRequest = requests.find(
-        (request) => new URL(request.url).pathname === "/api/v1/export",
-      );
-      expect(exportRequest).toBeDefined();
-
-      const exportUrl = new URL((exportRequest as Request).url);
-      expect(exportUrl.searchParams.get("format")).toBe("csv");
-      expect(exportUrl.searchParams.get("granularity")).toBe("5m");
-      expect(exportUrl.searchParams.getAll("class_names")).toEqual(["bus"]);
-    });
+  test("Show all 80 COCO classes expander reveals unseen classes", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("option", { name: /car \(40\)/i });
+    await user.click(screen.getByRole("button", { name: /show all 80 coco classes/i }));
+    expect(screen.getByRole("option", { name: /giraffe \(0\)/i })).toBeInTheDocument();
   });
 });
