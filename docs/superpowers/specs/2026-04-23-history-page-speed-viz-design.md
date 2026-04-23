@@ -22,9 +22,11 @@ The product spec (`product-spec-v4.md`) pins the data model, the endpoint contra
 
 ## In Scope
 
-- Smart defaults on `/history` (last 24 h, all cameras, all classes, granularity 1 h).
+- Smart defaults on `/history` (last 24 h, all cameras, all classes actually observed in the window, granularity 1 h).
 - Empty-state banner with one-click "Try last 7 days" when the selected window has no data.
 - URL-persisted filter state for `from`, `to`, `granularity`, `cameras`, `classes`, `speed`, `speedThreshold`.
+- **Dynamic class filter** populated from distinct `class_name` values observed in the selected window, ordered by frequency. A "Show all 80 COCO classes" expander lets the user pick classes not yet seen. The filter is never a hardcoded allow-list.
+- **Class-adaptive speed panel**: speed lines render for every selected class that has at least one non-null `speed_kph` row in the window. Selected classes with zero speed rows are tagged in the legend as `(no speed data in this window)` and produce no line. If none of the selected classes have any speed rows, the speed panel renders its own small empty-state instead of a blank area.
 - New stacked speed panel on the History page:
   - Per-class median (`p50`) and 95th percentile (`p95`) speed lines with a shaded band between them.
   - Horizontal threshold reference line (ECharts `markLine`) when a threshold is set.
@@ -47,6 +49,7 @@ The product spec (`product-spec-v4.md`) pins the data model, the endpoint contra
 - Continuous aggregates for speed (add only if p95 endpoint latency becomes a problem).
 - Per-track drill-down views.
 - Unit switcher (km/h vs mph).
+- Per-class speed thresholds (single global threshold for first cut; per-class is a follow-up if asked).
 - Natural-language filter behaviour beyond making it URL-serialisable alongside the structured filters.
 
 ## Data and API
@@ -56,6 +59,34 @@ The product spec (`product-spec-v4.md`) pins the data model, the endpoint contra
 - Bucketing via `time_bucket(:granularity, ts)`.
 - Percentiles via `percentile_cont(0.5) WITHIN GROUP (ORDER BY speed_kph)` and `percentile_cont(0.95) WITHIN GROUP (ORDER BY speed_kph)`.
 - Violation count via `count(*) FILTER (WHERE speed_kph > :threshold AND speed_kph IS NOT NULL)`.
+
+### Companion endpoint — `GET /api/v1/history/classes`
+
+Purpose: populate the class filter from observed data rather than a hardcoded list.
+
+Query parameters:
+
+| Name | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `from` | ISO timestamp | yes | Start of the observation window. |
+| `to` | ISO timestamp | yes | End of the observation window. |
+| `cameras` | comma-separated UUIDs | no | Restrict to specific cameras; omitted = all accessible. |
+
+Response:
+
+```json
+{
+  "from": "...",
+  "to":   "...",
+  "classes": [
+    {"class_name": "person", "event_count": 1420, "has_speed_data": true},
+    {"class_name": "car",    "event_count":   87, "has_speed_data": true},
+    {"class_name": "dog",    "event_count":    6, "has_speed_data": false}
+  ]
+}
+```
+
+`has_speed_data` is `true` when the class has at least one row with `speed_kph IS NOT NULL` in the window — the UI uses this to decide whether to grey out a class in the speed-panel legend.
 
 ### Endpoint shape — `GET /api/v1/history/series`
 
@@ -94,6 +125,7 @@ Speed fields are `null` for rows where `speed_kph IS NULL` (no homography config
 ### Guardrails
 - Window cap: reject `(to - from) > 31 days` with HTTP 400 and a structured error payload `{detail: "Window exceeds 31 days"}`.
 - Bucket cap: auto-bump granularity one tier when the request would generate more than 500 buckets. Tiers: `1m → 5m → 1h → 1d`. Response sets `granularity_adjusted = true` and returns the effective granularity. UI shows a small notice when this happens.
+- Class cap for speed aggregation: when `include_speed=true` and more than 20 classes are selected, the backend computes percentiles and violation counts only for the 20 most-frequent classes in the window. Count chart is never capped. Response sets `speed_classes_capped = true` with the list of classes actually aggregated, so the UI can tag the rest as "(not shown in speed panel — too many classes)".
 
 ### Why no new continuous aggregate yet
 - `events_1m` and `events_1h` exist only for counts, per the product spec. Extending them to carry speed percentiles is a schema and migration commitment. Ship the on-the-fly query first; add aggregates only if real-world p95 latency of `/history/series` with `include_speed=true` degrades past the acceptability threshold (~500 ms at 5 m granularity across 24 h).
@@ -150,15 +182,16 @@ Speed fields are `null` for rows where `speed_kph IS NULL` (no homography config
 
 Frontend (React, TypeScript, ECharts 6):
 
-- `frontend/src/pages/History.tsx` — add Show speed toggle, threshold input, empty-state card, smart-default hydration.
-- `frontend/src/components/history/HistoryTrendChart.tsx` — extend to render optional violation bar panel and speed panel when props indicate.
-- `frontend/src/hooks/use-history.ts` — extend `useHistorySeries` to pass `include_speed` and `speed_threshold` params; consume the extended response shape.
+- `frontend/src/pages/History.tsx` — add Show speed toggle, threshold input, empty-state card, smart-default hydration; swap the hardcoded class list (if any) for data from the new `/history/classes` endpoint; add "Show all 80 COCO classes" expander for selecting classes not yet seen.
+- `frontend/src/components/history/HistoryTrendChart.tsx` — extend to render optional violation bar panel and speed panel when props indicate; legend tagging for classes without speed data or capped by the 20-class limit.
+- `frontend/src/hooks/use-history.ts` — extend `useHistorySeries` to pass `include_speed` and `speed_threshold` params; consume the extended response shape (`granularity_adjusted`, `speed_classes_capped`). Add `useHistoryClasses` hook for the class-filter data source.
 - `frontend/src/lib/history-url-state.ts` (new) — parse/serialise filter state to URL query params; one small module with round-trippable behaviour.
+- `frontend/src/lib/coco-classes.ts` (new or reused if it already exists) — static list of 80 COCO class names for the "show all" expander.
 
 Backend (Python, FastAPI, SQLAlchemy, TimescaleDB):
 
-- `backend/src/argus/api/v1/history.py` — accept `include_speed` and `speed_threshold`, pass through to the service, serialise extended response.
-- `backend/src/argus/services/app.py` — `HistoryService.query_series` gets the speed-aware query path, percentile and violation computations, and the window/bucket guardrails. `query_history` (non-series legacy) stays unchanged.
+- `backend/src/argus/api/v1/history.py` — accept `include_speed` and `speed_threshold` on the existing series endpoint; add a new `GET /api/v1/history/classes` endpoint that delegates to a new service method.
+- `backend/src/argus/services/app.py` — `HistoryService.query_series` gets the speed-aware query path, percentile and violation computations, window/bucket guardrails, and the 20-class speed-aggregation cap. Add `HistoryService.list_classes` for the companion endpoint. `query_history` (non-series legacy) stays unchanged.
 - No new database migrations.
 
 ## Data Flow
@@ -185,22 +218,30 @@ Backend (Python, FastAPI, SQLAlchemy, TimescaleDB):
   - Rows with `speed_kph IS NULL` (homography missing) are excluded from percentile and violation computations but counted in `count`.
   - Window > 31 days returns HTTP 400.
   - `granularity=1m` across a 10-day range auto-bumps to `5m` or higher and sets `granularity_adjusted=true`.
+  - Selecting 25 classes with `include_speed=true` sets `speed_classes_capped=true`, aggregates speed only for the 20 most-frequent classes, and still returns count rows for all 25.
 - Integration test: HTTP endpoint with `include_speed=true&speed_threshold=50`, verify response shape and absence of speed fields when `include_speed=false`.
+- New endpoint tests for `GET /api/v1/history/classes`: returns only classes present in the window, sorted by `event_count` descending, with correct `has_speed_data` flags.
 
 ### Frontend — vitest
 - `history-url-state`: round-trip serialisation for every filter combination, including edge cases (empty camera list, `speed=true` without threshold, threshold `0`, unrealistically-large threshold).
+- `useHistoryClasses`: populates class options from `/history/classes`, re-fetches when the window or camera set changes.
 - `HistoryTrendChart`:
   - Renders count only when `include_speed=false`.
   - Renders count + speed when `include_speed=true` and no threshold.
   - Renders count + violation bars + speed with threshold line when threshold is set.
   - Renders "(speed not configured)" legend entry for homography-null cameras.
+  - Renders "(no speed data in this window)" legend entry for selected classes with no `speed_kph` rows.
+  - Renders "(not shown in speed panel — too many classes)" when `speed_classes_capped=true`.
+- Class filter: observed classes listed first ordered by frequency; "Show all 80 COCO classes" expander reveals unseen classes; selecting an unseen class adds it to the filter.
 - Empty state: "Try last 7 days" button updates URL and triggers a refetch with the widened window.
 
 ### e2e — Playwright
 - Extend `frontend/e2e/prompt9-history-and-incidents.spec.ts`:
   - Load `/history`, assert default 24 h view renders data when the fixture DB has rows.
+  - Class filter: shows observed classes first in frequency order; opening the "Show all 80 COCO classes" expander reveals the rest.
   - Change camera + class filter, navigate to `/live`, navigate back: URL preserved and filter state restored.
   - Toggle Show speed, set threshold to 60, assert the threshold line and violation bars appear.
+  - Selecting only classes with no speed data shows the speed-panel empty-state, not a blank chart.
   - Deep link visit `/history?speed=true&speedThreshold=60&granularity=5m` applies state on first render.
 
 ## Non-Functional Requirements
