@@ -232,6 +232,8 @@ class _FFmpegRawVideoCapture:
             "tcp",
             "-timeout",
             _FFMPEG_RTSP_TIMEOUT_US,
+            "-rw_timeout",
+            _FFMPEG_RTSP_TIMEOUT_US,
             "-i",
             source_uri,
             "-map",

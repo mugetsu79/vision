@@ -235,6 +235,9 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     assert "-timeout" in created_commands[0]
     timeout_index = created_commands[0].index("-timeout")
     assert created_commands[0][timeout_index + 1] == "5000000"
+    assert "-rw_timeout" in created_commands[0]
+    rw_timeout_index = created_commands[0].index("-rw_timeout")
+    assert created_commands[0][rw_timeout_index + 1] == "5000000"
 
 
 def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(
