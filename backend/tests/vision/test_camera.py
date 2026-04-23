@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import logging
 import os
 import subprocess
@@ -180,6 +181,7 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     class _FakeProcess:
         def __init__(self, payload: bytes) -> None:
             self.stdout = _FakeStdout([payload])
+            self.stderr = io.BytesIO(b"")
             self._returncode: int | None = None
 
         def poll(self) -> int | None:
@@ -268,5 +270,69 @@ def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(
         "FFmpeg rawvideo capture unavailable, falling back to OpenCV"
         in record.message
         and "ffprobe did not return a video stream." in record.message
+        for record in caplog.records
+    )
+
+
+def test_ffmpeg_rawvideo_capture_logs_stderr_when_process_exits(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    stderr_payload = (
+        b"[rtsp @ 0x1] method DESCRIBE failed: 401 Unauthorized\n"
+        b"rtsp://camera.internal/live: Server returned 401 Unauthorized\n"
+    )
+
+    class _ExitedProcess:
+        def __init__(self) -> None:
+            self.stdout = io.BytesIO(b"")
+            self.stderr = io.BytesIO(stderr_payload)
+            self._returncode: int | None = 1
+
+        def poll(self) -> int | None:
+            return self._returncode
+
+        def terminate(self) -> None:
+            self._returncode = 0
+
+        def wait(self, timeout: float | None = None) -> int:
+            return self._returncode or 0
+
+        def kill(self) -> None:
+            self._returncode = -9
+
+    def fake_run(command: list[str], check: bool, capture_output: bool, text: bool):
+        del check, capture_output, text
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"streams":[{"width":16,"height":12}]}',
+            stderr="",
+        )
+
+    def fake_popen(command: list[str], stdout: object, stderr: object, bufsize: int):
+        del command, stdout, stderr, bufsize
+        return _ExitedProcess()
+
+    monkeypatch.setattr(camera_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(camera_module.subprocess, "Popen", fake_popen)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = camera_module._FFmpegRawVideoCapture.create("rtsp://camera.internal/live")
+    # Give the stderr pump a chance to drain before we probe read().
+    import time as _time
+
+    for _ in range(20):
+        if capture._stderr_tail:
+            break
+        _time.sleep(0.01)
+
+    ok, frame = capture.read()
+
+    assert ok is False
+    assert frame is None
+    assert any(
+        "ffmpeg rawvideo capture failed" in record.message
+        and "401 Unauthorized" in record.message
         for record in caplog.records
     )

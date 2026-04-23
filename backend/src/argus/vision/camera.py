@@ -4,9 +4,11 @@ import json
 import os
 import platform
 import subprocess
+import threading
 import time
+from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from logging import getLogger
 from typing import Protocol, cast
@@ -220,6 +222,8 @@ class _FFmpegRawVideoCapture:
     _process: subprocess.Popen[bytes]
     _width: int
     _height: int
+    _stderr_tail: deque[str] = field(default_factory=lambda: deque(maxlen=20))
+    _stderr_reported: bool = False
 
     @classmethod
     def create(cls, source_uri: str) -> _FFmpegRawVideoCapture:
@@ -248,22 +252,59 @@ class _FFmpegRawVideoCapture:
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             bufsize=max(1, width * height * 3 * 2),
         )
-        return cls(_process=process, _width=width, _height=height)
+        instance = cls(_process=process, _width=width, _height=height)
+        instance._start_stderr_pump()
+        return instance
+
+    def _start_stderr_pump(self) -> None:
+        stderr = self._process.stderr
+        if stderr is None:
+            return
+
+        def pump() -> None:
+            try:
+                for raw_line in stderr:
+                    line = raw_line.decode("utf-8", errors="replace").rstrip()
+                    if line:
+                        self._stderr_tail.append(line)
+            except (OSError, ValueError):
+                return
+
+        threading.Thread(target=pump, daemon=True).start()
 
     def read(self) -> tuple[bool, Frame | None]:
         if self._process.poll() is not None or self._process.stdout is None:
+            self._report_stderr("ffmpeg process exited")
             return False, None
 
         frame_size = self._width * self._height * 3
         payload = self._process.stdout.read(frame_size)
         if len(payload) != frame_size:
+            self._report_stderr(f"short read {len(payload)}/{frame_size}")
             return False, None
 
         frame = np.frombuffer(payload, dtype=np.uint8).reshape((self._height, self._width, 3))
         return True, frame.copy()
+
+    def _report_stderr(self, reason: str) -> None:
+        if self._stderr_reported:
+            return
+        self._stderr_reported = True
+        tail = list(self._stderr_tail)
+        if tail:
+            LOGGER.warning(
+                "ffmpeg rawvideo capture failed (%s); last stderr: %s",
+                reason,
+                " | ".join(tail),
+            )
+        else:
+            LOGGER.warning(
+                "ffmpeg rawvideo capture failed (%s); no stderr captured",
+                reason,
+            )
 
     def release(self) -> None:
         if self._process.poll() is not None:
