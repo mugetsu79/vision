@@ -52,6 +52,18 @@ export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOpti
   const thresholdSet = speedOn && series.speedThreshold !== null && series.speedThreshold !== undefined;
   const speedClasses = series.speedClassesUsed ?? [];
 
+  const colorFor = new Map<string, string>();
+  series.classNames.forEach((cls, i) => {
+    colorFor.set(cls, PALETTE[i % PALETTE.length]);
+  });
+  // Speed-only classes (appear in speedClassesUsed but not in classNames) get colours too
+  speedClasses.forEach((cls) => {
+    if (!colorFor.has(cls)) {
+      colorFor.set(cls, PALETTE[colorFor.size % PALETTE.length]);
+    }
+  });
+  const paletteOf = (cls: string) => colorFor.get(cls) ?? PALETTE[0];
+
   const grids: NonNullable<EChartsOption["grid"]> = [
     { top: 56, left: 20, right: 16, bottom: thresholdSet ? 260 : speedOn ? 216 : 56, containLabel: true },
   ];
@@ -76,12 +88,12 @@ export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOpti
     },
   ];
 
-  const seriesList: NonNullable<EChartsOption["series"]> = series.classNames.map((cls, i) => ({
+  const seriesList: NonNullable<EChartsOption["series"]> = series.classNames.map((cls) => ({
     name: cls,
     type: "line",
     smooth: true,
     showSymbol: false,
-    color: PALETTE[i % PALETTE.length],
+    color: paletteOf(cls),
     lineStyle: { width: 2.5 },
     areaStyle: { opacity: 0.1 },
     xAxisIndex: 0,
@@ -106,14 +118,14 @@ export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOpti
       axisLine: { show: false },
       axisLabel: { color: "#8ea8cf" },
     });
-    speedClasses.forEach((cls, i) => {
+    speedClasses.forEach((cls) => {
       seriesList.push({
         name: `${cls} (over threshold)`,
         type: "bar",
         stack: "violations",
         xAxisIndex: 1,
         yAxisIndex: 1,
-        color: PALETTE[i % PALETTE.length],
+        color: paletteOf(cls),
         data: series.points.map((p) => p.over_threshold_count?.[cls] ?? 0),
       });
     });
@@ -141,7 +153,7 @@ export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOpti
     });
 
     speedClasses.forEach((cls, i) => {
-      const color = PALETTE[i % PALETTE.length];
+      const color = paletteOf(cls);
       const xIndex = xAxes.length - 1;
       const yIndex = yAxes.length - 1;
       seriesList.push({

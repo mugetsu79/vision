@@ -1,4 +1,4 @@
-import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -40,13 +40,23 @@ export function HistoryPage() {
     (next: HistoryFilterState | ((prev: HistoryFilterState) => HistoryFilterState)) => {
       setState((prev) => {
         const resolved = typeof next === "function" ? next(prev) : next;
-        const search = writeHistoryFiltersToSearch(resolved);
-        navigate({ pathname: location.pathname, search: `?${search}` }, { replace: true });
         return resolved;
       });
+      // navigate happens after commit, via useEffect on `state` below
     },
-    [location.pathname, navigate],
+    [],
   );
+
+  // When state changes, sync the URL (replace so back-button stays natural).
+  useEffect(() => {
+    const search = writeHistoryFiltersToSearch(state);
+    const currentSearch = location.search.startsWith("?")
+      ? location.search.slice(1)
+      : location.search;
+    if (search !== currentSearch) {
+      navigate({ pathname: location.pathname, search: `?${search}` }, { replace: true });
+    }
+  }, [state, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     const parsed = readHistoryFiltersFromSearch(new URLSearchParams(location.search));
