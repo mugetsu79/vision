@@ -464,8 +464,19 @@ async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> 
 @pytest.mark.asyncio
 async def test_engine_exposes_last_stage_timings_for_processed_frame() -> None:
     camera_id = uuid4()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
     engine = InferenceEngine(
-        config=_engine_config(camera_id),
+        config=config,
         frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
         detector=_FakeDetector(),
         tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
@@ -499,6 +510,46 @@ async def test_engine_exposes_last_stage_timings_for_processed_frame() -> None:
     assert engine.last_stage_timings["attributes"] >= 0.0
     assert engine.last_stage_timings["publish_stream"] >= 0.0
     assert engine.last_stage_timings["total"] >= engine.last_stage_timings["detect"]
+
+
+@pytest.mark.asyncio
+async def test_engine_diagnostics_log_frame_stage_boundaries(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        diagnostics_enabled=True,
+    )
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 23, 9, 30, tzinfo=UTC))
+
+    messages = [record.message for record in caplog.records]
+    assert any("Worker frame capture starting" in message for message in messages)
+    assert any("Worker frame capture completed" in message for message in messages)
+    assert any("Worker frame publish_stream starting" in message for message in messages)
+    assert any("Worker frame completed" in message for message in messages)
 
 
 @pytest.mark.asyncio

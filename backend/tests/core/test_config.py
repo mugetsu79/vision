@@ -72,6 +72,15 @@ def test_settings_accept_inference_runtime_overrides() -> None:
     assert settings.inference_session_intra_op_threads == 4
 
 
+def test_settings_accept_worker_diagnostics_flag() -> None:
+    settings = Settings(
+        _env_file=None,
+        worker_diagnostics_enabled=True,
+    )
+
+    assert settings.worker_diagnostics_enabled is True
+
+
 def test_settings_reject_invalid_inference_provider_override() -> None:
     with pytest.raises(ValidationError):
         Settings(

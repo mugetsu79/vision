@@ -283,6 +283,7 @@ class InferenceEngine:
         homography: Homography | None = None,
         privacy_filter: PrivacyFilter | None = None,
         preprocessor: Preprocessor | None = None,
+        diagnostics_enabled: bool = False,
         timing_summary_interval_frames: int = 120,
     ) -> None:
         self.config = config
@@ -299,6 +300,7 @@ class InferenceEngine:
         self.incident_capture = incident_capture
         self.homography = homography or _build_homography(config.homography)
         self.preprocessor = preprocessor or _identity_preprocessor
+        self._diagnostics_enabled = diagnostics_enabled
         self._timing_summary_interval_frames = max(0, timing_summary_interval_frames)
         self.privacy_filter = privacy_filter or PrivacyFilter(
             config=PrivacyConfig(
@@ -317,6 +319,7 @@ class InferenceEngine:
         self._zones = Zones(self._state.zones) if self._state.zones else None
         self._stream_registration: StreamRegistration | None = None
         self._track_history: dict[int, list[tuple[float, float]]] = defaultdict(list)
+        self._frame_attempt_index = 0
         self._last_stage_timings: dict[str, float] = {}
         self._timing_summary = _TimingSummaryWindow()
         self._started = False
@@ -366,9 +369,22 @@ class InferenceEngine:
             await self.start()
         loop = asyncio.get_running_loop()
         started_at = loop.time()
+        self._frame_attempt_index += 1
+        frame_attempt = self._frame_attempt_index
         stage_timer = _FrameStageTimer.start(started_at)
         current_ts = ts or datetime.now(tz=UTC)
+        self._log_frame_diagnostic(
+            "Worker frame capture starting",
+            frame_attempt=frame_attempt,
+            stage="capture",
+        )
         frame = self.frame_source.next_frame()
+        self._log_frame_diagnostic(
+            "Worker frame capture completed",
+            frame_attempt=frame_attempt,
+            stage="capture",
+            frame_shape=tuple(int(value) for value in frame.shape),
+        )
         if self.incident_capture is not None:
             await self.incident_capture.record_frame(
                 camera_id=self.config.camera_id,
@@ -378,7 +394,19 @@ class InferenceEngine:
         stage_timer.record_stage("capture", ended_at=loop.time())
         processed = self.preprocessor(frame.copy())
         stage_timer.record_stage("preprocess", ended_at=loop.time())
+        self._log_frame_diagnostic(
+            "Worker frame detect starting",
+            frame_attempt=frame_attempt,
+            stage="detect",
+            active_classes=list(self.active_classes),
+        )
         detections = self.detector.detect(processed, self.active_classes)
+        self._log_frame_diagnostic(
+            "Worker frame detect completed",
+            frame_attempt=frame_attempt,
+            stage="detect",
+            detection_count=len(detections),
+        )
         stage_timer.record_stage("detect", ended_at=loop.time())
         filtered = [
             detection
@@ -420,10 +448,24 @@ class InferenceEngine:
             self._stream_registration is not None
             and self._stream_registration.mode is not StreamMode.PASSTHROUGH
         ):
+            self._log_frame_diagnostic(
+                "Worker frame publish_stream starting",
+                frame_attempt=frame_attempt,
+                stage="publish_stream",
+                stream_mode=self._stream_registration.mode.value,
+                path_name=self._stream_registration.path_name,
+            )
             await self.stream_client.push_frame(
                 self._stream_registration,
                 stream_frame,
                 ts=current_ts,
+            )
+            self._log_frame_diagnostic(
+                "Worker frame publish_stream completed",
+                frame_attempt=frame_attempt,
+                stage="publish_stream",
+                stream_mode=self._stream_registration.mode.value,
+                path_name=self._stream_registration.path_name,
             )
             stage_timer.record_stage("publish_stream", ended_at=loop.time())
         else:
@@ -459,6 +501,13 @@ class InferenceEngine:
             self._last_stage_timings["total"]
         )
         self._record_timing_summary()
+        self._log_frame_diagnostic(
+            "Worker frame completed",
+            frame_attempt=frame_attempt,
+            stage="complete",
+            stream_mode=telemetry.stream_mode.value,
+            total_ms=round(self._last_stage_timings["total"] * 1000.0, 1),
+        )
         return telemetry
 
     async def apply_command(self, command: CameraCommand) -> None:
@@ -639,6 +688,32 @@ class InferenceEngine:
         )
         self._timing_summary.reset()
 
+    def _log_frame_diagnostic(
+        self,
+        message: str,
+        *,
+        frame_attempt: int,
+        stage: str,
+        **extra: object,
+    ) -> None:
+        if not self._diagnostics_enabled:
+            return
+
+        logger.info(
+            "%s camera_id=%s frame_attempt=%s stage=%s details=%s",
+            message,
+            str(self.config.camera_id),
+            frame_attempt,
+            stage,
+            extra,
+            extra={
+                "camera_id": str(self.config.camera_id),
+                "frame_attempt": frame_attempt,
+                "stage": stage,
+                **extra,
+            },
+        )
+
 
 async def load_engine_config(
     camera_id: UUID,
@@ -792,6 +867,7 @@ def build_runtime_engine(
         attribute_classifier=attribute_classifier,
         anpr_processor=anpr_processor,
         incident_capture=incident_capture,
+        diagnostics_enabled=settings.worker_diagnostics_enabled,
     )
 
 
