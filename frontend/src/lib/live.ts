@@ -2,6 +2,7 @@ import type { components } from "@/lib/api.generated";
 
 export type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 export type TelemetryTrack = components["schemas"]["TelemetryTrack"];
+export type HeartbeatStatus = "unknown" | "fresh" | "stale";
 
 export function parseTelemetryPayload(payload: unknown): TelemetryFrame[] {
   if (isTelemetryFrame(payload)) {
@@ -48,20 +49,27 @@ export function countTracksByClass(
   return counts;
 }
 
-export function isHeartbeatFresh(
+export function getHeartbeatStatus(
   frame: TelemetryFrame | null | undefined,
   maxAgeMs = 15_000,
-): boolean {
+): HeartbeatStatus {
   if (!frame) {
-    return false;
+    return "unknown";
   }
 
   const ts = Date.parse(frame.ts);
   if (Number.isNaN(ts)) {
-    return false;
+    return "unknown";
   }
 
-  return Date.now() - ts <= maxAgeMs;
+  return Date.now() - ts <= maxAgeMs ? "fresh" : "stale";
+}
+
+export function isHeartbeatFresh(
+  frame: TelemetryFrame | null | undefined,
+  maxAgeMs = 15_000,
+): boolean {
+  return getHeartbeatStatus(frame, maxAgeMs) === "fresh";
 }
 
 export function formatHeartbeat(frame: TelemetryFrame | null | undefined): string {

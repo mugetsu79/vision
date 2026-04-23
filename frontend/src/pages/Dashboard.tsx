@@ -13,7 +13,7 @@ import {
   countTracksByClass,
   filterTracks,
   formatHeartbeat,
-  isHeartbeatFresh,
+  getHeartbeatStatus,
 } from "@/lib/live";
 import type { components } from "@/lib/api.generated";
 import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
@@ -131,7 +131,7 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
               const frame = framesByCamera[camera.id];
               const classFilter = classFiltersByCamera.get(camera.id) ?? null;
               const visibleTracks = filterTracks(frame, classFilter);
-              const online = isHeartbeatFresh(frame);
+              const heartbeatStatus = getHeartbeatStatus(frame);
 
               return (
                 <article
@@ -148,14 +148,8 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      <Badge
-                        className={
-                          online
-                            ? "border-[#1f654c] bg-[#082118] text-[#b6f7d2]"
-                            : "border-[#5d2f3b] bg-[#221018] text-[#ffd2db]"
-                        }
-                      >
-                        {online ? "online" : "offline"}
+                      <Badge className={heartbeatBadgeClass(heartbeatStatus)}>
+                        {heartbeatBadgeLabel(heartbeatStatus)}
                       </Badge>
                       <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
                         {camera.tracker_type}
@@ -247,6 +241,26 @@ function connectionBadgeClass(connectionState: string): string {
     return "border-[#5d2f3b] bg-[#221018] text-[#ffd2db]";
   }
   if (connectionState === "closed") {
+    return "border-[#6a4b1c] bg-[#24180d] text-[#ffd9a9]";
+  }
+  return "border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]";
+}
+
+function heartbeatBadgeLabel(status: "unknown" | "fresh" | "stale"): string {
+  if (status === "fresh") {
+    return "telemetry live";
+  }
+  if (status === "stale") {
+    return "telemetry stale";
+  }
+  return "awaiting telemetry";
+}
+
+function heartbeatBadgeClass(status: "unknown" | "fresh" | "stale"): string {
+  if (status === "fresh") {
+    return "border-[#1f654c] bg-[#082118] text-[#b6f7d2]";
+  }
+  if (status === "stale") {
     return "border-[#6a4b1c] bg-[#24180d] text-[#ffd9a9]";
   }
   return "border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]";
