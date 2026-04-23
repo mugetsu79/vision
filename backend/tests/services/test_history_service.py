@@ -195,3 +195,33 @@ async def test_query_series_caps_speed_classes_at_20(monkeypatch: pytest.MonkeyP
     assert "class_00" in (response.speed_classes_used or [])
     assert "class_24" not in (response.speed_classes_used or [])
     assert len(response.class_names) == 25  # count chart uncapped
+
+
+@pytest.mark.asyncio
+async def test_list_classes_orders_by_event_count_desc(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+
+    # Patch the session factory call chain to return fake rows
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session_cm)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+    execute_result = MagicMock()
+    execute_result.mappings.return_value.all.return_value = [
+        {"class_name": "person", "event_count": 42, "has_speed_data": False},
+        {"class_name": "car", "event_count": 13, "has_speed_data": True},
+    ]
+    session_cm.execute = AsyncMock(return_value=execute_result)
+    service.session_factory = MagicMock(return_value=session_cm)
+
+    starts = datetime(2026, 4, 23, tzinfo=UTC)
+    response = await service.list_classes(
+        _tenant_context(),
+        camera_ids=None,
+        starts_at=starts,
+        ends_at=starts + timedelta(hours=1),
+    )
+
+    assert [c.class_name for c in response.classes] == ["person", "car"]
+    assert response.classes[0].has_speed_data is False
+    assert response.classes[1].has_speed_data is True

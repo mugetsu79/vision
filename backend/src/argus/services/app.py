@@ -27,6 +27,7 @@ from argus.api.contracts import (
     EdgeRegisterRequest,
     EdgeRegisterResponse,
     ExportArtifact,
+    HistoryClassesResponse,
     HistoryPoint,
     HistorySeriesResponse,
     HistorySeriesRow,
@@ -843,6 +844,61 @@ class HistoryService:
             granularity_adjusted=granularity_adjusted,
             speed_classes_capped=speed_classes_capped,
             speed_classes_used=speed_classes_used if include_speed else None,
+        )
+
+    async def list_classes(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_ids: list[UUID] | None,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> HistoryClassesResponse:
+        _ensure_history_window(starts_at, ends_at)
+        await self._ensure_camera_access(tenant_context, camera_ids)
+
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+
+        statement = text(
+            f"""
+            SELECT
+              class_name,
+              count(*)::bigint AS event_count,
+              bool_or(speed_kph IS NOT NULL) AS has_speed_data
+            FROM tracking_events
+            WHERE ts >= :starts_at
+              AND ts <= :ends_at
+              {' '.join(filters)}
+            GROUP BY class_name
+            ORDER BY event_count DESC, class_name ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+
+        return HistoryClassesResponse.model_validate(
+            {
+                "from": starts_at,
+                "to": ends_at,
+                "classes": [
+                    {
+                        "class_name": row["class_name"],
+                        "event_count": int(row["event_count"]),
+                        "has_speed_data": bool(row["has_speed_data"]),
+                    }
+                    for row in rows
+                ],
+            }
         )
 
     async def export_history(
