@@ -89,7 +89,7 @@ async def test_mediamtx_client_registers_passthrough_for_privacy_off_jetson() ->
     assert requests == [
         (
             "POST",
-            f"http://mediamtx.internal:9997/v3/config/paths/add/cameras/{camera_id}/passthrough",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
             {
                 "name": f"cameras/{camera_id}/passthrough",
                 "source": "rtsp://camera.internal/live",
@@ -151,7 +151,7 @@ async def test_mediamtx_client_registers_filtered_preview_and_deletes_passthroug
         request[:2]
         != (
             "POST",
-            f"http://mediamtx.internal:9997/v3/config/paths/add/cameras/{camera_id}/preview",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/preview",
         )
         for request in requests
     )
@@ -199,7 +199,7 @@ async def test_mediamtx_client_registers_whip_target_for_central_profile() -> No
     assert requests == [
         (
             "POST",
-            f"http://mediamtx.internal:9997/v3/config/paths/add/cameras/{camera_id}/annotated",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated",
             {
                 "name": f"cameras/{camera_id}/annotated",
                 "source": "publisher",
@@ -253,7 +253,7 @@ async def test_mediamtx_client_keeps_preconfigured_preview_when_switching_to_pas
     assert requests == [
         (
             "POST",
-            f"http://mediamtx.internal:9997/v3/config/paths/add/cameras/{camera_id}/passthrough",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
             {
                 "name": f"cameras/{camera_id}/passthrough",
                 "source": "rtsp://camera.internal/live",
@@ -300,7 +300,7 @@ async def test_mediamtx_client_respects_passthrough_stream_kind_on_central_profi
     assert requests == [
         (
             "POST",
-            f"http://mediamtx.internal:9997/v3/config/paths/add/cameras/{camera_id}/passthrough",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
             {
                 "name": f"cameras/{camera_id}/passthrough",
                 "source": "rtsp://camera.internal/live",

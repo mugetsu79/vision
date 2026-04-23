@@ -572,7 +572,7 @@ class MediaMTXClient:
     async def _ensure_path(self, path_name: str, *, source: str, source_on_demand: bool) -> None:
         await self._request(
             "POST",
-            f"/v3/config/paths/add/{path_name}",
+            f"/v3/config/paths/replace/{path_name}",
             json={
                 "name": path_name,
                 "source": source,
