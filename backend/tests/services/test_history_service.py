@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 
+from argus.api.contracts import TenantContext
+from argus.core.security import AuthenticatedUser, RoleEnum
 from argus.services.app import (
+    HistoryService,
     _effective_granularity,
     _ensure_history_window,
 )
@@ -39,3 +44,154 @@ def test_ensure_history_window_allows_exactly_31_days() -> None:
     starts = datetime(2026, 4, 1, tzinfo=UTC)
     ends = starts + timedelta(days=31)
     _ensure_history_window(starts, ends)  # no raise
+
+
+def _tenant_context() -> TenantContext:
+    return TenantContext(
+        tenant_id=uuid4(),
+        tenant_slug="test-tenant",
+        user=AuthenticatedUser(
+            subject="operator-1",
+            email="operator@argus.local",
+            role=RoleEnum.OPERATOR,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_query_series_without_speed_uses_aggregate_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    monkeypatch.setattr(
+        service,
+        "_fetch_series_rows",
+        AsyncMock(
+            return_value=[
+                {
+                    "bucket": datetime(2026, 4, 23, tzinfo=UTC),
+                    "class_name": "car",
+                    "event_count": 3,
+                },
+            ]
+        ),
+    )
+    speed_mock = AsyncMock()
+    monkeypatch.setattr(service, "_fetch_series_rows_with_speed", speed_mock)
+
+    starts = datetime(2026, 4, 23, tzinfo=UTC)
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=None,
+        granularity="1h",
+        starts_at=starts,
+        ends_at=starts + timedelta(hours=6),
+    )
+
+    assert response.granularity == "1h"
+    assert response.granularity_adjusted is False
+    assert response.class_names == ["car"]
+    assert response.rows[0].values == {"car": 3}
+    assert response.rows[0].speed_p50 is None
+    speed_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_query_series_with_speed_populates_percentiles_and_violations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    starts = datetime(2026, 4, 23, 0, 0, tzinfo=UTC)
+    bucket = starts
+    monkeypatch.setattr(
+        service,
+        "_fetch_series_rows_with_speed",
+        AsyncMock(
+            return_value=[
+                {
+                    "bucket": bucket,
+                    "class_name": "car",
+                    "event_count": 10,
+                    "speed_p50": 42.0,
+                    "speed_p95": 58.0,
+                    "speed_sample_count": 10,
+                    "over_threshold_count": 3,
+                },
+                {
+                    "bucket": bucket,
+                    "class_name": "person",
+                    "event_count": 5,
+                    "speed_p50": None,
+                    "speed_p95": None,
+                    "speed_sample_count": 0,
+                    "over_threshold_count": 0,
+                },
+            ]
+        ),
+    )
+
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=None,
+        granularity="5m",
+        starts_at=starts,
+        ends_at=starts + timedelta(hours=1),
+        include_speed=True,
+        speed_threshold=50.0,
+    )
+
+    row = response.rows[0]
+    assert row.values == {"car": 10, "person": 5}
+    assert row.speed_p50 == {"car": 42.0}
+    assert row.speed_p95 == {"car": 58.0}
+    assert row.speed_sample_count == {"car": 10}
+    assert row.over_threshold_count == {"car": 3}
+    assert response.speed_classes_used == ["car"]
+    assert response.speed_classes_capped is False
+
+
+@pytest.mark.asyncio
+async def test_query_series_caps_speed_classes_at_20(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    starts = datetime(2026, 4, 23, tzinfo=UTC)
+
+    rows = []
+    for i in range(25):
+        rows.append(
+            {
+                "bucket": starts,
+                "class_name": f"class_{i:02d}",
+                "event_count": 100 - i,  # class_00 is most frequent
+                "speed_p50": 30.0 + i,
+                "speed_p95": 40.0 + i,
+                "speed_sample_count": 100 - i,
+                "over_threshold_count": None,
+            }
+        )
+    monkeypatch.setattr(service, "_fetch_series_rows_with_speed", AsyncMock(return_value=rows))
+
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=None,
+        granularity="5m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=30),
+        include_speed=True,
+    )
+
+    assert response.speed_classes_capped is True
+    assert len(response.speed_classes_used or []) == 20
+    assert "class_00" in (response.speed_classes_used or [])
+    assert "class_24" not in (response.speed_classes_used or [])
+    assert len(response.class_names) == 25  # count chart uncapped

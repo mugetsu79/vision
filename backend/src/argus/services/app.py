@@ -713,50 +713,136 @@ class HistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        include_speed: bool = False,
+        speed_threshold: float | None = None,
     ) -> HistorySeriesResponse:
+        _ensure_history_window(starts_at, ends_at)
         await self._ensure_camera_access(tenant_context, camera_ids)
-        rows = await self._fetch_series_rows(
-            camera_ids=camera_ids,
-            class_names=class_names,
-            granularity=granularity,
+
+        effective_granularity, granularity_adjusted = _effective_granularity(
+            granularity,
             starts_at=starts_at,
             ends_at=ends_at,
         )
 
-        points_by_bucket: dict[datetime, dict[str, int]] = {}
+        if include_speed:
+            rows = await self._fetch_series_rows_with_speed(
+                camera_ids=camera_ids,
+                class_names=class_names,
+                granularity=effective_granularity,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                speed_threshold=speed_threshold,
+            )
+        else:
+            rows = await self._fetch_series_rows(
+                camera_ids=camera_ids,
+                class_names=class_names,
+                granularity=effective_granularity,
+                starts_at=starts_at,
+                ends_at=ends_at,
+            )
+
+        buckets: dict[datetime, dict[str, int]] = {}
+        speed_p50: dict[datetime, dict[str, float]] = {}
+        speed_p95: dict[datetime, dict[str, float]] = {}
+        speed_samples: dict[datetime, dict[str, int]] = {}
+        violations: dict[datetime, dict[str, int]] = {}
+        class_event_counts: dict[str, int] = {}
+        class_has_speed: set[str] = set()
         ordered_classes: list[str] = []
         seen_classes: set[str] = set()
+
         for row in rows:
             bucket = cast(datetime, row["bucket"])
             class_name = cast(str, row["class_name"])
             event_count = int(row["event_count"])
-            values = points_by_bucket.setdefault(bucket, {})
-            values[class_name] = event_count
+            buckets.setdefault(bucket, {})[class_name] = event_count
+            class_event_counts[class_name] = class_event_counts.get(class_name, 0) + event_count
+
             if class_name not in seen_classes:
                 seen_classes.add(class_name)
                 ordered_classes.append(class_name)
 
+            if include_speed:
+                p50 = row.get("speed_p50")
+                p95 = row.get("speed_p95")
+                sample_count = int(row.get("speed_sample_count") or 0)
+                if sample_count > 0:
+                    class_has_speed.add(class_name)
+                    if p50 is not None:
+                        speed_p50.setdefault(bucket, {})[class_name] = float(p50)
+                    if p95 is not None:
+                        speed_p95.setdefault(bucket, {})[class_name] = float(p95)
+                    speed_samples.setdefault(bucket, {})[class_name] = sample_count
+                if speed_threshold is not None and row.get("over_threshold_count") is not None:
+                    violations.setdefault(bucket, {})[class_name] = int(
+                        row["over_threshold_count"]
+                    )
+
         if class_names:
-            selected_classes = [
-                class_name for class_name in class_names if class_name in seen_classes
-            ]
+            selected_classes = [c for c in class_names if c in seen_classes]
         else:
             selected_classes = ordered_classes
 
+        speed_classes_capped = False
+        speed_classes_used: list[str] | None = None
+        if include_speed:
+            eligible = [c for c in selected_classes if c in class_has_speed]
+            eligible_sorted = sorted(
+                eligible,
+                key=lambda c: class_event_counts.get(c, 0),
+                reverse=True,
+            )
+            if len(eligible_sorted) > _MAX_SPEED_CLASSES:
+                speed_classes_capped = True
+                speed_classes_used = eligible_sorted[:_MAX_SPEED_CLASSES]
+            else:
+                speed_classes_used = eligible_sorted
+
+        def _project_speed(
+            source: dict[datetime, dict[str, float]],
+            bucket: datetime,
+        ) -> dict[str, float] | None:
+            if not include_speed:
+                return None
+            chosen = speed_classes_used or []
+            per_bucket = source.get(bucket, {})
+            return {c: per_bucket[c] for c in chosen if c in per_bucket}
+
+        def _project_int(
+            source: dict[datetime, dict[str, int]],
+            bucket: datetime,
+        ) -> dict[str, int] | None:
+            if not include_speed:
+                return None
+            chosen = speed_classes_used or []
+            per_bucket = source.get(bucket, {})
+            return {c: per_bucket[c] for c in chosen if c in per_bucket}
+
+        result_rows = []
+        for bucket in sorted(buckets.keys()):
+            values = buckets[bucket]
+            row = HistorySeriesRow(
+                bucket=bucket,
+                values={c: values.get(c, 0) for c in selected_classes},
+                total_count=sum(values.values()),
+                speed_p50=_project_speed(speed_p50, bucket),
+                speed_p95=_project_speed(speed_p95, bucket),
+                speed_sample_count=_project_int(speed_samples, bucket),
+                over_threshold_count=(
+                    _project_int(violations, bucket) if speed_threshold is not None else None
+                ),
+            )
+            result_rows.append(row)
+
         return HistorySeriesResponse(
-            granularity=granularity,
+            granularity=effective_granularity,
             class_names=selected_classes,
-            rows=[
-                HistorySeriesRow(
-                    bucket=bucket,
-                    values={
-                        class_name: values.get(class_name, 0)
-                        for class_name in selected_classes
-                    },
-                    total_count=sum(values.values()),
-                )
-                for bucket, values in sorted(points_by_bucket.items())
-            ],
+            rows=result_rows,
+            granularity_adjusted=granularity_adjusted,
+            speed_classes_capped=speed_classes_capped,
+            speed_classes_used=speed_classes_used if include_speed else None,
         )
 
     async def export_history(
@@ -878,6 +964,66 @@ class HistoryService:
             FROM {view_name}
             WHERE bucket >= :starts_at
               AND bucket <= :ends_at
+              {' '.join(filters)}
+            GROUP BY 1, 2
+            ORDER BY 1 ASC, 2 ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+        if class_names:
+            statement = statement.bindparams(bindparam("class_names", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _fetch_series_rows_with_speed(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        speed_threshold: float | None,
+    ) -> list[dict[str, Any]]:
+        interval = _GRANULARITY_INTERVAL[granularity]
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+        if class_names:
+            filters.append("AND class_name IN :class_names")
+            parameters["class_names"] = class_names
+
+        threshold_expr = (
+            "count(*) FILTER (WHERE speed_kph IS NOT NULL AND speed_kph > :speed_threshold)::bigint"
+            if speed_threshold is not None
+            else "NULL::bigint"
+        )
+        if speed_threshold is not None:
+            parameters["speed_threshold"] = float(speed_threshold)
+
+        statement = text(
+            f"""
+            SELECT
+              time_bucket(INTERVAL '{interval}', ts) AS bucket,
+              class_name,
+              count(*)::bigint AS event_count,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY speed_kph)
+                  FILTER (WHERE speed_kph IS NOT NULL) AS speed_p50,
+              percentile_cont(0.95) WITHIN GROUP (ORDER BY speed_kph)
+                  FILTER (WHERE speed_kph IS NOT NULL) AS speed_p95,
+              count(speed_kph)::bigint AS speed_sample_count,
+              {threshold_expr} AS over_threshold_count
+            FROM tracking_events
+            WHERE ts >= :starts_at
+              AND ts <= :ends_at
               {' '.join(filters)}
             GROUP BY 1, 2
             ORDER BY 1 ASC, 2 ASC
