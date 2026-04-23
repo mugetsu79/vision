@@ -217,6 +217,9 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
     return cast(CaptureHandle, capture)
 
 
+_FFMPEG_FRAME_WAIT_TIMEOUT_S = 10.0
+
+
 @dataclass(slots=True)
 class _FFmpegRawVideoCapture:
     _process: subprocess.Popen[bytes]
@@ -224,6 +227,9 @@ class _FFmpegRawVideoCapture:
     _height: int
     _stderr_tail: deque[str] = field(default_factory=lambda: deque(maxlen=20))
     _stderr_reported: bool = False
+    _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
+    _new_frame_event: threading.Event = field(default_factory=threading.Event)
+    _frame_pump_done: bool = False
 
     @classmethod
     def create(cls, source_uri: str) -> _FFmpegRawVideoCapture:
@@ -255,6 +261,7 @@ class _FFmpegRawVideoCapture:
         )
         instance = cls(_process=process, _width=width, _height=height)
         instance._start_stderr_pump()
+        instance._start_frame_pump()
         return instance
 
     def _start_stderr_pump(self) -> None:
@@ -273,19 +280,53 @@ class _FFmpegRawVideoCapture:
 
         threading.Thread(target=pump, daemon=True).start()
 
-    def read(self) -> tuple[bool, Frame | None]:
-        if self._process.poll() is not None or self._process.stdout is None:
-            self._report_stderr("ffmpeg process exited")
-            return False, None
+    def _start_frame_pump(self) -> None:
+        stdout = self._process.stdout
+        if stdout is None:
+            self._frame_pump_done = True
+            self._new_frame_event.set()
+            return
 
         frame_size = self._width * self._height * 3
-        payload = self._process.stdout.read(frame_size)
-        if len(payload) != frame_size:
-            self._report_stderr(f"short read {len(payload)}/{frame_size}")
-            return False, None
+        width = self._width
+        height = self._height
 
-        frame = np.frombuffer(payload, dtype=np.uint8).reshape((self._height, self._width, 3))
-        return True, frame.copy()
+        def pump() -> None:
+            try:
+                while True:
+                    payload = stdout.read(frame_size)
+                    if len(payload) != frame_size:
+                        return
+                    frame = np.frombuffer(payload, dtype=np.uint8).reshape(
+                        (height, width, 3)
+                    ).copy()
+                    self._latest_frame.append(frame)
+                    self._new_frame_event.set()
+            except (OSError, ValueError):
+                return
+            finally:
+                self._frame_pump_done = True
+                self._new_frame_event.set()
+
+        threading.Thread(target=pump, daemon=True).start()
+
+    def read(self) -> tuple[bool, Frame | None]:
+        if not self._new_frame_event.wait(timeout=_FFMPEG_FRAME_WAIT_TIMEOUT_S):
+            self._report_stderr(
+                f"no frame produced within {_FFMPEG_FRAME_WAIT_TIMEOUT_S:.0f}s"
+            )
+            return False, None
+        self._new_frame_event.clear()
+        try:
+            frame = self._latest_frame[0]
+        except IndexError:
+            if self._frame_pump_done:
+                self._report_stderr("ffmpeg frame pump exited")
+            return False, None
+        if self._frame_pump_done and len(self._latest_frame) == 0:
+            self._report_stderr("ffmpeg frame pump exited")
+            return False, None
+        return True, frame
 
     def _report_stderr(self, reason: str) -> None:
         if self._stderr_reported:
