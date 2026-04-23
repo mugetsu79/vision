@@ -6,7 +6,7 @@ import io
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
@@ -1493,6 +1493,46 @@ def _history_view_and_bucket_expr(granularity: str) -> tuple[str, str]:
     if granularity == "1d":
         return ("events_1h", "time_bucket(INTERVAL '1 day', bucket)")
     raise ValueError(f"Unsupported history granularity: {granularity}")
+
+
+_GRANULARITY_SECONDS: dict[str, int] = {
+    "1m": 60,
+    "5m": 300,
+    "1h": 3600,
+    "1d": 86400,
+}
+_GRANULARITY_ORDER: tuple[str, ...] = ("1m", "5m", "1h", "1d")
+_GRANULARITY_INTERVAL: dict[str, str] = {
+    "1m": "1 minute",
+    "5m": "5 minutes",
+    "1h": "1 hour",
+    "1d": "1 day",
+}
+_MAX_HISTORY_WINDOW = timedelta(days=31)
+_MAX_HISTORY_BUCKETS = 500
+_MAX_SPEED_CLASSES = 20
+
+
+def _ensure_history_window(starts_at: datetime, ends_at: datetime) -> None:
+    if ends_at - starts_at > _MAX_HISTORY_WINDOW:
+        raise HTTPException(status_code=400, detail="Window exceeds 31 days")
+
+
+def _effective_granularity(
+    requested: str,
+    *,
+    starts_at: datetime,
+    ends_at: datetime,
+) -> tuple[str, bool]:
+    span_seconds = max(1.0, (ends_at - starts_at).total_seconds())
+    try:
+        start_index = _GRANULARITY_ORDER.index(requested)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported granularity: {requested}") from exc
+    for candidate in _GRANULARITY_ORDER[start_index:]:
+        if span_seconds / _GRANULARITY_SECONDS[candidate] <= _MAX_HISTORY_BUCKETS:
+            return candidate, candidate != requested
+    return _GRANULARITY_ORDER[-1], _GRANULARITY_ORDER[-1] != requested
 
 
 def _tenant_name_from_slug(slug: str) -> str:
