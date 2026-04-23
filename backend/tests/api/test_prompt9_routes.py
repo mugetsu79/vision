@@ -271,8 +271,15 @@ async def test_history_series_route_returns_chart_ready_rows() -> None:
                 "bucket": "2026-04-12T00:00:00Z",
                 "values": {"car": 18, "bus": 4},
                 "total_count": 22,
+                "speed_p50": None,
+                "speed_p95": None,
+                "speed_sample_count": None,
+                "over_threshold_count": None,
             }
         ],
+        "granularity_adjusted": False,
+        "speed_classes_capped": False,
+        "speed_classes_used": None,
     }
     assert history.last_series_query == {
         "tenant_id": UUID(str(user.tenant_context)),

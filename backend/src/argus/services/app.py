@@ -820,10 +820,10 @@ class HistoryService:
             per_bucket = source.get(bucket, {})
             return {c: per_bucket[c] for c in chosen if c in per_bucket}
 
-        result_rows = []
+        result_rows: list[HistorySeriesRow] = []
         for bucket in sorted(buckets.keys()):
             values = buckets[bucket]
-            row = HistorySeriesRow(
+            series_row = HistorySeriesRow(
                 bucket=bucket,
                 values={c: values.get(c, 0) for c in selected_classes},
                 total_count=sum(values.values()),
@@ -834,7 +834,7 @@ class HistoryService:
                     _project_int(violations, bucket) if speed_threshold is not None else None
                 ),
             )
-            result_rows.append(row)
+            result_rows.append(series_row)
 
         return HistorySeriesResponse(
             granularity=effective_granularity,
