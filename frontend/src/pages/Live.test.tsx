@@ -31,6 +31,10 @@ vi.mock("@/components/live/TelemetryCanvas", () => ({
   TelemetryCanvas: () => null,
 }));
 
+vi.mock("@/components/live/LiveSparkline", () => ({
+  LiveSparkline: () => <div data-testid="live-sparkline-mock" />,
+}));
+
 import { createQueryClient } from "@/app/query-client";
 import { LivePage } from "@/pages/Live";
 import { useAuthStore } from "@/stores/auth-store";

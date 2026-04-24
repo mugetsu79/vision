@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageUtilityBar } from "@/components/layout/PageUtilityBar";
 import { AgentInput, type LiveQueryScope } from "@/components/live/AgentInput";
 import { DynamicStats } from "@/components/live/DynamicStats";
+import { LiveSparkline } from "@/components/live/LiveSparkline";
 import { TelemetryCanvas } from "@/components/live/TelemetryCanvas";
 import { VideoStream } from "@/components/live/VideoStream";
 import { Badge } from "@/components/ui/badge";
@@ -172,6 +173,13 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
                       </div>
                       {frame ? <p className="text-xs text-[#9db3d3]">{frame.stream_mode}</p> : null}
                     </div>
+                  </div>
+
+                  <div className="space-y-3 border-t border-white/8 px-5 py-4">
+                    <LiveSparkline
+                      cameraId={camera.id}
+                      activeClasses={camera.active_classes ?? []}
+                    />
                   </div>
                 </article>
               );
