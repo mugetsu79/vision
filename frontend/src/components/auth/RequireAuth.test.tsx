@@ -32,11 +32,11 @@ describe("RequireAuth", () => {
 
   test("redirects anonymous users to the sign-in page", async () => {
     render(
-      <MemoryRouter initialEntries={["/dashboard"]}>
+      <MemoryRouter initialEntries={["/live"]}>
         <Routes>
           <Route path="/signin" element={<div>Sign in page</div>} />
           <Route
-            path="/dashboard"
+            path="/live"
             element={
               <RequireAuth>
                 <div>Private dashboard</div>

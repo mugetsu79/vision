@@ -32,7 +32,7 @@ vi.mock("@/components/live/TelemetryCanvas", () => ({
 }));
 
 import { createQueryClient } from "@/app/query-client";
-import { DashboardPage } from "@/pages/Dashboard";
+import { LivePage } from "@/pages/Live";
 import { useAuthStore } from "@/stores/auth-store";
 import { useTelemetryStore } from "@/stores/telemetry-store";
 
@@ -66,7 +66,7 @@ class FakeWebSocket {
   }
 }
 
-describe("DashboardPage", () => {
+describe("LivePage", () => {
   beforeEach(() => {
     act(() => {
       useAuthStore.setState({
@@ -222,7 +222,7 @@ describe("DashboardPage", () => {
 
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <DashboardPage />
+        <LivePage />
       </QueryClientProvider>,
     );
 
@@ -360,7 +360,7 @@ describe("DashboardPage", () => {
 
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <DashboardPage />
+        <LivePage />
       </QueryClientProvider>,
     );
 

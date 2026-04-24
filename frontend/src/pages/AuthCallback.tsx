@@ -15,7 +15,7 @@ export function AuthCallbackPage() {
 
     hasHandledCallback.current = true;
     void completeSignIn().then(
-      () => navigate("/dashboard", { replace: true }),
+      () => navigate("/live", { replace: true }),
       () => navigate("/signin", { replace: true }),
     );
   }, [completeSignIn, navigate]);

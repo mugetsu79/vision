@@ -80,7 +80,6 @@ describe("AppShell", () => {
 
     expect(operationsNav).toBeInTheDocument();
     expect(configurationNav).toBeInTheDocument();
-    expect(within(operationsNav).getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(within(operationsNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
     expect(within(operationsNav).getByRole("link", { name: "History" })).toBeInTheDocument();
     expect(within(operationsNav).getByRole("link", { name: "Incidents" })).toBeInTheDocument();
@@ -130,7 +129,7 @@ describe("AppShell", () => {
   });
 
   test("routes authenticated users into the refreshed operations workspace", async () => {
-    window.history.pushState({}, "", "/dashboard");
+    window.history.pushState({}, "", "/live");
     vi.mocked(oidcManager.getUser).mockResolvedValue({
       access_token: "test-token",
       expired: false,
@@ -140,7 +139,7 @@ describe("AppShell", () => {
         iss: "http://127.0.0.1:8080/realms/argus-dev",
         realm_access: { roles: ["admin"] },
       },
-    } as Awaited<ReturnType<typeof oidcManager.getUser>>);
+    } as unknown as Awaited<ReturnType<typeof oidcManager.getUser>>);
 
     const { default: App } = await import("@/App");
     render(<App />);
@@ -152,7 +151,7 @@ describe("AppShell", () => {
     expect(
       screen.queryByText(/operator-grade visibility without native-bandwidth waste/i),
     ).not.toBeInTheDocument();
-    expect(within(primaryWorkspaceNav).getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(within(primaryWorkspaceNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
     expect(
       screen.getByRole("navigation", {
         name: /operations/i,

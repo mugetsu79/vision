@@ -3,7 +3,6 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   Clock3,
   type LucideIcon,
-  LayoutDashboard,
   MapPinned,
   Radio,
   Settings2,
@@ -28,7 +27,6 @@ export const workspaceNavGroups = [
   {
     label: "Operations",
     items: [
-      { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
       { label: "Live", to: "/live", icon: Radio },
       { label: "History", to: "/history", icon: Clock3 },
       { label: "Incidents", to: "/incidents", icon: ShieldAlert },
