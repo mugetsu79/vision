@@ -736,7 +736,7 @@ class HistoryService:
                 speed_threshold=speed_threshold,
             )
         else:
-            rows = await self._fetch_series_rows(
+            rows = await self._fetch_series_rows_from_events(
                 camera_ids=camera_ids,
                 class_names=class_names,
                 granularity=effective_granularity,
@@ -989,7 +989,7 @@ class HistoryService:
             rows = (await session.execute(statement, parameters)).mappings().all()
         return [dict(row) for row in rows]
 
-    async def _fetch_series_rows(
+    async def _fetch_series_rows_aggregate(
         self,
         *,
         camera_ids: list[UUID] | None,
@@ -1020,6 +1020,51 @@ class HistoryService:
             FROM {view_name}
             WHERE bucket >= :starts_at
               AND bucket <= :ends_at
+              {' '.join(filters)}
+            GROUP BY 1, 2
+            ORDER BY 1 ASC, 2 ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+        if class_names:
+            statement = statement.bindparams(bindparam("class_names", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _fetch_series_rows_from_events(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> list[dict[str, Any]]:
+        interval = _GRANULARITY_INTERVAL[granularity]
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+        if class_names:
+            filters.append("AND class_name IN :class_names")
+            parameters["class_names"] = class_names
+
+        statement = text(
+            f"""
+            SELECT
+              time_bucket(INTERVAL '{interval}', ts) AS bucket,
+              class_name,
+              count(*)::bigint AS event_count
+            FROM tracking_events
+            WHERE ts >= :starts_at
+              AND ts <= :ends_at
               {' '.join(filters)}
             GROUP BY 1, 2
             ORDER BY 1 ASC, 2 ASC

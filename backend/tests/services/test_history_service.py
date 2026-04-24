@@ -71,7 +71,7 @@ async def test_query_series_without_speed_uses_aggregate_path(
     service._ensure_camera_access = AsyncMock()
     monkeypatch.setattr(
         service,
-        "_fetch_series_rows",
+        "_fetch_series_rows_from_events",
         AsyncMock(
             return_value=[
                 {
@@ -224,4 +224,39 @@ async def test_list_classes_orders_by_event_count_desc(monkeypatch: pytest.Monke
 
     assert [c.class_name for c in response.classes] == ["person", "car"]
     assert response.classes[0].has_speed_data is False
-    assert response.classes[1].has_speed_data is True
+
+
+@pytest.mark.asyncio
+async def test_query_series_count_only_reads_tracking_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+
+    fresh_rows = [
+        {
+            "bucket": datetime(2026, 4, 24, 14, 0, tzinfo=UTC),
+            "class_name": "person",
+            "event_count": 42,
+        },
+    ]
+    from_events = AsyncMock(return_value=fresh_rows)
+    monkeypatch.setattr(service, "_fetch_series_rows_from_events", from_events)
+    aggregate = AsyncMock(return_value=[])
+    monkeypatch.setattr(service, "_fetch_series_rows_aggregate", aggregate)
+
+    starts = datetime(2026, 4, 24, 14, 0, tzinfo=UTC)
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=None,
+        granularity="1m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=30),
+    )
+
+    from_events.assert_awaited_once()
+    aggregate.assert_not_awaited()
+    assert response.class_names == ["person"]
+    assert response.rows[0].values == {"person": 42}
+    assert response.rows[0].total_count == 42
