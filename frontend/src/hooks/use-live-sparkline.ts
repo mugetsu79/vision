@@ -22,8 +22,12 @@ function floorMinute(value: number): number {
   return value - (value % BUCKET_MS);
 }
 
-function bucketIndex(tsMs: number, windowEndMs: number): number {
-  const diff = Math.floor((windowEndMs - tsMs) / BUCKET_MS);
+// windowEndMs is the START of the most recent bucket (i.e. floorMinute(now)).
+// tsMs MUST be aligned to its own bucket via floorMinute() before calling —
+// otherwise frames in the current minute (tsMs > windowEndMs) produce a
+// negative diff and spill past the last bucket.
+function bucketIndex(alignedTsMs: number, windowEndMs: number): number {
+  const diff = Math.floor((windowEndMs - alignedTsMs) / BUCKET_MS);
   return BUCKET_COUNT - 1 - diff;
 }
 
@@ -46,6 +50,20 @@ function addCounts(
     const copy = series.slice();
     copy[index] = (copy[index] ?? 0) + count;
     next[cls] = copy;
+  }
+  return next;
+}
+
+// Shift every class's series left by `steps` buckets and pad with zeros on the right.
+function shiftBuckets(buckets: SparklineBuckets, steps: number): SparklineBuckets {
+  if (steps <= 0) return buckets;
+  const capped = Math.min(steps, BUCKET_COUNT);
+  const next: SparklineBuckets = {};
+  for (const [cls, series] of Object.entries(buckets)) {
+    next[cls] = [
+      ...series.slice(capped),
+      ...new Array(capped).fill(0),
+    ];
   }
   return next;
 }
@@ -117,10 +135,19 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
       const frame = store.getLatest(cameraId);
       if (!frame || frame === lastFrame) return;
       lastFrame = frame;
-      const tsMs = Date.parse(frame.ts);
+      const alignedTsMs = floorMinute(Date.parse(frame.ts));
+
+      // Event-driven window rollover: if this frame's bucket is ahead of the
+      // current window end, advance the window and shift existing buckets.
+      const steps = Math.floor((alignedTsMs - windowEndRef.current) / BUCKET_MS);
+      if (steps > 0) {
+        windowEndRef.current += steps * BUCKET_MS;
+        setBuckets((current) => shiftBuckets(current, steps));
+      }
+
       const end = windowEndRef.current;
-      if (tsMs < end - BUCKET_COUNT * BUCKET_MS) return;
-      const idx = bucketIndex(tsMs, end);
+      if (alignedTsMs < end - (BUCKET_COUNT - 1) * BUCKET_MS) return;
+      const idx = bucketIndex(alignedTsMs, end);
       if (idx < 0 || idx >= BUCKET_COUNT) return;
       setBuckets((current) => addCounts(current, frame.counts ?? {}, idx));
     });
@@ -130,19 +157,32 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
     };
   }, [cameraId, accessToken, tenantId]);
 
-  // Minute rollover
+  // Clock-aligned rollover (safety net for idle cameras). Fires at every minute
+  // boundary; the live handler above handles rollover event-driven when frames
+  // arrive. Aligning to the wall clock means the bucket shifts on :00 seconds
+  // regardless of when the component mounted.
   useEffect(() => {
-    const id = setInterval(() => {
-      windowEndRef.current = floorMinute(Date.now());
-      setBuckets((current) => {
-        const next: SparklineBuckets = {};
-        for (const [cls, series] of Object.entries(current)) {
-          next[cls] = [...series.slice(1), 0];
-        }
-        return next;
-      });
-    }, BUCKET_MS);
-    return () => clearInterval(id);
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const rollWindowForward = () => {
+      const nowBucket = floorMinute(Date.now());
+      const steps = Math.floor((nowBucket - windowEndRef.current) / BUCKET_MS);
+      if (steps <= 0) return;
+      windowEndRef.current += steps * BUCKET_MS;
+      setBuckets((current) => shiftBuckets(current, steps));
+    };
+
+    const msToNextMinute = BUCKET_MS - (Date.now() % BUCKET_MS);
+    timeout = setTimeout(() => {
+      rollWindowForward();
+      interval = setInterval(rollWindowForward, BUCKET_MS);
+    }, msToNextMinute);
+
+    return () => {
+      if (timeout !== null) clearTimeout(timeout);
+      if (interval !== null) clearInterval(interval);
+    };
   }, []);
 
   const totals = useMemo(() => {

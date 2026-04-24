@@ -25,6 +25,23 @@ export function useLiveTelemetry(cameraIds: string[]) {
 
     const ids = cameraKey ? cameraKey.split(",") : [];
     ids.forEach((id) => store.subscribe(id));
+
+    // Hydrate immediately from whatever the store already retained — otherwise
+    // a remount into a still-open socket renders blank until the next WS frame.
+    setConnectionState(store.connectionState());
+    setFramesByCamera((current) => {
+      const next: Record<string, TelemetryFrame> = { ...current };
+      let changed = false;
+      for (const id of ids) {
+        const frame = store.getLatest(id);
+        if (frame && next[id] !== frame) {
+          next[id] = frame;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+
     const unsubscribe = store.onChange(() => {
       setConnectionState(store.connectionState());
       setFramesByCamera((current) => {
