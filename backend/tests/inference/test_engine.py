@@ -676,7 +676,8 @@ def test_worker_main_configures_logging_and_reuses_settings(
     assert captured["awaitable"].__class__.__name__ == "_Awaitable"
 
 
-def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_models(
+@pytest.mark.asyncio
+async def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_models(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -732,6 +733,45 @@ def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_mod
     monkeypatch.setattr(engine_module, "YoloDetector", _FakeResolvedDetector)
     monkeypatch.setattr(engine_module, "AttributeClassifier", _FakeResolvedAttributeClassifier)
 
+    class _StubMediaMTXClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        async def register_stream(
+            self,
+            *,
+            camera_id: UUID,
+            rtsp_url: str,
+            profile: PublishProfile,
+            stream_kind: str,
+            privacy: PrivacyPolicy,
+            target_fps: int,
+            target_width: int | None = None,
+            target_height: int | None = None,
+        ) -> StreamRegistration:
+            return StreamRegistration(
+                camera_id=camera_id,
+                mode=StreamMode.PASSTHROUGH,
+                path_name=f"cameras/{camera_id}/passthrough",
+                read_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+                managed_path_config=True,
+                ingest_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+            )
+
+    monkeypatch.setattr(engine_module, "MediaMTXClient", _StubMediaMTXClient)
+
+    class _StubTokenIssuer:
+        @classmethod
+        def from_settings(cls, settings: object) -> _StubTokenIssuer:
+            return cls()
+
+        def issue_publish_token(
+            self, *, subject: str, camera_id: UUID, path_name: str
+        ) -> str:
+            return "token"
+
+    monkeypatch.setattr(engine_module, "MediaMTXTokenIssuer", _StubTokenIssuer)
+
     config = _engine_config(camera_id).model_copy(
         update={
             "secondary_model": ModelSettings(
@@ -745,7 +785,7 @@ def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_mod
     settings = engine_module.Settings(_env_file=None)
     caplog.set_level(logging.INFO, logger="argus.inference.engine")
 
-    engine_module.build_runtime_engine(
+    await engine_module.build_runtime_engine(
         config,
         settings=settings,
         events_client=_FakeEventClient(),
@@ -761,3 +801,37 @@ def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_mod
         and "attribute_provider=CoreMLExecutionProvider" in record.message
         for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_engine_uses_initial_registration_without_calling_register_stream() -> None:
+    from argus.streaming.mediamtx import StreamMode, StreamRegistration
+
+    camera_id = uuid4()
+    registration = StreamRegistration(
+        camera_id=camera_id,
+        mode=StreamMode.PASSTHROUGH,
+        path_name=f"cameras/{camera_id}/passthrough",
+        read_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+        managed_path_config=True,
+        ingest_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+    )
+
+    stream_client = _FakeStreamClient()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+        initial_registration=registration,
+    )
+
+    await engine.start()
+
+    assert engine._stream_registration is registration
+    assert stream_client.register_stream_calls == []

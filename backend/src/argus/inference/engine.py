@@ -277,6 +277,7 @@ class InferenceEngine:
         rule_engine: RuleEvaluator,
         event_client: EventSubscriber,
         stream_client: StreamClient,
+        initial_registration: StreamRegistration | None = None,
         attribute_classifier: AttributeClassifier | None = None,
         anpr_processor: LineCrossingAnprProcessor | None = None,
         incident_capture: IncidentClipCaptureService | None = None,
@@ -295,6 +296,7 @@ class InferenceEngine:
         self.rule_engine = rule_engine
         self.event_client = event_client
         self.stream_client = stream_client
+        self._initial_registration = initial_registration
         self.attribute_classifier = attribute_classifier
         self.anpr_processor = anpr_processor
         self.incident_capture = incident_capture
@@ -327,16 +329,19 @@ class InferenceEngine:
     async def start(self) -> None:
         if self._started:
             return
-        self._stream_registration = await self.stream_client.register_stream(
-            camera_id=self.config.camera_id,
-            rtsp_url=self.config.camera.rtsp_url,
-            profile=self.profile,
-            stream_kind=self.config.stream.kind,
-            privacy=self._state.privacy,
-            target_fps=self.config.stream.fps,
-            target_width=self.config.stream.width,
-            target_height=self.config.stream.height,
-        )
+        if self._initial_registration is not None:
+            self._stream_registration = self._initial_registration
+        else:
+            self._stream_registration = await self.stream_client.register_stream(
+                camera_id=self.config.camera_id,
+                rtsp_url=self.config.camera.rtsp_url,
+                profile=self.profile,
+                stream_kind=self.config.stream.kind,
+                privacy=self._state.privacy,
+                target_fps=self.config.stream.fps,
+                target_width=self.config.stream.width,
+                target_height=self.config.stream.height,
+            )
         await self.event_client.subscribe(
             f"cmd.camera.{self.config.camera_id}",
             self._handle_command_message,
@@ -739,7 +744,7 @@ async def load_engine_config(
         return EngineConfig.model_validate(response.json())
 
 
-def build_runtime_engine(
+async def build_runtime_engine(
     config: EngineConfig,
     *,
     settings: Settings,
@@ -748,9 +753,44 @@ def build_runtime_engine(
     rule_engine: RuleEvaluator | None = None,
     incident_capture: IncidentClipCaptureService | None = None,
 ) -> InferenceEngine:
+    token_issuer = MediaMTXTokenIssuer.from_settings(settings)
+    stream_client = MediaMTXClient(
+        api_base_url=settings.mediamtx_api_url,
+        rtsp_base_url=settings.mediamtx_rtsp_base_url,
+        whip_base_url=settings.mediamtx_whip_base_url,
+        username=settings.mediamtx_username,
+        password=(
+            settings.mediamtx_password.get_secret_value()
+            if settings.mediamtx_password is not None
+            else None
+        ),
+        publish_token_factory=lambda camera_id, path_name: token_issuer.issue_publish_token(
+            subject=f"worker-{camera_id}",
+            camera_id=camera_id,
+            path_name=path_name,
+        ),
+    )
+
+    profile = config.profile if config.profile is not None else PublishProfile.CENTRAL_GPU
+    registration = await stream_client.register_stream(
+        camera_id=config.camera_id,
+        rtsp_url=config.camera.rtsp_url,
+        profile=profile,
+        stream_kind=config.stream.kind,
+        privacy=config.privacy,
+        target_fps=config.stream.fps,
+        target_width=config.stream.width,
+        target_height=config.stream.height,
+    )
+    logger.info(
+        "Worker ingesting from MediaMTX relay at %s (registered for camera %s)",
+        registration.ingest_path,
+        config.camera_id,
+    )
+
     frame_source = create_camera_source(
         CameraSourceConfig(
-            source_uri=config.camera.rtsp_url,
+            source_uri=registration.ingest_path,
             frame_skip=config.camera.frame_skip,
             fps_cap=config.camera.fps_cap,
         )
@@ -837,8 +877,6 @@ def build_runtime_engine(
     else:
         publisher = primary_publisher
 
-    token_issuer = MediaMTXTokenIssuer.from_settings(settings)
-
     return InferenceEngine(
         config=config,
         frame_source=frame_source,
@@ -848,22 +886,8 @@ def build_runtime_engine(
         tracking_store=tracking_store or _NoopTrackingStore(),
         rule_engine=rule_engine or _NoopRuleEngine(),
         event_client=events_client,
-        stream_client=MediaMTXClient(
-            api_base_url=settings.mediamtx_api_url,
-            rtsp_base_url=settings.mediamtx_rtsp_base_url,
-            whip_base_url=settings.mediamtx_whip_base_url,
-            username=settings.mediamtx_username,
-            password=(
-                settings.mediamtx_password.get_secret_value()
-                if settings.mediamtx_password is not None
-                else None
-            ),
-            publish_token_factory=lambda camera_id, path_name: token_issuer.issue_publish_token(
-                subject=f"worker-{camera_id}",
-                camera_id=camera_id,
-                path_name=path_name,
-            ),
-        ),
+        stream_client=stream_client,
+        initial_registration=registration,
         attribute_classifier=attribute_classifier,
         anpr_processor=anpr_processor,
         incident_capture=incident_capture,
@@ -885,7 +909,7 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         command_runner=default_profile_probe,
     )
     config = config.model_copy(update={"profile": resolved_profile})
-    engine = build_runtime_engine(
+    engine = await build_runtime_engine(
         config,
         settings=resolved_settings,
         events_client=events_client,
