@@ -60,6 +60,7 @@ class StreamRegistration:
     target_fps: int = 25
     target_width: int | None = None
     target_height: int | None = None
+    ingest_path: str = ""
 
 
 class FramePublisher(Protocol):
