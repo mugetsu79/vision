@@ -297,3 +297,88 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
     )
     .toBe(false);
 });
+
+test("visiting /dashboard redirects to /live and only shows Live in Operations nav", async ({ page }) => {
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.locator("#username").fill("admin-dev");
+  await page.locator("#password").fill("argus-admin-pass");
+  await page.locator("#kc-login").click();
+
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/live$/);
+
+  const operationsNav = page.locator("nav").getByRole("link");
+  await expect(operationsNav.filter({ hasText: /^Dashboard$/ })).toHaveCount(0);
+  await expect(operationsNav.filter({ hasText: /^Live$/ })).toHaveCount(1);
+});
+
+test("live sparkline renders with seeded data and does not reset on history round-trip", async ({ page }) => {
+  await page.route("**/api/v1/cameras", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          edge_node_id: null,
+          name: "Gate 1",
+          rtsp_url_masked: "rtsp://***",
+          processing_mode: "central",
+          primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+          secondary_model_id: null,
+          tracker_type: "botsort",
+          active_classes: ["person", "car"],
+          attribute_rules: [],
+          zones: [],
+          homography: null,
+          privacy: { blur_faces: false, blur_plates: false, method: "gaussian", strength: 7 },
+          browser_delivery: { default_profile: "720p10", allow_native_on_demand: true, profiles: [] },
+          frame_skip: 1,
+          fps_cap: 25,
+          created_at: "2026-04-24T10:00:00Z",
+          updated_at: "2026-04-24T10:00:00Z",
+        },
+      ]),
+    });
+  });
+
+  await page.route("**/api/v1/history/series**", async (route) => {
+    const rows = [];
+    const start = Date.now() - 29 * 60 * 1000;
+    for (let i = 0; i < 30; i++) {
+      rows.push({
+        bucket: new Date(start + i * 60 * 1000).toISOString(),
+        values: { person: (i % 5) + 1, car: i % 3 },
+        total_count: ((i % 5) + 1) + (i % 3),
+      });
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        granularity: "1m",
+        class_names: ["person", "car"],
+        rows,
+        granularity_adjusted: false,
+        speed_classes_capped: false,
+        speed_classes_used: null,
+      }),
+    });
+  });
+
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.locator("#username").fill("admin-dev");
+  await page.locator("#password").fill("argus-admin-pass");
+  await page.locator("#kc-login").click();
+
+  await expect(page).toHaveURL(/\/live$/);
+  await expect(page.getByLabel(/person sparkline/i)).toBeVisible();
+  await expect(page.getByLabel(/car sparkline/i)).toBeVisible();
+
+  await page.getByRole("link", { name: "History" }).click();
+  await expect(page).toHaveURL(/\/history/);
+  await page.getByRole("link", { name: "Live" }).click();
+  await expect(page).toHaveURL(/\/live$/);
+  await expect(page.getByLabel(/person sparkline/i)).toBeVisible();
+});
