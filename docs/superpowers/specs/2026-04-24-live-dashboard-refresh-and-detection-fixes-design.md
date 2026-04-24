@@ -30,7 +30,7 @@ And the Live page itself has no running chart. Operators see instantaneous count
 - **Bug 2 — Tracker IDs don't persist.** Verify after Bug 1 lands on the iMac. If the tracker still assigns a fresh track_id per frame even with correct bbox coordinates, add a follow-up fix in `backend/src/argus/vision/tracker.py` `UltralyticsTrackerAdapter`. Budget one extra commit.
 - **Bug 3 — History chart empty without "Show speed".** In `HistoryService.query_series` at `backend/src/argus/services/app.py`, route the count-only path (`include_speed=False`) at the `tracking_events` hypertable instead of the `events_1m`/`events_1h` continuous aggregates. Keep the existing `_fetch_series_rows` helper around, renamed to `_fetch_series_rows_aggregate`, in case we later decide to re-introduce the aggregate path for large deployments.
 - **Bug 4 — Telemetry WebSocket lifecycle.** Move the `/ws/telemetry` subscription out of the Live page and into an app-level Zustand store (`frontend/src/stores/telemetry-store.ts`). A single shared connection, keyed on the authenticated user/tenant, with a union of subscribed cameras. Ref-counted — opens on first subscribe, closes on last-subscriber unmount plus a 10-second idle grace period so tab-to-tab navigation keeps the socket warm.
-- **Bug 5 — Worker vs MediaMTX RTSP contention in passthrough mode.** When a camera's `stream.kind == "passthrough"` (and the runtime decides MediaMTX will pull from the camera), the worker reads from `rtsp://mediamtx:8554/cameras/<camera_id>/passthrough` instead of the camera URL directly. Annotated-mode workers keep pulling from the camera URL because MediaMTX does not open an RTSP session in that mode. One helper function with branch logic and a unit test.
+- **Bug 5 — Always relay camera RTSP through MediaMTX (architectural).** MediaMTX becomes the sole RTSP consumer of every camera. Regardless of stream mode, the worker reads its frames from `rtsp://mediamtx:8554/cameras/<camera_id>/passthrough`, and in annotated mode also publishes processed frames to `cameras/<camera_id>/annotated`. One camera session per camera, MediaMTX fans it out to the worker and any browser consumers. Eliminates the single-concurrent-session contention we saw on the iMac and bounds long-haul RTSP traffic for the eventual central-server deployment with remote cameras on the Jetson Orin edge nodes. The "passthrough" path name stays — it already means "raw camera stream as pulled by MediaMTX" — even though in annotated mode the browsers read the `annotated` path, not `passthrough`.
 
 ### IA consolidation
 
@@ -58,7 +58,6 @@ And the Live page itself has no running chart. Operators see instantaneous count
 
 ## Out of Scope (Deferred)
 
-- Architectural relay of all camera streams through MediaMTX (Bug 5 option B). Only the passthrough-mode contention is fixed. The annotated-mode direct-pull is untouched because there is no contention there.
 - Fleet-wide aggregate chart at the top of Live (would duplicate History).
 - Per-camera speed sparkline (speed analysis stays on History).
 - Attribute-driven filtering (Spec D).
@@ -106,11 +105,16 @@ def _rescale_bbox(
 - Add `_fetch_series_rows_from_events`: same shape as `_fetch_series_rows_with_speed` but without percentile/violation columns. Query `tracking_events` with `time_bucket(INTERVAL '<interval>', ts)` + `count(*)::bigint` grouped by bucket and class_name.
 - `query_series` dispatch: `include_speed=True` → `_fetch_series_rows_with_speed`; `include_speed=False` → `_fetch_series_rows_from_events`. Both paths read the hypertable.
 
-`backend/src/argus/vision/runtime.py` (or the worker bootstrap in `engine.py`):
+`backend/src/argus/streaming/mediamtx.py` — always-relay registration:
 
-- New helper `resolve_camera_read_url(camera_config, mediamtx_rtsp_base)` that returns either the camera's direct RTSP URL or the MediaMTX passthrough URL depending on `stream.kind`.
-- Call this helper at worker startup where the worker currently wires up `CameraSourceConfig.source_uri`.
-- Emit an INFO log line on selection ("Worker reading RTSP from MediaMTX passthrough path" / "… from camera URL directly") so the first iMac test shows which path is live.
+- Rework `_build_registration` so it *always* ensures a camera-source path exists in MediaMTX (canonical name: `cameras/<camera_id>/passthrough`, `source=<camera RTSP URL>`, `sourceOnDemand=true`) for every camera, regardless of `stream.kind` or privacy settings. This is the "always on, pulled from the camera" path.
+- When the browser needs an annotated / processed stream (non-passthrough mode or privacy filtering active), *additionally* register `cameras/<camera_id>/annotated` as a publisher-receive path (`source=publisher`). The `StreamRegistration` returned from `register_stream` still carries the mode + publish path as before — that's what the worker's `push_frame` pipeline uses — but now both paths coexist when needed instead of one replacing the other.
+- `StreamRegistration` gains a new field `ingest_path: str` (the MediaMTX URL the worker reads FROM), always set to `rtsp://.../cameras/<id>/passthrough`. Backward compatibility: existing `read_path` and `publish_path` remain unchanged in meaning.
+
+`backend/src/argus/inference/engine.py` — worker bootstrap:
+
+- Where the worker currently reads `CameraSourceConfig.source_uri` (the camera's direct RTSP URL), it now reads `StreamRegistration.ingest_path` after `register_stream` returns. Camera URL is consumed only by MediaMTX, never by the worker.
+- One INFO log line at startup: "Worker ingesting from MediaMTX relay at `<url>`", so the first iMac test shows the relay is live.
 
 ### Frontend — IA
 
@@ -239,9 +243,9 @@ Within the camera tile renderer in `Live.tsx` (previously `Dashboard.tsx`), add 
 
 ## Data Flow
 
-1. Camera RTSP → MediaMTX (passthrough mode only).
-2. MediaMTX → Worker (passthrough mode, Bug 5 fix): worker reads from `rtsp://mediamtx:8554/cameras/<id>/passthrough`.
-3. Camera RTSP → Worker (annotated mode): worker reads camera URL directly.
+1. Camera RTSP → MediaMTX (always). Single RTSP session per camera, `cameras/<id>/passthrough` always registered with `source=<camera URL>`.
+2. MediaMTX → Worker (always). Worker reads `rtsp://mediamtx:8554/cameras/<id>/passthrough` for ingest, regardless of mode. Bug 5 fix.
+3. In annotated mode, MediaMTX also carries a publisher-receive path `cameras/<id>/annotated` for the worker's processed frames.
 4. Worker → Detector → corrected bbox rescale (Bug 1) → Tracker → stable track IDs (Bug 2 verification) → Annotate.
 5. Worker → NATS `evt.tracking.<id>` → backend subscriber → `/ws/telemetry` fan-out.
 6. Worker → `tracking_events` hypertable (persistent rows with corrected bboxes).
@@ -254,7 +258,10 @@ Within the camera tile renderer in `Live.tsx` (previously `Dashboard.tsx`), add 
 
 - **Detector rescale**: zero or negative `frame_width` / `input_width` → log warning + return bbox unchanged. Avoids a divide-by-zero that would crash the worker loop.
 - **Count-only history path**: same `_ensure_history_window` + `_effective_granularity` guards as the speed path. Empty result → `rows: []`. Frontend already handles that.
-- **MediaMTX relay**: worker starts before MediaMTX registers the path → existing `_reconnect` logic retries with backoff. Log the URL source once at startup so operators can diagnose "is my worker using MediaMTX or the camera?" from one log line.
+- **MediaMTX relay**: the worker now has MediaMTX as a hard dependency for detection, since it reads frames from MediaMTX instead of the camera. If MediaMTX is down, worker ingest fails. Mitigations:
+  - Worker's existing `_reconnect` retry loop with backoff keeps trying when MediaMTX is unavailable, so startup ordering (worker before MediaMTX) is safe.
+  - At startup, worker logs a one-liner with the MediaMTX URL it's using so operators can answer "is the relay live?" from the first log line.
+  - MediaMTX registration uses `sourceOnDemand=true`, so a bad camera URL only surfaces at ingest time with a clear RTSP error (not at registration time). Documented in the worker logs.
 - **Telemetry store WebSocket**: disconnect → exponential backoff reconnect (existing 1.5 s start). Ring buffer survives disconnects so the sparkline doesn't flicker during short blips. Subscription union re-sent on reconnect.
 - **Telemetry store oversize buffer**: ring buffer capped at 6000 entries per camera. That's 3 FPS × 60 sec × 30 min = 5400 frames under normal conditions, plus a 10 % safety margin so brief rate spikes don't truncate the window.
 - **Sparkline seed failure**: if the hydration request fails, sparkline renders from WS only (starts empty, fills as minutes pass) and logs a console warning. Non-fatal; the live path still works.
@@ -266,8 +273,8 @@ Backend (Python, FastAPI, SQLAlchemy, TimescaleDB):
 
 - `backend/src/argus/vision/detector.py` — rewrite `_rescale_bbox`.
 - `backend/src/argus/services/app.py` — rename `_fetch_series_rows` → `_fetch_series_rows_aggregate`; add `_fetch_series_rows_from_events`; update `query_series` dispatch.
-- `backend/src/argus/vision/runtime.py` (or a new helper module if cleaner) — `resolve_camera_read_url`.
-- `backend/src/argus/inference/engine.py` — call the new helper at worker bootstrap, log selection.
+- `backend/src/argus/streaming/mediamtx.py` — rework `_build_registration` to always register the camera-source `passthrough` path and conditionally also the `annotated` publisher-receive path; add `ingest_path` field to `StreamRegistration`.
+- `backend/src/argus/inference/engine.py` — consume `StreamRegistration.ingest_path` at worker bootstrap; log the MediaMTX relay URL once at startup.
 - `backend/src/argus/vision/tracker.py` — touch only if Bug 1 fix doesn't stabilise tracker IDs on the iMac smoke test.
 
 Frontend (React 19, Zustand 5, TanStack Query, ECharts 6):
@@ -293,9 +300,12 @@ No database migrations.
   - `test_rescale_bbox_handles_zero_dimensions` — zero input/frame dims → bbox unchanged, no crash.
 - `tests/services/test_history_service.py`:
   - `test_query_series_count_only_reads_tracking_events` — seed hypertable fixtures (or mock `_fetch_series_rows_from_events`), assert response matches fresh rows not the stale aggregate.
-- `tests/vision/test_camera.py` or a new `tests/vision/test_runtime.py`:
-  - `test_resolve_camera_read_url_uses_mediamtx_passthrough` — passthrough camera config returns `rtsp://mediamtx:8554/cameras/<id>/passthrough`.
-  - `test_resolve_camera_read_url_uses_direct_in_annotated` — annotated returns the camera URL unchanged.
+- `tests/streaming/test_mediamtx.py`:
+  - `test_build_registration_always_registers_camera_source_path` — any `stream_kind` + privacy combination produces a call to `_ensure_path(cameras/<id>/passthrough, source=<camera URL>, sourceOnDemand=true)`.
+  - `test_build_registration_adds_annotated_path_when_non_passthrough` — non-passthrough or privacy-filter-active requests additionally register `cameras/<id>/annotated` as publisher-receive.
+  - `test_stream_registration_carries_ingest_path` — the returned `StreamRegistration` exposes `ingest_path` pointing at the MediaMTX passthrough URL regardless of mode.
+- `tests/inference/test_engine.py` (or the worker bootstrap test file):
+  - `test_worker_uses_stream_registration_ingest_path` — worker startup reads `registration.ingest_path` and wires it into its frame source, not `CameraSourceConfig.source_uri`.
 
 ### Frontend — vitest
 
@@ -337,7 +347,6 @@ Single branch off `new-features`. Single PR targeting `main`. No feature flag ne
 ## Known Deferred
 
 - **Bug 2 deeper fix**: if Bug 1 doesn't stabilise tracker IDs on the iMac, a follow-up commit in `UltralyticsTrackerAdapter` as part of the same spec execution.
-- **MediaMTX-relay for annotated mode** (Bug 5 option B): touched only if fleet-level native-mode contention surfaces.
 - **Per-camera homography tag** in the speed legend: still Spec B follow-up.
 - **Observability cleanup** (Tempo config, Prometheus, otel-collector): still Spec C.
 - **Attribute-driven filtering** (person with a hat): still Spec D.
