@@ -188,16 +188,13 @@ MediaMTX drops the path, the remaining issue is downstream of the worker.
 
 ## Remaining Work
 
-1. Confirm the latest commits on the iMac.
-   - The user’s latest successful passthrough test was done before pulling the latest timeout/diagnostic commits.
-   - First step for Claude: make sure iMac HEAD is `ee6f74e` or newer.
+1. ✅ Confirmed 2026-04-23: iMac HEAD is current (≥ `ee6f74e`) with the
+   timeout/diagnostic commits applied.
 
-2. Verify true native behavior.
-   - Camera `4f6380b8-75d6-4e92-90b8-d870f4ca06c0`.
-   - Browser delivery: `native`.
-   - Privacy: `blur_faces=false`, `blur_plates=false`.
-   - Expected registration: `cameras/<id>/passthrough`.
-   - Expected stream mode in telemetry: `passthrough`.
+2. ✅ Confirmed 2026-04-23: true native passthrough works for camera
+   `4f6380b8-75d6-4e92-90b8-d870f4ca06c0` with `blur_faces=false`,
+   `blur_plates=false`. Registration path is `cameras/<id>/passthrough`;
+   telemetry reports `stream mode = passthrough`; browser shows `WEBRTC LIVE`.
 
 3. Re-test processed path with diagnostics enabled.
    - Turn on a non-native profile or re-enable privacy blur.
