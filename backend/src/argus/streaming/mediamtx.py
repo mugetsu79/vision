@@ -433,21 +433,16 @@ class MediaMTXClient:
         target_width: int | None,
         target_height: int | None,
     ) -> StreamRegistration:
-        if stream_kind == StreamMode.PASSTHROUGH.value and not privacy.requires_filtering:
-            path_name = f"cameras/{camera_id}/passthrough"
-            await self._ensure_path(path_name, source=rtsp_url, source_on_demand=True)
-            return StreamRegistration(
-                camera_id=camera_id,
-                mode=StreamMode.PASSTHROUGH,
-                path_name=path_name,
-                read_path=f"{self.rtsp_base_url}/{path_name}",
-                managed_path_config=True,
-                target_fps=max(1, target_fps),
-                target_width=target_width,
-                target_height=target_height,
-            )
+        passthrough_name = f"cameras/{camera_id}/passthrough"
+        passthrough_read = f"{self.rtsp_base_url}/{passthrough_name}"
+        await self._ensure_path(
+            passthrough_name,
+            source=rtsp_url,
+            source_on_demand=True,
+        )
 
-        if stream_kind == StreamMode.PASSTHROUGH.value and privacy.requires_filtering:
+        requested_passthrough = stream_kind == StreamMode.PASSTHROUGH.value
+        if requested_passthrough and privacy.requires_filtering:
             LOGGER.warning(
                 (
                     "Passthrough stream requested, but privacy filtering is enabled; "
@@ -460,45 +455,67 @@ class MediaMTXClient:
                 },
             )
 
-        if profile is PublishProfile.CENTRAL_GPU:
-            path_name = f"cameras/{camera_id}/annotated"
-            await self._ensure_path(path_name, source="publisher", source_on_demand=False)
+        effective_passthrough = requested_passthrough and not privacy.requires_filtering
+
+        if effective_passthrough:
             return StreamRegistration(
                 camera_id=camera_id,
-                mode=StreamMode.ANNOTATED_WHIP,
-                path_name=path_name,
-                read_path=f"{self.rtsp_base_url}/{path_name}",
-                publish_path=f"{self.rtsp_base_url}/{path_name}",
+                mode=StreamMode.PASSTHROUGH,
+                path_name=passthrough_name,
+                read_path=passthrough_read,
                 managed_path_config=True,
                 target_fps=max(1, target_fps),
                 target_width=target_width,
                 target_height=target_height,
+                ingest_path=passthrough_read,
             )
 
-        if privacy.requires_filtering:
-            path_name = f"cameras/{camera_id}/preview"
+        if profile is PublishProfile.CENTRAL_GPU:
+            annotated_name = f"cameras/{camera_id}/annotated"
+            annotated_path = f"{self.rtsp_base_url}/{annotated_name}"
+            await self._ensure_path(
+                annotated_name,
+                source="publisher",
+                source_on_demand=False,
+            )
             return StreamRegistration(
                 camera_id=camera_id,
-                mode=StreamMode.FILTERED_PREVIEW,
-                path_name=path_name,
-                read_path=f"{self.rtsp_base_url}/{path_name}",
-                publish_path=f"{self.rtsp_base_url}/{path_name}",
+                mode=StreamMode.ANNOTATED_WHIP,
+                path_name=annotated_name,
+                read_path=annotated_path,
+                publish_path=annotated_path,
+                managed_path_config=True,
                 target_fps=max(1, target_fps),
                 target_width=target_width,
                 target_height=target_height,
+                ingest_path=passthrough_read,
             )
 
-        path_name = f"cameras/{camera_id}/passthrough"
-        await self._ensure_path(path_name, source=rtsp_url, source_on_demand=True)
+        if privacy.requires_filtering:
+            preview_name = f"cameras/{camera_id}/preview"
+            preview_path = f"{self.rtsp_base_url}/{preview_name}"
+            return StreamRegistration(
+                camera_id=camera_id,
+                mode=StreamMode.FILTERED_PREVIEW,
+                path_name=preview_name,
+                read_path=preview_path,
+                publish_path=preview_path,
+                target_fps=max(1, target_fps),
+                target_width=target_width,
+                target_height=target_height,
+                ingest_path=passthrough_read,
+            )
+
         return StreamRegistration(
             camera_id=camera_id,
             mode=StreamMode.PASSTHROUGH,
-            path_name=path_name,
-            read_path=f"{self.rtsp_base_url}/{path_name}",
+            path_name=passthrough_name,
+            read_path=passthrough_read,
             managed_path_config=True,
             target_fps=max(1, target_fps),
             target_width=target_width,
             target_height=target_height,
+            ingest_path=passthrough_read,
         )
 
     async def _ensure_publisher(
