@@ -113,14 +113,14 @@ test("history renders quickly, CSV export works, and incidents show signed previ
   await page.locator("#password").fill("argus-admin-pass");
   await page.locator("#kc-login").click();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/live$/);
 
   // Warm the dev server route chunk before measuring the history render budget.
   await page.getByRole("link", { name: "History" }).click();
   await expect(page).toHaveURL(/\/history$/);
   await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
-  await page.getByRole("link", { name: "Dashboard" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.getByRole("link", { name: "Live" }).click();
+  await expect(page).toHaveURL(/\/live$/);
 
   await page.evaluate(() => {
     (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart = performance.now();
@@ -212,7 +212,7 @@ test("history filter state survives navigation via URL", async ({ page }) => {
   await page.locator("#password").fill("argus-admin-pass");
   await page.locator("#kc-login").click();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/live$/);
   await page.getByRole("link", { name: "History" }).click();
   await expect(page).toHaveURL(/\/history/);
 
@@ -222,8 +222,8 @@ test("history filter state survives navigation via URL", async ({ page }) => {
   await expect(page).toHaveURL(/speed=1/);
   await expect(page).toHaveURL(/speedThreshold=60/);
 
-  await page.getByRole("link", { name: "Dashboard" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.getByRole("link", { name: "Live" }).click();
+  await expect(page).toHaveURL(/\/live$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/history.*speed=1.*speedThreshold=60/);
   await expect(page.getByLabel("Show speed")).toBeChecked();

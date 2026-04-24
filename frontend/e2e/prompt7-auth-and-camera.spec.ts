@@ -69,7 +69,7 @@ test("real login creates a site and camera through the prompt 7 flows", async ({
   await page.locator("#password").fill("argus-admin-pass");
   await page.locator("#kc-login").click();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/live$/);
   const accessToken = await readAccessToken(page);
   const { modelLabel } = await seedModel(request, accessToken);
   await page.getByRole("link", { name: "Sites" }).click();

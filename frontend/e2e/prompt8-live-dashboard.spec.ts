@@ -198,7 +198,7 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
   await page.locator("#password").fill("argus-admin-pass");
   await page.locator("#kc-login").click();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/live$/);
   await expect(page.getByRole("heading", { name: "North Gate" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Depot Yard" })).toBeVisible();
 
