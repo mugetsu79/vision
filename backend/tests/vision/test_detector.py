@@ -138,7 +138,7 @@ def test_detector_selects_best_provider_and_filters_allowed_classes(vehicle_fram
 
     assert detector.selected_provider == "CUDAExecutionProvider"
     assert [detection.class_name for detection in detections] == ["truck"]
-    assert detections[0].bbox == (82.0, 38.0, 146.0, 78.0)
+    assert detections[0].bbox == pytest.approx((20.5, 5.7, 36.5, 11.7), rel=1e-6)
 
 
 def test_detector_supports_vehicle_person_and_custom_ppe_classes(
@@ -228,9 +228,9 @@ def test_detector_supports_channel_first_yolo_outputs(vehicle_frame) -> None:
 
     assert [detection.class_name for detection in detections] == ["car", "person"]
     assert detections[0].confidence == pytest.approx(0.94)
-    assert detections[0].bbox == (18.0, 48.0, 58.0, 74.0)
+    assert detections[0].bbox == pytest.approx((4.5, 7.2, 14.5, 11.1), rel=1e-6)
     assert detections[1].confidence == pytest.approx(0.93)
-    assert detections[1].bbox == (64.0, 38.0, 128.0, 78.0)
+    assert detections[1].bbox == pytest.approx((16.0, 5.7, 32.0, 11.7), rel=1e-6)
 
 
 def test_detector_uses_resolved_runtime_policy_provider_and_thread_overrides(vehicle_frame) -> None:

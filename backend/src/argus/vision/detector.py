@@ -201,14 +201,24 @@ class YoloDetector:
     ) -> tuple[float, float, float, float]:
         input_width = float(self.model_config.input_shape["width"])
         input_height = float(self.model_config.input_shape["height"])
-        max_coordinate = max(bbox)
-        if max_coordinate <= max(frame_width, frame_height):
-            scale_x = 1.0
-            scale_y = 1.0
-        else:
-            scale_x = frame_width / input_width
-            scale_y = frame_height / input_height
-
+        if (
+            input_width <= 0.0
+            or input_height <= 0.0
+            or frame_width <= 0
+            or frame_height <= 0
+        ):
+            LOGGER.warning(
+                "Invalid input/frame dimensions, returning bbox unchanged: "
+                "input=%sx%s frame=%sx%s",
+                input_width,
+                input_height,
+                frame_width,
+                frame_height,
+            )
+            x1, y1, x2, y2 = bbox
+            return (float(x1), float(y1), float(x2), float(y2))
+        scale_x = frame_width / input_width
+        scale_y = frame_height / input_height
         x1, y1, x2, y2 = bbox
         return (
             float(np.clip(x1 * scale_x, 0.0, frame_width)),
