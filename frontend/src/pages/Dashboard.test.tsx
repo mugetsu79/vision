@@ -34,6 +34,7 @@ vi.mock("@/components/live/TelemetryCanvas", () => ({
 import { createQueryClient } from "@/app/query-client";
 import { DashboardPage } from "@/pages/Dashboard";
 import { useAuthStore } from "@/stores/auth-store";
+import { useTelemetryStore } from "@/stores/telemetry-store";
 
 const initialAuthState = useAuthStore.getState();
 
@@ -91,6 +92,11 @@ describe("DashboardPage", () => {
     vi.unstubAllGlobals();
     act(() => {
       useAuthStore.setState(initialAuthState, true);
+      useTelemetryStore.setState({
+        instance: null,
+        accessToken: null,
+        tenantId: null,
+      });
     });
   });
 

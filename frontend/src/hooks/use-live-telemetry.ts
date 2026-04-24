@@ -1,99 +1,49 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { parseTelemetryPayload, type TelemetryFrame } from "@/lib/live";
-import { buildWebSocketUrl } from "@/lib/ws";
+import { ensureTelemetryStore } from "@/stores/telemetry-store";
+import type { TelemetryConnectionState } from "@/stores/telemetry-store";
+import type { TelemetryFrame } from "@/lib/live";
 import { useAuthStore } from "@/stores/auth-store";
 
-export type TelemetryConnectionState = "connecting" | "open" | "closed" | "error";
+export type { TelemetryConnectionState };
 
 export function useLiveTelemetry(cameraIds: string[]) {
   const accessToken = useAuthStore((state) => state.accessToken);
   const tenantId = useAuthStore((state) => state.user?.tenantId ?? null);
   const [framesByCamera, setFramesByCamera] = useState<Record<string, TelemetryFrame>>({});
-  const [connectionState, setConnectionState] =
-    useState<TelemetryConnectionState>("connecting");
+  const [connectionState, setConnectionState] = useState<TelemetryConnectionState>("closed");
 
   const cameraKey = useMemo(() => [...cameraIds].sort().join(","), [cameraIds]);
 
   useEffect(() => {
-    if (!accessToken) {
+    const store = ensureTelemetryStore(accessToken, tenantId);
+    if (!store) {
       setConnectionState("closed");
       setFramesByCamera({});
       return;
     }
 
-    let socket: WebSocket | null = null;
-    let reconnectTimer: number | null = null;
-    let disposed = false;
-    const allowedCameras = new Set(cameraKey ? cameraKey.split(",") : []);
-
-    const connect = () => {
-      if (disposed) {
-        return;
-      }
-
-      setConnectionState("connecting");
-      socket = new WebSocket(
-        buildWebSocketUrl("/ws/telemetry", {
-          access_token: accessToken,
-          tenant_id: tenantId,
-        }),
-      );
-
-      socket.onopen = () => {
-        if (!disposed) {
-          setConnectionState("open");
-        }
-      };
-
-      socket.onmessage = (event) => {
-        let parsed: unknown = null;
-        try {
-          parsed = JSON.parse(String(event.data));
-        } catch {
-          return;
-        }
-
-        const frames = parseTelemetryPayload(parsed);
-        if (frames.length === 0) {
-          return;
-        }
-
-        setFramesByCamera((current) => {
-          const next = { ...current };
-          for (const frame of frames) {
-            if (allowedCameras.size > 0 && !allowedCameras.has(frame.camera_id)) {
-              continue;
-            }
-            next[frame.camera_id] = frame;
+    const ids = cameraKey ? cameraKey.split(",") : [];
+    ids.forEach((id) => store.subscribe(id));
+    const unsubscribe = store.onChange(() => {
+      setConnectionState(store.connectionState());
+      setFramesByCamera((current) => {
+        const next: Record<string, TelemetryFrame> = {};
+        for (const id of ids) {
+          const frame = store.getLatest(id);
+          if (frame) {
+            next[id] = frame;
+          } else if (current[id]) {
+            next[id] = current[id];
           }
-          return next;
-        });
-      };
-
-      socket.onerror = () => {
-        if (!disposed) {
-          setConnectionState("error");
         }
-      };
-
-      socket.onclose = () => {
-        if (disposed) {
-          return;
-        }
-        setConnectionState("closed");
-        reconnectTimer = window.setTimeout(connect, 1_500);
-      };
-    };
-
-    connect();
+        return next;
+      });
+    });
 
     return () => {
-      disposed = true;
-      if (reconnectTimer !== null) {
-        window.clearTimeout(reconnectTimer);
-      }
-      socket?.close();
+      unsubscribe();
+      ids.forEach((id) => store.unsubscribe(id));
     };
   }, [accessToken, tenantId, cameraKey]);
 
