@@ -936,7 +936,142 @@ async def test_build_runtime_engine_redacts_worker_ingest_url_in_logs(
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_engine_supplies_refreshable_worker_ingest_url(
+async def test_build_runtime_engine_uses_direct_camera_rtsp_for_processed_streams(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    captured_camera_configs: list[CameraSourceConfig] = []
+
+    monkeypatch.setattr(
+        engine_module,
+        "create_camera_source",
+        lambda camera_config: captured_camera_configs.append(camera_config) or _FakeFrameSource([]),
+    )
+    monkeypatch.setattr(engine_module, "import_onnxruntime", lambda: object())
+    monkeypatch.setattr(
+        engine_module,
+        "resolve_execution_policy",
+        lambda runtime, **kwargs: RuntimeExecutionPolicy(
+            host=HostClassification(
+                system="darwin",
+                machine="x86_64",
+                cpu_vendor=CpuVendor.INTEL,
+                available_providers=(ExecutionProvider.CPU.value,),
+                profile=ExecutionProfile.MACOS_X86_64_INTEL,
+                profile_overridden=False,
+            ),
+            provider=ExecutionProvider.CPU.value,
+            available_providers=(ExecutionProvider.CPU.value,),
+            provider_overridden=False,
+            inter_op_threads=None,
+            intra_op_threads=None,
+        ),
+    )
+    monkeypatch.setattr(engine_module, "YoloDetector", lambda *args, **kwargs: object())
+
+    class _StubMediaMTXClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        async def register_stream(
+            self,
+            *,
+            camera_id: UUID,
+            rtsp_url: str,
+            profile: PublishProfile,
+            stream_kind: str,
+            privacy: PrivacyPolicy,
+            target_fps: int,
+            target_width: int | None = None,
+            target_height: int | None = None,
+        ) -> StreamRegistration:
+            return StreamRegistration(
+                camera_id=camera_id,
+                mode=StreamMode.ANNOTATED_WHIP,
+                path_name=f"cameras/{camera_id}/annotated",
+                read_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated",
+                publish_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated",
+                managed_path_config=True,
+                ingest_path=(
+                    f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
+                    "?jwt=bootstrap-token"
+                ),
+            )
+
+    monkeypatch.setattr(engine_module, "MediaMTXClient", _StubMediaMTXClient)
+
+    class _StubTokenIssuer:
+        def __init__(self) -> None:
+            self.tokens = iter(["refreshed-token-1", "refreshed-token-2"])
+
+        @classmethod
+        def from_settings(cls, settings: object) -> _StubTokenIssuer:
+            return cls()
+
+        def issue_publish_token(
+            self, *, subject: str, camera_id: UUID, path_name: str
+        ) -> str:
+            return "publish-token"
+
+        def issue_internal_read_token(
+            self,
+            *,
+            camera_id: UUID,
+            path_name: str,
+            ttl_seconds: int | None = None,
+        ) -> str:
+            assert path_name == f"cameras/{camera_id}/passthrough"
+            return next(self.tokens)
+
+        def build_internal_rtsp_url(
+            self,
+            *,
+            camera_id: UUID,
+            path_name: str,
+            rtsp_url: str,
+            ttl_seconds: int | None = None,
+        ) -> str:
+            token = self.issue_internal_read_token(
+                camera_id=camera_id,
+                path_name=path_name,
+                ttl_seconds=ttl_seconds,
+            )
+            return f"{rtsp_url}?jwt={token}"
+
+    monkeypatch.setattr(engine_module, "MediaMTXTokenIssuer", _StubTokenIssuer)
+
+    settings = engine_module.Settings(_env_file=None)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "camera": CameraSettings(
+                rtsp_url="rtsp://user:pass@camera.internal/live",
+                frame_skip=1,
+                fps_cap=25,
+            )
+        }
+    )
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+
+    await engine_module.build_runtime_engine(
+        config,
+        settings=settings,
+        events_client=_FakeEventClient(),
+    )
+
+    assert len(captured_camera_configs) == 1
+    camera_config = captured_camera_configs[0]
+    assert camera_config.source_uri == "rtsp://user:pass@camera.internal/live"
+    assert camera_config.source_uri_factory is None
+    assert any(
+        "Worker ingesting directly from camera RTSP for processed stream" in record.message
+        and "user:pass@" not in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_supplies_refreshable_worker_ingest_url_for_passthrough(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     camera_id = uuid4()
@@ -988,8 +1123,8 @@ async def test_build_runtime_engine_supplies_refreshable_worker_ingest_url(
             return StreamRegistration(
                 camera_id=camera_id,
                 mode=StreamMode.PASSTHROUGH,
-                path_name=f"cameras/{camera_id}/annotated",
-                read_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated",
+                path_name=f"cameras/{camera_id}/passthrough",
+                read_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
                 managed_path_config=True,
                 ingest_path=(
                     f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
@@ -1040,9 +1175,20 @@ async def test_build_runtime_engine_supplies_refreshable_worker_ingest_url(
     monkeypatch.setattr(engine_module, "MediaMTXTokenIssuer", _StubTokenIssuer)
 
     settings = engine_module.Settings(_env_file=None)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="native",
+                kind="passthrough",
+                width=None,
+                height=None,
+                fps=25,
+            )
+        }
+    )
 
     await engine_module.build_runtime_engine(
-        _engine_config(camera_id),
+        config,
         settings=settings,
         events_client=_FakeEventClient(),
     )

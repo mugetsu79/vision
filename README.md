@@ -154,7 +154,7 @@ The repo already includes:
 - history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, and CSV/Parquet export
 - incident clip storage
 - edge worker support
-- MediaMTX relay ingest for workers, with passthrough/native delivery separated from processed browser renditions
+- hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions
 - Docker Compose and Helm assets
 - CI-oriented full validation flow
 

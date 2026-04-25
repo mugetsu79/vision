@@ -789,34 +789,47 @@ async def build_runtime_engine(
         target_width=config.stream.width,
         target_height=config.stream.height,
     )
-    logger.info(
-        "Worker ingesting from MediaMTX relay at %s (registered for camera %s)",
-        redact_url_secrets(registration.ingest_path),
-        config.camera_id,
-    )
-    ingest_url_parts = urlsplit(registration.ingest_path)
-    ingest_path_name = ingest_url_parts.path.lstrip("/")
-    ingest_base_url = urlunsplit(
-        (
-            ingest_url_parts.scheme,
-            ingest_url_parts.netloc,
-            ingest_url_parts.path,
-            "",
-            ingest_url_parts.fragment,
-        )
-    )
+    source_uri = config.camera.rtsp_url
     source_uri_factory = None
-    if ingest_path_name != "":
-        source_uri_factory = lambda: token_issuer.build_internal_rtsp_url(
-            camera_id=config.camera_id,
-            path_name=ingest_path_name,
-            rtsp_url=ingest_base_url,
-            ttl_seconds=settings.mediamtx_jwt_worker_ttl_seconds,
+    if registration.mode is StreamMode.PASSTHROUGH:
+        logger.info(
+            "Worker ingesting from MediaMTX relay at %s (registered for camera %s)",
+            redact_url_secrets(registration.ingest_path),
+            config.camera_id,
+        )
+        ingest_url_parts = urlsplit(registration.ingest_path)
+        ingest_path_name = ingest_url_parts.path.lstrip("/")
+        ingest_base_url = urlunsplit(
+            (
+                ingest_url_parts.scheme,
+                ingest_url_parts.netloc,
+                ingest_url_parts.path,
+                "",
+                ingest_url_parts.fragment,
+            )
+        )
+        source_uri = registration.ingest_path
+        if ingest_path_name != "":
+            source_uri_factory = lambda: token_issuer.build_internal_rtsp_url(
+                camera_id=config.camera_id,
+                path_name=ingest_path_name,
+                rtsp_url=ingest_base_url,
+                ttl_seconds=settings.mediamtx_jwt_worker_ttl_seconds,
+            )
+    else:
+        logger.info(
+            (
+                "Worker ingesting directly from camera RTSP for processed stream "
+                "(stream_mode=%s, output_path=%s, camera_id=%s)"
+            ),
+            registration.mode.value,
+            registration.path_name,
+            config.camera_id,
         )
 
     frame_source = create_camera_source(
         CameraSourceConfig(
-            source_uri=registration.ingest_path,
+            source_uri=source_uri,
             source_uri_factory=source_uri_factory,
             frame_skip=config.camera.frame_skip,
             fps_cap=config.camera.fps_cap,

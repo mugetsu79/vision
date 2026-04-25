@@ -72,10 +72,30 @@ def redact_url_secrets(
     sensitive_query_keys: frozenset[str] = frozenset({"jwt", "token", "access_token"}),
 ) -> str:
     parts = urlsplit(value)
-    if not parts.query:
-        return value
-
     redacted = False
+    netloc = parts.netloc
+    if parts.username is not None or parts.password is not None:
+        host = parts.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        authority = host
+        if parts.port is not None:
+            authority = f"{authority}:{parts.port}"
+        netloc = f"redacted@{authority}" if authority != "" else "redacted"
+        redacted = True
+
+    if not parts.query:
+        if not redacted:
+            return value
+        return urlunsplit(
+            (
+                parts.scheme,
+                netloc,
+                parts.path,
+                "",
+                parts.fragment,
+            )
+        )
     query_items: list[tuple[str, str]] = []
     for key, query_value in parse_qsl(parts.query, keep_blank_values=True):
         if key.lower() in sensitive_query_keys:
@@ -90,7 +110,7 @@ def redact_url_secrets(
     return urlunsplit(
         (
             parts.scheme,
-            parts.netloc,
+            netloc,
             parts.path,
             urlencode(query_items),
             parts.fragment,
