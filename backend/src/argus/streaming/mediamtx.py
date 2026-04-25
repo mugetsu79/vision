@@ -23,6 +23,7 @@ class Frame(Protocol):
 
 type CommandRunner = Callable[[list[str]], str]
 type PublishTokenFactory = Callable[[UUID, str], str]
+type ReadTokenFactory = Callable[[UUID, str], str]
 
 LOGGER = getLogger(__name__)
 
@@ -242,6 +243,7 @@ class MediaMTXClient:
         http_client: httpx.AsyncClient | None = None,
         publisher_factory: PublisherFactory | None = None,
         publish_token_factory: PublishTokenFactory | None = None,
+        read_token_factory: ReadTokenFactory | None = None,
         publisher_push_timeout_seconds: float = 1.0,
         publisher_idle_restart_seconds: float = 15.0,
     ) -> None:
@@ -254,6 +256,7 @@ class MediaMTXClient:
         )
         self._publisher_factory = publisher_factory or _default_publisher_factory
         self._publish_token_factory = publish_token_factory
+        self._read_token_factory = read_token_factory
         self._publisher_push_timeout_seconds = max(0.0, publisher_push_timeout_seconds)
         self._publisher_idle_restart_seconds = max(0.0, publisher_idle_restart_seconds)
         self._registrations: dict[UUID, StreamRegistration] = {}
@@ -421,6 +424,19 @@ class MediaMTXClient:
             or ""
         )
 
+    def _authenticated_read_url(self, camera_id: UUID, base_url: str, path_name: str) -> str:
+        """Append a read JWT to a MediaMTX RTSP URL when a read token factory is configured.
+
+        Used to build the worker's ingest URL — MediaMTX's `authMethod: jwt`
+        rejects unauthenticated DESCRIBE on protected paths, so the worker
+        cannot read from `cameras/<id>/passthrough` without a token.
+        """
+        if self._read_token_factory is None:
+            return base_url
+        token = self._read_token_factory(camera_id, path_name)
+        separator = "&" if "?" in base_url else "?"
+        return f"{base_url}{separator}jwt={token}"
+
     async def _build_registration(
         self,
         *,
@@ -435,6 +451,9 @@ class MediaMTXClient:
     ) -> StreamRegistration:
         passthrough_name = f"cameras/{camera_id}/passthrough"
         passthrough_read = f"{self.rtsp_base_url}/{passthrough_name}"
+        ingest_path = self._authenticated_read_url(
+            camera_id, passthrough_read, passthrough_name
+        )
         await self._ensure_path(
             passthrough_name,
             source=rtsp_url,
@@ -467,7 +486,7 @@ class MediaMTXClient:
                 target_fps=max(1, target_fps),
                 target_width=target_width,
                 target_height=target_height,
-                ingest_path=passthrough_read,
+                ingest_path=ingest_path,
             )
 
         if profile is PublishProfile.CENTRAL_GPU:
@@ -488,7 +507,7 @@ class MediaMTXClient:
                 target_fps=max(1, target_fps),
                 target_width=target_width,
                 target_height=target_height,
-                ingest_path=passthrough_read,
+                ingest_path=ingest_path,
             )
 
         if privacy.requires_filtering:
@@ -503,7 +522,7 @@ class MediaMTXClient:
                 target_fps=max(1, target_fps),
                 target_width=target_width,
                 target_height=target_height,
-                ingest_path=passthrough_read,
+                ingest_path=ingest_path,
             )
 
         return StreamRegistration(
@@ -515,7 +534,7 @@ class MediaMTXClient:
             target_fps=max(1, target_fps),
             target_width=target_width,
             target_height=target_height,
-            ingest_path=passthrough_read,
+            ingest_path=ingest_path,
         )
 
     async def _ensure_publisher(

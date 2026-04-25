@@ -769,6 +769,11 @@ async def build_runtime_engine(
             camera_id=camera_id,
             path_name=path_name,
         ),
+        read_token_factory=lambda camera_id, path_name: token_issuer.issue_internal_read_token(
+            camera_id=camera_id,
+            path_name=path_name,
+            ttl_seconds=settings.mediamtx_jwt_worker_ttl_seconds,
+        ),
     )
 
     profile = config.profile if config.profile is not None else PublishProfile.CENTRAL_GPU

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     mediamtx_jwt_issuer: str = "argus-mediamtx"
     mediamtx_jwt_audience: str = "mediamtx"
     mediamtx_jwt_ttl_seconds: int = 60
+    mediamtx_jwt_worker_ttl_seconds: int = 86_400
     mediamtx_jwt_key_id: str = "argus-mediamtx-dev"
     mediamtx_jwt_private_key_pem: SecretStr | None = None
 

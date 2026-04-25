@@ -192,6 +192,28 @@ class MediaMTXTokenIssuer:
             permissions=[{"action": "publish", "path": path_name}],
         )
 
+    def issue_internal_read_token(
+        self,
+        *,
+        camera_id: UUID,
+        path_name: str,
+        ttl_seconds: int | None = None,
+    ) -> str:
+        """Long-lived read token for internal service-to-service RTSP reads.
+
+        Browser-facing tokens use the default short TTL so that a leaked
+        token is short-lived. Workers hold a single RTSP session for hours
+        and reconnect over an unbounded period; they need a token that
+        outlives MediaMTX reconnect backoff. Pass an explicit ttl_seconds
+        to override the issuer default.
+        """
+        return self._issue_token(
+            subject=f"worker-{camera_id}",
+            camera_id=camera_id,
+            permissions=[{"action": "read", "path": path_name}],
+            ttl_seconds_override=ttl_seconds,
+        )
+
     def build_hls_url(
         self,
         *,
@@ -241,15 +263,17 @@ class MediaMTXTokenIssuer:
         subject: str,
         camera_id: UUID,
         permissions: list[dict[str, str]],
+        ttl_seconds_override: int | None = None,
     ) -> str:
         now = datetime.now(tz=UTC)
+        ttl = ttl_seconds_override if ttl_seconds_override is not None else self.ttl_seconds
         claims = {
             "sub": subject,
             "iss": self.issuer,
             "aud": self.audience,
             "iat": int(now.timestamp()),
             "nbf": int(now.timestamp()),
-            "exp": int((now + timedelta(seconds=self.ttl_seconds)).timestamp()),
+            "exp": int((now + timedelta(seconds=ttl)).timestamp()),
             "jti": str(uuid4()),
             "camera_id": str(camera_id),
             "mediamtx_permissions": permissions,
