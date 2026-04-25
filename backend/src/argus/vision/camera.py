@@ -21,11 +21,12 @@ LOGGER = getLogger(__name__)
 
 _FFMPEG_RTSP_TIMEOUT_US = "5000000"
 # Analyze long enough to catch the first H.264 SPS + keyframe even on slow
-# streams (e.g. 5 fps with a 50-frame GOP = 10 s between keyframes). ffmpeg's
-# default 5 s analyzeduration was tripping on such streams and returning
-# zero dimensions / empty media-info.
-_FFMPEG_ANALYZE_DURATION_US = "20000000"  # 20 seconds
-_FFMPEG_PROBE_SIZE = "32000000"  # 32 MB
+# streams (e.g. 5 fps with a 60-frame GOP = 12 s between keyframes), plus
+# allowance for MediaMTX UDP→TCP renegotiation when first connecting upstream.
+# ffmpeg's default 5 s analyzeduration was tripping on such streams and
+# returning zero dimensions / empty media-info.
+_FFMPEG_ANALYZE_DURATION_US = "60000000"  # 60 seconds
+_FFMPEG_PROBE_SIZE = "64000000"  # 64 MB
 
 type Frame = NDArray[np.uint8]
 type CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
@@ -404,9 +405,25 @@ def _probe_video_dimensions(source_uri: str) -> tuple[int, int]:
     payload = json.loads(completed.stdout)
     streams = payload.get("streams", [])
     if not streams:
-        raise RuntimeError("ffprobe did not return a video stream.")
-    width = int(streams[0]["width"])
-    height = int(streams[0]["height"])
+        raise RuntimeError(
+            "ffprobe did not return a video stream. "
+            f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
+        )
+    raw_width = streams[0].get("width")
+    raw_height = streams[0].get("height")
+    try:
+        width = int(raw_width) if raw_width is not None else 0
+        height = int(raw_height) if raw_height is not None else 0
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            "ffprobe returned non-numeric video dimensions: "
+            f"width={raw_width!r} height={raw_height!r} "
+            f"stderr={completed.stderr!r}"
+        ) from None
     if width <= 0 or height <= 0:
-        raise RuntimeError("ffprobe returned invalid video dimensions.")
+        raise RuntimeError(
+            "ffprobe returned invalid video dimensions: "
+            f"width={width} height={height} payload={payload!r} "
+            f"stderr={completed.stderr!r}"
+        )
     return width, height
