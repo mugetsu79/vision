@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import subprocess
 import threading
 import time
@@ -377,7 +378,32 @@ def _should_use_ffmpeg_rawvideo_capture(*, source: str | int, backend: int | Non
     )
 
 
+_FFMPEG_VIDEO_LINE_PATTERN = re.compile(
+    r"Stream #\d+:\d+.*?Video:.*?\b(\d{2,5})x(\d{2,5})\b",
+    re.DOTALL,
+)
+
+
 def _probe_video_dimensions(source_uri: str) -> tuple[int, int]:
+    """Resolve the stream's frame size, with fallback to an ffmpeg one-frame probe.
+
+    ffprobe is the cheap, fast first try. On RTSP relays that don't surface
+    SPS dimensions in the SDP (observed with MediaMTX-fronted on-demand
+    sources at low FPS), ffprobe returns a clean JSON payload but with
+    width=0 / height=0. In that case we fall back to ffmpeg, which actually
+    decodes a keyframe and prints the stream layout to stderr.
+    """
+    try:
+        return _probe_via_ffprobe(source_uri)
+    except RuntimeError as exc:
+        LOGGER.warning(
+            "ffprobe could not determine video dimensions; falling back to ffmpeg probe: %s",
+            exc,
+        )
+    return _probe_via_ffmpeg(source_uri)
+
+
+def _probe_via_ffprobe(source_uri: str) -> tuple[int, int]:
     command = [
         "ffprobe",
         "-v",
@@ -426,4 +452,58 @@ def _probe_video_dimensions(source_uri: str) -> tuple[int, int]:
             f"width={width} height={height} payload={payload!r} "
             f"stderr={completed.stderr!r}"
         )
+    return width, height
+
+
+def _probe_via_ffmpeg(source_uri: str) -> tuple[int, int]:
+    """Fall-back probe: decode one frame with ffmpeg and parse stderr.
+
+    ffmpeg prints `Stream #0:N: Video: h264 (...), yuv420p(...), 960x540, ...`
+    once it has decoded the SPS for a keyframe. We regex the WxH out.
+    """
+    command = [
+        "ffmpeg",
+        "-v",
+        "info",
+        "-rtsp_transport",
+        "tcp",
+        "-analyzeduration",
+        _FFMPEG_ANALYZE_DURATION_US,
+        "-probesize",
+        _FFMPEG_PROBE_SIZE,
+        "-i",
+        source_uri,
+        "-map",
+        "0:v:0",
+        "-frames:v",
+        "1",
+        "-f",
+        "null",
+        "-",
+    ]
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    match = _FFMPEG_VIDEO_LINE_PATTERN.search(completed.stderr)
+    if match is None:
+        raise RuntimeError(
+            "ffmpeg fallback probe did not report video dimensions. "
+            f"returncode={completed.returncode} "
+            f"stderr={completed.stderr[-2000:]!r}"
+        )
+    width = int(match.group(1))
+    height = int(match.group(2))
+    if width <= 0 or height <= 0:
+        raise RuntimeError(
+            f"ffmpeg fallback probe returned non-positive dimensions: "
+            f"width={width} height={height}"
+        )
+    LOGGER.info(
+        "ffmpeg fallback probe resolved video dimensions: %sx%s",
+        width,
+        height,
+    )
     return width, height

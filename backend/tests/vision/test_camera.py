@@ -340,3 +340,49 @@ def test_ffmpeg_rawvideo_capture_logs_stderr_when_process_exits(
         and "401 Unauthorized" in record.message
         for record in caplog.records
     )
+
+
+def test_probe_video_dimensions_falls_back_to_ffmpeg_when_ffprobe_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When ffprobe reports valid JSON but width=0/height=0, fall back to the
+    ffmpeg one-frame probe and parse dimensions out of stderr."""
+    calls: list[str] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        if command[0] == "ffprobe":
+            calls.append("ffprobe")
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout='{"streams":[{"width":0,"height":0}]}',
+                stderr="",
+            )
+        if command[0] == "ffmpeg":
+            calls.append("ffmpeg")
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout="",
+                stderr=(
+                    "Input #0, rtsp, from 'rtsp://...':\n"
+                    "  Stream #0:0: Audio: aac, 48000 Hz, mono, fltp\n"
+                    "  Stream #0:1: Video: h264 (Main), yuv420p(progressive),"
+                    " 960x540, 5 fps, 5 tbr\n"
+                    "Output #0, null, to 'pipe:':\n"
+                ),
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(camera_module.subprocess, "run", fake_run)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    width, height = camera_module._probe_video_dimensions("rtsp://relay/stream")
+
+    assert (width, height) == (960, 540)
+    assert calls == ["ffprobe", "ffmpeg"]
+    assert any(
+        "falling back to ffmpeg probe" in record.message for record in caplog.records
+    )
