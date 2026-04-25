@@ -4,6 +4,7 @@ import contextvars
 import logging
 import uuid
 from typing import Any, cast
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import structlog
 from opentelemetry import trace
@@ -63,3 +64,35 @@ def bind_request_context() -> str:
 def clear_request_context() -> None:
     request_id_var.set(None)
     structlog.contextvars.clear_contextvars()
+
+
+def redact_url_secrets(
+    value: str,
+    *,
+    sensitive_query_keys: frozenset[str] = frozenset({"jwt", "token", "access_token"}),
+) -> str:
+    parts = urlsplit(value)
+    if not parts.query:
+        return value
+
+    redacted = False
+    query_items: list[tuple[str, str]] = []
+    for key, query_value in parse_qsl(parts.query, keep_blank_values=True):
+        if key.lower() in sensitive_query_keys:
+            query_items.append((key, "redacted"))
+            redacted = True
+        else:
+            query_items.append((key, query_value))
+
+    if not redacted:
+        return value
+
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(query_items),
+            parts.fragment,
+        )
+    )

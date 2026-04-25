@@ -18,6 +18,8 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
+from argus.core.logging import redact_url_secrets
+
 LOGGER = getLogger(__name__)
 
 _FFMPEG_RTSP_TIMEOUT_US = "5000000"
@@ -28,11 +30,14 @@ _FFMPEG_RTSP_TIMEOUT_US = "5000000"
 # returning zero dimensions / empty media-info.
 _FFMPEG_ANALYZE_DURATION_US = "60000000"  # 60 seconds
 _FFMPEG_PROBE_SIZE = "64000000"  # 64 MB
+_FFMPEG_DIMENSION_PROBE_TIMEOUT_S = 20.0
+_FFMPEG_FRAME_WAIT_TIMEOUT_S = 20.0
 
 type Frame = NDArray[np.uint8]
 type CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
 type MonotonicClock = Callable[[], float]
 type SleepFunction = Callable[[float], None]
+type SourceUriFactory = Callable[[], str]
 
 
 class CaptureHandle(Protocol):
@@ -56,6 +61,7 @@ class PlatformInfo:
 @dataclass(slots=True, frozen=True)
 class CameraSourceConfig:
     source_uri: str
+    source_uri_factory: SourceUriFactory | None = None
     frame_skip: int = 1
     fps_cap: int = 25
     reconnect_backoff_base: float = 1.0
@@ -67,17 +73,17 @@ class CameraSource:
         self,
         *,
         config: CameraSourceConfig,
-        mode: CameraSourceMode,
-        source: str | int,
-        backend: int | None,
+        platform_info: PlatformInfo,
         capture_factory: CaptureFactory,
         monotonic: MonotonicClock,
         sleep: SleepFunction,
     ) -> None:
         self.config = config
-        self.mode = mode
-        self._source = source
-        self._backend = backend
+        self._platform_info = platform_info
+        self.mode = CameraSourceMode.X86_RTSP
+        self._source: str | int = config.source_uri
+        self._backend: int | None = None
+        self._current_source_uri = config.source_uri
         self._capture_factory = capture_factory
         self._monotonic = monotonic
         self._sleep = sleep
@@ -112,7 +118,18 @@ class CameraSource:
         self._capture.release()
 
     def _open_capture(self) -> CaptureHandle:
+        source_uri = self._resolve_source_uri()
+        mode, source, backend = _resolve_capture_spec(source_uri, self._platform_info)
+        self.mode = mode
+        self._source = source
+        self._backend = backend
+        self._current_source_uri = source_uri
         return self._capture_factory(self._source, self._backend)
+
+    def _resolve_source_uri(self) -> str:
+        if self.config.source_uri_factory is None:
+            return self.config.source_uri
+        return self.config.source_uri_factory()
 
     def _throttle(self) -> None:
         if self._last_yield_at is None or self.config.fps_cap <= 0:
@@ -135,7 +152,7 @@ class CameraSource:
         LOGGER.warning(
             "Camera capture lost, reconnecting",
             extra={
-                "source_uri": self.config.source_uri,
+                "source_uri": redact_url_secrets(self._current_source_uri),
                 "mode": self.mode.value,
                 "reconnect_delay_seconds": delay,
             },
@@ -154,12 +171,9 @@ def create_camera_source(
     sleep: SleepFunction = time.sleep,
 ) -> CameraSource:
     resolved_platform = platform_info or detect_platform()
-    mode, source, backend = _resolve_capture_spec(config.source_uri, resolved_platform)
     return CameraSource(
         config=config,
-        mode=mode,
-        source=source,
-        backend=backend,
+        platform_info=resolved_platform,
         capture_factory=capture_factory or _default_capture_factory,
         monotonic=monotonic,
         sleep=sleep,
@@ -209,10 +223,11 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
         try:
             return _FFmpegRawVideoCapture.create(cast(str, source))
         except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            redacted_source = redact_url_secrets(source) if isinstance(source, str) else source
             LOGGER.warning(
                 "FFmpeg rawvideo capture unavailable, falling back to OpenCV: %s",
-                exc,
-                extra={"source_uri": source},
+                _redact_capture_exception_message(exc, source=source),
+                extra={"source_uri": redacted_source},
             )
     if (
         backend == cv2.CAP_FFMPEG
@@ -224,15 +239,13 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
     capture = cv2.VideoCapture(source, backend) if backend is not None else cv2.VideoCapture(source)
     return cast(CaptureHandle, capture)
 
-
-_FFMPEG_FRAME_WAIT_TIMEOUT_S = 10.0
-
-
 @dataclass(slots=True)
 class _FFmpegRawVideoCapture:
     _process: subprocess.Popen[bytes]
     _width: int
     _height: int
+    _source_uri: str
+    _redacted_source_uri: str
     _stderr_tail: deque[str] = field(default_factory=lambda: deque(maxlen=20))
     _stderr_reported: bool = False
     _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
@@ -271,7 +284,13 @@ class _FFmpegRawVideoCapture:
             stderr=subprocess.PIPE,
             bufsize=max(1, width * height * 3 * 2),
         )
-        instance = cls(_process=process, _width=width, _height=height)
+        instance = cls(
+            _process=process,
+            _width=width,
+            _height=height,
+            _source_uri=source_uri,
+            _redacted_source_uri=redact_url_secrets(source_uri),
+        )
         instance._start_stderr_pump()
         instance._start_frame_pump()
         return instance
@@ -286,7 +305,7 @@ class _FFmpegRawVideoCapture:
                 for raw_line in stderr:
                     line = raw_line.decode("utf-8", errors="replace").rstrip()
                     if line:
-                        self._stderr_tail.append(line)
+                        self._stderr_tail.append(self._sanitize_stderr_line(line))
             except (OSError, ValueError):
                 return
 
@@ -357,6 +376,11 @@ class _FFmpegRawVideoCapture:
                 reason,
             )
 
+    def _sanitize_stderr_line(self, line: str) -> str:
+        if self._redacted_source_uri == self._source_uri:
+            return line
+        return line.replace(self._source_uri, self._redacted_source_uri)
+
     def release(self) -> None:
         if self._process.poll() is not None:
             return
@@ -410,6 +434,8 @@ def _probe_via_ffprobe(source_uri: str) -> tuple[int, int]:
         "error",
         "-rtsp_transport",
         "tcp",
+        "-timeout",
+        _FFMPEG_RTSP_TIMEOUT_US,
         "-analyzeduration",
         _FFMPEG_ANALYZE_DURATION_US,
         "-probesize",
@@ -422,12 +448,19 @@ def _probe_via_ffprobe(source_uri: str) -> tuple[int, int]:
         "json",
         source_uri,
     ]
-    completed = subprocess.run(
-        command,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=_FFMPEG_DIMENSION_PROBE_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            "ffprobe timed out while probing video dimensions "
+            f"after {_FFMPEG_DIMENSION_PROBE_TIMEOUT_S:.0f}s."
+        ) from exc
     payload = json.loads(completed.stdout)
     streams = payload.get("streams", [])
     if not streams:
@@ -467,6 +500,8 @@ def _probe_via_ffmpeg(source_uri: str) -> tuple[int, int]:
         "info",
         "-rtsp_transport",
         "tcp",
+        "-timeout",
+        _FFMPEG_RTSP_TIMEOUT_US,
         "-analyzeduration",
         _FFMPEG_ANALYZE_DURATION_US,
         "-probesize",
@@ -481,12 +516,18 @@ def _probe_via_ffmpeg(source_uri: str) -> tuple[int, int]:
         "null",
         "-",
     ]
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=_FFMPEG_DIMENSION_PROBE_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            "ffmpeg fallback probe timed out while probing video dimensions "
+            f"after {_FFMPEG_DIMENSION_PROBE_TIMEOUT_S:.0f}s."
+        ) from exc
     match = _FFMPEG_VIDEO_LINE_PATTERN.search(completed.stderr)
     if match is None:
         raise RuntimeError(
@@ -507,3 +548,17 @@ def _probe_via_ffmpeg(source_uri: str) -> tuple[int, int]:
         height,
     )
     return width, height
+
+
+def _redact_capture_exception_message(
+    exc: BaseException,
+    *,
+    source: str | int,
+) -> str:
+    message = str(exc)
+    if not isinstance(source, str):
+        return message
+    redacted_source = redact_url_secrets(source)
+    if redacted_source == source:
+        return message
+    return message.replace(source, redacted_source)

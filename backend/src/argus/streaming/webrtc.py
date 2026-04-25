@@ -242,6 +242,21 @@ class MediaMTXTokenIssuer:
         )
         return _append_query_parameter(access.rtsp_url, key="jwt", value=token)
 
+    def build_internal_rtsp_url(
+        self,
+        *,
+        camera_id: UUID,
+        path_name: str,
+        rtsp_url: str,
+        ttl_seconds: int | None = None,
+    ) -> str:
+        token = self.issue_internal_read_token(
+            camera_id=camera_id,
+            path_name=path_name,
+            ttl_seconds=ttl_seconds,
+        )
+        return _append_query_parameter(rtsp_url, key="jwt", value=token)
+
     def jwks(self) -> dict[str, list[dict[str, str]]]:
         public_numbers = self._private_key.public_key().public_numbers()
         return {

@@ -144,6 +144,55 @@ def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
     assert source.reconnect_attempts == 0
 
 
+def test_camera_source_refreshes_source_uri_on_reconnect_and_redacts_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    capture_attempts = [
+        _FakeCapture([None]),
+        _FakeCapture([np.full((2, 2, 3), 7, dtype=np.uint8)]),
+    ]
+    capture_calls: list[_CaptureCall] = []
+    source_uris = iter(
+        [
+            "rtsp://mediamtx.internal:8554/cameras/cam/passthrough?jwt=stale-token",
+            "rtsp://mediamtx.internal:8554/cameras/cam/passthrough?jwt=fresh-token",
+        ]
+    )
+    sleep_calls: list[float] = []
+
+    def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
+        capture_calls.append(_CaptureCall(source=source, backend=backend))
+        return capture_attempts.pop(0)
+
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+    source = create_camera_source(
+        CameraSourceConfig(
+            source_uri="rtsp://mediamtx.internal:8554/cameras/cam/passthrough?jwt=initial-token",
+            source_uri_factory=lambda: next(source_uris),
+            reconnect_backoff_base=0.25,
+            reconnect_backoff_max=0.25,
+        ),
+        platform_info=PlatformInfo(machine="x86_64", jetson=False),
+        capture_factory=capture_factory,
+        sleep=sleep_calls.append,
+    )
+
+    frame = source.next_frame()
+
+    assert int(frame[0, 0, 0]) == 7
+    assert [call.source for call in capture_calls] == [
+        "rtsp://mediamtx.internal:8554/cameras/cam/passthrough?jwt=stale-token",
+        "rtsp://mediamtx.internal:8554/cameras/cam/passthrough?jwt=fresh-token",
+    ]
+    assert sleep_calls == [0.25]
+    assert any(
+        "Camera capture lost, reconnecting" in record.message
+        and "jwt=redacted" in str(record.source_uri)
+        and "stale-token" not in str(record.source_uri)
+        for record in caplog.records
+    )
+
+
 def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -> None:
     calls: list[_CaptureCall] = []
 
@@ -197,10 +246,17 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
         def kill(self) -> None:
             self._returncode = -9
 
-    def fake_run(command: list[str], check: bool, capture_output: bool, text: bool):
+    def fake_run(
+        command: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+    ):
         assert check is True
         assert capture_output is True
         assert text is True
+        assert timeout == 20.0
         assert command[:4] == ["ffprobe", "-v", "error", "-rtsp_transport"]
         return subprocess.CompletedProcess(
             args=command,
@@ -278,6 +334,43 @@ def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(
     )
 
 
+def test_default_capture_factory_redacts_probe_timeout_source_uri(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fallback_capture = _FakeCapture([])
+    source_uri = "rtsp://camera.internal/live?jwt=super-secret-token"
+
+    monkeypatch.setattr(camera_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(camera_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        camera_module._FFmpegRawVideoCapture,
+        "create",
+        classmethod(
+            lambda cls, source_uri: (_ for _ in ()).throw(  # noqa: ARG005
+                subprocess.TimeoutExpired(
+                    cmd=["ffmpeg", "-i", source_uri],
+                    timeout=120,
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(cv2, "VideoCapture", lambda source, backend=None: fallback_capture)
+    monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory(source_uri, cv2.CAP_FFMPEG)
+
+    assert capture is fallback_capture
+    assert any(
+        "FFmpeg rawvideo capture unavailable, falling back to OpenCV"
+        in record.message
+        and "jwt=redacted" in record.message
+        and "super-secret-token" not in record.message
+        for record in caplog.records
+    )
+
+
 def test_ffmpeg_rawvideo_capture_logs_stderr_when_process_exits(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -305,8 +398,15 @@ def test_ffmpeg_rawvideo_capture_logs_stderr_when_process_exits(
         def kill(self) -> None:
             self._returncode = -9
 
-    def fake_run(command: list[str], check: bool, capture_output: bool, text: bool):
+    def fake_run(
+        command: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+    ):
         del check, capture_output, text
+        assert timeout == 20.0
         return subprocess.CompletedProcess(
             args=command,
             returncode=0,
@@ -338,6 +438,77 @@ def test_ffmpeg_rawvideo_capture_logs_stderr_when_process_exits(
     assert any(
         "ffmpeg rawvideo capture failed" in record.message
         and "401 Unauthorized" in record.message
+        for record in caplog.records
+    )
+
+
+def test_ffmpeg_rawvideo_capture_redacts_source_uri_in_stderr_log(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    source_uri = "rtsp://camera.internal/live?jwt=super-secret-token"
+    stderr_payload = (
+        f"{source_uri}: Connection timed out\n".encode("utf-8")
+    )
+
+    class _ExitedProcess:
+        def __init__(self) -> None:
+            self.stdout = io.BytesIO(b"")
+            self.stderr = io.BytesIO(stderr_payload)
+            self._returncode: int | None = 1
+
+        def poll(self) -> int | None:
+            return self._returncode
+
+        def terminate(self) -> None:
+            self._returncode = 0
+
+        def wait(self, timeout: float | None = None) -> int:
+            return self._returncode or 0
+
+        def kill(self) -> None:
+            self._returncode = -9
+
+    def fake_run(
+        command: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+    ):
+        del check, capture_output, text
+        assert timeout == 20.0
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"streams":[{"width":16,"height":12}]}',
+            stderr="",
+        )
+
+    def fake_popen(command: list[str], stdout: object, stderr: object, bufsize: int):
+        del command, stdout, stderr, bufsize
+        return _ExitedProcess()
+
+    monkeypatch.setattr(camera_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(camera_module.subprocess, "Popen", fake_popen)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = camera_module._FFmpegRawVideoCapture.create(source_uri)
+    import time as _time
+
+    for _ in range(20):
+        if capture._stderr_tail:
+            break
+        _time.sleep(0.01)
+
+    ok, frame = capture.read()
+
+    assert ok is False
+    assert frame is None
+    assert any(
+        "ffmpeg rawvideo capture failed" in record.message
+        and "jwt=redacted" in record.message
+        and "super-secret-token" not in record.message
         for record in caplog.records
     )
 
@@ -386,3 +557,74 @@ def test_probe_video_dimensions_falls_back_to_ffmpeg_when_ffprobe_returns_zero(
     assert any(
         "falling back to ffmpeg probe" in record.message for record in caplog.records
     )
+
+
+def test_probe_via_ffmpeg_uses_rtsp_timeout_and_redacts_timeout_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_uri = "rtsp://relay/stream?jwt=super-secret-token"
+    captured: dict[str, object] = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        raise subprocess.TimeoutExpired(cmd=command, timeout=float(kwargs["timeout"]))
+
+    monkeypatch.setattr(camera_module.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        camera_module._probe_via_ffmpeg(source_uri)
+
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert "-timeout" in command
+    timeout_index = command.index("-timeout")
+    assert command[timeout_index + 1] == "5000000"
+    kwargs = captured["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["timeout"] == 20.0
+
+
+def test_ffmpeg_rawvideo_capture_waits_20_seconds_for_first_frame() -> None:
+    class _FakeEvent:
+        def __init__(self) -> None:
+            self.wait_calls: list[float] = []
+
+        def wait(self, timeout: float | None = None) -> bool:
+            self.wait_calls.append(float(timeout))
+            return False
+
+        def clear(self) -> None:
+            return None
+
+        def set(self) -> None:
+            return None
+
+    class _FakeProcess:
+        def poll(self) -> int | None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 0
+
+        def kill(self) -> None:
+            return None
+
+    fake_event = _FakeEvent()
+    capture = camera_module._FFmpegRawVideoCapture(
+        _process=_FakeProcess(),
+        _width=16,
+        _height=12,
+        _source_uri="rtsp://camera.internal/live",
+        _redacted_source_uri="rtsp://camera.internal/live",
+        _new_frame_event=fake_event,
+    )
+
+    ok, frame = capture.read()
+
+    assert ok is False
+    assert frame is None
+    assert fake_event.wait_calls == [20.0]

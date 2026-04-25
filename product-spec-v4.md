@@ -5,6 +5,14 @@
 > **Scope target:** mid-scale commercial VMS — 5–50 sites, 25–250 cameras.
 >
 > **Primary consumers of this doc:** (1) human reviewers, (2) `ai-coder-prompt-v4.md` which feeds Codex / Claude Code.
+>
+> **Current implementation checkpoint (2026-04-24):**
+> - `/live` is the canonical operator wall; `/dashboard` is retained only as a legacy redirect.
+> - Live tiles now combine browser video delivery, telemetry overlays, and a per-camera 30-minute detection sparkline backed by a shared app-level telemetry store.
+> - `/history` has URL-backed filters, a `/api/v1/history/classes` discovery path, optional speed overlays/thresholds, and backend granularity auto-adjustment for wide windows.
+> - Workers now ingest through the MediaMTX passthrough relay path before optionally publishing processed browser renditions such as `annotated` or `preview`.
+> - Standard self-describing ONNX metadata is now the default truth for model inventory; camera `active_classes` and NL query scope narrow behavior later without falsifying the model record.
+> - Worker startup resolves a host-aware ONNX Runtime policy and logs stage timing summaries so central, Jetson, Intel Linux, and lab macOS hosts can be reasoned about explicitly.
 
 ---
 
@@ -17,7 +25,7 @@
    - **Attributes per tracked object** are produced by an optional secondary classifier (see §5.1.7): *"this person is wearing a hi-vis vest but no hard hat"*.
    - **Counting modes** include instantaneous count, cumulative count, directional line-crossing, speed, dwell time, density, trajectory, proximity between objects, attribute combinations, queue length, loitering, abandoned-object detection, and (opt-in) cross-camera re-identification.
    - **Rules** compose freely across class × attribute × zone × time-window × speed × proximity, with actions `count | alert | record_clip | webhook`.
-   - **Mixing domains in one deployment is first-class**: Camera A does traffic speed, Camera B does PPE compliance, Camera C does retail queue analytics, Camera D does perimeter security — same database, same dashboard, no code forks.
+   - **Mixing domains in one deployment is first-class**: Camera A does traffic speed, Camera B does PPE compliance, Camera C does retail queue analytics, Camera D does perimeter security — same database, same operator console, no code forks.
    - *Out of scope by design:* facial identification, action recognition networks bundled in-box, video-LLM scene captioning. These are roadmap / separate-SKU items (see §10.7).
 3. **Reference edge hardware is the NVIDIA Jetson Orin Nano Super 8 GB.** The spec and blueprint must be buildable and runnable on that device out of the box. See §3.2 for the hardware profile and its constraints — most importantly: **no NVENC** on Orin Nano, so V2's "annotated-frame re-encode at the edge" path is infeasible. V4 routes around this (see §5.5).
 4. Build a **true hybrid** inference pipeline: a camera can be `central` (master pulls RTSP and runs inference locally on HQ GPU), `edge` (Orin Nano runs inference and publishes events), or `hybrid` (edge does primary detection, central does re-identification and long-term analytics). Same worker binary, different deployment profile.
@@ -331,6 +339,8 @@ POST   /api/v1/edge/heartbeat
 
 POST   /api/v1/query                        -- LLM NL → active_classes
 GET    /api/v1/history                      ?camera_id=&from=&to=&granularity=
+GET    /api/v1/history/series              -- bucketed counts; optional speed percentiles / threshold breaches
+GET    /api/v1/history/classes             -- observed classes for filter hydration in a window
 GET    /api/v1/export                       -- CSV / Parquet
 GET    /api/v1/incidents
 
@@ -343,6 +353,13 @@ SSE    /sse/events                          -- fallback
 GET    /metrics                             -- Prometheus
 GET    /healthz  /readyz
 ```
+
+Model registration contract:
+
+- Self-describing ONNX metadata is canonical when present.
+- `classes` may be omitted for self-describing ONNX models.
+- If supplied `classes` disagree with embedded metadata, the API rejects the request with a validation error instead of storing a false inventory.
+- `Model.classes` remains the full detector inventory; `Camera.active_classes` and query resolution narrow runtime scope later.
 
 All endpoints auth-gated except `/healthz`, `/readyz`, `/metrics` (internal). RBAC: `viewer` read-only, `operator` can issue commands (`/query`, start/stop), `admin` full CRUD, `superadmin` cross-tenant. Tenant users authenticate in tenant realms; `superadmin` authenticates in a dedicated `platform-admin` realm and assumes tenant context explicitly. Tokens with missing or unrecognized role claims must be rejected rather than silently downgraded.
 
@@ -366,7 +383,7 @@ providers/vllm.py      # local OpenAI-compatible server
 
 ### 5.5 Streaming (`src/argus/streaming/` + MediaMTX)
 
-Default path depends on deployment profile, but the core rule is that **native ingest and browser delivery are decoupled**. For `central-gpu`, the worker may push annotated, privacy-filtered frames to **MediaMTX** via `rtsp://mediamtx:8554/cameras/<id>` using its `whip` or RTSP-push plugin, including multiple operator renditions where helpful. For `jetson-nano`, MediaMTX may expose the original camera stream as a native passthrough option **only when privacy is off**; when bandwidth savings are preferred, the worker may additionally publish lower-bitrate preview/transcode renditions for browser delivery. If privacy is on, the worker must disable raw passthrough and publish only privacy-filtered preview renditions instead. Clients pull via WebRTC (preferred), LL-HLS (iOS/fallback), or MJPEG (forensic only, and never as a privacy bypass). Overlays (bbox, class, speed) may be drawn in the worker for preview streams, and a parallel JSON telemetry stream lets the React canvas re-draw precise overlays on top of the decoded video for interactive UX.
+Default path depends on deployment profile, but the core rule is that **native ingest and browser delivery are decoupled**. The current implementation registers a MediaMTX passthrough relay path first (`cameras/<id>/passthrough`) and points workers at that relay for ingest, even when browser delivery later resolves to processed outputs. For `central-gpu`, the worker may then publish annotated, privacy-filtered frames to `cameras/<id>/annotated`. For `jetson-nano`, MediaMTX may expose the original camera stream as a native passthrough option **only when privacy is off**; when privacy is on, the worker must disable raw passthrough for operators and publish only privacy-filtered preview renditions instead. Clients pull via WebRTC (preferred), LL-HLS (iOS/fallback), or MJPEG (forensic only, and never as a privacy bypass). Overlays (bbox, class, speed) may be drawn in the worker for preview streams, and a parallel JSON telemetry stream lets the React canvas re-draw precise overlays on top of the decoded video for interactive UX.
 
 ### 5.6 Frontend (`frontend/src/`)
 
@@ -380,18 +397,24 @@ src/
 │   └── auth.ts                 -- OIDC PKCE (via oidc-client-ts)
 ├── stores/
 │   ├── camera-store.ts         -- Zustand: active camera grid
-│   └── command-store.ts
+│   ├── command-store.ts
+│   └── telemetry-store.ts      -- shared WS connection + ring buffer across Live/History hops
 ├── components/
 │   ├── VideoStream.tsx         -- WebRTC first, HLS fallback, canvas overlay for boxes
 │   ├── TelemetryCanvas.tsx     -- decouples overlay from video element
 │   ├── DynamicStats.tsx        -- auto stat cards from telemetry counts
 │   ├── AgentInput.tsx          -- chat bar to /api/v1/query
+│   ├── LiveSparkline.tsx       -- per-camera 30-minute detection pulse
 │   ├── HomographyEditor.tsx    -- click-to-set 4 src + 4 dst points on a frame snapshot
 │   └── PrivacyToggle.tsx
+├── hooks/
+│   ├── use-live-telemetry.ts   -- hooks into the shared telemetry store
+│   ├── use-live-sparkline.ts   -- history seed + live updates for sparkline buckets
+│   └── use-history.ts          -- URL-backed history filters + speed-aware query hooks
 ├── pages/
-│   ├── Dashboard.tsx           -- grid, N×M, responsive
+│   ├── Live.tsx                -- canonical live wall; `/dashboard` redirects here
 │   ├── Sites.tsx, Cameras.tsx  -- CRUD
-│   ├── History.tsx             -- ECharts time-series + CSV/Parquet export
+│   ├── History.tsx             -- URL-backed filters, class discovery, speed overlays, export
 │   ├── Incidents.tsx
 │   └── Settings.tsx            -- per-tenant settings, API keys, users
 ```
@@ -484,7 +507,7 @@ argus-v4/
 
 ## 10. Capabilities & Supported Use Cases
 
-**This is not a car counter.** V4 is a general-purpose real-time vision analytics platform. A single deployment can simultaneously run traffic counting at one camera, worksite PPE compliance at another, retail dwell analytics at a third, and perimeter security at a fourth — from the same binaries, the same database, and the same dashboard. The only per-camera differences are configuration (classes, zones, rules, privacy) and, optionally, the ONNX model file.
+**This is not a car counter.** V4 is a general-purpose real-time vision analytics platform. A single deployment can simultaneously run traffic counting at one camera, worksite PPE compliance at another, retail dwell analytics at a third, and perimeter security at a fourth — from the same binaries, the same database, and the same operator console. The only per-camera differences are configuration (classes, zones, rules, privacy) and, optionally, the ONNX model file.
 
 ### 10.1 What can be detected (object classes)
 

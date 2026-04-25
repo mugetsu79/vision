@@ -149,10 +149,12 @@ The repo already includes:
 - multi-tenant auth and RBAC
 - site and camera management
 - model registration
-- live dashboard with query-driven filtering
-- history and incidents
+- unified live workspace at `/live` with NL query-driven filtering, per-camera video tiles, and 30-minute detection sparklines (`/dashboard` now redirects)
+- shared telemetry WebSocket state that survives route changes and keeps the live wall warm across short navigation hops
+- history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, and CSV/Parquet export
 - incident clip storage
 - edge worker support
+- MediaMTX relay ingest for workers, with passthrough/native delivery separated from processed browser renditions
 - Docker Compose and Helm assets
 - CI-oriented full validation flow
 
@@ -163,6 +165,7 @@ The most mature operational paths today are `central` and `edge`.
 - `models/` is just where local ONNX files live during lab and development work.
 - In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later.
 - For standard deployment, self-describing ONNX metadata is the source of truth for model classes.
+- If an operator supplies `classes` for a self-describing ONNX model and they disagree with embedded metadata, registration should fail closed instead of warning and proceeding.
 - `Model.classes` is the full model inventory.
 - `Camera.active_classes` narrows the operational scope for a camera or site.
 - Custom reduced-class models are an advanced optional path, not the default deployment story.

@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 import cv2
@@ -19,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from argus.core.config import Settings
 from argus.core.db import DatabaseManager, TrackingEventStore
 from argus.core.events import EventMessage, NatsJetStreamClient
+from argus.core.logging import redact_url_secrets
 from argus.core.logging import configure_logging
 from argus.core.metrics import (
     INFERENCE_FRAME_DURATION_SECONDS,
@@ -789,13 +791,33 @@ async def build_runtime_engine(
     )
     logger.info(
         "Worker ingesting from MediaMTX relay at %s (registered for camera %s)",
-        registration.ingest_path,
+        redact_url_secrets(registration.ingest_path),
         config.camera_id,
     )
+    ingest_url_parts = urlsplit(registration.ingest_path)
+    ingest_path_name = ingest_url_parts.path.lstrip("/")
+    ingest_base_url = urlunsplit(
+        (
+            ingest_url_parts.scheme,
+            ingest_url_parts.netloc,
+            ingest_url_parts.path,
+            "",
+            ingest_url_parts.fragment,
+        )
+    )
+    source_uri_factory = None
+    if ingest_path_name != "":
+        source_uri_factory = lambda: token_issuer.build_internal_rtsp_url(
+            camera_id=config.camera_id,
+            path_name=ingest_path_name,
+            rtsp_url=ingest_base_url,
+            ttl_seconds=settings.mediamtx_jwt_worker_ttl_seconds,
+        )
 
     frame_source = create_camera_source(
         CameraSourceConfig(
             source_uri=registration.ingest_path,
+            source_uri_factory=source_uri_factory,
             frame_skip=config.camera.frame_skip,
             fps_cap=config.camera.fps_cap,
         )

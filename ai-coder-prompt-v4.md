@@ -108,7 +108,7 @@
 >
 > `sites` and `cameras` are full CRUD with Pydantic v2 request/response models. Camera create/update validates the 8 homography points + ref distance, primary / secondary model references, and the `privacy` object against the tenant policy (privacy policy may force certain flags true).
 >
-> `models` supports list, create, and patch. `POST /api/v1/models` registers ONNX metadata (task, classes, shape, checksum, license) so cameras can reference models without code changes.
+> `models` supports list, create, and patch. `POST /api/v1/models` registers ONNX metadata (task, classes, shape, checksum, license) so cameras can reference models without code changes. Treat self-describing ONNX metadata as canonical: operators may omit `classes`, matching `classes` may be accepted, and mismatches must fail closed with a validation error instead of storing a false model inventory.
 >
 > `POST /api/v1/edge/register` bootstraps a new edge node: issues a scoped NATS nkey + edge API key, returns config (MediaMTX creds, overlay network hints).
 >
@@ -117,6 +117,10 @@
 > `WS /ws/telemetry` subscribes the connected user to NATS `evt.tracking.*` filtered to the tenant's cameras. Use backpressure (drop oldest) if the client is slow.
 >
 > `GET /api/v1/history` queries the appropriate continuous aggregate (`events_1m` or `events_1h`) based on `granularity`, grouped by `class_name`.
+>
+> `GET /api/v1/history/series` returns chart-ready bucketed rows and supports additive speed fields via `include_speed` and `speed_threshold`.
+>
+> `GET /api/v1/history/classes` returns the observed class inventory for the selected window so the History page can hydrate its filter UI without hardcoding a deployment-specific class list.
 >
 > `GET /api/v1/export` streams CSV or Parquet (`format=csv|parquet` query param).
 >
@@ -152,39 +156,43 @@
 >
 > 1. Generate a TypeScript API client from the OpenAPI schema (`openapi-typescript` + `openapi-fetch`). Wire TanStack Query with typed hooks (`useSites`, `useCameras`, etc.).
 > 2. Implement OIDC PKCE login via `oidc-client-ts` against Keycloak. Store the user in a Zustand store. Add a `<RequireAuth>` boundary and a `<RequireRole role>` component. Frontend auth must fail closed: callback/session failures return the user to sign-in, and tokens without a recognized Argus role must be rejected instead of defaulting to `viewer`.
-> 3. Build the app shell: top nav (Dashboard, Live, History, Incidents, Settings), tenant switcher (only for `superadmin` users authenticated via the `platform-admin` realm), user menu with logout. The visual system must be dark-first and clearly aligned to the Argus brand brief: obsidian / charcoal surfaces, luminous off-white typography, restrained cerulean-to-violet glow accents, premium geometric sans styling, and a matte-screen control-room feel. Avoid generic light SaaS visuals.
+> 3. Build the app shell: operations nav (`Live`, `History`, `Incidents`) plus configuration surfaces (`Sites`, `Cameras`, `Settings`), tenant switcher (only for `superadmin` users authenticated via the `platform-admin` realm), and user menu with logout. Keep `/dashboard` only as a legacy redirect to `/live`, not as a first-class nav destination. The visual system must be dark-first and clearly aligned to the Argus brand brief: obsidian / charcoal surfaces, luminous off-white typography, restrained cerulean-to-violet glow accents, premium geometric sans styling, and a matte-screen control-room feel. Avoid generic light SaaS visuals.
 > 4. Implement `pages/Sites.tsx` and `pages/Cameras.tsx` as shadcn data tables with create/edit dialogs. The camera form must include: processing-mode select (central / edge / hybrid), RTSP URL (masked), primary / secondary model selectors, tracker type, privacy toggles, browser delivery profile selection (`native`, `1080p15`, `720p10`, `540p5`) with clear native-ingest versus browser-delivery messaging, and a `HomographyEditor` component for 4 src + 4 dst points on a frame snapshot + ref distance.
 >
 > **Verification:** gates; Playwright test: login → create site → create camera with homography → verify it shows on the Cameras table.
 
 ---
 
-## Prompt 8 — Live Dashboard: WebRTC player + telemetry overlay + dynamic stats + NL query
+## Prompt 8 — Live Workspace: WebRTC player + telemetry overlay + dynamic stats + NL query
 
 > Implement `components/VideoStream.tsx`:
 > - Try WebRTC first (via `POST /api/v1/streams/{id}/offer`); fall back to LL-HLS via `hls.js`; final fallback is MJPEG `<img>`.
 > - Request the camera's default browser delivery profile by default and keep the path open for later user-selectable quality escalation.
 > - Render a `<canvas>` absolutely positioned over the `<video>`/`<img>` sized to match.
 >
-> Implement `components/TelemetryCanvas.tsx` that subscribes to `/ws/telemetry` and draws bounding boxes, class labels, track IDs, and speed (if present) on the canvas. Throttle redraw to `requestAnimationFrame`; decouple from video decode.
+> Implement `components/TelemetryCanvas.tsx` that renders bounding boxes, class labels, track IDs, and speed (if present) on the canvas. Feed it from a shared app-level telemetry store so the `/ws/telemetry` connection survives route changes and short navigations away from `/live`.
 >
 > Implement `components/DynamicStats.tsx` that auto-generates stat cards from the `counts` object in each telemetry frame (one card per distinct `class_name`). No hardcoded class list.
 >
 > Implement `components/AgentInput.tsx` — chat bar wired to `POST /api/v1/query`, supports per-camera or global scope, shows the resolved class list + model + latency inline.
 >
-> `pages/Dashboard.tsx` renders an N×M responsive grid of `VideoStream` tiles for the user's subscribed cameras. Include presence indicators (online/offline per last heartbeat).
+> Implement `components/LiveSparkline.tsx` and `hooks/use-live-sparkline.ts` so each live tile shows a 30-minute detection pulse seeded from `/api/v1/history/series` and kept warm by the shared telemetry store.
 >
-> **Verification:** gates; Playwright: start two test cameras → dashboard shows both tiles with live overlays → issue NL query `"only show cars"` → within 2s, bus detections disappear from the canvas.
+> `pages/Live.tsx` renders the canonical N×M responsive live wall for the user's subscribed cameras. Each tile combines `VideoStream`, `TelemetryCanvas`, presence indicators (`telemetry live` / `telemetry stale` / `awaiting telemetry`), and the per-camera sparkline. `/dashboard` should redirect here.
+>
+> **Verification:** gates; Playwright: visit `/dashboard` and confirm redirect to `/live` → start two test cameras → live wall shows both tiles with live overlays and sparklines → issue NL query `"only show cars"` → within 2s, bus detections disappear from the canvas.
 
 ---
 
 ## Prompt 9 — History, exports, incidents
 
 > Implement `pages/History.tsx`:
-> - Date-range picker (shadcn + `react-day-picker`).
+> - URL-backed filter state so the current window and selections survive refresh/share links.
+> - Quick range presets (`Last 24h`, `Last 7d`) plus explicit `from` / `to` state in the query string.
 > - Granularity select (1m / 5m / 1h / 1d).
-> - Camera & class multi-select filters.
-> - ECharts time-series with one line per class; supports brush zoom and CSV/Parquet download buttons that call `/api/v1/export`.
+> - Camera multi-select plus class discovery from `GET /api/v1/history/classes`; preserve the ability to expose the wider COCO list when the current window has sparse detections.
+> - Optional speed overlays and thresholding backed by `GET /api/v1/history/series?include_speed=true`.
+> - ECharts time-series with one line per class, brush zoom, CSV/Parquet export buttons that call `/api/v1/export`, and backend-driven granularity adjustment when the requested window is too wide for the chosen bucket size.
 >
 > Implement `pages/Incidents.tsx` listing recent incidents with snapshot previews (MinIO signed URLs), filterable by camera and type.
 >
