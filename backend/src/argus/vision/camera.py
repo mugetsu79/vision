@@ -20,6 +20,12 @@ from numpy.typing import NDArray
 LOGGER = getLogger(__name__)
 
 _FFMPEG_RTSP_TIMEOUT_US = "5000000"
+# Analyze long enough to catch the first H.264 SPS + keyframe even on slow
+# streams (e.g. 5 fps with a 50-frame GOP = 10 s between keyframes). ffmpeg's
+# default 5 s analyzeduration was tripping on such streams and returning
+# zero dimensions / empty media-info.
+_FFMPEG_ANALYZE_DURATION_US = "20000000"  # 20 seconds
+_FFMPEG_PROBE_SIZE = "32000000"  # 32 MB
 
 type Frame = NDArray[np.uint8]
 type CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
@@ -242,6 +248,10 @@ class _FFmpegRawVideoCapture:
             "tcp",
             "-timeout",
             _FFMPEG_RTSP_TIMEOUT_US,
+            "-analyzeduration",
+            _FFMPEG_ANALYZE_DURATION_US,
+            "-probesize",
+            _FFMPEG_PROBE_SIZE,
             "-i",
             source_uri,
             "-map",
@@ -373,6 +383,10 @@ def _probe_video_dimensions(source_uri: str) -> tuple[int, int]:
         "error",
         "-rtsp_transport",
         "tcp",
+        "-analyzeduration",
+        _FFMPEG_ANALYZE_DURATION_US,
+        "-probesize",
+        _FFMPEG_PROBE_SIZE,
         "-select_streams",
         "v:0",
         "-show_entries",

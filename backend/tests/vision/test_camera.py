@@ -238,6 +238,12 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     timeout_index = created_commands[0].index("-timeout")
     assert created_commands[0][timeout_index + 1] == "5000000"
     assert "-rw_timeout" not in created_commands[0]
+    assert "-analyzeduration" in created_commands[0]
+    analyze_index = created_commands[0].index("-analyzeduration")
+    assert created_commands[0][analyze_index + 1] == "20000000"
+    assert "-probesize" in created_commands[0]
+    probesize_index = created_commands[0].index("-probesize")
+    assert created_commands[0][probesize_index + 1] == "32000000"
 
 
 def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(
