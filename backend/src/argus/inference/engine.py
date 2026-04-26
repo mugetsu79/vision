@@ -1075,10 +1075,6 @@ def _worker_api_headers(settings: Settings) -> dict[str, str]:
     return {"Authorization": f"Bearer {settings.api_bearer_token.get_secret_value()}"}
 
 
-if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
-
-
 def _polygon_zone_definitions(zone_definitions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         zone
@@ -1090,3 +1086,7 @@ def _polygon_zone_definitions(zone_definitions: list[dict[str, Any]]) -> list[di
 class _NoopCountEventStore:
     async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None:
         return None
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -1489,3 +1490,14 @@ def test_draw_annotations_omits_tracker_ids_from_overlay_labels(
     )
 
     assert captured_labels == ["person"]
+
+
+def test_engine_entrypoint_guard_is_after_runtime_helpers() -> None:
+    source = Path(engine_module.__file__).read_text(encoding="utf-8")
+
+    main_guard_index = source.index('if __name__ == "__main__":')
+    polygon_helper_index = source.index("def _polygon_zone_definitions(")
+    noop_count_store_index = source.index("class _NoopCountEventStore:")
+
+    assert polygon_helper_index < main_guard_index
+    assert noop_count_store_index < main_guard_index
