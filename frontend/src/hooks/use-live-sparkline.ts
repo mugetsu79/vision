@@ -9,11 +9,11 @@ const BUCKET_COUNT = 30;
 const BUCKET_MS = 60_000;
 
 export type SparklineBuckets = Record<string, number[]>;
-export type SparklineTotals = Record<string, number>;
+export type SparklineLatestValues = Record<string, number>;
 
 export type UseLiveSparklineResult = {
   buckets: SparklineBuckets;
-  totals: SparklineTotals;
+  latestValues: SparklineLatestValues;
   loading: boolean;
   error: Error | null;
 };
@@ -23,9 +23,6 @@ function floorMinute(value: number): number {
 }
 
 // windowEndMs is the START of the most recent bucket (i.e. floorMinute(now)).
-// tsMs MUST be aligned to its own bucket via floorMinute() before calling —
-// otherwise frames in the current minute (tsMs > windowEndMs) produce a
-// negative diff and spill past the last bucket.
 function bucketIndex(alignedTsMs: number, windowEndMs: number): number {
   const diff = Math.floor((windowEndMs - alignedTsMs) / BUCKET_MS);
   return BUCKET_COUNT - 1 - diff;
@@ -39,7 +36,7 @@ function emptyBuckets(classes: string[]): SparklineBuckets {
   return out;
 }
 
-function addCounts(
+function setBucketPeaks(
   buckets: SparklineBuckets,
   classesCount: Record<string, number>,
   index: number,
@@ -48,24 +45,41 @@ function addCounts(
   for (const [cls, count] of Object.entries(classesCount)) {
     const series = next[cls] ?? new Array(BUCKET_COUNT).fill(0);
     const copy = series.slice();
-    copy[index] = (copy[index] ?? 0) + count;
+    copy[index] = Math.max(copy[index] ?? 0, count);
     next[cls] = copy;
   }
   return next;
 }
 
-// Shift every class's series left by `steps` buckets and pad with zeros on the right.
+export function mergeOccupancySnapshot(
+  buckets: SparklineBuckets,
+  bucketStartMs: number,
+  frame: Pick<TelemetryFrame, "counts">,
+  windowEndMs: number,
+): SparklineBuckets {
+  const index = bucketIndex(bucketStartMs, windowEndMs);
+  if (index < 0 || index >= BUCKET_COUNT) {
+    return buckets;
+  }
+  return setBucketPeaks(buckets, frame.counts ?? {}, index);
+}
+
 function shiftBuckets(buckets: SparklineBuckets, steps: number): SparklineBuckets {
   if (steps <= 0) return buckets;
   const capped = Math.min(steps, BUCKET_COUNT);
   const next: SparklineBuckets = {};
   for (const [cls, series] of Object.entries(buckets)) {
-    next[cls] = [
-      ...series.slice(capped),
-      ...new Array(capped).fill(0),
-    ];
+    next[cls] = [...series.slice(capped), ...new Array(capped).fill(0)];
   }
   return next;
+}
+
+function latestBucketValues(buckets: SparklineBuckets): SparklineLatestValues {
+  const latest: SparklineLatestValues = {};
+  for (const [cls, series] of Object.entries(buckets)) {
+    latest[cls] = series[BUCKET_COUNT - 1] ?? 0;
+  }
+  return latest;
 }
 
 export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
@@ -75,28 +89,29 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
   const [buckets, setBuckets] = useState<SparklineBuckets>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [seedReady, setSeedReady] = useState(false);
 
-  // Seed from history
   useEffect(() => {
     let cancelled = false;
-    const now = new Date();
-    const fromDate = new Date(now.getTime() - BUCKET_COUNT * BUCKET_MS);
-    windowEndRef.current = floorMinute(now.getTime());
+    const nowMs = Date.now();
+    const currentBucketStartMs = floorMinute(nowMs);
+    const fromDate = new Date(currentBucketStartMs - (BUCKET_COUNT - 1) * BUCKET_MS);
+    windowEndRef.current = currentBucketStartMs;
+    setSeedReady(false);
+
     (async () => {
       try {
-        const { data, error: apiError } = await apiClient.GET(
-          "/api/v1/history/series",
-          {
-            params: {
-              query: {
-                granularity: "1m",
-                from: fromDate.toISOString(),
-                to: now.toISOString(),
-                camera_ids: [cameraId],
-              },
+        const { data, error: apiError } = await apiClient.GET("/api/v1/history/series", {
+          params: {
+            query: {
+              granularity: "1m",
+              metric: "occupancy",
+              from: fromDate.toISOString(),
+              to: new Date(currentBucketStartMs - 1).toISOString(),
+              camera_ids: [cameraId],
             },
           },
-        );
+        });
         if (cancelled) return;
         if (apiError || !data) {
           throw toApiError(apiError, "Failed to seed sparkline.");
@@ -109,36 +124,37 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
           if (idx < 0 || idx >= BUCKET_COUNT) continue;
           for (const [cls, count] of Object.entries(row.values ?? {})) {
             const series = seed[cls] ?? new Array(BUCKET_COUNT).fill(0);
-            series[idx] = (series[idx] ?? 0) + count;
-            seed[cls] = series;
+            const copy = series.slice();
+            copy[idx] = Math.max(copy[idx] ?? 0, count);
+            seed[cls] = copy;
           }
         }
         setBuckets(seed);
       } catch (err) {
         if (!cancelled) setError(err as Error);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setSeedReady(true);
+          setLoading(false);
+        }
       }
     })();
+
     return () => {
       cancelled = true;
     };
   }, [cameraId]);
 
-  // Live updates from telemetry store
   useEffect(() => {
+    if (!seedReady) return;
+
     const store = ensureTelemetryStore(accessToken, tenantId);
     if (!store) return;
     store.subscribe(cameraId);
     let lastFrame: TelemetryFrame | null = null;
-    const unsubscribe = store.onChange(() => {
-      const frame = store.getLatest(cameraId);
-      if (!frame || frame === lastFrame) return;
-      lastFrame = frame;
-      const alignedTsMs = floorMinute(Date.parse(frame.ts));
 
-      // Event-driven window rollover: if this frame's bucket is ahead of the
-      // current window end, advance the window and shift existing buckets.
+    const applyFrame = (frame: TelemetryFrame) => {
+      const alignedTsMs = floorMinute(Date.parse(frame.ts));
       const steps = Math.floor((alignedTsMs - windowEndRef.current) / BUCKET_MS);
       if (steps > 0) {
         windowEndRef.current += steps * BUCKET_MS;
@@ -146,21 +162,36 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
       }
 
       const end = windowEndRef.current;
-      if (alignedTsMs < end - (BUCKET_COUNT - 1) * BUCKET_MS) return;
+      const oldestBucketMs = end - (BUCKET_COUNT - 1) * BUCKET_MS;
+      if (alignedTsMs < oldestBucketMs) return;
+
       const idx = bucketIndex(alignedTsMs, end);
       if (idx < 0 || idx >= BUCKET_COUNT) return;
-      setBuckets((current) => addCounts(current, frame.counts ?? {}, idx));
+
+      setBuckets((current) => setBucketPeaks(current, frame.counts ?? {}, idx));
+    };
+
+    const bufferedFrames = store
+      .getBuffer(cameraId)
+      .filter((frame) => floorMinute(Date.parse(frame.ts)) === windowEndRef.current);
+    for (const frame of bufferedFrames) {
+      applyFrame(frame);
+      lastFrame = frame;
+    }
+
+    const unsubscribe = store.onChange(() => {
+      const frame = store.getLatest(cameraId);
+      if (!frame || frame === lastFrame) return;
+      lastFrame = frame;
+      applyFrame(frame);
     });
+
     return () => {
       unsubscribe();
       store.unsubscribe(cameraId);
     };
-  }, [cameraId, accessToken, tenantId]);
+  }, [cameraId, accessToken, tenantId, seedReady]);
 
-  // Clock-aligned rollover (safety net for idle cameras). Fires at every minute
-  // boundary; the live handler above handles rollover event-driven when frames
-  // arrive. Aligning to the wall clock means the bucket shifts on :00 seconds
-  // regardless of when the component mounted.
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -185,13 +216,7 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
     };
   }, []);
 
-  const totals = useMemo(() => {
-    const out: SparklineTotals = {};
-    for (const [cls, series] of Object.entries(buckets)) {
-      out[cls] = series.reduce((a, b) => a + b, 0);
-    }
-    return out;
-  }, [buckets]);
+  const latestValues = useMemo(() => latestBucketValues(buckets), [buckets]);
 
-  return { buckets, totals, loading, error };
+  return { buckets, latestValues, loading, error };
 }

@@ -10,6 +10,7 @@ from argus.api.contracts import (
     HistoryClassesResponse,
     HistoryPoint,
     HistorySeriesResponse,
+    HistoryMetric,
     TenantContext,
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
@@ -29,6 +30,7 @@ FromQuery = Annotated[datetime, Query(alias="from")]
 ToQuery = Annotated[datetime, Query(alias="to")]
 IncludeSpeedQuery = Annotated[bool, Query()]
 SpeedThresholdQuery = Annotated[float | None, Query(ge=0)]
+HistoryMetricQuery = Annotated[HistoryMetric, Query()]
 
 
 def _normalize_camera_ids(
@@ -64,6 +66,7 @@ async def get_history(
     camera_ids: CameraIdsQuery = None,
     class_names: ClassNamesQuery = None,
     granularity: GranularityQuery = "1m",
+    metric: HistoryMetricQuery = HistoryMetric.OCCUPANCY,
 ) -> list[HistoryPoint]:
     return await services.history.query_history(
         tenant_context,
@@ -72,6 +75,7 @@ async def get_history(
         granularity=granularity,
         starts_at=from_,
         ends_at=to,
+        metric=metric,
     )
 
 
@@ -86,6 +90,7 @@ async def get_history_series(
     camera_ids: CameraIdsQuery = None,
     class_names: ClassNamesQuery = None,
     granularity: GranularityQuery = "1h",
+    metric: HistoryMetricQuery = HistoryMetric.OCCUPANCY,
     include_speed: IncludeSpeedQuery = False,
     speed_threshold: SpeedThresholdQuery = None,
 ) -> HistorySeriesResponse:
@@ -96,6 +101,7 @@ async def get_history_series(
         granularity=granularity,
         starts_at=from_,
         ends_at=to,
+        metric=metric,
         include_speed=include_speed,
         speed_threshold=speed_threshold,
     )
@@ -110,10 +116,12 @@ async def get_history_classes(
     to: ToQuery,
     camera_id: CameraIdQuery = None,
     camera_ids: CameraIdsQuery = None,
+    metric: HistoryMetricQuery = HistoryMetric.OCCUPANCY,
 ) -> HistoryClassesResponse:
     return await services.history.list_classes(
         tenant_context,
         camera_ids=_normalize_camera_ids(camera_id=camera_id, camera_ids=camera_ids),
         starts_at=from_,
         ends_at=to,
+        metric=metric,
     )

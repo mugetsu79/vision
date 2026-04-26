@@ -589,6 +589,18 @@ export interface components {
             /** Fps Cap */
             fps_cap?: number | null;
         };
+        /** CountEventBoundarySummary */
+        CountEventBoundarySummary: {
+            /** Boundary Id */
+            boundary_id: string;
+            /** Event Types */
+            event_types: components["schemas"]["CountEventType"][];
+        };
+        /**
+         * CountEventType
+         * @enum {string}
+         */
+        CountEventType: "line_cross" | "zone_enter" | "zone_exit";
         /** EdgeHeartbeatRequest */
         EdgeHeartbeatRequest: {
             /**
@@ -673,9 +685,17 @@ export interface components {
              * Format: date-time
              */
             to: string;
+            metric?: components["schemas"]["HistoryMetric"] | null;
+            /** Boundaries */
+            boundaries?: components["schemas"]["CountEventBoundarySummary"][];
             /** Classes */
             classes: components["schemas"]["HistoryClassEntry"][];
         };
+        /**
+         * HistoryMetric
+         * @enum {string}
+         */
+        HistoryMetric: "occupancy" | "count_events" | "observations";
         /** HistoryPoint */
         HistoryPoint: {
             /**
@@ -691,11 +711,13 @@ export interface components {
             event_count: number;
             /** Granularity */
             granularity: string;
+            metric?: components["schemas"]["HistoryMetric"] | null;
         };
         /** HistorySeriesResponse */
         HistorySeriesResponse: {
             /** Granularity */
             granularity: string;
+            metric?: components["schemas"]["HistoryMetric"] | null;
             /** Class Names */
             class_names: string[];
             /** Rows */
@@ -1879,6 +1901,7 @@ export interface operations {
                 camera_ids?: string[] | null;
                 class_names?: string[] | null;
                 granularity?: string;
+                metric?: components["schemas"]["HistoryMetric"];
             };
             header?: {
                 "X-Tenant-ID"?: string | null;
@@ -1917,6 +1940,7 @@ export interface operations {
                 camera_ids?: string[] | null;
                 class_names?: string[] | null;
                 granularity?: string;
+                metric?: components["schemas"]["HistoryMetric"];
                 include_speed?: boolean;
                 speed_threshold?: number | null;
             };
@@ -1955,6 +1979,7 @@ export interface operations {
                 to: string;
                 camera_id?: string | null;
                 camera_ids?: string[] | null;
+                metric?: components["schemas"]["HistoryMetric"];
             };
             header?: {
                 "X-Tenant-ID"?: string | null;
@@ -1994,6 +2019,7 @@ export interface operations {
                 class_names?: string[] | null;
                 granularity?: string;
                 format?: string;
+                metric?: components["schemas"]["HistoryMetric"];
             };
             header?: {
                 "X-Tenant-ID"?: string | null;

@@ -14,10 +14,10 @@ type RowProps = {
   className: string;
   color: string;
   series: number[];
-  total: number;
+  latestValue: number;
 };
 
-function SparklineRow({ className, color, series, total }: RowProps) {
+function SparklineRow({ className, color, series, latestValue }: RowProps) {
   const max = Math.max(1, ...series);
   const points = useMemo(
     () =>
@@ -47,22 +47,22 @@ function SparklineRow({ className, color, series, total }: RowProps) {
           points={points}
         />
       </svg>
-      <span className="w-10 text-right tabular-nums text-[#8ea8cf]">{total}</span>
+      <span className="w-10 text-right tabular-nums text-[#8ea8cf]">{latestValue}</span>
     </div>
   );
 }
 
 export function LiveSparkline({ cameraId, activeClasses }: LiveSparklineProps) {
-  const { buckets, totals, loading, error } = useLiveSparkline(cameraId);
+  const { buckets, latestValues, loading, error } = useLiveSparkline(cameraId);
   const [showAll, setShowAll] = useState(false);
 
   const ranked = useMemo(
     () =>
       activeClasses
-        .map((cls) => [cls, totals[cls] ?? 0] as const)
+        .map((cls) => [cls, latestValues[cls] ?? 0] as const)
         .sort(([, a], [, b]) => b - a)
         .map(([cls]) => cls),
-    [activeClasses, totals],
+    [activeClasses, latestValues],
   );
   const top = ranked.slice(0, TOP_N);
   const rest = ranked.slice(TOP_N);
@@ -80,7 +80,7 @@ export function LiveSparkline({ cameraId, activeClasses }: LiveSparklineProps) {
       className={cls}
       color={PALETTE[index % PALETTE.length]}
       series={buckets[cls] ?? []}
-      total={totals[cls] ?? 0}
+      latestValue={latestValues[cls] ?? 0}
     />
   );
 

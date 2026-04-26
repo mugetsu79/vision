@@ -8,8 +8,8 @@
 >
 > **Current implementation checkpoint (2026-04-24):**
 > - `/live` is the canonical operator wall; `/dashboard` is retained only as a legacy redirect.
-> - Live tiles now combine browser video delivery, telemetry overlays, and a per-camera 30-minute detection sparkline backed by a shared app-level telemetry store.
-> - `/history` has URL-backed filters, a `/api/v1/history/classes` discovery path, optional speed overlays/thresholds, and backend granularity auto-adjustment for wide windows.
+> - Live tiles now combine browser video delivery, telemetry overlays, and a per-camera 30-minute occupancy sparkline backed by a shared app-level telemetry store.
+> - `/history` is metric-aware: operators can switch between `occupancy`, precise `count_events`, and raw `observations`, with URL-backed filters, `/api/v1/history/classes` discovery, optional speed overlays/thresholds, and backend granularity auto-adjustment for wide windows.
 > - Native ingest and browser delivery are decoupled: processed workers ingest camera RTSP directly, while MediaMTX remains the authenticated distribution/publication layer for passthrough plus processed renditions such as `annotated` or `preview`.
 > - Standard self-describing ONNX metadata is now the default truth for model inventory; camera `active_classes` and NL query scope narrow behavior later without falsifying the model record.
 > - Worker startup resolves a host-aware ONNX Runtime policy and logs stage timing summaries so central, Jetson, Intel Linux, and lab macOS hosts can be reasoned about explicitly.
@@ -539,12 +539,13 @@ The class list for any model is loaded from the `models.classes` row; the infere
 
 | Measurement                                   | How it works in V4                                                                        |
 |-----------------------------------------------|-------------------------------------------------------------------------------------------|
-| **Instantaneous count** per class per zone    | Active track IDs inside the zone polygon                                                   |
-| **Cumulative count** over time                | `tracking_events` aggregated via TimescaleDB continuous aggregates (1m / 1h)               |
-| **Directional line-crossing count**           | Virtual line + tracker history; separate `in` / `out` tallies                             |
+| **Instantaneous count / occupancy** per class per zone | Active track IDs inside the zone polygon                                           |
+| **Bucketed occupancy history**                | Peak concurrent visible tracks per bucket from `tracking_events`                           |
+| **Precise cumulative count** over time        | Durable `count_events` (`line_cross`, `zone_enter`, `zone_exit`) aggregated via TimescaleDB |
+| **Directional line-crossing count**           | Virtual line + tracker history persisted as `count_events`; separate `in` / `out` tallies |
 | **Speed (km/h or mph)**                       | Homography on bbox bottom-center + moving-average filter                                   |
 | **Dwell time** (how long an object stays)     | Per-track enter/exit timestamps per zone; reported as p50 / p95 / max                     |
-| **Density / occupancy**                       | Track count ÷ zone area; heatmap over sessions                                            |
+| **Density / occupancy**                       | Track count ÷ zone area, plus peak visible occupancy over sessions                        |
 | **Trajectory / path**                         | Per-track centroid history persisted to `tracking_events.bbox` time-series               |
 | **Proximity** (object ↔ object distance)      | Pairwise world-plane distance (via homography) evaluated per frame                         |
 | **Attribute presence / absence**              | Secondary classifier output (e.g. `hi_vis: false`) attached to each `tracking_event`      |

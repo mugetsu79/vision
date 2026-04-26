@@ -12,6 +12,7 @@ import {
 import { CanvasRenderer } from "echarts/renderers";
 import { init, type EChartsType, use as registerECharts } from "echarts/core";
 
+import { type HistoryMetric, historyMetricCopy } from "@/lib/history-url-state";
 import { cn } from "@/lib/utils";
 
 type HistoryTrendPoint = {
@@ -219,13 +220,16 @@ export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOpti
 export function HistoryTrendChart({
   series,
   className,
+  metric = "occupancy",
 }: {
   series: HistoryTrendSeries;
   className?: string;
+  metric?: HistoryMetric;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<EChartsType | null>(null);
   const option = useMemo(() => buildHistoryChartOption(series), [series]);
+  const metricCopy = historyMetricCopy(metric);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -257,7 +261,7 @@ export function HistoryTrendChart({
       className={cn("w-full", className)}
       style={{ height }}
       role="img"
-      aria-label="History trend chart"
+      aria-label={`History trend chart for ${metricCopy.label.toLowerCase()}`}
     />
   );
 }

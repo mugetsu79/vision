@@ -4,6 +4,7 @@ import type { components } from "@/lib/api.generated";
 import { apiClient, toApiError } from "@/lib/api";
 import { buildApiUrl } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth-store";
+import { type HistoryMetric } from "@/lib/history-url-state";
 
 export type HistorySeriesResponse = components["schemas"]["HistorySeriesResponse"];
 export type HistoryClassesResponse = components["schemas"]["HistoryClassesResponse"];
@@ -12,6 +13,7 @@ export type HistoryFilters = {
   from: Date;
   to: Date;
   granularity: "1m" | "5m" | "1h" | "1d";
+  metric: HistoryMetric;
   cameraIds: string[];
   classNames: string[];
   includeSpeed?: boolean;
@@ -28,6 +30,7 @@ export function createDefaultHistoryFilters(now = new Date()): HistoryFilters {
     from,
     to,
     granularity: "1h",
+    metric: "occupancy",
     cameraIds: [],
     classNames: [],
     includeSpeed: false,
@@ -42,6 +45,7 @@ export function historySeriesQueryOptions(filters: HistoryFilters) {
       filters.from.toISOString(),
       filters.to.toISOString(),
       filters.granularity,
+      filters.metric,
       filters.cameraIds,
       filters.classNames,
       filters.includeSpeed ?? false,
@@ -54,6 +58,7 @@ export function historySeriesQueryOptions(filters: HistoryFilters) {
             from: filters.from.toISOString(),
             to: filters.to.toISOString(),
             granularity: filters.granularity,
+            metric: filters.metric,
             camera_ids: filters.cameraIds.length > 0 ? filters.cameraIds : undefined,
             class_names: filters.classNames.length > 0 ? filters.classNames : undefined,
             include_speed: filters.includeSpeed ? true : undefined,
@@ -79,6 +84,7 @@ export function useHistorySeries(filters: HistoryFilters) {
 export function historyClassesQueryOptions(params: {
   from: Date;
   to: Date;
+  metric: HistoryMetric;
   cameraIds: string[];
 }) {
   return queryOptions({
@@ -86,6 +92,7 @@ export function historyClassesQueryOptions(params: {
       "history-classes",
       params.from.toISOString(),
       params.to.toISOString(),
+      params.metric,
       params.cameraIds,
     ],
     queryFn: async () => {
@@ -94,6 +101,7 @@ export function historyClassesQueryOptions(params: {
           query: {
             from: params.from.toISOString(),
             to: params.to.toISOString(),
+            metric: params.metric,
             camera_ids: params.cameraIds.length > 0 ? params.cameraIds : undefined,
           },
         },
@@ -106,7 +114,7 @@ export function historyClassesQueryOptions(params: {
   });
 }
 
-export function useHistoryClasses(params: { from: Date; to: Date; cameraIds: string[] }) {
+export function useHistoryClasses(params: { from: Date; to: Date; metric: HistoryMetric; cameraIds: string[] }) {
   return useQuery(historyClassesQueryOptions(params));
 }
 
@@ -128,6 +136,7 @@ export async function downloadHistoryExport(
       from: filters.from.toISOString(),
       to: filters.to.toISOString(),
       granularity: filters.granularity,
+      metric: filters.metric,
       format,
       camera_ids: filters.cameraIds,
       class_names: filters.classNames,

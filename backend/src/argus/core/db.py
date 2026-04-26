@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import Request
@@ -15,8 +16,11 @@ from sqlalchemy.ext.asyncio import (
 
 from argus.core.config import Settings
 from argus.core.metrics import TRACKING_EVENT_WRITE_FAILURES_TOTAL
-from argus.models.tables import TrackingEvent
+from argus.models.tables import CountEvent, TrackingEvent
 from argus.vision.types import Detection
+
+if TYPE_CHECKING:
+    from argus.vision.count_events import CountEventRecord
 
 
 class DatabaseManager:
@@ -79,6 +83,46 @@ class TrackingEventStore:
                 await session.commit()
             except Exception:
                 TRACKING_EVENT_WRITE_FAILURES_TOTAL.labels(store="tracking-events").inc()
+                raise
+
+
+class CountEventStore:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+
+    async def record(
+        self,
+        camera_id: UUID,
+        events: list[CountEventRecord],
+    ) -> None:
+        if not events:
+            return
+
+        async with self.session_factory() as session:
+            try:
+                session.add_all(
+                    [
+                        CountEvent(
+                            ts=event.ts,
+                            camera_id=camera_id,
+                            class_name=event.class_name,
+                            track_id=event.track_id,
+                            event_type=event.event_type,
+                            boundary_id=event.boundary_id,
+                            direction=event.direction,
+                            from_zone_id=event.from_zone_id,
+                            to_zone_id=event.to_zone_id,
+                            speed_kph=event.speed_kph,
+                            confidence=event.confidence,
+                            attributes=dict(event.attributes) if event.attributes else None,
+                            payload=dict(event.payload),
+                        )
+                        for event in events
+                    ]
+                )
+                await session.commit()
+            except Exception:
+                TRACKING_EVENT_WRITE_FAILURES_TOTAL.labels(store="count-events").inc()
                 raise
 
 

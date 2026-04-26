@@ -28,6 +28,18 @@ class ModelTask(StrEnum):
     ATTRIBUTE = "attribute"
 
 
+class HistoryMetric(StrEnum):
+    OCCUPANCY = "occupancy"
+    COUNT_EVENTS = "count_events"
+    OBSERVATIONS = "observations"
+
+
+class CountEventType(StrEnum):
+    LINE_CROSS = "line_cross"
+    ZONE_ENTER = "zone_enter"
+    ZONE_EXIT = "zone_exit"
+
+
 class ModelFormat(StrEnum):
     ONNX = "onnx"
     ENGINE = "engine"

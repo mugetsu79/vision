@@ -9,6 +9,8 @@ import { productBrand } from "@/brand/product";
 import { COCO_CLASSES } from "@/lib/coco-classes";
 import {
   type HistoryFilterState,
+  type HistoryMetric,
+  historyMetricCopy,
   readHistoryFiltersFromSearch,
   writeHistoryFiltersToSearch,
 } from "@/lib/history-url-state";
@@ -68,18 +70,33 @@ export function HistoryPage() {
       from: state.from,
       to: state.to,
       granularity: state.granularity,
+      metric: resolveHistoryMetric(state.metric, cameras, state.cameraIds),
       cameraIds: state.cameraIds,
       classNames: state.classNames,
       includeSpeed: state.speed,
       speedThreshold: state.speedThreshold,
     }),
-    [state],
+    [
+      cameras,
+      state.cameraIds,
+      state.classNames,
+      state.from,
+      state.granularity,
+      state.metric,
+      state.speed,
+      state.speedThreshold,
+      state.to,
+    ],
   );
+
+  const metric = filters.metric;
+  const metricCopy = useMemo(() => historyMetricCopy(metric), [metric]);
 
   const { data, isLoading, error } = useHistorySeries(filters);
   const { data: classesData } = useHistoryClasses({
     from: state.from,
     to: state.to,
+    metric,
     cameraIds: state.cameraIds,
   });
 
@@ -144,16 +161,18 @@ export function HistoryPage() {
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9db3d3]">History</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[0.01em] text-[#f4f8ff]">
-                Fleet history and speed telemetry.
+                {metricCopy.label} and speed telemetry.
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                {brandName} aggregates detections and speeds in buckets so operators can pivot across classes and
-                cameras without reshaping data in the browser.
+                {brandName} aggregates {metricCopy.description} and speeds in buckets so operators can pivot across
+                classes and cameras without reshaping data in the browser.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">{state.granularity}</Badge>
-              <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">{totalCount} detections</Badge>
+              <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+                {totalCount} {metricCopy.countLabel}
+              </Badge>
               {granularityBumped ? (
                 <Badge className="border-[#705e29] bg-[#1d1b08]/80 text-[#ffe5a8]">
                   granularity adjusted to {data?.granularity}
@@ -209,7 +228,7 @@ export function HistoryPage() {
               </div>
             ) : chartEmpty ? (
               <div className="space-y-4 px-6 py-16 text-sm text-[#93a7c5]">
-                <p>No detections in this window for the selected cameras and classes.</p>
+                <p>{metricCopy.emptyState}</p>
                 <Button onClick={() => applyPresetRange(7)}>Try last 7 days</Button>
               </div>
             ) : (
@@ -220,7 +239,7 @@ export function HistoryPage() {
                   </p>
                 ) : null}
                 <Suspense fallback={<div className="px-6 py-16 text-sm text-[#93a7c5]">Loading chart…</div>}>
-                  <HistoryTrendChart className="px-2 py-4" series={chartSeries} />
+                  <HistoryTrendChart className="px-2 py-4" metric={metric} series={chartSeries} />
                 </Suspense>
               </div>
             )}
@@ -238,6 +257,30 @@ export function HistoryPage() {
           </div>
 
           <div className="space-y-4 px-5 py-5">
+            <label className="space-y-2 text-sm text-[#d9e5f7]">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Metric</span>
+              <Select
+                aria-label="Metric"
+                value={metric}
+                onChange={(e) => applyState((p) => ({ ...p, metric: e.target.value as HistoryMetric }))}
+              >
+                <option value="occupancy">
+                  {historyMetricCopy("occupancy").label} — {historyMetricCopy("occupancy").description}
+                </option>
+                <option value="count_events">
+                  {historyMetricCopy("count_events").label} — {historyMetricCopy("count_events").description}
+                </option>
+                <option value="observations">
+                  {historyMetricCopy("observations").label} — {historyMetricCopy("observations").description}
+                </option>
+              </Select>
+              {state.metric === null ? (
+                <p className="text-xs text-[#8ea8cf]">
+                  Automatically using {metricCopy.label.toLowerCase()} for the selected cameras.
+                </p>
+              ) : null}
+            </label>
+
             <label className="space-y-2 text-sm text-[#d9e5f7]">
               <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Granularity</span>
               <Select
@@ -286,7 +329,7 @@ export function HistoryPage() {
               >
                 {observedClasses.map((entry) => (
                   <option key={entry.class_name} value={entry.class_name}>
-                    {entry.class_name} ({entry.event_count})
+                    {entry.class_name} ({entry.event_count} {metricCopy.countLabel})
                     {entry.has_speed_data ? "" : " — no speed data in this window"}
                   </option>
                 ))}
@@ -348,4 +391,26 @@ function formatRangeLabel(from: Date, to: Date): string {
   const fmt = (d: Date) =>
     d.toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" });
   return `${fmt(from)} to ${fmt(to)}`;
+}
+
+function resolveHistoryMetric(
+  explicitMetric: HistoryMetric | null,
+  cameras: Array<{ id: string; zones?: Array<Record<string, unknown>> }>,
+  selectedCameraIds: string[],
+): HistoryMetric {
+  if (explicitMetric !== null) {
+    return explicitMetric;
+  }
+
+  const selectedCameras =
+    selectedCameraIds.length === 0
+      ? cameras
+      : cameras.filter((camera) => selectedCameraIds.includes(camera.id));
+  return selectedCameras.length > 0 && selectedCameras.every(cameraHasCountBoundaries)
+    ? "count_events"
+    : "occupancy";
+}
+
+function cameraHasCountBoundaries(camera: { zones?: Array<Record<string, unknown>> }): boolean {
+  return camera.zones?.some((zone) => zone?.type === "line") ?? false;
 }

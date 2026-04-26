@@ -1,9 +1,11 @@
 export type HistoryGranularity = "1m" | "5m" | "1h" | "1d";
+export type HistoryMetric = "occupancy" | "count_events" | "observations";
 
 export interface HistoryFilterState {
   from: Date;
   to: Date;
   granularity: HistoryGranularity;
+  metric: HistoryMetric | null;
   cameraIds: string[];
   classNames: string[];
   speed: boolean;
@@ -11,6 +13,36 @@ export interface HistoryFilterState {
 }
 
 const GRANULARITIES = new Set<HistoryGranularity>(["1m", "5m", "1h", "1d"]);
+const HISTORY_METRICS = new Set<HistoryMetric>(["occupancy", "count_events", "observations"]);
+
+const HISTORY_METRIC_COPY: Record<
+  HistoryMetric,
+  {
+    label: string;
+    description: string;
+    countLabel: string;
+    emptyState: string;
+  }
+> = {
+  occupancy: {
+    label: "Occupancy",
+    description: "peak visible occupancy snapshots",
+    countLabel: "visible samples",
+    emptyState: "No occupancy snapshots in this window for the selected cameras and classes.",
+  },
+  count_events: {
+    label: "Count events",
+    description: "crossings, entries, and exits",
+    countLabel: "events",
+    emptyState: "No crossings, entries, or exits in this window for the selected cameras and classes.",
+  },
+  observations: {
+    label: "Observations",
+    description: "raw observations",
+    countLabel: "observations",
+    emptyState: "No observations in this window for the selected cameras and classes.",
+  },
+};
 
 function toDate(value: string | null, fallback: Date): Date {
   if (!value) {
@@ -25,6 +57,13 @@ function toGranularity(value: string | null): HistoryGranularity {
     return value as HistoryGranularity;
   }
   return "1h";
+}
+
+function toMetric(value: string | null): HistoryMetric | null {
+  if (value && HISTORY_METRICS.has(value as HistoryMetric)) {
+    return value as HistoryMetric;
+  }
+  return null;
 }
 
 function toList(value: string | null): string[] {
@@ -50,6 +89,7 @@ export function defaultHistoryFilters(now = new Date()): HistoryFilterState {
     from,
     to,
     granularity: "1h",
+    metric: null,
     cameraIds: [],
     classNames: [],
     speed: false,
@@ -66,6 +106,7 @@ export function readHistoryFiltersFromSearch(
     from: toDate(params.get("from"), defaults.from),
     to: toDate(params.get("to"), defaults.to),
     granularity: toGranularity(params.get("granularity")),
+    metric: toMetric(params.get("metric")),
     cameraIds: toList(params.get("cameras")),
     classNames: toList(params.get("classes")),
     speed: params.get("speed") === "1",
@@ -78,6 +119,9 @@ export function writeHistoryFiltersToSearch(state: HistoryFilterState): string {
   params.set("from", state.from.toISOString());
   params.set("to", state.to.toISOString());
   params.set("granularity", state.granularity);
+  if (state.metric !== null) {
+    params.set("metric", state.metric);
+  }
   if (state.cameraIds.length > 0) {
     params.set("cameras", state.cameraIds.join(","));
   }
@@ -91,4 +135,8 @@ export function writeHistoryFiltersToSearch(state: HistoryFilterState): string {
     }
   }
   return params.toString();
+}
+
+export function historyMetricCopy(metric: HistoryMetric) {
+  return HISTORY_METRIC_COPY[metric];
 }

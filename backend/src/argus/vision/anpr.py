@@ -45,7 +45,7 @@ class LineCrossingAnprProcessor:
             for line in self._lines:
                 if line.class_names and detection.class_name not in line.class_names:
                     continue
-                side = _point_side(bottom_center, line)
+                side = point_side(bottom_center, line.start, line.end)
                 key = (line.line_id, detection.track_id)
                 previous_side = self._last_side.get(key)
                 self._last_side[key] = side
@@ -65,7 +65,7 @@ class LineCrossingAnprProcessor:
                             "class_name": detection.class_name,
                             "plate_text": plate_text,
                             "plate_hash": sha256(plate_text.encode("utf-8")).hexdigest(),
-                            "direction": _direction(previous_side, side),
+                            "direction": line_cross_direction(previous_side, side),
                         },
                     )
                 )
@@ -75,6 +75,8 @@ class LineCrossingAnprProcessor:
 def _parse_line_definition(definition: dict[str, Any]) -> _LineDefinition:
     if str(definition.get("type", "line")) != "line":
         raise ValueError("ANPR line definitions must use type='line'.")
+    if "polygon" in definition:
+        raise ValueError("ANPR line definitions must not include a polygon field.")
     points = definition.get("points")
     if not isinstance(points, list) or len(points) != 2:
         raise ValueError("Line definitions require exactly two points.")
@@ -89,14 +91,18 @@ def _parse_line_definition(definition: dict[str, Any]) -> _LineDefinition:
     )
 
 
-def _point_side(point: tuple[float, float], line: _LineDefinition) -> float:
+def point_side(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> float:
     px, py = point
-    x1, y1 = line.start
-    x2, y2 = line.end
+    x1, y1 = start
+    x2, y2 = end
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
 
 
-def _direction(previous_side: float, side: float) -> str:
+def line_cross_direction(previous_side: float, side: float) -> str:
     if previous_side > 0 and side < 0:
         return "positive-to-negative"
     return "negative-to-positive"

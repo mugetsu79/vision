@@ -18,7 +18,7 @@ from prometheus_client import start_http_server
 from pydantic import BaseModel, ConfigDict, Field
 
 from argus.core.config import Settings
-from argus.core.db import DatabaseManager, TrackingEventStore
+from argus.core.db import CountEventStore, DatabaseManager, TrackingEventStore
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.logging import redact_url_secrets
 from argus.core.logging import configure_logging
@@ -52,6 +52,7 @@ from argus.streaming.mediamtx import (
 )
 from argus.streaming.webrtc import MediaMTXTokenIssuer
 from argus.vision.anpr import LineCrossingAnprProcessor
+from argus.vision.count_events import CountEventProcessor, CountEventRecord
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
 from argus.vision.detector import DetectionModelConfig, YoloDetector
@@ -161,6 +162,10 @@ class Publisher(Protocol):
 
 class TrackingStore(Protocol):
     async def record(self, camera_id: UUID, ts: datetime, detections: list[Detection]) -> None: ...
+
+
+class CountEventStoreProtocol(Protocol):
+    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None: ...
 
 
 class RuleEvaluator(Protocol):
@@ -276,6 +281,7 @@ class InferenceEngine:
         tracker_factory: TrackerFactory,
         publisher: Publisher,
         tracking_store: TrackingStore,
+        count_event_store: CountEventStoreProtocol | None = None,
         rule_engine: RuleEvaluator,
         event_client: EventSubscriber,
         stream_client: StreamClient,
@@ -295,6 +301,7 @@ class InferenceEngine:
         self._tracker_factory = tracker_factory
         self.publisher = publisher
         self.tracking_store = tracking_store
+        self._count_event_store = count_event_store or _NoopCountEventStore()
         self.rule_engine = rule_engine
         self.event_client = event_client
         self.stream_client = stream_client
@@ -320,7 +327,8 @@ class InferenceEngine:
             zones=list(config.zones),
         )
         self._tracker = self._tracker_factory(self._state.tracker_type)
-        self._zones = Zones(self._state.zones) if self._state.zones else None
+        self._count_event_processor = self._build_count_event_processor()
+        self._zones = Zones(_polygon_zone_definitions(self._state.zones)) if self._state.zones else None
         self._stream_registration: StreamRegistration | None = None
         self._track_history: dict[int, list[tuple[float, float]]] = defaultdict(list)
         self._frame_attempt_index = 0
@@ -428,6 +436,7 @@ class InferenceEngine:
         stage_timer.record_stage("attributes", ended_at=loop.time())
         tracked = self._apply_zones(tracked)
         stage_timer.record_stage("zones", ended_at=loop.time())
+        count_events = self._count_event_processor.process(ts=current_ts, detections=tracked)
         rule_events = await self.rule_engine.evaluate(
             camera_id=self.config.camera_id,
             detections=tracked,
@@ -493,6 +502,14 @@ class InferenceEngine:
         stage_timer.record_stage("publish_telemetry", ended_at=loop.time())
         await self.tracking_store.record(self.config.camera_id, current_ts, tracked)
         stage_timer.record_stage("persist_tracking", ended_at=loop.time())
+        try:
+            await self._count_event_store.record(self.config.camera_id, count_events)
+        except Exception:
+            logger.exception(
+                "Failed to persist count events for camera %s",
+                self.config.camera_id,
+            )
+        stage_timer.record_stage("persist_count_events", ended_at=loop.time())
         self._last_stage_timings = stage_timer.finish(ended_at=loop.time())
         for stage_name, duration in self._last_stage_timings.items():
             INFERENCE_STAGE_DURATION_SECONDS.labels(
@@ -523,6 +540,7 @@ class InferenceEngine:
         if command.tracker_type is not None and command.tracker_type != self._state.tracker_type:
             self._state.tracker_type = command.tracker_type
             self._tracker = self._tracker_factory(command.tracker_type)
+            self._count_event_processor = self._build_count_event_processor()
         if command.privacy is not None and command.privacy != self._state.privacy:
             self._state.privacy = command.privacy
             self.privacy_filter = PrivacyFilter(
@@ -546,7 +564,10 @@ class InferenceEngine:
             self._state.attribute_rules = list(command.attribute_rules)
         if command.zones is not None:
             self._state.zones = list(command.zones)
-            self._zones = Zones(self._state.zones) if self._state.zones else None
+            self._count_event_processor = self._build_count_event_processor()
+            self._zones = (
+                Zones(_polygon_zone_definitions(self._state.zones)) if self._state.zones else None
+            )
 
     @property
     def active_classes(self) -> list[str]:
@@ -608,6 +629,9 @@ class InferenceEngine:
             )
             enriched.append(detection.with_updates(speed_kph=speed_kph))
         return enriched
+
+    def _build_count_event_processor(self) -> CountEventProcessor:
+        return CountEventProcessor(self._state.zones)
 
     def _build_stream_frame(self, frame: Frame, detections: list[Detection]) -> Frame:
         if (
@@ -752,6 +776,7 @@ async def build_runtime_engine(
     settings: Settings,
     events_client: NatsJetStreamClient,
     tracking_store: TrackingStore | None = None,
+    count_event_store: CountEventStoreProtocol | None = None,
     rule_engine: RuleEvaluator | None = None,
     incident_capture: IncidentClipCaptureService | None = None,
 ) -> InferenceEngine:
@@ -924,6 +949,7 @@ async def build_runtime_engine(
         tracker_factory=tracker_factory,
         publisher=publisher,
         tracking_store=tracking_store or _NoopTrackingStore(),
+        count_event_store=count_event_store or _NoopCountEventStore(),
         rule_engine=rule_engine or _NoopRuleEngine(),
         event_client=events_client,
         stream_client=stream_client,
@@ -954,6 +980,7 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         settings=resolved_settings,
         events_client=events_client,
         tracking_store=TrackingEventStore(db_manager.session_factory),
+        count_event_store=CountEventStore(db_manager.session_factory),
         incident_capture=IncidentClipCaptureService(
             object_store=MinioObjectStore(resolved_settings),
             repository=SQLIncidentRepository(db_manager.session_factory),
@@ -1052,3 +1079,16 @@ def _worker_api_headers(settings: Settings) -> dict[str, str]:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def _polygon_zone_definitions(zone_definitions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        zone
+        for zone in zone_definitions
+        if str(zone.get("type", "polygon")).lower() != "line" and "polygon" in zone
+    ]
+
+
+class _NoopCountEventStore:
+    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None:
+        return None

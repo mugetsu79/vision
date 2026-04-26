@@ -8,10 +8,13 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
+    CountEventBoundarySummary,
     HistoryClassEntry,
     HistoryClassesResponse,
+    HistoryPoint,
     HistorySeriesResponse,
     HistorySeriesRow,
+    HistoryMetric,
     TenantContext,
 )
 from argus.api.v1.history import router
@@ -43,13 +46,25 @@ class _FakeHistoryService:
         self.calls: list[dict] = []
 
     async def query_history(self, *args, **kwargs):
-        return []
+        self.calls.append({"kind": "history", **kwargs})
+        now = datetime(2026, 4, 23, tzinfo=UTC)
+        return [
+            HistoryPoint(
+                bucket=now,
+                camera_id=None,
+                class_name="car",
+                event_count=4,
+                granularity=kwargs.get("granularity", "1m"),
+                metric=kwargs.get("metric", HistoryMetric.OCCUPANCY),
+            )
+        ]
 
     async def query_series(self, *args, **kwargs) -> HistorySeriesResponse:
         self.calls.append({"kind": "series", **kwargs})
         now = datetime(2026, 4, 23, tzinfo=UTC)
         return HistorySeriesResponse(
             granularity=kwargs.get("granularity", "1h"),
+            metric=kwargs.get("metric", HistoryMetric.OCCUPANCY),
             class_names=["car"],
             rows=[
                 HistorySeriesRow(
@@ -75,6 +90,13 @@ class _FakeHistoryService:
             {
                 "from": kwargs["starts_at"],
                 "to": kwargs["ends_at"],
+                "metric": kwargs.get("metric", HistoryMetric.OCCUPANCY),
+                "boundaries": [
+                    CountEventBoundarySummary(
+                        boundary_id="driveway",
+                        event_types=["line_cross"],
+                    )
+                ],
                 "classes": [
                     HistoryClassEntry(
                         class_name="person", event_count=10, has_speed_data=False
@@ -133,6 +155,7 @@ async def test_series_endpoint_passes_include_speed_and_threshold(
                 "from": "2026-04-23T00:00:00Z",
                 "to": "2026-04-23T06:00:00Z",
                 "granularity": "1h",
+                "metric": "count_events",
                 "include_speed": "true",
                 "speed_threshold": "50",
             },
@@ -140,32 +163,36 @@ async def test_series_endpoint_passes_include_speed_and_threshold(
 
     assert resp.status_code == 200
     body = resp.json()
+    assert body["metric"] == "count_events"
     assert body["rows"][0]["speed_p50"] == {"car": 42.0}
     assert body["rows"][0]["over_threshold_count"] == {"car": 2}
+    assert service.calls[-1]["metric"] == HistoryMetric.COUNT_EVENTS
     assert service.calls[-1]["include_speed"] is True
     assert service.calls[-1]["speed_threshold"] == 50.0
 
 
 @pytest.mark.asyncio
-async def test_series_endpoint_defaults_speed_fields_to_null(
+async def test_history_endpoint_passes_metric_and_serializes_points(
     tenant_context: TenantContext,
 ) -> None:
     service = _FakeHistoryService()
     app = _app_with_fakes(service, tenant_context)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(
-            "/api/v1/history/series",
+            "/api/v1/history",
             params={
                 "from": "2026-04-23T00:00:00Z",
                 "to": "2026-04-23T06:00:00Z",
-                "granularity": "1h",
+                "granularity": "1m",
+                "metric": "observations",
             },
         )
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["rows"][0]["speed_p50"] is None
-    assert body["rows"][0]["over_threshold_count"] is None
+    assert body[0]["metric"] == "observations"
+    assert body[0]["event_count"] == 4
+    assert service.calls[-1]["metric"] == HistoryMetric.OBSERVATIONS
 
 
 @pytest.mark.asyncio
@@ -180,11 +207,15 @@ async def test_classes_endpoint_returns_sorted_entries(
             params={
                 "from": "2026-04-23T00:00:00Z",
                 "to": "2026-04-23T06:00:00Z",
+                "metric": "count_events",
             },
         )
 
     assert resp.status_code == 200
     body = resp.json()
+    assert body["metric"] == "count_events"
     assert body["from"] == "2026-04-23T00:00:00Z"
     assert body["classes"][0]["class_name"] == "person"
     assert body["classes"][0]["has_speed_data"] is False
+    assert body["boundaries"][0]["boundary_id"] == "driveway"
+    assert service.calls[-1]["metric"] == HistoryMetric.COUNT_EVENTS

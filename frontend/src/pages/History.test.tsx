@@ -15,9 +15,15 @@ vi.mock("@/lib/config", () => ({
 }));
 
 vi.mock("@/components/history/HistoryTrendChart", () => ({
-  HistoryTrendChart: ({ series }: { series: { classNames: string[]; points: unknown[]; includeSpeed?: boolean; speedThreshold?: number | null } }) => (
+  HistoryTrendChart: ({
+    series,
+    metric,
+  }: {
+    series: { classNames: string[]; points: unknown[]; includeSpeed?: boolean; speedThreshold?: number | null };
+    metric?: string;
+  }) => (
     <div data-testid="history-trend-chart">
-      {series.classNames.join(",")}::{series.points.length}::speed={String(!!series.includeSpeed)}::threshold={String(series.speedThreshold ?? "none")}
+      {series.classNames.join(",")}::{series.points.length}::speed={String(!!series.includeSpeed)}::threshold={String(series.speedThreshold ?? "none")}::metric={metric ?? "none"}
     </div>
   ),
 }));
@@ -27,6 +33,11 @@ import { HistoryPage } from "@/pages/History";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
+const routerFuture = {
+  v7_relativeSplatPath: true,
+  v7_startTransition: true,
+} as const;
+let recordedRequests: URL[] = [];
 
 function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -58,18 +69,34 @@ function classesResponse() {
   };
 }
 
+function cameraResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "cam-1",
+    name: "Gate camera",
+    zones: [],
+    ...overrides,
+  };
+}
+
 function renderPage(initialEntry = "/history") {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={[initialEntry]}>
+      <MemoryRouter future={routerFuture} initialEntries={[initialEntry]}>
         <HistoryPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
+function findHistoryRequest(pathname: string, metric: string) {
+  return recordedRequests.find(
+    (request) => request.pathname === pathname && request.searchParams.get("metric") === metric,
+  );
+}
+
 describe("HistoryPage", () => {
   beforeEach(() => {
+    recordedRequests = [];
     act(() => {
       useAuthStore.setState({
         status: "authenticated",
@@ -88,6 +115,7 @@ describe("HistoryPage", () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request = input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
+      recordedRequests.push(url);
       if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
       if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
@@ -125,12 +153,86 @@ describe("HistoryPage", () => {
   });
 
   test("hydrates filter state from URL and calls endpoint with include_speed", async () => {
-    renderPage("/history?speed=1&speedThreshold=50&granularity=5m");
+    renderPage("/history?metric=observations&speed=1&speedThreshold=50&granularity=5m");
     await waitFor(() =>
       expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
-        "speed=true::threshold=50",
+        "speed=true::threshold=50::metric=observations",
       ),
     );
+    expect(findHistoryRequest("/api/v1/history/series", "observations")).toBeDefined();
+    expect(findHistoryRequest("/api/v1/history/classes", "observations")).toBeDefined();
+  });
+
+  test("defaults to count_events when selected cameras have count boundaries", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraResponse({ zones: [{ type: "line" }] })]));
+      }
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage("/history?cameras=cam-1");
+
+    await waitFor(() => {
+      expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
+      expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
+    });
+    expect(screen.getByLabelText(/metric/i)).toHaveValue("count_events");
+    expect(screen.getByTestId("history-trend-chart")).toHaveTextContent("metric=count_events");
+  });
+
+  test("defaults to count_events with no explicit camera filter when the camera inventory has count boundaries", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraResponse({ zones: [{ type: "line" }] })]));
+      }
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage("/history");
+
+    await waitFor(() => {
+      expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
+      expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
+    });
+    expect(screen.getByLabelText(/metric/i)).toHaveValue("count_events");
+  });
+
+  test("stays on occupancy when only some selected cameras have count boundaries", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(
+          jsonResponse([
+            cameraResponse({ id: "cam-1", zones: [{ type: "line" }] }),
+            cameraResponse({ id: "cam-2", name: "Lobby camera", zones: [] }),
+          ]),
+        );
+      }
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage("/history?cameras=cam-1,cam-2");
+
+    await waitFor(() => {
+      expect(findHistoryRequest("/api/v1/history/series", "occupancy")).toBeDefined();
+      expect(findHistoryRequest("/api/v1/history/classes", "occupancy")).toBeDefined();
+    });
+    expect(screen.getByLabelText(/metric/i)).toHaveValue("occupancy");
   });
 
   test("toggling Show speed and entering a threshold updates the chart props", async () => {
@@ -168,16 +270,65 @@ describe("HistoryPage", () => {
   test("class filter is populated by /history/classes", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByRole("option", { name: /car \(40\)/i })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /car \(40 visible samples\)/i })).toBeInTheDocument();
     });
-    expect(screen.getByRole("option", { name: /person \(5\) — no speed data in this window/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /person \(5 visible samples\) — no speed data in this window/i }),
+    ).toBeInTheDocument();
   });
 
   test("Show all 80 COCO classes expander reveals unseen classes", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByRole("option", { name: /car \(40\)/i });
+    await screen.findByRole("option", { name: /car \(40 visible samples\)/i });
     await user.click(screen.getByRole("button", { name: /show all 80 coco classes/i }));
     expect(screen.getByRole("option", { name: /giraffe \(0\)/i })).toBeInTheDocument();
+  });
+
+  test("downloads exports with the selected metric", async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi.fn(() => "blob:history");
+    const revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectURL,
+    });
+
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      if (url.pathname === "/api/v1/export") {
+        return Promise.resolve(
+          new Response("bucket,class_name,event_count\n", {
+            status: 200,
+            headers: { "Content-Disposition": 'attachment; filename="history.csv"' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage("/history?metric=count_events");
+    await screen.findByTestId("history-trend-chart");
+
+    await user.click(screen.getByRole("button", { name: /download csv/i }));
+
+    await waitFor(() => {
+      expect(findHistoryRequest("/api/v1/export", "count_events")).toBeDefined();
+    });
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalled();
+    clickSpy.mockRestore();
   });
 });

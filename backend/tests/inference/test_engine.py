@@ -22,7 +22,7 @@ from argus.inference.engine import (
     TrackerSettings,
 )
 from argus.inference.publisher import TelemetryFrame
-from argus.models.enums import ProcessingMode, RuleAction, TrackerType
+from argus.models.enums import CountEventType, ProcessingMode, RuleAction, TrackerType
 from argus.services.incident_capture import IncidentTriggeredEvent
 from argus.streaming.mediamtx import (
     PrivacyPolicy,
@@ -30,6 +30,7 @@ from argus.streaming.mediamtx import (
     StreamMode,
     StreamRegistration,
 )
+from argus.vision.count_events import CountEventRecord
 from argus.vision.rules import RuleEventRecord
 from argus.vision.runtime import (
     CpuVendor,
@@ -105,6 +106,25 @@ class _FakeTrackingStore:
 
     async def record(self, camera_id: UUID, ts: datetime, detections: list[Detection]) -> None:
         self.records.append((camera_id, detections))
+
+
+class _FakeCountEventStore:
+    def __init__(self) -> None:
+        self.records: list[tuple[UUID, list[CountEventRecord]]] = []
+
+    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None:
+        if events:
+            self.records.append((camera_id, list(events)))
+
+
+class _FailingCountEventStore:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None:
+        self.calls += 1
+        if events:
+            raise RuntimeError("count event persistence failed")
 
 
 class _FakeRuleEngine:
@@ -1239,3 +1259,202 @@ async def test_engine_uses_initial_registration_without_calling_register_stream(
 
     assert engine._stream_registration is registration
     assert stream_client.register_stream_calls == []
+
+
+@pytest.mark.asyncio
+async def test_engine_records_generic_count_events_with_mixed_zones() -> None:
+    camera_id = uuid4()
+    detector_calls = 0
+
+    class _CrossingDetector:
+        def detect(self, frame: np.ndarray, allowed_classes: list[str]) -> list[Detection]:
+            nonlocal detector_calls
+            detector_calls += 1
+            if detector_calls == 1:
+                bbox = (10.0, 10.0, 30.0, 30.0)
+            else:
+                bbox = (60.0, 10.0, 80.0, 30.0)
+            return [Detection(class_name="car", confidence=0.95, bbox=bbox, class_id=0)]
+
+    class _SingleTrackTracker:
+        def update(
+            self,
+            detections: list[Detection],
+            frame: np.ndarray | None = None,
+        ) -> list[Detection]:
+            return [detection.with_updates(track_id=7) for detection in detections]
+
+    count_store = _FakeCountEventStore()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "zones": [
+                {"id": "driveway", "type": "line", "points": [[50, 0], [50, 64]], "class_names": ["car"]},
+                {"id": "yard", "polygon": [[40, 40], [63, 40], [63, 63], [40, 63]]},
+            ]
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((64, 64, 3), dtype=np.uint8), np.zeros((64, 64, 3), dtype=np.uint8)]
+        ),
+        detector=_CrossingDetector(),
+        tracker_factory=lambda tracker_type: _SingleTrackTracker(),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        count_event_store=count_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert len(publisher.frames) == 2
+    assert len(count_store.records) == 1
+    camera_seen, events = count_store.records[0]
+    assert camera_seen == camera_id
+    assert len(events) == 1
+    assert events[0]["event_type"] == CountEventType.LINE_CROSS
+    assert events[0]["boundary_id"] == "driveway"
+
+
+@pytest.mark.asyncio
+async def test_engine_resets_count_event_state_on_tracker_change() -> None:
+    camera_id = uuid4()
+    detector_calls = 0
+
+    class _TrackerChangeDetector:
+        def detect(self, frame: np.ndarray, allowed_classes: list[str]) -> list[Detection]:
+            nonlocal detector_calls
+            detector_calls += 1
+            if detector_calls in (1, 3):
+                bbox = (10.0, 10.0, 30.0, 30.0)
+            else:
+                bbox = (60.0, 10.0, 80.0, 30.0)
+            return [Detection(class_name="car", confidence=0.95, bbox=bbox, class_id=0)]
+
+    class _ConstantTrackTracker:
+        def __init__(self, tracker_type: TrackerType) -> None:
+            self.tracker_type = tracker_type
+
+        def update(
+            self,
+            detections: list[Detection],
+            frame: np.ndarray | None = None,
+        ) -> list[Detection]:
+            return [detection.with_updates(track_id=7) for detection in detections]
+
+    count_store = _FakeCountEventStore()
+    tracker_creations: list[TrackerType] = []
+
+    def tracker_factory(tracker_type: TrackerType) -> _ConstantTrackTracker:
+        tracker_creations.append(tracker_type)
+        return _ConstantTrackTracker(tracker_type)
+
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "zones": [
+                {"id": "driveway", "type": "line", "points": [[50, 0], [50, 64]], "class_names": ["car"]}
+            ]
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(4)]),
+        detector=_TrackerChangeDetector(),
+        tracker_factory=tracker_factory,
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        count_event_store=count_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 1, tzinfo=UTC))
+    await engine.apply_command(CameraCommand(tracker_type=TrackerType.BYTETRACK))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 2, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 3, tzinfo=UTC))
+    await engine.close()
+
+    assert tracker_creations == [TrackerType.BOTSORT, TrackerType.BYTETRACK]
+    assert len(count_store.records) == 2
+    assert all(record[1][0]["boundary_id"] == "driveway" for record in count_store.records)
+
+
+@pytest.mark.asyncio
+async def test_engine_continues_when_count_event_persistence_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    detector_calls = 0
+
+    class _CrossingDetector:
+        def detect(self, frame: np.ndarray, allowed_classes: list[str]) -> list[Detection]:
+            nonlocal detector_calls
+            detector_calls += 1
+            if detector_calls == 1:
+                bbox = (10.0, 10.0, 30.0, 30.0)
+            else:
+                bbox = (60.0, 10.0, 80.0, 30.0)
+            return [Detection(class_name="car", confidence=0.95, bbox=bbox, class_id=0)]
+
+    class _SingleTrackTracker:
+        def update(
+            self,
+            detections: list[Detection],
+            frame: np.ndarray | None = None,
+        ) -> list[Detection]:
+            return [detection.with_updates(track_id=11) for detection in detections]
+
+    count_store = _FailingCountEventStore()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "zones": [
+                {"id": "driveway", "type": "line", "points": [[50, 0], [50, 64]], "class_names": ["car"]}
+            ]
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((64, 64, 3), dtype=np.uint8), np.zeros((64, 64, 3), dtype=np.uint8)]
+        ),
+        detector=_CrossingDetector(),
+        tracker_factory=lambda tracker_type: _SingleTrackTracker(),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        count_event_store=count_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    caplog.clear()
+    telemetry = await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert telemetry.camera_id == camera_id
+    assert len(publisher.frames) == 2
+    assert count_store.calls == 2
+    assert "persist_count_events" in engine.last_stage_timings
+    assert engine.last_stage_timings["persist_count_events"] >= 0.0
+    assert any(
+        record.levelname == "ERROR"
+        and record.name == "argus.inference.engine"
+        and "Failed to persist count events" in record.message
+        for record in caplog.records
+    )

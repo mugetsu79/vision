@@ -16,6 +16,10 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
+const routerFuture = {
+  v7_relativeSplatPath: true,
+  v7_startTransition: true,
+} as const;
 
 describe("RequireAuth", () => {
   beforeEach(() => {
@@ -32,7 +36,7 @@ describe("RequireAuth", () => {
 
   test("redirects anonymous users to the sign-in page", async () => {
     render(
-      <MemoryRouter initialEntries={["/live"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/live"]}>
         <Routes>
           <Route path="/signin" element={<div>Sign in page</div>} />
           <Route

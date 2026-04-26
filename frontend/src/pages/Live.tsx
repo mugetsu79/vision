@@ -11,8 +11,6 @@ import { VideoStream } from "@/components/live/VideoStream";
 import { Badge } from "@/components/ui/badge";
 import { useCameras } from "@/hooks/use-cameras";
 import {
-  countTracksByClass,
-  filterTracks,
   formatHeartbeat,
   getHeartbeatStatus,
 } from "@/lib/live";
@@ -61,8 +59,10 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
     for (const camera of cameras) {
       const frame = framesByCamera[camera.id];
       const classFilter = classFiltersByCamera.get(camera.id) ?? null;
-      const visibleCounts = countTracksByClass(frame, classFilter);
-      for (const [className, count] of Object.entries(visibleCounts)) {
+      for (const [className, count] of Object.entries(frame?.counts ?? {})) {
+        if (classFilter && !classFilter.includes(className)) {
+          continue;
+        }
         aggregated[className] = (aggregated[className] ?? 0) + count;
       }
     }
@@ -127,8 +127,13 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
             {cameras.map((camera) => {
               const frame = framesByCamera[camera.id];
               const classFilter = classFiltersByCamera.get(camera.id) ?? null;
-              const visibleTracks = filterTracks(frame, classFilter);
               const heartbeatStatus = getHeartbeatStatus(frame);
+              const visibleNow = Object.entries(frame?.counts ?? {}).reduce((total, [className, count]) => {
+                if (classFilter && !classFilter.includes(className)) {
+                  return total;
+                }
+                return total + count;
+              }, 0);
 
               return (
                 <article
@@ -168,7 +173,7 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
                           {formatHeartbeat(frame)}
                         </p>
                         <p className="mt-1 text-sm text-[#dce6f7]">
-                          {visibleTracks.length} visible detections
+                          {visibleNow} visible now
                         </p>
                       </div>
                       {frame ? <p className="text-xs text-[#9db3d3]">{frame.stream_mode}</p> : null}

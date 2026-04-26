@@ -11,7 +11,7 @@ from argus.api.contracts import ExportArtifact, TenantContext
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.api.v1.history import _normalize_camera_ids
 from argus.core.security import AuthenticatedUser, require
-from argus.models.enums import RoleEnum
+from argus.models.enums import HistoryMetric, RoleEnum
 from argus.services.app import AppServices
 
 router = APIRouter(prefix="/api/v1/export", tags=["export"])
@@ -25,6 +25,7 @@ GranularityQuery = Annotated[str, Query(pattern="^(1m|5m|1h|1d)$")]
 FromQuery = Annotated[datetime, Query(alias="from")]
 ToQuery = Annotated[datetime, Query(alias="to")]
 FormatQuery = Annotated[str, Query(pattern="^(csv|parquet)$")]
+MetricQuery = Annotated[HistoryMetric, Query()]
 
 
 @router.get("")
@@ -39,6 +40,7 @@ async def export_history(
     class_names: ClassNamesQuery = None,
     granularity: GranularityQuery = "1m",
     format: FormatQuery = "csv",
+    metric: MetricQuery = HistoryMetric.OCCUPANCY,
 ) -> Response:
     artifact: ExportArtifact = await services.history.export_history(
         tenant_context,
@@ -48,6 +50,7 @@ async def export_history(
         starts_at=from_,
         ends_at=to,
         format_name=format,
+        metric=metric,
     )
     return Response(
         content=artifact.content,

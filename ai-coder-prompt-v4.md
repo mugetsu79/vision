@@ -116,11 +116,11 @@
 >
 > `WS /ws/telemetry` subscribes the connected user to NATS `evt.tracking.*` filtered to the tenant's cameras. Use backpressure (drop oldest) if the client is slow.
 >
-> `GET /api/v1/history` queries the appropriate continuous aggregate (`events_1m` or `events_1h`) based on `granularity`, grouped by `class_name`.
+> `GET /api/v1/history`, `GET /api/v1/history/series`, and `GET /api/v1/history/classes` all accept `metric=occupancy|count_events|observations`.
 >
-> `GET /api/v1/history/series` returns chart-ready bucketed rows and supports additive speed fields via `include_speed` and `speed_threshold`.
+> `metric=occupancy` means visible-now / peak-concurrent bucket semantics from `tracking_events`, `metric=count_events` means durable cumulative events such as `line_cross`, `zone_enter`, and `zone_exit`, and `metric=observations` means raw frame-observation density.
 >
-> `GET /api/v1/history/classes` returns the observed class inventory for the selected window so the History page can hydrate its filter UI without hardcoding a deployment-specific class list.
+> `GET /api/v1/history/series` returns chart-ready bucketed rows and supports additive speed fields via `include_speed` and `speed_threshold`; CSV/Parquet export must preserve the selected metric as well.
 >
 > `GET /api/v1/export` streams CSV or Parquet (`format=csv|parquet` query param).
 >
@@ -172,11 +172,11 @@
 >
 > Implement `components/TelemetryCanvas.tsx` that renders bounding boxes, class labels, track IDs, and speed (if present) on the canvas. Feed it from a shared app-level telemetry store so the `/ws/telemetry` connection survives route changes and short navigations away from `/live`.
 >
-> Implement `components/DynamicStats.tsx` that auto-generates stat cards from the `counts` object in each telemetry frame (one card per distinct `class_name`). No hardcoded class list.
+> Implement `components/DynamicStats.tsx` that auto-generates stat cards from the live occupancy `counts` object in each telemetry frame (one card per distinct `class_name`). No hardcoded class list.
 >
 > Implement `components/AgentInput.tsx` — chat bar wired to `POST /api/v1/query`, supports per-camera or global scope, shows the resolved class list + model + latency inline.
 >
-> Implement `components/LiveSparkline.tsx` and `hooks/use-live-sparkline.ts` so each live tile shows a 30-minute detection pulse seeded from `/api/v1/history/series` and kept warm by the shared telemetry store.
+> Implement `components/LiveSparkline.tsx` and `hooks/use-live-sparkline.ts` so each live tile shows a 30-minute occupancy sparkline seeded from `/api/v1/history/series?metric=occupancy` and kept warm by the shared telemetry store. The right-edge value should represent latest occupancy, not cumulative detections.
 >
 > `pages/Live.tsx` renders the canonical N×M responsive live wall for the user's subscribed cameras. Each tile combines `VideoStream`, `TelemetryCanvas`, presence indicators (`telemetry live` / `telemetry stale` / `awaiting telemetry`), and the per-camera sparkline. `/dashboard` should redirect here.
 >
@@ -190,9 +190,10 @@
 > - URL-backed filter state so the current window and selections survive refresh/share links.
 > - Quick range presets (`Last 24h`, `Last 7d`) plus explicit `from` / `to` state in the query string.
 > - Granularity select (1m / 5m / 1h / 1d).
+> - Metric select (`occupancy`, `count_events`, `observations`) with clear operator-facing copy; default to `count_events` only when all selected cameras support count boundaries.
 > - Camera multi-select plus class discovery from `GET /api/v1/history/classes`; preserve the ability to expose the wider COCO list when the current window has sparse detections.
 > - Optional speed overlays and thresholding backed by `GET /api/v1/history/series?include_speed=true`.
-> - ECharts time-series with one line per class, brush zoom, CSV/Parquet export buttons that call `/api/v1/export`, and backend-driven granularity adjustment when the requested window is too wide for the chosen bucket size.
+> - ECharts time-series with one line per class, brush zoom, CSV/Parquet export buttons that call `/api/v1/export`, and backend-driven granularity adjustment when the requested window is too wide for the chosen bucket size. Export must preserve the selected metric.
 >
 > Implement `pages/Incidents.tsx` listing recent incidents with snapshot previews (MinIO signed URLs), filterable by camera and type.
 >

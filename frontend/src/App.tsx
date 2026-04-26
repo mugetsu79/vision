@@ -7,7 +7,12 @@ export default function App() {
   return (
     <>
       <AuthSessionSync />
-      <RouterProvider router={router} />
+      <RouterProvider
+        router={router}
+        future={{
+          v7_startTransition: true,
+        }}
+      />
     </>
   );
 }

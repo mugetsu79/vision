@@ -66,7 +66,7 @@ describe("CamerasPage", () => {
     const user = userEvent.setup();
     let modelRequests = 0;
 
-    vi.spyOn(global, "fetch").mockImplementation((input) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       const request = input as Request;
       const url = new URL(request.url);
 
@@ -149,7 +149,7 @@ describe("CamerasPage", () => {
   test("shows a models loading failure inside the wizard instead of an empty silent select", async () => {
     const user = userEvent.setup();
 
-    vi.spyOn(global, "fetch").mockImplementation((input) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       const request = input as Request;
       const url = new URL(request.url);
 

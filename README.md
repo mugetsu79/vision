@@ -149,9 +149,9 @@ The repo already includes:
 - multi-tenant auth and RBAC
 - site and camera management
 - model registration
-- unified live workspace at `/live` with NL query-driven filtering, per-camera video tiles, and 30-minute detection sparklines (`/dashboard` now redirects)
+- unified live workspace at `/live` with NL query-driven filtering, per-camera video tiles, and 30-minute occupancy sparklines (`/dashboard` now redirects)
 - shared telemetry WebSocket state that survives route changes and keeps the live wall warm across short navigation hops
-- history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, and CSV/Parquet export
+- metric-aware history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, CSV/Parquet export, and a clear split between `occupancy`, `count_events`, and raw `observations`
 - incident clip storage
 - edge worker support
 - hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions
@@ -161,6 +161,9 @@ The repo already includes:
 The most mature operational paths today are `central` and `edge`.
 
 ## Model And Camera Scope
+
+- `occupancy` means objects currently visible in the scene or peak visible occupancy within a bucketed history window.
+- Precise cumulative traffic-style counts come from durable `count_events` such as `line_cross`, `zone_enter`, and `zone_exit`, not from aggregating raw frame observations.
 
 - `models/` is just where local ONNX files live during lab and development work.
 - In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later.

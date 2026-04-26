@@ -17,6 +17,10 @@ import { AuthCallbackPage } from "@/pages/AuthCallback";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
+const routerFuture = {
+  v7_relativeSplatPath: true,
+  v7_startTransition: true,
+} as const;
 
 describe("AuthCallbackPage", () => {
   beforeEach(() => {
@@ -43,7 +47,7 @@ describe("AuthCallbackPage", () => {
 
     render(
       <React.StrictMode>
-        <MemoryRouter initialEntries={["/auth/callback"]}>
+        <MemoryRouter future={routerFuture} initialEntries={["/auth/callback"]}>
           <Routes>
             <Route path="/signin" element={<div>Sign in page</div>} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />

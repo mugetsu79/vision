@@ -57,7 +57,7 @@ from argus.core.db import DatabaseManager
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
-from argus.models.enums import ModelFormat, ModelTask
+from argus.models.enums import CountEventType, HistoryMetric, ModelFormat, ModelTask
 from argus.models.tables import (
     APIKey,
     AuditLog,
@@ -685,7 +685,9 @@ class HistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: HistoryMetric = HistoryMetric.OCCUPANCY,
     ) -> list[HistoryPoint]:
+        _ensure_history_window(starts_at, ends_at)
         await self._ensure_camera_access(tenant_context, camera_ids)
         rows = await self._fetch_history_rows(
             camera_ids=camera_ids,
@@ -693,6 +695,7 @@ class HistoryService:
             granularity=granularity,
             starts_at=starts_at,
             ends_at=ends_at,
+            metric=metric,
         )
         return [
             HistoryPoint(
@@ -701,6 +704,7 @@ class HistoryService:
                 class_name=row["class_name"],
                 event_count=int(row["event_count"]),
                 granularity=granularity,
+                metric=metric,
             )
             for row in rows
         ]
@@ -714,6 +718,7 @@ class HistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: HistoryMetric = HistoryMetric.OCCUPANCY,
         include_speed: bool = False,
         speed_threshold: float | None = None,
     ) -> HistorySeriesResponse:
@@ -726,13 +731,33 @@ class HistoryService:
             ends_at=ends_at,
         )
 
-        if include_speed:
+        if metric is HistoryMetric.COUNT_EVENTS:
+            if include_speed:
+                rows = await self._fetch_series_rows_with_speed_from_count_events(
+                    camera_ids=camera_ids,
+                    class_names=class_names,
+                    granularity=effective_granularity,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                    speed_threshold=speed_threshold,
+                )
+            else:
+                rows = await self._fetch_series_rows_aggregate(
+                    camera_ids=camera_ids,
+                    class_names=class_names,
+                    granularity=effective_granularity,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                    metric=metric,
+                )
+        elif include_speed:
             rows = await self._fetch_series_rows_with_speed(
                 camera_ids=camera_ids,
                 class_names=class_names,
                 granularity=effective_granularity,
                 starts_at=starts_at,
                 ends_at=ends_at,
+                metric=metric,
                 speed_threshold=speed_threshold,
             )
         else:
@@ -742,6 +767,7 @@ class HistoryService:
                 granularity=effective_granularity,
                 starts_at=starts_at,
                 ends_at=ends_at,
+                metric=metric,
             )
 
         buckets: dict[datetime, dict[str, int]] = {}
@@ -839,6 +865,7 @@ class HistoryService:
 
         return HistorySeriesResponse(
             granularity=effective_granularity,
+            metric=metric,
             class_names=selected_classes,
             rows=result_rows,
             granularity_adjusted=granularity_adjusted,
@@ -853,43 +880,37 @@ class HistoryService:
         camera_ids: list[UUID] | None,
         starts_at: datetime,
         ends_at: datetime,
+        metric: HistoryMetric = HistoryMetric.OCCUPANCY,
     ) -> HistoryClassesResponse:
         _ensure_history_window(starts_at, ends_at)
         await self._ensure_camera_access(tenant_context, camera_ids)
 
-        parameters: dict[str, Any] = {
-            "starts_at": starts_at,
-            "ends_at": ends_at,
-        }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
-
-        statement = text(
-            f"""
-            SELECT
-              class_name,
-              count(*)::bigint AS event_count,
-              bool_or(speed_kph IS NOT NULL) AS has_speed_data
-            FROM tracking_events
-            WHERE ts >= :starts_at
-              AND ts <= :ends_at
-              {' '.join(filters)}
-            GROUP BY class_name
-            ORDER BY event_count DESC, class_name ASC
-            """
-        )
-        if camera_ids:
-            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
-
-        async with self.session_factory() as session:
-            rows = (await session.execute(statement, parameters)).mappings().all()
+        if metric is HistoryMetric.COUNT_EVENTS:
+            rows = await self._fetch_class_rows_from_count_events(
+                camera_ids=camera_ids,
+                starts_at=starts_at,
+                ends_at=ends_at,
+            )
+            boundaries = await self._fetch_count_event_boundary_summaries(
+                camera_ids=camera_ids,
+                starts_at=starts_at,
+                ends_at=ends_at,
+            )
+        else:
+            rows = await self._fetch_class_rows_from_tracking_events(
+                camera_ids=camera_ids,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                metric=metric,
+            )
+            boundaries = []
 
         return HistoryClassesResponse.model_validate(
             {
                 "from": starts_at,
                 "to": ends_at,
+                "metric": metric,
+                "boundaries": boundaries,
                 "classes": [
                     {
                         "class_name": row["class_name"],
@@ -911,6 +932,7 @@ class HistoryService:
         starts_at: datetime,
         ends_at: datetime,
         format_name: str,
+        metric: HistoryMetric = HistoryMetric.OCCUPANCY,
     ) -> ExportArtifact:
         rows = await self.query_history(
             tenant_context,
@@ -919,6 +941,7 @@ class HistoryService:
             granularity=granularity,
             starts_at=starts_at,
             ends_at=ends_at,
+            metric=metric,
         )
         if format_name == "parquet":
             return ExportArtifact(
@@ -951,8 +974,9 @@ class HistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: HistoryMetric = HistoryMetric.OCCUPANCY,
     ) -> list[dict[str, Any]]:
-        view_name, bucket_expr = _history_view_and_bucket_expr(granularity)
+        interval = _GRANULARITY_INTERVAL[granularity]
         parameters: dict[str, Any] = {
             "starts_at": starts_at,
             "ends_at": ends_at,
@@ -965,21 +989,67 @@ class HistoryService:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
 
-        statement = text(
-            f"""
-            SELECT
-              {bucket_expr} AS bucket,
-              camera_id,
-              class_name,
-              SUM(event_count)::bigint AS event_count
-            FROM {view_name}
-            WHERE bucket >= :starts_at
-              AND bucket <= :ends_at
-              {' '.join(filters)}
-            GROUP BY 1, 2, 3
-            ORDER BY 1 ASC, 3 ASC, 2 ASC
-            """
-        )
+        if metric is HistoryMetric.COUNT_EVENTS:
+            statement = text(
+                f"""
+                SELECT
+                  time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                  camera_id,
+                  class_name,
+                  count(*)::bigint AS event_count
+                FROM count_events
+                WHERE ts >= :starts_at
+                  AND ts <= :ends_at
+                  {' '.join(filters)}
+                GROUP BY 1, 2, 3
+                ORDER BY 1 ASC, 3 ASC, 2 ASC
+                """
+            )
+        elif metric is HistoryMetric.OCCUPANCY:
+            statement = text(
+                f"""
+                WITH active_by_ts AS (
+                  SELECT
+                    time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                    camera_id,
+                    class_name,
+                    ts,
+                    count(DISTINCT track_id)::bigint AS active_count
+                  FROM tracking_events
+                  WHERE ts >= :starts_at
+                    AND ts <= :ends_at
+                    {' '.join(filters)}
+                  GROUP BY 1, 2, 3, 4
+                )
+                SELECT
+                  bucket,
+                  camera_id,
+                  class_name,
+                  MAX(active_count)::bigint AS event_count
+                FROM active_by_ts
+                GROUP BY 1, 2, 3
+                ORDER BY 1 ASC, 3 ASC, 2 ASC
+                """
+            )
+        else:
+            count_expr = (
+                "count(*)::bigint"
+            )
+            statement = text(
+                f"""
+                SELECT
+                  time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                  camera_id,
+                  class_name,
+                  {count_expr} AS event_count
+                FROM tracking_events
+                WHERE ts >= :starts_at
+                  AND ts <= :ends_at
+                  {' '.join(filters)}
+                GROUP BY 1, 2, 3
+                  ORDER BY 1 ASC, 3 ASC, 2 ASC
+                """
+            )
         if camera_ids:
             statement = statement.bindparams(bindparam("camera_ids", expanding=True))
         if class_names:
@@ -997,8 +1067,12 @@ class HistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: HistoryMetric = HistoryMetric.COUNT_EVENTS,
     ) -> list[dict[str, Any]]:
-        view_name, bucket_expr = _history_view_and_bucket_expr(granularity)
+        if metric is HistoryMetric.COUNT_EVENTS:
+            view_name, bucket_expr = _count_event_view_and_bucket_expr(granularity)
+        else:
+            view_name, bucket_expr = _history_view_and_bucket_expr(granularity)
         parameters: dict[str, Any] = {
             "starts_at": starts_at,
             "ends_at": ends_at,
@@ -1042,6 +1116,7 @@ class HistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: HistoryMetric = HistoryMetric.OCCUPANCY,
     ) -> list[dict[str, Any]]:
         interval = _GRANULARITY_INTERVAL[granularity]
         parameters: dict[str, Any] = {
@@ -1056,20 +1131,55 @@ class HistoryService:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
 
-        statement = text(
-            f"""
-            SELECT
-              time_bucket(INTERVAL '{interval}', ts) AS bucket,
-              class_name,
-              count(*)::bigint AS event_count
-            FROM tracking_events
-            WHERE ts >= :starts_at
-              AND ts <= :ends_at
-              {' '.join(filters)}
-            GROUP BY 1, 2
-            ORDER BY 1 ASC, 2 ASC
-            """
-        )
+        if metric is HistoryMetric.OCCUPANCY:
+            statement = text(
+                f"""
+                WITH active_by_ts AS (
+                  SELECT
+                    time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                    camera_id,
+                    class_name,
+                    ts,
+                    count(DISTINCT track_id)::bigint AS active_count
+                  FROM tracking_events
+                  WHERE ts >= :starts_at
+                    AND ts <= :ends_at
+                    {' '.join(filters)}
+                  GROUP BY 1, 2, 3, 4
+                ),
+                occupancy_by_camera AS (
+                  SELECT
+                    bucket,
+                    camera_id,
+                    class_name,
+                    MAX(active_count)::bigint AS event_count
+                  FROM active_by_ts
+                  GROUP BY 1, 2, 3
+                )
+                SELECT
+                  bucket,
+                  class_name,
+                  SUM(event_count)::bigint AS event_count
+                FROM occupancy_by_camera
+                GROUP BY 1, 2
+                ORDER BY 1 ASC, 2 ASC
+                """
+            )
+        else:
+            statement = text(
+                f"""
+                SELECT
+                  time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                  class_name,
+                  count(*)::bigint AS event_count
+                FROM tracking_events
+                WHERE ts >= :starts_at
+                  AND ts <= :ends_at
+                  {' '.join(filters)}
+                GROUP BY 1, 2
+                ORDER BY 1 ASC, 2 ASC
+                """
+            )
         if camera_ids:
             statement = statement.bindparams(bindparam("camera_ids", expanding=True))
         if class_names:
@@ -1080,6 +1190,135 @@ class HistoryService:
         return [dict(row) for row in rows]
 
     async def _fetch_series_rows_with_speed(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        metric: HistoryMetric = HistoryMetric.OCCUPANCY,
+        speed_threshold: float | None,
+    ) -> list[dict[str, Any]]:
+        interval = _GRANULARITY_INTERVAL[granularity]
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+        if class_names:
+            filters.append("AND class_name IN :class_names")
+            parameters["class_names"] = class_names
+
+        count_expr = (
+            "count(*)::bigint"
+        )
+        threshold_expr = (
+            "count(*) FILTER (WHERE speed_kph IS NOT NULL AND speed_kph > :speed_threshold)::bigint"
+            if speed_threshold is not None
+            else "NULL::bigint"
+        )
+        if speed_threshold is not None:
+            parameters["speed_threshold"] = float(speed_threshold)
+
+        if metric is HistoryMetric.OCCUPANCY:
+            statement = text(
+                f"""
+                WITH active_by_ts AS (
+                  SELECT
+                    time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                    camera_id,
+                    class_name,
+                    ts,
+                    count(DISTINCT track_id)::bigint AS active_count
+                  FROM tracking_events
+                  WHERE ts >= :starts_at
+                    AND ts <= :ends_at
+                    {' '.join(filters)}
+                  GROUP BY 1, 2, 3, 4
+                ),
+                occupancy_by_camera AS (
+                  SELECT
+                    bucket,
+                    camera_id,
+                    class_name,
+                    MAX(active_count)::bigint AS event_count
+                  FROM active_by_ts
+                  GROUP BY 1, 2, 3
+                ),
+                speed_by_bucket AS (
+                  SELECT
+                    time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                    class_name,
+                    count(*)::bigint AS event_count,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY speed_kph)
+                        FILTER (WHERE speed_kph IS NOT NULL) AS speed_p50,
+                    percentile_cont(0.95) WITHIN GROUP (ORDER BY speed_kph)
+                        FILTER (WHERE speed_kph IS NOT NULL) AS speed_p95,
+                    count(speed_kph)::bigint AS speed_sample_count,
+                    {threshold_expr} AS over_threshold_count
+                  FROM tracking_events
+                  WHERE ts >= :starts_at
+                    AND ts <= :ends_at
+                    {' '.join(filters)}
+                  GROUP BY 1, 2
+                )
+                SELECT
+                  occupancy_by_camera.bucket,
+                  occupancy_by_camera.class_name,
+                  SUM(occupancy_by_camera.event_count)::bigint AS event_count,
+                  speed_by_bucket.speed_p50,
+                  speed_by_bucket.speed_p95,
+                  speed_by_bucket.speed_sample_count,
+                  speed_by_bucket.over_threshold_count
+                FROM occupancy_by_camera
+                LEFT JOIN speed_by_bucket
+                  ON speed_by_bucket.bucket = occupancy_by_camera.bucket
+                 AND speed_by_bucket.class_name = occupancy_by_camera.class_name
+                GROUP BY
+                  occupancy_by_camera.bucket,
+                  occupancy_by_camera.class_name,
+                  speed_by_bucket.speed_p50,
+                  speed_by_bucket.speed_p95,
+                  speed_by_bucket.speed_sample_count,
+                  speed_by_bucket.over_threshold_count
+                ORDER BY 1 ASC, 2 ASC
+                """
+            )
+        else:
+            statement = text(
+                f"""
+                SELECT
+                  time_bucket(INTERVAL '{interval}', ts) AS bucket,
+                  class_name,
+                  {count_expr} AS event_count,
+                  percentile_cont(0.5) WITHIN GROUP (ORDER BY speed_kph)
+                      FILTER (WHERE speed_kph IS NOT NULL) AS speed_p50,
+                  percentile_cont(0.95) WITHIN GROUP (ORDER BY speed_kph)
+                      FILTER (WHERE speed_kph IS NOT NULL) AS speed_p95,
+                  count(speed_kph)::bigint AS speed_sample_count,
+                  {threshold_expr} AS over_threshold_count
+                FROM tracking_events
+                WHERE ts >= :starts_at
+                  AND ts <= :ends_at
+                  {' '.join(filters)}
+                GROUP BY 1, 2
+                ORDER BY 1 ASC, 2 ASC
+                """
+            )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+        if class_names:
+            statement = statement.bindparams(bindparam("class_names", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _fetch_series_rows_with_speed_from_count_events(
         self,
         *,
         camera_ids: list[UUID] | None,
@@ -1122,7 +1361,7 @@ class HistoryService:
                   FILTER (WHERE speed_kph IS NOT NULL) AS speed_p95,
               count(speed_kph)::bigint AS speed_sample_count,
               {threshold_expr} AS over_threshold_count
-            FROM tracking_events
+            FROM count_events
             WHERE ts >= :starts_at
               AND ts <= :ends_at
               {' '.join(filters)}
@@ -1138,6 +1377,128 @@ class HistoryService:
         async with self.session_factory() as session:
             rows = (await session.execute(statement, parameters)).mappings().all()
         return [dict(row) for row in rows]
+
+    async def _fetch_class_rows_from_tracking_events(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        starts_at: datetime,
+        ends_at: datetime,
+        metric: HistoryMetric,
+    ) -> list[dict[str, Any]]:
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+
+        count_expr = (
+            "count(DISTINCT (camera_id, track_id))::bigint"
+            if metric is HistoryMetric.OCCUPANCY
+            else "count(*)::bigint"
+        )
+        statement = text(
+            f"""
+            SELECT
+              class_name,
+              {count_expr} AS event_count,
+              bool_or(speed_kph IS NOT NULL) AS has_speed_data
+            FROM tracking_events
+            WHERE ts >= :starts_at
+              AND ts <= :ends_at
+              {' '.join(filters)}
+            GROUP BY class_name
+            ORDER BY event_count DESC, class_name ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _fetch_class_rows_from_count_events(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> list[dict[str, Any]]:
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+
+        statement = text(
+            f"""
+            SELECT
+              class_name,
+              count(*)::bigint AS event_count,
+              bool_or(speed_kph IS NOT NULL) AS has_speed_data
+            FROM count_events
+            WHERE ts >= :starts_at
+              AND ts <= :ends_at
+              {' '.join(filters)}
+            GROUP BY class_name
+            ORDER BY event_count DESC, class_name ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _fetch_count_event_boundary_summaries(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> list[dict[str, Any]]:
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+
+        statement = text(
+            f"""
+            SELECT
+              boundary_id,
+              array_agg(DISTINCT event_type ORDER BY event_type) AS event_types
+            FROM count_events
+            WHERE ts >= :starts_at
+              AND ts <= :ends_at
+              {' '.join(filters)}
+            GROUP BY boundary_id
+            ORDER BY boundary_id ASC
+            """
+        )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [
+            {
+                "boundary_id": row["boundary_id"],
+                "event_types": [CountEventType(event_type) for event_type in row["event_types"]],
+            }
+            for row in rows
+        ]
 
 
 class IncidentService:
@@ -1739,6 +2100,18 @@ def _history_view_and_bucket_expr(granularity: str) -> tuple[str, str]:
         return ("events_1h", "bucket")
     if granularity == "1d":
         return ("events_1h", "time_bucket(INTERVAL '1 day', bucket)")
+    raise ValueError(f"Unsupported history granularity: {granularity}")
+
+
+def _count_event_view_and_bucket_expr(granularity: str) -> tuple[str, str]:
+    if granularity == "1m":
+        return ("count_events_1m", "bucket")
+    if granularity == "5m":
+        return ("count_events_1m", "time_bucket(INTERVAL '5 minutes', bucket)")
+    if granularity == "1h":
+        return ("count_events_1h", "bucket")
+    if granularity == "1d":
+        return ("count_events_1h", "time_bucket(INTERVAL '1 day', bucket)")
     raise ValueError(f"Unsupported history granularity: {granularity}")
 
 

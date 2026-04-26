@@ -11,7 +11,7 @@ vi.mock("@/hooks/use-live-sparkline", () => ({
       bicycle: [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       bus: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     },
-    totals: { person: 15, car: 1, truck: 1, bicycle: 1, bus: 1 },
+    latestValues: { person: 5, car: 1, truck: 1, bicycle: 1, bus: 1 },
     loading: false,
     error: null,
   }),
@@ -42,8 +42,8 @@ describe("LiveSparkline", () => {
     expect(screen.getByText(/bus/i)).toBeInTheDocument();
   });
 
-  test("renders totals next to each class", () => {
+  test("renders latest occupancy next to each class", () => {
     render(<LiveSparkline cameraId="cam-1" activeClasses={["person", "car", "truck"]} />);
-    expect(screen.getByText("15")).toBeInTheDocument();
+    expect(screen.getByText("5")).toBeInTheDocument();
   });
 });

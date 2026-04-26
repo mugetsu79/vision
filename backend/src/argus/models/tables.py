@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from argus.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
 from argus.models.enums import (
+    CountEventType,
     ModelFormat,
     ModelTask,
     ProcessingMode,
@@ -203,6 +204,31 @@ class TrackingEvent(UUIDPrimaryKeyMixin, Base):
     zone_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attributes: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     bbox: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
+class CountEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "count_events"
+
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, nullable=False)
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    class_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    track_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    event_type: Mapped[CountEventType] = mapped_column(
+        enum_column(CountEventType, "count_event_type_enum"),
+        nullable=False,
+    )
+    boundary_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    direction: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    from_zone_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    to_zone_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    speed_kph: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    attributes: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class RuleEvent(UUIDPrimaryKeyMixin, Base):

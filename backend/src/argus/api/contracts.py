@@ -9,7 +9,14 @@ from pydantic import BaseModel, Field, field_validator
 
 from argus.core.security import AuthenticatedUser
 from argus.inference.publisher import TelemetryFrame
-from argus.models.enums import ModelFormat, ModelTask, ProcessingMode, TrackerType
+from argus.models.enums import (
+    CountEventType,
+    HistoryMetric,
+    ModelFormat,
+    ModelTask,
+    ProcessingMode,
+    TrackerType,
+)
 
 
 class SiteCreate(BaseModel):
@@ -270,12 +277,18 @@ class QueryResponse(BaseModel):
     camera_ids: list[UUID]
 
 
+class CountEventBoundarySummary(BaseModel):
+    boundary_id: str
+    event_types: list[CountEventType]
+
+
 class HistoryPoint(BaseModel):
     bucket: datetime
     camera_id: UUID | None = None
     class_name: str
     event_count: int
     granularity: str
+    metric: HistoryMetric | None = None
 
 
 class HistorySeriesRow(BaseModel):
@@ -290,6 +303,7 @@ class HistorySeriesRow(BaseModel):
 
 class HistorySeriesResponse(BaseModel):
     granularity: str
+    metric: HistoryMetric | None = None
     class_names: list[str]
     rows: list[HistorySeriesRow]
     granularity_adjusted: bool = False
@@ -306,6 +320,8 @@ class HistoryClassEntry(BaseModel):
 class HistoryClassesResponse(BaseModel):
     from_: datetime = Field(serialization_alias="from", validation_alias="from")
     to: datetime
+    metric: HistoryMetric | None = None
+    boundaries: list[CountEventBoundarySummary] = Field(default_factory=list)
     classes: list[HistoryClassEntry]
 
 
