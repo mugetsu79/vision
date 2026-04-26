@@ -271,7 +271,8 @@ export function HistoryPage() {
                   {historyMetricCopy("count_events").label} — {historyMetricCopy("count_events").description}
                 </option>
                 <option value="observations">
-                  {historyMetricCopy("observations").label} — {historyMetricCopy("observations").description}
+                  {historyMetricCopy("observations").label} (debug) —{" "}
+                  {historyMetricCopy("observations").description}
                 </option>
               </Select>
               {state.metric === null ? (
@@ -412,5 +413,10 @@ function resolveHistoryMetric(
 }
 
 function cameraHasCountBoundaries(camera: { zones?: Array<Record<string, unknown>> }): boolean {
-  return camera.zones?.some((zone) => zone?.type === "line") ?? false;
+  return (
+    camera.zones?.some((zone) => {
+      const zoneType = typeof zone?.type === "string" ? zone.type.toLowerCase() : null;
+      return zoneType === "line" || zoneType === "polygon" || Array.isArray(zone?.polygon);
+    }) ?? false
+  );
 }

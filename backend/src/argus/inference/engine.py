@@ -652,8 +652,6 @@ class InferenceEngine:
             color = (255, 196, 64)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             label = detection.class_name
-            if detection.track_id is not None:
-                label = f"{label} #{detection.track_id}"
             cv2.putText(
                 frame,
                 label,

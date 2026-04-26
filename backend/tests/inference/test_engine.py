@@ -1458,3 +1458,34 @@ async def test_engine_continues_when_count_event_persistence_fails(
         and "Failed to persist count events" in record.message
         for record in caplog.records
     )
+
+
+def test_draw_annotations_omits_tracker_ids_from_overlay_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured_labels: list[str] = []
+
+    def fake_put_text(*args, **kwargs):  # noqa: ANN001
+        captured_labels.append(args[1])
+        return None
+
+    monkeypatch.setattr(engine_module.cv2, "putText", fake_put_text)
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    engine._draw_annotations(
+        np.zeros((32, 32, 3), dtype=np.uint8),
+        [Detection(class_name="person", confidence=0.95, bbox=(1.0, 1.0, 10.0, 10.0), track_id=12)],
+    )
+
+    assert captured_labels == ["person"]

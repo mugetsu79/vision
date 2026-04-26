@@ -431,7 +431,8 @@ async def test_fetch_series_rows_occupancy_uses_peak_concurrency_sql() -> None:
     sql = " ".join(str(statement).split()).lower()
     assert "with active_by_ts as" in sql
     assert "max(active_count)::bigint as event_count" in sql
-    assert "count(distinct track_id)::bigint as active_count" in sql
+    assert "count(*)::bigint as active_count" in sql
+    assert "count(distinct track_id)" not in sql
     assert "sum(occupancy_by_camera.event_count)::bigint as event_count" not in sql
 
 
@@ -463,6 +464,32 @@ async def test_fetch_series_rows_counts_raw_observations() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fetch_class_rows_occupancy_uses_visibility_samples_sql() -> None:
+    service = HistoryService(session_factory=MagicMock())
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session_cm)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+    execute_result = MagicMock()
+    execute_result.mappings.return_value.all.return_value = []
+    session_cm.execute = AsyncMock(return_value=execute_result)
+    service.session_factory = MagicMock(return_value=session_cm)
+
+    starts = datetime(2026, 4, 24, 14, 0, tzinfo=UTC)
+    await service._fetch_class_rows_from_tracking_events(
+        camera_ids=None,
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=30),
+        metric=HistoryMetric.OCCUPANCY,
+    )
+
+    statement = session_cm.execute.await_args.args[0]
+    sql = " ".join(str(statement).split()).lower()
+    assert "count(distinct (camera_id, ts))::bigint as event_count" in sql
+    assert "track_id" not in sql
+
+
+@pytest.mark.asyncio
 async def test_fetch_series_rows_with_speed_occupancy_uses_peak_concurrency_sql() -> None:
     service = HistoryService(session_factory=MagicMock())
 
@@ -489,6 +516,8 @@ async def test_fetch_series_rows_with_speed_occupancy_uses_peak_concurrency_sql(
     sql = " ".join(str(statement).split()).lower()
     assert "with active_by_ts as" in sql
     assert "occupancy_by_camera" in sql
+    assert "count(*)::bigint as active_count" in sql
+    assert "count(distinct track_id)" not in sql
     assert "sum(occupancy_by_camera.event_count)::bigint as event_count" in sql
 
 
@@ -518,4 +547,5 @@ async def test_fetch_history_rows_occupancy_uses_peak_concurrency_sql() -> None:
     sql = " ".join(str(statement).split()).lower()
     assert "with active_by_ts as" in sql
     assert "max(active_count)::bigint as event_count" in sql
-    assert "count(distinct track_id)::bigint as active_count" in sql
+    assert "count(*)::bigint as active_count" in sql
+    assert "count(distinct track_id)" not in sql

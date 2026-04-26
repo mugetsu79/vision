@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import csv
 import io
 import secrets
@@ -85,6 +86,9 @@ HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 if TYPE_CHECKING:
     from argus.services.query import QueryService
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -382,10 +386,12 @@ class CameraService:
         session_factory: async_sessionmaker[AsyncSession],
         settings: Settings,
         audit_logger: DatabaseAuditLogger,
+        events: NatsJetStreamClient | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
         self.audit_logger = audit_logger
+        self.events = events
 
     async def list_cameras(
         self,
@@ -544,6 +550,7 @@ class CameraService:
             target=f"camera:{camera.id}",
             meta=payload.model_dump(exclude_unset=True, mode="json"),
         )
+        await self._publish_camera_command(camera)
         return _camera_to_response(camera)
 
     async def delete_camera(self, tenant_context: TenantContext, camera_id: UUID) -> None:
@@ -556,6 +563,21 @@ class CameraService:
             action="camera.delete",
             target=f"camera:{camera_id}",
         )
+
+    async def _publish_camera_command(self, camera: Camera) -> None:
+        if self.events is None:
+            return
+        command = {
+            "active_classes": list(camera.active_classes),
+            "tracker_type": camera.tracker_type.value,
+            "privacy": dict(camera.privacy),
+            "attribute_rules": list(camera.attribute_rules),
+            "zones": list(camera.zones),
+        }
+        try:
+            await self.events.publish(f"cmd.camera.{camera.id}", command)
+        except Exception:
+            logger.exception("Failed to publish camera command update for camera %s", camera.id)
 
 
 class EdgeService:
@@ -1014,7 +1036,7 @@ class HistoryService:
                     camera_id,
                     class_name,
                     ts,
-                    count(DISTINCT track_id)::bigint AS active_count
+                    count(*)::bigint AS active_count
                   FROM tracking_events
                   WHERE ts >= :starts_at
                     AND ts <= :ends_at
@@ -1140,7 +1162,7 @@ class HistoryService:
                     camera_id,
                     class_name,
                     ts,
-                    count(DISTINCT track_id)::bigint AS active_count
+                    count(*)::bigint AS active_count
                   FROM tracking_events
                   WHERE ts >= :starts_at
                     AND ts <= :ends_at
@@ -1233,7 +1255,7 @@ class HistoryService:
                     camera_id,
                     class_name,
                     ts,
-                    count(DISTINCT track_id)::bigint AS active_count
+                    count(*)::bigint AS active_count
                   FROM tracking_events
                   WHERE ts >= :starts_at
                     AND ts <= :ends_at
@@ -1396,7 +1418,7 @@ class HistoryService:
             parameters["camera_ids"] = camera_ids
 
         count_expr = (
-            "count(DISTINCT (camera_id, track_id))::bigint"
+            "count(DISTINCT (camera_id, ts))::bigint"
             if metric is HistoryMetric.OCCUPANCY
             else "count(*)::bigint"
         )
@@ -1761,7 +1783,7 @@ def build_app_services(
     return AppServices(
         tenancy=TenancyService(db.session_factory, settings),
         sites=SiteService(db.session_factory, audit_logger),
-        cameras=CameraService(db.session_factory, settings, audit_logger),
+        cameras=CameraService(db.session_factory, settings, audit_logger, events),
         models=ModelService(db.session_factory, audit_logger),
         edge=EdgeService(db.session_factory, settings, events, audit_logger),
         history=HistoryService(db.session_factory),

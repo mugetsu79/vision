@@ -14,6 +14,18 @@ import type {
 
 type Point = [number, number];
 type BrowserDeliveryProfile = "native" | "1080p15" | "720p10" | "540p5";
+type BoundaryType = "line" | "polygon";
+
+type BoundaryDraft = {
+  id: string;
+  type: BoundaryType;
+  classNames: string;
+  x1: string;
+  y1: string;
+  x2: string;
+  y2: string;
+  polygonText: string;
+};
 
 export type SiteOption = { id: string; name: string };
 export type ModelOption = { id: string; name: string; version: string; classes: string[] };
@@ -39,6 +51,7 @@ export type CameraWizardData = {
     dst: Point[];
     refDistanceM: number;
   };
+  zones: BoundaryDraft[];
 };
 
 const steps = [
@@ -82,6 +95,7 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
       dst: toPointTupleArray(initialCamera?.homography.dst),
       refDistanceM: initialCamera?.homography.ref_distance_m ?? 0,
     },
+    zones: boundaryDraftsFromZones(initialCamera?.zones),
   };
 }
 
@@ -96,6 +110,204 @@ function buildBrowserDelivery(defaultProfile: BrowserDeliveryProfile) {
       { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5 },
     ],
   };
+}
+
+function createLineBoundaryDraft(): BoundaryDraft {
+  return {
+    id: "",
+    type: "line",
+    classNames: "",
+    x1: "",
+    y1: "",
+    x2: "",
+    y2: "",
+    polygonText: "",
+  };
+}
+
+function createPolygonBoundaryDraft(): BoundaryDraft {
+  return {
+    id: "",
+    type: "polygon",
+    classNames: "",
+    x1: "",
+    y1: "",
+    x2: "",
+    y2: "",
+    polygonText: "",
+  };
+}
+
+function formatPolygonText(points: Point[]): string {
+  return points.map((point) => `${point[0]},${point[1]}`).join("\n");
+}
+
+function boundaryDraftsFromZones(zones: Array<Record<string, unknown>> | undefined): BoundaryDraft[] {
+  if (!zones) {
+    return [];
+  }
+
+  return zones.reduce<BoundaryDraft[]>((drafts, zone) => {
+    const zoneId = typeof zone.id === "string" ? zone.id : "";
+    const boundaryType = typeof zone.type === "string" ? zone.type.toLowerCase() : undefined;
+
+    if (boundaryType === "line" && Array.isArray(zone.points) && zone.points.length === 2) {
+      const [first, second] = zone.points;
+      if (
+        Array.isArray(first) &&
+        Array.isArray(second) &&
+        first.length === 2 &&
+        second.length === 2
+      ) {
+        drafts.push({
+          id: zoneId,
+          type: "line",
+          classNames: Array.isArray(zone.class_names)
+            ? zone.class_names
+                .filter((value): value is string => typeof value === "string")
+                .join(",")
+            : "",
+          x1: String(first[0]),
+          y1: String(first[1]),
+          x2: String(second[0]),
+          y2: String(second[1]),
+          polygonText: "",
+        });
+        return drafts;
+      }
+    }
+
+    if (Array.isArray(zone.polygon)) {
+      const polygon = zone.polygon
+        .filter((point): point is [number, number] => Array.isArray(point) && point.length === 2)
+        .map((point) => [Number(point[0]), Number(point[1])] as Point);
+      if (polygon.length >= 3) {
+        drafts.push({
+          id: zoneId,
+          type: "polygon",
+          classNames: "",
+          x1: "",
+          y1: "",
+          x2: "",
+          y2: "",
+          polygonText: formatPolygonText(polygon),
+        });
+      }
+    }
+
+    return drafts;
+  }, []);
+}
+
+function parseBoundaryClassNames(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function parseCoordinate(value: string): number | null {
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePolygonText(value: string): Point[] | null {
+  const rows = value
+    .split("\n")
+    .map((row) => row.trim())
+    .filter((row) => row.length > 0);
+  if (rows.length < 3) {
+    return null;
+  }
+
+  const points: Point[] = [];
+  for (const row of rows) {
+    const [xPart, yPart, ...rest] = row.split(",").map((part) => part.trim());
+    if (rest.length > 0 || xPart === undefined || yPart === undefined) {
+      return null;
+    }
+    const x = parseCoordinate(xPart);
+    const y = parseCoordinate(yPart);
+    if (x === null || y === null) {
+      return null;
+    }
+    points.push([x, y]);
+  }
+
+  return points;
+}
+
+function serializeZones(boundaries: BoundaryDraft[]): Array<Record<string, unknown>> {
+  return boundaries.map((boundary, index) => {
+    const zoneId = boundary.id.trim();
+    if (!zoneId) {
+      throw new Error(`Boundary ${index + 1} requires an id.`);
+    }
+
+    if (boundary.type === "line") {
+      const x1 = parseCoordinate(boundary.x1);
+      const y1 = parseCoordinate(boundary.y1);
+      const x2 = parseCoordinate(boundary.x2);
+      const y2 = parseCoordinate(boundary.y2);
+      if (x1 === null || y1 === null || x2 === null || y2 === null) {
+        throw new Error(`Boundary ${index + 1} requires two numeric points.`);
+      }
+      return {
+        id: zoneId,
+        type: "line",
+        points: [
+          [x1, y1],
+          [x2, y2],
+        ],
+        class_names: parseBoundaryClassNames(boundary.classNames),
+      };
+    }
+
+    const polygon = parsePolygonText(boundary.polygonText);
+    if (polygon === null) {
+      throw new Error(`Boundary ${index + 1} requires at least three polygon points.`);
+    }
+    return {
+      id: zoneId,
+      type: "polygon",
+      polygon,
+    };
+  });
+}
+
+function validateZoneBoundaries(boundaries: BoundaryDraft[]): string | null {
+  for (const [index, boundary] of boundaries.entries()) {
+    if (!boundary.id.trim()) {
+      return `Boundary ${index + 1} requires an id.`;
+    }
+    if (boundary.type === "line") {
+      const coordinates = [boundary.x1, boundary.y1, boundary.x2, boundary.y2].map(parseCoordinate);
+      if (coordinates.some((value) => value === null)) {
+        return `Boundary ${index + 1} requires two numeric points.`;
+      }
+      continue;
+    }
+    if (parsePolygonText(boundary.polygonText) === null) {
+      return `Boundary ${index + 1} requires at least three polygon points in x,y format.`;
+    }
+  }
+  return null;
+}
+
+function summarizeBoundaries(boundaries: BoundaryDraft[]): string {
+  if (boundaries.length === 0) {
+    return "None configured";
+  }
+  const lineCount = boundaries.filter((boundary) => boundary.type === "line").length;
+  const polygonCount = boundaries.filter((boundary) => boundary.type === "polygon").length;
+  const parts: string[] = [];
+  if (lineCount > 0) {
+    parts.push(`${lineCount} line${lineCount === 1 ? "" : "s"}`);
+  }
+  if (polygonCount > 0) {
+    parts.push(`${polygonCount} polygon${polygonCount === 1 ? "" : "s"}`);
+  }
+  return parts.join(", ");
 }
 
 function pruneActiveClasses(activeClasses: string[], allowedClasses: string[]) {
@@ -127,7 +339,7 @@ function toCreatePayload(data: CameraWizardData): CreateCameraInput {
     tracker_type: data.trackerType,
     active_classes: data.activeClasses,
     attribute_rules: [],
-    zones: [],
+    zones: serializeZones(data.zones),
     homography: {
       src: data.homography.src,
       dst: data.homography.dst,
@@ -154,6 +366,7 @@ function toUpdatePayload(data: CameraWizardData): UpdateCameraInput {
     secondary_model_id: data.secondaryModelId || null,
     tracker_type: data.trackerType,
     active_classes: data.activeClasses,
+    zones: serializeZones(data.zones),
     homography: {
       src: data.homography.src,
       dst: data.homography.dst,
@@ -278,7 +491,7 @@ export function CameraWizard({
       case "Privacy, Processing & Delivery":
         return "Analytics ingest remains native. Lower browser delivery profiles may activate an optional preview/transcode path to reduce bandwidth without changing inference quality.";
       case "Calibration":
-        return `Calibrate four source points, four destination points, and a real-world distance so ${brandName} can map image motion into the physical scene.`;
+        return `Calibrate four source points, four destination points, a real-world distance, and any line or polygon boundaries so ${brandName} can map motion and count events inside the physical scene.`;
       case "Review":
         return `Confirm the camera configuration before ${brandName} saves it. RTSP stays masked unless you explicitly replace it.`;
       default:
@@ -362,6 +575,10 @@ export function CameraWizard({
       if (data.homography.refDistanceM <= 0) {
         return "Reference distance is required.";
       }
+      const boundaryError = validateZoneBoundaries(data.zones);
+      if (boundaryError) {
+        return boundaryError;
+      }
     }
 
     return null;
@@ -380,6 +597,29 @@ export function CameraWizard({
         activeClasses: nextActiveClasses,
       };
     });
+  }
+
+  function addBoundary(type: BoundaryType) {
+    setData((current) => ({
+      ...current,
+      zones: [...current.zones, type === "line" ? createLineBoundaryDraft() : createPolygonBoundaryDraft()],
+    }));
+  }
+
+  function updateBoundary(index: number, patch: Partial<BoundaryDraft>) {
+    setData((current) => ({
+      ...current,
+      zones: current.zones.map((boundary, boundaryIndex) =>
+        boundaryIndex === index ? { ...boundary, ...patch } : boundary,
+      ),
+    }));
+  }
+
+  function removeBoundary(index: number) {
+    setData((current) => ({
+      ...current,
+      zones: current.zones.filter((_, boundaryIndex) => boundaryIndex !== index),
+    }));
   }
 
   async function handlePrimaryAction() {
@@ -743,12 +983,143 @@ export function CameraWizard({
           ) : null}
 
           {stepTitle === "Calibration" ? (
-            <HomographyEditor
-              src={data.homography.src}
-              dst={data.homography.dst}
-              refDistanceM={data.homography.refDistanceM}
-              onChange={(homography) => updateData("homography", homography)}
-            />
+            <div className="space-y-5">
+              <HomographyEditor
+                src={data.homography.src}
+                dst={data.homography.dst}
+                refDistanceM={data.homography.refDistanceM}
+                onChange={(homography) => updateData("homography", homography)}
+              />
+              <section className="rounded-[1.5rem] border border-[#243853] bg-[#09121c] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+                      Count boundaries
+                    </p>
+                    <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
+                      Lines and zones
+                    </h3>
+                    <p className="mt-2 max-w-2xl text-sm text-[#9eb2cf]">
+                      Add line crossings or polygon zones for count events. Lines emit
+                      crossings, while polygons emit entry and exit events.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+                      type="button"
+                      onClick={() => addBoundary("line")}
+                    >
+                      Add line boundary
+                    </Button>
+                    <Button
+                      className="bg-white/[0.06] text-[#eef4ff] shadow-none hover:bg-white/[0.1]"
+                      type="button"
+                      onClick={() => addBoundary("polygon")}
+                    >
+                      Add polygon zone
+                    </Button>
+                  </div>
+                </div>
+
+                {data.zones.length === 0 ? (
+                  <p className="mt-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                    No boundaries configured yet. Add a line for pass-by counting or a polygon for entry/exit counting.
+                  </p>
+                ) : (
+                  <div className="mt-5 space-y-4">
+                    {data.zones.map((boundary, index) => (
+                      <section
+                        key={`${boundary.type}-${index}`}
+                        className="rounded-[1.2rem] border border-white/8 bg-white/[0.03] p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8ea4c7]">
+                              Boundary {index + 1}
+                            </p>
+                            <p className="mt-2 text-sm text-[#d8e2f2]">
+                              {boundary.type === "line" ? "Line crossing" : "Polygon zone"}
+                            </p>
+                          </div>
+                          <button
+                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                            type="button"
+                            onClick={() => removeBoundary(index)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                          <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                            <span>Boundary {index + 1} ID</span>
+                            <Input
+                              aria-label={`Boundary ${index + 1} ID`}
+                              value={boundary.id}
+                              onChange={(event) => updateBoundary(index, { id: event.target.value })}
+                            />
+                          </label>
+
+                          {boundary.type === "line" ? (
+                            <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                              <span>Boundary {index + 1} classes</span>
+                              <Input
+                                aria-label={`Boundary ${index + 1} classes`}
+                                placeholder="person,car"
+                                value={boundary.classNames}
+                                onChange={(event) =>
+                                  updateBoundary(index, { classNames: event.target.value })
+                                }
+                              />
+                            </label>
+                          ) : (
+                            <div className="rounded-[1rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                              Polygon zones currently count all tracked classes that enter or exit them.
+                            </div>
+                          )}
+                        </div>
+
+                        {boundary.type === "line" ? (
+                          <div className="mt-4 grid gap-3 md:grid-cols-4">
+                            {[
+                              ["x1", boundary.x1],
+                              ["y1", boundary.y1],
+                              ["x2", boundary.x2],
+                              ["y2", boundary.y2],
+                            ].map(([field, value]) => (
+                              <label key={field} className="grid gap-2 text-sm text-[#d8e2f2]">
+                                <span>Boundary {index + 1} {field}</span>
+                                <Input
+                                  aria-label={`Boundary ${index + 1} ${field}`}
+                                  value={value}
+                                  onChange={(event) =>
+                                    updateBoundary(index, { [field]: event.target.value } as Partial<BoundaryDraft>)
+                                  }
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <label className="mt-4 grid gap-2 text-sm text-[#d8e2f2]">
+                            <span>Boundary {index + 1} polygon points</span>
+                            <textarea
+                              aria-label={`Boundary ${index + 1} polygon points`}
+                              className="min-h-32 w-full rounded-2xl border border-[color:var(--argus-border)] bg-[color:var(--argus-surface)] px-4 py-3 text-sm text-[var(--argus-text)] outline-none placeholder:text-[var(--argus-text-subtle)] transition duration-200 focus:border-[color:var(--argus-border-highlight)] focus:shadow-[0_0_0_4px_var(--argus-accent-soft)]"
+                              placeholder={"0,0\n100,0\n100,100\n0,100"}
+                              value={boundary.polygonText}
+                              onChange={(event) =>
+                                updateBoundary(index, { polygonText: event.target.value })
+                              }
+                            />
+                          </label>
+                        )}
+                      </section>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
           ) : null}
 
           {stepTitle === "Review" ? (
@@ -764,6 +1135,7 @@ export function CameraWizard({
                 browserDeliveryProfile: data.browserDeliveryProfile,
                 frameSkip: data.frameSkip,
                 fpsCap: data.fpsCap,
+                boundarySummary: summarizeBoundaries(data.zones),
                 rtspUrlMasked: data.rtspUrl.trim()
                   ? "rtsp://replacement configured"
                   : maskedRtspPlaceholder || "not set",

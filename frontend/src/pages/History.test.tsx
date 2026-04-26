@@ -186,6 +186,34 @@ describe("HistoryPage", () => {
     expect(screen.getByTestId("history-trend-chart")).toHaveTextContent("metric=count_events");
   });
 
+  test("defaults to count_events when selected cameras only have polygon zones", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(
+          jsonResponse([
+            cameraResponse({
+              zones: [{ id: "workspace", polygon: [[0, 0], [10, 0], [10, 10], [0, 10]] }],
+            }),
+          ]),
+        );
+      }
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage("/history?cameras=cam-1");
+
+    await waitFor(() => {
+      expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
+      expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
+    });
+    expect(screen.getByLabelText(/metric/i)).toHaveValue("count_events");
+  });
+
   test("defaults to count_events with no explicit camera filter when the camera inventory has count boundaries", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request = input instanceof Request ? input : new Request(String(input), init);
@@ -274,6 +302,19 @@ describe("HistoryPage", () => {
     });
     expect(
       screen.getByRole("option", { name: /person \(5 visible samples\) — no speed data in this window/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("observations metric is clearly labeled as a debug/raw view", async () => {
+    renderPage("/history?metric=observations");
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /raw tracking samples and speed telemetry/i })).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("option", {
+        name: /raw tracking samples \(debug\) — per-frame tracking density for debugging/i,
+      }),
     ).toBeInTheDocument();
   });
 

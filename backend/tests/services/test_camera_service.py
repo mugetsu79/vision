@@ -51,6 +51,14 @@ class _FakeAuditLogger:
         self.calls.append(kwargs)
 
 
+class _FakeEvents:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+
+    async def publish(self, subject: str, payload: object) -> None:
+        self.calls.append((subject, payload))
+
+
 @pytest.mark.asyncio
 async def test_update_camera_accepts_full_wizard_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(
@@ -98,6 +106,7 @@ async def test_update_camera_accepts_full_wizard_payload(monkeypatch: pytest.Mon
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=audit_logger,
+        events=None,
     )
     user = AuthenticatedUser(
         subject="admin-1",
@@ -136,6 +145,14 @@ async def test_update_camera_accepts_full_wizard_payload(monkeypatch: pytest.Mon
         browser_delivery=BrowserDeliverySettings(default_profile="540p5"),
         frame_skip=2,
         fps_cap=12,
+        zones=[
+            {
+                "id": "entry-line",
+                "type": "line",
+                "points": [[5, 5], [100, 100]],
+                "class_names": ["person"],
+            }
+        ],
     )
     model = Model(
         id=model_id,
@@ -184,6 +201,14 @@ async def test_update_camera_accepts_full_wizard_payload(monkeypatch: pytest.Mon
     assert response.browser_delivery.default_profile == "540p5"
     assert response.frame_skip == 2
     assert response.fps_cap == 12
+    assert response.zones == [
+        {
+            "id": "entry-line",
+            "type": "line",
+            "points": [[5, 5], [100, 100]],
+            "class_names": ["person"],
+        }
+    ]
     assert camera.homography == {
         "src": [[0.0, 0.0], [20.0, 0.0], [20.0, 20.0], [0.0, 20.0]],
         "dst": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]],
@@ -214,6 +239,7 @@ async def test_create_camera_rejects_active_classes_outside_primary_model_invent
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=audit_logger,
+        events=None,
     )
     user = AuthenticatedUser(
         subject="admin-1",
@@ -340,6 +366,7 @@ async def test_update_camera_rejects_active_classes_when_primary_model_changes(
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=audit_logger,
+        events=None,
     )
     user = AuthenticatedUser(
         subject="admin-1",
@@ -418,3 +445,120 @@ async def test_update_camera_rejects_active_classes_when_primary_model_changes(
         await service.update_camera(tenant_context, camera_id, payload)
 
     assert exc_info.value.status_code == HTTP_422_UNPROCESSABLE
+
+
+@pytest.mark.asyncio
+async def test_update_camera_publishes_zone_command_to_running_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    site_id = uuid4()
+    model_id = uuid4()
+    camera_id = uuid4()
+    now = datetime.now(tz=UTC)
+    audit_logger = _FakeAuditLogger()
+    events = _FakeEvents()
+    camera = Camera(
+        id=camera_id,
+        site_id=site_id,
+        edge_node_id=None,
+        name="Dock Camera",
+        rtsp_url_encrypted=app_services.encrypt_rtsp_url("rtsp://old-camera/live", settings),
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=model_id,
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography={
+            "src": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "dst": [[0, 0], [5, 0], [5, 5], [0, 5]],
+            "ref_distance_m": 5.0,
+        },
+        privacy={
+            "blur_faces": True,
+            "blur_plates": True,
+            "method": "gaussian",
+            "strength": 7,
+        },
+        browser_delivery=BrowserDeliverySettings().model_dump(mode="python"),
+        frame_skip=1,
+        fps_cap=25,
+        created_at=now,
+        updated_at=now,
+    )
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=audit_logger,
+        events=events,
+    )
+    user = AuthenticatedUser(
+        subject="admin-1",
+        email="admin@argus.local",
+        role=RoleEnum.ADMIN,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=None,
+        claims={},
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=user,
+    )
+    payload = CameraUpdate(
+        zones=[
+            {
+                "id": "entry-line",
+                "type": "line",
+                "points": [[5, 5], [100, 100]],
+                "class_names": ["person"],
+            },
+            {
+                "id": "workspace",
+                "polygon": [[0, 0], [30, 0], [30, 30], [0, 30]],
+            },
+        ]
+    )
+    model = Model(
+        id=model_id,
+        name="Vezor YOLO12n",
+        version="lab-imac",
+        task=ModelTask.DETECT,
+        path="/models/yolo12n.onnx",
+        format=ModelFormat.ONNX,
+        classes=["person"],
+        input_shape={"width": 640, "height": 640},
+        sha256="a" * 64,
+        size_bytes=1024,
+        license="lab",
+    )
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    async def fake_load_model(session, model_id_arg):  # noqa: ANN001
+        assert model_id_arg == model_id
+        return model
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(app_services, "_load_model", fake_load_model)
+
+    await service.update_camera(tenant_context, camera_id, payload)
+
+    assert events.calls
+    subject, command = events.calls[0]
+    assert subject == f"cmd.camera.{camera_id}"
+    assert isinstance(command, dict)
+    assert command["zones"] == payload.zones
+    assert command["active_classes"] == ["person"]

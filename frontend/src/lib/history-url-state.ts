@@ -37,10 +37,10 @@ const HISTORY_METRIC_COPY: Record<
     emptyState: "No crossings, entries, or exits in this window for the selected cameras and classes.",
   },
   observations: {
-    label: "Observations",
-    description: "raw observations",
-    countLabel: "observations",
-    emptyState: "No observations in this window for the selected cameras and classes.",
+    label: "Raw tracking samples",
+    description: "per-frame tracking density for debugging",
+    countLabel: "tracking samples",
+    emptyState: "No raw tracking samples in this window for the selected cameras and classes.",
   },
 };
 

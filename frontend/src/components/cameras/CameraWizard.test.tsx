@@ -130,6 +130,19 @@ describe("CameraWizard", () => {
     }
     await user.clear(screen.getByLabelText(/reference distance \(m\)/i));
     await user.type(screen.getByLabelText(/reference distance \(m\)/i), "12.5");
+    await user.click(screen.getByRole("button", { name: /add line boundary/i }));
+    await user.type(screen.getByLabelText(/boundary 1 id/i), "door-line");
+    await user.type(screen.getByLabelText(/boundary 1 classes/i), "person,car");
+    await user.type(screen.getByLabelText(/boundary 1 x1/i), "10");
+    await user.type(screen.getByLabelText(/boundary 1 y1/i), "20");
+    await user.type(screen.getByLabelText(/boundary 1 x2/i), "110");
+    await user.type(screen.getByLabelText(/boundary 1 y2/i), "220");
+    await user.click(screen.getByRole("button", { name: /add polygon zone/i }));
+    await user.type(screen.getByLabelText(/boundary 2 id/i), "desk-zone");
+    await user.type(
+      screen.getByLabelText(/boundary 2 polygon points/i),
+      "0,0\n100,0\n100,100\n0,100",
+    );
     await user.click(screen.getByRole("button", { name: /next/i }));
     expect(screen.getByText(/class scope/i)).toBeInTheDocument();
     expect(screen.getByText(/person, car/i)).toBeInTheDocument();
@@ -156,6 +169,27 @@ describe("CameraWizard", () => {
       [10, 10],
       [15, 15],
     ]);
+    expect(submittedPayload?.zones).toEqual([
+      {
+        id: "door-line",
+        type: "line",
+        points: [
+          [10, 20],
+          [110, 220],
+        ],
+        class_names: ["person", "car"],
+      },
+      {
+        id: "desk-zone",
+        type: "polygon",
+        polygon: [
+          [0, 0],
+          [100, 0],
+          [100, 100],
+          [0, 100],
+        ],
+      },
+    ]);
   });
 
   test("keeps RTSP masked in edit mode unless the operator explicitly replaces it", async () => {
@@ -176,7 +210,26 @@ describe("CameraWizard", () => {
         tracker_type: "botsort",
         active_classes: [],
         attribute_rules: [],
-        zones: [],
+        zones: [
+          {
+            id: "entry-line",
+            type: "line",
+            points: [
+              [10, 10],
+              [20, 20],
+            ],
+            class_names: ["person"],
+          },
+          {
+            id: "workspace",
+            polygon: [
+              [0, 0],
+              [50, 0],
+              [50, 50],
+              [0, 50],
+            ],
+          },
+        ],
         homography: {
           src: [
             [0, 0],
@@ -225,6 +278,27 @@ describe("CameraWizard", () => {
 
     expect(submittedPayload).toBeDefined();
     expect(submittedPayload).not.toHaveProperty("rtsp_url");
+    expect(submittedPayload?.zones).toEqual([
+      {
+        id: "entry-line",
+        type: "line",
+        points: [
+          [10, 10],
+          [20, 20],
+        ],
+        class_names: ["person"],
+      },
+      {
+        id: "workspace",
+        type: "polygon",
+        polygon: [
+          [0, 0],
+          [50, 0],
+          [50, 50],
+          [0, 50],
+        ],
+      },
+    ]);
   });
 
   test("requires reselecting a primary model when the stored model is no longer in inventory", async () => {
