@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import csv
 import io
+import logging
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -22,12 +22,14 @@ from argus.api.contracts import (
     BrowserDeliverySettings,
     CameraCreate,
     CameraResponse,
+    CameraSetupPreviewResponse,
     CameraUpdate,
     EdgeHeartbeatRequest,
     EdgeHeartbeatResponse,
     EdgeRegisterRequest,
     EdgeRegisterResponse,
     ExportArtifact,
+    FrameSize,
     HistoryClassesResponse,
     HistoryPoint,
     HistorySeriesResponse,
@@ -80,6 +82,7 @@ from argus.streaming.webrtc import (
     WebRTCNegotiator,
     resolve_stream_access,
 )
+from argus.vision.camera import _probe_video_dimensions, capture_still_image
 from argus.vision.model_metadata import resolve_model_classes
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
@@ -89,6 +92,23 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_SETUP_PREVIEW_CACHE_TTL = timedelta(minutes=2)
+
+
+@dataclass(slots=True)
+class _SetupPreviewSnapshot:
+    image_bytes: bytes
+    frame_size: FrameSize
+    captured_at: datetime
+    content_type: str = "image/jpeg"
+
+
+@dataclass(slots=True)
+class _SetupPreviewCacheEntry:
+    snapshot: _SetupPreviewSnapshot
+    camera_updated_at: datetime
+    expires_at: datetime
 
 
 @dataclass(slots=True)
@@ -392,6 +412,8 @@ class CameraService:
         self.settings = settings
         self.audit_logger = audit_logger
         self.events = events
+        self._setup_preview_cache: dict[UUID, _SetupPreviewCacheEntry] = {}
+        self._setup_preview_lock = asyncio.Lock()
 
     async def list_cameras(
         self,
@@ -435,6 +457,73 @@ class CameraService:
             rtsp_url=rtsp_url,
         )
 
+    async def get_setup_preview(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+    ) -> CameraSetupPreviewResponse:
+        async with self.session_factory() as session:
+            camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+
+        snapshot = await self._get_or_capture_setup_preview_snapshot(camera, force_refresh=True)
+        return CameraSetupPreviewResponse(
+            camera_id=camera.id,
+            preview_url=(
+                f"/api/v1/cameras/{camera.id}/setup-preview/image"
+                f"?rev={int(snapshot.captured_at.timestamp() * 1000)}"
+            ),
+            frame_size=snapshot.frame_size,
+            captured_at=snapshot.captured_at,
+        )
+
+    async def get_setup_preview_image(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+    ) -> _SetupPreviewSnapshot:
+        async with self.session_factory() as session:
+            camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+        return await self._get_or_capture_setup_preview_snapshot(camera, force_refresh=False)
+
+    async def _get_or_capture_setup_preview_snapshot(
+        self,
+        camera: Camera,
+        *,
+        force_refresh: bool,
+    ) -> _SetupPreviewSnapshot:
+        now = datetime.now(tz=UTC)
+        cached_entry = self._setup_preview_cache.get(camera.id)
+        if (
+            not force_refresh
+            and cached_entry is not None
+            and cached_entry.expires_at > now
+            and cached_entry.camera_updated_at == camera.updated_at
+        ):
+            return cached_entry.snapshot
+
+        async with self._setup_preview_lock:
+            now = datetime.now(tz=UTC)
+            cached_entry = self._setup_preview_cache.get(camera.id)
+            if (
+                not force_refresh
+                and cached_entry is not None
+                and cached_entry.expires_at > now
+                and cached_entry.camera_updated_at == camera.updated_at
+            ):
+                return cached_entry.snapshot
+
+            snapshot = await asyncio.to_thread(
+                _capture_setup_preview_snapshot,
+                camera,
+                self.settings,
+            )
+            self._setup_preview_cache[camera.id] = _SetupPreviewCacheEntry(
+                snapshot=snapshot,
+                camera_updated_at=camera.updated_at,
+                expires_at=now + _SETUP_PREVIEW_CACHE_TTL,
+            )
+            return snapshot
+
     async def create_camera(
         self,
         tenant_context: TenantContext,
@@ -475,7 +564,9 @@ class CameraService:
                 tracker_type=payload.tracker_type,
                 active_classes=payload.active_classes,
                 attribute_rules=payload.attribute_rules,
-                zones=payload.zones,
+                zones=_normalize_zones_payload(
+                    [zone.model_dump(mode="python") for zone in payload.zones]
+                ),
                 homography=payload.homography.model_dump(mode="python"),
                 privacy=privacy,
                 browser_delivery=payload.browser_delivery.model_dump(mode="python"),
@@ -538,6 +629,8 @@ class CameraService:
                 update_data["browser_delivery"] = dict(update_data["browser_delivery"])
             if "homography" in update_data and update_data["homography"] is not None:
                 update_data["homography"] = dict(update_data["homography"])
+            if "zones" in update_data and update_data["zones"] is not None:
+                update_data["zones"] = _normalize_zones_payload(update_data["zones"])
 
             for field_name, value in update_data.items():
                 setattr(camera, field_name, value)
@@ -572,7 +665,7 @@ class CameraService:
             "tracker_type": camera.tracker_type.value,
             "privacy": dict(camera.privacy),
             "attribute_rules": list(camera.attribute_rules),
-            "zones": list(camera.zones),
+            "zones": [_worker_zone_payload(zone) for zone in camera.zones],
         }
         try:
             await self.events.publish(f"cmd.camera.{camera.id}", command)
@@ -1971,7 +2064,7 @@ def _camera_to_worker_config(
         ),
         active_classes=list(camera.active_classes),
         attribute_rules=list(camera.attribute_rules),
-        zones=list(camera.zones),
+        zones=[_worker_zone_payload(zone) for zone in camera.zones],
         homography=_homography_to_worker_payload(camera.homography),
     )
 
@@ -2020,6 +2113,134 @@ def _resolve_worker_stream_settings(
         height=None,
         fps=max(1, fps_cap),
     )
+
+
+def _normalize_points(
+    points: list[list[float]],
+    frame_size: FrameSize,
+) -> list[list[float]]:
+    return [
+        [
+            round(float(point[0]) / frame_size.width, 6),
+            round(float(point[1]) / frame_size.height, 6),
+        ]
+        for point in points
+    ]
+
+
+def _denormalize_points(
+    points: list[list[float]],
+    frame_size: FrameSize,
+) -> list[list[int]]:
+    return [
+        [
+            round(float(point[0]) * frame_size.width),
+            round(float(point[1]) * frame_size.height),
+        ]
+        for point in points
+    ]
+
+
+def _normalize_zone_payload(zone: dict[str, object]) -> dict[str, object]:
+    payload = {key: value for key, value in zone.items() if value is not None}
+    frame_size_payload = payload.get("frame_size")
+    points = payload.get("points") or payload.get("polygon")
+    if frame_size_payload is None or not isinstance(points, list):
+        return payload
+
+    frame_size = FrameSize.model_validate(frame_size_payload)
+    _validate_points_within_frame(points, frame_size)
+    payload["frame_size"] = frame_size.model_dump(mode="python")
+    payload["points_normalized"] = _normalize_points(points, frame_size)
+    return payload
+
+
+def _normalize_zones_payload(zones: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [_normalize_zone_payload(zone) for zone in zones]
+
+
+def _worker_zone_payload(zone: dict[str, object]) -> dict[str, object]:
+    frame_size_payload = zone.get("frame_size")
+    points_normalized = zone.get("points_normalized")
+    payload = {
+        key: value
+        for key, value in zone.items()
+        if key not in {"frame_size", "points_normalized"}
+    }
+    if frame_size_payload is None or not isinstance(points_normalized, list):
+        return payload
+
+    frame_size = FrameSize.model_validate(frame_size_payload)
+    geometry_key = "points" if payload.get("type") == "line" else "polygon"
+    payload[geometry_key] = _denormalize_points(points_normalized, frame_size)
+    return payload
+
+
+def _capture_setup_preview_snapshot(
+    camera: Camera,
+    settings: Settings,
+) -> _SetupPreviewSnapshot:
+    rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, settings)
+    image_bytes, width, height = capture_still_image(rtsp_url)
+    return _SetupPreviewSnapshot(
+        image_bytes=image_bytes,
+        frame_size=FrameSize(width=width, height=height),
+        captured_at=datetime.now(tz=UTC),
+    )
+
+
+async def _camera_setup_frame_size(camera: Camera, settings: Settings) -> FrameSize:
+    probed_frame_size = await asyncio.to_thread(_probe_camera_frame_size, camera, settings)
+    if probed_frame_size is not None:
+        return probed_frame_size
+
+    for zone in camera.zones:
+        frame_size_payload = zone.get("frame_size")
+        if frame_size_payload is not None:
+            return FrameSize.model_validate(frame_size_payload)
+
+    browser_delivery = BrowserDeliverySettings.model_validate(
+        camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+    )
+    stream_settings = _resolve_worker_stream_settings(
+        browser_delivery=browser_delivery,
+        fps_cap=camera.fps_cap,
+    )
+    if stream_settings.width is not None and stream_settings.height is not None:
+        return FrameSize(width=stream_settings.width, height=stream_settings.height)
+
+    return FrameSize(width=1280, height=720)
+
+
+def _probe_camera_frame_size(camera: Camera, settings: Settings) -> FrameSize | None:
+    try:
+        rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, settings)
+        width, height = _probe_video_dimensions(rtsp_url)
+    except Exception:
+        logger.warning(
+            "Failed to probe camera frame size for setup preview; falling back to default.",
+            exc_info=True,
+        )
+        return None
+
+    if width <= 0 or height <= 0:
+        return None
+
+    return FrameSize(width=width, height=height)
+
+
+def _validate_points_within_frame(
+    points: list[list[float]],
+    frame_size: FrameSize,
+) -> None:
+    for point in points:
+        x = float(point[0])
+        y = float(point[1])
+        if x < 0 or x > frame_size.width or y < 0 or y > frame_size.height:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE,
+                detail="Zone coordinates must fall within the declared frame_size.",
+            )
 
 
 def _homography_to_worker_payload(

@@ -104,7 +104,9 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
     assert config.privacy.blur_plates is False
     assert config.active_classes == ["bus", "truck"]
     assert config.attribute_rules == [{"kind": "ppe"}]
-    assert config.zones == [{"id": "gate-1", "type": "line"}]
+    assert [zone.model_dump(exclude_none=True, mode="python") for zone in config.zones] == [
+        {"id": "gate-1", "type": "line"}
+    ]
     assert config.homography == {
         "src_points": [[0, 0], [100, 0], [100, 100], [0, 100]],
         "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],

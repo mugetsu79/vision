@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from argus.core.security import AuthenticatedUser
 from argus.inference.publisher import TelemetryFrame
@@ -99,6 +99,79 @@ class HomographyPayload(BaseModel):
         return value
 
 
+class FrameSize(BaseModel):
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+
+
+Coordinate = list[float]
+NormalizedCoordinate = list[float]
+
+
+class ZoneBase(BaseModel):
+    id: str | None = None
+    class_names: list[str] | None = None
+    frame_size: FrameSize | None = None
+    points_normalized: list[NormalizedCoordinate] | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+    @field_validator("points_normalized")
+    @classmethod
+    def validate_points_normalized(
+        cls,
+        value: list[NormalizedCoordinate] | None,
+    ) -> list[NormalizedCoordinate] | None:
+        if value is None:
+            return value
+        for point in value:
+            if len(point) != 2:
+                raise ValueError("Each normalized zone point must contain exactly two coordinates.")
+            if point[0] < 0 or point[0] > 1 or point[1] < 0 or point[1] > 1:
+                raise ValueError("Normalized zone coordinates must be between 0 and 1.")
+        return value
+
+
+class LineZone(ZoneBase):
+    type: Literal["line"]
+    points: list[Coordinate]
+
+    @field_validator("points")
+    @classmethod
+    def validate_points(cls, value: list[Coordinate]) -> list[Coordinate]:
+        if len(value) != 2:
+            raise ValueError("Line zones must contain exactly two points.")
+        for point in value:
+            if len(point) != 2:
+                raise ValueError("Each line zone point must contain exactly two coordinates.")
+        return value
+
+
+class PolygonZone(ZoneBase):
+    type: Literal["polygon"] | None = None
+    polygon: list[Coordinate]
+
+    @field_validator("polygon")
+    @classmethod
+    def validate_polygon(cls, value: list[Coordinate]) -> list[Coordinate]:
+        if len(value) < 3:
+            raise ValueError("Polygon zones must contain at least three vertices.")
+        for point in value:
+            if len(point) != 2:
+                raise ValueError("Each polygon zone point must contain exactly two coordinates.")
+        return value
+
+
+class LegacyZone(ZoneBase):
+    type: str | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+CameraZone = LineZone | PolygonZone
+StoredCameraZone = LineZone | PolygonZone | LegacyZone
+
+
 class PrivacySettings(BaseModel):
     blur_faces: bool = True
     blur_plates: bool = True
@@ -162,6 +235,46 @@ class WorkerPrivacySettings(BaseModel):
     blur_plates: bool = True
 
 
+class WorkerZoneBase(BaseModel):
+    id: str | None = None
+    class_names: list[str] | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+class WorkerLineZone(WorkerZoneBase):
+    type: Literal["line"]
+    points: list[Coordinate]
+
+    @field_validator("points")
+    @classmethod
+    def validate_points(cls, value: list[Coordinate]) -> list[Coordinate]:
+        if len(value) != 2:
+            raise ValueError("Line zones must contain exactly two points.")
+        for point in value:
+            if len(point) != 2:
+                raise ValueError("Each line zone point must contain exactly two coordinates.")
+        return value
+
+
+class WorkerPolygonZone(WorkerZoneBase):
+    type: Literal["polygon"] | None = None
+    polygon: list[Coordinate]
+
+    @field_validator("polygon")
+    @classmethod
+    def validate_polygon(cls, value: list[Coordinate]) -> list[Coordinate]:
+        if len(value) < 3:
+            raise ValueError("Polygon zones must contain at least three vertices.")
+        for point in value:
+            if len(point) != 2:
+                raise ValueError("Each polygon zone point must contain exactly two coordinates.")
+        return value
+
+
+WorkerZone = WorkerLineZone | WorkerPolygonZone | LegacyZone
+
+
 class WorkerConfigResponse(BaseModel):
     camera_id: UUID
     mode: ProcessingMode
@@ -174,7 +287,7 @@ class WorkerConfigResponse(BaseModel):
     privacy: WorkerPrivacySettings = Field(default_factory=WorkerPrivacySettings)
     active_classes: list[str] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
-    zones: list[dict[str, Any]] = Field(default_factory=list)
+    zones: list[WorkerZone] = Field(default_factory=list)
     homography: dict[str, Any] | None = None
 
 
@@ -188,7 +301,7 @@ class CameraCreate(BaseModel):
     tracker_type: TrackerType
     active_classes: list[str] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
-    zones: list[dict[str, Any]] = Field(default_factory=list)
+    zones: list[CameraZone] = Field(default_factory=list)
     homography: HomographyPayload
     privacy: PrivacySettings = Field(default_factory=PrivacySettings)
     browser_delivery: BrowserDeliverySettings = Field(default_factory=BrowserDeliverySettings)
@@ -206,7 +319,7 @@ class CameraUpdate(BaseModel):
     tracker_type: TrackerType | None = None
     active_classes: list[str] | None = None
     attribute_rules: list[dict[str, Any]] | None = None
-    zones: list[dict[str, Any]] | None = None
+    zones: list[CameraZone] | None = None
     homography: HomographyPayload | None = None
     privacy: PrivacySettings | None = None
     browser_delivery: BrowserDeliverySettings | None = None
@@ -226,7 +339,7 @@ class CameraResponse(BaseModel):
     tracker_type: TrackerType
     active_classes: list[str]
     attribute_rules: list[dict[str, Any]]
-    zones: list[dict[str, Any]]
+    zones: list[StoredCameraZone]
     homography: HomographyPayload
     privacy: PrivacySettings
     browser_delivery: BrowserDeliverySettings
@@ -234,6 +347,13 @@ class CameraResponse(BaseModel):
     fps_cap: int
     created_at: datetime
     updated_at: datetime
+
+
+class CameraSetupPreviewResponse(BaseModel):
+    camera_id: UUID
+    preview_url: str = Field(min_length=1)
+    frame_size: FrameSize
+    captured_at: datetime
 
 
 class EdgeRegisterRequest(BaseModel):

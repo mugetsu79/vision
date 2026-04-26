@@ -17,6 +17,8 @@ from argus.core.security import AuthenticatedUser, require
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
 
+from . import camera_setup
+
 router = APIRouter(prefix="/api/v1/cameras", tags=["cameras"])
 ViewerUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.VIEWER))]
 AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]
@@ -85,3 +87,6 @@ async def delete_camera(
 ) -> Response:
     await services.cameras.delete_camera(tenant_context, camera_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+router.include_router(camera_setup.router)

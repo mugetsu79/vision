@@ -562,3 +562,27 @@ def _redact_capture_exception_message(
     if redacted_source == source:
         return message
     return message.replace(source, redacted_source)
+
+
+def capture_still_image(source_uri: str) -> tuple[bytes, int, int]:
+    capture = _default_capture_factory(source_uri, cv2.CAP_FFMPEG)
+    deadline = time.monotonic() + _FFMPEG_FRAME_WAIT_TIMEOUT_S
+
+    try:
+        while time.monotonic() < deadline:
+            success, frame = capture.read()
+            if not success or frame is None or frame.size == 0:
+                continue
+
+            height, width = frame.shape[:2]
+            ok, encoded = cv2.imencode(".jpg", frame)
+            if not ok:
+                raise RuntimeError("OpenCV failed to encode setup preview frame as JPEG.")
+            return encoded.tobytes(), int(width), int(height)
+    finally:
+        capture.release()
+
+    raise RuntimeError(
+        "Timed out while capturing a setup preview frame "
+        f"after {_FFMPEG_FRAME_WAIT_TIMEOUT_S:.0f}s."
+    )

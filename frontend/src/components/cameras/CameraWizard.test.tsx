@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
@@ -30,6 +30,23 @@ function renderWizard(props?: Partial<Parameters<typeof CameraWizard>[0]>) {
       />
     </QueryClientProvider>,
   );
+}
+
+function stubRect(element: HTMLElement, width: number, height: number) {
+  Object.defineProperty(element, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      width,
+      height,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
 }
 
 describe("CameraWizard", () => {
@@ -133,16 +150,19 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /add line boundary/i }));
     await user.type(screen.getByLabelText(/boundary 1 id/i), "door-line");
     await user.type(screen.getByLabelText(/boundary 1 classes/i), "person,car");
-    await user.type(screen.getByLabelText(/boundary 1 x1/i), "10");
-    await user.type(screen.getByLabelText(/boundary 1 y1/i), "20");
-    await user.type(screen.getByLabelText(/boundary 1 x2/i), "110");
-    await user.type(screen.getByLabelText(/boundary 1 y2/i), "220");
+    expect(screen.queryByLabelText(/boundary 1 x1/i)).not.toBeInTheDocument();
+    const lineCanvas = screen.getByLabelText(/boundary 1 canvas/i);
+    stubRect(lineCanvas, 640, 360);
+    fireEvent.click(lineCanvas, { clientX: 5, clientY: 10 });
+    fireEvent.click(lineCanvas, { clientX: 55, clientY: 110 });
     await user.click(screen.getByRole("button", { name: /add polygon zone/i }));
     await user.type(screen.getByLabelText(/boundary 2 id/i), "desk-zone");
-    await user.type(
-      screen.getByLabelText(/boundary 2 polygon points/i),
-      "0,0\n100,0\n100,100\n0,100",
-    );
+    const polygonCanvas = screen.getByLabelText(/boundary 2 canvas/i);
+    stubRect(polygonCanvas, 640, 360);
+    fireEvent.click(polygonCanvas, { clientX: 0, clientY: 0 });
+    fireEvent.click(polygonCanvas, { clientX: 50, clientY: 0 });
+    fireEvent.click(polygonCanvas, { clientX: 50, clientY: 50 });
+    fireEvent.click(polygonCanvas, { clientX: 0, clientY: 50 });
     await user.click(screen.getByRole("button", { name: /next/i }));
     expect(screen.getByText(/class scope/i)).toBeInTheDocument();
     expect(screen.getByText(/person, car/i)).toBeInTheDocument();
@@ -178,6 +198,7 @@ describe("CameraWizard", () => {
           [110, 220],
         ],
         class_names: ["person", "car"],
+        frame_size: { width: 1280, height: 720 },
       },
       {
         id: "desk-zone",
@@ -188,6 +209,7 @@ describe("CameraWizard", () => {
           [100, 100],
           [0, 100],
         ],
+        frame_size: { width: 1280, height: 720 },
       },
     ]);
   });
@@ -195,6 +217,39 @@ describe("CameraWizard", () => {
   test("keeps RTSP masked in edit mode unless the operator explicitly replaces it", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    const createObjectURL = vi.fn(() => "blob:camera-preview");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.endsWith("/api/v1/cameras/camera-1/setup-preview")) {
+        return new Response(
+          JSON.stringify({
+            camera_id: "camera-1",
+            preview_url: "/api/v1/cameras/camera-1/setup-preview/image?rev=12345",
+            frame_size: { width: 1280, height: 720 },
+            captured_at: "2026-04-19T00:00:00Z",
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xdb]), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg" },
+      });
+    });
 
     renderWizard({
       onSubmit,
@@ -287,6 +342,7 @@ describe("CameraWizard", () => {
           [20, 20],
         ],
         class_names: ["person"],
+        frame_size: { width: 1280, height: 720 },
       },
       {
         id: "workspace",
@@ -297,6 +353,7 @@ describe("CameraWizard", () => {
           [50, 50],
           [0, 50],
         ],
+        frame_size: { width: 1280, height: 720 },
       },
     ]);
   });

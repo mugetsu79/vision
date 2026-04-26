@@ -1,6 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { productBrand } from "@/brand/product";
+import { BoundaryAuthoringCanvas } from "@/components/cameras/BoundaryAuthoringCanvas";
+import {
+  type FrameSize,
+  denormalizePointList,
+  normalizePointList,
+} from "@/components/cameras/boundary-geometry";
 
 type Point = [number, number];
 
@@ -13,19 +19,46 @@ export function HomographyEditor({
   dst,
   refDistanceM,
   onChange,
+  sourceFrameSize,
+  sourcePreviewSrc,
+  destinationFrameSize,
 }: {
   src: Point[];
   dst: Point[];
   refDistanceM: number;
   onChange: (value: { src: Point[]; dst: Point[]; refDistanceM: number }) => void;
+  sourceFrameSize?: FrameSize;
+  sourcePreviewSrc?: string | null;
+  destinationFrameSize?: FrameSize;
 }) {
   const brandName = productBrand.name;
+  const resolvedSourceFrameSize =
+    sourceFrameSize ?? derivePlaneSize(src, { width: 100, height: 100 });
+  const resolvedDestinationFrameSize =
+    destinationFrameSize ?? derivePlaneSize(dst, { width: 100, height: 100 });
+
   function updateRefDistance(value: string) {
     const parsed = Number(value);
     onChange({
       src,
       dst,
       refDistanceM: Number.isFinite(parsed) ? parsed : 0,
+    });
+  }
+
+  function updateSourcePoints(pointsNormalized: readonly (readonly [number, number])[]) {
+    onChange({
+      src: denormalizePointList(pointsNormalized, resolvedSourceFrameSize),
+      dst,
+      refDistanceM,
+    });
+  }
+
+  function updateDestinationPoints(pointsNormalized: readonly (readonly [number, number])[]) {
+    onChange({
+      src,
+      dst: denormalizePointList(pointsNormalized, resolvedDestinationFrameSize),
+      refDistanceM,
     });
   }
 
@@ -54,8 +87,25 @@ export function HomographyEditor({
               Add source point
             </Button>
           </div>
-          <div className="mt-4 flex min-h-48 items-center justify-center rounded-[1.3rem] border border-dashed border-[#37537e] bg-[radial-gradient(circle_at_top,_rgba(55,124,255,0.18),_transparent_35%),linear-gradient(180deg,#0d1725_0%,#08101a_100%)] text-center text-sm text-[#9eb2cf]">
-            Frame snapshot placeholder
+          <div className="mt-4">
+            <BoundaryAuthoringCanvas
+              ariaLabel="Source points canvas"
+              backgroundContent={
+                <p className="max-w-sm text-sm text-[#9eb2cf]">
+                  Click the plane to place source points, or keep using the add button and
+                  drag the handles into place once they land.
+                </p>
+              }
+              frameSize={resolvedSourceFrameSize}
+              helperText="This source plane is the reusable authoring surface that future setup steps will use for the frozen analytics frame."
+              maxPoints={4}
+              mode="points"
+              pointLabelPrefix="Source"
+              previewSrc={sourcePreviewSrc}
+              value={normalizePointList(src, resolvedSourceFrameSize)}
+              variant="source"
+              onChange={updateSourcePoints}
+            />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {src.length === 0 ? (
@@ -97,8 +147,24 @@ export function HomographyEditor({
               Add destination point
             </Button>
           </div>
-          <div className="mt-4 flex min-h-48 items-center justify-center rounded-[1.3rem] border border-dashed border-[#553a79] bg-[radial-gradient(circle_at_top,_rgba(128,92,255,0.2),_transparent_35%),linear-gradient(180deg,#111426_0%,#090d19_100%)] text-center text-sm text-[#b4abdc]">
-            Ground-plane reference placeholder
+          <div className="mt-4">
+            <BoundaryAuthoringCanvas
+              ariaLabel="Destination points canvas"
+              backgroundContent={
+                <p className="max-w-sm text-sm text-[#cbbaf4]">
+                  Shape a simple top-down reference plane here so motion can map into a
+                  real-world calibration.
+                </p>
+              }
+              frameSize={resolvedDestinationFrameSize}
+              helperText="Destination points can use the same interaction model even though this plane is abstract instead of a camera frame."
+              maxPoints={4}
+              mode="points"
+              pointLabelPrefix="Destination"
+              value={normalizePointList(dst, resolvedDestinationFrameSize)}
+              variant="destination"
+              onChange={updateDestinationPoints}
+            />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {dst.length === 0 ? (
@@ -154,4 +220,23 @@ export function HomographyEditor({
       </p>
     </div>
   );
+}
+
+function derivePlaneSize(points: Point[], fallback: FrameSize): FrameSize {
+  if (points.length === 0) {
+    return fallback;
+  }
+
+  const maxX = Math.max(...points.map((point) => point[0]), 0);
+  const maxY = Math.max(...points.map((point) => point[1]), 0);
+
+  return {
+    width: Math.max(fallback.width, roundPlaneEdge(maxX)),
+    height: Math.max(fallback.height, roundPlaneEdge(maxY)),
+  };
+}
+
+function roundPlaneEdge(value: number) {
+  const padded = Math.max(100, value + 20);
+  return Math.ceil(padded / 10) * 10;
 }

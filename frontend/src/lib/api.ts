@@ -5,7 +5,7 @@ import type { paths } from "@/lib/api.generated";
 import { frontendConfig } from "@/lib/config";
 import { useAuthStore } from "@/stores/auth-store";
 
-async function resolveAccessToken() {
+export async function resolveAccessToken() {
   try {
     const user = await oidcManager.getUser();
 
