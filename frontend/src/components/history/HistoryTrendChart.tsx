@@ -34,6 +34,12 @@ type HistoryTrendSeries = {
   selectedBucket?: string | null;
 };
 
+type HistoryTrendChartClickParams = {
+  componentType?: string;
+  dataType?: string;
+  dataIndex?: number;
+};
+
 registerECharts([
   LineChart,
   BarChart,
@@ -47,6 +53,16 @@ registerECharts([
 ]);
 
 const PALETTE = ["#4f8cff", "#8b6dff", "#26d0ff", "#6de4a7", "#ffaf52", "#ff6b91", "#c28bff", "#f5d570"];
+
+export function bucketFromChartClick(
+  params: HistoryTrendChartClickParams,
+  points: HistoryTrendPoint[],
+): string | null {
+  if (params.componentType !== "series") return null;
+  if (params.dataType === "markLine") return null;
+  if (typeof params.dataIndex !== "number") return null;
+  return points[params.dataIndex]?.bucket ?? null;
+}
 
 export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOption {
   const buckets = series.points.map((p) => formatBucket(p.bucket));
@@ -248,11 +264,10 @@ export function HistoryTrendChart({
     const chart = chartRef.current ?? init(container, undefined, { renderer: "canvas" });
     chartRef.current = chart;
     chart.setOption(option, true);
-    const onClick = (params: { dataIndex?: number }) => {
-      if (typeof params.dataIndex !== "number") return;
-      const point = series.points[params.dataIndex];
-      if (point?.bucket) {
-        onBucketSelect?.(point.bucket);
+    const onClick = (params: HistoryTrendChartClickParams) => {
+      const bucket = bucketFromChartClick(params, series.points);
+      if (bucket) {
+        onBucketSelect?.(bucket);
       }
     };
     chart.off("click");

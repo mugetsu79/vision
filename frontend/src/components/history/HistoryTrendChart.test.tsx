@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildHistoryChartOption } from "@/components/history/HistoryTrendChart";
+import { bucketFromChartClick, buildHistoryChartOption } from "@/components/history/HistoryTrendChart";
 
 const BASE_POINT = {
   bucket: "2026-04-23T00:00:00Z",
@@ -73,10 +73,10 @@ describe("buildHistoryChartOption", () => {
 
   test("marks the selected bucket on each primary series", () => {
     const option = buildHistoryChartOption({
-      classNames: ["car"],
+      classNames: ["car", "person"],
       points: [
-        { bucket: "2026-04-23T00:00:00Z", values: { car: 1 }, total_count: 1 },
-        { bucket: "2026-04-23T01:00:00Z", values: { car: 2 }, total_count: 2 },
+        { bucket: "2026-04-23T00:00:00Z", values: { car: 1, person: 3 }, total_count: 4 },
+        { bucket: "2026-04-23T01:00:00Z", values: { car: 2, person: 5 }, total_count: 7 },
       ],
       selectedBucket: "2026-04-23T01:00:00Z",
     });
@@ -86,5 +86,19 @@ describe("buildHistoryChartOption", () => {
       markLine?: { data: Array<{ xAxis: string }> };
     }>;
     expect(seriesList.find((entry) => entry.name === "car")?.markLine?.data[0].xAxis).toBe("23 Apr, 01:00");
+    expect(seriesList.find((entry) => entry.name === "person")?.markLine?.data[0].xAxis).toBe("23 Apr, 01:00");
+  });
+});
+
+describe("bucketFromChartClick", () => {
+  const points = [
+    { bucket: "2026-04-23T00:00:00Z", values: { car: 1 }, total_count: 1 },
+    { bucket: "2026-04-23T01:00:00Z", values: { car: 2 }, total_count: 2 },
+  ];
+
+  test("returns buckets only for real series point clicks", () => {
+    expect(bucketFromChartClick({ componentType: "series", dataIndex: 1 }, points)).toBe("2026-04-23T01:00:00Z");
+    expect(bucketFromChartClick({ componentType: "markLine", dataIndex: 1 }, points)).toBeNull();
+    expect(bucketFromChartClick({ componentType: "series", dataType: "markLine", dataIndex: 1 }, points)).toBeNull();
   });
 });
