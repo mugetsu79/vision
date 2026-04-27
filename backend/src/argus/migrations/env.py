@@ -14,8 +14,8 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from argus.models import Base  # noqa: E402
 from argus.migrations.alembic_config import configure_database_url  # noqa: E402
+from argus.models import Base  # noqa: E402
 
 config = context.config
 configure_database_url(config)

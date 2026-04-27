@@ -20,8 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from argus.core.config import Settings
 from argus.core.db import CountEventStore, DatabaseManager, TrackingEventStore
 from argus.core.events import EventMessage, NatsJetStreamClient
-from argus.core.logging import redact_url_secrets
-from argus.core.logging import configure_logging
+from argus.core.logging import configure_logging, redact_url_secrets
 from argus.core.metrics import (
     INFERENCE_FRAME_DURATION_SECONDS,
     INFERENCE_FRAMES_PROCESSED_TOTAL,
@@ -52,9 +51,9 @@ from argus.streaming.mediamtx import (
 )
 from argus.streaming.webrtc import MediaMTXTokenIssuer
 from argus.vision.anpr import LineCrossingAnprProcessor
-from argus.vision.count_events import CountEventProcessor, CountEventRecord
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
+from argus.vision.count_events import CountEventProcessor, CountEventRecord
 from argus.vision.detector import DetectionModelConfig, YoloDetector
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
@@ -328,7 +327,11 @@ class InferenceEngine:
         )
         self._tracker = self._tracker_factory(self._state.tracker_type)
         self._count_event_processor = self._build_count_event_processor()
-        self._zones = Zones(_polygon_zone_definitions(self._state.zones)) if self._state.zones else None
+        self._zones = (
+            Zones(_polygon_zone_definitions(self._state.zones))
+            if self._state.zones
+            else None
+        )
         self._stream_registration: StreamRegistration | None = None
         self._track_history: dict[int, list[tuple[float, float]]] = defaultdict(list)
         self._frame_attempt_index = 0
@@ -833,12 +836,13 @@ async def build_runtime_engine(
         )
         source_uri = registration.ingest_path
         if ingest_path_name != "":
-            source_uri_factory = lambda: token_issuer.build_internal_rtsp_url(
-                camera_id=config.camera_id,
-                path_name=ingest_path_name,
-                rtsp_url=ingest_base_url,
-                ttl_seconds=settings.mediamtx_jwt_worker_ttl_seconds,
-            )
+            def source_uri_factory() -> str:
+                return token_issuer.build_internal_rtsp_url(
+                    camera_id=config.camera_id,
+                    path_name=ingest_path_name,
+                    rtsp_url=ingest_base_url,
+                    ttl_seconds=settings.mediamtx_jwt_worker_ttl_seconds,
+                )
     else:
         logger.info(
             (

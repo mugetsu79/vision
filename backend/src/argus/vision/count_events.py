@@ -80,7 +80,10 @@ class CountEventProcessor:
         self._last_line_side: dict[tuple[str, int], float] = {}
         self._last_zone_by_track: dict[int, str | None] = {}
         self._track_last_seen: dict[int, datetime] = {}
-        self._recent_boundary_hits: dict[tuple[str, str, str, str | None, _SpatialSignature], datetime] = {}
+        self._recent_boundary_hits: dict[
+            tuple[str, str, str, str | None, _SpatialSignature],
+            datetime,
+        ] = {}
         self._dedupe_seconds = dedupe_seconds
         self._stale_state_ttl_seconds = stale_state_ttl_seconds
 
@@ -97,13 +100,18 @@ class CountEventProcessor:
                         boundary_id=str(definition["id"]),
                         start=(float(points[0][0]), float(points[0][1])),
                         end=(float(points[1][0]), float(points[1][1])),
-                        class_names=frozenset(str(name) for name in definition.get("class_names", [])),
+                        class_names=frozenset(
+                            str(name) for name in definition.get("class_names", [])
+                        ),
                     )
                 )
                 continue
 
             if "points" in definition:
-                raise ValueError("Line definitions must declare type='line'; polygon definitions must use 'polygon'.")
+                raise ValueError(
+                    "Line definitions must declare type='line'; "
+                    "polygon definitions must use 'polygon'."
+                )
 
             if "polygon" not in definition:
                 raise ValueError("Polygon definitions require a polygon field.")
@@ -153,17 +161,19 @@ class CountEventProcessor:
         for track_id in expired_tracks:
             self._track_last_seen.pop(track_id, None)
             self._last_zone_by_track.pop(track_id, None)
-            stale_line_keys = [key for key in self._last_line_side if key[1] == track_id]
-            for key in stale_line_keys:
-                self._last_line_side.pop(key, None)
+            stale_line_keys = [
+                line_key for line_key in self._last_line_side if line_key[1] == track_id
+            ]
+            for line_key in stale_line_keys:
+                self._last_line_side.pop(line_key, None)
 
         expired_boundary_hits = [
             key
             for key, previous_hit in self._recent_boundary_hits.items()
             if (ts - previous_hit).total_seconds() > self._dedupe_seconds
         ]
-        for key in expired_boundary_hits:
-            self._recent_boundary_hits.pop(key, None)
+        for hit_key in expired_boundary_hits:
+            self._recent_boundary_hits.pop(hit_key, None)
 
     def _process_lines(
         self,
@@ -174,6 +184,7 @@ class CountEventProcessor:
         spatial_signature: _SpatialSignature,
         current_zone: str | None,
     ) -> list[CountEventRecord]:
+        assert detection.track_id is not None
         emitted: list[CountEventRecord] = []
         for boundary in self._lines:
             if boundary.class_names and detection.class_name not in boundary.class_names:
@@ -217,6 +228,7 @@ class CountEventProcessor:
         current_zone: str | None,
         spatial_signature: _SpatialSignature,
     ) -> list[CountEventRecord]:
+        assert detection.track_id is not None
         previous_zone = self._last_zone_by_track.get(detection.track_id)
         self._last_zone_by_track[detection.track_id] = current_zone
 

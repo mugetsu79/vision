@@ -10,12 +10,11 @@ from argus.api.contracts import (
     HistoryClassesResponse,
     HistoryPoint,
     HistorySeriesResponse,
-    HistoryMetric,
     TenantContext,
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
-from argus.models.enums import RoleEnum
+from argus.models.enums import HistoryMetric, RoleEnum
 from argus.services.app import AppServices
 
 router = APIRouter(prefix="/api/v1/history", tags=["history"])
