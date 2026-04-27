@@ -55,6 +55,13 @@ const COVERAGE_COPY: Record<CoverageStatus, Omit<CoverageCopy, "status">> = {
   },
 };
 
+const BUCKET_DURATION_MS: Partial<Record<string, number>> = {
+  "1m": 60 * 1000,
+  "5m": 5 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+};
+
 export function getCoverageCopy(status: CoverageStatus | undefined | null): CoverageCopy {
   const resolved: CoverageStatus = status ?? "populated";
   return { status: resolved, ...COVERAGE_COPY[resolved] };
@@ -102,12 +109,8 @@ export function buildBucketDetails(
 
 export function formatBucketSpan(bucket: string, granularity: string): string {
   const start = new Date(bucket);
-  const end = new Date(start);
-  if (granularity === "1m") end.setMinutes(end.getMinutes() + 1);
-  if (granularity === "5m") end.setMinutes(end.getMinutes() + 5);
-  if (granularity === "1h") end.setHours(end.getHours() + 1);
-  if (granularity === "1d") end.setDate(end.getDate() + 1);
-  end.setMilliseconds(end.getMilliseconds() - 1);
+  const durationMs = BUCKET_DURATION_MS[granularity] ?? 1;
+  const end = new Date(start.getTime() + durationMs - 1);
   const format = new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",

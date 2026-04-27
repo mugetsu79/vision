@@ -51,6 +51,10 @@ describe("history-workbench", () => {
     expect(formatBucketSpan("2026-04-27T10:00:00Z", "1h")).toBe("10:00-10:59");
   });
 
+  test("formats UTC daily bucket spans across DST boundaries", () => {
+    expect(formatBucketSpan("2026-03-29T00:00:00Z", "1d")).toBe("00:00-23:59");
+  });
+
   test("returns operational copy for worker offline", () => {
     expect(getCoverageCopy("worker_offline").message).toBe("Processing was unavailable for this bucket.");
   });
