@@ -1,7 +1,12 @@
-import { HistoryTrendChart } from "@/components/history/HistoryTrendChart";
+import { lazy, Suspense } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import type { CoverageCopy } from "@/lib/history-workbench";
 import type { HistoryMetric } from "@/lib/history-url-state";
+
+const HistoryTrendChart = lazy(async () => ({
+  default: (await import("@/components/history/HistoryTrendChart")).HistoryTrendChart,
+}));
 
 type TrendSeries = {
   classNames: string[];
@@ -42,12 +47,14 @@ export function HistoryTrendPanel({
         </div>
         <Badge>{coverage.label}</Badge>
       </div>
-      <HistoryTrendChart
-        className="px-2 py-4"
-        metric={metric}
-        series={series}
-        onBucketSelect={onBucketSelect}
-      />
+      <Suspense fallback={<div className="px-6 py-16 text-sm text-[#93a7c5]">Loading chart...</div>}>
+        <HistoryTrendChart
+          className="px-2 py-4"
+          metric={metric}
+          series={series}
+          onBucketSelect={onBucketSelect}
+        />
+      </Suspense>
     </section>
   );
 }
