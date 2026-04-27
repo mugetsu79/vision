@@ -34,6 +34,17 @@ class HistoryMetric(StrEnum):
     OBSERVATIONS = "observations"
 
 
+class HistoryCoverageStatus(StrEnum):
+    POPULATED = "populated"
+    ZERO = "zero"
+    NO_TELEMETRY = "no_telemetry"
+    CAMERA_OFFLINE = "camera_offline"
+    WORKER_OFFLINE = "worker_offline"
+    SOURCE_UNAVAILABLE = "source_unavailable"
+    NO_SCOPE = "no_scope"
+    ACCESS_LIMITED = "access_limited"
+
+
 class CountEventType(StrEnum):
     LINE_CROSS = "line_cross"
     ZONE_ENTER = "zone_enter"

@@ -11,6 +11,7 @@ from argus.core.security import AuthenticatedUser
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
     CountEventType,
+    HistoryCoverageStatus,
     HistoryMetric,
     ModelFormat,
     ModelTask,
@@ -473,6 +474,12 @@ class HistorySeriesRow(BaseModel):
     over_threshold_count: dict[str, int] | None = None
 
 
+class HistoryBucketCoverage(BaseModel):
+    bucket: datetime
+    status: HistoryCoverageStatus
+    reason: str | None = None
+
+
 class HistorySeriesResponse(BaseModel):
     granularity: str
     metric: HistoryMetric | None = None
@@ -481,6 +488,12 @@ class HistorySeriesResponse(BaseModel):
     granularity_adjusted: bool = False
     speed_classes_capped: bool = False
     speed_classes_used: list[str] | None = None
+    effective_from: datetime | None = None
+    effective_to: datetime | None = None
+    bucket_count: int = 0
+    bucket_span: str | None = None
+    coverage_status: HistoryCoverageStatus = HistoryCoverageStatus.POPULATED
+    coverage_by_bucket: list[HistoryBucketCoverage] = Field(default_factory=list)
 
 
 class HistoryClassEntry(BaseModel):

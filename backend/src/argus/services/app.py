@@ -37,6 +37,7 @@ from argus.api.contracts import (
     EdgeRegisterResponse,
     ExportArtifact,
     FrameSize,
+    HistoryBucketCoverage,
     HistoryClassesResponse,
     HistoryPoint,
     HistorySeriesResponse,
@@ -71,6 +72,7 @@ from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
     CountEventType,
+    HistoryCoverageStatus,
     HistoryMetric,
     ModelFormat,
     ModelTask,
@@ -1093,7 +1095,7 @@ class HistoryService:
                     )
 
         if class_names:
-            selected_classes = [c for c in class_names if c in seen_classes]
+            selected_classes = list(class_names)
         else:
             selected_classes = ordered_classes
 
@@ -1133,12 +1135,27 @@ class HistoryService:
             return {c: per_bucket[c] for c in chosen if c in per_bucket}
 
         result_rows: list[HistorySeriesRow] = []
-        for bucket in sorted(buckets.keys()):
-            values = buckets[bucket]
+        coverage_by_bucket: list[HistoryBucketCoverage] = []
+        materialized_buckets = _history_bucket_range(
+            starts_at,
+            ends_at,
+            effective_granularity,
+        )
+        for bucket in materialized_buckets:
+            values = buckets.get(bucket, {})
+            projected_values = {c: values.get(c, 0) for c in selected_classes}
+            total_count = sum(projected_values.values())
+            if not selected_classes and values:
+                total_count = sum(values.values())
+            status = (
+                HistoryCoverageStatus.POPULATED
+                if total_count > 0
+                else HistoryCoverageStatus.ZERO
+            )
             series_row = HistorySeriesRow(
                 bucket=bucket,
-                values={c: values.get(c, 0) for c in selected_classes},
-                total_count=sum(values.values()),
+                values=projected_values,
+                total_count=total_count,
                 speed_p50=_project_speed(speed_p50, bucket),
                 speed_p95=_project_speed(speed_p95, bucket),
                 speed_sample_count=_project_int(speed_samples, bucket),
@@ -1147,6 +1164,9 @@ class HistoryService:
                 ),
             )
             result_rows.append(series_row)
+            coverage_by_bucket.append(HistoryBucketCoverage(bucket=bucket, status=status))
+
+        coverage_status = _summarize_history_coverage(coverage_by_bucket)
 
         return HistorySeriesResponse(
             granularity=effective_granularity,
@@ -1156,6 +1176,12 @@ class HistoryService:
             granularity_adjusted=granularity_adjusted,
             speed_classes_capped=speed_classes_capped,
             speed_classes_used=speed_classes_used if include_speed else None,
+            effective_from=starts_at,
+            effective_to=ends_at,
+            bucket_count=len(materialized_buckets),
+            bucket_span=effective_granularity,
+            coverage_status=coverage_status,
+            coverage_by_bucket=coverage_by_bucket,
         )
 
     async def list_classes(
@@ -2681,6 +2707,47 @@ _MAX_SPEED_CLASSES = 20
 def _ensure_history_window(starts_at: datetime, ends_at: datetime) -> None:
     if ends_at - starts_at > _MAX_HISTORY_WINDOW:
         raise HTTPException(status_code=400, detail="Window exceeds 31 days")
+
+
+def _history_bucket_delta(granularity: str) -> timedelta:
+    if granularity == "1m":
+        return timedelta(minutes=1)
+    if granularity == "5m":
+        return timedelta(minutes=5)
+    if granularity == "1h":
+        return timedelta(hours=1)
+    if granularity == "1d":
+        return timedelta(days=1)
+    raise ValueError(f"Unsupported history granularity: {granularity}")
+
+
+def _history_bucket_range(
+    starts_at: datetime,
+    ends_at: datetime,
+    granularity: str,
+) -> list[datetime]:
+    delta = _history_bucket_delta(granularity)
+    buckets: list[datetime] = []
+    current = starts_at
+    while current < ends_at:
+        buckets.append(current)
+        current += delta
+    return buckets
+
+
+def _summarize_history_coverage(
+    coverage_by_bucket: list[HistoryBucketCoverage],
+) -> HistoryCoverageStatus:
+    statuses = {entry.status for entry in coverage_by_bucket}
+    if HistoryCoverageStatus.POPULATED in statuses:
+        return HistoryCoverageStatus.POPULATED
+    if statuses == {HistoryCoverageStatus.ZERO}:
+        return HistoryCoverageStatus.ZERO
+    if not statuses:
+        return HistoryCoverageStatus.ZERO
+    if len(statuses) == 1:
+        return next(iter(statuses))
+    return HistoryCoverageStatus.NO_TELEMETRY
 
 
 def _effective_granularity(

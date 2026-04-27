@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 from argus.api.contracts import TenantContext
 from argus.core.security import AuthenticatedUser, RoleEnum
-from argus.models.enums import CountEventType, HistoryMetric
+from argus.models.enums import CountEventType, HistoryCoverageStatus, HistoryMetric
 from argus.services.app import (
     HistoryService,
     _effective_granularity,
@@ -403,6 +403,131 @@ async def test_query_series_count_events_use_count_event_storage(
     from_events.assert_not_awaited()
     assert response.metric == HistoryMetric.COUNT_EVENTS
     assert response.rows[0].values == {"person": 11}
+
+
+@pytest.mark.asyncio
+async def test_query_series_returns_zero_buckets_for_empty_valid_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    monkeypatch.setattr(service, "_fetch_series_rows_from_events", AsyncMock(return_value=[]))
+
+    starts = datetime(2026, 4, 26, 14, 0, tzinfo=UTC)
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=["person"],
+        granularity="1m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=3),
+        metric=HistoryMetric.OCCUPANCY,
+    )
+
+    assert response.coverage_status == HistoryCoverageStatus.ZERO
+    assert response.effective_from == starts
+    assert response.effective_to == starts + timedelta(minutes=3)
+    assert response.bucket_count == 3
+    assert response.bucket_span == "1m"
+    assert response.class_names == ["person"]
+    assert [row.bucket for row in response.rows] == [
+        starts,
+        starts + timedelta(minutes=1),
+        starts + timedelta(minutes=2),
+    ]
+    assert [row.values for row in response.rows] == [{"person": 0}, {"person": 0}, {"person": 0}]
+    assert [row.total_count for row in response.rows] == [0, 0, 0]
+    assert [entry.status for entry in response.coverage_by_bucket] == [
+        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.ZERO,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_series_materializes_missing_buckets_around_populated_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    starts = datetime(2026, 4, 26, 14, 0, tzinfo=UTC)
+    monkeypatch.setattr(
+        service,
+        "_fetch_series_rows_from_events",
+        AsyncMock(
+            return_value=[
+                {
+                    "bucket": starts + timedelta(minutes=1),
+                    "class_name": "car",
+                    "event_count": 7,
+                }
+            ]
+        ),
+    )
+
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=["car"],
+        granularity="1m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=3),
+        metric=HistoryMetric.OCCUPANCY,
+    )
+
+    assert response.coverage_status == HistoryCoverageStatus.POPULATED
+    assert [row.values for row in response.rows] == [{"car": 0}, {"car": 7}, {"car": 0}]
+    assert [entry.status for entry in response.coverage_by_bucket] == [
+        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.POPULATED,
+        HistoryCoverageStatus.ZERO,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_series_zero_fill_preserves_speed_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    starts = datetime(2026, 4, 26, 14, 0, tzinfo=UTC)
+    monkeypatch.setattr(
+        service,
+        "_fetch_series_rows_with_speed",
+        AsyncMock(
+            return_value=[
+                {
+                    "bucket": starts,
+                    "class_name": "car",
+                    "event_count": 3,
+                    "speed_p50": 41.0,
+                    "speed_p95": 55.0,
+                    "speed_sample_count": 3,
+                    "over_threshold_count": 1,
+                }
+            ]
+        ),
+    )
+
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=["car"],
+        granularity="1m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=2),
+        metric=HistoryMetric.OCCUPANCY,
+        include_speed=True,
+        speed_threshold=50.0,
+    )
+
+    assert response.rows[0].speed_p50 == {"car": 41.0}
+    assert response.rows[0].speed_p95 == {"car": 55.0}
+    assert response.rows[0].speed_sample_count == {"car": 3}
+    assert response.rows[0].over_threshold_count == {"car": 1}
+    assert response.rows[1].values == {"car": 0}
+    assert response.rows[1].speed_p50 == {}
+    assert response.speed_classes_used == ["car"]
 
 
 @pytest.mark.asyncio

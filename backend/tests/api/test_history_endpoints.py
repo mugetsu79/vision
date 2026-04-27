@@ -9,15 +9,17 @@ from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
     CountEventBoundarySummary,
+    HistoryBucketCoverage,
     HistoryClassEntry,
     HistoryClassesResponse,
+    HistoryMetric,
     HistoryPoint,
     HistorySeriesResponse,
     HistorySeriesRow,
-    HistoryMetric,
     TenantContext,
 )
 from argus.api.v1.history import router
+from argus.models.enums import HistoryCoverageStatus
 
 
 @pytest.fixture
@@ -82,6 +84,17 @@ class _FakeHistoryService:
             granularity_adjusted=False,
             speed_classes_capped=False,
             speed_classes_used=["car"] if kwargs.get("include_speed") else None,
+            effective_from=kwargs["starts_at"],
+            effective_to=kwargs["ends_at"],
+            bucket_count=1,
+            bucket_span=kwargs.get("granularity", "1h"),
+            coverage_status=HistoryCoverageStatus.POPULATED,
+            coverage_by_bucket=[
+                HistoryBucketCoverage(
+                    bucket=now,
+                    status=HistoryCoverageStatus.POPULATED,
+                )
+            ],
         )
 
     async def list_classes(self, *args, **kwargs) -> HistoryClassesResponse:
@@ -169,6 +182,39 @@ async def test_series_endpoint_passes_include_speed_and_threshold(
     assert service.calls[-1]["metric"] == HistoryMetric.COUNT_EVENTS
     assert service.calls[-1]["include_speed"] is True
     assert service.calls[-1]["speed_threshold"] == 50.0
+
+
+@pytest.mark.asyncio
+async def test_series_endpoint_serializes_coverage_metadata(
+    tenant_context: TenantContext,
+) -> None:
+    service = _FakeHistoryService()
+    app = _app_with_fakes(service, tenant_context)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/api/v1/history/series",
+            params={
+                "from": "2026-04-23T00:00:00Z",
+                "to": "2026-04-23T01:00:00Z",
+                "granularity": "1h",
+                "metric": "occupancy",
+            },
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["effective_from"] == "2026-04-23T00:00:00Z"
+    assert body["effective_to"] == "2026-04-23T01:00:00Z"
+    assert body["bucket_count"] == 1
+    assert body["bucket_span"] == "1h"
+    assert body["coverage_status"] == "populated"
+    assert body["coverage_by_bucket"] == [
+        {
+            "bucket": "2026-04-23T00:00:00Z",
+            "status": "populated",
+            "reason": None,
+        }
+    ]
 
 
 @pytest.mark.asyncio
