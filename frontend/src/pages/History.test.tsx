@@ -94,6 +94,12 @@ function findHistoryRequest(pathname: string, metric: string) {
   );
 }
 
+function historyRequests(pathname: string, metric: string) {
+  return recordedRequests.filter(
+    (request) => request.pathname === pathname && request.searchParams.get("metric") === metric,
+  );
+}
+
 describe("HistoryPage", () => {
   beforeEach(() => {
     recordedRequests = [];
@@ -146,6 +152,7 @@ describe("HistoryPage", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     act(() => {
       useAuthStore.setState(initialAuthState, true);
@@ -293,6 +300,28 @@ describe("HistoryPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /try last 7 days/i })).toBeInTheDocument(),
     );
+  });
+
+  test("keeps last 7 days preset as the active relative window", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-27T12:34:56.000Z"));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("button", { name: /download csv/i });
+    recordedRequests = [];
+
+    await user.click(screen.getByRole("button", { name: /last 7d/i }));
+    await user.click(screen.getByLabelText(/show speed/i));
+
+    await waitFor(() => {
+      const requests = historyRequests("/api/v1/history/series", "occupancy").filter(
+        (request) => request.searchParams.get("include_speed") === "true",
+      );
+      expect(requests.length).toBeGreaterThanOrEqual(1);
+      const latest = requests.at(-1);
+      expect(latest?.searchParams.get("from")).toBe("2026-04-20T12:34:00.000Z");
+      expect(latest?.searchParams.get("to")).toBe("2026-04-27T12:34:00.000Z");
+    });
   });
 
   test("class filter is populated by /history/classes", async () => {

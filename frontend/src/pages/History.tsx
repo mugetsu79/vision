@@ -10,8 +10,10 @@ import { COCO_CLASSES } from "@/lib/coco-classes";
 import {
   type HistoryFilterState,
   type HistoryMetric,
+  type RelativeHistoryWindow,
   historyMetricCopy,
   readHistoryFiltersFromSearch,
+  resolveRelativeWindow,
   writeHistoryFiltersToSearch,
 } from "@/lib/history-url-state";
 import { useCameras } from "@/hooks/use-cameras";
@@ -143,13 +145,10 @@ export function HistoryPage() {
     }
   }
 
-  function applyPresetRange(days: number) {
+  function applyPresetRange(relativeWindow: RelativeHistoryWindow) {
     applyState((prev) => {
-      const to = new Date();
-      to.setSeconds(0, 0);
-      const from = new Date(to);
-      from.setDate(from.getDate() - days);
-      return { ...prev, from, to };
+      const { from, to } = resolveRelativeWindow(relativeWindow);
+      return { ...prev, from, to, windowMode: "relative", relativeWindow, followNow: true };
     });
   }
 
@@ -196,13 +195,13 @@ export function HistoryPage() {
             <div className="flex flex-wrap gap-2">
               <Button
                 className="bg-white/[0.06] px-4 py-2 text-[#e7efff] shadow-none hover:bg-white/[0.1]"
-                onClick={() => applyPresetRange(1)}
+                onClick={() => applyPresetRange("last_24h")}
               >
                 Last 24h
               </Button>
               <Button
                 className="bg-white/[0.06] px-4 py-2 text-[#e7efff] shadow-none hover:bg-white/[0.1]"
-                onClick={() => applyPresetRange(7)}
+                onClick={() => applyPresetRange("last_7d")}
               >
                 Last 7d
               </Button>
@@ -229,7 +228,7 @@ export function HistoryPage() {
             ) : chartEmpty ? (
               <div className="space-y-4 px-6 py-16 text-sm text-[#93a7c5]">
                 <p>{metricCopy.emptyState}</p>
-                <Button onClick={() => applyPresetRange(7)}>Try last 7 days</Button>
+                <Button onClick={() => applyPresetRange("last_7d")}>Try last 7 days</Button>
               </div>
             ) : (
               <div className="space-y-3">
