@@ -22,6 +22,7 @@ export function buildHistorySearchResults({
   if (!normalized) return [];
 
   const results: HistorySearchResult[] = [];
+  const emittedBoundaryKeys = new Set<string>();
   const classEntries = Array.isArray(classes) ? classes : classes.classes;
   const boundaryEntries = Array.isArray(classes) ? [] : (classes.boundaries ?? []);
 
@@ -40,6 +41,9 @@ export function buildHistorySearchResults({
       const boundary = readBoundary(zone);
       if (!boundary || (!matches(boundary.id, normalized) && !matches(boundary.name, normalized))) {
         continue;
+      }
+      for (const key of boundaryResultKeys(camera.id, boundary)) {
+        emittedBoundaryKeys.add(key);
       }
       results.push({
         id: `boundary:${camera.id}:${boundary.id}`,
@@ -66,8 +70,11 @@ export function buildHistorySearchResults({
 
   for (const boundary of boundaryEntries) {
     if (matches(boundary.boundary_id, normalized)) {
-      const cameraId = findCameraIdForBoundary(boundary.boundary_id, cameras);
+      const cameraId = findUniqueCameraIdForBoundary(boundary.boundary_id, cameras);
       if (!cameraId) continue;
+      const boundaryKey = boundaryResultKey(cameraId, boundary.boundary_id);
+      if (emittedBoundaryKeys.has(boundaryKey)) continue;
+      emittedBoundaryKeys.add(boundaryKey);
       results.push({
         id: `boundary:${cameraId}:${boundary.boundary_id}`,
         type: "boundary",
@@ -153,8 +160,9 @@ function readBoundary(zone: unknown): { id: string; name?: string } | null {
   return { id: boundaryId, name: name || undefined };
 }
 
-function findCameraIdForBoundary(boundaryId: string, cameras: Camera[]): string | null {
+function findUniqueCameraIdForBoundary(boundaryId: string, cameras: Camera[]): string | null {
   const boundaryKey = normalizeBoundaryKey(boundaryId);
+  const matchingCameraIds = new Set<string>();
   for (const camera of cameras) {
     for (const zone of camera.zones ?? []) {
       const boundary = readBoundary(zone);
@@ -163,15 +171,25 @@ function findCameraIdForBoundary(boundaryId: string, cameras: Camera[]): string 
         (normalizeBoundaryKey(boundary.id) === boundaryKey ||
           normalizeBoundaryKey(boundary.name) === boundaryKey)
       ) {
-        return camera.id;
+        matchingCameraIds.add(camera.id);
       }
     }
   }
-  return null;
+  return matchingCameraIds.size === 1 ? [...matchingCameraIds][0] : null;
 }
 
 function normalizeBoundaryKey(value: string | undefined): string {
   return value?.toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
+}
+
+function boundaryResultKey(cameraId: string, boundaryId: string): string {
+  return `${cameraId}:${normalizeBoundaryKey(boundaryId)}`;
+}
+
+function boundaryResultKeys(cameraId: string, boundary: { id: string; name?: string }): string[] {
+  return [boundary.id, boundary.name]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => boundaryResultKey(cameraId, value));
 }
 
 function formatBucket(bucket: string): string {

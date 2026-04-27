@@ -113,6 +113,48 @@ describe("buildHistorySearchResults", () => {
     );
   });
 
+  test("does not map summary boundaries when multiple cameras share the boundary key", () => {
+    const results = buildHistorySearchResults({
+      query: "shared-line",
+      cameras: [
+        { id: "cam-1", name: "Gate camera", zones: [{ name: "Shared Line" }] },
+        { id: "cam-2", name: "Dock camera", zones: [{ name: "Shared Line" }] },
+      ] as unknown as Camera[],
+      classes: {
+        ...classes,
+        boundaries: [{ boundary_id: "shared-line", event_types: ["line_cross"] }],
+      },
+      series,
+    });
+
+    expect(results).not.toContainEqual(
+      expect.objectContaining({
+        type: "boundary",
+        boundaryId: "shared-line",
+      }),
+    );
+  });
+
+  test("does not duplicate summary boundaries already emitted from camera zones", () => {
+    const results = buildHistorySearchResults({
+      query: "entry-line",
+      cameras: [
+        {
+          id: "cam-1",
+          name: "Gate camera",
+          zones: [{ id: "entry-line", name: "Entry Line" }],
+        },
+      ] as unknown as Camera[],
+      classes: {
+        ...classes,
+        boundaries: [{ boundary_id: "entry-line", event_types: ["line_cross"] }],
+      },
+      series,
+    });
+
+    expect(results.filter((result) => result.id === "boundary:cam-1:entry-line")).toHaveLength(1);
+  });
+
   test("keeps stable order while limiting results", () => {
     const crowdedSeries = {
       ...series,
