@@ -31,6 +31,7 @@ type HistoryTrendSeries = {
   speedClassesUsed?: string[] | null;
   includeSpeed?: boolean;
   speedThreshold?: number | null;
+  selectedBucket?: string | null;
 };
 
 registerECharts([
@@ -49,6 +50,7 @@ const PALETTE = ["#4f8cff", "#8b6dff", "#26d0ff", "#6de4a7", "#ffaf52", "#ff6b91
 
 export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOption {
   const buckets = series.points.map((p) => formatBucket(p.bucket));
+  const selectedBucketLabel = series.selectedBucket ? formatBucket(series.selectedBucket) : null;
   const speedOn = !!series.includeSpeed;
   const thresholdSet = speedOn && series.speedThreshold !== null && series.speedThreshold !== undefined;
   const speedClasses = series.speedClassesUsed ?? [];
@@ -100,6 +102,13 @@ export function buildHistoryChartOption(series: HistoryTrendSeries): EChartsOpti
     xAxisIndex: 0,
     yAxisIndex: 0,
     data: series.points.map((p) => p.values[cls] ?? 0),
+    markLine: selectedBucketLabel
+      ? {
+          symbol: "none",
+          lineStyle: { color: "#f5d570", type: "dashed", width: 1.5 },
+          data: [{ xAxis: selectedBucketLabel, name: "selected bucket" }],
+        }
+      : undefined,
   }));
 
   if (thresholdSet) {
@@ -221,10 +230,12 @@ export function HistoryTrendChart({
   series,
   className,
   metric = "occupancy",
+  onBucketSelect,
 }: {
   series: HistoryTrendSeries;
   className?: string;
   metric?: HistoryMetric;
+  onBucketSelect?: (bucket: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<EChartsType | null>(null);
@@ -237,10 +248,22 @@ export function HistoryTrendChart({
     const chart = chartRef.current ?? init(container, undefined, { renderer: "canvas" });
     chartRef.current = chart;
     chart.setOption(option, true);
+    const onClick = (params: { dataIndex?: number }) => {
+      if (typeof params.dataIndex !== "number") return;
+      const point = series.points[params.dataIndex];
+      if (point?.bucket) {
+        onBucketSelect?.(point.bucket);
+      }
+    };
+    chart.off("click");
+    chart.on("click", onClick);
     const onResize = () => chart.resize();
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [option]);
+    return () => {
+      chart.off("click", onClick);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [onBucketSelect, option, series.points]);
 
   useEffect(() => {
     return () => {

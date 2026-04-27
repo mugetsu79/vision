@@ -70,4 +70,21 @@ describe("buildHistoryChartOption", () => {
     const p95 = seriesList.find((s) => s.name === "car p95");
     expect(p95?.markLine?.data?.[0].yAxis).toBe(50);
   });
+
+  test("marks the selected bucket on each primary series", () => {
+    const option = buildHistoryChartOption({
+      classNames: ["car"],
+      points: [
+        { bucket: "2026-04-23T00:00:00Z", values: { car: 1 }, total_count: 1 },
+        { bucket: "2026-04-23T01:00:00Z", values: { car: 2 }, total_count: 2 },
+      ],
+      selectedBucket: "2026-04-23T01:00:00Z",
+    });
+
+    const seriesList = option.series as unknown as Array<{
+      name: string;
+      markLine?: { data: Array<{ xAxis: string }> };
+    }>;
+    expect(seriesList.find((entry) => entry.name === "car")?.markLine?.data[0].xAxis).toBe("23 Apr, 01:00");
+  });
 });
