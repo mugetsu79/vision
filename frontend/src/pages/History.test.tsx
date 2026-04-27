@@ -424,7 +424,9 @@ describe("HistoryPage", () => {
 
     await user.click(screen.getByTestId("history-trend-chart"));
 
-    expect(screen.getByText(/apr 12/i)).toBeInTheDocument();
+    const selectedHeading = screen.getByRole("heading", { name: /12 apr/i });
+    expect(selectedHeading).toBeInTheDocument();
+    expect(selectedHeading).not.toHaveTextContent(/\(Apr 12\)/i);
     expect(screen.getByText(/28 visible samples/i)).toBeInTheDocument();
   });
 
@@ -438,5 +440,71 @@ describe("HistoryPage", () => {
     await user.click(screen.getByRole("button", { name: /resume following now/i }));
 
     expect(screen.getByText(/following now/i)).toBeInTheDocument();
+  });
+
+  test("paused relative windows keep their stored bounds until resumed", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-27T12:34:56.000Z"));
+    const user = userEvent.setup();
+    renderPage("/history?window=last_24h&follow=0");
+
+    await screen.findByTestId("history-trend-chart");
+    expect(screen.getByText(/paused window/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /resume following now/i })).toBeInTheDocument();
+
+    recordedRequests = [];
+    vi.setSystemTime(new Date("2026-04-27T13:34:56.000Z"));
+    await user.click(screen.getByLabelText(/show speed/i));
+
+    await waitFor(() => {
+      const requests = historyRequests("/api/v1/history/series", "occupancy").filter(
+        (request) => request.searchParams.get("include_speed") === "true",
+      );
+      expect(requests.length).toBeGreaterThanOrEqual(1);
+      const latest = requests.at(-1);
+      expect(latest?.searchParams.get("from")).toBe("2026-04-26T12:34:00.000Z");
+      expect(latest?.searchParams.get("to")).toBe("2026-04-27T12:34:00.000Z");
+    });
+  });
+
+  test("clears chart selection when the selected bucket leaves the current series", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") {
+        if (url.searchParams.get("metric") === "count_events") {
+          return Promise.resolve(
+            jsonResponse(
+              historySeriesResponse({
+                metric: "count_events",
+                rows: [
+                  { bucket: "2026-04-13T00:00:00Z", values: { car: 7, bus: 3 }, total_count: 10 },
+                ],
+              }),
+            ),
+          );
+        }
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
+      }
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage();
+    await screen.findByTestId("history-trend-chart");
+
+    await user.click(screen.getByTestId("history-trend-chart"));
+    expect(screen.getByTestId("history-trend-chart")).toHaveTextContent("selected=2026-04-12T00:00:00Z");
+
+    await user.selectOptions(screen.getByLabelText("Toolbar metric"), "count_events");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
+        "metric=count_events::selected=none",
+      ),
+    );
   });
 });

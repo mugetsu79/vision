@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { HistoryBucketDetail } from "@/components/history/HistoryBucketDetail";
@@ -29,6 +29,7 @@ export function HistoryPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: cameras = [] } = useCameras();
+  const selfWrittenSearchRef = useRef<string | null>(null);
 
   const [state, setState] = useState<HistoryFilterState>(() =>
     readHistoryFiltersFromSearch(new URLSearchParams(location.search)),
@@ -56,21 +57,29 @@ export function HistoryPage() {
       ? location.search.slice(1)
       : location.search;
     if (search !== currentSearch) {
+      selfWrittenSearchRef.current = search;
       navigate({ pathname: location.pathname, search: `?${search}` }, { replace: true });
     }
   }, [state, location.pathname, location.search, navigate]);
 
   useEffect(() => {
+    const currentSearch = location.search.startsWith("?")
+      ? location.search.slice(1)
+      : location.search;
+    if (selfWrittenSearchRef.current === currentSearch) {
+      selfWrittenSearchRef.current = null;
+      return;
+    }
     const parsed = readHistoryFiltersFromSearch(new URLSearchParams(location.search));
     setState(parsed);
   }, [location.search]);
 
   const resolvedWindow = useMemo(() => {
-    if (state.windowMode === "relative") {
+    if (state.windowMode === "relative" && state.followNow) {
       return resolveRelativeWindow(state.relativeWindow);
     }
     return { from: state.from, to: state.to };
-  }, [state.from, state.relativeWindow, state.to, state.windowMode]);
+  }, [state.followNow, state.from, state.relativeWindow, state.to, state.windowMode]);
 
   const filters = useMemo(
     () => ({
@@ -120,9 +129,13 @@ export function HistoryPage() {
     () => (data ? buildDisplaySeries(data) : { classNames: [], points: [] }),
     [data],
   );
+  const validSelectedBucket = useMemo(() => {
+    if (!selectedBucket) return null;
+    return data?.rows.some((row) => row.bucket === selectedBucket) ? selectedBucket : null;
+  }, [data?.rows, selectedBucket]);
   const bucketDetail = useMemo(
-    () => (data ? buildBucketDetails(data, selectedBucket) : null),
-    [data, selectedBucket],
+    () => (data ? buildBucketDetails(data, validSelectedBucket) : null),
+    [data, validSelectedBucket],
   );
   const coverageCopy = useMemo(() => getCoverageCopy(data?.coverage_status), [data?.coverage_status]);
 
@@ -243,7 +256,7 @@ export function HistoryPage() {
                   includeSpeed: state.speed,
                   speedThreshold: state.speedThreshold ?? null,
                   speedClassesUsed: data.speed_classes_used ?? null,
-                  selectedBucket,
+                  selectedBucket: validSelectedBucket,
                 }}
                 metric={metric}
                 granularity={data.granularity}

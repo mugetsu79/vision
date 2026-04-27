@@ -80,21 +80,14 @@ export function HistoryBucketDetail({
 }
 
 function formatBucketHeading(bucket: string): string {
-  const formatter = new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-GB", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
     timeZone: "UTC",
-  });
-  const date = new Date(bucket);
-  const parts = formatter.formatToParts(date).reduce<Record<string, string>>((acc, part) => {
-    acc[part.type] = part.value;
-    return acc;
-  }, {});
-
-  return `${formatter.format(date)} (${parts.month} ${parts.day})`;
+  }).format(new Date(bucket));
 }
 
 function formatSpeed(value: number | undefined): string {

@@ -17,6 +17,8 @@ export function HistoryToolbar({
   onChange: (next: HistoryFilterState | ((previous: HistoryFilterState) => HistoryFilterState)) => void;
   onResumeFollowing: () => void;
 }) {
+  const isFollowingNow = state.windowMode === "relative" && state.followNow;
+
   return (
     <section className="rounded-lg border border-white/10 bg-[#07101c] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -26,9 +28,9 @@ export function HistoryToolbar({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-md border border-white/10 px-3 py-2 text-sm text-[#dce6f7]">
-            {state.windowMode === "relative" && state.followNow ? "Following now" : "Absolute window"}
+            {isFollowingNow ? "Following now" : state.windowMode === "relative" ? "Paused window" : "Absolute window"}
           </span>
-          {state.windowMode === "absolute" ? (
+          {!isFollowingNow ? (
             <Button type="button" onClick={onResumeFollowing}>
               Resume following now
             </Button>
