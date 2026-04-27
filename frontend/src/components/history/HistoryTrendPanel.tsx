@@ -1,5 +1,3 @@
-import { Suspense } from "react";
-
 import { HistoryTrendChart } from "@/components/history/HistoryTrendChart";
 import { Badge } from "@/components/ui/badge";
 import type { CoverageCopy } from "@/lib/history-workbench";
@@ -44,14 +42,12 @@ export function HistoryTrendPanel({
         </div>
         <Badge>{coverage.label}</Badge>
       </div>
-      <Suspense fallback={<div className="px-6 py-16 text-sm text-[#93a7c5]">Loading chart...</div>}>
-        <HistoryTrendChart
-          className="px-2 py-4"
-          metric={metric}
-          series={series}
-          onBucketSelect={onBucketSelect}
-        />
-      </Suspense>
+      <HistoryTrendChart
+        className="px-2 py-4"
+        metric={metric}
+        series={series}
+        onBucketSelect={onBucketSelect}
+      />
     </section>
   );
 }

@@ -74,12 +74,10 @@ export function HistoryPage() {
     setState(parsed);
   }, [location.search]);
 
-  const resolvedWindow = useMemo(() => {
-    if (state.windowMode === "relative" && state.followNow) {
-      return resolveRelativeWindow(state.relativeWindow);
-    }
-    return { from: state.from, to: state.to };
-  }, [state.followNow, state.from, state.relativeWindow, state.to, state.windowMode]);
+  const resolvedWindow =
+    state.windowMode === "relative" && state.followNow
+      ? resolveRelativeWindow(state.relativeWindow)
+      : { from: state.from, to: state.to };
 
   const filters = useMemo(
     () => ({

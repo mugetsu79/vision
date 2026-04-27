@@ -336,6 +336,30 @@ describe("HistoryPage", () => {
     });
   });
 
+  test("refreshes following-now bounds when filters change after time advances", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-27T12:34:56.000Z"));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByTestId("history-trend-chart");
+    expect(screen.getByText(/following now/i)).toBeInTheDocument();
+
+    recordedRequests = [];
+    vi.setSystemTime(new Date("2026-04-27T13:34:56.000Z"));
+    await user.click(screen.getByLabelText(/show speed/i));
+
+    await waitFor(() => {
+      const requests = historyRequests("/api/v1/history/series", "occupancy").filter(
+        (request) => request.searchParams.get("include_speed") === "true",
+      );
+      expect(requests.length).toBeGreaterThanOrEqual(1);
+      const latest = requests.at(-1);
+      expect(latest?.searchParams.get("from")).toBe("2026-04-26T13:34:00.000Z");
+      expect(latest?.searchParams.get("to")).toBe("2026-04-27T13:34:00.000Z");
+    });
+  });
+
   test("class filter is populated by /history/classes", async () => {
     renderPage();
     await waitFor(() => {
