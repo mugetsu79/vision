@@ -125,7 +125,72 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
     }
 
 
-def test_camera_worker_config_resolves_native_browser_delivery_to_passthrough_stream() -> None:
+def test_edge_native_browser_delivery_keeps_passthrough_stream() -> None:
+    camera = Camera(
+        id=uuid4(),
+        site_id=uuid4(),
+        edge_node_id=uuid4(),
+        name="Dock Camera",
+        rtsp_url_encrypted="encrypted",
+        processing_mode=ProcessingMode.EDGE,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=[],
+        attribute_rules=[],
+        zones=[],
+        homography={
+            "src": [[0, 0], [100, 0], [100, 100], [0, 100]],
+            "dst": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "ref_distance_m": 12.5,
+        },
+        privacy={"blur_faces": False, "blur_plates": False, "method": "gaussian", "strength": 7},
+        browser_delivery={
+            "default_profile": "native",
+            "allow_native_on_demand": True,
+            "profiles": [],
+        },
+        frame_skip=1,
+        fps_cap=17,
+    )
+    primary_model = Model(
+        id=camera.primary_model_id,
+        name="YOLO12n",
+        version="lab-1",
+        task=ModelTask.DETECT,
+        path="/models/yolo12n.onnx",
+        format=ModelFormat.ONNX,
+        classes=["person", "car"],
+        input_shape={"width": 640, "height": 640},
+        sha256="a" * 64,
+        size_bytes=123,
+        license="lab",
+    )
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=primary_model,
+        secondary_model=None,
+        settings=settings,
+        rtsp_url="rtsp://lab-camera.local/live",
+    )
+
+    assert config.stream.model_dump() == {
+        "profile_id": "native",
+        "kind": "passthrough",
+        "width": None,
+        "height": None,
+        "fps": 17,
+    }
+    assert config.model.classes == ["person", "car"]
+
+
+def test_central_native_browser_delivery_uses_processed_full_rate_stream() -> None:
     camera = Camera(
         id=uuid4(),
         site_id=uuid4(),
@@ -182,9 +247,8 @@ def test_camera_worker_config_resolves_native_browser_delivery_to_passthrough_st
 
     assert config.stream.model_dump() == {
         "profile_id": "native",
-        "kind": "passthrough",
+        "kind": "transcode",
         "width": None,
         "height": None,
         "fps": 17,
     }
-    assert config.model.classes == ["person", "car"]

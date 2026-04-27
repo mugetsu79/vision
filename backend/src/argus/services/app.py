@@ -69,7 +69,13 @@ from argus.core.db import DatabaseManager
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
-from argus.models.enums import CountEventType, HistoryMetric, ModelFormat, ModelTask
+from argus.models.enums import (
+    CountEventType,
+    HistoryMetric,
+    ModelFormat,
+    ModelTask,
+    ProcessingMode,
+)
 from argus.models.tables import (
     APIKey,
     AuditLog,
@@ -1924,6 +1930,7 @@ class StreamService:
         stream_settings = _resolve_worker_stream_settings(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
+            processed_native=_uses_processed_native_delivery(camera),
         )
         return resolve_stream_access(
             camera_id=camera.id,
@@ -2223,6 +2230,7 @@ def _camera_to_worker_config(
         stream=_resolve_worker_stream_settings(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
+            processed_native=_uses_processed_native_delivery(camera),
         ),
         model=_model_to_worker_settings(primary_model),
         secondary_model=(
@@ -2369,6 +2377,7 @@ def _resolve_worker_stream_settings(
     *,
     browser_delivery: BrowserDeliverySettings,
     fps_cap: int,
+    processed_native: bool = False,
 ) -> WorkerStreamSettings:
     profile_payloads = browser_delivery.profiles or BrowserDeliverySettings().profiles
     profiles_by_id = {str(profile["id"]): dict(profile) for profile in profile_payloads}
@@ -2377,6 +2386,14 @@ def _resolve_worker_stream_settings(
     selected = profiles_by_id.get(browser_delivery.default_profile)
     if selected is None:
         selected = profiles_by_id["native"]
+    if browser_delivery.default_profile == "native" and processed_native:
+        return WorkerStreamSettings(
+            profile_id="native",
+            kind="transcode",
+            width=None,
+            height=None,
+            fps=max(1, fps_cap),
+        )
     kind = str(selected.get("kind", "passthrough"))
     if kind == "transcode":
         return WorkerStreamSettings(
@@ -2393,6 +2410,10 @@ def _resolve_worker_stream_settings(
         height=None,
         fps=max(1, fps_cap),
     )
+
+
+def _uses_processed_native_delivery(camera: Camera) -> bool:
+    return camera.processing_mode is ProcessingMode.CENTRAL and camera.edge_node_id is None
 
 
 def _normalize_points(
@@ -2485,6 +2506,7 @@ async def _camera_setup_frame_size(camera: Camera, settings: Settings) -> FrameS
     stream_settings = _resolve_worker_stream_settings(
         browser_delivery=browser_delivery,
         fps_cap=camera.fps_cap,
+        processed_native=_uses_processed_native_delivery(camera),
     )
     if stream_settings.width is not None and stream_settings.height is not None:
         return FrameSize(width=stream_settings.width, height=stream_settings.height)
