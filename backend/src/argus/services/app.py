@@ -2721,6 +2721,19 @@ def _history_bucket_delta(granularity: str) -> timedelta:
     raise ValueError(f"Unsupported history granularity: {granularity}")
 
 
+def _align_history_bucket_start(value: datetime, granularity: str) -> datetime:
+    if granularity == "1m":
+        return value.replace(second=0, microsecond=0)
+    if granularity == "5m":
+        minute = value.minute - (value.minute % 5)
+        return value.replace(minute=minute, second=0, microsecond=0)
+    if granularity == "1h":
+        return value.replace(minute=0, second=0, microsecond=0)
+    if granularity == "1d":
+        return value.replace(hour=0, minute=0, second=0, microsecond=0)
+    raise ValueError(f"Unsupported history granularity: {granularity}")
+
+
 def _history_bucket_range(
     starts_at: datetime,
     ends_at: datetime,
@@ -2728,7 +2741,7 @@ def _history_bucket_range(
 ) -> list[datetime]:
     delta = _history_bucket_delta(granularity)
     buckets: list[datetime] = []
-    current = starts_at
+    current = _align_history_bucket_start(starts_at, granularity)
     while current < ends_at:
         buckets.append(current)
         current += delta
