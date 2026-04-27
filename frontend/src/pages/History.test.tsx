@@ -551,7 +551,7 @@ describe("HistoryPage", () => {
 
     await screen.findByTestId("history-trend-chart");
     await user.type(screen.getByLabelText(/search history/i), "car");
-    await user.click(screen.getByRole("button", { name: "car" }));
+    await user.click(screen.getByRole("option", { name: "car" }));
 
     await waitFor(() => {
       const request = recordedRequests.find(
@@ -564,8 +564,48 @@ describe("HistoryPage", () => {
 
     await user.clear(screen.getByLabelText(/search history/i));
     await user.type(screen.getByLabelText(/search history/i), "spike");
-    await user.click(screen.getByRole("button", { name: /28 events/i }));
+    await user.click(screen.getByRole("option", { name: /28 events/i }));
 
     expect(screen.getByText(/28 visible samples/i)).toBeInTheDocument();
+  });
+
+  test("unified search selects boundary summaries by matching camera zones", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(
+          jsonResponse([cameraResponse({ zones: [{ name: "Entry Line" }] })]),
+        );
+      }
+      if (url.pathname === "/api/v1/history/classes") {
+        return Promise.resolve(
+          jsonResponse({
+            ...classesResponse(),
+            boundaries: [{ boundary_id: "entry-line", event_types: ["line_cross"] }],
+          }),
+        );
+      }
+      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage();
+    await screen.findByTestId("history-trend-chart");
+    recordedRequests = [];
+
+    await user.type(screen.getByLabelText(/search history/i), "entry-line");
+    await user.click(screen.getByRole("option", { name: "entry-line" }));
+
+    await waitFor(() => {
+      const request = recordedRequests.find(
+        (url) =>
+          url.pathname === "/api/v1/history/series" &&
+          url.searchParams.get("camera_ids") === "cam-1",
+      );
+      expect(request).toBeDefined();
+    });
   });
 });

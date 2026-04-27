@@ -85,4 +85,53 @@ describe("buildHistorySearchResults", () => {
       ]),
     );
   });
+
+  test("maps response boundary summaries back to matching camera zones", () => {
+    const results = buildHistorySearchResults({
+      query: "entry-line",
+      cameras: [
+        {
+          id: "cam-1",
+          name: "Gate camera",
+          zones: [{ name: "Entry Line" }],
+        },
+      ] as unknown as Camera[],
+      classes: {
+        ...classes,
+        boundaries: [{ boundary_id: "entry-line", event_types: ["line_cross"] }],
+      },
+      series,
+    });
+
+    expect(results).toContainEqual(
+      expect.objectContaining({
+        type: "boundary",
+        label: "entry-line",
+        boundaryId: "entry-line",
+        cameraId: "cam-1",
+      }),
+    );
+  });
+
+  test("keeps stable order while limiting results", () => {
+    const crowdedSeries = {
+      ...series,
+      rows: Array.from({ length: 25 }, (_, index) => ({
+        bucket: `2026-04-27T${String(index).padStart(2, "0")}:00:00Z`,
+        values: { car: 10 + index },
+        total_count: 10 + index,
+      })),
+    } as HistorySeriesResponse;
+
+    const results = buildHistorySearchResults({
+      query: "spike",
+      cameras: [],
+      classes: [],
+      series: crowdedSeries,
+    });
+
+    expect(results).toHaveLength(20);
+    expect(results[0]).toEqual(expect.objectContaining({ bucket: "2026-04-27T00:00:00Z" }));
+    expect(results[19]).toEqual(expect.objectContaining({ bucket: "2026-04-27T19:00:00Z" }));
+  });
 });

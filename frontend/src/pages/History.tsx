@@ -125,10 +125,10 @@ export function HistoryPage() {
       buildHistorySearchResults({
         query: search,
         cameras,
-        classes: observedClasses,
+        classes: classesData ?? observedClasses,
         series: data,
       }),
-    [cameras, data, observedClasses, search],
+    [cameras, classesData, data, observedClasses, search],
   );
   const unseenCocoClasses = useMemo(() => {
     const seen = new Set(observedClasses.map((c) => c.class_name));

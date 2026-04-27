@@ -66,12 +66,15 @@ export function buildHistorySearchResults({
 
   for (const boundary of boundaryEntries) {
     if (matches(boundary.boundary_id, normalized)) {
+      const cameraId = findCameraIdForBoundary(boundary.boundary_id, cameras);
+      if (!cameraId) continue;
       results.push({
-        id: `boundary:${boundary.boundary_id}`,
+        id: `boundary:${cameraId}:${boundary.boundary_id}`,
         type: "boundary",
         group: "Boundaries",
         label: boundary.boundary_id,
         boundaryId: boundary.boundary_id,
+        cameraId,
       });
     }
   }
@@ -148,6 +151,27 @@ function readBoundary(zone: unknown): { id: string; name?: string } | null {
   const boundaryId = id || name;
   if (!boundaryId) return null;
   return { id: boundaryId, name: name || undefined };
+}
+
+function findCameraIdForBoundary(boundaryId: string, cameras: Camera[]): string | null {
+  const boundaryKey = normalizeBoundaryKey(boundaryId);
+  for (const camera of cameras) {
+    for (const zone of camera.zones ?? []) {
+      const boundary = readBoundary(zone);
+      if (
+        boundary &&
+        (normalizeBoundaryKey(boundary.id) === boundaryKey ||
+          normalizeBoundaryKey(boundary.name) === boundaryKey)
+      ) {
+        return camera.id;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeBoundaryKey(value: string | undefined): string {
+  return value?.toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
 }
 
 function formatBucket(bucket: string): string {
