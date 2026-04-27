@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from argus.api.contracts import TenantContext
+from argus.api.contracts import HistorySeriesResponse, HistorySeriesRow, TenantContext
 from argus.core.security import AuthenticatedUser, RoleEnum
 from argus.models.enums import CountEventType, HistoryCoverageStatus, HistoryMetric
 from argus.services.app import (
@@ -482,6 +482,49 @@ async def test_query_series_materializes_missing_buckets_around_populated_rows(
         HistoryCoverageStatus.POPULATED,
         HistoryCoverageStatus.ZERO,
     ]
+
+
+@pytest.mark.asyncio
+async def test_export_history_includes_zero_buckets_from_series(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    starts = datetime(2026, 4, 26, 14, 0, tzinfo=UTC)
+    service.query_series = AsyncMock(
+        return_value=HistorySeriesResponse(
+            granularity="1m",
+            metric=HistoryMetric.COUNT_EVENTS,
+            class_names=["car"],
+            rows=[
+                HistorySeriesRow(bucket=starts, values={"car": 0}, total_count=0),
+                HistorySeriesRow(
+                    bucket=starts + timedelta(minutes=1),
+                    values={"car": 2},
+                    total_count=2,
+                ),
+            ],
+            effective_from=starts,
+            effective_to=starts + timedelta(minutes=2),
+            bucket_count=2,
+            bucket_span="1m",
+            coverage_status=HistoryCoverageStatus.POPULATED,
+        )
+    )
+
+    artifact = await service.export_history(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=["car"],
+        granularity="1m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=2),
+        format_name="csv",
+        metric=HistoryMetric.COUNT_EVENTS,
+    )
+
+    csv_text = artifact.content.decode("utf-8")
+    assert "2026-04-26T14:00:00+00:00,,car,0,1m" in csv_text
+    assert "2026-04-26T14:01:00+00:00,,car,2,1m" in csv_text
 
 
 @pytest.mark.asyncio

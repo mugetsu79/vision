@@ -1245,7 +1245,7 @@ class HistoryService:
         format_name: str,
         metric: HistoryMetric = HistoryMetric.OCCUPANCY,
     ) -> ExportArtifact:
-        rows = await self.query_history(
+        series = await self.query_series(
             tenant_context,
             camera_ids=camera_ids,
             class_names=class_names,
@@ -1254,6 +1254,7 @@ class HistoryService:
             ends_at=ends_at,
             metric=metric,
         )
+        rows = _series_response_to_history_points(series)
         if format_name == "parquet":
             return ExportArtifact(
                 filename="history.parquet",
@@ -2635,6 +2636,37 @@ def _serialize_csv(rows: list[HistoryPoint]) -> bytes:
             ]
         )
     return buffer.getvalue().encode("utf-8")
+
+
+def _series_response_to_history_points(
+    response: HistorySeriesResponse,
+) -> list[HistoryPoint]:
+    rows: list[HistoryPoint] = []
+    for series_row in response.rows:
+        if response.class_names:
+            for class_name in response.class_names:
+                rows.append(
+                    HistoryPoint(
+                        bucket=series_row.bucket,
+                        camera_id=None,
+                        class_name=class_name,
+                        event_count=series_row.values.get(class_name, 0),
+                        granularity=response.granularity,
+                        metric=response.metric,
+                    )
+                )
+        else:
+            rows.append(
+                HistoryPoint(
+                    bucket=series_row.bucket,
+                    camera_id=None,
+                    class_name="total",
+                    event_count=series_row.total_count,
+                    granularity=response.granularity,
+                    metric=response.metric,
+                )
+            )
+    return rows
 
 
 def _serialize_parquet(rows: list[HistoryPoint]) -> bytes:
