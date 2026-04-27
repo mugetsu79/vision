@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -523,6 +523,55 @@ async def test_query_series_materializes_aligned_buckets_for_non_aligned_window(
         datetime(2026, 4, 26, 14, 0, tzinfo=UTC),
         aligned_populated_bucket,
         datetime(2026, 4, 26, 14, 10, tzinfo=UTC),
+    ]
+    assert [row.values for row in response.rows] == [{"car": 0}, {"car": 7}, {"car": 0}]
+    assert [entry.status for entry in response.coverage_by_bucket] == [
+        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.POPULATED,
+        HistoryCoverageStatus.ZERO,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_series_materializes_utc_aligned_buckets_for_non_utc_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    request_tz = timezone(timedelta(hours=5, minutes=30))
+    starts = datetime(2026, 4, 26, 14, 2, tzinfo=request_tz)
+    ends = starts + timedelta(hours=2)
+    aligned_populated_bucket = datetime(2026, 4, 26, 9, 0, tzinfo=UTC)
+    monkeypatch.setattr(
+        service,
+        "_fetch_series_rows_from_events",
+        AsyncMock(
+            return_value=[
+                {
+                    "bucket": aligned_populated_bucket,
+                    "class_name": "car",
+                    "event_count": 7,
+                }
+            ]
+        ),
+    )
+
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=["car"],
+        granularity="1h",
+        starts_at=starts,
+        ends_at=ends,
+        metric=HistoryMetric.OCCUPANCY,
+    )
+
+    assert response.effective_from == starts
+    assert response.effective_to == ends
+    assert [row.bucket for row in response.rows] == [
+        datetime(2026, 4, 26, 8, 0, tzinfo=UTC),
+        aligned_populated_bucket,
+        datetime(2026, 4, 26, 10, 0, tzinfo=UTC),
     ]
     assert [row.values for row in response.rows] == [{"car": 0}, {"car": 7}, {"car": 0}]
     assert [entry.status for entry in response.coverage_by_bucket] == [

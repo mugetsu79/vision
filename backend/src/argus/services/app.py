@@ -2722,6 +2722,7 @@ def _history_bucket_delta(granularity: str) -> timedelta:
 
 
 def _align_history_bucket_start(value: datetime, granularity: str) -> datetime:
+    value = value.astimezone(UTC)
     if granularity == "1m":
         return value.replace(second=0, microsecond=0)
     if granularity == "5m":
@@ -2742,7 +2743,8 @@ def _history_bucket_range(
     delta = _history_bucket_delta(granularity)
     buckets: list[datetime] = []
     current = _align_history_bucket_start(starts_at, granularity)
-    while current < ends_at:
+    aligned_ends_at = ends_at.astimezone(UTC)
+    while current < aligned_ends_at:
         buckets.append(current)
         current += delta
     return buckets
