@@ -69,7 +69,7 @@ export function HomographyEditor({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
-                Frame plane
+                Analytics still
               </p>
               <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">Source points</h3>
             </div>
@@ -92,12 +92,13 @@ export function HomographyEditor({
               ariaLabel="Source points canvas"
               backgroundContent={
                 <p className="max-w-sm text-sm text-[#9eb2cf]">
-                  Click the plane to place source points, or keep using the add button and
-                  drag the handles into place once they land.
+                  Place four source points directly on the captured analytics still. If the
+                  still is temporarily unavailable, keep using the authoring plane and refresh
+                  the still once the camera source responds.
                 </p>
               }
               frameSize={resolvedSourceFrameSize}
-              helperText="This source plane is the reusable authoring surface that future setup steps will use for the frozen analytics frame."
+              helperText="This captured analytics still anchors the source plane for calibration and count-boundary authoring across the rest of setup."
               maxPoints={4}
               mode="points"
               pointLabelPrefix="Source"

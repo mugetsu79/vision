@@ -14,11 +14,17 @@ from argus.models.enums import RoleEnum
 
 
 class _FakeCameraService:
+    def __init__(self) -> None:
+        self.force_refresh_calls: list[bool] = []
+
     async def get_setup_preview(
         self,
         tenant_context: TenantContext,
         camera_id,
+        *,
+        force_refresh: bool = False,
     ) -> CameraSetupPreviewResponse:
+        self.force_refresh_calls.append(force_refresh)
         return CameraSetupPreviewResponse(
             camera_id=camera_id,
             preview_url=f"/api/v1/cameras/{camera_id}/setup-preview/image?rev=12345",
@@ -149,6 +155,41 @@ async def test_camera_setup_preview_route_returns_frame_size_and_preview_url() -
     assert response.json()["preview_url"].startswith(
         f"/api/v1/cameras/{camera_id}/setup-preview/image"
     )
+
+
+@pytest.mark.asyncio
+async def test_camera_setup_preview_route_can_force_refresh() -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    services = _FakeServices()
+    app = create_app(settings=settings)
+    app.state.services = services
+    user = AuthenticatedUser(
+        subject="admin-1",
+        email="admin@argus.local",
+        role=RoleEnum.ADMIN,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=str(uuid4()),
+        claims={},
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    camera_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(f"/api/v1/cameras/{camera_id}/setup-preview?refresh=true")
+
+    assert response.status_code == 200
+    assert services.cameras.force_refresh_calls == [True]
 
 
 @pytest.mark.asyncio

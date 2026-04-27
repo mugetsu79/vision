@@ -32,6 +32,12 @@ _FFMPEG_ANALYZE_DURATION_US = "60000000"  # 60 seconds
 _FFMPEG_PROBE_SIZE = "64000000"  # 64 MB
 _FFMPEG_DIMENSION_PROBE_TIMEOUT_S = 20.0
 _FFMPEG_FRAME_WAIT_TIMEOUT_S = 20.0
+_OPENCV_CAPTURE_OPEN_TIMEOUT_MS = int(_FFMPEG_DIMENSION_PROBE_TIMEOUT_S * 1000)
+_OPENCV_CAPTURE_READ_TIMEOUT_MS = int(_FFMPEG_FRAME_WAIT_TIMEOUT_S * 1000)
+_OPENCV_FFMPEG_CAPTURE_OPTIONS = (
+    f"rtsp_transport;tcp|analyzeduration;{_FFMPEG_ANALYZE_DURATION_US}"
+    f"|probesize;{_FFMPEG_PROBE_SIZE}"
+)
 
 type Frame = NDArray[np.uint8]
 type CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
@@ -235,9 +241,35 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
         and source.startswith(("rtsp://", "rtsps://"))
         and "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ
     ):
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
-    capture = cv2.VideoCapture(source, backend) if backend is not None else cv2.VideoCapture(source)
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _OPENCV_FFMPEG_CAPTURE_OPTIONS
+    capture = _open_opencv_capture(source, backend)
     return cast(CaptureHandle, capture)
+
+
+def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCapture:
+    if backend is not None:
+        capture = cv2.VideoCapture(source, backend)
+    else:
+        capture = cv2.VideoCapture(source)
+    _configure_opencv_capture(capture)
+    return capture
+
+
+def _configure_opencv_capture(capture: cv2.VideoCapture) -> None:
+    setter = getattr(capture, "set", None)
+    if not callable(setter):
+        return
+
+    for prop_id, value in (
+        (getattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC", None), _OPENCV_CAPTURE_OPEN_TIMEOUT_MS),
+        (getattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC", None), _OPENCV_CAPTURE_READ_TIMEOUT_MS),
+    ):
+        if prop_id is None:
+            continue
+        try:
+            setter(prop_id, value)
+        except Exception:  # pragma: no cover - backend-specific OpenCV failure
+            continue
 
 @dataclass(slots=True)
 class _FFmpegRawVideoCapture:

@@ -28,9 +28,11 @@ export function useCameraSetupPreview(
   enabled = true,
 ) {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [refreshGeneration, setRefreshGeneration] = useState(0);
   const query = useQuery<CameraSetupPreviewQueryData>({
     enabled: Boolean(cameraId) && enabled,
-    queryKey: ["camera-setup-preview", cameraId ?? "none"],
+    placeholderData: (previousData) => previousData,
+    queryKey: ["camera-setup-preview", cameraId ?? "none", refreshGeneration],
     queryFn: async () => {
       const accessToken = await resolveAccessToken();
       const authHeaders = accessToken
@@ -38,9 +40,10 @@ export function useCameraSetupPreview(
             Authorization: `Bearer ${accessToken}`,
           }
         : undefined;
+      const refreshSuffix = refreshGeneration > 0 ? "?refresh=1" : "";
 
       const metadataResponse = await fetch(
-        `${frontendConfig.apiBaseUrl}/api/v1/cameras/${cameraId}/setup-preview`,
+        `${frontendConfig.apiBaseUrl}/api/v1/cameras/${cameraId}/setup-preview${refreshSuffix}`,
         {
           headers: authHeaders,
         },
@@ -115,5 +118,8 @@ export function useCameraSetupPreview(
           preview_src: previewSrc,
         } satisfies CameraSetupPreview)
       : undefined,
+    refreshPreview: () => {
+      setRefreshGeneration((current) => current + 1);
+    },
   };
 }

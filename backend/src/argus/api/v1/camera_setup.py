@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 
 from argus.api.contracts import CameraSetupPreviewResponse, TenantContext
 from argus.api.dependencies import get_app_services, get_tenant_context
@@ -23,8 +23,13 @@ async def get_camera_setup_preview(
     current_user: ViewerUser,
     tenant_context: TenantDependency,
     services: ServicesDependency,
+    refresh: bool = Query(default=False),
 ) -> CameraSetupPreviewResponse:
-    return await services.cameras.get_setup_preview(tenant_context, camera_id)
+    return await services.cameras.get_setup_preview(
+        tenant_context,
+        camera_id,
+        force_refresh=refresh,
+    )
 
 
 @router.get("/{camera_id}/setup-preview/image")

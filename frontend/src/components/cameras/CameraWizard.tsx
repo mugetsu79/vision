@@ -514,32 +514,82 @@ export function CameraWizard({
   );
   const setupFrameSize = setupPreviewQuery.data?.frame_size ?? fallbackSetupFrameSize;
   const setupPreviewSrc = setupPreviewQuery.data?.preview_src ?? null;
-  const setupFrameStatus = useMemo(() => {
+  const calibrationPreviewState = useMemo(() => {
+    const defaultFrameLabel = `${setupFrameSize.width}×${setupFrameSize.height}`;
+    const capturedLabel = setupPreviewQuery.data
+      ? (() => {
+          const capturedAt = new Date(setupPreviewQuery.data.captured_at);
+          return Number.isNaN(capturedAt.getTime())
+            ? setupPreviewQuery.data.captured_at
+            : capturedAt.toLocaleString();
+        })()
+      : null;
+    const errorDetail =
+      setupPreviewQuery.error instanceof Error && setupPreviewQuery.error.message
+        ? setupPreviewQuery.error.message
+        : "Retry the analytics still capture after confirming the camera stream is reachable.";
+
+    if (!isEditMode) {
+      return {
+        tone: "neutral" as const,
+        title: "Analytics still becomes available after the camera is saved",
+        body: `Use the provisional ${defaultFrameLabel} authoring plane for now. Once the camera exists, ${brandName} can capture a real analytics still for source points and count boundaries.`,
+        frameLabel: defaultFrameLabel,
+      };
+    }
+
+    if (setupPreviewQuery.isPending) {
+      return {
+        tone: "neutral" as const,
+        title: "Capturing analytics still",
+        body: `Source points and count boundaries will attach to the ${defaultFrameLabel} analytics frame as soon as the captured still is ready.`,
+        frameLabel: defaultFrameLabel,
+      };
+    }
+
+    if (setupPreviewQuery.isError) {
+      return {
+        tone: "error" as const,
+        title: "Unable to capture analytics still",
+        body: `${errorDetail} Source points can still be placed on the ${defaultFrameLabel} fallback analytics plane, but review alignment once the still is available.`,
+        frameLabel: defaultFrameLabel,
+      };
+    }
+
+    if (setupPreviewQuery.data && setupPreviewSrc) {
+      return {
+        tone: "success" as const,
+        title: "Analytics still ready",
+        body: `Source points and count boundaries are drawing on a captured ${defaultFrameLabel} analytics frame from the configured camera source. Captured ${capturedLabel}.`,
+        frameLabel: defaultFrameLabel,
+      };
+    }
+
     if (setupPreviewQuery.data) {
-      const capturedAt = new Date(setupPreviewQuery.data.captured_at);
-      const capturedLabel = Number.isNaN(capturedAt.getTime())
-        ? setupPreviewQuery.data.captured_at
-        : capturedAt.toLocaleString();
-      return `Analytics frame: ${setupFrameSize.width}×${setupFrameSize.height} · Still captured ${capturedLabel}`;
+      return {
+        tone: "warning" as const,
+        title: "Analytics frame ready, still unavailable",
+        body: `Frame metadata was loaded for ${defaultFrameLabel}, but the still image could not be displayed. Source points and count boundaries are using the analytics frame bounds until you refresh the still.`,
+        frameLabel: defaultFrameLabel,
+      };
     }
-    if (isEditMode && stepTitle === "Calibration" && setupPreviewQuery.isPending) {
-      return "Loading analytics frame metadata…";
-    }
-    if (isEditMode && stepTitle === "Calibration" && setupPreviewQuery.isError) {
-      return `Using fallback authoring plane ${setupFrameSize.width}×${setupFrameSize.height} while preview metadata is unavailable.`;
-    }
-    if (isEditMode) {
-      return `Analytics frame: ${setupFrameSize.width}×${setupFrameSize.height}`;
-    }
-    return `Using a provisional ${setupFrameSize.width}×${setupFrameSize.height} authoring plane until the camera is saved and preview metadata is available.`;
+
+    return {
+      tone: "neutral" as const,
+      title: "Analytics frame pending",
+      body: `Preparing the ${defaultFrameLabel} analytics frame for source-point and boundary authoring.`,
+      frameLabel: defaultFrameLabel,
+    };
   }, [
+    brandName,
     isEditMode,
     setupFrameSize.height,
     setupFrameSize.width,
     setupPreviewQuery.data,
+    setupPreviewQuery.error,
     setupPreviewQuery.isError,
     setupPreviewQuery.isPending,
-    stepTitle,
+    setupPreviewSrc,
   ]);
 
   const contextPanel = useMemo(() => {
@@ -1058,6 +1108,48 @@ export function CameraWizard({
 
           {stepTitle === "Calibration" ? (
             <div className="space-y-5">
+              <section
+                className={`rounded-[1.5rem] border p-4 ${
+                  calibrationPreviewState.tone === "error"
+                    ? "border-[#6a2735] bg-[#231118]"
+                    : calibrationPreviewState.tone === "success"
+                      ? "border-[#24594f] bg-[#0d1717]"
+                      : calibrationPreviewState.tone === "warning"
+                        ? "border-[#5b4b28] bg-[#19150c]"
+                        : "border-[#243853] bg-[#09121c]"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+                      Calibration still
+                    </p>
+                    <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
+                      {calibrationPreviewState.title}
+                    </h3>
+                    <p className="mt-2 max-w-3xl text-sm text-[#d8e2f2]">
+                      {calibrationPreviewState.body}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2]">
+                      Analytics frame {calibrationPreviewState.frameLabel}
+                    </span>
+                    {isEditMode ? (
+                      <Button
+                        className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+                        disabled={setupPreviewQuery.isFetching}
+                        type="button"
+                        onClick={() => {
+                          setupPreviewQuery.refreshPreview();
+                        }}
+                      >
+                        {setupPreviewQuery.isFetching ? "Refreshing still…" : "Refresh still"}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
               <HomographyEditor
                 destinationFrameSize={DEFAULT_ANALYTICS_FRAME_SIZE}
                 src={data.homography.src}
@@ -1077,8 +1169,8 @@ export function CameraWizard({
                       Lines and zones
                     </h3>
                     <p className="mt-2 max-w-2xl text-sm text-[#9eb2cf]">
-                      Freeze the analytics frame mentally around the live scene and draw
-                      count boundaries directly on that plane. Lines emit crossings,
+                      Reuse the same analytics still from source-point setup to draw count
+                      boundaries directly on the analyzed frame. Lines emit crossings,
                       while polygons emit entry and exit events.
                     </p>
                   </div>
@@ -1090,18 +1182,6 @@ export function CameraWizard({
                     >
                       {showBoundaryAdvanced ? "Hide advanced" : "Advanced"}
                     </Button>
-                    {isEditMode ? (
-                      <Button
-                        className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
-                        disabled={setupPreviewQuery.isPending}
-                        type="button"
-                        onClick={() => {
-                          void setupPreviewQuery.refetch();
-                        }}
-                      >
-                        {setupPreviewQuery.isPending ? "Refreshing still…" : "Refresh still"}
-                      </Button>
-                    ) : null}
                     <Button
                       className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
                       type="button"
@@ -1117,9 +1197,6 @@ export function CameraWizard({
                       Add polygon zone
                     </Button>
                   </div>
-                </div>
-                <div className="mt-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-                  {setupFrameStatus}
                 </div>
 
                 {data.zones.length === 0 ? (

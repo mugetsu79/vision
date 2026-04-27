@@ -24,12 +24,17 @@ class _FakeCapture:
     def __init__(self, frames: list[np.ndarray | None]) -> None:
         self._frames = deque(frames)
         self.released = False
+        self.properties: dict[int, float] = {}
 
     def read(self) -> tuple[bool, np.ndarray | None]:
         if not self._frames:
             return False, None
         frame = self._frames.popleft()
         return (frame is not None, frame)
+
+    def set(self, prop_id: int, value: float) -> bool:
+        self.properties[prop_id] = value
+        return True
 
     def release(self) -> None:
         self.released = True
@@ -195,10 +200,11 @@ def test_camera_source_refreshes_source_uri_on_reconnect_and_redacts_log(
 
 def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -> None:
     calls: list[_CaptureCall] = []
+    capture = _FakeCapture([])
 
     def fake_video_capture(source: str | int, backend: int | None = None) -> _FakeCapture:
         calls.append(_CaptureCall(source=source, backend=backend))
-        return _FakeCapture([])
+        return capture
 
     monkeypatch.setattr(cv2, "VideoCapture", fake_video_capture)
     monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
@@ -207,7 +213,11 @@ def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -
 
     assert calls[0].source == "rtsp://camera.internal/live"
     assert calls[0].backend == cv2.CAP_FFMPEG
-    assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == "rtsp_transport;tcp"
+    assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == (
+        "rtsp_transport;tcp|analyzeduration;60000000|probesize;64000000"
+    )
+    assert capture.properties[cv2.CAP_PROP_OPEN_TIMEOUT_MSEC] == 20000
+    assert capture.properties[cv2.CAP_PROP_READ_TIMEOUT_MSEC] == 20000
 
 
 def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
@@ -447,9 +457,7 @@ def test_ffmpeg_rawvideo_capture_redacts_source_uri_in_stderr_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     source_uri = "rtsp://camera.internal/live?jwt=super-secret-token"
-    stderr_payload = (
-        f"{source_uri}: Connection timed out\n".encode("utf-8")
-    )
+    stderr_payload = f"{source_uri}: Connection timed out\n".encode()
 
     class _ExitedProcess:
         def __init__(self) -> None:

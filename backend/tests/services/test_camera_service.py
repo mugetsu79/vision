@@ -689,6 +689,88 @@ async def test_get_setup_preview_returns_frame_size_and_preview_url(
 
 
 @pytest.mark.asyncio
+async def test_get_setup_preview_returns_503_when_capture_fails_without_cached_still(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    now = datetime.now(tz=UTC)
+    camera = Camera(
+        id=camera_id,
+        site_id=uuid4(),
+        edge_node_id=None,
+        name="Dock Camera",
+        rtsp_url_encrypted=app_services.encrypt_rtsp_url("rtsp://old-camera/live", settings),
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=[],
+        attribute_rules=[],
+        zones=[],
+        homography={
+            "src": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "dst": [[0, 0], [5, 0], [5, 5], [0, 5]],
+            "ref_distance_m": 5.0,
+        },
+        privacy={
+            "blur_faces": True,
+            "blur_plates": True,
+            "method": "gaussian",
+            "strength": 7,
+        },
+        browser_delivery=BrowserDeliverySettings().model_dump(mode="python"),
+        frame_skip=1,
+        fps_cap=25,
+        created_at=now,
+        updated_at=now,
+    )
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+    user = AuthenticatedUser(
+        subject="viewer-1",
+        email="viewer@argus.local",
+        role=RoleEnum.VIEWER,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=None,
+        claims={},
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=user,
+    )
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(
+        app_services,
+        "_capture_setup_preview_snapshot",
+        lambda camera_arg, settings_arg: (_ for _ in ()).throw(
+            RuntimeError("Timed out while capturing a setup preview frame after 20s.")
+        ),
+    )
+
+    with pytest.raises(HTTPException, match="Unable to capture an analytics still"):
+        await service.get_setup_preview(tenant_context, camera_id)
+
+
+@pytest.mark.asyncio
 async def test_get_setup_preview_uses_captured_still_dimensions_instead_of_stale_zone_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -981,6 +1063,109 @@ async def test_get_setup_preview_image_reuses_cached_snapshot(
     assert len(capture_calls) == 1
     assert snapshot.image_bytes == b"preview-jpeg"
     assert snapshot.frame_size.model_dump() == {"width": 1280, "height": 720}
+
+
+@pytest.mark.asyncio
+async def test_get_setup_preview_reuses_cached_snapshot_when_refresh_capture_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    now = datetime.now(tz=UTC)
+    camera = Camera(
+        id=camera_id,
+        site_id=uuid4(),
+        edge_node_id=None,
+        name="Dock Camera",
+        rtsp_url_encrypted=app_services.encrypt_rtsp_url("rtsp://old-camera/live", settings),
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=[],
+        attribute_rules=[],
+        zones=[],
+        homography={
+            "src": [[120, 80], [920, 80], [920, 680], [120, 680]],
+            "dst": [[0, 0], [5, 0], [5, 5], [0, 5]],
+            "ref_distance_m": 5.0,
+        },
+        privacy={
+            "blur_faces": True,
+            "blur_plates": True,
+            "method": "gaussian",
+            "strength": 7,
+        },
+        browser_delivery={
+            "default_profile": "native",
+            "allow_native_on_demand": True,
+            "profiles": [],
+        },
+        frame_skip=1,
+        fps_cap=25,
+        created_at=now,
+        updated_at=now,
+    )
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+    user = AuthenticatedUser(
+        subject="viewer-1",
+        email="viewer@argus.local",
+        role=RoleEnum.VIEWER,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=None,
+        claims={},
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=user,
+    )
+    capture_calls = 0
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    def fake_capture_setup_preview_snapshot(camera_arg, settings_arg):  # noqa: ANN001
+        nonlocal capture_calls
+        capture_calls += 1
+        if capture_calls == 1:
+            return app_services._SetupPreviewSnapshot(
+                image_bytes=b"preview-jpeg",
+                frame_size=FrameSize(width=1280, height=720),
+                captured_at=now,
+            )
+        raise RuntimeError("Timed out while capturing a setup preview frame after 20s.")
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(
+        app_services,
+        "_capture_setup_preview_snapshot",
+        fake_capture_setup_preview_snapshot,
+    )
+    caplog.set_level("WARNING", logger="argus.services.app")
+
+    original = await service.get_setup_preview(tenant_context, camera_id)
+    refreshed = await service.get_setup_preview(tenant_context, camera_id, force_refresh=True)
+
+    assert capture_calls == 2
+    assert refreshed.frame_size == original.frame_size
+    assert refreshed.preview_url == original.preview_url
+    assert any("reusing cached still" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio

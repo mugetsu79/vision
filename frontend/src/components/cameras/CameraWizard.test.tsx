@@ -326,6 +326,8 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByText(/analytics still ready/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /refresh still/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /save camera/i }));
 
@@ -356,6 +358,85 @@ describe("CameraWizard", () => {
         frame_size: { width: 1280, height: 720 },
       },
     ]);
+  });
+
+  test("surfaces a step-level calibration error when the analytics still cannot be captured", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.endsWith("/api/v1/cameras/camera-1/setup-preview")) {
+        return new Response(
+          JSON.stringify({
+            detail:
+              "Unable to capture an analytics still from the camera source right now. Retry the capture after confirming the camera stream is reachable.",
+          }),
+          {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected fetch to ${url}`);
+    });
+
+    renderWizard({
+      initialCamera: {
+        id: "camera-1",
+        site_id: "site-1",
+        edge_node_id: null,
+        name: "Dock Camera",
+        rtsp_url_masked: "rtsp://***",
+        processing_mode: "hybrid",
+        primary_model_id: "model-1",
+        secondary_model_id: null,
+        tracker_type: "botsort",
+        active_classes: [],
+        attribute_rules: [],
+        zones: [],
+        homography: {
+          src: [
+            [0, 0],
+            [100, 0],
+            [100, 100],
+            [0, 100],
+          ],
+          dst: [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+          ],
+          ref_distance_m: 12.5,
+        },
+        privacy: {
+          blur_faces: true,
+          blur_plates: true,
+          method: "gaussian",
+          strength: 7,
+        },
+        browser_delivery: {
+          default_profile: "720p10",
+          allow_native_on_demand: true,
+          profiles: [],
+        },
+        frame_skip: 1,
+        fps_cap: 25,
+        created_at: "2026-04-19T00:00:00Z",
+        updated_at: "2026-04-19T00:00:00Z",
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(await screen.findByText(/unable to capture analytics still/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/source points can still be placed on the 1280×720 fallback analytics plane/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /refresh still/i })).toBeInTheDocument();
   });
 
   test("requires reselecting a primary model when the stored model is no longer in inventory", async () => {

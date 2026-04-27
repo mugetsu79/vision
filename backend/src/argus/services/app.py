@@ -461,11 +461,25 @@ class CameraService:
         self,
         tenant_context: TenantContext,
         camera_id: UUID,
+        *,
+        force_refresh: bool = False,
     ) -> CameraSetupPreviewResponse:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
 
-        snapshot = await self._get_or_capture_setup_preview_snapshot(camera, force_refresh=True)
+        try:
+            snapshot = await self._get_or_capture_setup_preview_snapshot(
+                camera,
+                force_refresh=force_refresh,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Unable to capture an analytics still from the camera source right now. "
+                    "Retry the capture after confirming the camera stream is reachable."
+                ),
+            ) from exc
         return CameraSetupPreviewResponse(
             camera_id=camera.id,
             preview_url=(
@@ -483,7 +497,16 @@ class CameraService:
     ) -> _SetupPreviewSnapshot:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
-        return await self._get_or_capture_setup_preview_snapshot(camera, force_refresh=False)
+        try:
+            return await self._get_or_capture_setup_preview_snapshot(camera, force_refresh=False)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Unable to load the analytics still for this camera right now. "
+                    "Retry the capture after confirming the camera stream is reachable."
+                ),
+            ) from exc
 
     async def _get_or_capture_setup_preview_snapshot(
         self,
@@ -512,11 +535,20 @@ class CameraService:
             ):
                 return cached_entry.snapshot
 
-            snapshot = await asyncio.to_thread(
-                _capture_setup_preview_snapshot,
-                camera,
-                self.settings,
-            )
+            try:
+                snapshot = await asyncio.to_thread(
+                    _capture_setup_preview_snapshot,
+                    camera,
+                    self.settings,
+                )
+            except RuntimeError:
+                if cached_entry is not None and cached_entry.camera_updated_at == camera.updated_at:
+                    logger.warning(
+                        "Setup preview refresh failed; reusing cached still for camera %s",
+                        camera.id,
+                    )
+                    return cached_entry.snapshot
+                raise
             self._setup_preview_cache[camera.id] = _SetupPreviewCacheEntry(
                 snapshot=snapshot,
                 camera_updated_at=camera.updated_at,
