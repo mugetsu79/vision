@@ -4,6 +4,7 @@ import asyncio
 import csv
 import io
 import logging
+import math
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ from argus.api.contracts import (
     CameraCreate,
     CameraResponse,
     CameraSetupPreviewResponse,
+    CameraSourceProbeRequest,
+    CameraSourceProbeResponse,
     CameraUpdate,
     DerivedBrowserProfiles,
     EdgeHeartbeatRequest,
@@ -462,6 +465,79 @@ class CameraService:
             secondary_model=secondary_model,
             settings=self.settings,
             rtsp_url=rtsp_url,
+        )
+
+    async def probe_camera_source(
+        self,
+        tenant_context: TenantContext,
+        payload: CameraSourceProbeRequest,
+    ) -> CameraSourceProbeResponse:
+        rtsp_url = payload.rtsp_url.strip() if payload.rtsp_url is not None else None
+        if rtsp_url == "":
+            rtsp_url = None
+
+        requested_delivery = payload.browser_delivery or BrowserDeliverySettings()
+        requested_privacy = (
+            payload.privacy.model_dump(mode="python")
+            if payload.privacy is not None
+            else PrivacySettings().model_dump(mode="python")
+        )
+        existing_source_capability: SourceCapability | None = None
+        should_persist_probe = False
+
+        if payload.camera_id is not None:
+            async with self.session_factory() as session:
+                camera = await _load_camera(session, tenant_context.tenant_id, payload.camera_id)
+                supplied_rtsp_url = rtsp_url is not None
+                if rtsp_url is None:
+                    rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
+                    should_persist_probe = True
+                if payload.browser_delivery is None:
+                    stored_browser_delivery = (
+                        camera.browser_delivery
+                        or BrowserDeliverySettings().model_dump(mode="python")
+                    )
+                    requested_delivery = BrowserDeliverySettings.model_validate(
+                        stored_browser_delivery
+                    )
+                if payload.privacy is None:
+                    requested_privacy = dict(camera.privacy)
+                if camera.source_capability is not None:
+                    existing_source_capability = SourceCapability.model_validate(
+                        camera.source_capability
+                    )
+
+                source_capability = (
+                    await _probe_source_capability(rtsp_url, settings=self.settings)
+                    if rtsp_url is not None
+                    else None
+                )
+                if source_capability is None:
+                    source_capability = existing_source_capability
+                elif should_persist_probe and not supplied_rtsp_url:
+                    camera.source_capability = source_capability.model_dump(mode="python")
+                    await session.commit()
+                    await session.refresh(camera)
+        else:
+            if rtsp_url is None:
+                raise HTTPException(
+                    status_code=HTTP_422_UNPROCESSABLE,
+                    detail="rtsp_url is required when camera_id is not provided.",
+                )
+            source_capability = await _probe_source_capability(rtsp_url, settings=self.settings)
+
+        privacy = _apply_tenant_privacy_policy(
+            settings=self.settings,
+            tenant_context=tenant_context,
+            privacy=requested_privacy,
+        )
+        return CameraSourceProbeResponse(
+            source_capability=source_capability,
+            browser_delivery=_build_source_aware_browser_delivery(
+                requested=requested_delivery,
+                source_capability=source_capability,
+                privacy=privacy,
+            ),
         )
 
     async def get_setup_preview(
@@ -2084,6 +2160,19 @@ def _validate_active_classes_subset(
 def _camera_to_response(camera: Camera) -> CameraResponse:
     if camera.homography is None:
         raise ValueError("Camera homography must be set.")
+    privacy = PrivacySettings.model_validate(camera.privacy)
+    source_capability = (
+        SourceCapability.model_validate(camera.source_capability)
+        if camera.source_capability is not None
+        else None
+    )
+    browser_delivery = _build_source_aware_browser_delivery(
+        requested=BrowserDeliverySettings.model_validate(
+            camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+        ),
+        source_capability=source_capability,
+        privacy=privacy.model_dump(mode="python"),
+    )
     return CameraResponse(
         id=camera.id,
         site_id=camera.site_id,
@@ -2098,15 +2187,9 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, list(camera.zones)),
         homography=HomographyPayload.model_validate(camera.homography),
-        privacy=PrivacySettings.model_validate(camera.privacy),
-        browser_delivery=BrowserDeliverySettings.model_validate(
-            camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
-        ),
-        source_capability=(
-            SourceCapability.model_validate(camera.source_capability)
-            if camera.source_capability is not None
-            else None
-        ),
+        privacy=privacy,
+        browser_delivery=browser_delivery,
+        source_capability=source_capability,
         frame_skip=camera.frame_skip,
         fps_cap=camera.fps_cap,
         created_at=camera.created_at,
@@ -2257,8 +2340,29 @@ async def _probe_source_capability(
     try:
         return await asyncio.to_thread(probe_rtsp_source, rtsp_url, settings=settings)
     except RuntimeError:
+        logger.warning(
+            "ffprobe source capability probe failed; falling back to still capture.",
+            exc_info=True,
+        )
+    try:
+        return await asyncio.to_thread(_probe_source_capability_from_still, rtsp_url)
+    except RuntimeError:
         logger.exception("Failed to probe source capability for camera source.")
         return None
+
+
+def _probe_source_capability_from_still(rtsp_url: str) -> SourceCapability:
+    _image_bytes, width, height = capture_still_image(rtsp_url)
+    return SourceCapability(
+        width=width,
+        height=height,
+        aspect_ratio=_aspect_ratio(width, height),
+    )
+
+
+def _aspect_ratio(width: int, height: int) -> str:
+    divisor = math.gcd(width, height)
+    return f"{width // divisor}:{height // divisor}"
 
 
 def _resolve_worker_stream_settings(

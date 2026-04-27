@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from argus.api.contracts import (
     CameraCreate,
     CameraResponse,
+    CameraSourceProbeRequest,
+    CameraSourceProbeResponse,
     CameraUpdate,
     TenantContext,
     WorkerConfigResponse,
@@ -35,6 +37,16 @@ async def list_cameras(
     site_id: SiteIdQuery = None,
 ) -> list[CameraResponse]:
     return await services.cameras.list_cameras(tenant_context, site_id=site_id)
+
+
+@router.post("/source-probe", response_model=CameraSourceProbeResponse)
+async def probe_camera_source(
+    payload: CameraSourceProbeRequest,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> CameraSourceProbeResponse:
+    return await services.cameras.probe_camera_source(tenant_context, payload)
 
 
 @router.get("/{camera_id}", response_model=CameraResponse)

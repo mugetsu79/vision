@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { useQuery } from "@tanstack/react-query";
+
 import { productBrand } from "@/brand/product";
 import { BoundaryAuthoringCanvas } from "@/components/cameras/BoundaryAuthoringCanvas";
 import { CameraStepSummary } from "@/components/cameras/CameraStepSummary";
@@ -13,6 +15,8 @@ import type {
   CreateCameraInput,
   UpdateCameraInput,
 } from "@/hooks/use-cameras";
+import { resolveAccessToken, toApiError } from "@/lib/api";
+import { frontendConfig } from "@/lib/config";
 import type { FrameSize } from "@/components/cameras/boundary-geometry";
 import { denormalizePointList, normalizePointList } from "@/components/cameras/boundary-geometry";
 
@@ -38,6 +42,16 @@ type SourceCapability = {
   fps?: number | null;
   codec?: string | null;
   aspect_ratio?: string | null;
+};
+type CameraSourceProbeResponse = {
+  source_capability: SourceCapability | null;
+  browser_delivery: {
+    default_profile: BrowserDeliveryProfile;
+    allow_native_on_demand: boolean;
+    profiles?: { [key: string]: unknown }[];
+    unsupported_profiles?: { [key: string]: unknown }[];
+    native_status?: NativeDeliveryStatus;
+  };
 };
 
 type BoundaryDraft = {
@@ -535,11 +549,62 @@ export function CameraWizard({
   const isEditMode = initialCamera !== null;
   const maskedRtspPlaceholder = rtspUrlPlaceholder ?? initialCamera?.rtsp_url_masked ?? "";
   const stepTitle = steps[stepIndex];
+  const trimmedRtspUrl = data.rtspUrl.trim();
   const sourceSizeLabel = formatSourceSize(data.sourceCapability);
   const setupPreviewQuery = useCameraSetupPreview(
     initialCamera?.id,
     isEditMode && stepTitle === "Calibration",
   );
+  const sourceProbeQuery = useQuery<CameraSourceProbeResponse>({
+    enabled:
+      stepTitle === "Privacy, Processing & Delivery" &&
+      (isEditMode ? Boolean(initialCamera?.id) : trimmedRtspUrl.length > 0),
+    queryKey: [
+      "camera-source-probe",
+      initialCamera?.id ?? "new",
+      isEditMode && trimmedRtspUrl.length === 0 ? "stored" : trimmedRtspUrl,
+      data.blurFaces,
+      data.blurPlates,
+      data.method,
+      data.strength,
+    ],
+    queryFn: async () => {
+      const accessToken = await resolveAccessToken();
+      const headers = new Headers({ "Content-Type": "application/json" });
+      if (accessToken) {
+        headers.set("Authorization", `Bearer ${accessToken}`);
+      }
+
+      const response = await fetch(`${frontendConfig.apiBaseUrl}/api/v1/cameras/source-probe`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          camera_id: initialCamera?.id ?? null,
+          rtsp_url: isEditMode ? trimmedRtspUrl || null : trimmedRtspUrl,
+          browser_delivery: buildBrowserDelivery(data),
+          privacy: {
+            blur_faces: data.blurFaces,
+            blur_plates: data.blurPlates,
+            method: data.method,
+            strength: data.strength,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        let detail: unknown;
+        try {
+          detail = await response.json();
+        } catch {
+          detail = await response.text();
+        }
+        throw toApiError(detail, "Failed to inspect camera source capability.");
+      }
+
+      return (await response.json()) as CameraSourceProbeResponse;
+    },
+    retry: false,
+  });
   const selectedPrimaryModel = useMemo(
     () => models.find((model) => model.id === data.primaryModelId) ?? null,
     [data.primaryModelId, models],
@@ -558,6 +623,45 @@ export function CameraWizard({
     setIsSubmitting(false);
     setShowBoundaryAdvanced(false);
   }, [initialCamera]);
+
+  useEffect(() => {
+    if (!sourceProbeQuery.data) {
+      return;
+    }
+
+    const probeBrowserDelivery = sourceProbeQuery.data.browser_delivery;
+    const probedProfiles = normalizeBrowserDeliveryProfiles(probeBrowserDelivery.profiles);
+    const unsupportedProfiles = normalizeBrowserDeliveryProfiles(
+      probeBrowserDelivery.unsupported_profiles,
+      [],
+    );
+    const serverDefaultProfile = isBrowserDeliveryProfile(probeBrowserDelivery.default_profile)
+      ? probeBrowserDelivery.default_profile
+      : "720p10";
+
+    setData((current) => {
+      const requestedProfile = probedProfiles.some(
+        (profile) => profile.id === current.browserDeliveryProfile,
+      )
+        ? current.browserDeliveryProfile
+        : serverDefaultProfile;
+
+      return {
+        ...current,
+        browserDeliveryProfile: resolveBrowserDeliveryProfile(
+          requestedProfile,
+          probedProfiles,
+        ),
+        browserDeliveryProfiles: probedProfiles,
+        unsupportedBrowserDeliveryProfiles: unsupportedProfiles,
+        browserDeliveryNativeStatus: probeBrowserDelivery.native_status ?? {
+          available: true,
+          reason: null,
+        },
+        sourceCapability: sourceProbeQuery.data.source_capability,
+      };
+    });
+  }, [sourceProbeQuery.data]);
 
   useEffect(() => {
     setData((current) => {
@@ -1194,6 +1298,17 @@ export function CameraWizard({
                   ))}
                 </Select>
               </label>
+              {sourceProbeQuery.isFetching ? (
+                <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                  Inspecting source capability...
+                </p>
+              ) : null}
+              {sourceProbeQuery.isError ? (
+                <p className="rounded-[1.15rem] border border-[#5b4b28] bg-[#19150c] px-4 py-3 text-sm text-[#ffd9a1]">
+                  Source capability could not be inspected. Profiles are based on saved settings until
+                  the stream responds.
+                </p>
+              ) : null}
               {sourceSizeLabel && data.unsupportedBrowserDeliveryProfiles.length > 0 ? (
                 <div className="space-y-1 rounded-[1.15rem] border border-[#4a3a26] bg-[#18120b] px-4 py-3 text-sm text-[#ffd9a1]">
                   {data.unsupportedBrowserDeliveryProfiles.map((profile) => (

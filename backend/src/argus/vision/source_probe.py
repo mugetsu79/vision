@@ -59,6 +59,11 @@ def probe_rtsp_source(
             "ffprobe failed while probing source capability for "
             f"{redact_url_secrets(rtsp_url)}: {exc.stderr[-500:]}"
         ) from exc
+    except OSError as exc:
+        raise RuntimeError(
+            "ffprobe is not available while probing source capability for "
+            f"{redact_url_secrets(rtsp_url)}."
+        ) from exc
 
     payload = json.loads(completed.stdout)
     streams = payload.get("streams", [])

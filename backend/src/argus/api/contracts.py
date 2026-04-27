@@ -228,6 +228,18 @@ class BrowserDeliverySettings(BaseModel):
     native_status: NativeAvailability = Field(default_factory=NativeAvailability)
 
 
+class CameraSourceProbeRequest(BaseModel):
+    camera_id: UUID | None = None
+    rtsp_url: str | None = Field(default=None, min_length=1)
+    browser_delivery: BrowserDeliverySettings | None = None
+    privacy: PrivacySettings | None = None
+
+
+class CameraSourceProbeResponse(BaseModel):
+    source_capability: SourceCapability | None = None
+    browser_delivery: BrowserDeliverySettings
+
+
 class WorkerCameraSettings(BaseModel):
     rtsp_url: str = Field(min_length=1)
     frame_skip: int = Field(default=1, ge=1)
