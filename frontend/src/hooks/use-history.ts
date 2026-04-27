@@ -4,15 +4,15 @@ import type { components } from "@/lib/api.generated";
 import { apiClient, toApiError } from "@/lib/api";
 import { buildApiUrl } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth-store";
-import { type HistoryMetric } from "@/lib/history-url-state";
+import { type HistoryGranularity, type HistoryMetric } from "@/lib/history-url-state";
 
 export type HistorySeriesResponse = components["schemas"]["HistorySeriesResponse"];
 export type HistoryClassesResponse = components["schemas"]["HistoryClassesResponse"];
 
-export type HistoryFilters = {
+export type ResolvedHistoryFilters = {
   from: Date;
   to: Date;
-  granularity: "1m" | "5m" | "1h" | "1d";
+  granularity: HistoryGranularity;
   metric: HistoryMetric;
   cameraIds: string[];
   classNames: string[];
@@ -20,7 +20,7 @@ export type HistoryFilters = {
   speedThreshold?: number | null;
 };
 
-export function createDefaultHistoryFilters(now = new Date()): HistoryFilters {
+export function createDefaultHistoryFilters(now = new Date()): ResolvedHistoryFilters {
   const to = new Date(now);
   to.setSeconds(0, 0);
   const from = new Date(to);
@@ -38,7 +38,7 @@ export function createDefaultHistoryFilters(now = new Date()): HistoryFilters {
   };
 }
 
-export function historySeriesQueryOptions(filters: HistoryFilters) {
+export function historySeriesQueryOptions(filters: ResolvedHistoryFilters) {
   return queryOptions({
     queryKey: [
       "history-series",
@@ -77,16 +77,13 @@ export function historySeriesQueryOptions(filters: HistoryFilters) {
   });
 }
 
-export function useHistorySeries(filters: HistoryFilters) {
+export function useHistorySeries(filters: ResolvedHistoryFilters) {
   return useQuery(historySeriesQueryOptions(filters));
 }
 
-export function historyClassesQueryOptions(params: {
-  from: Date;
-  to: Date;
-  metric: HistoryMetric;
-  cameraIds: string[];
-}) {
+type HistoryClassesFilters = Pick<ResolvedHistoryFilters, "from" | "to" | "metric" | "cameraIds">;
+
+export function historyClassesQueryOptions(params: HistoryClassesFilters) {
   return queryOptions({
     queryKey: [
       "history-classes",
@@ -114,12 +111,12 @@ export function historyClassesQueryOptions(params: {
   });
 }
 
-export function useHistoryClasses(params: { from: Date; to: Date; metric: HistoryMetric; cameraIds: string[] }) {
+export function useHistoryClasses(params: HistoryClassesFilters) {
   return useQuery(historyClassesQueryOptions(params));
 }
 
 export async function downloadHistoryExport(
-  filters: HistoryFilters,
+  filters: ResolvedHistoryFilters,
   format: "csv" | "parquet",
 ) {
   const { accessToken, user } = useAuthStore.getState();

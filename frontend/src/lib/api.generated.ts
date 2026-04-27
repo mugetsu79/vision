@@ -144,6 +144,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cameras/source-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe Camera Source */
+        post: operations["probe_camera_source_api_v1_cameras_source_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras/{camera_id}": {
         parameters: {
             query?: never;
@@ -172,6 +189,40 @@ export interface paths {
         };
         /** Get Camera Worker Config */
         get: operations["get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/setup-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Camera Setup Preview */
+        get: operations["get_camera_setup_preview_api_v1_cameras__camera_id__setup_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/setup-preview/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Camera Setup Preview Image */
+        get: operations["get_camera_setup_preview_image_api_v1_cameras__camera_id__setup_preview_image_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -541,9 +592,7 @@ export interface components {
                 [key: string]: unknown;
             }[];
             /** Zones */
-            zones: {
-                [key: string]: unknown;
-            }[];
+            zones: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"] | components["schemas"]["LegacyZone"])[];
             homography: components["schemas"]["HomographyPayload"];
             privacy: components["schemas"]["PrivacySettings"];
             browser_delivery: components["schemas"]["BrowserDeliverySettings"];
@@ -562,6 +611,36 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** CameraSetupPreviewResponse */
+        CameraSetupPreviewResponse: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Preview Url */
+            preview_url: string;
+            frame_size: components["schemas"]["FrameSize"];
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+        };
+        /** CameraSourceProbeRequest */
+        CameraSourceProbeRequest: {
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Rtsp Url */
+            rtsp_url?: string | null;
+            browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
+            privacy?: components["schemas"]["PrivacySettings"] | null;
+        };
+        /** CameraSourceProbeResponse */
+        CameraSourceProbeResponse: {
+            source_capability?: components["schemas"]["SourceCapability"] | null;
+            browser_delivery: components["schemas"]["BrowserDeliverySettings"];
         };
         /** CameraUpdate */
         CameraUpdate: {
@@ -665,10 +744,28 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** FrameSize */
+        FrameSize: {
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HistoryBucketCoverage */
+        HistoryBucketCoverage: {
+            /**
+             * Bucket
+             * Format: date-time
+             */
+            bucket: string;
+            status: components["schemas"]["HistoryCoverageStatus"];
+            /** Reason */
+            reason?: string | null;
         };
         /** HistoryClassEntry */
         HistoryClassEntry: {
@@ -697,6 +794,11 @@ export interface components {
             /** Classes */
             classes: components["schemas"]["HistoryClassEntry"][];
         };
+        /**
+         * HistoryCoverageStatus
+         * @enum {string}
+         */
+        HistoryCoverageStatus: "populated" | "zero" | "no_telemetry" | "camera_offline" | "worker_offline" | "source_unavailable" | "no_scope" | "access_limited";
         /**
          * HistoryMetric
          * @enum {string}
@@ -740,6 +842,21 @@ export interface components {
             speed_classes_capped: boolean;
             /** Speed Classes Used */
             speed_classes_used?: string[] | null;
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective To */
+            effective_to?: string | null;
+            /**
+             * Bucket Count
+             * @default 0
+             */
+            bucket_count: number;
+            /** Bucket Span */
+            bucket_span?: string | null;
+            /** @default populated */
+            coverage_status: components["schemas"]["HistoryCoverageStatus"];
+            /** Coverage By Bucket */
+            coverage_by_bucket?: components["schemas"]["HistoryBucketCoverage"][];
         };
         /** HistorySeriesRow */
         HistorySeriesRow: {
@@ -814,6 +931,39 @@ export interface components {
              * @default 0
              */
             storage_bytes: number;
+        };
+        /** LegacyZone */
+        LegacyZone: {
+            /** Id */
+            id?: string | null;
+            /** Class Names */
+            class_names?: string[] | null;
+            frame_size?: components["schemas"]["FrameSize"] | null;
+            /** Points Normalized */
+            points_normalized?: number[][] | null;
+            /** Type */
+            type?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** LineZone */
+        LineZone: {
+            /** Id */
+            id?: string | null;
+            /** Class Names */
+            class_names?: string[] | null;
+            frame_size?: components["schemas"]["FrameSize"] | null;
+            /** Points Normalized */
+            points_normalized?: number[][] | null;
+            /**
+             * Type
+             * @constant
+             */
+            type: "line";
+            /** Points */
+            points: number[][];
+        } & {
+            [key: string]: unknown;
         };
         /** ModelCreate */
         ModelCreate: {
@@ -899,6 +1049,32 @@ export interface components {
             /** License */
             license?: string | null;
         };
+        /** NativeAvailability */
+        NativeAvailability: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** PolygonZone */
+        PolygonZone: {
+            /** Id */
+            id?: string | null;
+            /** Class Names */
+            class_names?: string[] | null;
+            frame_size?: components["schemas"]["FrameSize"] | null;
+            /** Points Normalized */
+            points_normalized?: number[][] | null;
+            /** Type */
+            type?: "polygon" | null;
+            /** Polygon */
+            polygon: number[][];
+        } & {
+            [key: string]: unknown;
+        };
         /** PrivacySettings */
         PrivacySettings: {
             /**
@@ -922,16 +1098,6 @@ export interface components {
              * @default 7
              */
             strength: number;
-        };
-        /** NativeAvailability */
-        NativeAvailability: {
-            /**
-             * Available
-             * @default true
-             */
-            available: boolean;
-            /** Reason */
-            reason?: string | null;
         };
         /**
          * ProcessingMode
@@ -1157,13 +1323,27 @@ export interface components {
                 [key: string]: unknown;
             }[];
             /** Zones */
-            zones?: {
-                [key: string]: unknown;
-            }[];
+            zones?: (components["schemas"]["WorkerLineZone"] | components["schemas"]["WorkerPolygonZone"] | components["schemas"]["LegacyZone"])[];
             /** Homography */
             homography?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** WorkerLineZone */
+        WorkerLineZone: {
+            /** Id */
+            id?: string | null;
+            /** Class Names */
+            class_names?: string[] | null;
+            /**
+             * Type
+             * @constant
+             */
+            type: "line";
+            /** Points */
+            points: number[][];
+        } & {
+            [key: string]: unknown;
         };
         /** WorkerModelSettings */
         WorkerModelSettings: {
@@ -1187,6 +1367,19 @@ export interface components {
              * @default 0.45
              */
             iou_threshold: number;
+        };
+        /** WorkerPolygonZone */
+        WorkerPolygonZone: {
+            /** Id */
+            id?: string | null;
+            /** Class Names */
+            class_names?: string[] | null;
+            /** Type */
+            type?: "polygon" | null;
+            /** Polygon */
+            polygon: number[][];
+        } & {
+            [key: string]: unknown;
         };
         /** WorkerPrivacySettings */
         WorkerPrivacySettings: {
@@ -1596,6 +1789,41 @@ export interface operations {
             };
         };
     };
+    probe_camera_source_api_v1_cameras_source_probe_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CameraSourceProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraSourceProbeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_camera_api_v1_cameras__camera_id__get: {
         parameters: {
             query?: never;
@@ -1717,6 +1945,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkerConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_camera_setup_preview_api_v1_cameras__camera_id__setup_preview_get: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraSetupPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_camera_setup_preview_image_api_v1_cameras__camera_id__setup_preview_image_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

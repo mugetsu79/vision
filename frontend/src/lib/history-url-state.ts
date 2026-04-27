@@ -1,9 +1,14 @@
 export type HistoryGranularity = "1m" | "5m" | "1h" | "1d";
 export type HistoryMetric = "occupancy" | "count_events" | "observations";
+export type HistoryWindowMode = "relative" | "absolute";
+export type RelativeHistoryWindow = "last_15m" | "last_1h" | "last_24h" | "last_7d";
 
 export interface HistoryFilterState {
   from: Date;
   to: Date;
+  windowMode: HistoryWindowMode;
+  relativeWindow: RelativeHistoryWindow;
+  followNow: boolean;
   granularity: HistoryGranularity;
   metric: HistoryMetric | null;
   cameraIds: string[];
@@ -14,6 +19,19 @@ export interface HistoryFilterState {
 
 const GRANULARITIES = new Set<HistoryGranularity>(["1m", "5m", "1h", "1d"]);
 const HISTORY_METRICS = new Set<HistoryMetric>(["occupancy", "count_events", "observations"]);
+const RELATIVE_HISTORY_WINDOWS = new Set<RelativeHistoryWindow>([
+  "last_15m",
+  "last_1h",
+  "last_24h",
+  "last_7d",
+]);
+
+const RELATIVE_WINDOW_DURATIONS: Record<RelativeHistoryWindow, number> = {
+  last_15m: 15 * 60 * 1000,
+  last_1h: 60 * 60 * 1000,
+  last_24h: 24 * 60 * 60 * 1000,
+  last_7d: 7 * 24 * 60 * 60 * 1000,
+};
 
 const HISTORY_METRIC_COPY: Record<
   HistoryMetric,
@@ -66,6 +84,13 @@ function toMetric(value: string | null): HistoryMetric | null {
   return null;
 }
 
+function toRelativeWindow(value: string | null): RelativeHistoryWindow {
+  if (value && RELATIVE_HISTORY_WINDOWS.has(value as RelativeHistoryWindow)) {
+    return value as RelativeHistoryWindow;
+  }
+  return "last_24h";
+}
+
 function toList(value: string | null): string[] {
   if (!value) return [];
   return value
@@ -80,14 +105,25 @@ function toPositiveNumber(value: string | null): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function defaultHistoryFilters(now = new Date()): HistoryFilterState {
+export function resolveRelativeWindow(
+  window: RelativeHistoryWindow,
+  now = new Date(),
+): { from: Date; to: Date } {
   const to = new Date(now);
   to.setSeconds(0, 0);
-  const from = new Date(to);
-  from.setDate(from.getDate() - 1);
+  const from = new Date(to.getTime() - RELATIVE_WINDOW_DURATIONS[window]);
+  return { from, to };
+}
+
+export function defaultHistoryFilters(now = new Date()): HistoryFilterState {
+  const relativeWindow: RelativeHistoryWindow = "last_24h";
+  const { from, to } = resolveRelativeWindow(relativeWindow, now);
   return {
     from,
     to,
+    windowMode: "relative",
+    relativeWindow,
+    followNow: true,
     granularity: "1h",
     metric: null,
     cameraIds: [],
@@ -102,9 +138,18 @@ export function readHistoryFiltersFromSearch(
   now = new Date(),
 ): HistoryFilterState {
   const defaults = defaultHistoryFilters(now);
+  const relativeWindow = toRelativeWindow(params.get("window"));
+  const hasAbsoluteBound = params.has("from") || params.has("to");
+  const relativeBounds = resolveRelativeWindow(relativeWindow, now);
+  const windowMode: HistoryWindowMode = hasAbsoluteBound ? "absolute" : "relative";
+  const followNow = hasAbsoluteBound ? false : params.get("follow") !== "0";
+
   return {
-    from: toDate(params.get("from"), defaults.from),
-    to: toDate(params.get("to"), defaults.to),
+    from: hasAbsoluteBound ? toDate(params.get("from"), defaults.from) : relativeBounds.from,
+    to: hasAbsoluteBound ? toDate(params.get("to"), defaults.to) : relativeBounds.to,
+    windowMode,
+    relativeWindow,
+    followNow,
     granularity: toGranularity(params.get("granularity")),
     metric: toMetric(params.get("metric")),
     cameraIds: toList(params.get("cameras")),
@@ -116,9 +161,21 @@ export function readHistoryFiltersFromSearch(
 
 export function writeHistoryFiltersToSearch(state: HistoryFilterState): string {
   const params = new URLSearchParams();
-  params.set("from", state.from.toISOString());
-  params.set("to", state.to.toISOString());
-  params.set("granularity", state.granularity);
+  const relativeBounds = resolveRelativeWindow(state.relativeWindow, state.to);
+  const matchesRelativeWindow =
+    state.from.getTime() === relativeBounds.from.getTime() &&
+    state.to.getTime() === relativeBounds.to.getTime();
+
+  if (state.windowMode === "relative" && matchesRelativeWindow) {
+    params.set("window", state.relativeWindow);
+    params.set("follow", state.followNow ? "1" : "0");
+  } else {
+    params.set("from", state.from.toISOString());
+    params.set("to", state.to.toISOString());
+  }
+  if (state.granularity !== "1h") {
+    params.set("granularity", state.granularity);
+  }
   if (state.metric !== null) {
     params.set("metric", state.metric);
   }
