@@ -314,6 +314,61 @@ describe("HistoryPage", () => {
     );
   });
 
+  test("renders zero coverage as no detections instead of generic emptiness", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") {
+        return Promise.resolve(
+          jsonResponse(
+            historySeriesResponse({
+              class_names: ["car"],
+              rows: [{ bucket: "2026-04-12T00:00:00Z", values: { car: 0 }, total_count: 0 }],
+              coverage_status: "zero",
+              coverage_by_bucket: [{ bucket: "2026-04-12T00:00:00Z", status: "zero", reason: null }],
+            }),
+          ),
+        );
+      }
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage();
+
+    await screen.findByText(/telemetry was valid and no detections/i);
+    expect(screen.getAllByText(/no detections/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId("history-trend-chart")).toBeInTheDocument();
+  });
+
+  test("renders no telemetry coverage distinctly", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") {
+        return Promise.resolve(
+          jsonResponse(
+            historySeriesResponse({
+              class_names: ["car"],
+              rows: [{ bucket: "2026-04-12T00:00:00Z", values: { car: 0 }, total_count: 0 }],
+              coverage_status: "no_telemetry",
+              coverage_by_bucket: [{ bucket: "2026-04-12T00:00:00Z", status: "no_telemetry", reason: null }],
+            }),
+          ),
+        );
+      }
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage();
+
+    await screen.findByText(/no usable telemetry/i);
+    expect(screen.getAllByText(/no telemetry/i).length).toBeGreaterThanOrEqual(1);
+  });
+
   test("keeps last 7 days preset as the active relative window", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-04-27T12:34:56.000Z"));

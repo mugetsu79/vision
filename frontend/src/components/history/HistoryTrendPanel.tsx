@@ -55,6 +55,12 @@ export function HistoryTrendPanel({
           onBucketSelect={onBucketSelect}
         />
       </Suspense>
+      {coverage.status !== "populated" ? (
+        <div className="border-t border-white/8 px-4 py-3 text-sm text-[#dce6f7]">
+          <span className="font-semibold">{coverage.label}</span>
+          <span className="ml-2 text-[#93a7c5]">{coverage.message}</span>
+        </div>
+      ) : null}
     </section>
   );
 }
