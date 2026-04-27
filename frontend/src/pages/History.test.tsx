@@ -18,13 +18,25 @@ vi.mock("@/components/history/HistoryTrendChart", () => ({
   HistoryTrendChart: ({
     series,
     metric,
+    onBucketSelect,
   }: {
-    series: { classNames: string[]; points: unknown[]; includeSpeed?: boolean; speedThreshold?: number | null };
+    series: {
+      classNames: string[];
+      points: Array<{ bucket: string }>;
+      includeSpeed?: boolean;
+      speedThreshold?: number | null;
+      selectedBucket?: string | null;
+    };
     metric?: string;
+    onBucketSelect?: (bucket: string) => void;
   }) => (
-    <div data-testid="history-trend-chart">
-      {series.classNames.join(",")}::{series.points.length}::speed={String(!!series.includeSpeed)}::threshold={String(series.speedThreshold ?? "none")}::metric={metric ?? "none"}
-    </div>
+    <button
+      type="button"
+      data-testid="history-trend-chart"
+      onClick={() => onBucketSelect?.(series.points[0]?.bucket ?? "")}
+    >
+      {series.classNames.join(",")}::{series.points.length}::speed={String(!!series.includeSpeed)}::threshold={String(series.speedThreshold ?? "none")}::metric={metric ?? "none"}::selected={series.selectedBucket ?? "none"}
+    </button>
   ),
 }));
 
@@ -189,7 +201,7 @@ describe("HistoryPage", () => {
       expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
       expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
     });
-    expect(screen.getByLabelText(/metric/i)).toHaveValue("count_events");
+    expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
     expect(screen.getByTestId("history-trend-chart")).toHaveTextContent("metric=count_events");
   });
 
@@ -218,7 +230,7 @@ describe("HistoryPage", () => {
       expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
       expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
     });
-    expect(screen.getByLabelText(/metric/i)).toHaveValue("count_events");
+    expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
   });
 
   test("defaults to count_events with no explicit camera filter when the camera inventory has count boundaries", async () => {
@@ -240,7 +252,7 @@ describe("HistoryPage", () => {
       expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
       expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
     });
-    expect(screen.getByLabelText(/metric/i)).toHaveValue("count_events");
+    expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
   });
 
   test("stays on occupancy when only some selected cameras have count boundaries", async () => {
@@ -267,7 +279,7 @@ describe("HistoryPage", () => {
       expect(findHistoryRequest("/api/v1/history/series", "occupancy")).toBeDefined();
       expect(findHistoryRequest("/api/v1/history/classes", "occupancy")).toBeDefined();
     });
-    expect(screen.getByLabelText(/metric/i)).toHaveValue("occupancy");
+    expect(screen.getByLabelText("Metric")).toHaveValue("occupancy");
   });
 
   test("toggling Show speed and entering a threshold updates the chart props", async () => {
@@ -338,7 +350,7 @@ describe("HistoryPage", () => {
     renderPage("/history?metric=observations");
 
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /raw tracking samples and speed telemetry/i })).toBeInTheDocument(),
+      expect(screen.getByRole("heading", { name: /raw tracking samples/i })).toBeInTheDocument(),
     );
     expect(
       screen.getByRole("option", {
@@ -400,5 +412,31 @@ describe("HistoryPage", () => {
     expect(createObjectURL).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalled();
     clickSpy.mockRestore();
+  });
+
+  test("renders split review and selects a bucket from the chart", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByTestId("history-trend-chart");
+    expect(screen.getByRole("heading", { name: /bucket review/i })).toBeInTheDocument();
+    expect(screen.getByText(/select a bucket/i)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("history-trend-chart"));
+
+    expect(screen.getByText(/apr 12/i)).toBeInTheDocument();
+    expect(screen.getByText(/28 visible samples/i)).toBeInTheDocument();
+  });
+
+  test("shows following-now controls by default and resumes from absolute windows", async () => {
+    const user = userEvent.setup();
+    renderPage("/history?from=2026-04-01T00%3A00%3A00.000Z&to=2026-04-02T00%3A00%3A00.000Z");
+
+    await screen.findByTestId("history-trend-chart");
+    expect(screen.getByText(/absolute window/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /resume following now/i }));
+
+    expect(screen.getByText(/following now/i)).toBeInTheDocument();
   });
 });

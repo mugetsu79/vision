@@ -1,12 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
+import { HistoryBucketDetail } from "@/components/history/HistoryBucketDetail";
+import { HistoryToolbar } from "@/components/history/HistoryToolbar";
+import { HistoryTrendPanel } from "@/components/history/HistoryTrendPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { productBrand } from "@/brand/product";
 import { COCO_CLASSES } from "@/lib/coco-classes";
+import { buildBucketDetails, buildDisplaySeries, getCoverageCopy } from "@/lib/history-workbench";
 import {
   type HistoryFilterState,
   type HistoryMetric,
@@ -23,12 +25,7 @@ import {
   useHistorySeries,
 } from "@/hooks/use-history";
 
-const HistoryTrendChart = lazy(async () => ({
-  default: (await import("@/components/history/HistoryTrendChart")).HistoryTrendChart,
-}));
-
 export function HistoryPage() {
-  const brandName = productBrand.name;
   const location = useLocation();
   const navigate = useNavigate();
   const { data: cameras = [] } = useCameras();
@@ -39,6 +36,7 @@ export function HistoryPage() {
   const [showAllClasses, setShowAllClasses] = useState(false);
   const [isDownloading, setIsDownloading] = useState<"csv" | "parquet" | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
 
   const applyState = useCallback(
     (next: HistoryFilterState | ((prev: HistoryFilterState) => HistoryFilterState)) => {
@@ -67,10 +65,17 @@ export function HistoryPage() {
     setState(parsed);
   }, [location.search]);
 
+  const resolvedWindow = useMemo(() => {
+    if (state.windowMode === "relative") {
+      return resolveRelativeWindow(state.relativeWindow);
+    }
+    return { from: state.from, to: state.to };
+  }, [state.from, state.relativeWindow, state.to, state.windowMode]);
+
   const filters = useMemo(
     () => ({
-      from: state.from,
-      to: state.to,
+      from: resolvedWindow.from,
+      to: resolvedWindow.to,
       granularity: state.granularity,
       metric: resolveHistoryMetric(state.metric, cameras, state.cameraIds),
       cameraIds: state.cameraIds,
@@ -80,14 +85,14 @@ export function HistoryPage() {
     }),
     [
       cameras,
+      resolvedWindow.from,
+      resolvedWindow.to,
       state.cameraIds,
       state.classNames,
-      state.from,
       state.granularity,
       state.metric,
       state.speed,
       state.speedThreshold,
-      state.to,
     ],
   );
 
@@ -96,8 +101,8 @@ export function HistoryPage() {
 
   const { data, isLoading, error } = useHistorySeries(filters);
   const { data: classesData } = useHistoryClasses({
-    from: state.from,
-    to: state.to,
+    from: resolvedWindow.from,
+    to: resolvedWindow.to,
     metric,
     cameraIds: state.cameraIds,
   });
@@ -111,21 +116,15 @@ export function HistoryPage() {
     return COCO_CLASSES.filter((name) => !seen.has(name));
   }, [observedClasses]);
 
-  const chartSeries = useMemo(
-    () => ({
-      classNames: data?.class_names ?? [],
-      points: data?.rows ?? [],
-      includeSpeed: state.speed,
-      speedThreshold: state.speedThreshold ?? null,
-      speedClassesUsed: data?.speed_classes_used ?? null,
-    }),
-    [data, state.speed, state.speedThreshold],
-  );
-
-  const totalCount = useMemo(
-    () => (data?.rows ?? []).reduce((sum, row) => sum + row.total_count, 0),
+  const displaySeries = useMemo(
+    () => (data ? buildDisplaySeries(data) : { classNames: [], points: [] }),
     [data],
   );
+  const bucketDetail = useMemo(
+    () => (data ? buildBucketDetails(data, selectedBucket) : null),
+    [data, selectedBucket],
+  );
+  const coverageCopy = useMemo(() => getCoverageCopy(data?.coverage_status), [data?.coverage_status]);
 
   const chartEmpty = !isLoading && (data?.rows.length ?? 0) === 0;
   const granularityBumped = data?.granularity_adjusted === true;
@@ -152,45 +151,30 @@ export function HistoryPage() {
     });
   }
 
+  function resumeFollowingNow() {
+    applyState((prev) => {
+      const { from, to } = resolveRelativeWindow("last_24h");
+      return { ...prev, from, to, windowMode: "relative", relativeWindow: "last_24h", followNow: true };
+    });
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,29,0.98),rgba(5,8,14,0.96))]">
-        <div className="border-b border-white/8 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9db3d3]">History</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-[0.01em] text-[#f4f8ff]">
-                {metricCopy.label} and speed telemetry.
-              </h2>
-              <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                {brandName} aggregates {metricCopy.description} and speeds in buckets so operators can pivot across
-                classes and cameras without reshaping data in the browser.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">{state.granularity}</Badge>
-              <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-                {totalCount} {metricCopy.countLabel}
-              </Badge>
-              {granularityBumped ? (
-                <Badge className="border-[#705e29] bg-[#1d1b08]/80 text-[#ffe5a8]">
-                  granularity adjusted to {data?.granularity}
-                </Badge>
-              ) : null}
-              {speedCapped ? (
-                <Badge className="border-[#705e29] bg-[#1d1b08]/80 text-[#ffe5a8]">
-                  speed panel capped at 20 classes
-                </Badge>
-              ) : null}
-            </div>
-          </div>
-        </div>
+      <div className="space-y-4">
+        <HistoryToolbar
+          state={state}
+          metric={metric}
+          onChange={applyState}
+          onResumeFollowing={resumeFollowingNow}
+        />
 
-        <div className="space-y-6 px-6 py-6">
+        <section className="rounded-lg border border-white/10 bg-[#07101c] p-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea8cf]">Time window</p>
-              <p className="mt-2 text-sm text-[#dce6f7]">{formatRangeLabel(state.from, state.to)}</p>
+            <div className="text-sm text-[#dce6f7]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Export</p>
+              <p className="mt-1">
+                {metricCopy.description} as {state.granularity} buckets.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -217,36 +201,60 @@ export function HistoryPage() {
               </Button>
             </div>
           </div>
+          {downloadError ? <p className="mt-3 text-sm text-[#f0b7c1]">{downloadError}</p> : null}
+        </section>
 
-          <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(8,13,22,0.98),rgba(4,7,12,0.96))]">
-            {isLoading ? (
-              <div className="px-6 py-16 text-sm text-[#93a7c5]">Loading history…</div>
-            ) : error ? (
-              <div className="px-6 py-16 text-sm text-[#f0b7c1]">
-                {error instanceof Error ? error.message : "Failed to load history."}
-              </div>
-            ) : chartEmpty ? (
-              <div className="space-y-4 px-6 py-16 text-sm text-[#93a7c5]">
-                <p>{metricCopy.emptyState}</p>
-                <Button onClick={() => applyPresetRange("last_7d")}>Try last 7 days</Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {speedRequestedButEmpty ? (
-                  <p className="px-6 pt-4 text-sm text-[#ffd28a]">
-                    None of the selected classes have speed data in this window — try widening the range or check camera homography.
-                  </p>
-                ) : null}
-                <Suspense fallback={<div className="px-6 py-16 text-sm text-[#93a7c5]">Loading chart…</div>}>
-                  <HistoryTrendChart className="px-2 py-4" metric={metric} series={chartSeries} />
-                </Suspense>
-              </div>
-            )}
+        {isLoading ? (
+          <div className="rounded-lg border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
+            Loading history...
           </div>
-
-          {downloadError ? <p className="text-sm text-[#f0b7c1]">{downloadError}</p> : null}
-        </div>
-      </section>
+        ) : error ? (
+          <div className="rounded-lg border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#f0b7c1]">
+            {error instanceof Error ? error.message : "Failed to load history."}
+          </div>
+        ) : chartEmpty ? (
+          <div className="space-y-4 rounded-lg border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
+            <p>{metricCopy.emptyState}</p>
+            <Button onClick={() => applyPresetRange("last_7d")}>Try last 7 days</Button>
+          </div>
+        ) : data ? (
+          <div className="space-y-3">
+            {granularityBumped ? (
+              <p className="rounded-md border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
+                Granularity adjusted to {data.granularity}.
+              </p>
+            ) : null}
+            {speedCapped ? (
+              <p className="rounded-md border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
+                Speed panel capped at 20 classes.
+              </p>
+            ) : null}
+            {speedRequestedButEmpty ? (
+              <p className="rounded-md border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
+                None of the selected classes have speed data in this window - try widening the range or check camera
+                homography.
+              </p>
+            ) : null}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <HistoryTrendPanel
+                series={{
+                  classNames: displaySeries.classNames,
+                  points: displaySeries.points,
+                  includeSpeed: state.speed,
+                  speedThreshold: state.speedThreshold ?? null,
+                  speedClassesUsed: data.speed_classes_used ?? null,
+                  selectedBucket,
+                }}
+                metric={metric}
+                granularity={data.granularity}
+                coverage={coverageCopy}
+                onBucketSelect={setSelectedBucket}
+              />
+              <HistoryBucketDetail detail={bucketDetail} metric={metric} />
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <aside className="space-y-6">
         <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(4,7,12,0.96))]">
@@ -385,12 +393,6 @@ export function HistoryPage() {
       </aside>
     </div>
   );
-}
-
-function formatRangeLabel(from: Date, to: Date): string {
-  const fmt = (d: Date) =>
-    d.toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" });
-  return `${fmt(from)} to ${fmt(to)}`;
 }
 
 function resolveHistoryMetric(
