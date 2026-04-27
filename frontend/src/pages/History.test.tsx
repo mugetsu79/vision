@@ -466,6 +466,19 @@ describe("HistoryPage", () => {
     expect(screen.getByText(/following now/i)).toBeInTheDocument();
   });
 
+  test("resuming a paused relative window preserves the selected relative window", async () => {
+    const user = userEvent.setup();
+    renderPage("/history?window=last_7d&follow=0");
+
+    await screen.findByTestId("history-trend-chart");
+    expect(screen.getByText(/paused window/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /resume following now/i }));
+
+    expect(screen.getByLabelText("Time window")).toHaveValue("last_7d");
+    expect(screen.getByText(/following now/i)).toBeInTheDocument();
+  });
+
   test("paused relative windows keep their stored bounds until resumed", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-04-27T12:34:56.000Z"));

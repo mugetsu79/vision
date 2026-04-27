@@ -164,8 +164,9 @@ export function HistoryPage() {
 
   function resumeFollowingNow() {
     applyState((prev) => {
-      const { from, to } = resolveRelativeWindow("last_24h");
-      return { ...prev, from, to, windowMode: "relative", relativeWindow: "last_24h", followNow: true };
+      const relativeWindow = prev.windowMode === "relative" ? prev.relativeWindow : "last_24h";
+      const { from, to } = resolveRelativeWindow(relativeWindow);
+      return { ...prev, from, to, windowMode: "relative", relativeWindow, followNow: true };
     });
   }
 
