@@ -164,6 +164,10 @@ class Camera(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
         nullable=False,
         default=dict,
     )
+    source_capability: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
     frame_skip: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     fps_cap: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
 

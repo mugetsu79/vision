@@ -191,10 +191,41 @@ def _default_browser_delivery_profiles() -> list[dict[str, Any]]:
     ]
 
 
+class SourceCapability(BaseModel):
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    fps: int | None = Field(default=None, ge=1)
+    codec: str | None = None
+    aspect_ratio: str | None = None
+
+
+class BrowserDeliveryProfile(BaseModel):
+    id: BrowserDeliveryProfileId
+    kind: Literal["passthrough", "transcode"]
+    w: int | None = Field(default=None, gt=0)
+    h: int | None = Field(default=None, gt=0)
+    fps: int | None = Field(default=None, ge=1)
+    reason: str | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+class DerivedBrowserProfiles(BaseModel):
+    allowed: list[BrowserDeliveryProfile]
+    unsupported: list[BrowserDeliveryProfile] = Field(default_factory=list)
+
+
+class NativeAvailability(BaseModel):
+    available: bool = True
+    reason: str | None = None
+
+
 class BrowserDeliverySettings(BaseModel):
     default_profile: BrowserDeliveryProfileId = "720p10"
     allow_native_on_demand: bool = True
     profiles: list[dict[str, Any]] = Field(default_factory=_default_browser_delivery_profiles)
+    unsupported_profiles: list[dict[str, Any]] = Field(default_factory=list)
+    native_status: NativeAvailability = Field(default_factory=NativeAvailability)
 
 
 class WorkerCameraSettings(BaseModel):
@@ -275,6 +306,14 @@ class WorkerPolygonZone(WorkerZoneBase):
 WorkerZone = WorkerLineZone | WorkerPolygonZone | LegacyZone
 
 
+class CameraCommandPayload(BaseModel):
+    active_classes: list[str] | None = None
+    tracker_type: TrackerType | None = None
+    privacy: WorkerPrivacySettings | None = None
+    attribute_rules: list[dict[str, Any]] | None = None
+    zones: list[WorkerZone] | None = None
+
+
 class WorkerConfigResponse(BaseModel):
     camera_id: UUID
     mode: ProcessingMode
@@ -343,6 +382,7 @@ class CameraResponse(BaseModel):
     homography: HomographyPayload
     privacy: PrivacySettings
     browser_delivery: BrowserDeliverySettings
+    source_capability: SourceCapability | None = None
     frame_skip: int
     fps_cap: int
     created_at: datetime

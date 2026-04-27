@@ -457,6 +457,11 @@ export interface components {
             profiles?: {
                 [key: string]: unknown;
             }[];
+            /** Unsupported Profiles */
+            unsupported_profiles?: {
+                [key: string]: unknown;
+            }[];
+            native_status?: components["schemas"]["NativeAvailability"];
         };
         /** CameraCreate */
         CameraCreate: {
@@ -542,6 +547,7 @@ export interface components {
             homography: components["schemas"]["HomographyPayload"];
             privacy: components["schemas"]["PrivacySettings"];
             browser_delivery: components["schemas"]["BrowserDeliverySettings"];
+            source_capability?: components["schemas"]["SourceCapability"] | null;
             /** Frame Skip */
             frame_skip: number;
             /** Fps Cap */
@@ -917,6 +923,16 @@ export interface components {
              */
             strength: number;
         };
+        /** NativeAvailability */
+        NativeAvailability: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /** Reason */
+            reason?: string | null;
+        };
         /**
          * ProcessingMode
          * @enum {string}
@@ -1003,6 +1019,19 @@ export interface components {
             geo_point?: {
                 [key: string]: number;
             } | null;
+        };
+        /** SourceCapability */
+        SourceCapability: {
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Fps */
+            fps?: number | null;
+            /** Codec */
+            codec?: string | null;
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
         };
         /**
          * StreamMode

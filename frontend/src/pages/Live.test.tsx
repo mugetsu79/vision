@@ -310,6 +310,90 @@ describe("LivePage", () => {
     await waitFor(() => expect(screen.queryByText("bus")).not.toBeInTheDocument());
   });
 
+  test("shows why native is unavailable for a camera", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["car", "bus"],
+            attribute_rules: [],
+            zones: [],
+            homography: {
+              src: [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+              ],
+              dst: [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+              ],
+              ref_distance_m: 10,
+            },
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [
+                { id: "native", kind: "passthrough" },
+                { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10 },
+              ],
+              native_status: {
+                available: false,
+                reason: "privacy_filtering_required",
+              },
+            },
+            source_capability: {
+              width: 1280,
+              height: 720,
+              fps: 20,
+              codec: "h264",
+              aspect_ratio: "16:9",
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/native unavailable: privacy filtering required/i),
+    ).toBeInTheDocument();
+  });
+
   test("shows telemetry stale instead of offline when the last worker frame is old", async () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(

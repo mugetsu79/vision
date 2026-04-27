@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from argus.api.contracts import SourceCapability
 from argus.core.config import Settings
 from argus.models.enums import ModelFormat, ModelTask, ProcessingMode, TrackerType
 from argus.models.tables import Camera, Model
-from argus.services.app import _camera_to_worker_config
+from argus.services.app import _camera_to_worker_config, derive_browser_profiles
+
+
+def test_source_capability_hides_1080p_above_720p_source() -> None:
+    source = SourceCapability(width=1280, height=720, fps=20, codec="h264")
+
+    profiles = derive_browser_profiles(source)
+
+    assert [profile.id for profile in profiles.allowed] == ["native", "720p10", "540p5"]
+    assert profiles.unsupported[0].id == "1080p15"
+    assert profiles.unsupported[0].reason == "source_resolution_too_small"
 
 
 def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> None:

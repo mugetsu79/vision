@@ -19,6 +19,26 @@ import { denormalizePointList, normalizePointList } from "@/components/cameras/b
 type Point = [number, number];
 type BrowserDeliveryProfile = "native" | "1080p15" | "720p10" | "540p5";
 type BoundaryType = "line" | "polygon";
+type BrowserDeliveryProfilePayload = {
+  id: BrowserDeliveryProfile;
+  kind: "passthrough" | "transcode";
+  w?: number;
+  h?: number;
+  fps?: number;
+  reason?: string | null;
+  [key: string]: unknown;
+};
+type NativeDeliveryStatus = {
+  available: boolean;
+  reason?: string | null;
+};
+type SourceCapability = {
+  width: number;
+  height: number;
+  fps?: number | null;
+  codec?: string | null;
+  aspect_ratio?: string | null;
+};
 
 type BoundaryDraft = {
   id: string;
@@ -32,6 +52,13 @@ const DEFAULT_ANALYTICS_FRAME_SIZE: FrameSize = {
   width: 1280,
   height: 720,
 };
+
+const DEFAULT_BROWSER_DELIVERY_PROFILES: BrowserDeliveryProfilePayload[] = [
+  { id: "native", kind: "passthrough" },
+  { id: "1080p15", kind: "transcode", w: 1920, h: 1080, fps: 15 },
+  { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10 },
+  { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5 },
+];
 
 export type SiteOption = { id: string; name: string };
 export type ModelOption = { id: string; name: string; version: string; classes: string[] };
@@ -52,6 +79,10 @@ export type CameraWizardData = {
   frameSkip: number;
   fpsCap: number;
   browserDeliveryProfile: BrowserDeliveryProfile;
+  browserDeliveryProfiles: BrowserDeliveryProfilePayload[];
+  unsupportedBrowserDeliveryProfiles: BrowserDeliveryProfilePayload[];
+  browserDeliveryNativeStatus: NativeDeliveryStatus;
+  sourceCapability: SourceCapability | null;
   homography: {
     src: Point[];
     dst: Point[];
@@ -78,7 +109,69 @@ function toPointTupleArray(points: number[][] | undefined): Point[] {
     .map((point) => [point[0], point[1]]);
 }
 
+function isBrowserDeliveryProfile(value: unknown): value is BrowserDeliveryProfile {
+  return (
+    value === "native" ||
+    value === "1080p15" ||
+    value === "720p10" ||
+    value === "540p5"
+  );
+}
+
+function normalizeBrowserDeliveryProfiles(
+  profiles: { [key: string]: unknown }[] | undefined,
+  fallback: BrowserDeliveryProfilePayload[] = DEFAULT_BROWSER_DELIVERY_PROFILES,
+): BrowserDeliveryProfilePayload[] {
+  if (!profiles || profiles.length === 0) {
+    return fallback;
+  }
+
+  const normalized = profiles.flatMap((profile) => {
+    if (!isBrowserDeliveryProfile(profile.id)) {
+      return [];
+    }
+    return [
+      {
+        ...profile,
+        id: profile.id,
+        kind: profile.kind === "transcode" ? "transcode" : "passthrough",
+      } satisfies BrowserDeliveryProfilePayload,
+    ];
+  });
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function resolveBrowserDeliveryProfile(
+  requestedProfile: BrowserDeliveryProfile,
+  profiles: BrowserDeliveryProfilePayload[],
+): BrowserDeliveryProfile {
+  if (profiles.some((profile) => profile.id === requestedProfile)) {
+    return requestedProfile;
+  }
+  return profiles.find((profile) => profile.id === "720p10")?.id ?? profiles[0]?.id ?? "native";
+}
+
+function formatSourceSize(sourceCapability: SourceCapability | null) {
+  if (!sourceCapability) {
+    return null;
+  }
+  return `${sourceCapability.width}×${sourceCapability.height}`;
+}
+
 function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
+  const browserDeliveryProfiles = normalizeBrowserDeliveryProfiles(
+    initialCamera?.browser_delivery?.profiles,
+  );
+  const unsupportedBrowserDeliveryProfiles = normalizeBrowserDeliveryProfiles(
+    initialCamera?.browser_delivery?.unsupported_profiles,
+    [],
+  );
+  const browserDeliveryProfile = resolveBrowserDeliveryProfile(
+    initialCamera?.browser_delivery?.default_profile ?? "720p10",
+    browserDeliveryProfiles,
+  );
+
   return {
     name: initialCamera?.name ?? "",
     siteId: initialCamera?.site_id ?? "",
@@ -94,8 +187,12 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     strength: initialCamera?.privacy.strength ?? 7,
     frameSkip: initialCamera?.frame_skip ?? 1,
     fpsCap: initialCamera?.fps_cap ?? 25,
-    browserDeliveryProfile:
-      initialCamera?.browser_delivery?.default_profile ?? "720p10",
+    browserDeliveryProfile,
+    browserDeliveryProfiles,
+    unsupportedBrowserDeliveryProfiles,
+    browserDeliveryNativeStatus:
+      initialCamera?.browser_delivery?.native_status ?? { available: true, reason: null },
+    sourceCapability: initialCamera?.source_capability ?? null,
     homography: {
       src: toPointTupleArray(initialCamera?.homography.src),
       dst: toPointTupleArray(initialCamera?.homography.dst),
@@ -105,16 +202,13 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
   };
 }
 
-function buildBrowserDelivery(defaultProfile: BrowserDeliveryProfile) {
+function buildBrowserDelivery(data: CameraWizardData) {
   return {
-    default_profile: defaultProfile,
+    default_profile: data.browserDeliveryProfile,
     allow_native_on_demand: true,
-    profiles: [
-      { id: "native", kind: "passthrough" },
-      { id: "1080p15", kind: "transcode", w: 1920, h: 1080, fps: 15 },
-      { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10 },
-      { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5 },
-    ],
+    profiles: data.browserDeliveryProfiles,
+    unsupported_profiles: data.unsupportedBrowserDeliveryProfiles,
+    native_status: data.browserDeliveryNativeStatus,
   };
 }
 
@@ -369,7 +463,7 @@ function toCreatePayload(
       method: data.method,
       strength: data.strength,
     },
-    browser_delivery: buildBrowserDelivery(data.browserDeliveryProfile),
+    browser_delivery: buildBrowserDelivery(data),
     frame_skip: data.frameSkip,
     fps_cap: data.fpsCap,
   };
@@ -399,7 +493,7 @@ function toUpdatePayload(
       method: data.method,
       strength: data.strength,
     },
-    browser_delivery: buildBrowserDelivery(data.browserDeliveryProfile),
+    browser_delivery: buildBrowserDelivery(data),
     frame_skip: data.frameSkip,
     fps_cap: data.fpsCap,
   };
@@ -441,6 +535,7 @@ export function CameraWizard({
   const isEditMode = initialCamera !== null;
   const maskedRtspPlaceholder = rtspUrlPlaceholder ?? initialCamera?.rtsp_url_masked ?? "";
   const stepTitle = steps[stepIndex];
+  const sourceSizeLabel = formatSourceSize(data.sourceCapability);
   const setupPreviewQuery = useCameraSetupPreview(
     initialCamera?.id,
     isEditMode && stepTitle === "Calibration",
@@ -1092,12 +1187,22 @@ export function CameraWizard({
                     )
                   }
                 >
-                  <option value="native">native</option>
-                  <option value="1080p15">1080p15</option>
-                  <option value="720p10">720p10</option>
-                  <option value="540p5">540p5</option>
+                  {data.browserDeliveryProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.id}
+                    </option>
+                  ))}
                 </Select>
               </label>
+              {sourceSizeLabel && data.unsupportedBrowserDeliveryProfiles.length > 0 ? (
+                <div className="space-y-1 rounded-[1.15rem] border border-[#4a3a26] bg-[#18120b] px-4 py-3 text-sm text-[#ffd9a1]">
+                  {data.unsupportedBrowserDeliveryProfiles.map((profile) => (
+                    <p key={profile.id}>
+                      Source is {sourceSizeLabel}, so {profile.id} is unavailable.
+                    </p>
+                  ))}
+                </div>
+              ) : null}
               <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
                 Analytics ingest stays native. Lower browser delivery profiles may use
                 an optional preview/transcode path to reduce bandwidth while operator

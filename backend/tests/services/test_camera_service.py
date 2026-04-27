@@ -14,6 +14,7 @@ from argus.api.contracts import (
     FrameSize,
     HomographyPayload,
     PrivacySettings,
+    SourceCapability,
     TenantContext,
 )
 from argus.core.config import Settings
@@ -55,10 +56,11 @@ class _FakeAuditLogger:
 
 class _FakeEvents:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, object]] = []
+        self.calls: list[tuple[str, object, str]] = []
 
     async def publish(self, subject: str, payload: object) -> None:
-        self.calls.append((subject, payload))
+        serialized = payload.model_dump_json()  # type: ignore[attr-defined]
+        self.calls.append((subject, payload, serialized))
 
 
 @pytest.mark.asyncio
@@ -224,6 +226,145 @@ async def test_update_camera_accepts_full_wizard_payload(monkeypatch: pytest.Mon
     assert isinstance(audit_meta, dict)
     assert audit_meta["site_id"] == str(site_id)
     assert audit_meta["primary_model_id"] == str(model_id)
+
+
+@pytest.mark.asyncio
+async def test_update_camera_reprobes_source_capability_when_rtsp_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=True,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    site_id = uuid4()
+    model_id = uuid4()
+    camera_id = uuid4()
+    now = datetime.now(tz=UTC)
+    audit_logger = _FakeAuditLogger()
+    camera = Camera(
+        id=camera_id,
+        site_id=site_id,
+        edge_node_id=None,
+        name="Dock Camera",
+        rtsp_url_encrypted=app_services.encrypt_rtsp_url("rtsp://old-camera/live", settings),
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=model_id,
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography={
+            "src": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "dst": [[0, 0], [5, 0], [5, 5], [0, 5]],
+            "ref_distance_m": 5.0,
+        },
+        privacy={
+            "blur_faces": False,
+            "blur_plates": False,
+            "method": "gaussian",
+            "strength": 7,
+        },
+        browser_delivery=BrowserDeliverySettings(default_profile="1080p15").model_dump(
+            mode="python"
+        ),
+        source_capability=None,
+        frame_skip=1,
+        fps_cap=25,
+        created_at=now,
+        updated_at=now,
+    )
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=audit_logger,
+        events=None,
+    )
+    user = AuthenticatedUser(
+        subject="admin-1",
+        email="admin@argus.local",
+        role=RoleEnum.ADMIN,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=None,
+        claims={},
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=user,
+    )
+    model = Model(
+        id=model_id,
+        name="Vezor YOLO12n",
+        version="lab-imac",
+        task=ModelTask.DETECT,
+        path="/models/yolo12n.onnx",
+        format=ModelFormat.ONNX,
+        classes=["person"],
+        input_shape={"width": 640, "height": 640},
+        sha256="a" * 64,
+        size_bytes=1024,
+        license="lab",
+    )
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    async def fake_load_model(session, model_id_arg):  # noqa: ANN001
+        assert model_id_arg == model_id
+        return model
+
+    def fake_probe_rtsp_source(rtsp_url, *, settings):  # noqa: ANN001
+        assert rtsp_url == "rtsp://new-camera/live"
+        assert settings is not None
+        return SourceCapability(
+            width=1280,
+            height=720,
+            fps=20,
+            codec="h264",
+            aspect_ratio="16:9",
+        )
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(app_services, "_load_model", fake_load_model)
+    monkeypatch.setattr(app_services, "probe_rtsp_source", fake_probe_rtsp_source)
+
+    response = await service.update_camera(
+        tenant_context,
+        camera_id,
+        CameraUpdate(
+            rtsp_url="rtsp://new-camera/live",
+            browser_delivery=BrowserDeliverySettings(default_profile="1080p15"),
+        ),
+    )
+
+    assert camera.source_capability == {
+        "width": 1280,
+        "height": 720,
+        "fps": 20,
+        "codec": "h264",
+        "aspect_ratio": "16:9",
+    }
+    assert response.source_capability == SourceCapability(
+        width=1280,
+        height=720,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    assert response.browser_delivery.default_profile == "720p10"
+    assert [profile["id"] for profile in response.browser_delivery.profiles] == [
+        "native",
+        "720p10",
+        "540p5",
+    ]
+    assert response.browser_delivery.unsupported_profiles[0]["id"] == "1080p15"
 
 
 @pytest.mark.asyncio
@@ -1720,10 +1861,11 @@ async def test_update_camera_publishes_zone_command_to_running_worker(
     await service.update_camera(tenant_context, camera_id, payload)
 
     assert events.calls
-    subject, command = events.calls[0]
+    subject, command, serialized = events.calls[0]
     assert subject == f"cmd.camera.{camera_id}"
-    assert isinstance(command, dict)
-    assert command["zones"] == [
+    assert "room-split" in serialized
+    command_payload = command.model_dump(mode="python")  # type: ignore[attr-defined]
+    assert command_payload["zones"] == [
         {
             "id": "room-split",
             "type": "line",
@@ -1731,4 +1873,4 @@ async def test_update_camera_publishes_zone_command_to_running_worker(
             "class_names": ["person"],
         }
     ]
-    assert command["active_classes"] == ["person"]
+    assert command_payload["active_classes"] == ["person"]

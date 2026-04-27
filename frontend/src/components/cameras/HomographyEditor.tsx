@@ -57,7 +57,7 @@ export function HomographyEditor({
   function updateDestinationPoints(pointsNormalized: readonly (readonly [number, number])[]) {
     onChange({
       src,
-      dst: denormalizePointList(pointsNormalized, resolvedDestinationFrameSize),
+      dst: denormalizeDestinationPointList(pointsNormalized, resolvedDestinationFrameSize),
       refDistanceM,
     });
   }
@@ -162,7 +162,7 @@ export function HomographyEditor({
               maxPoints={4}
               mode="points"
               pointLabelPrefix="Destination"
-              value={normalizePointList(dst, resolvedDestinationFrameSize)}
+              value={normalizeDestinationPointList(dst, resolvedDestinationFrameSize)}
               variant="destination"
               onChange={updateDestinationPoints}
             />
@@ -240,4 +240,23 @@ function derivePlaneSize(points: Point[], fallback: FrameSize): FrameSize {
 function roundPlaneEdge(value: number) {
   const padded = Math.max(100, value + 20);
   return Math.ceil(padded / 10) * 10;
+}
+
+function normalizeDestinationPointList(
+  points: readonly Point[],
+  frameSize: FrameSize,
+) {
+  return normalizePointList(
+    points.map(([x, y]) => [x, frameSize.height - y]),
+    frameSize,
+  );
+}
+
+function denormalizeDestinationPointList(
+  points: readonly (readonly [number, number])[],
+  frameSize: FrameSize,
+) {
+  return denormalizePointList(points, frameSize).map(
+    ([x, y]): Point => [x, frameSize.height - y],
+  );
 }

@@ -147,6 +147,14 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
                         {camera.processing_mode} processing ·{" "}
                         {camera.browser_delivery?.default_profile ?? "720p10"}
                       </p>
+                      {camera.browser_delivery?.native_status?.available === false ? (
+                        <p className="mt-2 text-xs text-[#ffd28a]">
+                          Native unavailable:{" "}
+                          {formatNativeAvailabilityReason(
+                            camera.browser_delivery.native_status.reason,
+                          )}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -273,4 +281,8 @@ function heartbeatBadgeClass(status: "unknown" | "fresh" | "stale"): string {
     return "border-[#6a4b1c] bg-[#24180d] text-[#ffd9a9]";
   }
   return "border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]";
+}
+
+function formatNativeAvailabilityReason(reason: string | null | undefined): string {
+  return reason ? reason.replaceAll("_", " ") : "not available";
 }

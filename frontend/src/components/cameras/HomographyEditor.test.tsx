@@ -49,4 +49,53 @@ describe("HomographyEditor", () => {
       refDistanceM: 12.5,
     });
   });
+
+  test("renders destination world coordinates with y increasing upward", () => {
+    render(
+      <HomographyEditor
+        destinationFrameSize={{ width: 100, height: 100 }}
+        dst={[
+          [0, 0],
+          [100, 100],
+        ]}
+        onChange={vi.fn()}
+        refDistanceM={12.5}
+        src={[]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /destination point 1/i })).toHaveStyle({
+      left: "0%",
+      top: "100%",
+    });
+    expect(screen.getByRole("button", { name: /destination point 2/i })).toHaveStyle({
+      left: "100%",
+      top: "0%",
+    });
+  });
+
+  test("maps destination clicks back into upward world coordinates", () => {
+    const onChange = vi.fn();
+
+    render(
+      <HomographyEditor
+        destinationFrameSize={{ width: 100, height: 100 }}
+        dst={[]}
+        onChange={onChange}
+        refDistanceM={12.5}
+        src={[]}
+      />,
+    );
+
+    const canvas = screen.getByLabelText(/destination points canvas/i);
+    stubRect(canvas, 100, 100);
+
+    fireEvent.click(canvas, { clientX: 25, clientY: 10 });
+
+    expect(onChange).toHaveBeenCalledWith({
+      src: [],
+      dst: [[25, 90]],
+      refDistanceM: 12.5,
+    });
+  });
 });

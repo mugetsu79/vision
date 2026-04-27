@@ -19,11 +19,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
+    BrowserDeliveryProfile,
+    BrowserDeliveryProfileId,
     BrowserDeliverySettings,
+    CameraCommandPayload,
     CameraCreate,
     CameraResponse,
     CameraSetupPreviewResponse,
     CameraUpdate,
+    DerivedBrowserProfiles,
     EdgeHeartbeatRequest,
     EdgeHeartbeatResponse,
     EdgeRegisterRequest,
@@ -39,10 +43,12 @@ from argus.api.contracts import (
     ModelCreate,
     ModelResponse,
     ModelUpdate,
+    NativeAvailability,
     PrivacySettings,
     SiteCreate,
     SiteResponse,
     SiteUpdate,
+    SourceCapability,
     StreamOfferRequest,
     StreamOfferResponse,
     TelemetryEnvelope,
@@ -84,6 +90,7 @@ from argus.streaming.webrtc import (
 )
 from argus.vision.camera import _probe_video_dimensions, capture_still_image
 from argus.vision.model_metadata import resolve_model_classes
+from argus.vision.source_probe import probe_rtsp_source
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
@@ -585,6 +592,15 @@ class CameraService:
                 tenant_context=tenant_context,
                 privacy=payload.privacy.model_dump(mode="python"),
             )
+            source_capability = await _probe_source_capability(
+                payload.rtsp_url,
+                settings=self.settings,
+            )
+            browser_delivery = _build_source_aware_browser_delivery(
+                requested=payload.browser_delivery,
+                source_capability=source_capability,
+                privacy=privacy,
+            )
             camera = Camera(
                 site_id=payload.site_id,
                 edge_node_id=None,
@@ -601,7 +617,12 @@ class CameraService:
                 ),
                 homography=payload.homography.model_dump(mode="python"),
                 privacy=privacy,
-                browser_delivery=payload.browser_delivery.model_dump(mode="python"),
+                browser_delivery=browser_delivery.model_dump(mode="python"),
+                source_capability=(
+                    source_capability.model_dump(mode="python")
+                    if source_capability is not None
+                    else None
+                ),
                 frame_skip=payload.frame_skip,
                 fps_cap=payload.fps_cap,
             )
@@ -646,19 +667,51 @@ class CameraService:
                     )
             if "site_id" in update_data:
                 await _load_site(session, tenant_context.tenant_id, update_data["site_id"])
+            source_capability_changed = False
             if "rtsp_url" in update_data:
+                rtsp_url = str(update_data.pop("rtsp_url"))
                 camera.rtsp_url_encrypted = encrypt_rtsp_url(
-                    str(update_data.pop("rtsp_url")),
+                    rtsp_url,
                     self.settings,
                 )
+                source_capability = await _probe_source_capability(
+                    rtsp_url,
+                    settings=self.settings,
+                )
+                update_data["source_capability"] = (
+                    source_capability.model_dump(mode="python")
+                    if source_capability is not None
+                    else None
+                )
+                source_capability_changed = True
             if "privacy" in update_data:
                 update_data["privacy"] = _apply_tenant_privacy_policy(
                     settings=self.settings,
                     tenant_context=tenant_context,
                     privacy=dict(update_data["privacy"]),
                 )
-            if "browser_delivery" in update_data and update_data["browser_delivery"] is not None:
-                update_data["browser_delivery"] = dict(update_data["browser_delivery"])
+            if (
+                ("browser_delivery" in update_data and update_data["browser_delivery"] is not None)
+                or "privacy" in update_data
+                or source_capability_changed
+            ):
+                requested_delivery = BrowserDeliverySettings.model_validate(
+                    update_data.get(
+                        "browser_delivery",
+                        camera.browser_delivery
+                        or BrowserDeliverySettings().model_dump(mode="python"),
+                    )
+                )
+                source_payload = update_data.get("source_capability", camera.source_capability)
+                update_data["browser_delivery"] = _build_source_aware_browser_delivery(
+                    requested=requested_delivery,
+                    source_capability=(
+                        SourceCapability.model_validate(source_payload)
+                        if source_payload is not None
+                        else None
+                    ),
+                    privacy=dict(update_data.get("privacy", camera.privacy)),
+                ).model_dump(mode="python")
             if "homography" in update_data and update_data["homography"] is not None:
                 update_data["homography"] = dict(update_data["homography"])
             if "zones" in update_data and update_data["zones"] is not None:
@@ -692,13 +745,16 @@ class CameraService:
     async def _publish_camera_command(self, camera: Camera) -> None:
         if self.events is None:
             return
-        command = {
-            "active_classes": list(camera.active_classes),
-            "tracker_type": camera.tracker_type.value,
-            "privacy": dict(camera.privacy),
-            "attribute_rules": list(camera.attribute_rules),
-            "zones": [_worker_zone_payload(zone) for zone in camera.zones],
-        }
+        command = CameraCommandPayload(
+            active_classes=list(camera.active_classes),
+            tracker_type=camera.tracker_type,
+            privacy=WorkerPrivacySettings(
+                blur_faces=bool(camera.privacy.get("blur_faces", True)),
+                blur_plates=bool(camera.privacy.get("blur_plates", True)),
+            ),
+            attribute_rules=list(camera.attribute_rules),
+            zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
+        )
         try:
             await self.events.publish(f"cmd.camera.{camera.id}", command)
         except Exception:
@@ -2040,11 +2096,16 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         tracker_type=camera.tracker_type,
         active_classes=list(camera.active_classes),
         attribute_rules=list(camera.attribute_rules),
-        zones=list(camera.zones),
+        zones=cast(Any, list(camera.zones)),
         homography=HomographyPayload.model_validate(camera.homography),
         privacy=PrivacySettings.model_validate(camera.privacy),
         browser_delivery=BrowserDeliverySettings.model_validate(
             camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+        ),
+        source_capability=(
+            SourceCapability.model_validate(camera.source_capability)
+            if camera.source_capability is not None
+            else None
         ),
         frame_skip=camera.frame_skip,
         fps_cap=camera.fps_cap,
@@ -2096,7 +2157,7 @@ def _camera_to_worker_config(
         ),
         active_classes=list(camera.active_classes),
         attribute_rules=list(camera.attribute_rules),
-        zones=[_worker_zone_payload(zone) for zone in camera.zones],
+        zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
         homography=_homography_to_worker_payload(camera.homography),
     )
 
@@ -2110,22 +2171,105 @@ def _model_to_worker_settings(model: Model) -> WorkerModelSettings:
     )
 
 
+def derive_browser_profiles(source: SourceCapability | None) -> DerivedBrowserProfiles:
+    candidates = [
+        BrowserDeliveryProfile.model_validate(profile)
+        for profile in BrowserDeliverySettings().profiles
+    ]
+    if source is None:
+        return DerivedBrowserProfiles(allowed=candidates, unsupported=[])
+
+    allowed: list[BrowserDeliveryProfile] = []
+    unsupported: list[BrowserDeliveryProfile] = []
+    for candidate in candidates:
+        if candidate.kind == "passthrough":
+            allowed.append(candidate)
+            continue
+        if (
+            candidate.w is not None
+            and candidate.h is not None
+            and candidate.w <= source.width
+            and candidate.h <= source.height
+        ):
+            allowed.append(candidate)
+            continue
+        unsupported.append(
+            candidate.model_copy(update={"reason": "source_resolution_too_small"})
+        )
+    return DerivedBrowserProfiles(allowed=allowed, unsupported=unsupported)
+
+
+def _build_source_aware_browser_delivery(
+    *,
+    requested: BrowserDeliverySettings,
+    source_capability: SourceCapability | None,
+    privacy: dict[str, object],
+) -> BrowserDeliverySettings:
+    derived_profiles = derive_browser_profiles(source_capability)
+    allowed_profile_ids = {profile.id for profile in derived_profiles.allowed}
+    default_profile = _resolve_default_browser_profile(
+        requested.default_profile,
+        allowed_profile_ids,
+    )
+    native_available = (
+        requested.allow_native_on_demand
+        and not bool(privacy.get("blur_faces", True))
+        and not bool(privacy.get("blur_plates", True))
+    )
+    native_reason = None
+    if not requested.allow_native_on_demand:
+        native_reason = "native_disabled"
+    elif not native_available:
+        native_reason = "privacy_filtering_required"
+
+    return BrowserDeliverySettings(
+        default_profile=default_profile,
+        allow_native_on_demand=requested.allow_native_on_demand,
+        profiles=[
+            profile.model_dump(exclude_none=True, mode="python")
+            for profile in derived_profiles.allowed
+        ],
+        unsupported_profiles=[
+            profile.model_dump(exclude_none=True, mode="python")
+            for profile in derived_profiles.unsupported
+        ],
+        native_status=NativeAvailability(available=native_available, reason=native_reason),
+    )
+
+
+def _resolve_default_browser_profile(
+    requested_profile: BrowserDeliveryProfileId,
+    allowed_profile_ids: set[BrowserDeliveryProfileId],
+) -> BrowserDeliveryProfileId:
+    for profile_id in (requested_profile, "720p10", "540p5", "native"):
+        if profile_id in allowed_profile_ids:
+            return profile_id
+    return "native"
+
+
+async def _probe_source_capability(
+    rtsp_url: str,
+    *,
+    settings: Settings,
+) -> SourceCapability | None:
+    if not settings.enable_startup_services:
+        return None
+    try:
+        return await asyncio.to_thread(probe_rtsp_source, rtsp_url, settings=settings)
+    except RuntimeError:
+        logger.exception("Failed to probe source capability for camera source.")
+        return None
+
+
 def _resolve_worker_stream_settings(
     *,
     browser_delivery: BrowserDeliverySettings,
     fps_cap: int,
 ) -> WorkerStreamSettings:
-    profiles_by_id = {
-        str(profile["id"]): dict(profile)
-        for profile in BrowserDeliverySettings().profiles
-    }
-    profiles_by_id.update(
-        {
-            str(profile["id"]): dict(profile)
-            for profile in browser_delivery.profiles
-            if "id" in profile
-        }
-    )
+    profile_payloads = browser_delivery.profiles or BrowserDeliverySettings().profiles
+    profiles_by_id = {str(profile["id"]): dict(profile) for profile in profile_payloads}
+    if "native" not in profiles_by_id:
+        profiles_by_id["native"] = {"id": "native", "kind": "passthrough"}
     selected = profiles_by_id.get(browser_delivery.default_profile)
     if selected is None:
         selected = profiles_by_id["native"]

@@ -131,7 +131,16 @@ function CamerasContent() {
                       <TD className="font-medium text-[#eef4ff]">{camera.name}</TD>
                       <TD>{siteNameById.get(camera.site_id) ?? "Unknown site"}</TD>
                       <TD>{camera.processing_mode}</TD>
-                      <TD>{camera.browser_delivery?.default_profile ?? "720p10"}</TD>
+                      <TD>
+                        <div className="font-medium text-[#eef4ff]">
+                          {camera.browser_delivery?.default_profile ?? "720p10"}
+                        </div>
+                        {camera.source_capability ? (
+                          <div className="mt-1 text-xs text-[#93a7c5]">
+                            source {`${camera.source_capability.width}×${camera.source_capability.height}`}
+                          </div>
+                        ) : null}
+                      </TD>
                       <TD>{camera.tracker_type}</TD>
                       <TD>
                         <div className="flex gap-2">

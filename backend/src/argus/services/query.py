@@ -6,17 +6,12 @@ from typing import Protocol, cast
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from argus.api.contracts import QueryRequest, QueryResponse, TenantContext
+from argus.api.contracts import CameraCommandPayload, QueryRequest, QueryResponse, TenantContext
 from argus.core.events import NatsJetStreamClient
 from argus.models.tables import AuditLog, Camera, Model, Site, Tenant
-
-
-class CameraCommandPayload(BaseModel):
-    active_classes: list[str]
 
 
 @dataclass(slots=True, frozen=True)
