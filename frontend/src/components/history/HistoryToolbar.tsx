@@ -1,21 +1,31 @@
 import { Button } from "@/components/ui/button";
+import { HistorySearchBox } from "@/components/history/HistorySearchBox";
 import { Select } from "@/components/ui/select";
 import {
   type HistoryFilterState,
   type HistoryMetric,
   historyMetricCopy,
 } from "@/lib/history-url-state";
+import type { HistorySearchResult } from "@/lib/history-search";
 
 export function HistoryToolbar({
   state,
   metric,
+  search,
+  searchResults,
   onChange,
   onResumeFollowing,
+  onSearchChange,
+  onSearchSelect,
 }: {
   state: HistoryFilterState;
   metric: HistoryMetric;
+  search: string;
+  searchResults: HistorySearchResult[];
   onChange: (next: HistoryFilterState | ((previous: HistoryFilterState) => HistoryFilterState)) => void;
   onResumeFollowing: () => void;
+  onSearchChange: (value: string) => void;
+  onSearchSelect: (result: HistorySearchResult) => void;
 }) {
   const isFollowingNow = state.windowMode === "relative" && state.followNow;
 
@@ -36,6 +46,15 @@ export function HistoryToolbar({
             </Button>
           ) : null}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <HistorySearchBox
+          value={search}
+          results={searchResults}
+          onChange={onSearchChange}
+          onSelect={onSearchSelect}
+        />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">

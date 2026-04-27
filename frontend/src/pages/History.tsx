@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { COCO_CLASSES } from "@/lib/coco-classes";
+import { buildHistorySearchResults, type HistorySearchResult } from "@/lib/history-search";
 import { buildBucketDetails, buildDisplaySeries, getCoverageCopy } from "@/lib/history-workbench";
 import {
   type HistoryFilterState,
@@ -38,6 +39,7 @@ export function HistoryPage() {
   const [isDownloading, setIsDownloading] = useState<"csv" | "parquet" | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const applyState = useCallback(
     (next: HistoryFilterState | ((prev: HistoryFilterState) => HistoryFilterState)) => {
@@ -118,6 +120,16 @@ export function HistoryPage() {
     () => classesData?.classes ?? [],
     [classesData],
   );
+  const searchResults = useMemo(
+    () =>
+      buildHistorySearchResults({
+        query: search,
+        cameras,
+        classes: observedClasses,
+        series: data,
+      }),
+    [cameras, data, observedClasses, search],
+  );
   const unseenCocoClasses = useMemo(() => {
     const seen = new Set(observedClasses.map((c) => c.class_name));
     return COCO_CLASSES.filter((name) => !seen.has(name));
@@ -170,14 +182,35 @@ export function HistoryPage() {
     });
   }
 
+  function selectSearchResult(result: HistorySearchResult) {
+    if (result.type === "camera") {
+      applyState((previous) => ({ ...previous, cameraIds: [result.cameraId] }));
+    }
+    if (result.type === "class") {
+      applyState((previous) => ({ ...previous, classNames: [result.className] }));
+    }
+    if (result.type === "boundary" && result.cameraId) {
+      const cameraId = result.cameraId;
+      applyState((previous) => ({ ...previous, cameraIds: [cameraId] }));
+    }
+    if (result.type === "bucket") {
+      setSelectedBucket(result.bucket);
+    }
+    setSearch("");
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-4">
         <HistoryToolbar
           state={state}
           metric={metric}
+          search={search}
+          searchResults={searchResults}
           onChange={applyState}
           onResumeFollowing={resumeFollowingNow}
+          onSearchChange={setSearch}
+          onSearchSelect={selectSearchResult}
         />
 
         <section className="rounded-lg border border-white/10 bg-[#07101c] p-4">

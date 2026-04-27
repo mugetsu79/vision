@@ -544,4 +544,28 @@ describe("HistoryPage", () => {
       ),
     );
   });
+
+  test("unified search selects cameras classes and buckets", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByTestId("history-trend-chart");
+    await user.type(screen.getByLabelText(/search history/i), "car");
+    await user.click(screen.getByRole("button", { name: "car" }));
+
+    await waitFor(() => {
+      const request = recordedRequests.find(
+        (url) =>
+          url.pathname === "/api/v1/history/series" &&
+          url.searchParams.get("class_names") === "car",
+      );
+      expect(request).toBeDefined();
+    });
+
+    await user.clear(screen.getByLabelText(/search history/i));
+    await user.type(screen.getByLabelText(/search history/i), "spike");
+    await user.click(screen.getByRole("button", { name: /28 events/i }));
+
+    expect(screen.getByText(/28 visible samples/i)).toBeInTheDocument();
+  });
 });
