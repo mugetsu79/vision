@@ -57,7 +57,7 @@ describe("history-url-state", () => {
     expect(parsed.to).toEqual(new Date("2026-04-02T00:00:00.000Z"));
   });
 
-  test("serializes mismatched relative state as absolute bounds", () => {
+  test("serializes mismatched relative state as a relative window", () => {
     const params = writeHistoryFiltersToSearch({
       from: new Date("2026-04-20T12:34:00.000Z"),
       to: new Date("2026-04-27T12:34:00.000Z"),
@@ -73,10 +73,10 @@ describe("history-url-state", () => {
     });
     const parsed = new URLSearchParams(params);
 
-    expect(parsed.get("from")).toBe("2026-04-20T12:34:00.000Z");
-    expect(parsed.get("to")).toBe("2026-04-27T12:34:00.000Z");
-    expect(parsed.has("window")).toBe(false);
-    expect(parsed.has("follow")).toBe(false);
+    expect(parsed.get("window")).toBe("last_24h");
+    expect(parsed.get("follow")).toBe("1");
+    expect(parsed.has("from")).toBe(false);
+    expect(parsed.has("to")).toBe(false);
   });
 
   test("round trips full state", () => {

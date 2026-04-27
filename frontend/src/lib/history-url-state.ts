@@ -161,12 +161,7 @@ export function readHistoryFiltersFromSearch(
 
 export function writeHistoryFiltersToSearch(state: HistoryFilterState): string {
   const params = new URLSearchParams();
-  const relativeBounds = resolveRelativeWindow(state.relativeWindow, state.to);
-  const matchesRelativeWindow =
-    state.from.getTime() === relativeBounds.from.getTime() &&
-    state.to.getTime() === relativeBounds.to.getTime();
-
-  if (state.windowMode === "relative" && matchesRelativeWindow) {
+  if (state.windowMode === "relative") {
     params.set("window", state.relativeWindow);
     params.set("follow", state.followNow ? "1" : "0");
   } else {
