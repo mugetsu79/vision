@@ -27,6 +27,7 @@ vi.mock("@/lib/auth", () => ({
 import { AppShell } from "@/components/layout/AppShell";
 import { createQueryClient } from "@/app/query-client";
 import { oidcManager } from "@/lib/auth";
+import { workspaceNavGroups } from "@/components/layout/TopNav";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
@@ -83,13 +84,24 @@ describe("AppShell", () => {
     expect(within(operationsNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
     expect(within(operationsNav).getByRole("link", { name: "History" })).toBeInTheDocument();
     expect(within(operationsNav).getByRole("link", { name: "Incidents" })).toBeInTheDocument();
-    expect(within(configurationNav).getByRole("link", { name: "Settings" })).toBeInTheDocument();
+    expect(within(configurationNav).getByRole("link", { name: "Operations" })).toBeInTheDocument();
     expect(within(configurationNav).getByRole("link", { name: "Sites" })).toBeInTheDocument();
     expect(within(configurationNav).getByRole("link", { name: "Cameras" })).toBeInTheDocument();
     expect(screen.queryByText(/management/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/configuration surfaces stay one step away/i),
     ).not.toBeInTheDocument();
+  });
+
+  test("labels the settings route as operations", () => {
+    const allItems = workspaceNavGroups.flatMap((group) => group.items);
+
+    expect(allItems).toContainEqual(
+      expect.objectContaining({
+        label: "Operations",
+        to: "/settings",
+      }),
+    );
   });
 
   test("lets operators collapse the grouped section rail without losing the icon rail", async () => {

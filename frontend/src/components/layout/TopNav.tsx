@@ -37,7 +37,7 @@ export const workspaceNavGroups = [
     items: [
       { label: "Sites", to: "/sites", icon: MapPinned },
       { label: "Cameras", to: "/cameras", icon: Video },
-      { label: "Settings", to: "/settings", icon: Settings2 },
+      { label: "Operations", to: "/settings", icon: Settings2 },
     ],
   },
 ] as const satisfies readonly WorkspaceNavGroup[];
