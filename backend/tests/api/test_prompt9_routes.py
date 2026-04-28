@@ -7,18 +7,23 @@ from uuid import UUID, uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from argus.api.contracts import ExportArtifact, HistoryPoint, IncidentResponse, TenantContext
+from argus.api.contracts import (
+    ExportArtifact,
+    HistoryPoint,
+    IncidentResponse,
+    TenantContext,
+)
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, get_current_user
 from argus.main import create_app
-from argus.models.enums import RoleEnum
+from argus.models.enums import IncidentReviewStatus, RoleEnum
 
 
-def _sample_user() -> AuthenticatedUser:
+def _sample_user(role: RoleEnum = RoleEnum.VIEWER) -> AuthenticatedUser:
     return AuthenticatedUser(
         subject="user-1",
         email="analyst@argus.local",
-        role=RoleEnum.VIEWER,
+        role=role,
         issuer="http://localhost:8080/realms/argus-dev",
         realm="argus-dev",
         is_superadmin=False,
@@ -67,6 +72,7 @@ class RecordingHistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: object,
     ) -> list[HistoryPoint]:
         self.last_query = {
             "tenant_id": context.tenant_id,
@@ -95,6 +101,7 @@ class RecordingHistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: object,
         include_speed: bool = False,
         speed_threshold: float | None = None,
     ) -> dict[str, object]:
@@ -130,6 +137,7 @@ class RecordingHistoryService:
         starts_at: datetime,
         ends_at: datetime,
         format_name: str,
+        metric: object,
     ) -> ExportArtifact:
         self.last_export = {
             "tenant_id": context.tenant_id,
@@ -150,6 +158,7 @@ class RecordingHistoryService:
 class RecordingIncidentService:
     def __init__(self) -> None:
         self.last_query: dict[str, object] | None = None
+        self.review_calls: list[dict[str, object]] = []
 
     async def list_incidents(
         self,
@@ -157,12 +166,14 @@ class RecordingIncidentService:
         *,
         camera_id: UUID | None,
         incident_type: str | None,
+        review_status: IncidentReviewStatus | None,
         limit: int,
     ) -> list[IncidentResponse]:
         self.last_query = {
             "tenant_id": context.tenant_id,
             "camera_id": camera_id,
             "incident_type": incident_type,
+            "review_status": review_status,
             "limit": limit,
         }
         return [
@@ -175,8 +186,44 @@ class RecordingIncidentService:
                 snapshot_url="https://minio.local/signed/incidents/1.jpg",
                 clip_url="https://minio.local/signed/incidents/1.mjpeg",
                 storage_bytes=2_097_152,
+                review_status=review_status or IncidentReviewStatus.PENDING,
             )
         ]
+
+    async def update_review_state(
+        self,
+        context: TenantContext,
+        *,
+        incident_id: UUID,
+        review_status: IncidentReviewStatus,
+    ) -> IncidentResponse:
+        self.review_calls.append(
+            {
+                "tenant_id": context.tenant_id,
+                "incident_id": incident_id,
+                "review_status": review_status,
+                "subject": context.user.subject,
+            }
+        )
+        reviewed_at = (
+            datetime.now(tz=UTC) if review_status == IncidentReviewStatus.REVIEWED else None
+        )
+        reviewed_by_subject = (
+            context.user.subject if review_status == IncidentReviewStatus.REVIEWED else None
+        )
+        return IncidentResponse(
+            id=incident_id,
+            camera_id=uuid4(),
+            ts=datetime.now(tz=UTC),
+            type="ppe-missing",
+            payload={"severity": "high"},
+            snapshot_url=None,
+            clip_url="https://minio.local/signed/incidents/1.mjpeg",
+            storage_bytes=2_097_152,
+            review_status=review_status,
+            reviewed_at=reviewed_at,
+            reviewed_by_subject=reviewed_by_subject,
+        )
 
 
 def _create_test_app(
@@ -269,6 +316,7 @@ async def test_history_series_route_returns_chart_ready_rows() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "granularity": "1d",
+        "metric": None,
         "class_names": ["car", "bus"],
         "rows": [
             {
@@ -284,6 +332,12 @@ async def test_history_series_route_returns_chart_ready_rows() -> None:
         "granularity_adjusted": False,
         "speed_classes_capped": False,
         "speed_classes_used": None,
+        "effective_from": None,
+        "effective_to": None,
+        "bucket_count": 0,
+        "bucket_span": None,
+        "coverage_status": "populated",
+        "coverage_by_bucket": [],
     }
     assert history.last_series_query == {
         "tenant_id": UUID(str(user.tenant_context)),
@@ -336,7 +390,7 @@ async def test_export_route_accepts_multi_filters_and_extended_granularity() -> 
 
 
 @pytest.mark.asyncio
-async def test_incidents_route_passes_camera_type_and_limit_filters() -> None:
+async def test_incidents_route_passes_camera_type_limit_and_review_status_filters() -> None:
     user = _sample_user()
     incidents = RecordingIncidentService()
     app = _create_test_app(user=user, history=RecordingHistoryService(), incidents=incidents)
@@ -351,6 +405,7 @@ async def test_incidents_route_passes_camera_type_and_limit_filters() -> None:
             params={
                 "camera_id": str(camera_id),
                 "type": "ppe-missing",
+                "review_status": "pending",
                 "limit": "25",
             },
         )
@@ -359,9 +414,60 @@ async def test_incidents_route_passes_camera_type_and_limit_filters() -> None:
     assert response.json()[0]["type"] == "ppe-missing"
     assert response.json()[0]["clip_url"] == "https://minio.local/signed/incidents/1.mjpeg"
     assert response.json()[0]["storage_bytes"] == 2_097_152
+    assert response.json()[0]["review_status"] == "pending"
     assert incidents.last_query == {
         "tenant_id": UUID(str(user.tenant_context)),
         "camera_id": camera_id,
         "incident_type": "ppe-missing",
+        "review_status": IncidentReviewStatus.PENDING,
         "limit": 25,
     }
+
+
+@pytest.mark.asyncio
+async def test_incident_review_route_requires_operator_and_calls_service() -> None:
+    user = _sample_user(role=RoleEnum.OPERATOR)
+    incidents = RecordingIncidentService()
+    app = _create_test_app(user=user, history=RecordingHistoryService(), incidents=incidents)
+    incident_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.patch(
+            f"/api/v1/incidents/{incident_id}/review",
+            json={"review_status": "reviewed"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(incident_id)
+    assert response.json()["review_status"] == "reviewed"
+    assert response.json()["reviewed_by_subject"] == "user-1"
+    assert incidents.review_calls == [
+        {
+            "tenant_id": UUID(str(user.tenant_context)),
+            "incident_id": incident_id,
+            "review_status": IncidentReviewStatus.REVIEWED,
+            "subject": "user-1",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_incident_review_route_rejects_viewer() -> None:
+    user = _sample_user(role=RoleEnum.VIEWER)
+    incidents = RecordingIncidentService()
+    app = _create_test_app(user=user, history=RecordingHistoryService(), incidents=incidents)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.patch(
+            f"/api/v1/incidents/{uuid4()}/review",
+            json={"review_status": "reviewed"},
+        )
+
+    assert response.status_code == 403
+    assert incidents.review_calls == []

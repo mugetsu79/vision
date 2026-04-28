@@ -89,6 +89,7 @@ from argus.models.enums import (
     DetectorCapability,
     HistoryCoverageStatus,
     HistoryMetric,
+    IncidentReviewStatus,
     ModelFormat,
     ModelTask,
     ProcessingMode,
@@ -2166,8 +2167,13 @@ def _history_camera_filters(
 
 
 class IncidentService:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        audit_logger: DatabaseAuditLogger | None = None,
+    ) -> None:
         self.session_factory = session_factory
+        self.audit_logger = audit_logger
 
     async def list_incidents(
         self,
@@ -2175,6 +2181,7 @@ class IncidentService:
         *,
         camera_id: UUID | None,
         incident_type: str | None,
+        review_status: IncidentReviewStatus | None,
         limit: int,
     ) -> list[IncidentResponse]:
         async with self.session_factory() as session:
@@ -2192,21 +2199,84 @@ class IncidentService:
                 statement = statement.where(Incident.camera_id == camera_id)
             if incident_type is not None:
                 statement = statement.where(Incident.type == incident_type)
+            if review_status is not None:
+                statement = statement.where(Incident.review_status == review_status)
             incidents = (await session.execute(statement)).all()
         return [
-            IncidentResponse(
-                id=incident.id,
-                camera_id=incident.camera_id,
-                camera_name=camera_name,
-                ts=incident.ts,
-                type=incident.type,
-                payload=incident.payload,
-                snapshot_url=incident.snapshot_url,
-                clip_url=incident.clip_url,
-                storage_bytes=incident.storage_bytes,
-            )
+            _incident_response(incident, camera_name)
             for incident, camera_name in incidents
         ]
+
+    async def update_review_state(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID,
+        review_status: IncidentReviewStatus,
+    ) -> IncidentResponse:
+        async with self.session_factory() as session:
+            statement = (
+                select(Incident, Camera.name)
+                .join(Camera, Camera.id == Incident.camera_id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Incident.id == incident_id)
+            )
+            row = (await session.execute(statement)).one_or_none()
+            if row is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Incident not found.",
+                )
+
+            incident, camera_name = row
+            previous_review_status = incident.review_status
+            changed = previous_review_status != review_status
+            if changed:
+                incident.review_status = review_status
+                if review_status == IncidentReviewStatus.REVIEWED:
+                    incident.reviewed_at = datetime.now(tz=UTC)
+                    incident.reviewed_by_subject = tenant_context.user.subject
+                else:
+                    incident.reviewed_at = None
+                    incident.reviewed_by_subject = None
+                await session.commit()
+                await session.refresh(incident)
+
+            response = _incident_response(incident, camera_name)
+
+        if changed and self.audit_logger is not None:
+            await self.audit_logger.record(
+                tenant_context=tenant_context,
+                action="incident.review",
+                target=f"incident:{incident_id}",
+                meta={
+                    "review_status": review_status.value,
+                    "previous_review_status": previous_review_status.value,
+                    "camera_id": str(response.camera_id),
+                    "incident_type": response.type,
+                    "user_subject": tenant_context.user.subject,
+                },
+            )
+
+        return response
+
+
+def _incident_response(incident: Incident, camera_name: str | None) -> IncidentResponse:
+    return IncidentResponse(
+        id=incident.id,
+        camera_id=incident.camera_id,
+        camera_name=camera_name,
+        ts=incident.ts,
+        type=incident.type,
+        payload=incident.payload,
+        snapshot_url=incident.snapshot_url,
+        clip_url=incident.clip_url,
+        storage_bytes=incident.storage_bytes,
+        review_status=incident.review_status,
+        reviewed_at=incident.reviewed_at,
+        reviewed_by_subject=incident.reviewed_by_subject,
+    )
 
 
 class StreamService:
@@ -2436,7 +2506,7 @@ def build_app_services(
             edge_service=edge_service,
         ),
         history=HistoryService(db.session_factory),
-        incidents=IncidentService(db.session_factory),
+        incidents=IncidentService(db.session_factory, audit_logger),
         streams=StreamService(db.session_factory, mediamtx, settings),
         query=query_service,
         telemetry=NatsTelemetryService(
