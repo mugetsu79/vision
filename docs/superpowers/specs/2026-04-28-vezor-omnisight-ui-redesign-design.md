@@ -95,7 +95,7 @@ Recommended route and page naming:
 - `Live` remains in nav, but page title becomes **Live Intelligence**.
 - `History` becomes **Patterns** or **History & Patterns** in page title.
 - `Incidents` becomes **Evidence Desk** in nav and page title.
-- `Cameras` becomes **Scenes** or **Scene Setup** in page title, with camera-specific fields inside.
+- `Cameras` becomes **Scenes** in nav and **Scene Setup** in page title, with camera-specific fields inside.
 - `Settings` should become **Operations** in nav and eventually route naming.
 
 Recommended component copy:
@@ -343,18 +343,11 @@ Visual QA should check:
 - Does the shell feel alive but not distracting?
 - Are runtime states honest and not overpromised?
 
-## Open Decisions
+## Implementation Defaults
 
-The following decisions should be made before implementation:
-
-- Whether to add a dedicated `/overview` route now or reserve the bold overview for a later milestone.
-- Whether nav label `History` should become `Patterns` immediately or `History & Patterns` first.
-- Whether `Cameras` should become `Scenes` in nav immediately or only in page title for one release.
-- Whether the 3D lens should be CSS/Canvas first or use Three.js for richer rendering.
-
-Recommended defaults:
+Use these defaults for the first implementation pass:
 
 - Do not add `/overview` in the first implementation pass.
 - Use `History & Patterns` first; move to `Patterns` after users understand the scope.
-- Use `Scenes` in page title first, keep `Cameras` in nav for one release if risk is high.
+- Use `Scenes` in nav immediately and `Scene Setup` as the page title; keep `/cameras` only as the route path for this pass.
 - Start with CSS/Canvas for the shell field; use Three.js only for a bold entry/overview render if performance remains good.
