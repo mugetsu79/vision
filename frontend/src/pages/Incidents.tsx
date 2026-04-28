@@ -166,7 +166,7 @@ export function IncidentsPage() {
 
         <div className="px-6 py-6">
           {isLoading ? (
-            <StatusMessage>Loading captured incident records...</StatusMessage>
+            <StatusMessage>Loading evidence records...</StatusMessage>
           ) : error ? (
             <StatusMessage tone="danger">{errorMessage}</StatusMessage>
           ) : incidents.length === 0 ? (
@@ -372,7 +372,7 @@ function IncidentFactsPanel({
 
   return (
     <aside
-      aria-label="Incident facts"
+      aria-label="Facts"
       className="min-w-0 rounded-lg border border-white/10 bg-white/[0.025]"
     >
       <div className="border-b border-white/8 px-4 py-3">

@@ -134,6 +134,8 @@ describe("IncidentsPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /review queue/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /facts/i })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: /^facts$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: /incident facts/i })).not.toBeInTheDocument();
     expect(
       screen.getByText(/move from signal to decision/i),
     ).toBeInTheDocument();

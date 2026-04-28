@@ -133,6 +133,8 @@ describe("CamerasPage", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: /scene setup/i })).toBeInTheDocument();
+    expect(screen.getByText(/^Scenes$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Cameras$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no cameras yet/i)).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: /add camera/i }));
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
