@@ -71,7 +71,7 @@ function historySeriesPayload() {
   };
 }
 
-test("history renders quickly, CSV export works, and incidents show signed previews", async ({
+test("history renders quickly, CSV export works, and incidents cover review flow", async ({
   page,
 }) => {
   await page.route("**/api/v1/cameras", async (route) => {
@@ -107,19 +107,83 @@ test("history renders quickly, CSV export works, and incidents show signed previ
     });
   });
 
+  let incident: {
+    id: string;
+    camera_id: string;
+    camera_name: string;
+    ts: string;
+    type: string;
+    payload: { hard_hat: boolean; severity: string };
+    snapshot_url: string | null;
+    clip_url: string;
+    storage_bytes: number;
+    review_status: "pending" | "reviewed";
+    reviewed_at: string | null;
+    reviewed_by_subject: string | null;
+  } = {
+    id: "99999999-9999-9999-9999-999999999999",
+    camera_id: "11111111-1111-1111-1111-111111111111",
+    camera_name: "Forklift Gate",
+    ts: "2026-04-18T10:15:00Z",
+    type: "ppe-missing",
+    payload: { hard_hat: false, severity: "high" },
+    snapshot_url: null,
+    clip_url: "https://minio.local/signed/incidents/forklift-gate.mjpeg",
+    storage_bytes: 2097152,
+    review_status: "pending",
+    reviewed_at: null,
+    reviewed_by_subject: null,
+  };
+
   await page.route("**/api/v1/incidents**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (
+      request.method() === "PATCH" &&
+      url.pathname === `/api/v1/incidents/${incident.id}/review`
+    ) {
+      const body = request.postDataJSON() as { review_status?: string };
+      incident =
+        body.review_status === "reviewed"
+          ? {
+              ...incident,
+              review_status: "reviewed",
+              reviewed_at: "2026-04-18T10:20:00Z",
+              reviewed_by_subject: "admin-dev",
+            }
+          : {
+              ...incident,
+              review_status: "pending",
+              reviewed_at: null,
+              reviewed_by_subject: null,
+            };
+
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(incident),
+      });
+      return;
+    }
+
+    if (request.method() === "GET" && url.pathname === "/api/v1/incidents") {
+      const reviewStatus = url.searchParams.get("review_status");
+      const incidents =
+        !reviewStatus || reviewStatus === "all" || reviewStatus === incident.review_status
+          ? [incident]
+          : [];
+
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(incidents),
+      });
+      return;
+    }
+
     await route.fulfill({
+      status: 404,
       contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "99999999-9999-9999-9999-999999999999",
-          camera_id: "11111111-1111-1111-1111-111111111111",
-          ts: "2026-04-18T10:15:00Z",
-          type: "ppe-missing",
-          payload: { hard_hat: false, severity: "high" },
-          snapshot_url: "https://minio.local/signed/incidents/forklift-gate.jpg",
-        },
-      ]),
+      body: JSON.stringify({ detail: "Not found" }),
     });
   });
 
@@ -173,10 +237,21 @@ test("history renders quickly, CSV export works, and incidents show signed previ
 
   await operationsLink(page, "Incidents").click();
   await expect(page).toHaveURL(/\/incidents$/);
+  await expect(page.getByRole("heading", { name: "Queue" })).toBeVisible();
   await expect(
-    page.getByRole("img", { name: /incident preview for forklift gate/i }),
+    page.getByRole("complementary", { name: "Incident facts" }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Forklift Gate" })).toBeVisible();
+  const evidence = page.getByRole("region", { name: /selected evidence/i });
+  await expect(evidence.getByText("Clip-only evidence")).toBeVisible();
+  await expect(evidence.getByRole("link", { name: "Open clip" })).toBeVisible();
+
+  await evidence.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByText(/no incident records match/i)).toBeVisible();
+
+  await page.getByLabel("Review status").selectOption("reviewed");
+  const reviewedEvidence = page.getByRole("region", { name: /selected evidence/i });
+  await expect(reviewedEvidence.getByRole("heading", { name: "Forklift Gate" })).toBeVisible();
+  await expect(reviewedEvidence.getByRole("button", { name: "Reopen" })).toBeVisible();
 });
 
 test("history filter state survives navigation via URL", async ({ page }) => {
