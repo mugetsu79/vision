@@ -317,6 +317,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/fleet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Fleet Overview */
+        get: operations["get_fleet_overview_api_v1_operations_fleet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Bootstrap Material */
+        post: operations["create_bootstrap_material_api_v1_operations_bootstrap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/history": {
         parameters: {
             query?: never;
@@ -491,6 +525,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BrowserDeliveryProfile */
+        BrowserDeliveryProfile: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "native" | "1080p15" | "720p10" | "540p5";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "passthrough" | "transcode";
+            /** W */
+            w?: number | null;
+            /** H */
+            h?: number | null;
+            /** Fps */
+            fps?: number | null;
+            /** Reason */
+            reason?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** BrowserDeliverySettings */
         BrowserDeliverySettings: {
             /**
@@ -541,9 +598,7 @@ export interface components {
                 [key: string]: unknown;
             }[];
             /** Zones */
-            zones?: {
-                [key: string]: unknown;
-            }[];
+            zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[];
             homography: components["schemas"]["HomographyPayload"];
             privacy?: components["schemas"]["PrivacySettings"];
             browser_delivery?: components["schemas"]["BrowserDeliverySettings"];
@@ -663,9 +718,7 @@ export interface components {
                 [key: string]: unknown;
             }[] | null;
             /** Zones */
-            zones?: {
-                [key: string]: unknown;
-            }[] | null;
+            zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[] | null;
             homography?: components["schemas"]["HomographyPayload"] | null;
             privacy?: components["schemas"]["PrivacySettings"] | null;
             browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
@@ -743,6 +796,168 @@ export interface components {
             overlay_network_hints?: {
                 [key: string]: unknown;
             };
+        };
+        /** FleetBootstrapRequest */
+        FleetBootstrapRequest: {
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Hostname */
+            hostname: string;
+            /** Version */
+            version: string;
+        };
+        /** FleetBootstrapResponse */
+        FleetBootstrapResponse: {
+            /**
+             * Edge Node Id
+             * Format: uuid
+             */
+            edge_node_id: string;
+            /** Api Key */
+            api_key: string;
+            /** Nats Nkey Seed */
+            nats_nkey_seed: string;
+            /** Subjects */
+            subjects: string[];
+            /** Mediamtx Url */
+            mediamtx_url: string;
+            /** Mediamtx Username */
+            mediamtx_username?: string | null;
+            /** Mediamtx Password */
+            mediamtx_password?: string | null;
+            /** Overlay Network Hints */
+            overlay_network_hints?: {
+                [key: string]: unknown;
+            };
+            /** Dev Compose Command */
+            dev_compose_command: string;
+            /** Supervisor Environment */
+            supervisor_environment?: {
+                [key: string]: string;
+            };
+        };
+        /** FleetCameraWorkerSummary */
+        FleetCameraWorkerSummary: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Camera Name */
+            camera_name: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Node Id */
+            node_id?: string | null;
+            /** Node Hostname */
+            node_hostname?: string | null;
+            processing_mode: components["schemas"]["ProcessingMode"];
+            desired_state: components["schemas"]["WorkerDesiredState"];
+            runtime_status: components["schemas"]["WorkerRuntimeStatus"];
+            /**
+             * Lifecycle Owner
+             * @enum {string}
+             */
+            lifecycle_owner: "manual_dev" | "central_supervisor" | "edge_supervisor" | "none";
+            /** Dev Run Command */
+            dev_run_command?: string | null;
+            /** Detail */
+            detail?: string | null;
+        };
+        /** FleetDeliveryDiagnostic */
+        FleetDeliveryDiagnostic: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Camera Name */
+            camera_name: string;
+            processing_mode: components["schemas"]["ProcessingMode"];
+            /** Assigned Node Id */
+            assigned_node_id?: string | null;
+            source_capability?: components["schemas"]["SourceCapability"] | null;
+            /**
+             * Default Profile
+             * @enum {string}
+             */
+            default_profile: "native" | "1080p15" | "720p10" | "540p5";
+            /** Available Profiles */
+            available_profiles?: components["schemas"]["BrowserDeliveryProfile"][];
+            native_status?: components["schemas"]["NativeAvailability"];
+            /**
+             * Selected Stream Mode
+             * @enum {string}
+             */
+            selected_stream_mode: "passthrough" | "transcode";
+        };
+        /**
+         * FleetLifecycleMode
+         * @enum {string}
+         */
+        FleetLifecycleMode: "manual_dev" | "supervised" | "mixed";
+        /**
+         * FleetNodeStatus
+         * @enum {string}
+         */
+        FleetNodeStatus: "healthy" | "stale" | "offline" | "unknown";
+        /** FleetNodeSummary */
+        FleetNodeSummary: {
+            /** Id */
+            id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "central" | "edge";
+            /** Hostname */
+            hostname: string;
+            /** Site Id */
+            site_id?: string | null;
+            status: components["schemas"]["FleetNodeStatus"];
+            /** Version */
+            version?: string | null;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /** Assigned Camera Ids */
+            assigned_camera_ids?: string[];
+            /** Reported Camera Count */
+            reported_camera_count?: number | null;
+        };
+        /** FleetOverviewResponse */
+        FleetOverviewResponse: {
+            mode: components["schemas"]["FleetLifecycleMode"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            summary: components["schemas"]["FleetSummary"];
+            /** Nodes */
+            nodes: components["schemas"]["FleetNodeSummary"][];
+            /** Camera Workers */
+            camera_workers: components["schemas"]["FleetCameraWorkerSummary"][];
+            /** Delivery Diagnostics */
+            delivery_diagnostics: components["schemas"]["FleetDeliveryDiagnostic"][];
+        };
+        /** FleetSummary */
+        FleetSummary: {
+            /** Desired Workers */
+            desired_workers: number;
+            /** Running Workers */
+            running_workers: number;
+            /** Stale Nodes */
+            stale_nodes: number;
+            /** Offline Nodes */
+            offline_nodes: number;
+            /** Native Unavailable Cameras */
+            native_unavailable_cameras: number;
         };
         /** FrameSize */
         FrameSize: {
@@ -1329,6 +1544,11 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * WorkerDesiredState
+         * @enum {string}
+         */
+        WorkerDesiredState: "desired" | "not_desired" | "manual" | "supervised";
         /** WorkerLineZone */
         WorkerLineZone: {
             /** Id */
@@ -1404,6 +1624,11 @@ export interface components {
             /** Http Fallback Url */
             http_fallback_url?: string | null;
         };
+        /**
+         * WorkerRuntimeStatus
+         * @enum {string}
+         */
+        WorkerRuntimeStatus: "running" | "stale" | "offline" | "unknown" | "not_reported";
         /** WorkerStreamSettings */
         WorkerStreamSettings: {
             /**
@@ -2204,6 +2429,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EdgeHeartbeatResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_fleet_overview_api_v1_operations_fleet_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FleetOverviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_bootstrap_material_api_v1_operations_bootstrap_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FleetBootstrapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FleetBootstrapResponse"];
                 };
             };
             /** @description Validation Error */
