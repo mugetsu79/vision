@@ -9,7 +9,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID
 
 import httpx
@@ -36,6 +36,13 @@ from argus.api.contracts import (
     EdgeRegisterRequest,
     EdgeRegisterResponse,
     ExportArtifact,
+    FleetCameraWorkerSummary,
+    FleetDeliveryDiagnostic,
+    FleetLifecycleMode,
+    FleetNodeStatus,
+    FleetNodeSummary,
+    FleetOverviewResponse,
+    FleetSummary,
     FrameSize,
     HistoryBucketCoverage,
     HistoryClassesResponse,
@@ -57,6 +64,8 @@ from argus.api.contracts import (
     StreamOfferResponse,
     TelemetryEnvelope,
     TenantContext,
+    WorkerDesiredState,
+    WorkerRuntimeStatus,
     WorkerCameraSettings,
     WorkerConfigResponse,
     WorkerModelSettings,
@@ -958,6 +967,138 @@ class EdgeService:
             )
             await session.commit()
         return EdgeHeartbeatResponse(status="ok", received_at=datetime.now(tz=UTC))
+
+
+class OperationsService:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: Settings,
+        edge_service: EdgeService | None = None,
+    ) -> None:
+        self.session_factory = session_factory
+        self.settings = settings
+        self.edge_service = edge_service
+
+    async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
+        now = datetime.now(tz=UTC)
+        async with self.session_factory() as session:
+            edge_rows = (
+                await session.execute(
+                    select(EdgeNode, Site)
+                    .join(Site, Site.id == EdgeNode.site_id)
+                    .where(Site.tenant_id == tenant_context.tenant_id)
+                    .order_by(EdgeNode.hostname)
+                )
+            ).all()
+            camera_rows = (
+                await session.execute(
+                    select(Camera, Site)
+                    .join(Site, Site.id == Camera.site_id)
+                    .where(Site.tenant_id == tenant_context.tenant_id)
+                    .order_by(Camera.name)
+                )
+            ).all()
+
+        edge_by_id = {edge.id: edge for edge, _site in edge_rows}
+        assigned_camera_ids: dict[UUID, list[UUID]] = {edge.id: [] for edge, _site in edge_rows}
+        for camera, _site in camera_rows:
+            if camera.edge_node_id in assigned_camera_ids:
+                assigned_camera_ids[camera.edge_node_id].append(camera.id)
+
+        nodes: list[FleetNodeSummary] = [
+            FleetNodeSummary(
+                id=None,
+                kind="central",
+                hostname="central",
+                status=FleetNodeStatus.UNKNOWN,
+                assigned_camera_ids=[
+                    camera.id
+                    for camera, _site in camera_rows
+                    if camera.edge_node_id is None
+                    and camera.processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}
+                ],
+            )
+        ]
+        for edge, site in edge_rows:
+            node_status = _fleet_node_status(edge.last_seen_at, now)
+            nodes.append(
+                FleetNodeSummary(
+                    id=edge.id,
+                    kind="edge",
+                    hostname=edge.hostname,
+                    site_id=site.id,
+                    status=node_status,
+                    version=edge.version,
+                    last_seen_at=edge.last_seen_at,
+                    assigned_camera_ids=assigned_camera_ids.get(edge.id, []),
+                    reported_camera_count=None,
+                )
+            )
+
+        camera_workers: list[FleetCameraWorkerSummary] = []
+        delivery_diagnostics: list[FleetDeliveryDiagnostic] = []
+        for camera, site in camera_rows:
+            desired, runtime, owner, detail = _derive_worker_lifecycle(
+                camera=camera,
+                edge_by_id=edge_by_id,
+                now=now,
+            )
+            camera_workers.append(
+                FleetCameraWorkerSummary(
+                    camera_id=camera.id,
+                    camera_name=camera.name,
+                    site_id=site.id,
+                    node_id=camera.edge_node_id,
+                    node_hostname=(
+                        edge_by_id[camera.edge_node_id].hostname
+                        if camera.edge_node_id in edge_by_id
+                        else None
+                    ),
+                    processing_mode=camera.processing_mode,
+                    desired_state=desired,
+                    runtime_status=runtime,
+                    lifecycle_owner=owner,
+                    dev_run_command=(
+                        _central_dev_run_command(camera.id) if owner == "manual_dev" else None
+                    ),
+                    detail=detail,
+                )
+            )
+            delivery_diagnostics.append(_camera_delivery_diagnostic(camera))
+
+        summary = FleetSummary(
+            desired_workers=sum(
+                1
+                for worker in camera_workers
+                if worker.desired_state
+                in {
+                    WorkerDesiredState.DESIRED,
+                    WorkerDesiredState.MANUAL,
+                    WorkerDesiredState.SUPERVISED,
+                }
+            ),
+            running_workers=sum(
+                1
+                for worker in camera_workers
+                if worker.runtime_status == WorkerRuntimeStatus.RUNNING
+            ),
+            stale_nodes=sum(1 for node in nodes if node.status == FleetNodeStatus.STALE),
+            offline_nodes=sum(1 for node in nodes if node.status == FleetNodeStatus.OFFLINE),
+            native_unavailable_cameras=sum(
+                1
+                for diagnostic in delivery_diagnostics
+                if diagnostic.native_status.available is False
+            ),
+        )
+        return FleetOverviewResponse(
+            mode=FleetLifecycleMode.MANUAL_DEV,
+            generated_at=now,
+            summary=summary,
+            nodes=nodes,
+            camera_workers=camera_workers,
+            delivery_diagnostics=delivery_diagnostics,
+        )
 
 
 class HistoryService:
@@ -2186,12 +2327,18 @@ def build_app_services(
             else None
         ),
     )
+    edge_service = EdgeService(db.session_factory, settings, events, audit_logger)
     return AppServices(
         tenancy=TenancyService(db.session_factory, settings),
         sites=SiteService(db.session_factory, audit_logger),
         cameras=CameraService(db.session_factory, settings, audit_logger, events),
         models=ModelService(db.session_factory, audit_logger),
-        edge=EdgeService(db.session_factory, settings, events, audit_logger),
+        edge=edge_service,
+        operations=OperationsService(
+            db.session_factory,
+            settings,
+            edge_service=edge_service,
+        ),
         history=HistoryService(db.session_factory),
         incidents=IncidentService(db.session_factory),
         streams=StreamService(db.session_factory, mediamtx, settings),
@@ -2201,6 +2348,112 @@ def build_app_services(
             event_client=events,
             settings=settings,
         ),
+    )
+
+
+def _fleet_node_status(last_seen_at: datetime | None, now: datetime) -> FleetNodeStatus:
+    if last_seen_at is None:
+        return FleetNodeStatus.OFFLINE
+    age = now - last_seen_at
+    if age <= timedelta(minutes=2):
+        return FleetNodeStatus.HEALTHY
+    if age <= timedelta(minutes=15):
+        return FleetNodeStatus.STALE
+    return FleetNodeStatus.OFFLINE
+
+
+def _derive_worker_lifecycle(
+    *,
+    camera: Camera,
+    edge_by_id: dict[UUID, EdgeNode],
+    now: datetime,
+) -> tuple[
+    WorkerDesiredState,
+    WorkerRuntimeStatus,
+    Literal["manual_dev", "central_supervisor", "edge_supervisor", "none"],
+    str,
+]:
+    if camera.processing_mode is ProcessingMode.EDGE and camera.edge_node_id is None:
+        return (
+            WorkerDesiredState.NOT_DESIRED,
+            WorkerRuntimeStatus.UNKNOWN,
+            "none",
+            "Edge processing requires an assigned edge node.",
+        )
+    if camera.edge_node_id is not None:
+        edge = edge_by_id.get(camera.edge_node_id)
+        if edge is None:
+            return (
+                WorkerDesiredState.SUPERVISED,
+                WorkerRuntimeStatus.OFFLINE,
+                "edge_supervisor",
+                "Assigned edge node is missing.",
+            )
+        node_status = _fleet_node_status(edge.last_seen_at, now)
+        runtime = (
+            WorkerRuntimeStatus.STALE
+            if node_status is FleetNodeStatus.STALE
+            else WorkerRuntimeStatus.OFFLINE
+            if node_status is FleetNodeStatus.OFFLINE
+            else WorkerRuntimeStatus.NOT_REPORTED
+        )
+        return (
+            WorkerDesiredState.SUPERVISED,
+            runtime,
+            "edge_supervisor",
+            "Edge supervisor owns this worker process.",
+        )
+    if camera.processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}:
+        return (
+            WorkerDesiredState.MANUAL,
+            WorkerRuntimeStatus.NOT_REPORTED,
+            "manual_dev",
+            "Start this worker manually in local development.",
+        )
+    return (
+        WorkerDesiredState.NOT_DESIRED,
+        WorkerRuntimeStatus.NOT_REPORTED,
+        "none",
+        "No worker is desired for this camera.",
+    )
+
+
+def _central_dev_run_command(camera_id: UUID) -> str:
+    return (
+        "cd backend && "
+        "ARGUS_API_BASE_URL=http://127.0.0.1:8000 "
+        "ARGUS_API_BEARER_TOKEN=<token> "
+        f"python3 -m uv run python -m argus.inference.engine --camera-id {camera_id}"
+    )
+
+
+def _camera_delivery_diagnostic(camera: Camera) -> FleetDeliveryDiagnostic:
+    source_capability = (
+        SourceCapability.model_validate(camera.source_capability)
+        if camera.source_capability is not None
+        else None
+    )
+    requested = BrowserDeliverySettings.model_validate(camera.browser_delivery or {})
+    resolved = _build_source_aware_browser_delivery(
+        requested=requested,
+        privacy=camera.privacy,
+        source_capability=source_capability,
+    )
+    selected = _resolve_worker_stream_settings(
+        browser_delivery=resolved,
+        fps_cap=camera.fps_cap,
+        processed_native=_uses_processed_native_delivery(camera),
+    )
+    return FleetDeliveryDiagnostic(
+        camera_id=camera.id,
+        camera_name=camera.name,
+        processing_mode=camera.processing_mode,
+        assigned_node_id=camera.edge_node_id,
+        source_capability=source_capability,
+        default_profile=resolved.default_profile,
+        available_profiles=resolved.profiles,
+        native_status=resolved.native_status,
+        selected_stream_mode=selected.kind,
     )
 
 
