@@ -146,7 +146,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("navigation", { name: /control/i })).toBeInTheDocument();
   });
 
-  test("routes authenticated users into the refreshed operations workspace", async () => {
+  test("routes authenticated users into the refreshed omnisight workspace", async () => {
     window.history.pushState({}, "", "/live");
     vi.mocked(oidcManager).getUser.mockResolvedValue({
       access_token: "test-token",
@@ -165,11 +165,12 @@ describe("AppShell", () => {
     const primaryWorkspaceNav = await screen.findByRole("navigation", {
       name: /primary workspace/i,
     });
-    expect(await screen.findByRole("heading", { name: /live command surface/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /live intelligence/i })).toBeInTheDocument();
     expect(
       screen.queryByText(/operator-grade visibility without native-bandwidth waste/i),
     ).not.toBeInTheDocument();
     expect(within(primaryWorkspaceNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
+    expect(within(primaryWorkspaceNav).queryByRole("link", { name: "Cameras" })).not.toBeInTheDocument();
     expect(
       screen.getByRole("navigation", {
         name: /intelligence/i,

@@ -107,10 +107,11 @@ select {
 }
 
 .omnisight-field--entry .omnisight-field__lens {
-  width: 13rem;
-  height: 13rem;
-  left: calc(50% - 6.5rem);
+  width: clamp(10rem, 18vw, 13rem);
+  height: clamp(10rem, 18vw, 13rem);
+  left: clamp(24rem, 58vw, 52rem);
   top: 18%;
+  opacity: 0.82;
 }
 
 .omnisight-field--overview .omnisight-field__lens {
@@ -135,6 +136,22 @@ select {
   right: 1.5rem;
   top: 1.25rem;
   opacity: 0.12;
+}
+
+@media (max-width: 900px) {
+  .omnisight-field--entry .omnisight-field__lens {
+    width: 11rem;
+    height: 11rem;
+    left: auto;
+    right: -1.25rem;
+    top: 8rem;
+    opacity: 0.28;
+  }
+
+  .omnisight-field--entry .omnisight-field__ring,
+  .omnisight-field--entry .omnisight-field__surface {
+    opacity: 0.55;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
