@@ -38,6 +38,24 @@ The product should separate:
 
 In production, a supervisor owns process lifecycle. The UI owns visibility, desired state, bootstrap, and safe lifecycle requests.
 
+### Start/Stop Button Model
+
+The product should eventually have Start, Stop, Restart, and Drain controls in the Operations UI, but those controls must target a supervisor contract, not a raw shell command.
+
+The intended flow is:
+
+```text
+UI lifecycle button
+  -> backend authorizes and records desired state or lifecycle request
+  -> central or edge supervisor reconciles that request on the correct node
+  -> worker reports heartbeat, status, metrics, and last error
+  -> UI renders desired state versus actual runtime state
+```
+
+The backend API process should not directly shell out to start host workers. That would couple the product to the backend container host, bypass the node that actually owns the worker, and create a dangerous remote-command-execution surface. It also would not survive backend restarts, browser refreshes, process crashes, machine reboot, or multi-node edge placement.
+
+Local development is different because there is not yet a local supervisor process. In dev, copyable shell commands are an honest bridge: the developer owns the terminal process and can interrupt it with `Ctrl-C`. Production should not rely on that manual path. Production should run a central or edge supervisor that owns process start/stop/restart and reports truth back to the control plane.
+
 ---
 
 ## 3. Terms
@@ -102,10 +120,17 @@ In local development:
 Example command:
 
 ```bash
-cd backend
-ARGUS_API_BASE_URL=http://127.0.0.1:8000 \
-ARGUS_API_BEARER_TOKEN=<token> \
-python3 -m uv run python -m argus.inference.engine --camera-id <camera-id>
+TOKEN="$(
+  curl -fsS \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
+
+cd "${ARGUS_REPO_DIR:-$HOME/vision}/backend" && \
+ARGUS_API_BASE_URL="http://127.0.0.1:8000" \
+ARGUS_API_BEARER_TOKEN="$TOKEN" \
+python3 -m uv run python -m argus.inference.engine --camera-id "replace-with-camera-id"
 ```
 
 ### Edge Development
@@ -119,9 +144,16 @@ In edge development:
 Example command:
 
 ```bash
-ARGUS_EDGE_CAMERA_ID=<camera-id> \
-ARGUS_API_BASE_URL=http://<master-host>:8000 \
-ARGUS_API_BEARER_TOKEN=<token> \
+TOKEN="$(
+  curl -fsS \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
+
+ARGUS_EDGE_CAMERA_ID="${ARGUS_EDGE_CAMERA_ID:-replace-with-camera-id}" \
+ARGUS_API_BASE_URL="${ARGUS_API_BASE_URL:-http://host.docker.internal:8000}" \
+ARGUS_API_BEARER_TOKEN="$TOKEN" \
 docker compose -f infra/docker-compose.edge.yml up inference-worker
 ```
 

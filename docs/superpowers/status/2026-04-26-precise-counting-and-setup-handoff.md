@@ -2,7 +2,7 @@
 
 Date: 2026-04-28
 
-Purpose: paste this document into a fresh project chat to continue from the current repo state without redoing completed setup, source-aware delivery, native routing, History work, Fleet / Operations phase 1, or the logo cleanup.
+Purpose: paste this document into a fresh project chat to continue from the current repo state without redoing completed setup, source-aware delivery, native routing, History work, Fleet / Operations phase 1, logo cleanup, or worker lifecycle reasoning.
 
 ## Current Branch State
 
@@ -10,11 +10,12 @@ Active branch:
 - `codex/source-aware-delivery-calibration-fixes`
 
 Remote state:
-- `origin/codex/source-aware-delivery-calibration-fixes` contains all implementation work through `1d2ee26`.
-- The branch may also contain handoff-only commits after `1d2ee26`; treat `1d2ee26` as the verified implementation checkpoint, not necessarily the branch tip.
+- `origin/codex/source-aware-delivery-calibration-fixes` contains all implementation work through `24b7935`.
+- The branch may also contain handoff-only commits after `24b7935`; treat `24b7935` as the verified implementation checkpoint for worker command UX, not necessarily the branch tip.
 - The old handoff branch `codex/precise-counting-occupancy` is not the active continuation branch for this work.
 
 Latest relevant commits:
+- `24b7935 fix(operations): make dev worker command copy pasteable`
 - `fa94d88 docs(handoff): refresh operations and logo status`
 - `1d2ee26 fix(brand): remove logo background tile`
 - `f7ca875 fix(brand): use uploaded argus icon logo`
@@ -40,6 +41,7 @@ git log --oneline -5
 ```
 
 Expected result:
+- the recent history includes `24b7935 fix(operations): make dev worker command copy pasteable`
 - the recent history includes `docs(handoff): refresh operations and logo status`
 - the recent history includes `1d2ee26 fix(brand): remove logo background tile`
 
@@ -60,6 +62,7 @@ These items are complete and should not be re-planned:
 - Fleet / Operations phase 1 is implemented under the Settings route
 - Settings is relabeled as Operations in app navigation
 - the product logo now uses `argus-icon-from-upload.svg`, with the dark background tile removed so the sidebar mark renders on transparent canvas
+- Operations dev worker commands are copy/paste-safe and fetch a local dev bearer token instead of emitting `ARGUS_API_BEARER_TOKEN=<token>`
 
 ## Fleet / Operations Phase 1
 
@@ -90,6 +93,13 @@ Implemented behavior:
 Important constraint:
 - Current edge heartbeats still do not report true per-worker process state. The UI/service must continue to represent missing precision as `not_reported`, `stale`, `offline`, or `unknown` rather than inventing a running state.
 
+Lifecycle control note:
+- The product should eventually expose Start, Stop, Restart, and Drain buttons in Operations.
+- Those buttons should not make the backend shell out directly.
+- The intended production path is UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the process on the correct node -> worker reports runtime truth.
+- Dev uses copyable shell commands because there is not yet a local dev supervisor process. That is a temporary bridge, not the production control model.
+- The Fleet / Operations design doc now records this under `Start/Stop Button Model`.
+
 ## Product Model To Preserve
 
 Important concepts:
@@ -107,6 +117,7 @@ Important concepts:
   - runtime state: what supervisors/workers report
   - dev/manual mode: terminal or compose commands
   - production/supervised mode: a supervisor owns process start/stop/restart
+- UI lifecycle controls should change desired state or send a constrained supervisor request. They should never become generic remote shell execution.
 - Bootstrap material can contain secrets. Show it once, do not persist plaintext API keys, and do not leak it into logs, docs, screenshots, or chat summaries.
 
 ## Latest Verification
@@ -116,6 +127,8 @@ Fresh verification after the Operations and logo work:
 Backend:
 - `python3 -m uv run pytest tests/services/test_operations_service.py tests/api/test_operations_endpoints.py -q`
   - `5 passed`
+- `python3 -m uv run ruff check src/argus/services/app.py tests/services/test_operations_service.py`
+  - passed
 
 Frontend:
 - `corepack pnpm --dir frontend exec vitest run src/hooks/use-operations.test.ts src/pages/Settings.test.tsx src/components/layout/AppShell.test.tsx src/brand/product-assets.test.ts`
@@ -144,14 +157,14 @@ Earlier History verification on this branch:
 
 Recommended next-chat starting point:
 
-1. Pull `codex/source-aware-delivery-calibration-fixes` on the iMac and confirm recent history includes `1d2ee26 fix(brand): remove logo background tile`.
+1. Pull `codex/source-aware-delivery-calibration-fixes` on the iMac and confirm recent history includes `24b7935 fix(operations): make dev worker command copy pasteable`.
 2. Recreate backend and frontend containers so the new API and UI assets are active:
 
 ```bash
 make dev-up
 docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend frontend
 docker compose -f infra/docker-compose.dev.yml exec backend \
-  /tmp/argus-backend-venv/bin/alembic upgrade head
+  python -m uv run alembic upgrade head
 corepack pnpm --dir frontend generate:api
 ```
 
@@ -161,6 +174,7 @@ corepack pnpm --dir frontend generate:api
    - the Operations page loads
    - the transparent uploaded Argus logo renders cleanly
    - node and worker state is truthful for the current dev setup
+   - copied central worker commands include token fetch and `ARGUS_API_BEARER_TOKEN="$TOKEN"`
    - bootstrap material can be generated without exposing secrets beyond the one-time UI result
 5. If browser assets look stale, hard refresh with `Cmd+Shift+R`.
 
