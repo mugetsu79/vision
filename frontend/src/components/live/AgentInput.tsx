@@ -109,7 +109,7 @@ export function AgentInput({
               value={scopeValue}
               onChange={(event) => setScopeValue(event.target.value)}
             >
-              <option value="all">All live cameras</option>
+              <option value="all">All live scenes</option>
               {cameras.map((camera) => (
                 <option key={camera.id} value={camera.id}>
                   {camera.name}
@@ -120,7 +120,7 @@ export function AgentInput({
 
           <label className="space-y-2 text-sm text-[#d9e5f7]">
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
-              Ask Vezor
+              {omniLabels.askVezorTitle}
             </span>
             <Input
               aria-label={omniLabels.askVezorTitle}

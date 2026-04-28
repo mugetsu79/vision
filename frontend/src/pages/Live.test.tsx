@@ -237,6 +237,10 @@ describe("LivePage", () => {
     expect(screen.getByText(/^signals in view$/i)).toBeInTheDocument();
     expect(screen.getByText(/^resolved intent$/i)).toBeInTheDocument();
     expect(screen.queryByText(/live command surface/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+ cameras/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/dynamic stats/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/current command resolution/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/\d+ connected scenes/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
     expect(screen.getByTestId("stream-North Gate")).toBeInTheDocument();
     expect(screen.getByTestId("stream-Depot Yard")).toBeInTheDocument();

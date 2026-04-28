@@ -91,6 +91,8 @@ describe("AgentInput", () => {
       "show people near restricted zones",
     );
     expect(screen.getByRole("button", { name: /apply/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /all live cameras/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /all live scenes/i })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/ask vezor/i), "only watch cars and trucks");
     await user.click(screen.getByRole("button", { name: /^apply$/i }));

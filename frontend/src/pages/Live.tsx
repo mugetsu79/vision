@@ -80,7 +80,7 @@ function WorkspacePage() {
                 {connectionBadgeLabel(connectionState)}
               </Badge>
               <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-                {cameras.length} cameras
+                {cameras.length} connected scenes
               </Badge>
             </>
           }
@@ -100,7 +100,7 @@ function WorkspacePage() {
             {activeQuery ? "Filtered view active" : "Raw scene"}
           </Badge>
           <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-            {cameras.length} cameras
+            {cameras.length} connected scenes
           </Badge>
         </PageUtilityBar>
 
