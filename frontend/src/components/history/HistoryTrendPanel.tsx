@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import type { CoverageCopy } from "@/lib/history-workbench";
 import type { HistoryMetric } from "@/lib/history-url-state";
 
@@ -50,6 +51,21 @@ export function HistoryTrendPanel({
           <p className="mt-1 text-sm text-[#dce6f7]">{bucketCopy(granularity)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Select
+            aria-label="Review bucket"
+            className="h-8 w-44 rounded-xl px-3 py-1.5 text-xs"
+            value={series.selectedBucket ?? ""}
+            onChange={(event) => {
+              if (event.currentTarget.value) onBucketSelect(event.currentTarget.value);
+            }}
+          >
+            <option value="">Select bucket</option>
+            {series.points.map((point) => (
+              <option key={point.bucket} value={point.bucket}>
+                {formatBucketOption(point.bucket)}
+              </option>
+            ))}
+          </Select>
           <Button
             className="h-8 px-3 text-xs"
             disabled={!reviewBucket}
@@ -85,4 +101,15 @@ function bucketCopy(granularity: string): string {
   if (granularity === "1d") return "Daily buckets - timestamps mark bucket starts";
   if (granularity === "5m") return "5-minute buckets - timestamps mark bucket starts";
   return "1-minute buckets - timestamps mark bucket starts";
+}
+
+function formatBucketOption(bucket: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  }).format(new Date(bucket));
 }

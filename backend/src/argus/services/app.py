@@ -977,6 +977,7 @@ class HistoryService:
         _ensure_history_window(starts_at, ends_at)
         await self._ensure_camera_access(tenant_context, camera_ids)
         rows = await self._fetch_history_rows(
+            tenant_id=tenant_context.tenant_id,
             camera_ids=camera_ids,
             class_names=class_names,
             granularity=granularity,
@@ -1021,6 +1022,7 @@ class HistoryService:
         if metric is HistoryMetric.COUNT_EVENTS:
             if include_speed:
                 rows = await self._fetch_series_rows_with_speed_from_count_events(
+                    tenant_id=tenant_context.tenant_id,
                     camera_ids=camera_ids,
                     class_names=class_names,
                     granularity=effective_granularity,
@@ -1034,6 +1036,7 @@ class HistoryService:
                 effective_granularity,
             ):
                 rows = await self._fetch_series_rows_aggregate(
+                    tenant_id=tenant_context.tenant_id,
                     camera_ids=camera_ids,
                     class_names=class_names,
                     granularity=effective_granularity,
@@ -1043,6 +1046,7 @@ class HistoryService:
                 )
             else:
                 rows = await self._fetch_series_rows_from_count_events(
+                    tenant_id=tenant_context.tenant_id,
                     camera_ids=camera_ids,
                     class_names=class_names,
                     granularity=effective_granularity,
@@ -1051,6 +1055,7 @@ class HistoryService:
                 )
         elif include_speed:
             rows = await self._fetch_series_rows_with_speed(
+                tenant_id=tenant_context.tenant_id,
                 camera_ids=camera_ids,
                 class_names=class_names,
                 granularity=effective_granularity,
@@ -1061,6 +1066,7 @@ class HistoryService:
             )
         else:
             rows = await self._fetch_series_rows_from_events(
+                tenant_id=tenant_context.tenant_id,
                 camera_ids=camera_ids,
                 class_names=class_names,
                 granularity=effective_granularity,
@@ -1210,17 +1216,20 @@ class HistoryService:
 
         if metric is HistoryMetric.COUNT_EVENTS:
             rows = await self._fetch_class_rows_from_count_events(
+                tenant_id=tenant_context.tenant_id,
                 camera_ids=camera_ids,
                 starts_at=starts_at,
                 ends_at=ends_at,
             )
             boundaries = await self._fetch_count_event_boundary_summaries(
+                tenant_id=tenant_context.tenant_id,
                 camera_ids=camera_ids,
                 starts_at=starts_at,
                 ends_at=ends_at,
             )
         else:
             rows = await self._fetch_class_rows_from_tracking_events(
+                tenant_id=tenant_context.tenant_id,
                 camera_ids=camera_ids,
                 starts_at=starts_at,
                 ends_at=ends_at,
@@ -1293,6 +1302,7 @@ class HistoryService:
     async def _fetch_history_rows(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         class_names: list[str] | None,
         granularity: str,
@@ -1305,10 +1315,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
         if class_names:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
@@ -1386,6 +1397,7 @@ class HistoryService:
     async def _fetch_series_rows_aggregate(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         class_names: list[str] | None,
         granularity: str,
@@ -1401,10 +1413,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
         if class_names:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
@@ -1435,6 +1448,7 @@ class HistoryService:
     async def _fetch_series_rows_from_events(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         class_names: list[str] | None,
         granularity: str,
@@ -1447,10 +1461,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
         if class_names:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
@@ -1516,6 +1531,7 @@ class HistoryService:
     async def _fetch_series_rows_from_count_events(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         class_names: list[str] | None,
         granularity: str,
@@ -1527,10 +1543,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
         if class_names:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
@@ -1561,6 +1578,7 @@ class HistoryService:
     async def _fetch_series_rows_with_speed(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         class_names: list[str] | None,
         granularity: str,
@@ -1574,10 +1592,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
         if class_names:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
@@ -1690,6 +1709,7 @@ class HistoryService:
     async def _fetch_series_rows_with_speed_from_count_events(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         class_names: list[str] | None,
         granularity: str,
@@ -1702,10 +1722,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
         if class_names:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
@@ -1750,6 +1771,7 @@ class HistoryService:
     async def _fetch_class_rows_from_tracking_events(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         starts_at: datetime,
         ends_at: datetime,
@@ -1759,10 +1781,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
 
         count_expr = (
             "count(DISTINCT (camera_id, ts))::bigint"
@@ -1793,6 +1816,7 @@ class HistoryService:
     async def _fetch_class_rows_from_count_events(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         starts_at: datetime,
         ends_at: datetime,
@@ -1801,10 +1825,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
 
         statement = text(
             f"""
@@ -1830,6 +1855,7 @@ class HistoryService:
     async def _fetch_count_event_boundary_summaries(
         self,
         *,
+        tenant_id: UUID | None = None,
         camera_ids: list[UUID] | None,
         starts_at: datetime,
         ends_at: datetime,
@@ -1838,10 +1864,11 @@ class HistoryService:
             "starts_at": starts_at,
             "ends_at": ends_at,
         }
-        filters: list[str] = []
-        if camera_ids:
-            filters.append("AND camera_id IN :camera_ids")
-            parameters["camera_ids"] = camera_ids
+        filters = _history_camera_filters(
+            parameters,
+            tenant_id=tenant_id,
+            camera_ids=camera_ids,
+        )
 
         statement = text(
             f"""
@@ -1868,6 +1895,31 @@ class HistoryService:
             }
             for row in rows
         ]
+
+
+def _history_camera_filters(
+    parameters: dict[str, Any],
+    *,
+    tenant_id: UUID | None,
+    camera_ids: list[UUID] | None,
+) -> list[str]:
+    filters: list[str] = []
+    if tenant_id is not None:
+        parameters["tenant_id"] = tenant_id
+        filters.append(
+            """
+            AND camera_id IN (
+              SELECT cameras.id
+              FROM cameras
+              JOIN sites ON sites.id = cameras.site_id
+              WHERE sites.tenant_id = :tenant_id
+            )
+            """
+        )
+    if camera_ids:
+        filters.append("AND camera_id IN :camera_ids")
+        parameters["camera_ids"] = camera_ids
+    return filters
 
 
 class IncidentService:

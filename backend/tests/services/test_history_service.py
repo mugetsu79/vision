@@ -388,9 +388,10 @@ async def test_query_series_count_events_use_count_event_storage(
     from_events = AsyncMock(return_value=[])
     monkeypatch.setattr(service, "_fetch_series_rows_from_events", from_events)
 
+    tenant_context = _tenant_context()
     starts = datetime(2026, 4, 24, 14, 0, tzinfo=UTC)
     response = await service.query_series(
-        _tenant_context(),
+        tenant_context,
         camera_ids=None,
         class_names=None,
         granularity="1h",
@@ -400,6 +401,7 @@ async def test_query_series_count_events_use_count_event_storage(
     )
 
     assert count_event_rows.await_args.kwargs["metric"] == HistoryMetric.COUNT_EVENTS
+    assert count_event_rows.await_args.kwargs["tenant_id"] == tenant_context.tenant_id
     from_events.assert_not_awaited()
     assert response.metric == HistoryMetric.COUNT_EVENTS
     assert response.rows[0].values == {"person": 11}
@@ -435,9 +437,10 @@ async def test_query_series_count_events_unaligned_window_uses_raw_count_events(
     aggregate = AsyncMock(return_value=[])
     monkeypatch.setattr(service, "_fetch_series_rows_aggregate", aggregate)
 
+    tenant_context = _tenant_context()
     starts = datetime(2026, 4, 24, 11, 34, tzinfo=UTC)
     response = await service.query_series(
-        _tenant_context(),
+        tenant_context,
         camera_ids=None,
         class_names=None,
         granularity="1h",
@@ -447,11 +450,43 @@ async def test_query_series_count_events_unaligned_window_uses_raw_count_events(
     )
 
     raw_count_event_rows.assert_awaited_once()
+    assert raw_count_event_rows.await_args.kwargs["tenant_id"] == tenant_context.tenant_id
     aggregate.assert_not_awaited()
     assert response.rows[0].bucket == datetime(2026, 4, 24, 11, 0, tzinfo=UTC)
     assert response.rows[0].values == {"person": 5}
     assert response.rows[1].bucket == datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     assert response.rows[1].values == {"person": 6}
+
+
+@pytest.mark.asyncio
+async def test_fetch_series_rows_from_count_events_scopes_to_tenant_by_default() -> None:
+    service = HistoryService(session_factory=MagicMock())
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session_cm)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+    execute_result = MagicMock()
+    execute_result.mappings.return_value.all.return_value = []
+    session_cm.execute = AsyncMock(return_value=execute_result)
+    service.session_factory = MagicMock(return_value=session_cm)
+
+    tenant_id = uuid4()
+    starts = datetime(2026, 4, 24, 14, 0, tzinfo=UTC)
+    await service._fetch_series_rows_from_count_events(
+        tenant_id=tenant_id,
+        camera_ids=None,
+        class_names=None,
+        granularity="1h",
+        starts_at=starts,
+        ends_at=starts + timedelta(hours=1),
+    )
+
+    statement = session_cm.execute.await_args.args[0]
+    parameters = session_cm.execute.await_args.args[1]
+    sql = " ".join(str(statement).split()).lower()
+    assert "from cameras join sites" in sql
+    assert "sites.tenant_id = :tenant_id" in sql
+    assert parameters["tenant_id"] == tenant_id
 
 
 @pytest.mark.asyncio

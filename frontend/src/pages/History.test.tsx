@@ -561,6 +561,38 @@ describe("HistoryPage", () => {
     expect(screen.getByText(/28 visible samples/i)).toBeInTheDocument();
   });
 
+  test("selects any bucket from the accessible bucket picker", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series") {
+        return Promise.resolve(
+          jsonResponse(
+            historySeriesResponse({
+              rows: [
+                { bucket: "2026-04-12T00:00:00Z", values: { car: 22, bus: 6 }, total_count: 28 },
+                { bucket: "2026-04-12T01:00:00Z", values: { car: 5, bus: 2 }, total_count: 7 },
+              ],
+            }),
+          ),
+        );
+      }
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage();
+    await screen.findByTestId("history-trend-chart");
+
+    await user.selectOptions(screen.getByLabelText("Review bucket"), "2026-04-12T01:00:00Z");
+
+    expect(screen.getByRole("heading", { name: /12 Apr, 01:00/i })).toBeInTheDocument();
+    expect(screen.getByText(/7 visible samples/i)).toBeInTheDocument();
+  });
+
   test("shows following-now controls by default and resumes from absolute windows", async () => {
     const user = userEvent.setup();
     renderPage("/history?from=2026-04-01T00%3A00%3A00.000Z&to=2026-04-02T00%3A00%3A00.000Z");
