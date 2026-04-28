@@ -33,5 +33,8 @@ describe("App", () => {
       await screen.findByRole("button", { name: /sign in/i }),
     ).toBeInTheDocument();
     expect(screen.getByAltText(/Vezor product lockup/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /omnisight for every live environment/i }),
+    ).toBeInTheDocument();
   });
 });

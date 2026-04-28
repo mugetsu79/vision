@@ -51,14 +51,17 @@ describe("SignInPage", () => {
       screen.getByRole("img", { name: new RegExp(`${productBrand.name} product lockup`, "i") }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(new RegExp(`operate ${productBrand.name} from a premium`, "i")),
+      screen.getByRole("heading", { name: /omnisight for every live environment/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/connects scenes, models, events, evidence, and edge operations/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--entry");
     expect(
       screen.getByText(
         new RegExp(`use your ${productBrand.name} identity provider account to continue\\.`, "i"),
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
-    expect(screen.getByText(/vigilant intelligence/i)).toBeInTheDocument();
   });
 });
