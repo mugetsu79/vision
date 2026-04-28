@@ -144,6 +144,9 @@ class EngineConfig(BaseModel):
 
 class CameraCommand(BaseModel):
     active_classes: list[str] | None = None
+    runtime_vocabulary: list[str] | None = None
+    runtime_vocabulary_source: RuntimeVocabularySource | None = None
+    runtime_vocabulary_version: int | None = None
     tracker_type: TrackerType | None = None
     privacy: PrivacyPolicy | None = None
     attribute_rules: list[dict[str, Any]] | None = None
@@ -157,7 +160,15 @@ class FrameSource(Protocol):
 
 
 class Detector(Protocol):
-    def detect(self, frame: Frame, allowed_classes: list[str]) -> list[Detection]: ...
+    capability: DetectorCapability
+
+    def detect(
+        self,
+        frame: Frame,
+        allowed_classes: list[str] | None = None,
+    ) -> list[Detection]: ...
+
+    def update_runtime_vocabulary(self, vocabulary: list[str]) -> None: ...
 
 
 class Preprocessor(Protocol):
@@ -246,6 +257,9 @@ def build_detector(
 @dataclass(slots=True)
 class _EngineState:
     active_classes: list[str]
+    runtime_vocabulary: list[str]
+    runtime_vocabulary_source: RuntimeVocabularySource
+    runtime_vocabulary_version: int
     tracker_type: TrackerType
     privacy: PrivacyPolicy
     attribute_rules: list[dict[str, Any]]
@@ -357,6 +371,9 @@ class InferenceEngine:
         )
         self._state = _EngineState(
             active_classes=list(config.active_classes),
+            runtime_vocabulary=list(config.model.runtime_vocabulary.terms),
+            runtime_vocabulary_source=config.model.runtime_vocabulary.source,
+            runtime_vocabulary_version=config.model.runtime_vocabulary.version,
             tracker_type=config.tracker.tracker_type,
             privacy=config.privacy,
             attribute_rules=list(config.attribute_rules),
@@ -453,9 +470,10 @@ class InferenceEngine:
             "Worker frame detect starting",
             frame_attempt=frame_attempt,
             stage="detect",
-            active_classes=list(self.active_classes),
+            active_classes=list(self._visible_classes()),
         )
-        detections = self.detector.detect(processed, self.active_classes)
+        visible_classes = self._visible_classes()
+        detections = self.detector.detect(processed, visible_classes)
         self._log_frame_diagnostic(
             "Worker frame detect completed",
             frame_attempt=frame_attempt,
@@ -463,11 +481,7 @@ class InferenceEngine:
             detection_count=len(detections),
         )
         stage_timer.record_stage("detect", ended_at=loop.time())
-        filtered = [
-            detection
-            for detection in detections
-            if detection.class_name in self.active_classes
-        ]
+        filtered = self._filter_visible_detections(detections, visible_classes)
         tracked = self._tracker.update(filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
         tracked = self._apply_speed(tracked)
@@ -577,6 +591,13 @@ class InferenceEngine:
     async def apply_command(self, command: CameraCommand) -> None:
         if command.active_classes is not None:
             self._state.active_classes = list(command.active_classes)
+        if command.runtime_vocabulary is not None:
+            self._state.runtime_vocabulary = list(command.runtime_vocabulary)
+            if command.runtime_vocabulary_source is not None:
+                self._state.runtime_vocabulary_source = command.runtime_vocabulary_source
+            if command.runtime_vocabulary_version is not None:
+                self._state.runtime_vocabulary_version = command.runtime_vocabulary_version
+            self.detector.update_runtime_vocabulary(self._state.runtime_vocabulary)
         if command.tracker_type is not None and command.tracker_type != self._state.tracker_type:
             self._state.tracker_type = command.tracker_type
             self._tracker = self._tracker_factory(command.tracker_type)
@@ -614,6 +635,27 @@ class InferenceEngine:
         if self._state.active_classes:
             return list(self._state.active_classes)
         return list(self.config.model.classes)
+
+    @property
+    def runtime_vocabulary(self) -> list[str]:
+        if self._state.runtime_vocabulary:
+            return list(self._state.runtime_vocabulary)
+        return list(self.config.model.classes)
+
+    def _visible_classes(self) -> list[str]:
+        if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
+            if self._state.active_classes:
+                return list(self._state.active_classes)
+            return self.runtime_vocabulary
+        return self.active_classes
+
+    @staticmethod
+    def _filter_visible_detections(
+        detections: list[Detection],
+        visible_classes: list[str],
+    ) -> list[Detection]:
+        allowed = set(visible_classes)
+        return [detection for detection in detections if detection.class_name in allowed]
 
     async def _handle_command_message(self, message: Any) -> None:
         if isinstance(message, CameraCommand):

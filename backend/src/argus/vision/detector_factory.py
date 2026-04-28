@@ -45,6 +45,8 @@ def build_detector(
                 input_shape=dict(model.input_shape),
                 capability_config=dict(getattr(model, "capability_config", {}) or {}),
                 default_vocabulary=default_vocabulary,
+                confidence_threshold=float(getattr(model, "confidence_threshold", 0.25)),
+                iou_threshold=float(getattr(model, "iou_threshold", 0.45)),
             ),
             runtime=runtime,
             runtime_policy=runtime_policy,

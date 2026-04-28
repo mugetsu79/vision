@@ -73,6 +73,33 @@ class _FakeDetector:
         ]
 
 
+class _FakeOpenVocabDetector:
+    capability = DetectorCapability.OPEN_VOCAB
+
+    def __init__(
+        self,
+        *,
+        detections: list[Detection] | None = None,
+        runtime_vocabulary: list[str] | None = None,
+    ) -> None:
+        self.detections = list(detections or [])
+        self.runtime_vocabulary = list(runtime_vocabulary or [])
+        self.detect_calls: list[list[str] | None] = []
+        self.update_calls: list[list[str]] = []
+
+    def detect(
+        self,
+        frame: np.ndarray,
+        allowed_classes: list[str] | None = None,
+    ) -> list[Detection]:
+        self.detect_calls.append(None if allowed_classes is None else list(allowed_classes))
+        return list(self.detections)
+
+    def update_runtime_vocabulary(self, vocabulary: list[str]) -> None:
+        self.runtime_vocabulary = list(vocabulary)
+        self.update_calls.append(list(vocabulary))
+
+
 @dataclass(slots=True)
 class _FakeTracker:
     tracker_type: TrackerType
@@ -311,6 +338,97 @@ async def test_engine_applies_live_class_and_tracker_updates_without_restart() -
     assert detector.calls == [["car"], ["bus"]]
     assert tracker_creations == [TrackerType.BOTSORT, TrackerType.BYTETRACK]
     assert [frame.counts for frame in publisher.frames] == [{"car": 1}, {"bus": 1}]
+
+
+@pytest.mark.asyncio
+async def test_engine_applies_runtime_vocabulary_command_without_restart() -> None:
+    camera_id = uuid4()
+    detector = _FakeOpenVocabDetector(runtime_vocabulary=["forklift"])
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="YOLO World",
+                path="/models/yolo-world.onnx",
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={"supports_runtime_vocabulary_updates": True},
+                classes=[],
+                runtime_vocabulary={
+                    "terms": ["forklift"],
+                    "source": RuntimeVocabularySource.MANUAL,
+                    "version": 1,
+                },
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": [],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([]),
+        detector=detector,
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.apply_command(
+        CameraCommand(
+            runtime_vocabulary=["forklift", "pallet jack"],
+            runtime_vocabulary_source=RuntimeVocabularySource.QUERY,
+            runtime_vocabulary_version=2,
+        )
+    )
+
+    assert detector.update_calls == [["forklift", "pallet jack"]]
+    assert engine.runtime_vocabulary == ["forklift", "pallet jack"]
+
+
+@pytest.mark.asyncio
+async def test_engine_preserves_normalized_detection_shape_for_open_vocab() -> None:
+    camera_id = uuid4()
+    detector = _FakeOpenVocabDetector(
+        detections=[
+            Detection(class_name="forklift", confidence=0.9, bbox=(0.0, 0.0, 10.0, 10.0))
+        ],
+        runtime_vocabulary=["forklift"],
+    )
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="YOLO World",
+                path="/models/yolo-world.onnx",
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={"supports_runtime_vocabulary_updates": True},
+                classes=[],
+                runtime_vocabulary={
+                    "terms": ["forklift"],
+                    "source": RuntimeVocabularySource.MANUAL,
+                    "version": 1,
+                },
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": [],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=detector,
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    telemetry = await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    assert telemetry.counts == {"forklift": 1}
 
 
 @pytest.mark.asyncio
