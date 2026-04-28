@@ -45,7 +45,11 @@ import {
 describe("use-operations query helpers", () => {
   test("builds the fleet overview query", async () => {
     const options = fleetOverviewQueryOptions();
-    const data = await options.queryFn();
+    const queryFn = options.queryFn;
+    if (typeof queryFn !== "function") {
+      throw new Error("Expected fleet overview queryFn.");
+    }
+    const data = await queryFn({} as never);
 
     expect(options.queryKey).toEqual(["operations", "fleet"]);
     expect(data.mode).toBe("manual_dev");

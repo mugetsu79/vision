@@ -21,6 +21,7 @@ import type { FrameSize } from "@/components/cameras/boundary-geometry";
 import { denormalizePointList, normalizePointList } from "@/components/cameras/boundary-geometry";
 
 type Point = [number, number];
+type SerializedZone = NonNullable<CreateCameraInput["zones"]>[number];
 type BrowserDeliveryProfile = "native" | "1080p15" | "720p10" | "540p5";
 type BoundaryType = "line" | "polygon";
 type BrowserDeliveryProfilePayload = {
@@ -365,7 +366,7 @@ function boundaryPointsForFrame(boundary: BoundaryDraft, frameSize: FrameSize): 
 function serializeZones(
   boundaries: BoundaryDraft[],
   setupFrameSize: FrameSize,
-): Array<Record<string, unknown>> {
+): SerializedZone[] {
   return boundaries.map((boundary, index) => {
     const zoneId = boundary.id.trim();
     if (!zoneId) {

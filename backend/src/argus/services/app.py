@@ -66,13 +66,13 @@ from argus.api.contracts import (
     StreamOfferResponse,
     TelemetryEnvelope,
     TenantContext,
-    WorkerDesiredState,
-    WorkerRuntimeStatus,
     WorkerCameraSettings,
     WorkerConfigResponse,
+    WorkerDesiredState,
     WorkerModelSettings,
     WorkerPrivacySettings,
     WorkerPublishSettings,
+    WorkerRuntimeStatus,
     WorkerStreamSettings,
     WorkerTrackerSettings,
 )
@@ -2490,7 +2490,9 @@ def _camera_delivery_diagnostic(camera: Camera) -> FleetDeliveryDiagnostic:
         assigned_node_id=camera.edge_node_id,
         source_capability=source_capability,
         default_profile=resolved.default_profile,
-        available_profiles=resolved.profiles,
+        available_profiles=[
+            BrowserDeliveryProfile.model_validate(profile) for profile in resolved.profiles
+        ],
         native_status=resolved.native_status,
         selected_stream_mode=selected.kind,
     )

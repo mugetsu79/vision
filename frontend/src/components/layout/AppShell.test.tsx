@@ -27,7 +27,7 @@ vi.mock("@/lib/auth", () => ({
 import { AppShell } from "@/components/layout/AppShell";
 import { createQueryClient } from "@/app/query-client";
 import { oidcManager } from "@/lib/auth";
-import { workspaceNavGroups } from "@/components/layout/TopNav";
+import { type WorkspaceNavItem, workspaceNavGroups } from "@/components/layout/TopNav";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
@@ -94,7 +94,9 @@ describe("AppShell", () => {
   });
 
   test("labels the settings route as operations", () => {
-    const allItems = workspaceNavGroups.flatMap((group) => group.items);
+    const allItems: WorkspaceNavItem[] = workspaceNavGroups.flatMap((group) => [
+      ...group.items,
+    ]);
 
     expect(allItems).toContainEqual(
       expect.objectContaining({

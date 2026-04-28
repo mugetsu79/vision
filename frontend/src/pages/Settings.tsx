@@ -120,7 +120,7 @@ export function SettingsPage() {
                   <div>
                     <p className="font-medium text-[#f4f8ff]">{node.hostname}</p>
                     <p className="mt-1 text-xs text-[#93a7c5]">
-                      {node.kind} - {node.assigned_camera_ids.length} assigned cameras
+                      {node.kind} - {node.assigned_camera_ids?.length ?? 0} assigned cameras
                     </p>
                   </div>
                   <Badge>{node.status}</Badge>
@@ -207,9 +207,9 @@ export function SettingsPage() {
                 </div>
                 <Badge>{diagnostic.selected_stream_mode}</Badge>
               </div>
-              {diagnostic.native_status.available === false ? (
+              {diagnostic.native_status?.available === false ? (
                 <p className="mt-2 text-sm text-amber-100">
-                  Native unavailable: {formatReason(diagnostic.native_status.reason)}
+                  Native unavailable: {formatReason(diagnostic.native_status?.reason)}
                 </p>
               ) : null}
             </div>
