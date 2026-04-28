@@ -466,6 +466,8 @@ describe("CameraWizard", () => {
     );
     await user.click(screen.getByRole("button", { name: /next/i }));
 
+    expect(screen.getAllByText(/event boundaries/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/count boundaries/i)).not.toBeInTheDocument();
     for (let count = 0; count < 4; count += 1) {
       await user.click(screen.getByRole("button", { name: /add source point/i }));
       await user.click(

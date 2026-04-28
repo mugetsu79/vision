@@ -173,6 +173,8 @@ describe("HistoryPage", () => {
 
   test("hydrates filter state from URL and calls endpoint with include_speed", async () => {
     renderPage("/history?metric=observations&speed=1&speedThreshold=50&granularity=5m");
+    expect(await screen.findByRole("heading", { name: /history & patterns/i })).toBeInTheDocument();
+    expect(screen.queryByText(/as .* buckets/i)).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
         "speed=true::threshold=50::metric=observations",

@@ -5,6 +5,7 @@ import { CameraWizard } from "@/components/cameras/CameraWizard";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
+import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import {
   useCameras,
   useCreateCamera,
@@ -87,12 +88,10 @@ function CamerasContent() {
                 Cameras
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[0.01em] text-[#f4f8ff]">
-                Configure ingest, privacy, calibration, and delivery.
+                {omniLabels.sceneSetupTitle}
               </h2>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                Camera setup defines native ingest for analytics, the default browser
-                rendition for operators, and the calibration {brandName} uses to understand
-                movement inside each scene.
+                Scene setup connects source streams, models, privacy rules, event boundaries, and calibration so {brandName} can understand each environment.
               </p>
             </div>
             <Button onClick={openCreateWizard}>Add camera</Button>
@@ -122,7 +121,7 @@ function CamerasContent() {
                 ) : cameras.length === 0 ? (
                   <TR>
                     <TD colSpan={6} className="text-[#9eb2cf]">
-                      No cameras yet.
+                      {omniEmptyStates.noScenes}
                     </TD>
                   </TR>
                 ) : (

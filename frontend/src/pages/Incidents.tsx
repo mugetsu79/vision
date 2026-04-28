@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras } from "@/hooks/use-cameras";
 import {
   type Incident,
@@ -91,8 +92,7 @@ export function IncidentsPage() {
                 Evidence Desk
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[#9eb0cb]">
-                Review captured incident records with the queue, current evidence,
-                and incident facts kept in one triage workspace.
+                Review evidence records, confirm state, and move from signal to decision without leaving the desk.
               </p>
             </div>
 
@@ -170,9 +170,7 @@ export function IncidentsPage() {
           ) : error ? (
             <StatusMessage tone="danger">{errorMessage}</StatusMessage>
           ) : incidents.length === 0 ? (
-            <StatusMessage>
-              No incident records match the current evidence filters.
-            </StatusMessage>
+            <StatusMessage>{omniEmptyStates.noEvidence}</StatusMessage>
           ) : selectedIncident ? (
             <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
               <IncidentQueue
@@ -215,7 +213,7 @@ function IncidentQueue({
       className="min-w-0 rounded-lg border border-white/10 bg-white/[0.025]"
     >
       <div className="border-b border-white/8 px-4 py-3">
-        <h3 className="text-lg font-semibold text-[#eef4ff]">Queue</h3>
+        <h3 className="text-lg font-semibold text-[#eef4ff]">{omniLabels.reviewQueueTitle}</h3>
       </div>
 
       <div className="divide-y divide-white/8">
@@ -378,7 +376,7 @@ function IncidentFactsPanel({
       className="min-w-0 rounded-lg border border-white/10 bg-white/[0.025]"
     >
       <div className="border-b border-white/8 px-4 py-3">
-        <h3 className="text-lg font-semibold text-[#eef4ff]">Incident facts</h3>
+        <h3 className="text-lg font-semibold text-[#eef4ff]">{omniLabels.factsTitle}</h3>
       </div>
 
       <dl className="divide-y divide-white/8">

@@ -9,6 +9,7 @@ import { HomographyEditor } from "@/components/cameras/HomographyEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { omniPlaceExamples } from "@/copy/omnisight";
 import { useCameraSetupPreview } from "@/hooks/use-camera-setup-preview";
 import type {
   Camera,
@@ -800,7 +801,7 @@ export function CameraWizard({
       return {
         tone: "neutral" as const,
         title: "Analytics still becomes available after the camera is saved",
-        body: `Use the provisional ${defaultFrameLabel} authoring plane for now. Once the camera exists, ${brandName} can capture a real analytics still for source points and count boundaries.`,
+        body: `Use the provisional ${defaultFrameLabel} authoring plane for now. Once the camera exists, ${brandName} can capture a real analytics still for source points and event boundaries.`,
         frameLabel: defaultFrameLabel,
       };
     }
@@ -809,7 +810,7 @@ export function CameraWizard({
       return {
         tone: "neutral" as const,
         title: "Capturing analytics still",
-        body: `Source points and count boundaries will attach to the ${defaultFrameLabel} analytics frame as soon as the captured still is ready.`,
+        body: `Source points and event boundaries will attach to the ${defaultFrameLabel} analytics frame as soon as the captured still is ready.`,
         frameLabel: defaultFrameLabel,
       };
     }
@@ -827,7 +828,7 @@ export function CameraWizard({
       return {
         tone: "success" as const,
         title: "Analytics still ready",
-        body: `Source points and count boundaries are drawing on a captured ${defaultFrameLabel} analytics frame from the configured camera source. Captured ${capturedLabel}.`,
+        body: `Source points and event boundaries are drawing on a captured ${defaultFrameLabel} analytics frame from the configured camera source. Captured ${capturedLabel}.`,
         frameLabel: defaultFrameLabel,
       };
     }
@@ -836,7 +837,7 @@ export function CameraWizard({
       return {
         tone: "warning" as const,
         title: "Analytics frame ready, still unavailable",
-        body: `Frame metadata was loaded for ${defaultFrameLabel}, but the still image could not be displayed. Source points and count boundaries are using the analytics frame bounds until you refresh the still.`,
+        body: `Frame metadata was loaded for ${defaultFrameLabel}, but the still image could not be displayed. Source points and event boundaries are using the analytics frame bounds until you refresh the still.`,
         frameLabel: defaultFrameLabel,
       };
     }
@@ -1480,13 +1481,13 @@ export function CameraWizard({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
-                      Count boundaries
+                      Event boundaries
                     </p>
                     <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
                       Lines and zones
                     </h3>
                     <p className="mt-2 max-w-2xl text-sm text-[#9eb2cf]">
-                      Reuse the same analytics still from source-point setup to draw count
+                      Reuse the same analytics still from source-point setup to draw event
                       boundaries directly on the analyzed frame. Lines emit crossings,
                       while polygons emit entry and exit events.
                     </p>
@@ -1518,9 +1519,7 @@ export function CameraWizard({
 
                 {data.zones.length === 0 ? (
                   <p className="mt-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-                    No boundaries configured yet. Add a line for pass-by counting or a
-                    polygon for entry/exit counting, then click directly on the setup
-                    plane instead of typing raw coordinates.
+                    No event boundaries configured yet. Add a line for crossing events or a zone for enter and exit events.
                   </p>
                 ) : (
                   <div className="mt-5 space-y-4">
@@ -1571,7 +1570,7 @@ export function CameraWizard({
                               <span>Boundary {index + 1} classes</span>
                               <Input
                                 aria-label={`Boundary ${index + 1} classes`}
-                                placeholder="person,car"
+                                placeholder={omniPlaceExamples.eventClasses}
                                 value={boundary.classNames}
                                 onChange={(event) =>
                                   updateBoundary(index, { classNames: event.target.value })
@@ -1597,7 +1596,7 @@ export function CameraWizard({
                             helperText={
                               boundary.type === "line"
                                 ? "Lines count side-to-side crossings. Start on one side of the path and end on the other."
-                                : "Polygons count entries and exits whenever the tracked footpoint crosses the zone edge."
+                                : "Zones create enter and exit events whenever the tracked footpoint crosses the boundary."
                             }
                             mode={boundary.type === "line" ? "line" : "polygon"}
                             pointLabelPrefix={`Boundary ${index + 1}`}

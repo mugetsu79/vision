@@ -123,9 +123,11 @@ describe("SettingsPage operations workbench", () => {
   test("renders fleet operations instead of placeholder copy", () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: /fleet and operations/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /operations/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/stream diagnostics/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/delivery truth/i)).not.toBeInTheDocument();
     expect(screen.getByText(/manual dev mode/i)).toBeInTheDocument();
-    expect(screen.getByText(/desired workers/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/planned workers/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/prompt 7 uses this route/i)).not.toBeInTheDocument();
   });
 

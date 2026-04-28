@@ -4,9 +4,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { HistoryBucketDetail } from "@/components/history/HistoryBucketDetail";
 import { HistoryToolbar } from "@/components/history/HistoryToolbar";
 import { HistoryTrendPanel } from "@/components/history/HistoryTrendPanel";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { omniLabels } from "@/copy/omnisight";
 import { COCO_CLASSES } from "@/lib/coco-classes";
 import { buildHistorySearchResults, type HistorySearchResult } from "@/lib/history-search";
 import { buildBucketDetails, buildDisplaySeries, getCoverageCopy } from "@/lib/history-workbench";
@@ -211,6 +213,12 @@ export function HistoryPage() {
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-4">
+        <PageHeader
+          eyebrow="History"
+          title={omniLabels.historyTitle}
+          description="Explore how signals, events, and scene patterns change over time."
+        />
+
         <HistoryToolbar
           state={state}
           metric={metric}
@@ -227,7 +235,7 @@ export function HistoryPage() {
             <div className="text-sm text-[#dce6f7]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Export</p>
               <p className="mt-1">
-                {metricCopy.description} as {state.granularity} buckets.
+                Export the current pattern view at {state.granularity} granularity.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

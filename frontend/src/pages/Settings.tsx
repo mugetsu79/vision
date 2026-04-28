@@ -4,6 +4,7 @@ import { Copy, RefreshCw, Server, ShieldAlert, TerminalSquare } from "lucide-rea
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
 import {
   type FleetBootstrapResponse,
   type FleetOverview,
@@ -71,12 +72,10 @@ export function SettingsPage() {
                 Operations
               </p>
               <h1 className="mt-3 text-3xl font-semibold text-[#f4f8ff]">
-                Fleet and operations
+                {omniLabels.operationsTitle}
               </h1>
               <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                Workers are started by manual dev commands or production supervisors.
-                This page shows desired state, runtime reports, bootstrap material, and
-                delivery truth.
+                Monitor planned workers, runtime reports, bootstrap material, and stream diagnostics for the fleet.
               </p>
             </div>
             <Button type="button" onClick={() => void fleet.refetch()}>
@@ -87,7 +86,7 @@ export function SettingsPage() {
         </div>
 
         <div className="grid gap-3 px-6 py-5 md:grid-cols-5">
-          <SummaryTile label="Desired workers" value={fleet.data.summary.desired_workers} />
+          <SummaryTile label="Planned workers" value={fleet.data.summary.desired_workers} />
           <SummaryTile label="Running workers" value={fleet.data.summary.running_workers} />
           <SummaryTile label="Stale nodes" value={fleet.data.summary.stale_nodes} />
           <SummaryTile label="Offline nodes" value={fleet.data.summary.offline_nodes} />
@@ -137,7 +136,7 @@ export function SettingsPage() {
               <Input
                 value={hostname}
                 onChange={(event) => setHostname(event.target.value)}
-                placeholder="edge-kit-01"
+                placeholder={omniPlaceExamples.edgeHostname}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
@@ -192,7 +191,7 @@ export function SettingsPage() {
         </div>
       </Panel>
 
-      <Panel title="Delivery diagnostics" icon={<Copy className="size-4" />}>
+      <Panel title={omniLabels.streamDiagnosticsTitle} icon={<Copy className="size-4" />}>
         <div className="flex flex-col gap-3">
           {fleet.data.delivery_diagnostics.map((diagnostic) => (
             <div key={diagnostic.camera_id} className="rounded-[1rem] border border-white/10 p-3">
@@ -259,11 +258,11 @@ function CommandBlock({ text }: { text: string }) {
 
 function formatSource(source: FleetSourceCapability | null | undefined) {
   if (!source?.width || !source.height) {
-    return "source unknown";
+    return "source not reported";
   }
   return `${source.width} x ${source.height}${source.fps ? ` at ${source.fps} fps` : ""}`;
 }
 
 function formatReason(reason: string | null | undefined) {
-  return (reason ?? "unknown").replaceAll("_", " ");
+  return (reason ?? "not reported").replaceAll("_", " ");
 }

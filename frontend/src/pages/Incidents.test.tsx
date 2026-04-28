@@ -132,11 +132,11 @@ describe("IncidentsPage", () => {
     expect(
       await screen.findByRole("heading", { name: /evidence desk/i }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /review queue/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /facts/i })).toBeInTheDocument();
     expect(
-      screen.getByText(/review captured incident records/i),
+      screen.getByText(/move from signal to decision/i),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Queue" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /incident facts/i })).toBeInTheDocument();
 
     const hero = screen.getByRole("region", { name: /selected evidence/i });
     expect(within(hero).getByText(/clip-only evidence/i)).toBeInTheDocument();
@@ -228,7 +228,7 @@ describe("IncidentsPage", () => {
     await user.click(within(hero).getByRole("button", { name: /^review$/i }));
 
     expect(
-      await screen.findByText(/no incident records match/i),
+      await screen.findByText(/no evidence records match/i),
     ).toBeInTheDocument();
 
     const reviewRequest = requests.find(
