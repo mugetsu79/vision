@@ -416,8 +416,9 @@ describe("VideoStream", () => {
     });
 
     expect(
-      screen.getByRole("region", { name: /depot yard video stream/i }),
+      screen.getByRole("region", { name: /depot yard stream panel/i }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText(/depot yard live video/i)).toBeInTheDocument();
     const image = await screen.findByRole("img", { name: /depot yard live stream/i });
     expect(image).toHaveAttribute(
       "src",

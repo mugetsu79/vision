@@ -462,7 +462,7 @@ export function VideoStream({
   return (
     <div
       ref={containerRef}
-      aria-label={`${cameraName} video stream`}
+      aria-label={`${cameraName} stream panel`}
       className="absolute inset-0"
       data-first-frame-ms={firstFrameMs ?? undefined}
       data-transport={transport}
@@ -470,7 +470,7 @@ export function VideoStream({
     >
       <video
         ref={videoRef}
-        aria-label={`${cameraName} video stream`}
+        aria-label={`${cameraName} live video`}
         autoPlay
         className={transport === "mjpeg" ? "hidden" : "h-full w-full object-cover"}
         muted
