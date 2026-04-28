@@ -108,7 +108,12 @@ async def test_fleet_overview_derives_manual_central_worker() -> None:
     assert response.camera_workers[0].camera_name == "Lobby"
     assert response.camera_workers[0].desired_state == "manual"
     assert response.camera_workers[0].runtime_status == "not_reported"
-    assert "argus.inference.engine --camera-id" in response.camera_workers[0].dev_run_command
+    dev_run_command = response.camera_workers[0].dev_run_command
+    assert dev_run_command is not None
+    assert "<token>" not in dev_run_command
+    assert "grant_type=password&client_id=argus-cli" in dev_run_command
+    assert 'ARGUS_API_BEARER_TOKEN="$TOKEN"' in dev_run_command
+    assert "argus.inference.engine --camera-id" in dev_run_command
     assert response.delivery_diagnostics[0].source_capability is not None
 
 
@@ -192,6 +197,10 @@ async def test_create_bootstrap_material_wraps_edge_registration() -> None:
     assert edge_service.payload is not None
     assert edge_service.payload.hostname == "edge-kit-01"
     assert response.api_key == "edge_secret_once"
+    assert "<token>" not in response.dev_compose_command
+    assert "<camera-id>" not in response.dev_compose_command
+    assert "grant_type=password&client_id=argus-cli" in response.dev_compose_command
+    assert 'ARGUS_API_BEARER_TOKEN="$TOKEN"' in response.dev_compose_command
     assert (
         "docker compose -f infra/docker-compose.edge.yml up inference-worker"
         in response.dev_compose_command

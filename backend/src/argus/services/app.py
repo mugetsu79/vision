@@ -2450,19 +2450,36 @@ def _derive_worker_lifecycle(
 
 def _central_dev_run_command(camera_id: UUID) -> str:
     return (
-        "cd backend && "
-        "ARGUS_API_BASE_URL=http://127.0.0.1:8000 "
-        "ARGUS_API_BEARER_TOKEN=<token> "
-        f"python3 -m uv run python -m argus.inference.engine --camera-id {camera_id}"
+        f"{_local_dev_token_command()}\n\n"
+        'cd "${ARGUS_REPO_DIR:-$HOME/vision}/backend" && \\\n'
+        'ARGUS_API_BASE_URL="http://127.0.0.1:8000" \\\n'
+        'ARGUS_API_BEARER_TOKEN="$TOKEN" \\\n'
+        f'python3 -m uv run python -m argus.inference.engine --camera-id "{camera_id}"'
     )
 
 
 def _edge_dev_compose_command(edge_node_id: UUID) -> str:
     return (
-        "ARGUS_EDGE_CAMERA_ID=<camera-id> "
-        "ARGUS_API_BASE_URL=http://<master-host>:8000 "
-        "ARGUS_API_BEARER_TOKEN=<token> "
+        f"{_local_dev_token_command()}\n\n"
+        'ARGUS_EDGE_NODE_ID="'
+        f'{edge_node_id}" \\\n'
+        'ARGUS_EDGE_CAMERA_ID="${ARGUS_EDGE_CAMERA_ID:-replace-with-camera-id}" \\\n'
+        'ARGUS_API_BASE_URL="${ARGUS_API_BASE_URL:-http://host.docker.internal:8000}" \\\n'
+        'ARGUS_API_BEARER_TOKEN="$TOKEN" \\\n'
         "docker compose -f infra/docker-compose.edge.yml up inference-worker"
+    )
+
+
+def _local_dev_token_command() -> str:
+    return (
+        'TOKEN="$(\n'
+        "  curl -fsS \\\n"
+        "    --data "
+        "'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' "
+        "\\\n"
+        "    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |\n"
+        '  python3 -c \'import json,sys; print(json.load(sys.stdin)["access_token"])\'\n'
+        ')"'
     )
 
 
