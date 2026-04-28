@@ -6,17 +6,18 @@ import { describe, expect, test } from "vitest";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
-const rebuiltSymbolIds = [
-  "vezor-symbol-mark",
-  "symbol-ring",
-  "symbol-shards",
-  "symbol-eye",
-  "symbol-core",
-];
+const uploadedIconMarkers = [
+  'aria-label="Argus"',
+  "<title>Argus \u2014 Icon</title>",
+  'id="brandGrad"',
+  'filter="url(#innerShadow)"',
+  '<rect x="200" y="25" width="200" height="200"',
+] as const;
 
-const legacySimplifiedMarkers = [
-  'id="symbol-blades"',
-  'stroke-dasharray="94 24',
+const previousGeneratedSymbolMarkers = [
+  'id="vezor-symbol-mark"',
+  'id="symbol-shards"',
+  'id="symbol-eye"',
 ] as const;
 
 async function readRepoFile(pathFromRoot: string): Promise<string> {
@@ -24,7 +25,11 @@ async function readRepoFile(pathFromRoot: string): Promise<string> {
 }
 
 describe("product brand SVG assets", () => {
-  test("source and runtime symbol assets expose the rebuilt Vezor symbol structure", async () => {
+  test("source and runtime symbol assets use the uploaded Argus icon", async () => {
+    const uploadedIcon = await readRepoFile("argus-icon-from-upload.svg");
+    const sourceIcon = await readRepoFile(
+      "docs/brand/assets/source/argus-icon-from-upload.svg",
+    );
     const sourceSymbol = await readRepoFile(
       "docs/brand/assets/source/vezor-symbol-product-ui.svg",
     );
@@ -35,28 +40,32 @@ describe("product brand SVG assets", () => {
       "frontend/public/brand/argus-symbol-ui.svg",
     );
 
-    for (const svg of [sourceSymbol, productSymbol, compatibilitySymbol]) {
+    for (const svg of [
+      uploadedIcon,
+      sourceIcon,
+      sourceSymbol,
+      productSymbol,
+      compatibilitySymbol,
+    ]) {
       expect(svg).toContain('role="img"');
-      expect(svg).toContain('aria-label="Vezor symbol"');
-      expect(svg).toContain("<title>Vezor symbol</title>");
       expect(svg).toContain("<desc>");
 
-      for (const id of rebuiltSymbolIds) {
-        expect(svg).toContain(`id="${id}"`);
+      for (const marker of uploadedIconMarkers) {
+        expect(svg).toContain(marker);
       }
 
-      for (const marker of legacySimplifiedMarkers) {
+      for (const marker of previousGeneratedSymbolMarkers) {
         expect(svg).not.toContain(marker);
       }
-
-      expect(svg).not.toContain(">Argus<");
     }
 
+    expect(sourceIcon).toBe(uploadedIcon);
+    expect(sourceSymbol).toBe(uploadedIcon);
     expect(productSymbol).toBe(sourceSymbol);
     expect(compatibilitySymbol).toBe(sourceSymbol);
   });
 
-  test("source and runtime lockup assets embed the rebuilt symbol and Vezor lockup metadata", async () => {
+  test("source and runtime lockup assets embed the uploaded icon and Vezor lockup metadata", async () => {
     const sourceLockup = await readRepoFile(
       "docs/brand/assets/source/vezor-lockup-product-ui.svg",
     );
@@ -72,19 +81,19 @@ describe("product brand SVG assets", () => {
       expect(svg).toContain('aria-label="Vezor product lockup"');
       expect(svg).toContain("<title>Vezor product lockup</title>");
       expect(svg).toContain("<desc>");
+      expect(svg).toContain("data:image/svg+xml;base64,");
 
-      for (const id of rebuiltSymbolIds) {
-        expect(svg).toContain(`id="${id}"`);
+      for (const marker of uploadedIconMarkers) {
+        expect(svg).toContain(`data-upload-marker: ${marker}`);
       }
 
-      for (const marker of legacySimplifiedMarkers) {
+      for (const marker of previousGeneratedSymbolMarkers) {
         expect(svg).not.toContain(marker);
       }
 
       expect(svg).toContain(">Vezor<");
       expect(svg).toContain(">THE OMNISIGHT<");
       expect(svg).toContain(">PLATFORM<");
-      expect(svg).not.toContain(">Argus<");
     }
 
     expect(productLockup).toBe(sourceLockup);
