@@ -22,6 +22,22 @@ class TrackerType(StrEnum):
     OCSORT = "ocsort"
 
 
+class DetectorCapability(StrEnum):
+    FIXED_VOCAB = "fixed_vocab"
+    OPEN_VOCAB = "open_vocab"
+
+
+class RuntimeVocabularySource(StrEnum):
+    DEFAULT = "default"
+    QUERY = "query"
+    MANUAL = "manual"
+
+
+class QueryResolutionMode(StrEnum):
+    FIXED_FILTER = "fixed_filter"
+    OPEN_VOCAB = "open_vocab"
+
+
 class ModelTask(StrEnum):
     DETECT = "detect"
     CLASSIFY = "classify"

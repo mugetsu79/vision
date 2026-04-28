@@ -60,3 +60,28 @@ def test_sqlalchemy_enums_use_database_values_not_member_names() -> None:
     assert list(camera_columns["processing_mode"].type.enums) == ["central", "edge", "hybrid"]
     assert list(camera_columns["tracker_type"].type.enums) == ["botsort", "bytetrack", "ocsort"]
     assert list(model_columns["task"].type.enums) == ["detect", "classify", "attribute"]
+
+
+def test_schema_exposes_open_vocab_tables_and_columns() -> None:
+    from argus.models.tables import Camera, CountEvent, Model, TrackingEvent
+
+    assert "capability" in Model.__table__.c
+    assert "capability_config" in Model.__table__.c
+    assert "runtime_vocabulary" in Camera.__table__.c
+    assert "runtime_vocabulary_source" in Camera.__table__.c
+    assert "runtime_vocabulary_version" in Camera.__table__.c
+    assert "runtime_vocabulary_updated_at" in Camera.__table__.c
+    assert "vocabulary_version" in TrackingEvent.__table__.c
+    assert "vocabulary_hash" in TrackingEvent.__table__.c
+    assert "vocabulary_version" in CountEvent.__table__.c
+    assert "vocabulary_hash" in CountEvent.__table__.c
+
+
+def test_schema_registers_camera_vocabulary_snapshots_table() -> None:
+    from argus.models.tables import CameraVocabularySnapshot
+
+    assert CameraVocabularySnapshot.__tablename__ == "camera_vocabulary_snapshots"
+    assert "camera_id" in CameraVocabularySnapshot.__table__.c
+    assert "version" in CameraVocabularySnapshot.__table__.c
+    assert "vocabulary_hash" in CameraVocabularySnapshot.__table__.c
+    assert "terms" in CameraVocabularySnapshot.__table__.c

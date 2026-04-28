@@ -11,11 +11,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from argus.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
 from argus.models.enums import (
     CountEventType,
+    DetectorCapability,
     ModelFormat,
     ModelTask,
     ProcessingMode,
     RoleEnum,
     RuleAction,
+    RuntimeVocabularySource,
     TrackerType,
 )
 
@@ -113,6 +115,16 @@ class Model(UUIDPrimaryKeyMixin, Base):
         nullable=False,
     )
     classes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    capability: Mapped[DetectorCapability] = mapped_column(
+        enum_column(DetectorCapability, "detector_capability_enum"),
+        nullable=False,
+        default=DetectorCapability.FIXED_VOCAB,
+    )
+    capability_config: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
     input_shape: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -153,6 +165,17 @@ class Camera(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
         nullable=False,
     )
     active_classes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    runtime_vocabulary: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    runtime_vocabulary_source: Mapped[RuntimeVocabularySource] = mapped_column(
+        enum_column(RuntimeVocabularySource, "runtime_vocabulary_source_enum"),
+        nullable=False,
+        default=RuntimeVocabularySource.DEFAULT,
+    )
+    runtime_vocabulary_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    runtime_vocabulary_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     attribute_rules: Mapped[list[dict[str, object]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
@@ -208,6 +231,25 @@ class TrackingEvent(UUIDPrimaryKeyMixin, Base):
     zone_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attributes: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     bbox: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    vocabulary_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vocabulary_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class CameraVocabularySnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "camera_vocabulary_snapshots"
+
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    vocabulary_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[RuntimeVocabularySource] = mapped_column(
+        enum_column(RuntimeVocabularySource, "camera_vocabulary_snapshot_source_enum"),
+        nullable=False,
+    )
+    terms: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
 
 
 class CountEvent(UUIDPrimaryKeyMixin, Base):
@@ -233,6 +275,8 @@ class CountEvent(UUIDPrimaryKeyMixin, Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     attributes: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    vocabulary_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vocabulary_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class RuleEvent(UUIDPrimaryKeyMixin, Base):

@@ -12,11 +12,14 @@ from argus.core.security import AuthenticatedUser
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
     CountEventType,
+    DetectorCapability,
     HistoryCoverageStatus,
     HistoryMetric,
     ModelFormat,
     ModelTask,
     ProcessingMode,
+    QueryResolutionMode,
+    RuntimeVocabularySource,
     TrackerType,
 )
 
@@ -45,13 +48,29 @@ class SiteResponse(BaseModel):
     created_at: datetime
 
 
+class ModelCapabilityConfig(BaseModel):
+    supports_runtime_vocabulary_updates: bool = False
+    max_runtime_terms: int | None = None
+    prompt_format: Literal["labels", "phrases"] | None = None
+    execution_profiles: list[str] = Field(default_factory=list)
+
+
+class RuntimeVocabularyState(BaseModel):
+    terms: list[str] = Field(default_factory=list)
+    source: RuntimeVocabularySource = RuntimeVocabularySource.DEFAULT
+    version: int = 0
+    updated_at: datetime | None = None
+
+
 class ModelCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     version: str = Field(min_length=1, max_length=64)
     task: ModelTask
     path: str = Field(min_length=1)
     format: ModelFormat
-    classes: list[str] | None = Field(default=None, min_length=1)
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB
+    capability_config: ModelCapabilityConfig = Field(default_factory=ModelCapabilityConfig)
+    classes: list[str] | None = None
     input_shape: dict[str, int]
     sha256: str = Field(min_length=64, max_length=64)
     size_bytes: int = Field(gt=0)
@@ -64,7 +83,9 @@ class ModelUpdate(BaseModel):
     task: ModelTask | None = None
     path: str | None = Field(default=None, min_length=1)
     format: ModelFormat | None = None
-    classes: list[str] | None = Field(default=None, min_length=1)
+    capability: DetectorCapability | None = None
+    capability_config: ModelCapabilityConfig | None = None
+    classes: list[str] | None = None
     input_shape: dict[str, int] | None = None
     sha256: str | None = Field(default=None, min_length=64, max_length=64)
     size_bytes: int | None = Field(default=None, gt=0)
@@ -78,6 +99,8 @@ class ModelResponse(BaseModel):
     task: ModelTask
     path: str
     format: ModelFormat
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB
+    capability_config: ModelCapabilityConfig = Field(default_factory=ModelCapabilityConfig)
     classes: list[str]
     input_shape: dict[str, int]
     sha256: str
@@ -264,8 +287,11 @@ class WorkerStreamSettings(BaseModel):
 class WorkerModelSettings(BaseModel):
     name: str
     path: str
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB
+    capability_config: ModelCapabilityConfig = Field(default_factory=ModelCapabilityConfig)
     classes: list[str]
     input_shape: dict[str, int]
+    runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     confidence_threshold: float = 0.25
     iou_threshold: float = 0.45
 
@@ -322,6 +348,9 @@ WorkerZone = WorkerLineZone | WorkerPolygonZone | LegacyZone
 
 class CameraCommandPayload(BaseModel):
     active_classes: list[str] | None = None
+    runtime_vocabulary: list[str] | None = None
+    runtime_vocabulary_source: RuntimeVocabularySource | None = None
+    runtime_vocabulary_version: int | None = None
     tracker_type: TrackerType | None = None
     privacy: WorkerPrivacySettings | None = None
     attribute_rules: list[dict[str, Any]] | None = None
@@ -339,6 +368,7 @@ class WorkerConfigResponse(BaseModel):
     tracker: WorkerTrackerSettings
     privacy: WorkerPrivacySettings = Field(default_factory=WorkerPrivacySettings)
     active_classes: list[str] = Field(default_factory=list)
+    runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[WorkerZone] = Field(default_factory=list)
     homography: dict[str, Any] | None = None
@@ -353,6 +383,7 @@ class CameraCreate(BaseModel):
     secondary_model_id: UUID | None = None
     tracker_type: TrackerType
     active_classes: list[str] = Field(default_factory=list)
+    runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[CameraZone] = Field(default_factory=list)
     homography: HomographyPayload
@@ -371,6 +402,7 @@ class CameraUpdate(BaseModel):
     secondary_model_id: UUID | None = None
     tracker_type: TrackerType | None = None
     active_classes: list[str] | None = None
+    runtime_vocabulary: RuntimeVocabularyState | None = None
     attribute_rules: list[dict[str, Any]] | None = None
     zones: list[CameraZone] | None = None
     homography: HomographyPayload | None = None
@@ -391,6 +423,7 @@ class CameraResponse(BaseModel):
     secondary_model_id: UUID | None = None
     tracker_type: TrackerType
     active_classes: list[str]
+    runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     attribute_rules: list[dict[str, Any]]
     zones: list[StoredCameraZone]
     homography: HomographyPayload
@@ -538,7 +571,9 @@ class QueryRequest(BaseModel):
 
 
 class QueryResponse(BaseModel):
+    resolution_mode: QueryResolutionMode = QueryResolutionMode.FIXED_FILTER
     resolved_classes: list[str]
+    resolved_vocabulary: list[str] = Field(default_factory=list)
     provider: str
     model: str
     latency_ms: int
