@@ -1,8 +1,9 @@
 import { startTransition, type FormEvent, useMemo, useState } from "react";
 
+import { productBrand } from "@/brand/product";
+import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
 import { apiClient, toApiError } from "@/lib/api";
 import type { components } from "@/lib/api.generated";
-import { productBrand } from "@/brand/product";
 import { useAuthStore } from "@/stores/auth-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,14 +87,14 @@ export function AgentInput({
     <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,17,27,0.98),rgba(5,9,16,0.96))] shadow-[0_24px_64px_-46px_rgba(84,136,255,0.45)]">
       <div className="border-b border-white/8 px-5 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">
-          Command query
+          {omniLabels.askVezorTitle}
         </p>
         <h3 className="mt-2 text-lg font-semibold text-[#f3f7ff]">
-          Shape the live wall with natural language.
+          Resolve operator intent across live scenes.
         </h3>
         <p className="mt-2 text-sm text-[#8ca2c5]">
-          Resolve classes once, then let {brandName} trim the operator view while the backend
-          applies the same intent to the running pipeline.
+          Ask {brandName} for the signals you need, then keep the live wall focused
+          while the underlying telemetry remains unchanged.
         </p>
       </div>
 
@@ -101,10 +102,10 @@ export function AgentInput({
         <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)_auto]">
           <label className="space-y-2 text-sm text-[#d9e5f7]">
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
-              Query scope
+              Scope
             </span>
             <Select
-              aria-label="Query scope"
+              aria-label="Scope"
               value={scopeValue}
               onChange={(event) => setScopeValue(event.target.value)}
             >
@@ -119,11 +120,11 @@ export function AgentInput({
 
           <label className="space-y-2 text-sm text-[#d9e5f7]">
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
-              Query {brandName}
+              Ask Vezor
             </span>
             <Input
-              aria-label={`Query ${brandName}`}
-              placeholder="only show cars"
+              aria-label={omniLabels.askVezorTitle}
+              placeholder={omniPlaceExamples.askVezor}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
             />
@@ -131,7 +132,7 @@ export function AgentInput({
 
           <div className="flex items-end">
             <Button className="w-full xl:w-auto" disabled={queryDisabled} type="submit">
-              {isSubmitting ? "Resolving..." : "Apply query"}
+              {isSubmitting ? "Resolving..." : "Apply"}
             </Button>
           </div>
         </div>

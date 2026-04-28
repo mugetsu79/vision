@@ -1,3 +1,5 @@
+import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
+
 export function DynamicStats({
   counts,
 }: {
@@ -11,17 +13,17 @@ export function DynamicStats({
     <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(5,8,13,0.96))]">
       <div className="border-b border-white/8 px-5 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">
-          Dynamic stats
+          {omniLabels.signalsInViewTitle}
         </p>
         <h3 className="mt-2 text-lg font-semibold text-[#f3f7ff]">
-          Live classes in view.
+          Live signals in view.
         </h3>
       </div>
 
       <div className="grid gap-3 px-5 py-5">
         {entries.length === 0 ? (
           <p className="text-sm text-[#8ca2c5]">
-            Live telemetry has not produced any visible detections yet.
+            {omniEmptyStates.noSignals}
           </p>
         ) : (
           entries.map(([className, count]) => (

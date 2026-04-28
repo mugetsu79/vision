@@ -3,8 +3,6 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { productBrand } from "@/brand/product";
-
 vi.mock("@/lib/config", () => ({
   frontendConfig: {
     apiBaseUrl: "http://127.0.0.1:8000",
@@ -87,11 +85,15 @@ describe("AgentInput", () => {
       </QueryClientProvider>,
     );
 
-    await user.type(
-      screen.getByLabelText(new RegExp(`query ${productBrand.name}`, "i")),
-      "only watch cars and trucks",
+    expect(screen.getByText(/^ask vezor$/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/ask vezor/i)).toHaveAttribute(
+      "placeholder",
+      "show people near restricted zones",
     );
-    await user.click(screen.getByRole("button", { name: /apply query/i }));
+    expect(screen.getByRole("button", { name: /apply/i })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/ask vezor/i), "only watch cars and trucks");
+    await user.click(screen.getByRole("button", { name: /^apply$/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/car, truck/i)).toBeInTheDocument(),
@@ -156,11 +158,8 @@ describe("AgentInput", () => {
       </QueryClientProvider>,
     );
 
-    await user.type(
-      screen.getByLabelText(new RegExp(`query ${productBrand.name}`, "i")),
-      "forklifts and pallet jacks",
-    );
-    await user.click(screen.getByRole("button", { name: /apply query/i }));
+    await user.type(screen.getByLabelText(/ask vezor/i), "forklifts and pallet jacks");
+    await user.click(screen.getByRole("button", { name: /^apply$/i }));
 
     expect(await screen.findByText(/applied detector vocabulary/i)).toBeInTheDocument();
     expect(screen.getByText(/forklift, pallet jack/i)).toBeInTheDocument();

@@ -233,6 +233,10 @@ describe("LivePage", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
+    expect(await screen.findByRole("heading", { name: /live intelligence/i })).toBeInTheDocument();
+    expect(screen.getByText(/^signals in view$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^resolved intent$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/live command surface/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
     expect(screen.getByTestId("stream-North Gate")).toBeInTheDocument();
     expect(screen.getByTestId("stream-Depot Yard")).toBeInTheDocument();
@@ -297,12 +301,12 @@ describe("LivePage", () => {
     expect(screen.getByText("car")).toBeInTheDocument();
     expect(screen.getByText("bus")).toBeInTheDocument();
     expect(screen.getAllByText(/visible now/i).length).toBeGreaterThanOrEqual(2);
-    const dynamicStats = screen.getByRole("heading", { name: /live classes in view/i }).closest("section");
+    const dynamicStats = screen.getByRole("heading", { name: /live signals in view/i }).closest("section");
     expect(dynamicStats).not.toBeNull();
     expect(within(dynamicStats as HTMLElement).getByText("3")).toBeInTheDocument();
 
-    await user.type(screen.getByRole("textbox", { name: /query/i }), "only show cars");
-    await user.click(screen.getByRole("button", { name: /apply query/i }));
+    await user.type(screen.getByRole("textbox", { name: /ask vezor/i }), "only show cars");
+    await user.click(screen.getByRole("button", { name: /^apply$/i }));
 
     await waitFor(() =>
       expect(screen.getAllByText(/query-rules-v1/i).length).toBeGreaterThanOrEqual(1),

@@ -9,6 +9,7 @@ import { LiveSparkline } from "@/components/live/LiveSparkline";
 import { TelemetryCanvas } from "@/components/live/TelemetryCanvas";
 import { VideoStream } from "@/components/live/VideoStream";
 import { Badge } from "@/components/ui/badge";
+import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras } from "@/hooks/use-cameras";
 import {
   formatHeartbeat,
@@ -19,15 +20,11 @@ import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
 
 type QueryResponse = components["schemas"]["QueryResponse"];
 
-type WorkspacePageProps = {
-  workspaceLabel: string;
-};
-
 export function LivePage() {
-  return <WorkspacePage workspaceLabel="Live" />;
+  return <WorkspacePage />;
 }
 
-function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
+function WorkspacePage() {
   const { data: cameras = [], isLoading } = useCameras();
   const { connectionState, framesByCamera } = useLiveTelemetry(cameras.map((camera) => camera.id));
   const [activeQuery, setActiveQuery] = useState<{
@@ -74,9 +71,9 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0 space-y-5">
         <PageHeader
-          eyebrow={workspaceLabel}
-          title="Live command surface"
-          description="Monitor active streams, resolve natural-language filters, and review telemetry without oversized hero framing."
+          eyebrow="Live"
+          title={omniLabels.liveTitle}
+          description="Watch scenes, signals, and operator intent converge in one live spatial intelligence layer."
           actions={
             <>
               <Badge className={connectionBadgeClass(connectionState)}>
@@ -91,11 +88,11 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
 
         <PageUtilityBar
           label="Workspace utility"
-          title="Resolve filters without leaving the live wall"
+          title="Ask Vezor without leaving the live wall"
           description={
             isLoading
-              ? "Loading the current camera inventory."
-              : "The agent query still applies across the live wall and its detection overlays."
+              ? "Loading connected scenes."
+              : "Resolved intent narrows the operator view while telemetry remains truthful."
           }
           actions={<Badge className={connectionBadgeClass(connectionState)}>{connectionBadgeLabel(connectionState)}</Badge>}
         >
@@ -116,11 +113,11 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
 
         {isLoading ? (
           <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
-            Loading live cameras...
+            Loading connected scenes...
           </div>
         ) : cameras.length === 0 ? (
           <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
-            No cameras are configured yet.
+            {omniEmptyStates.noScenes}
           </div>
         ) : (
           <div className="grid gap-5 md:grid-cols-2">
@@ -205,8 +202,8 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
         <DynamicStats counts={counts} />
 
         <InspectorPanel
-          title="Current command resolution"
-          description="Selection-aware detail only."
+          title={omniLabels.resolvedIntentTitle}
+          description="Selection-aware interpretation for the current live view."
           actions={
             activeQuery ? (
               <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
@@ -227,8 +224,7 @@ function WorkspacePage({ workspaceLabel }: WorkspacePageProps) {
             </>
           ) : (
             <p className="text-sm text-[#8ca2c5]">
-              No natural-language filter is active. Operators are currently seeing the raw
-              class set from each live scene.
+              No intent is active. Operators are seeing the current signal set from each live scene.
             </p>
           )}
         </InspectorPanel>
