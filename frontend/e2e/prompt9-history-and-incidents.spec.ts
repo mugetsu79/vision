@@ -134,6 +134,8 @@ test("history renders quickly, CSV export works, and incidents cover review flow
     reviewed_at: null,
     reviewed_by_subject: null,
   };
+  const incidentReviewStatuses: Array<string | null> = [];
+  const patchBodies: Array<{ review_status?: string }> = [];
 
   await page.route("**/api/v1/incidents**", async (route) => {
     const request = route.request();
@@ -144,6 +146,7 @@ test("history renders quickly, CSV export works, and incidents cover review flow
       url.pathname === `/api/v1/incidents/${incident.id}/review`
     ) {
       const body = request.postDataJSON() as { review_status?: string };
+      patchBodies.push(body);
       incident =
         body.review_status === "reviewed"
           ? {
@@ -168,8 +171,10 @@ test("history renders quickly, CSV export works, and incidents cover review flow
 
     if (request.method() === "GET" && url.pathname === "/api/v1/incidents") {
       const reviewStatus = url.searchParams.get("review_status");
+      expect([null, "pending", "reviewed"]).toContain(reviewStatus);
+      incidentReviewStatuses.push(reviewStatus);
       const incidents =
-        !reviewStatus || reviewStatus === "all" || reviewStatus === incident.review_status
+        !reviewStatus || reviewStatus === incident.review_status
           ? [incident]
           : [];
 
@@ -237,6 +242,7 @@ test("history renders quickly, CSV export works, and incidents cover review flow
 
   await operationsLink(page, "Incidents").click();
   await expect(page).toHaveURL(/\/incidents$/);
+  await expect.poll(() => incidentReviewStatuses[0]).toBe("pending");
   await expect(page.getByRole("heading", { name: "Queue" })).toBeVisible();
   await expect(
     page.getByRole("complementary", { name: "Incident facts" }),
@@ -246,12 +252,65 @@ test("history renders quickly, CSV export works, and incidents cover review flow
   await expect(evidence.getByRole("link", { name: "Open clip" })).toBeVisible();
 
   await evidence.getByRole("button", { name: "Review" }).click();
+  await expect.poll(() => patchBodies[0]).toEqual({ review_status: "reviewed" });
   await expect(page.getByText(/no incident records match/i)).toBeVisible();
 
   await page.getByLabel("Review status").selectOption("reviewed");
+  await expect.poll(() => incidentReviewStatuses.at(-1)).toBe("reviewed");
   const reviewedEvidence = page.getByRole("region", { name: /selected evidence/i });
   await expect(reviewedEvidence.getByRole("heading", { name: "Forklift Gate" })).toBeVisible();
   await expect(reviewedEvidence.getByRole("button", { name: "Reopen" })).toBeVisible();
+});
+
+test("incidents render signed snapshot previews", async ({ page }) => {
+  await page.route("**/api/v1/cameras", async (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([cameraPayload()]),
+    }),
+  );
+  await page.route("**/api/v1/incidents**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const reviewStatus = url.searchParams.get("review_status");
+
+    expect(request.method()).toBe("GET");
+    expect(url.pathname).toBe("/api/v1/incidents");
+    expect([null, "pending", "reviewed"]).toContain(reviewStatus);
+
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "99999999-9999-9999-9999-999999999999",
+          camera_id: "11111111-1111-1111-1111-111111111111",
+          camera_name: "Forklift Gate",
+          ts: "2026-04-18T10:15:00Z",
+          type: "ppe-missing",
+          payload: { hard_hat: false, severity: "high" },
+          snapshot_url: "https://minio.local/signed/incidents/forklift-gate.jpg",
+          clip_url: "https://minio.local/signed/incidents/forklift-gate.mjpeg",
+          storage_bytes: 2097152,
+          review_status: "pending",
+          reviewed_at: null,
+          reviewed_by_subject: null,
+        },
+      ]),
+    });
+  });
+
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.locator("#username").fill("admin-dev");
+  await page.locator("#password").fill("argus-admin-pass");
+  await page.locator("#kc-login").click();
+
+  await expect(page).toHaveURL(/\/live$/);
+  await operationsLink(page, "Incidents").click();
+  await expect(page).toHaveURL(/\/incidents$/);
+  await expect(
+    page.getByRole("img", { name: /incident preview for forklift gate/i }),
+  ).toBeVisible();
 });
 
 test("history filter state survives navigation via URL", async ({ page }) => {
