@@ -2,32 +2,51 @@
 
 Date: 2026-04-28
 
-Purpose: paste this document into a fresh project chat to continue from the current repo state without redoing completed setup, source-aware delivery, native routing, or History work.
+Purpose: paste this document into a fresh project chat to continue from the current repo state without redoing completed setup, source-aware delivery, native routing, History work, Fleet / Operations phase 1, or the logo cleanup.
 
-## Current branch state
+## Current Branch State
 
 Active branch:
 - `codex/source-aware-delivery-calibration-fixes`
 
-Important branch note:
-- `origin/codex/source-aware-delivery-calibration-fixes` is pushed through `a41f8e2`.
-- Local branch also has `d9da189` with the new Fleet / Operations spec and implementation plan.
-- Push the branch before testing from another machine if that machine needs the Fleet / Operations docs.
+Remote state:
+- `origin/codex/source-aware-delivery-calibration-fixes` is pushed through `1d2ee26`.
+- Local `HEAD` is `1d2ee26`.
+- The old handoff branch `codex/precise-counting-occupancy` is not the active continuation branch for this work.
 
 Latest relevant commits:
+- `1d2ee26 fix(brand): remove logo background tile`
+- `f7ca875 fix(brand): use uploaded argus icon logo`
+- `f00499f fix(operations): satisfy generated type checks`
+- `921f04a feat(operations-ui): label settings route as operations`
+- `baf29e9 feat(operations-ui): replace settings with fleet workbench`
+- `4933860 feat(operations-ui): add fleet operations hooks`
+- `bed9ec0 feat(operations): expose edge bootstrap material`
+- `cf54f3f feat(operations): derive fleet worker lifecycle overview`
+- `874d3bd feat(operations): add fleet operations API contracts`
+- `bfce5dc docs(handoff): refresh next chat context`
 - `d9da189 docs(operations): spec fleet workbench lifecycle plan`
 - `a41f8e2 fix(history): mark unproven empty buckets as gaps`
-- `275c22c fix(history): scope default queries and expose bucket picker`
-- `dcf07e3 fix(history): use raw count events for partial buckets`
-- `0a88ee3 fix(history): refresh following windows and use exclusive ends`
-- `c96dcf4 fix: route central native delivery through processed stream`
-- `67b3711 fix: probe source profiles in camera wizard`
-- `37b0614 feat: add source-aware delivery and setup fixes`
-- `8a556e7 fix(setup): harden calibration still capture`
 
-## Current baseline
+To update another dev machine:
 
-These handoff items are done and should not be re-planned:
+```bash
+cd ~/vision
+git fetch origin
+git switch codex/source-aware-delivery-calibration-fixes
+git pull --rebase origin codex/source-aware-delivery-calibration-fixes
+git rev-parse --short HEAD
+```
+
+Expected short SHA:
+
+```text
+1d2ee26
+```
+
+## Current Baseline
+
+These items are complete and should not be re-planned:
 
 - camera PATCH command publishing regression is fixed by `CameraCommandPayload`
 - destination world-plane point ordering is fixed with y-up destination coordinate handling
@@ -39,12 +58,42 @@ These handoff items are done and should not be re-planned:
 - camera wizard/table/live UI expose source capability and native-unavailable reasons
 - central native browser delivery routes through processed stream access instead of fragile passthrough relay startup
 - History follow-now, zero/no-telemetry semantics, unified search, bucket review, exports, and accessibility fixes are implemented
+- Fleet / Operations phase 1 is implemented under the Settings route
+- Settings is relabeled as Operations in app navigation
+- the product logo now uses `argus-icon-from-upload.svg`, with the dark background tile removed so the sidebar mark renders on transparent canvas
 
-The old handoff branch `codex/precise-counting-occupancy` is no longer the active continuation branch for this work.
+## Fleet / Operations Phase 1
 
-## Current product model
+Implemented behavior:
 
-Important concepts to preserve:
+- Backend exposes `GET /api/v1/operations/fleet`.
+- Backend exposes `POST /api/v1/operations/bootstrap`.
+- Fleet overview derives:
+  - central and edge node summaries
+  - desired worker count
+  - running/stale/offline/unknown node summaries
+  - per-camera lifecycle owner
+  - runtime state from currently available heartbeat data
+  - camera assignment visibility
+  - native delivery diagnostics
+- Edge bootstrap wraps edge registration and returns one-time bootstrap material plus a dev compose command.
+- Frontend adds `use-operations` hooks.
+- `frontend/src/pages/Settings.tsx` is now the Fleet and operations workbench.
+- The UI supports:
+  - summary tiles
+  - manual dev mode / supervised / mixed mode context
+  - node list
+  - bootstrap edge node form
+  - desired camera worker cards
+  - delivery diagnostics
+- Phase 1 intentionally does not start, stop, or restart host processes from the browser.
+
+Important constraint:
+- Current edge heartbeats still do not report true per-worker process state. The UI/service must continue to represent missing precision as `not_reported`, `stale`, `offline`, or `unknown` rather than inventing a running state.
+
+## Product Model To Preserve
+
+Important concepts:
 
 - Analytics/calibration frame and browser delivery profile are separate concepts.
 - Boundaries and homography should be defined against the analytics frame, not the browser rendition.
@@ -59,71 +108,66 @@ Important concepts to preserve:
   - runtime state: what supervisors/workers report
   - dev/manual mode: terminal or compose commands
   - production/supervised mode: a supervisor owns process start/stop/restart
+- Bootstrap material can contain secrets. Show it once, do not persist plaintext API keys, and do not leak it into logs, docs, screenshots, or chat summaries.
 
-## Latest verification
+## Latest Verification
 
-After the final History coverage fix on `a41f8e2`, these passed:
+Fresh verification after the Operations and logo work:
 
 Backend:
-- `python3 -m uv run pytest tests/services/test_history_service.py tests/api/test_history_endpoints.py tests/api/test_export_endpoints.py -q`
-  - `38 passed`
-- `python3 -m uv run ruff check src/argus/models/enums.py src/argus/api/contracts.py src/argus/services/app.py tests/services/test_history_service.py tests/api/test_history_endpoints.py tests/api/test_export_endpoints.py`
-  - passed
-- `python3 -m uv run mypy src/argus/services/app.py src/argus/api/contracts.py`
-  - passed
+- `python3 -m uv run pytest tests/services/test_operations_service.py tests/api/test_operations_endpoints.py -q`
+  - `5 passed`
 
 Frontend:
-- `corepack pnpm --dir frontend exec vitest run src/lib/history-url-state.test.ts src/lib/history-workbench.test.ts src/lib/history-search.test.ts src/components/history/HistoryTrendChart.test.tsx src/pages/History.test.tsx`
-  - `51 passed`
-- `corepack pnpm --dir frontend build`
+- `corepack pnpm --dir frontend exec vitest run src/hooks/use-operations.test.ts src/pages/Settings.test.tsx src/components/layout/AppShell.test.tsx src/brand/product-assets.test.ts`
+  - `11 passed`
+- `corepack pnpm --dir frontend exec eslint src/brand/product-assets.test.ts`
   - passed
-- `CI=1 corepack pnpm --dir frontend exec playwright test e2e/prompt9-history-and-incidents.spec.ts`
-  - `3 passed`
+- `corepack pnpm --dir frontend build`
+  - passed after the final logo cleanup
 
-The Fleet / Operations documents in `d9da189` are docs-only and were self-reviewed plus staged with `git diff --cached --check` before commit.
+Browser smoke:
+- Reloaded `http://localhost:3000/settings`.
+- Confirmed the Operations page renders.
+- Confirmed the sidebar logo uses `/brand/product-symbol-ui.svg` and no longer shows the dark boxed background.
 
-## Primary next task
+Known non-blocking validation issue:
+- Full `corepack pnpm --dir frontend lint` still fails on pre-existing unrelated files outside the logo/operations patch. Do not treat those lint failures as part of the logo cleanup unless the next task is specifically to pay down lint debt.
 
-Implement the Fleet / Operations workbench.
+Earlier History verification on this branch:
+- `python3 -m uv run pytest tests/services/test_history_service.py tests/api/test_history_endpoints.py tests/api/test_export_endpoints.py -q`
+  - `38 passed`
+- targeted backend `ruff` and `mypy` checks for the History contract passed
+- targeted History frontend tests passed
+- History Playwright prompt 9 spec passed
 
-Use these docs as the source of truth:
+## Immediate Next Step
 
-Spec:
-- `docs/superpowers/specs/2026-04-28-fleet-operations-workbench-design.md`
+Recommended next-chat starting point:
 
-Plan:
-- `docs/superpowers/plans/2026-04-28-fleet-operations-workbench-implementation-plan.md`
+1. Pull `codex/source-aware-delivery-calibration-fixes` on the iMac and confirm `HEAD` is `1d2ee26`.
+2. Recreate backend and frontend containers so the new API and UI assets are active:
 
-Implementation mode:
-- Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
-- Follow the implementation plan task-by-task.
-- Keep the first phase read-first and safe:
-  - fleet overview
-  - desired worker state
-  - runtime status summary from current heartbeat data
-  - camera assignment visibility
-  - source/native/transcode diagnostics
-  - edge bootstrap material
-  - manual dev run commands
+```bash
+make dev-up
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend frontend
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  /tmp/argus-backend-venv/bin/alembic upgrade head
+corepack pnpm --dir frontend generate:api
+```
 
-Do not implement direct process start/stop from the browser in phase 1.
+3. Open `http://127.0.0.1:3000/settings`.
+4. Validate:
+   - the nav says Operations
+   - the Operations page loads
+   - the transparent uploaded Argus logo renders cleanly
+   - node and worker state is truthful for the current dev setup
+   - bootstrap material can be generated without exposing secrets beyond the one-time UI result
+5. If browser assets look stale, hard refresh with `Cmd+Shift+R`.
 
-The intended lifecycle model:
+## Secondary Future Task
 
-- Dev:
-  - platform services are started by Docker Compose
-  - camera workers are started manually with `argus.inference.engine --camera-id ...`
-  - edge dev can use `infra/docker-compose.edge.yml`
-- Production:
-  - a central or edge supervisor owns worker processes
-  - backend stores/derives desired worker state
-  - supervisors reconcile desired state to actual processes
-  - UI shows and changes desired state, or sends lifecycle requests to supervisors
-  - UI never shells into the host
-
-## Secondary future task
-
-After Fleet / Operations phase 1, continue with the open-vocab hybrid detector track.
+After iMac validation of Fleet / Operations phase 1, continue with the open-vocab hybrid detector track.
 
 Reference docs:
 - `docs/superpowers/specs/2026-04-26-open-vocab-hybrid-detector-design.md`
@@ -131,15 +175,14 @@ Reference docs:
 
 Important note:
 - Natural-language history/search can become richer once open-vocab hybrid detection exists.
-- Do not mix open-vocab implementation into Fleet / Operations phase 1.
+- Do not mix open-vocab implementation into Fleet / Operations validation or follow-up bug fixes.
 
-## Known follow-up risks
+## Known Follow-Up Risks
 
-Fleet / Operations implementation risks:
+Operations risks:
 
-- Current `EdgeHeartbeatRequest` reports only `node_id`, `version`, and camera count. Per-worker runtime state is not available yet.
-- Phase 1 should represent per-camera runtime as `not_reported`, `stale`, `offline`, or `unknown` rather than inventing false precision.
-- Existing scheduler is minimal and not yet a product supervisor contract.
+- `EdgeHeartbeatRequest` reports only `node_id`, `version`, and camera count. Per-worker runtime state is not available yet.
+- Existing scheduler is minimal and not yet a production supervisor contract.
 - Bootstrap returns secret material and must show it once only; do not persist plaintext secrets.
 - Delivery diagnostics must not expose RTSP credentials, JWTs, API keys, or NATS seeds.
 
@@ -147,14 +190,18 @@ Validation risks:
 
 - Native central routing is code-fixed, but should still be validated on the real target camera/runtime after pulling the branch.
 - Source capability migration `0005_source_capability.py` must be applied in any redeployed database before the camera list endpoint reads `cameras.source_capability`.
+- If `frontend/src/lib/api.generated.ts` changes during iMac setup, inspect and commit that change only if it is an expected OpenAPI regeneration from the current backend.
 
-## Useful files for the next chat
+## Useful Files For The Next Chat
 
 Backend:
 - `backend/src/argus/api/contracts.py`
+- `backend/src/argus/api/v1/operations.py`
 - `backend/src/argus/api/v1/edge.py`
 - `backend/src/argus/api/v1/__init__.py`
 - `backend/src/argus/services/app.py`
+- `backend/tests/services/test_operations_service.py`
+- `backend/tests/api/test_operations_endpoints.py`
 - `backend/src/argus/inference/engine.py`
 - `backend/src/argus/inference/scheduler.py`
 - `backend/src/argus/models/tables.py`
@@ -162,10 +209,24 @@ Backend:
 
 Frontend:
 - `frontend/src/pages/Settings.tsx`
+- `frontend/src/pages/Settings.test.tsx`
+- `frontend/src/hooks/use-operations.ts`
+- `frontend/src/hooks/use-operations.test.ts`
 - `frontend/src/components/layout/TopNav.tsx`
 - `frontend/src/components/layout/AppShell.test.tsx`
+- `frontend/src/components/layout/ProductLockup.tsx`
+- `frontend/src/components/layout/ProductLockup.test.tsx`
+- `frontend/src/brand/product-assets.test.ts`
 - `frontend/src/lib/api.ts`
 - `frontend/src/lib/api.generated.ts`
+- `frontend/public/brand/product-symbol-ui.svg`
+- `frontend/public/brand/product-lockup-ui.svg`
+
+Brand assets:
+- `argus-icon-from-upload.svg`
+- `docs/brand/assets/source/argus-icon-from-upload.svg`
+- `docs/brand/assets/source/vezor-symbol-product-ui.svg`
+- `docs/brand/assets/source/vezor-lockup-product-ui.svg`
 
 Infra:
 - `infra/docker-compose.dev.yml`
