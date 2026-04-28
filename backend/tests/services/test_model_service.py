@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException, status
 
 from argus.api.contracts import ModelCreate, ModelUpdate
-from argus.models.enums import ModelFormat, ModelTask
+from argus.models.enums import DetectorCapability, ModelFormat, ModelTask
 from argus.models.tables import Model
 from argus.services import app as app_services
 from argus.services.app import ModelService
@@ -88,6 +88,48 @@ async def test_create_model_uses_embedded_metadata_when_classes_are_omitted(
     assert response.classes == ["person", "bicycle", "car"]
     assert session_factory.state["model"] is not None
     assert session_factory.state["model"].classes == ["person", "bicycle", "car"]
+
+
+@pytest.mark.asyncio
+async def test_create_open_vocab_model_allows_empty_static_classes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = _FakeSessionFactory()
+    service = ModelService(session_factory=session_factory, audit_logger=_FakeAuditLogger())
+
+    def fake_resolve_model_classes(path: str, format: ModelFormat, declared_classes, runtime=None):  # noqa: ANN001
+        raise AssertionError("open-vocab models should not use fixed-vocab metadata resolution")
+
+    monkeypatch.setattr(app_services, "resolve_model_classes", fake_resolve_model_classes)
+
+    response = await service.create_model(
+        ModelCreate(
+            name="YOLO World",
+            version="1.0.0",
+            task=ModelTask.DETECT,
+            path="/models/yolo-world.onnx",
+            format=ModelFormat.ONNX,
+            capability=DetectorCapability.OPEN_VOCAB,
+            capability_config={
+                "supports_runtime_vocabulary_updates": True,
+                "max_runtime_terms": 32,
+                "prompt_format": "labels",
+                "execution_profiles": ["x86_64_gpu", "arm64_jetson"],
+            },
+            classes=[],
+            input_shape={"width": 640, "height": 640},
+            sha256="b" * 64,
+            size_bytes=123456,
+            license="Apache-2.0",
+        )
+    )
+
+    assert response.capability == DetectorCapability.OPEN_VOCAB
+    assert response.capability_config.supports_runtime_vocabulary_updates is True
+    assert response.classes == []
+    assert session_factory.state["model"] is not None
+    assert session_factory.state["model"].capability == DetectorCapability.OPEN_VOCAB
+    assert session_factory.state["model"].classes == []
 
 
 @pytest.mark.asyncio

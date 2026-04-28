@@ -58,6 +58,7 @@ from argus.api.contracts import (
     ModelUpdate,
     NativeAvailability,
     PrivacySettings,
+    RuntimeVocabularyState,
     SiteCreate,
     SiteResponse,
     SiteUpdate,
@@ -83,11 +84,13 @@ from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
     CountEventType,
+    DetectorCapability,
     HistoryCoverageStatus,
     HistoryMetric,
     ModelFormat,
     ModelTask,
     ProcessingMode,
+    RuntimeVocabularySource,
 )
 from argus.models.tables import (
     APIKey,
@@ -378,7 +381,14 @@ class ModelService:
         return [_model_to_response(model) for model in models]
 
     async def create_model(self, payload: ModelCreate) -> ModelResponse:
-        resolved_classes, _ = resolve_model_classes(payload.path, payload.format, payload.classes)
+        capability_config = payload.capability_config.model_dump(mode="python")
+        resolved_classes = _resolve_model_classes_for_capability(
+            capability=payload.capability,
+            path=payload.path,
+            format=payload.format,
+            classes=payload.classes,
+            capability_config=capability_config,
+        )
         async with self.session_factory() as session:
             model = Model(
                 name=payload.name,
@@ -386,6 +396,8 @@ class ModelService:
                 task=payload.task,
                 path=payload.path,
                 format=payload.format,
+                capability=payload.capability,
+                capability_config=capability_config,
                 classes=resolved_classes,
                 input_shape=payload.input_shape,
                 sha256=payload.sha256,
@@ -406,7 +418,14 @@ class ModelService:
                     detail="Model not found.",
                 )
             update_data = payload.model_dump(exclude_unset=True, mode="python")
-            if any(field_name in update_data for field_name in {"path", "format", "classes"}):
+            if any(
+                field_name in update_data
+                for field_name in {"path", "format", "classes", "capability", "capability_config"}
+            ):
+                resolved_capability = update_data.get("capability", _model_capability(model))
+                resolved_config = dict(
+                    update_data.get("capability_config", model.capability_config or {})
+                )
                 resolved_format = update_data.get("format", model.format)
                 declared_classes = (
                     update_data["classes"]
@@ -415,12 +434,18 @@ class ModelService:
                     if resolved_format is ModelFormat.ONNX
                     else list(model.classes)
                 )
-                resolved_classes = resolve_model_classes(
-                    str(update_data.get("path", model.path)),
-                    resolved_format,
-                    declared_classes,
+                if (
+                    resolved_capability is DetectorCapability.OPEN_VOCAB
+                    and "classes" not in update_data
+                ):
+                    declared_classes = list(model.classes)
+                model.classes = _resolve_model_classes_for_capability(
+                    capability=resolved_capability,
+                    path=str(update_data.get("path", model.path)),
+                    format=resolved_format,
+                    classes=declared_classes,
+                    capability_config=resolved_config,
                 )
-                model.classes = resolved_classes[0]
             for field_name, value in update_data.items():
                 if field_name == "classes":
                     continue
@@ -672,9 +697,10 @@ class CameraService:
                     status_code=HTTP_422_UNPROCESSABLE,
                     detail="Primary model must be a detector.",
                 )
-            _validate_active_classes_subset(
+            active_classes, runtime_vocabulary = _resolve_camera_detector_state(
                 active_classes=payload.active_classes,
-                primary_model_classes=primary_model.classes,
+                runtime_vocabulary=payload.runtime_vocabulary,
+                primary_model=primary_model,
             )
             if payload.secondary_model_id is not None:
                 secondary_model = await _load_model(session, payload.secondary_model_id)
@@ -706,7 +732,11 @@ class CameraService:
                 primary_model_id=payload.primary_model_id,
                 secondary_model_id=payload.secondary_model_id,
                 tracker_type=payload.tracker_type,
-                active_classes=payload.active_classes,
+                active_classes=active_classes,
+                runtime_vocabulary=runtime_vocabulary.terms,
+                runtime_vocabulary_source=runtime_vocabulary.source,
+                runtime_vocabulary_version=runtime_vocabulary.version,
+                runtime_vocabulary_updated_at=runtime_vocabulary.updated_at,
                 attribute_rules=payload.attribute_rules,
                 zones=_normalize_zones_payload(
                     [zone.model_dump(mode="python") for zone in payload.zones]
@@ -750,10 +780,21 @@ class CameraService:
                     detail="Primary model must be a detector.",
                 )
             active_classes = update_data.get("active_classes", camera.active_classes)
-            _validate_active_classes_subset(
-                active_classes=active_classes,
-                primary_model_classes=primary_model.classes,
+            runtime_vocabulary_payload = (
+                RuntimeVocabularyState.model_validate(update_data["runtime_vocabulary"])
+                if "runtime_vocabulary" in update_data
+                else _runtime_vocabulary_state_from_camera(camera)
             )
+            active_classes, runtime_vocabulary = _resolve_camera_detector_state(
+                active_classes=active_classes,
+                runtime_vocabulary=runtime_vocabulary_payload,
+                primary_model=primary_model,
+            )
+            update_data["active_classes"] = active_classes
+            update_data["runtime_vocabulary"] = runtime_vocabulary.terms
+            update_data["runtime_vocabulary_source"] = runtime_vocabulary.source
+            update_data["runtime_vocabulary_version"] = runtime_vocabulary.version
+            update_data["runtime_vocabulary_updated_at"] = runtime_vocabulary.updated_at
             if update_data.get("secondary_model_id") is not None:
                 secondary_model = await _load_model(session, update_data["secondary_model_id"])
                 if secondary_model.task not in {ModelTask.ATTRIBUTE, ModelTask.CLASSIFY}:
@@ -841,8 +882,12 @@ class CameraService:
     async def _publish_camera_command(self, camera: Camera) -> None:
         if self.events is None:
             return
+        runtime_vocabulary = _runtime_vocabulary_state_from_camera(camera)
         command = CameraCommandPayload(
             active_classes=list(camera.active_classes),
+            runtime_vocabulary=runtime_vocabulary.terms,
+            runtime_vocabulary_source=runtime_vocabulary.source,
+            runtime_vocabulary_version=runtime_vocabulary.version,
             tracker_type=camera.tracker_type,
             privacy=WorkerPrivacySettings(
                 blur_faces=bool(camera.privacy.get("blur_faces", True)),
@@ -2581,12 +2626,42 @@ def _model_to_response(model: Model) -> ModelResponse:
         task=model.task,
         path=model.path,
         format=model.format,
+        capability=_model_capability(model),
+        capability_config=_model_capability_config(model),
         classes=list(model.classes),
         input_shape=dict(model.input_shape),
         sha256=model.sha256,
         size_bytes=model.size_bytes,
         license=model.license,
     )
+
+
+def _model_capability(model: Model) -> DetectorCapability:
+    return getattr(model, "capability", None) or DetectorCapability.FIXED_VOCAB
+
+
+def _model_capability_config(model: Model) -> dict[str, object]:
+    return dict(getattr(model, "capability_config", None) or {})
+
+
+def _resolve_model_classes_for_capability(
+    *,
+    capability: DetectorCapability,
+    path: str,
+    format: ModelFormat,
+    classes: list[str] | None,
+    capability_config: dict[str, object],
+) -> list[str]:
+    if capability is DetectorCapability.OPEN_VOCAB:
+        if capability_config.get("supports_runtime_vocabulary_updates") is not True:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE,
+                detail="open_vocab models must declare runtime vocabulary support.",
+            )
+        return list(classes or [])
+
+    resolved_classes, _ = resolve_model_classes(path, format, classes)
+    return resolved_classes
 
 
 def _validate_active_classes_subset(
@@ -2617,6 +2692,56 @@ def _validate_active_classes_subset(
         )
 
 
+def _validate_runtime_vocabulary(
+    *,
+    terms: list[str],
+    primary_model: Model,
+) -> None:
+    max_terms = int(_model_capability_config(primary_model).get("max_runtime_terms") or 0)
+    if max_terms > 0 and len(terms) > max_terms:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail=f"runtime_vocabulary exceeds max_runtime_terms={max_terms}.",
+        )
+
+
+def _runtime_vocabulary_state_from_camera(camera: Camera) -> RuntimeVocabularyState:
+    return RuntimeVocabularyState(
+        terms=list(getattr(camera, "runtime_vocabulary", None) or []),
+        source=(
+            getattr(camera, "runtime_vocabulary_source", None)
+            or RuntimeVocabularySource.DEFAULT
+        ),
+        version=int(getattr(camera, "runtime_vocabulary_version", None) or 0),
+        updated_at=getattr(camera, "runtime_vocabulary_updated_at", None),
+    )
+
+
+def _resolve_camera_detector_state(
+    *,
+    active_classes: list[str] | None,
+    runtime_vocabulary: RuntimeVocabularyState,
+    primary_model: Model,
+) -> tuple[list[str], RuntimeVocabularyState]:
+    if _model_capability(primary_model) is DetectorCapability.FIXED_VOCAB:
+        _validate_active_classes_subset(
+            active_classes=active_classes,
+            primary_model_classes=primary_model.classes,
+        )
+        return list(active_classes or []), RuntimeVocabularyState(
+            terms=list(primary_model.classes),
+            source=RuntimeVocabularySource.DEFAULT,
+            version=0,
+            updated_at=None,
+        )
+
+    _validate_runtime_vocabulary(
+        terms=runtime_vocabulary.terms,
+        primary_model=primary_model,
+    )
+    return list(active_classes or []), runtime_vocabulary
+
+
 def _camera_to_response(camera: Camera) -> CameraResponse:
     if camera.homography is None:
         raise ValueError("Camera homography must be set.")
@@ -2644,6 +2769,7 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         secondary_model_id=camera.secondary_model_id,
         tracker_type=camera.tracker_type,
         active_classes=list(camera.active_classes),
+        runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, list(camera.zones)),
         homography=HomographyPayload.model_validate(camera.homography),
@@ -2685,7 +2811,10 @@ def _camera_to_worker_config(
             fps_cap=camera.fps_cap,
             processed_native=_uses_processed_native_delivery(camera),
         ),
-        model=_model_to_worker_settings(primary_model),
+        model=_model_to_worker_settings(
+            primary_model,
+            runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
+        ),
         secondary_model=(
             _model_to_worker_settings(secondary_model)
             if secondary_model is not None
@@ -2700,18 +2829,26 @@ def _camera_to_worker_config(
             blur_plates=bool(camera.privacy.get("blur_plates", True)),
         ),
         active_classes=list(camera.active_classes),
+        runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
         homography=_homography_to_worker_payload(camera.homography),
     )
 
 
-def _model_to_worker_settings(model: Model) -> WorkerModelSettings:
+def _model_to_worker_settings(
+    model: Model,
+    *,
+    runtime_vocabulary: RuntimeVocabularyState | None = None,
+) -> WorkerModelSettings:
     return WorkerModelSettings(
         name=model.name,
         path=model.path,
+        capability=_model_capability(model),
+        capability_config=_model_capability_config(model),
         classes=list(model.classes),
         input_shape=dict(model.input_shape),
+        runtime_vocabulary=runtime_vocabulary or RuntimeVocabularyState(),
     )
 
 

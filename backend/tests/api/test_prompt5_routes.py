@@ -44,6 +44,7 @@ from argus.core.security import (
 from argus.inference.publisher import TelemetryFrame, TelemetryTrack
 from argus.main import create_app
 from argus.models.enums import (
+    DetectorCapability,
     ModelFormat,
     ModelTask,
     ProcessingMode,
@@ -146,6 +147,7 @@ def _camera_response(payload: CameraCreate) -> CameraResponse:
         secondary_model_id=payload.secondary_model_id,
         tracker_type=payload.tracker_type,
         active_classes=payload.active_classes,
+        runtime_vocabulary=payload.runtime_vocabulary,
         attribute_rules=payload.attribute_rules,
         zones=payload.zones,
         homography=payload.homography,
@@ -228,11 +230,19 @@ class FakeModelService:
         return list(self.models.values())
 
     async def create_model(self, payload: ModelCreate) -> ModelResponse:
-        classes = self._resolve_classes(
-            path=payload.path,
-            format=payload.format,
-            declared_classes=payload.classes,
-        )
+        if payload.capability is DetectorCapability.OPEN_VOCAB:
+            if payload.capability_config.supports_runtime_vocabulary_updates is not True:
+                raise HTTPException(
+                    status_code=422,
+                    detail="open_vocab models must declare runtime vocabulary support.",
+                )
+            classes = list(payload.classes or [])
+        else:
+            classes = self._resolve_classes(
+                path=payload.path,
+                format=payload.format,
+                declared_classes=payload.classes,
+            )
         model = ModelResponse(
             id=uuid4(),
             name=payload.name,
@@ -240,6 +250,8 @@ class FakeModelService:
             task=payload.task,
             path=payload.path,
             format=payload.format,
+            capability=payload.capability,
+            capability_config=payload.capability_config,
             classes=classes,
             input_shape=payload.input_shape,
             sha256=payload.sha256,
@@ -252,19 +264,32 @@ class FakeModelService:
     async def update_model(self, model_id: UUID, payload: ModelUpdate) -> ModelResponse:
         existing = self.models[model_id]
         update_data = payload.model_dump(exclude_unset=True, mode="python")
-        if any(field_name in update_data for field_name in {"path", "format", "classes"}):
+        if any(
+            field_name in update_data
+            for field_name in {"path", "format", "classes", "capability", "capability_config"}
+        ):
+            capability = update_data.get("capability", existing.capability)
             resolved_format = update_data.get("format", existing.format)
-            update_data["classes"] = self._resolve_classes(
-                path=str(update_data.get("path", existing.path)),
-                format=resolved_format,
-                declared_classes=(
-                    update_data["classes"]
-                    if "classes" in update_data
-                    else None
-                    if resolved_format is ModelFormat.ONNX
-                    else existing.classes
-                ),
-            )
+            if capability is DetectorCapability.OPEN_VOCAB:
+                config = update_data.get("capability_config", existing.capability_config)
+                if config["supports_runtime_vocabulary_updates"] is not True:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="open_vocab models must declare runtime vocabulary support.",
+                    )
+                update_data["classes"] = list(update_data.get("classes", existing.classes))
+            else:
+                update_data["classes"] = self._resolve_classes(
+                    path=str(update_data.get("path", existing.path)),
+                    format=resolved_format,
+                    declared_classes=(
+                        update_data["classes"]
+                        if "classes" in update_data
+                        else None
+                        if resolved_format is ModelFormat.ONNX
+                        else existing.classes
+                    ),
+                )
         updated = existing.model_copy(update=update_data)
         self.models[model_id] = updated
         return updated
@@ -305,11 +330,15 @@ class FakeCameraService:
         forced_blur_faces: bool = False,
         forced_blur_plates: bool = False,
         model_classes_by_id: dict[UUID, list[str]] | None = None,
+        model_capabilities_by_id: dict[UUID, DetectorCapability] | None = None,
+        model_capability_config_by_id: dict[UUID, dict[str, object]] | None = None,
     ) -> None:
         self.cameras: dict[UUID, CameraResponse] = {}
         self.forced_blur_faces = forced_blur_faces
         self.forced_blur_plates = forced_blur_plates
         self.model_classes_by_id = model_classes_by_id or {}
+        self.model_capabilities_by_id = model_capabilities_by_id or {}
+        self.model_capability_config_by_id = model_capability_config_by_id or {}
 
     async def list_cameras(
         self,
@@ -330,7 +359,11 @@ class FakeCameraService:
             raise HTTPException(status_code=422, detail="Tenant policy requires blur_faces=true.")
         if self.forced_blur_plates and not payload.privacy.blur_plates:
             raise HTTPException(status_code=422, detail="Tenant policy requires blur_plates=true.")
-        self._validate_active_classes(payload.primary_model_id, payload.active_classes)
+        self._validate_detector_state(
+            payload.primary_model_id,
+            payload.active_classes,
+            payload.runtime_vocabulary.terms,
+        )
         camera = _camera_response(payload)
         self.cameras[camera.id] = camera
         return camera
@@ -354,7 +387,12 @@ class FakeCameraService:
             if payload.active_classes is not None
             else existing.active_classes
         )
-        self._validate_active_classes(primary_model_id, active_classes)
+        runtime_vocabulary = (
+            payload.runtime_vocabulary.terms
+            if payload.runtime_vocabulary is not None
+            else existing.runtime_vocabulary.terms
+        )
+        self._validate_detector_state(primary_model_id, active_classes, runtime_vocabulary)
         updated = existing.model_copy(
             update=payload.model_dump(exclude_unset=True, mode="python"),
         )
@@ -410,11 +448,26 @@ class FakeCameraService:
             },
         )
 
-    def _validate_active_classes(
+    def _validate_detector_state(
         self,
         primary_model_id: UUID,
         active_classes: list[str],
+        runtime_vocabulary: list[str],
     ) -> None:
+        capability = self.model_capabilities_by_id.get(
+            primary_model_id,
+            DetectorCapability.FIXED_VOCAB,
+        )
+        if capability is DetectorCapability.OPEN_VOCAB:
+            config = self.model_capability_config_by_id.get(primary_model_id, {})
+            max_terms = int(config.get("max_runtime_terms") or 0)
+            if max_terms > 0 and len(runtime_vocabulary) > max_terms:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"runtime_vocabulary exceeds max_runtime_terms={max_terms}.",
+                )
+            return
+
         allowed_classes = set(self.model_classes_by_id.get(primary_model_id, []))
         if not allowed_classes:
             return
@@ -476,6 +529,7 @@ class FakeHistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: object | None = None,
     ) -> list[HistoryPoint]:
         return [
             HistoryPoint(
@@ -496,6 +550,9 @@ class FakeHistoryService:
         granularity: str,
         starts_at: datetime,
         ends_at: datetime,
+        metric: object | None = None,
+        include_speed: bool = False,
+        speed_threshold: float | None = None,
     ) -> dict[str, object]:
         selected_classes = class_names or ["truck"]
         return {
@@ -520,6 +577,7 @@ class FakeHistoryService:
         starts_at: datetime,
         ends_at: datetime,
         format_name: str,
+        metric: object | None = None,
     ) -> ExportArtifact:
         if format_name == "parquet":
             return ExportArtifact(
@@ -787,6 +845,75 @@ async def test_models_routes_contract() -> None:
 
 
 @pytest.mark.asyncio
+async def test_models_routes_allow_open_vocab_empty_static_classes() -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    services = FakeServices(
+        tenancy=FakeTenancyService(context),
+        sites=FakeSiteService(context.tenant_id),
+        cameras=FakeCameraService(),
+        models=FakeModelService(),
+        edge=FakeEdgeService(),
+        history=FakeHistoryService(),
+        incidents=FakeIncidentService(),
+        streams=FakeStreamService(),
+        query=FakeQueryService(),
+        telemetry=FakeTelemetryService(
+            TelemetryFrame(
+                camera_id=uuid4(),
+                ts=datetime.now(tz=UTC),
+                profile=PublishProfile.CENTRAL_GPU,
+                stream_mode=StreamMode.ANNOTATED_WHIP,
+                counts={},
+                tracks=[],
+            )
+        ),
+    )
+    app = create_app(
+        Settings(
+            _env_file=None,
+            enable_startup_services=False,
+            enable_nats=False,
+            enable_tracing=False,
+            rtsp_encryption_key="argus-dev-rtsp-key",
+        )
+    )
+    app.state.services = services
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_websocket_user] = lambda: user
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/models",
+            json={
+                "name": "YOLO World",
+                "version": "1.0.0",
+                "task": "detect",
+                "path": "/models/yolo-world.onnx",
+                "format": "onnx",
+                "capability": "open_vocab",
+                "classes": [],
+                "capability_config": {
+                    "supports_runtime_vocabulary_updates": True,
+                    "max_runtime_terms": 32,
+                    "prompt_format": "labels",
+                    "execution_profiles": ["x86_64_gpu", "arm64_jetson"],
+                },
+                "input_shape": {"width": 640, "height": 640},
+                "sha256": "b" * 64,
+                "size_bytes": 1,
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json()["capability"] == "open_vocab"
+    assert response.json()["classes"] == []
+
+
+@pytest.mark.asyncio
 async def test_camera_routes_validate_policy_and_crud() -> None:
     user = _sample_user()
     context = _tenant_context(user)
@@ -866,6 +993,94 @@ async def test_camera_routes_validate_policy_and_crud() -> None:
     assert patch_response.status_code == 200
     assert patch_response.json()["active_classes"] == ["person"]
     assert delete_response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_camera_routes_persist_open_vocab_runtime_vocabulary() -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    site = _site_response(context.tenant_id)
+    model = _model_response().model_copy(
+        update={
+            "name": "YOLO World",
+            "path": "/models/yolo-world.onnx",
+            "capability": DetectorCapability.OPEN_VOCAB,
+            "capability_config": {
+                "supports_runtime_vocabulary_updates": True,
+                "max_runtime_terms": 32,
+                "prompt_format": "labels",
+                "execution_profiles": ["x86_64_gpu", "arm64_jetson"],
+            },
+            "classes": [],
+        }
+    )
+    site_service = FakeSiteService(context.tenant_id)
+    site_service.sites[site.id] = site
+    model_service = FakeModelService()
+    model_service.models[model.id] = model
+    camera_service = FakeCameraService(
+        model_capabilities_by_id={model.id: DetectorCapability.OPEN_VOCAB},
+        model_capability_config_by_id={
+            model.id: {
+                "supports_runtime_vocabulary_updates": True,
+                "max_runtime_terms": 32,
+                "prompt_format": "labels",
+                "execution_profiles": ["x86_64_gpu", "arm64_jetson"],
+            }
+        },
+    )
+    services = FakeServices(
+        tenancy=FakeTenancyService(context),
+        sites=site_service,
+        cameras=camera_service,
+        models=model_service,
+        edge=FakeEdgeService(),
+        history=FakeHistoryService(),
+        incidents=FakeIncidentService(),
+        streams=FakeStreamService(),
+        query=FakeQueryService(),
+        telemetry=FakeTelemetryService(
+            TelemetryFrame(
+                camera_id=uuid4(),
+                ts=datetime.now(tz=UTC),
+                profile=PublishProfile.CENTRAL_GPU,
+                stream_mode=StreamMode.ANNOTATED_WHIP,
+                counts={},
+                tracks=[],
+            )
+        ),
+    )
+    app = create_app(
+        Settings(
+            _env_file=None,
+            enable_startup_services=False,
+            enable_nats=False,
+            enable_tracing=False,
+            rtsp_encryption_key="argus-dev-rtsp-key",
+        )
+    )
+    app.state.services = services
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_websocket_user] = lambda: user
+    payload = _camera_payload(site.id, model.id).model_dump(mode="json")
+    payload["active_classes"] = []
+    payload["runtime_vocabulary"] = {
+        "terms": ["forklift", "pallet jack"],
+        "source": "manual",
+        "version": 1,
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post("/api/v1/cameras", json=payload)
+
+    assert response.status_code == 201
+    assert response.json()["active_classes"] == []
+    assert response.json()["runtime_vocabulary"]["terms"] == ["forklift", "pallet jack"]
+    assert response.json()["runtime_vocabulary"]["source"] == "manual"
+    assert response.json()["runtime_vocabulary"]["version"] == 1
 
 
 @pytest.mark.asyncio

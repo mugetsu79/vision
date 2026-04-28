@@ -15,12 +15,21 @@ from argus.api.contracts import (
     FrameSize,
     HomographyPayload,
     PrivacySettings,
+    RuntimeVocabularyState,
     SourceCapability,
     TenantContext,
 )
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, decrypt_rtsp_url
-from argus.models.enums import ModelFormat, ModelTask, ProcessingMode, RoleEnum, TrackerType
+from argus.models.enums import (
+    DetectorCapability,
+    ModelFormat,
+    ModelTask,
+    ProcessingMode,
+    RoleEnum,
+    RuntimeVocabularySource,
+    TrackerType,
+)
 from argus.models.tables import Camera, Model, Site
 from argus.services import app as app_services
 from argus.services.app import CameraService
@@ -40,6 +49,15 @@ class _FakeSession:
 
     async def refresh(self, camera: Camera) -> None:
         return None
+
+    def add(self, camera: Camera) -> None:
+        if camera.id is None:
+            camera.id = uuid4()
+        now = datetime.now(tz=UTC)
+        if camera.created_at is None:
+            camera.created_at = now
+        if camera.updated_at is None:
+            camera.updated_at = now
 
 
 class _FakeSessionFactory:
@@ -1865,6 +1883,115 @@ async def test_create_camera_rejects_active_classes_outside_primary_model_invent
         await service.create_camera(tenant_context, payload)
 
     assert exc_info.value.status_code == HTTP_422_UNPROCESSABLE
+
+
+@pytest.mark.asyncio
+async def test_create_open_vocab_camera_persists_runtime_vocabulary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    site_id = uuid4()
+    model_id = uuid4()
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="admin-1",
+            email="admin@argus.local",
+            role=RoleEnum.ADMIN,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+    model = Model(
+        id=model_id,
+        name="YOLO World",
+        version="lab-imac",
+        task=ModelTask.DETECT,
+        path="/models/yolo-world.onnx",
+        format=ModelFormat.ONNX,
+        capability=DetectorCapability.OPEN_VOCAB,
+        capability_config={
+            "supports_runtime_vocabulary_updates": True,
+            "max_runtime_terms": 32,
+            "prompt_format": "labels",
+            "execution_profiles": ["x86_64_gpu", "arm64_jetson"],
+        },
+        classes=[],
+        input_shape={"width": 640, "height": 640},
+        sha256="b" * 64,
+        size_bytes=1024,
+        license="lab",
+    )
+    site = Site(
+        id=site_id,
+        tenant_id=tenant_id,
+        name="HQ",
+        description=None,
+        tz="Europe/Zurich",
+        geo_point=None,
+        created_at=datetime.now(tz=UTC),
+    )
+
+    async def fake_load_model(session, model_id_arg):  # noqa: ANN001
+        assert model_id_arg == model_id
+        return model
+
+    async def fake_load_site(session, tenant_id_arg, site_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert site_id_arg == site_id
+        return site
+
+    monkeypatch.setattr(app_services, "_load_model", fake_load_model)
+    monkeypatch.setattr(app_services, "_load_site", fake_load_site)
+
+    response = await service.create_camera(
+        tenant_context,
+        CameraCreate(
+            site_id=site_id,
+            name="Dock Camera",
+            rtsp_url="rtsp://new-camera/live",
+            processing_mode=ProcessingMode.CENTRAL,
+            primary_model_id=model_id,
+            secondary_model_id=None,
+            tracker_type=TrackerType.BOTSORT,
+            active_classes=[],
+            runtime_vocabulary=RuntimeVocabularyState(
+                terms=["forklift", "pallet jack"],
+                source=RuntimeVocabularySource.MANUAL,
+                version=1,
+            ),
+            attribute_rules=[],
+            zones=[],
+            homography=HomographyPayload(
+                src=[[0, 0], [20, 0], [20, 20], [0, 20]],
+                dst=[[0, 0], [10, 0], [10, 10], [0, 10]],
+                ref_distance_m=10.0,
+            ),
+            privacy=PrivacySettings(),
+            frame_skip=1,
+            fps_cap=25,
+        ),
+    )
+
+    assert response.active_classes == []
+    assert response.runtime_vocabulary.terms == ["forklift", "pallet jack"]
+    assert response.runtime_vocabulary.source == RuntimeVocabularySource.MANUAL
+    assert response.runtime_vocabulary.version == 1
 
 
 @pytest.mark.asyncio
