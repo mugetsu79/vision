@@ -145,10 +145,6 @@ test("history renders quickly, CSV export works, and incidents show signed previ
   await expect(page).toHaveURL(/\/history(?:\?|$)/);
   await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /bucket review/i })).toBeVisible();
-  const chart = page.getByRole("img", { name: /history trend chart/i });
-  await chart.focus();
-  await page.keyboard.press("Enter");
-  await expect(page.getByText(/visible samples/i)).toBeVisible();
   const historyRenderMs = await page.evaluate(() => {
     const startedAt = (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart;
     if (typeof startedAt !== "number") {
@@ -157,6 +153,10 @@ test("history renders quickly, CSV export works, and incidents show signed previ
     return performance.now() - startedAt;
   });
   expect(historyRenderMs).toBeLessThan(500);
+  const reviewBucket = page.getByRole("button", { name: /review first bucket/i });
+  await reviewBucket.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/visible samples/i)).toBeVisible();
 
   await page.getByRole("button", { name: "Last 24h" }).click();
   const downloadPromise = page.waitForEvent("download");

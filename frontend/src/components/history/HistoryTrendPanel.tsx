@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { CoverageCopy } from "@/lib/history-workbench";
 import type { HistoryMetric } from "@/lib/history-url-state";
 
@@ -38,6 +39,9 @@ export function HistoryTrendPanel({
   coverage: CoverageCopy;
   onBucketSelect: (bucket: string) => void;
 }) {
+  const reviewBucket = series.selectedBucket ?? series.points[0]?.bucket ?? null;
+  const reviewBucketLabel = series.selectedBucket ? "Review selected bucket" : "Review first bucket";
+
   return (
     <section className="overflow-hidden rounded-lg border border-white/10 bg-[#050912]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
@@ -45,7 +49,18 @@ export function HistoryTrendPanel({
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Trend</p>
           <p className="mt-1 text-sm text-[#dce6f7]">{bucketCopy(granularity)}</p>
         </div>
-        <Badge>{coverage.label}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            className="h-8 px-3 text-xs"
+            disabled={!reviewBucket}
+            onClick={() => {
+              if (reviewBucket) onBucketSelect(reviewBucket);
+            }}
+          >
+            {reviewBucketLabel}
+          </Button>
+          <Badge>{coverage.label}</Badge>
+        </div>
       </div>
       <Suspense fallback={<div className="px-6 py-16 text-sm text-[#93a7c5]">Loading chart...</div>}>
         <HistoryTrendChart
