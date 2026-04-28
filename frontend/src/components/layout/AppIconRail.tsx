@@ -41,7 +41,7 @@ export function AppIconRail({
           aria-label="Primary workspace"
           className="flex flex-1 flex-col items-center justify-center gap-5"
         >
-          {workspaceNavGroups.map((group) => (
+          {workspaceNavGroups.map((group, groupIndex) => (
             <div key={group.label} className="flex flex-col items-center gap-2">
               {group.items.map((item) => (
                 <NavLink
@@ -62,7 +62,7 @@ export function AppIconRail({
                     cn(
                       "grid size-10 place-items-center rounded-[1rem] border transition duration-200",
                       isActive
-                        ? "border-[#35598d] bg-[rgba(43,71,110,0.34)] text-[#eef4ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                        ? "border-[rgba(118,224,255,0.42)] bg-[linear-gradient(135deg,rgba(110,189,255,0.22),rgba(126,83,255,0.18))] text-[#eef4ff] shadow-[0_0_28px_-14px_rgba(110,189,255,0.8)]"
                         : "border-white/[0.06] bg-white/[0.03] text-[#9fb0c9] hover:border-[#35598d] hover:bg-white/[0.06] hover:text-[#eef4ff]",
                     )
                   }
@@ -70,7 +70,7 @@ export function AppIconRail({
                   <item.icon className="size-4" aria-hidden="true" />
                 </NavLink>
               ))}
-              {group.label === "Operations" ? (
+              {groupIndex < workspaceNavGroups.length - 1 ? (
                 <div className="mt-2 h-px w-6 bg-white/[0.06]" />
               ) : null}
             </div>

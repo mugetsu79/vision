@@ -157,3 +157,14 @@ select {
     transform: rotateX(64deg) rotateZ(12deg) translate3d(0.4rem, -0.2rem, 0);
   }
 }
+
+@keyframes workspace-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.35rem, 0) scale(0.997);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}

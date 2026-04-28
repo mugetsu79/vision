@@ -76,6 +76,8 @@ describe("AppShell", () => {
     expect(
       screen.getByRole("navigation", { name: /primary workspace/i }),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--shell");
+    expect(screen.getByTestId("workspace-transition")).toBeInTheDocument();
     const intelligenceNav = screen.getByRole("navigation", {
       name: /intelligence/i,
     });
