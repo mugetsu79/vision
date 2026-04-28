@@ -10,6 +10,7 @@ import {
   Video,
 } from "lucide-react";
 
+import { omniNavGroups } from "@/copy/omnisight";
 import { getStreamRuntimeHints } from "@/lib/stream-playback";
 
 export type WorkspaceNavItem = {
@@ -23,24 +24,24 @@ export type WorkspaceNavGroup = {
   items: readonly WorkspaceNavItem[];
 };
 
-export const workspaceNavGroups = [
-  {
-    label: "Operations",
-    items: [
-      { label: "Live", to: "/live", icon: Radio },
-      { label: "History", to: "/history", icon: Clock3 },
-      { label: "Incidents", to: "/incidents", icon: ShieldAlert },
-    ],
-  },
-  {
-    label: "Configuration",
-    items: [
-      { label: "Sites", to: "/sites", icon: MapPinned },
-      { label: "Cameras", to: "/cameras", icon: Video },
-      { label: "Operations", to: "/settings", icon: Settings2 },
-    ],
-  },
-] as const satisfies readonly WorkspaceNavGroup[];
+export const workspaceNavGroups = omniNavGroups.map((group) => ({
+  label: group.label,
+  items: group.items.map((item) => ({
+    ...item,
+    icon:
+      item.to === "/live"
+        ? Radio
+        : item.to === "/history"
+          ? Clock3
+          : item.to === "/incidents"
+            ? ShieldAlert
+            : item.to === "/sites"
+              ? MapPinned
+              : item.to === "/cameras"
+                ? Video
+                : Settings2,
+  })),
+})) as readonly WorkspaceNavGroup[];
 
 async function prefetchHistoryQuery(queryClient: QueryClient) {
   const { createDefaultHistoryFilters, historySeriesQueryOptions } = await import(

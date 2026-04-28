@@ -76,17 +76,19 @@ describe("AppShell", () => {
     expect(
       screen.getByRole("navigation", { name: /primary workspace/i }),
     ).toBeInTheDocument();
-    const operationsNav = screen.getByRole("navigation", { name: /operations/i });
-    const configurationNav = screen.getByRole("navigation", { name: /configuration/i });
+    const intelligenceNav = screen.getByRole("navigation", {
+      name: /intelligence/i,
+    });
+    const controlNav = screen.getByRole("navigation", { name: /control/i });
 
-    expect(operationsNav).toBeInTheDocument();
-    expect(configurationNav).toBeInTheDocument();
-    expect(within(operationsNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
-    expect(within(operationsNav).getByRole("link", { name: "History" })).toBeInTheDocument();
-    expect(within(operationsNav).getByRole("link", { name: "Incidents" })).toBeInTheDocument();
-    expect(within(configurationNav).getByRole("link", { name: "Operations" })).toBeInTheDocument();
-    expect(within(configurationNav).getByRole("link", { name: "Sites" })).toBeInTheDocument();
-    expect(within(configurationNav).getByRole("link", { name: "Cameras" })).toBeInTheDocument();
+    expect(intelligenceNav).toBeInTheDocument();
+    expect(controlNav).toBeInTheDocument();
+    expect(within(intelligenceNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
+    expect(within(intelligenceNav).getByRole("link", { name: "History" })).toBeInTheDocument();
+    expect(within(intelligenceNav).getByRole("link", { name: "Evidence" })).toBeInTheDocument();
+    expect(within(controlNav).getByRole("link", { name: "Operations" })).toBeInTheDocument();
+    expect(within(controlNav).getByRole("link", { name: "Sites" })).toBeInTheDocument();
+    expect(within(controlNav).getByRole("link", { name: "Scenes" })).toBeInTheDocument();
     expect(screen.queryByText(/management/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/configuration surfaces stay one step away/i),
@@ -127,19 +129,19 @@ describe("AppShell", () => {
     expect(
       screen.getByRole("navigation", { name: /primary workspace/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /operations/i })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /configuration/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /intelligence/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /control/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /hide section rail/i }));
 
     expect(screen.getByRole("navigation", { name: /primary workspace/i })).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /operations/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /configuration/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: /intelligence/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: /control/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /show section rail/i }));
 
-    expect(screen.getByRole("navigation", { name: /operations/i })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /configuration/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /intelligence/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /control/i })).toBeInTheDocument();
   });
 
   test("routes authenticated users into the refreshed operations workspace", async () => {
@@ -168,12 +170,12 @@ describe("AppShell", () => {
     expect(within(primaryWorkspaceNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
     expect(
       screen.getByRole("navigation", {
-        name: /operations/i,
+        name: /intelligence/i,
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("navigation", {
-        name: /configuration/i,
+        name: /control/i,
       }),
     ).toBeInTheDocument();
   });
