@@ -123,6 +123,7 @@ describe("Vezor visual system tokens", () => {
     expect(css).toContain("--vezor-lens-violet");
     expect(css).toContain("--vezor-surface-depth");
     expect(css).toContain(".omnisight-field");
+    expect(css).toContain(".omnisight-field--overview .omnisight-field__lens");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

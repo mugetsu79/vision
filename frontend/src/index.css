@@ -113,6 +113,14 @@ select {
   top: 18%;
 }
 
+.omnisight-field--overview .omnisight-field__lens {
+  width: 11rem;
+  height: 11rem;
+  left: calc(50% - 5.5rem);
+  top: 20%;
+  opacity: 0.78;
+}
+
 .omnisight-field--shell .omnisight-field__lens {
   width: 4.75rem;
   height: 4.75rem;
