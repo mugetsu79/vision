@@ -462,9 +462,11 @@ export function VideoStream({
   return (
     <div
       ref={containerRef}
+      aria-label={`${cameraName} video stream`}
       className="absolute inset-0"
       data-first-frame-ms={firstFrameMs ?? undefined}
       data-transport={transport}
+      role="region"
     >
       <video
         ref={videoRef}
@@ -478,7 +480,7 @@ export function VideoStream({
       {transport === "mjpeg" ? (
         <img
           ref={imageRef}
-          alt={`${cameraName} video stream`}
+          alt={`${cameraName} live stream`}
           className="h-full w-full object-cover"
           src={mjpegUrl}
         />

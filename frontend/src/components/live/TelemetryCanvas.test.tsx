@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { TelemetryCanvas } from "@/components/live/TelemetryCanvas";
@@ -145,5 +145,11 @@ describe("TelemetryCanvas", () => {
     );
     expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("bus"))).toBe(false);
     expect(strokeRectMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("exposes the telemetry overlay canvas for inspection", () => {
+    render(<TelemetryCanvas frame={null} activeClasses={null} />);
+
+    expect(screen.getByLabelText(/telemetry overlay/i)).toBeInTheDocument();
   });
 });
