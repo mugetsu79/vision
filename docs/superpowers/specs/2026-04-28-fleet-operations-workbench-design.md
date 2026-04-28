@@ -1,0 +1,415 @@
+# Fleet Operations Workbench Design
+
+> **Status:** Approved for implementation planning
+>
+> **Date:** 2026-04-28
+>
+> **Goal:** Replace the placeholder Settings page with an operator-grade Fleet and Operations workbench that explains worker lifecycle, camera assignment, bootstrap, and delivery diagnostics across local development and production.
+
+---
+
+## 1. Context
+
+The handoff document identifies Fleet / Operations as the next remaining product hardening track after boundary setup, source-aware browser delivery, native routing, and History workbench work.
+
+The current product has real worker building blocks, but their lifecycle is still developer-oriented:
+
+- local iMac testing starts one worker per camera with `python -m argus.inference.engine --camera-id ...`
+- edge development has `infra/docker-compose.edge.yml`, which runs one `inference-worker` container for one camera
+- Helm has an `edge-worker` deployment with one configured camera id
+- `backend/src/argus/inference/scheduler.py` can spawn per-camera workers from database camera state, but it is not exposed as a product contract
+- the Settings route still renders placeholder copy
+- edge registration and heartbeat exist, but operators cannot see assignment or health from the UI
+
+This creates an unclear mental model: it is not obvious who starts a worker, who stops it, whether the UI should control processes, or how dev differs from production.
+
+---
+
+## 2. Product Position
+
+The Operations UI should not directly start or stop OS processes.
+
+The product should separate:
+
+- **desired state**: what the control plane wants to be running
+- **runtime state**: what supervisors and workers report as actually running
+- **operator actions**: safe requests that change desired state or ask a supervisor to act
+- **developer commands**: local/manual commands used only for dev and troubleshooting
+
+In production, a supervisor owns process lifecycle. The UI owns visibility, desired state, bootstrap, and safe lifecycle requests.
+
+---
+
+## 3. Terms
+
+### Camera Worker
+
+A camera worker is a process running `argus.inference.engine --camera-id <id>`. It pulls worker config from the backend, reads the camera or relay stream, runs inference, emits telemetry, and publishes live media when configured.
+
+### Supervisor
+
+A supervisor is the local process manager on a central or edge node. It may be:
+
+- a Python scheduler process
+- `systemd`
+- Docker Compose
+- Kubernetes
+- a future Argus edge agent
+
+The supervisor starts, stops, restarts, and monitors worker processes. The browser UI does not shell into hosts.
+
+### Desired State
+
+Desired state is the backend's answer to: "Which camera workers should exist?"
+
+Phase 1 derives desired state from existing camera configuration:
+
+- central cameras with no `edge_node_id` want a central worker
+- hybrid cameras want a central worker unless later assigned to an edge node for local processing
+- edge cameras with an `edge_node_id` want a worker on that edge node
+- inactive or disabled processing states want no worker
+
+Phase 1 does not add a `worker_assignments` table. That table can be added once the UI supports real reassignment workflows.
+
+### Runtime State
+
+Runtime state is the reported truth from supervisors and workers:
+
+- node heartbeat timestamp
+- node version
+- reported camera count
+- running worker camera ids
+- failed worker camera ids
+- restart counts
+- last error summary
+
+Phase 1 uses the existing `EdgeNode.last_seen_at` and heartbeat camera count, then defines contracts that can grow to per-worker detail.
+
+---
+
+## 4. Dev Versus Production
+
+### Local Development
+
+In local development:
+
+- Docker starts platform services, not per-camera workers.
+- The developer manually starts workers in terminal tabs.
+- Stop means `Ctrl-C`.
+- The Operations page should show copyable dev run commands for central cameras.
+- The page should label this mode as **Manual dev mode**.
+
+Example command:
+
+```bash
+cd backend
+ARGUS_API_BASE_URL=http://127.0.0.1:8000 \
+ARGUS_API_BEARER_TOKEN=<token> \
+python3 -m uv run python -m argus.inference.engine --camera-id <camera-id>
+```
+
+### Edge Development
+
+In edge development:
+
+- `infra/docker-compose.edge.yml` starts one worker container for one configured camera.
+- Stop and restart happen through Docker Compose.
+- The Operations page should show the equivalent compose command and required environment variables.
+
+Example command:
+
+```bash
+ARGUS_EDGE_CAMERA_ID=<camera-id> \
+ARGUS_API_BASE_URL=http://<master-host>:8000 \
+ARGUS_API_BEARER_TOKEN=<token> \
+docker compose -f infra/docker-compose.edge.yml up inference-worker
+```
+
+### Production
+
+In production:
+
+- a central supervisor runs on the master node for central/hybrid cameras
+- an edge supervisor runs on each edge node for edge-assigned cameras
+- supervisors reconcile desired state to runtime state
+- workers restart automatically after crashes
+- disabling or reassigning a camera changes desired state, and the supervisor stops or starts workers accordingly
+- restart requests are delivered to the supervisor as lifecycle commands
+
+The Operations UI should show this distinction directly. Operators should never have to infer whether a camera is unmanaged, manually managed, or supervisor-managed.
+
+---
+
+## 5. Phase 1 Scope
+
+Phase 1 is a read-first Operations workbench with safe bootstrap support.
+
+It includes:
+
+1. Fleet overview
+2. Desired worker list
+3. Runtime status summary
+4. Camera assignment view
+5. Delivery diagnostics
+6. Edge bootstrap material generation
+7. Dev/manual run command hints
+
+It does not include:
+
+- direct process start/stop from the browser
+- Kubernetes or Compose mutation from the backend
+- a persistent `worker_assignments` table
+- secret rotation automation
+- live log streaming
+- node draining
+- camera reassignment mutation
+
+These are intentionally deferred until the status model is trustworthy.
+
+---
+
+## 6. Backend Contract
+
+Add an operations API under `/api/v1/operations`.
+
+### GET `/api/v1/operations/fleet`
+
+Returns one tenant-scoped overview:
+
+```json
+{
+  "mode": "manual_dev",
+  "generated_at": "2026-04-28T07:00:00Z",
+  "summary": {
+    "desired_workers": 2,
+    "running_workers": 1,
+    "stale_nodes": 1,
+    "offline_nodes": 0,
+    "native_unavailable_cameras": 1
+  },
+  "nodes": [],
+  "camera_workers": [],
+  "delivery_diagnostics": []
+}
+```
+
+`mode` values:
+
+- `manual_dev`
+- `supervised`
+- `mixed`
+
+Phase 1 may derive `mode` from settings and available runtime reports. If no supervisor reports exist, use `manual_dev`.
+
+### POST `/api/v1/operations/bootstrap`
+
+Creates edge bootstrap material through the existing edge registration path.
+
+The response includes:
+
+- edge node id
+- one-time API key
+- NATS seed
+- MediaMTX hints
+- copyable edge compose command
+- copyable production supervisor command or environment block
+
+Plaintext secret material must be returned only in this response.
+
+---
+
+## 7. Backend Read Model
+
+The operations service should aggregate existing data:
+
+- `sites`
+- `edge_nodes`
+- `cameras`
+- `camera.browser_delivery`
+- `camera.source_capability`
+- `camera.processing_mode`
+- `camera.edge_node_id`
+- `edge_nodes.last_seen_at`
+
+Desired worker state:
+
+- `desired`: backend expects a worker for the camera
+- `not_desired`: no worker should run
+- `manual`: worker is expected to be launched manually in dev mode
+- `supervised`: worker is expected to be reconciled by a supervisor
+
+Runtime status:
+
+- `running`
+- `stale`
+- `offline`
+- `unknown`
+- `not_reported`
+
+Phase 1 cannot know per-camera runtime truth for manually launched workers unless they report it. The UI should state that clearly.
+
+---
+
+## 8. Delivery Diagnostics
+
+The Operations page should include a delivery diagnostics table so the same page answers native delivery questions.
+
+For each camera, show:
+
+- camera name
+- processing mode
+- assigned node or central
+- source width/height/fps/codec when known
+- browser default profile
+- available profiles
+- native available/unavailable
+- native reason
+- whether native resolves to passthrough or processed access
+
+This reuses the source-aware fields already added to camera responses. It should not probe RTSP again.
+
+---
+
+## 9. UI Design
+
+The route remains `/settings`, but the page title becomes **Fleet & Operations**.
+
+Navigation can continue to label the route `Settings` for one iteration if changing the nav is distracting. The page itself should make the operational purpose clear.
+
+Page sections:
+
+1. **Fleet Summary**
+   - desired workers
+   - running or reported workers
+   - stale nodes
+   - native unavailable cameras
+
+2. **Worker Lifecycle**
+   - explains current mode: manual dev, supervised, or mixed
+   - shows who owns start/stop
+   - shows copyable dev commands when in manual mode
+
+3. **Nodes**
+   - central node row
+   - edge node rows
+   - last seen
+   - version
+   - assigned cameras
+   - status badge
+
+4. **Camera Workers**
+   - camera
+   - desired location
+   - desired state
+   - runtime status
+   - command hint or supervisor owner
+
+5. **Delivery Diagnostics**
+   - source capability and browser delivery truth
+   - native unavailable reason
+
+6. **Bootstrap Edge Node**
+   - site selector
+   - hostname
+   - version
+   - generate material
+   - one-time secret warning
+
+The page should use dense operational layout, not a marketing hero. It should favor tables, badges, command blocks, and compact explanatory copy.
+
+---
+
+## 10. Operator Actions
+
+Phase 1 actions:
+
+- generate edge bootstrap material
+- copy manual central worker command
+- copy edge compose command
+- refresh fleet overview
+
+Future actions:
+
+- restart worker
+- disable processing
+- enable processing
+- reassign camera
+- drain edge node
+- rotate edge bootstrap credentials
+
+Future actions should be explicit requests to a supervisor or desired-state change. They should not execute shell commands from the API process.
+
+---
+
+## 11. Security
+
+Operations endpoints require admin access.
+
+Bootstrap responses contain one-time secret material and should:
+
+- be omitted from logs
+- not be persisted in plaintext
+- show warning copy in the UI
+- require deliberate operator action
+
+Runtime diagnostic fields must not expose RTSP passwords, JWTs, API keys, or NATS seeds.
+
+Copyable commands should use placeholders for secrets unless the command is generated immediately after bootstrap and is shown once.
+
+---
+
+## 12. Testing
+
+Backend tests:
+
+- route registration for `/api/v1/operations/fleet`
+- admin authorization
+- tenant scoping
+- desired worker derivation for central, hybrid, edge, and disabled cameras
+- edge heartbeat status mapping
+- delivery diagnostics serialization
+- bootstrap wraps existing edge registration
+
+Frontend tests:
+
+- placeholder Settings copy is removed
+- fleet summary renders
+- manual dev mode explains copyable commands
+- stale/offline badges render
+- delivery diagnostics render native unavailable reasons
+- bootstrap success shows one-time secret warning and generated command
+
+Manual validation:
+
+- local dev stack with no workers shows manual dev mode
+- adding a central camera shows copyable central worker command
+- an edge node heartbeat changes node status from offline/stale to healthy
+- native-unavailable camera shows the reason already visible on Live/Cameras pages
+
+---
+
+## 13. Acceptance Criteria
+
+The work is complete when:
+
+- `/settings` no longer shows placeholder copy
+- operators can see desired worker state versus runtime state
+- the page explicitly explains manual dev versus supervised production lifecycle
+- central and edge cameras show the correct lifecycle owner
+- edge bootstrap material can be generated from the UI
+- native delivery diagnostics are visible without opening each camera
+- no endpoint leaks plaintext credentials outside one-time bootstrap responses
+- backend and frontend tests cover the lifecycle distinction
+
+---
+
+## 14. Follow-On Work
+
+After Phase 1:
+
+1. Add supervisor heartbeat with per-worker runtime state.
+2. Add lifecycle command topics for restart and drain.
+3. Add explicit worker assignment persistence.
+4. Add camera reassignment UI.
+5. Add live logs and recent failure summaries.
+6. Add edge credential rotation.
