@@ -36,6 +36,8 @@ from argus.api.contracts import (
     EdgeRegisterRequest,
     EdgeRegisterResponse,
     ExportArtifact,
+    FleetBootstrapRequest,
+    FleetBootstrapResponse,
     FleetCameraWorkerSummary,
     FleetDeliveryDiagnostic,
     FleetLifecycleMode,
@@ -1098,6 +1100,34 @@ class OperationsService:
             nodes=nodes,
             camera_workers=camera_workers,
             delivery_diagnostics=delivery_diagnostics,
+        )
+
+    async def create_bootstrap_material(
+        self,
+        tenant_context: TenantContext,
+        payload: FleetBootstrapRequest,
+    ) -> FleetBootstrapResponse:
+        if self.edge_service is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Edge registration service is unavailable.",
+            )
+        edge_response = await self.edge_service.register_edge_node(
+            tenant_context,
+            EdgeRegisterRequest(
+                site_id=payload.site_id,
+                hostname=payload.hostname,
+                version=payload.version,
+            ),
+        )
+        return FleetBootstrapResponse(
+            **edge_response.model_dump(),
+            dev_compose_command=_edge_dev_compose_command(edge_response.edge_node_id),
+            supervisor_environment={
+                "ARGUS_API_BASE_URL": self.settings.api_base_url,
+                "ARGUS_EDGE_NODE_ID": str(edge_response.edge_node_id),
+                "ARGUS_EDGE_API_KEY": edge_response.api_key,
+            },
         )
 
 
@@ -2424,6 +2454,15 @@ def _central_dev_run_command(camera_id: UUID) -> str:
         "ARGUS_API_BASE_URL=http://127.0.0.1:8000 "
         "ARGUS_API_BEARER_TOKEN=<token> "
         f"python3 -m uv run python -m argus.inference.engine --camera-id {camera_id}"
+    )
+
+
+def _edge_dev_compose_command(edge_node_id: UUID) -> str:
+    return (
+        "ARGUS_EDGE_CAMERA_ID=<camera-id> "
+        "ARGUS_API_BASE_URL=http://<master-host>:8000 "
+        "ARGUS_API_BEARER_TOKEN=<token> "
+        "docker compose -f infra/docker-compose.edge.yml up inference-worker"
     )
 
 

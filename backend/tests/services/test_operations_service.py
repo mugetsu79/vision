@@ -152,3 +152,48 @@ async def test_fleet_overview_maps_edge_heartbeat_status() -> None:
     assert edge_node.status == "stale"
     assert response.camera_workers[0].lifecycle_owner == "edge_supervisor"
     assert response.camera_workers[0].runtime_status == "stale"
+
+
+class _FakeEdgeService:
+    def __init__(self) -> None:
+        self.payload = None
+
+    async def register_edge_node(self, tenant_context, payload):  # noqa: ANN001
+        self.payload = payload
+        from argus.api.contracts import EdgeRegisterResponse
+
+        return EdgeRegisterResponse(
+            edge_node_id=uuid4(),
+            api_key="edge_secret_once",
+            nats_nkey_seed="nats_secret_once",
+            subjects=["evt.tracking.node"],
+            mediamtx_url="http://mediamtx:9997",
+            overlay_network_hints={"nats_url": "nats://nats:4222"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_bootstrap_material_wraps_edge_registration() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    session_factory = _FakeSessionFactory()
+    edge_service = _FakeEdgeService()
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        edge_service=edge_service,
+    )
+
+    response = await service.create_bootstrap_material(
+        _tenant_context(tenant_id),
+        FleetBootstrapRequest(site_id=site.id, hostname="edge-kit-01", version="0.1.0"),
+    )
+
+    assert edge_service.payload is not None
+    assert edge_service.payload.hostname == "edge-kit-01"
+    assert response.api_key == "edge_secret_once"
+    assert (
+        "docker compose -f infra/docker-compose.edge.yml up inference-worker"
+        in response.dev_compose_command
+    )
+    assert response.supervisor_environment["ARGUS_EDGE_NODE_ID"] == str(response.edge_node_id)
