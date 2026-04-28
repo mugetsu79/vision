@@ -22,6 +22,7 @@ const loadHlsClientMock = vi.fn<
 >();
 const observedElements = new Map<Element, IntersectionObserverCallback>();
 let defaultIntersectionVisible = true;
+let mediaPlayMock: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
 class FakeRTCPeerConnection {
   static instances: FakeRTCPeerConnection[] = [];
@@ -87,7 +88,8 @@ describe("VideoStream", () => {
     FakeRTCPeerConnection.reset();
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
 
-    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    mediaPlayMock = vi.fn<() => Promise<void>>().mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(mediaPlayMock);
     defaultIntersectionVisible = true;
     observedElements.clear();
     vi.stubGlobal(
@@ -219,7 +221,7 @@ describe("VideoStream", () => {
       manifestParsedListener?.("manifestParsed");
     });
 
-    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
+    await waitFor(() => expect(mediaPlayMock).toHaveBeenCalled());
     expect(screen.getByText(/ll-hls fallback/i)).toBeInTheDocument();
   });
 

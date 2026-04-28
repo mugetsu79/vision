@@ -8,5 +8,7 @@ from alembic.config import Config
 def configure_database_url(config: Config) -> str:
     """Prefer the runtime database URL when Alembic runs inside containers."""
     database_url = os.getenv("ARGUS_DB_URL") or config.get_main_option("sqlalchemy.url")
+    if database_url is None:
+        raise RuntimeError("Alembic sqlalchemy.url is not configured.")
     config.set_main_option("sqlalchemy.url", database_url)
     return database_url

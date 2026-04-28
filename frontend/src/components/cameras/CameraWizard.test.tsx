@@ -186,6 +186,53 @@ describe("CameraWizard", () => {
     expect(screen.queryByRole("option", { name: "1080p15" })).not.toBeInTheDocument();
   });
 
+  test("uses probed source size for new-camera calibration authoring", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          source_capability: {
+            width: 1920,
+            height: 1080,
+            fps: 20,
+            codec: "h264",
+            aspect_ratio: "16:9",
+          },
+          browser_delivery: {
+            default_profile: "720p10",
+            allow_native_on_demand: true,
+            profiles: [
+              { id: "native", kind: "passthrough" },
+              { id: "1080p15", kind: "transcode", w: 1920, h: 1080, fps: 15 },
+              { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10 },
+              { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5 },
+            ],
+            unsupported_profiles: [],
+            native_status: { available: true, reason: null },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    renderWizard();
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByRole("option", { name: "1080p15" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(screen.getByText(/analytics frame 1920×1080/i)).toBeInTheDocument();
+  });
+
   test("reprobes an existing camera before showing stale stored browser profiles", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((_input, init) => {

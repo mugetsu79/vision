@@ -403,7 +403,9 @@ class InferenceEngine:
             else None
         )
         self._stream_registration: StreamRegistration | None = None
-        self._track_history: dict[int, list[tuple[float, float]]] = defaultdict(list)
+        self._track_history: dict[int, list[tuple[datetime, tuple[float, float]]]] = defaultdict(
+            list
+        )
         self._frame_attempt_index = 0
         self._last_stage_timings: dict[str, float] = {}
         self._timing_summary = _TimingSummaryWindow()
@@ -500,7 +502,7 @@ class InferenceEngine:
         filtered = self._filter_visible_detections(detections, visible_classes)
         tracked = self._tracker.update(filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
-        tracked = self._apply_speed(tracked)
+        tracked = self._apply_speed(tracked, ts=current_ts)
         stage_timer.record_stage("speed", ended_at=loop.time())
         tracked = self._apply_attributes(processed, tracked)
         stage_timer.record_stage("attributes", ended_at=loop.time())
@@ -720,7 +722,7 @@ class InferenceEngine:
             enriched.append(detection.with_updates(zone_id=zone_id))
         return enriched
 
-    def _apply_speed(self, detections: list[Detection]) -> list[Detection]:
+    def _apply_speed(self, detections: list[Detection], *, ts: datetime) -> list[Detection]:
         if self.homography is None:
             return detections
         enriched: list[Detection] = []
@@ -731,13 +733,10 @@ class InferenceEngine:
             x1, y1, x2, y2 = detection.bbox
             bottom_center = ((x1 + x2) / 2.0, y2)
             history = self._track_history[detection.track_id]
-            history.append(bottom_center)
+            history.append((ts, bottom_center))
             if len(history) > 16:
                 del history[:-16]
-            speed_kph = self.homography.speed_kph(
-                history,
-                fps=max(1.0, float(self.config.camera.fps_cap)),
-            )
+            speed_kph = self.homography.speed_kph_for_timed_points(history)
             enriched.append(detection.with_updates(speed_kph=speed_kph))
         return enriched
 

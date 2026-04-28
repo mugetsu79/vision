@@ -31,7 +31,7 @@ function bucketIndex(alignedTsMs: number, windowEndMs: number): number {
 function emptyBuckets(classes: string[]): SparklineBuckets {
   const out: SparklineBuckets = {};
   for (const cls of classes) {
-    out[cls] = new Array(BUCKET_COUNT).fill(0);
+    out[cls] = Array<number>(BUCKET_COUNT).fill(0);
   }
   return out;
 }
@@ -43,7 +43,7 @@ function setBucketPeaks(
 ): SparklineBuckets {
   const next: SparklineBuckets = { ...buckets };
   for (const [cls, count] of Object.entries(classesCount)) {
-    const series = next[cls] ?? new Array(BUCKET_COUNT).fill(0);
+    const series = next[cls] ?? Array<number>(BUCKET_COUNT).fill(0);
     const copy = series.slice();
     copy[index] = Math.max(copy[index] ?? 0, count);
     next[cls] = copy;
@@ -69,7 +69,7 @@ function shiftBuckets(buckets: SparklineBuckets, steps: number): SparklineBucket
   const capped = Math.min(steps, BUCKET_COUNT);
   const next: SparklineBuckets = {};
   for (const [cls, series] of Object.entries(buckets)) {
-    next[cls] = [...series.slice(capped), ...new Array(capped).fill(0)];
+    next[cls] = [...series.slice(capped), ...Array<number>(capped).fill(0)];
   }
   return next;
 }
@@ -99,7 +99,7 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
     windowEndRef.current = currentBucketStartMs;
     setSeedReady(false);
 
-    (async () => {
+    void (async () => {
       try {
         const { data, error: apiError } = await apiClient.GET("/api/v1/history/series", {
           params: {
@@ -123,7 +123,7 @@ export function useLiveSparkline(cameraId: string): UseLiveSparklineResult {
           const idx = bucketIndex(tsMs, windowEndRef.current);
           if (idx < 0 || idx >= BUCKET_COUNT) continue;
           for (const [cls, count] of Object.entries(row.values ?? {})) {
-            const series = seed[cls] ?? new Array(BUCKET_COUNT).fill(0);
+            const series = seed[cls] ?? Array<number>(BUCKET_COUNT).fill(0);
             const copy = series.slice();
             copy[idx] = Math.max(copy[idx] ?? 0, count);
             seed[cls] = copy;

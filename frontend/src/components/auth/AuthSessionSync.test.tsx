@@ -8,7 +8,7 @@ let userSignedOutHandler: (() => void) | undefined;
 
 vi.mock("@/lib/auth", () => ({
   mapOidcUser: vi.fn((user: { profile?: Record<string, unknown> }) => ({
-    sub: String(user.profile?.sub ?? ""),
+    sub: typeof user.profile?.sub === "string" ? user.profile.sub : "",
     email: typeof user.profile?.email === "string" ? user.profile.email : null,
     role: "admin",
     realm: "argus-dev",
@@ -53,7 +53,7 @@ describe("AuthSessionSync", () => {
     accessTokenExpiredHandler = undefined;
     silentRenewErrorHandler = undefined;
     userSignedOutHandler = undefined;
-    vi.mocked(oidcManager.getUser).mockResolvedValue(null);
+    vi.mocked(oidcManager).getUser.mockResolvedValue(null);
 
     act(() => {
       useAuthStore.setState(initialAuthState, true);
@@ -70,9 +70,7 @@ describe("AuthSessionSync", () => {
   test("hydrates the auth store with renewed users loaded by oidc-client-ts", async () => {
     render(<AuthSessionSync />);
 
-    await waitFor(() =>
-      expect(vi.mocked(oidcManager.events.addUserLoaded)).toHaveBeenCalled(),
-    );
+    await waitFor(() => expect(userLoadedHandler).toBeTypeOf("function"));
 
     act(() => {
       userLoadedHandler?.({
@@ -91,7 +89,7 @@ describe("AuthSessionSync", () => {
   });
 
   test("restores the current oidc session when the access token expires or renew errors", async () => {
-    vi.mocked(oidcManager.getUser).mockResolvedValue({
+    vi.mocked(oidcManager).getUser.mockResolvedValue({
       access_token: "refreshed-token",
       expired: false,
       profile: {

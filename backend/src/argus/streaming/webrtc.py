@@ -503,7 +503,7 @@ async def _open_initial_rtsp_capture(rtsp_url_source: RtspUrlSource, cv2: Any) -
     raise RuntimeError("Unable to initialize MJPEG bridge.")
 
 
-async def _reopen_rtsp_capture(rtsp_url: str, cv2: Any) -> tuple[Any, Any]:
+async def _reopen_rtsp_capture(rtsp_url: RtspUrlSource, cv2: Any) -> tuple[Any, Any]:
     attempt = 0
 
     while True:

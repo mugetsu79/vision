@@ -1,8 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { User } from "oidc-client-ts";
 
-import { productBrand } from "@/brand/product";
-
 vi.mock("@/lib/config", () => ({
   frontendConfig: {
     apiBaseUrl: "http://127.0.0.1:8000",

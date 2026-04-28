@@ -90,7 +90,7 @@ vi.mock("@/hooks/use-operations", () => ({
     refetch: vi.fn(),
   }),
   useCreateBootstrapMaterial: () => ({
-    mutateAsync: vi.fn(async () => ({
+    mutateAsync: vi.fn(() => Promise.resolve({
       edge_node_id: "00000000-0000-0000-0000-000000000999",
       api_key: "edge_secret_once",
       nats_nkey_seed: "nats_secret_once",

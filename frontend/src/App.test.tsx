@@ -32,6 +32,6 @@ describe("App", () => {
     expect(
       await screen.findByRole("button", { name: /sign in/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/argus \| the omnisight platform/i)).toBeInTheDocument();
+    expect(screen.getByAltText(/Vezor product lockup/i)).toBeInTheDocument();
   });
 });

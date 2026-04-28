@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
   apiClient: {
-    GET: vi.fn(async () => ({
+    GET: vi.fn(() => Promise.resolve({
       data: {
         mode: "manual_dev",
         generated_at: "2026-04-28T07:00:00Z",
@@ -19,7 +19,7 @@ vi.mock("@/lib/api", () => ({
       },
       error: undefined,
     })),
-    POST: vi.fn(async () => ({
+    POST: vi.fn(() => Promise.resolve({
       data: {
         edge_node_id: "00000000-0000-0000-0000-000000000123",
         api_key: "edge_secret_once",

@@ -30,7 +30,10 @@ def upgrade() -> None:
         ),
     )
     op.add_column("incidents", sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("incidents", sa.Column("reviewed_by_subject", sa.String(length=255), nullable=True))
+    op.add_column(
+        "incidents",
+        sa.Column("reviewed_by_subject", sa.String(length=255), nullable=True),
+    )
     op.alter_column("incidents", "review_status", server_default=None)
 
 

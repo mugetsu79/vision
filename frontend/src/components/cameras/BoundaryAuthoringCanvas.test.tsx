@@ -21,7 +21,7 @@ function stubRect(element: HTMLElement, width: number, height: number) {
 }
 
 describe("BoundaryAuthoringCanvas", () => {
-  test("creates a line by clicking two points on the setup canvas", async () => {
+  test("creates a line by clicking two points on the setup canvas", () => {
     const onChange = vi.fn();
 
     render(

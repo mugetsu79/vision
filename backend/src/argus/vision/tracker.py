@@ -59,7 +59,10 @@ TrackerBackendFactory = Callable[[str, TrackerConfig], TrackerBackend]
 class _TrackerResults:
     def __init__(self, detections: list[Detection]) -> None:
         self._detections = detections
-        self.xyxy = np.asarray([detection.bbox for detection in detections], dtype=np.float32)
+        self.xyxy = np.asarray(
+            [detection.bbox for detection in detections],
+            dtype=np.float32,
+        ).reshape((-1, 4))
         self.conf = np.asarray([detection.confidence for detection in detections], dtype=np.float32)
         self.cls = np.asarray(
             [
@@ -105,9 +108,6 @@ class UltralyticsTrackerAdapter:
         detections: list[Detection],
         frame: NDArray[np.uint8] | None = None,
     ) -> list[Detection]:
-        if not detections:
-            return []
-
         tracker_results = _TrackerResults(detections)
         raw_tracks = self.backend.update(tracker_results, img=frame)
         if isinstance(raw_tracks, np.ndarray):

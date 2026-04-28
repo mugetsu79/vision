@@ -67,6 +67,7 @@ describe("CamerasPage", () => {
     let modelRequests = 0;
 
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
       const request = input as Request;
       const url = new URL(request.url);
 
@@ -150,6 +151,7 @@ describe("CamerasPage", () => {
     const user = userEvent.setup();
 
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
       const request = input as Request;
       const url = new URL(request.url);
 
@@ -211,6 +213,7 @@ describe("CamerasPage", () => {
 
   test("shows source capability next to the browser delivery profile", async () => {
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
       const request = input as Request;
       const url = new URL(request.url);
 

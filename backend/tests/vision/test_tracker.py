@@ -85,3 +85,24 @@ def test_real_botsort_backend_accepts_default_tracker_config() -> None:
 
     assert len(tracked) == 1
     assert tracked[0].class_name == "car"
+
+
+def test_real_tracker_ages_state_on_empty_detection_frames() -> None:
+    tracker = create_tracker(TrackerConfig(tracker_type=TrackerType.BYTETRACK, frame_rate=30))
+
+    tracked = tracker.update(
+        [
+            Detection(
+                class_name="car",
+                confidence=0.93,
+                bbox=(10.0, 12.0, 60.0, 42.0),
+                class_id=2,
+            )
+        ],
+        frame=np.zeros((96, 96, 3), dtype=np.uint8),
+    )
+    assert len(tracked) == 1
+
+    tracker.update([], frame=np.zeros((96, 96, 3), dtype=np.uint8))
+
+    assert tracker.backend.frame_id == 2

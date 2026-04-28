@@ -75,6 +75,15 @@ class _FakeDetector:
         ]
 
 
+class _SequenceDetector:
+    def __init__(self, detections: list[list[Detection]]) -> None:
+        self._detections = iter(detections)
+
+    def detect(self, frame: np.ndarray, allowed_classes: list[str]) -> list[Detection]:
+        del frame, allowed_classes
+        return list(next(self._detections))
+
+
 class _FakeOpenVocabDetector:
     capability = DetectorCapability.OPEN_VOCAB
 
@@ -773,6 +782,59 @@ async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> 
     assert subject == f"incident.triggered.{camera_id}"
     assert isinstance(payload, IncidentTriggeredEvent)
     assert payload.type == "rule.alert"
+
+
+@pytest.mark.asyncio
+async def test_engine_uses_elapsed_time_for_calibrated_speed_after_frame_gap() -> None:
+    camera_id = uuid4()
+    tracking_store = _FakeTrackingStore()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "homography": {
+                "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "ref_distance_m": 10.0,
+            },
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((32, 32, 3), dtype=np.uint8), np.zeros((32, 32, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="car",
+                        confidence=0.95,
+                        bbox=(0.0, 0.0, 2.0, 2.0),
+                        class_id=0,
+                    )
+                ],
+                [
+                    Detection(
+                        class_name="car",
+                        confidence=0.95,
+                        bbox=(1.0, 0.0, 3.0, 2.0),
+                        class_id=0,
+                    )
+                ],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 5, tzinfo=UTC))
+
+    second_detection = tracking_store.records[1][1][0]
+    assert second_detection.speed_kph == pytest.approx(0.72)
 
 
 @pytest.mark.asyncio

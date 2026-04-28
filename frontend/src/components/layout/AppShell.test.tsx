@@ -144,7 +144,7 @@ describe("AppShell", () => {
 
   test("routes authenticated users into the refreshed operations workspace", async () => {
     window.history.pushState({}, "", "/live");
-    vi.mocked(oidcManager.getUser).mockResolvedValue({
+    vi.mocked(oidcManager).getUser.mockResolvedValue({
       access_token: "test-token",
       expired: false,
       profile: {

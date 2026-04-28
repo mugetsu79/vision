@@ -20,6 +20,8 @@ from pydantic import BaseModel, ConfigDict
 class Frame(Protocol):
     shape: tuple[int, ...]
 
+    def tobytes(self) -> bytes: ...
+
 
 type CommandRunner = Callable[[list[str]], str]
 type PublishTokenFactory = Callable[[UUID, str], str]

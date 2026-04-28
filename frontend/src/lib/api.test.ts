@@ -82,7 +82,7 @@ describe("typed API hooks", () => {
       });
     });
 
-    vi.mocked(oidcManager.getUser).mockResolvedValue(null);
+    vi.mocked(oidcManager).getUser.mockResolvedValue(null);
 
     const { result } = renderHook(() => useSites(), {
       wrapper: createTestQueryWrapper(),
@@ -115,7 +115,7 @@ describe("typed API hooks", () => {
       }),
     );
 
-    vi.mocked(oidcManager.getUser).mockResolvedValue({
+    vi.mocked(oidcManager).getUser.mockResolvedValue({
       access_token: "fresh-token",
       expired: false,
     } as Awaited<ReturnType<typeof oidcManager.getUser>>);

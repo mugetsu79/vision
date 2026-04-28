@@ -30,7 +30,12 @@ def _car(
 def test_line_cross_emits_direction_once() -> None:
     processor = CountEventProcessor(
         definitions=[
-            {"id": "driveway", "type": "line", "points": [[50, 0], [50, 100]], "class_names": ["car"]}
+            {
+                "id": "driveway",
+                "type": "line",
+                "points": [[50, 0], [50, 100]],
+                "class_names": ["car"],
+            }
         ]
     )
     ts = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
@@ -47,16 +52,28 @@ def test_line_cross_emits_direction_once() -> None:
 def test_close_in_time_different_tracks_both_count() -> None:
     processor = CountEventProcessor(
         definitions=[
-            {"id": "driveway", "type": "line", "points": [[50, 0], [50, 100]], "class_names": ["car"]}
+            {
+                "id": "driveway",
+                "type": "line",
+                "points": [[50, 0], [50, 100]],
+                "class_names": ["car"],
+            }
         ]
     )
     ts = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
 
     assert processor.process(ts=ts, detections=[_car(1, (10, 10, 30, 30))]) == []
-    first = processor.process(ts=ts + timedelta(milliseconds=500), detections=[_car(1, (60, 10, 80, 30))])
+    first = processor.process(
+        ts=ts + timedelta(milliseconds=500), detections=[_car(1, (60, 10, 80, 30))]
+    )
     assert len(first) == 1
 
-    assert processor.process(ts=ts + timedelta(milliseconds=750), detections=[_car(2, (10, 50, 30, 70))]) == []
+    assert (
+        processor.process(
+            ts=ts + timedelta(milliseconds=750), detections=[_car(2, (10, 50, 30, 70))]
+        )
+        == []
+    )
     second = processor.process(ts=ts + timedelta(seconds=1), detections=[_car(2, (60, 50, 80, 70))])
 
     assert len(second) == 1
@@ -75,7 +92,9 @@ def test_zone_transition_emits_exit_and_enter() -> None:
     ts = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
 
     processor.process(ts=ts, detections=[_car(7, (10, 20, 30, 40))])
-    transitioned = processor.process(ts=ts + timedelta(seconds=1), detections=[_car(7, (60, 20, 80, 40))])
+    transitioned = processor.process(
+        ts=ts + timedelta(seconds=1), detections=[_car(7, (60, 20, 80, 40))]
+    )
 
     assert [event["event_type"] for event in transitioned] == [
         CountEventType.ZONE_EXIT,
@@ -90,7 +109,12 @@ def test_zone_transition_emits_exit_and_enter() -> None:
 def test_short_boundary_dedupe_suppresses_track_churn() -> None:
     processor = CountEventProcessor(
         definitions=[
-            {"id": "driveway", "type": "line", "points": [[50, 0], [50, 100]], "class_names": ["car"]}
+            {
+                "id": "driveway",
+                "type": "line",
+                "points": [[50, 0], [50, 100]],
+                "class_names": ["car"],
+            }
         ],
         dedupe_seconds=2.0,
     )
@@ -100,8 +124,15 @@ def test_short_boundary_dedupe_suppresses_track_churn() -> None:
     first = processor.process(ts=ts + timedelta(seconds=1), detections=[_car(10, (60, 10, 80, 30))])
     assert len(first) == 1
 
-    assert processor.process(ts=ts + timedelta(seconds=1, milliseconds=500), detections=[_car(11, (10, 10, 30, 30))]) == []
-    second = processor.process(ts=ts + timedelta(seconds=2), detections=[_car(11, (60, 10, 80, 30))])
+    assert (
+        processor.process(
+            ts=ts + timedelta(seconds=1, milliseconds=500), detections=[_car(11, (10, 10, 30, 30))]
+        )
+        == []
+    )
+    second = processor.process(
+        ts=ts + timedelta(seconds=2), detections=[_car(11, (60, 10, 80, 30))]
+    )
 
     assert second == []
 
@@ -109,18 +140,30 @@ def test_short_boundary_dedupe_suppresses_track_churn() -> None:
 def test_stale_track_state_ttl_clears_reused_track_ids() -> None:
     processor = CountEventProcessor(
         definitions=[
-            {"id": "driveway", "type": "line", "points": [[50, 0], [50, 100]], "class_names": ["car"]}
+            {
+                "id": "driveway",
+                "type": "line",
+                "points": [[50, 0], [50, 100]],
+                "class_names": ["car"],
+            }
         ],
         stale_state_ttl_seconds=1.0,
     )
     ts = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
 
     assert processor.process(ts=ts, detections=[_car(3, (10, 10, 30, 30))]) == []
-    first = processor.process(ts=ts + timedelta(milliseconds=500), detections=[_car(3, (60, 10, 80, 30))])
+    first = processor.process(
+        ts=ts + timedelta(milliseconds=500), detections=[_car(3, (60, 10, 80, 30))]
+    )
     assert len(first) == 1
 
-    assert processor.process(ts=ts + timedelta(seconds=2), detections=[_car(3, (10, 10, 30, 30))]) == []
-    second = processor.process(ts=ts + timedelta(seconds=2, milliseconds=500), detections=[_car(3, (60, 10, 80, 30))])
+    assert (
+        processor.process(ts=ts + timedelta(seconds=2), detections=[_car(3, (10, 10, 30, 30))])
+        == []
+    )
+    second = processor.process(
+        ts=ts + timedelta(seconds=2, milliseconds=500), detections=[_car(3, (60, 10, 80, 30))]
+    )
 
     assert len(second) == 1
     assert second[0]["event_type"] == CountEventType.LINE_CROSS
@@ -130,7 +173,12 @@ def test_stale_track_state_ttl_clears_reused_track_ids() -> None:
 def test_expired_processor_state_is_pruned_without_track_reuse() -> None:
     processor = CountEventProcessor(
         definitions=[
-            {"id": "driveway", "type": "line", "points": [[50, 0], [50, 100]], "class_names": ["car"]}
+            {
+                "id": "driveway",
+                "type": "line",
+                "points": [[50, 0], [50, 100]],
+                "class_names": ["car"],
+            }
         ],
         dedupe_seconds=1.0,
         stale_state_ttl_seconds=1.0,
@@ -138,10 +186,15 @@ def test_expired_processor_state_is_pruned_without_track_reuse() -> None:
     ts = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
 
     assert processor.process(ts=ts, detections=[_car(3, (10, 10, 30, 30))]) == []
-    crossed = processor.process(ts=ts + timedelta(milliseconds=500), detections=[_car(3, (60, 10, 80, 30))])
+    crossed = processor.process(
+        ts=ts + timedelta(milliseconds=500), detections=[_car(3, (60, 10, 80, 30))]
+    )
     assert len(crossed) == 1
 
-    assert processor.process(ts=ts + timedelta(seconds=2), detections=[_car(9, (10, 60, 30, 80))]) == []
+    assert (
+        processor.process(ts=ts + timedelta(seconds=2), detections=[_car(9, (10, 60, 30, 80))])
+        == []
+    )
     assert 3 not in processor._track_last_seen
     assert all(key[1] != 3 for key in processor._last_line_side)
     assert processor._recent_boundary_hits == {}

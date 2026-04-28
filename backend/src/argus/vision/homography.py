@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from math import hypot
 
 import cv2
@@ -57,4 +58,33 @@ class Homography:
         smoothed_distances = distances[-window:]
         mean_distance_m = float(sum(smoothed_distances) / len(smoothed_distances))
         meters_per_second = mean_distance_m * fps
+        return meters_per_second * 3.6
+
+    def speed_kph_for_timed_points(
+        self,
+        track_history: Sequence[tuple[datetime, tuple[float, float]]],
+    ) -> float:
+        if len(track_history) < 2:
+            return 0.0
+
+        world_points = [
+            (ts, self.pixel_to_world(point[0], point[1]))
+            for ts, point in track_history
+        ]
+        segment_speeds_mps = [
+            hypot(current_point[0] - previous_point[0], current_point[1] - previous_point[1])
+            / elapsed_seconds
+            for (previous_ts, previous_point), (current_ts, current_point) in zip(
+                world_points,
+                world_points[1:],
+                strict=False,
+            )
+            if (elapsed_seconds := (current_ts - previous_ts).total_seconds()) > 0
+        ]
+        if not segment_speeds_mps:
+            return 0.0
+
+        window = max(1, self.smoothing_window)
+        smoothed_speeds = segment_speeds_mps[-window:]
+        meters_per_second = float(sum(smoothed_speeds) / len(smoothed_speeds))
         return meters_per_second * 3.6

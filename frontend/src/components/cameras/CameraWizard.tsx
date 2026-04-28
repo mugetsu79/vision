@@ -772,8 +772,12 @@ export function CameraWizard({
     [data.siteId, sites],
   );
   const fallbackSetupFrameSize = useMemo(
-    () => data.zones.find((boundary) => boundary.frameSize)?.frameSize ?? DEFAULT_ANALYTICS_FRAME_SIZE,
-    [data.zones],
+    () =>
+      data.zones.find((boundary) => boundary.frameSize)?.frameSize ??
+      (data.sourceCapability
+        ? { width: data.sourceCapability.width, height: data.sourceCapability.height }
+        : DEFAULT_ANALYTICS_FRAME_SIZE),
+    [data.sourceCapability, data.zones],
   );
   const setupFrameSize = setupPreviewQuery.data?.frame_size ?? fallbackSetupFrameSize;
   const setupPreviewSrc = setupPreviewQuery.data?.preview_src ?? null;

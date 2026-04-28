@@ -117,7 +117,6 @@ from argus.streaming.webrtc import (
     WebRTCNegotiator,
     resolve_stream_access,
 )
-from argus.vision.camera import _probe_video_dimensions, capture_still_image
 from argus.vision.model_metadata import resolve_model_classes
 from argus.vision.source_probe import probe_rtsp_source
 from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
@@ -131,6 +130,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SETUP_PREVIEW_CACHE_TTL = timedelta(minutes=2)
+
+
+def capture_still_image(rtsp_url: str) -> tuple[bytes, int, int]:
+    from argus.vision.camera import capture_still_image as _capture_still_image
+
+    return _capture_still_image(rtsp_url)
+
+
+def _probe_video_dimensions(rtsp_url: str) -> tuple[int, int]:
+    from argus.vision.camera import _probe_video_dimensions as _probe_dimensions
+
+    return _probe_dimensions(rtsp_url)
 
 
 @dataclass(slots=True)
