@@ -1019,12 +1019,16 @@ class HistoryService:
             ends_at=ends_at,
         )
 
+        # Coverage needs unfiltered class evidence so selected-class empty buckets can
+        # be distinguished from buckets with no telemetry.
+        fetch_class_names: list[str] | None = None
+
         if metric is HistoryMetric.COUNT_EVENTS:
             if include_speed:
                 rows = await self._fetch_series_rows_with_speed_from_count_events(
                     tenant_id=tenant_context.tenant_id,
                     camera_ids=camera_ids,
-                    class_names=class_names,
+                    class_names=fetch_class_names,
                     granularity=effective_granularity,
                     starts_at=starts_at,
                     ends_at=ends_at,
@@ -1038,7 +1042,7 @@ class HistoryService:
                 rows = await self._fetch_series_rows_aggregate(
                     tenant_id=tenant_context.tenant_id,
                     camera_ids=camera_ids,
-                    class_names=class_names,
+                    class_names=fetch_class_names,
                     granularity=effective_granularity,
                     starts_at=starts_at,
                     ends_at=ends_at,
@@ -1048,7 +1052,7 @@ class HistoryService:
                 rows = await self._fetch_series_rows_from_count_events(
                     tenant_id=tenant_context.tenant_id,
                     camera_ids=camera_ids,
-                    class_names=class_names,
+                    class_names=fetch_class_names,
                     granularity=effective_granularity,
                     starts_at=starts_at,
                     ends_at=ends_at,
@@ -1057,7 +1061,7 @@ class HistoryService:
             rows = await self._fetch_series_rows_with_speed(
                 tenant_id=tenant_context.tenant_id,
                 camera_ids=camera_ids,
-                class_names=class_names,
+                class_names=fetch_class_names,
                 granularity=effective_granularity,
                 starts_at=starts_at,
                 ends_at=ends_at,
@@ -1068,7 +1072,7 @@ class HistoryService:
             rows = await self._fetch_series_rows_from_events(
                 tenant_id=tenant_context.tenant_id,
                 camera_ids=camera_ids,
-                class_names=class_names,
+                class_names=fetch_class_names,
                 granularity=effective_granularity,
                 starts_at=starts_at,
                 ends_at=ends_at,
@@ -1165,11 +1169,12 @@ class HistoryService:
             total_count = sum(projected_values.values())
             if not selected_classes and values:
                 total_count = sum(values.values())
-            status = (
-                HistoryCoverageStatus.POPULATED
-                if total_count > 0
-                else HistoryCoverageStatus.ZERO
-            )
+            if total_count > 0:
+                status = HistoryCoverageStatus.POPULATED
+            elif values:
+                status = HistoryCoverageStatus.ZERO
+            else:
+                status = HistoryCoverageStatus.NO_TELEMETRY
             series_row = HistorySeriesRow(
                 bucket=bucket,
                 values=projected_values,

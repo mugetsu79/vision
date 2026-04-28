@@ -490,7 +490,7 @@ async def test_fetch_series_rows_from_count_events_scopes_to_tenant_by_default()
 
 
 @pytest.mark.asyncio
-async def test_query_series_returns_zero_buckets_for_empty_valid_window(
+async def test_query_series_returns_no_telemetry_buckets_for_empty_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = HistoryService(session_factory=MagicMock())
@@ -508,7 +508,7 @@ async def test_query_series_returns_zero_buckets_for_empty_valid_window(
         metric=HistoryMetric.OCCUPANCY,
     )
 
-    assert response.coverage_status == HistoryCoverageStatus.ZERO
+    assert response.coverage_status == HistoryCoverageStatus.NO_TELEMETRY
     assert response.effective_from == starts
     assert response.effective_to == starts + timedelta(minutes=3)
     assert response.bucket_count == 3
@@ -522,10 +522,130 @@ async def test_query_series_returns_zero_buckets_for_empty_valid_window(
     assert [row.values for row in response.rows] == [{"person": 0}, {"person": 0}, {"person": 0}]
     assert [row.total_count for row in response.rows] == [0, 0, 0]
     assert [entry.status for entry in response.coverage_by_bucket] == [
-        HistoryCoverageStatus.ZERO,
-        HistoryCoverageStatus.ZERO,
-        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.NO_TELEMETRY,
+        HistoryCoverageStatus.NO_TELEMETRY,
+        HistoryCoverageStatus.NO_TELEMETRY,
     ]
+
+
+@pytest.mark.asyncio
+async def test_query_series_marks_filtered_empty_bucket_as_zero_when_telemetry_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    starts = datetime(2026, 4, 26, 14, 0, tzinfo=UTC)
+    monkeypatch.setattr(
+        service,
+        "_fetch_series_rows_from_events",
+        AsyncMock(
+            return_value=[
+                {
+                    "bucket": starts,
+                    "class_name": "bus",
+                    "event_count": 3,
+                }
+            ]
+        ),
+    )
+
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=["car"],
+        granularity="1m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=1),
+        metric=HistoryMetric.OCCUPANCY,
+    )
+
+    assert response.coverage_status == HistoryCoverageStatus.ZERO
+    assert response.rows[0].values == {"car": 0}
+    assert response.coverage_by_bucket[0].status == HistoryCoverageStatus.ZERO
+    service._fetch_series_rows_from_events.assert_awaited_once()
+    assert service._fetch_series_rows_from_events.await_args.kwargs["class_names"] is None
+
+
+@pytest.mark.parametrize(
+    ("fetch_name", "metric", "include_speed", "granularity", "starts_at", "ends_at"),
+    [
+        (
+            "_fetch_series_rows_aggregate",
+            HistoryMetric.COUNT_EVENTS,
+            False,
+            "1h",
+            datetime(2026, 4, 26, 14, 0, tzinfo=UTC),
+            datetime(2026, 4, 26, 15, 0, tzinfo=UTC),
+        ),
+        (
+            "_fetch_series_rows_from_count_events",
+            HistoryMetric.COUNT_EVENTS,
+            False,
+            "1h",
+            datetime(2026, 4, 26, 14, 34, tzinfo=UTC),
+            datetime(2026, 4, 26, 15, 34, tzinfo=UTC),
+        ),
+        (
+            "_fetch_series_rows_with_speed",
+            HistoryMetric.OCCUPANCY,
+            True,
+            "1m",
+            datetime(2026, 4, 26, 14, 0, tzinfo=UTC),
+            datetime(2026, 4, 26, 14, 1, tzinfo=UTC),
+        ),
+        (
+            "_fetch_series_rows_with_speed_from_count_events",
+            HistoryMetric.COUNT_EVENTS,
+            True,
+            "1m",
+            datetime(2026, 4, 26, 14, 0, tzinfo=UTC),
+            datetime(2026, 4, 26, 14, 1, tzinfo=UTC),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_query_series_fetches_all_classes_for_selected_class_coverage_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    fetch_name: str,
+    metric: HistoryMetric,
+    include_speed: bool,
+    granularity: str,
+    starts_at: datetime,
+    ends_at: datetime,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+    bucket = starts_at.replace(minute=0 if granularity == "1h" else starts_at.minute)
+    fetch = AsyncMock(
+        return_value=[
+            {
+                "bucket": bucket,
+                "class_name": "bus",
+                "event_count": 3,
+                "speed_p50": None,
+                "speed_p95": None,
+                "speed_sample_count": 0,
+                "over_threshold_count": None,
+            }
+        ]
+    )
+    monkeypatch.setattr(service, fetch_name, fetch)
+
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=["car"],
+        granularity=granularity,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        metric=metric,
+        include_speed=include_speed,
+    )
+
+    fetch.assert_awaited_once()
+    assert fetch.await_args.kwargs["class_names"] is None
+    assert response.rows[0].values == {"car": 0}
+    assert response.coverage_by_bucket[0].status == HistoryCoverageStatus.ZERO
 
 
 @pytest.mark.asyncio
@@ -562,9 +682,9 @@ async def test_query_series_materializes_missing_buckets_around_populated_rows(
     assert response.coverage_status == HistoryCoverageStatus.POPULATED
     assert [row.values for row in response.rows] == [{"car": 0}, {"car": 7}, {"car": 0}]
     assert [entry.status for entry in response.coverage_by_bucket] == [
-        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.NO_TELEMETRY,
         HistoryCoverageStatus.POPULATED,
-        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.NO_TELEMETRY,
     ]
 
 
@@ -653,9 +773,9 @@ async def test_query_series_materializes_aligned_buckets_for_non_aligned_window(
     ]
     assert [row.values for row in response.rows] == [{"car": 0}, {"car": 7}, {"car": 0}]
     assert [entry.status for entry in response.coverage_by_bucket] == [
-        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.NO_TELEMETRY,
         HistoryCoverageStatus.POPULATED,
-        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.NO_TELEMETRY,
     ]
 
 
@@ -702,9 +822,9 @@ async def test_query_series_materializes_utc_aligned_buckets_for_non_utc_window(
     ]
     assert [row.values for row in response.rows] == [{"car": 0}, {"car": 7}, {"car": 0}]
     assert [entry.status for entry in response.coverage_by_bucket] == [
-        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.NO_TELEMETRY,
         HistoryCoverageStatus.POPULATED,
-        HistoryCoverageStatus.ZERO,
+        HistoryCoverageStatus.NO_TELEMETRY,
     ]
 
 
