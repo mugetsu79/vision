@@ -129,6 +129,12 @@ describe("IncidentsPage", () => {
       </QueryClientProvider>,
     );
 
+    expect(
+      await screen.findByRole("heading", { name: /evidence desk/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/review captured incident records/i),
+    ).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Queue" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /incident facts/i })).toBeInTheDocument();
 
@@ -165,7 +171,7 @@ describe("IncidentsPage", () => {
   test("persists review state from the evidence hero", async () => {
     const user = userEvent.setup();
     const requests: Request[] = [];
-    let reviewStatus = "pending";
+    let incident = incidentPayload();
 
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request =
@@ -178,24 +184,27 @@ describe("IncidentsPage", () => {
       }
 
       if (url.pathname === "/api/v1/incidents") {
-        return Promise.resolve(
-          jsonResponse([incidentPayload({ review_status: reviewStatus })]),
-        );
+        const reviewStatus = url.searchParams.get("review_status");
+        const incidentReviewStatus = String(incident.review_status);
+
+        if (!reviewStatus || reviewStatus === incidentReviewStatus) {
+          return Promise.resolve(jsonResponse([incident]));
+        }
+
+        return Promise.resolve(jsonResponse([]));
       }
 
       if (
         url.pathname ===
         "/api/v1/incidents/99999999-9999-9999-9999-999999999999/review"
       ) {
-        reviewStatus = "reviewed";
+        incident = incidentPayload({
+          review_status: "reviewed",
+          reviewed_at: "2026-04-18T10:20:00Z",
+          reviewed_by_subject: "analyst-1",
+        });
         return Promise.resolve(
-          jsonResponse(
-            incidentPayload({
-              review_status: "reviewed",
-              reviewed_at: "2026-04-18T10:20:00Z",
-              reviewed_by_subject: "analyst-1",
-            }),
-          ),
+          jsonResponse(incident),
         );
       }
 
@@ -211,7 +220,9 @@ describe("IncidentsPage", () => {
     const hero = await screen.findByRole("region", { name: /selected evidence/i });
     await user.click(within(hero).getByRole("button", { name: /^review$/i }));
 
-    expect(await within(hero).findByRole("button", { name: /^reopen$/i })).toBeInTheDocument();
+    expect(
+      await screen.findByText(/no incident records match/i),
+    ).toBeInTheDocument();
 
     const reviewRequest = requests.find(
       (request) =>
@@ -219,5 +230,14 @@ describe("IncidentsPage", () => {
         "/api/v1/incidents/99999999-9999-9999-9999-999999999999/review",
     );
     expect(reviewRequest?.method).toBe("PATCH");
+
+    await user.selectOptions(screen.getByLabelText(/review status/i), ["reviewed"]);
+
+    const reviewedHero = await screen.findByRole("region", {
+      name: /selected evidence/i,
+    });
+    expect(
+      within(reviewedHero).getByRole("button", { name: /^reopen$/i }),
+    ).toBeInTheDocument();
   });
 });
