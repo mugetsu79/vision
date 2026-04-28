@@ -493,6 +493,39 @@ describe("HistoryPage", () => {
     clickSpy.mockRestore();
   });
 
+  test("exports the visible resolved follow-now window", async () => {
+    const user = userEvent.setup();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-27T12:34:56Z"));
+
+    const createObjectURL = vi.fn(() => "blob:history");
+    const revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectURL,
+    });
+
+    renderPage("/history?window=last_1h&follow=1&metric=count_events");
+    await screen.findByTestId("history-trend-chart");
+    await user.click(screen.getByRole("button", { name: /download csv/i }));
+
+    await waitFor(() => {
+      const request = findHistoryRequest("/api/v1/export", "count_events");
+      expect(request?.searchParams.get("from")).toBe("2026-04-27T11:34:00.000Z");
+      expect(request?.searchParams.get("to")).toBe("2026-04-27T12:34:00.000Z");
+    });
+
+    clickSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
   test("renders split review and selects a bucket from the chart", async () => {
     const user = userEvent.setup();
     renderPage();

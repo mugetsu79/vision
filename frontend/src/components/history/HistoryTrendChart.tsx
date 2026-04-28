@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
 import type { EChartsOption } from "echarts";
 import { BarChart, LineChart } from "echarts/charts";
 import {
@@ -292,14 +292,26 @@ export function HistoryTrendChart({
       ? "680px"
       : "560px"
     : "360px";
+  const handleKeyboardSelect = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const bucket = series.selectedBucket ?? series.points[0]?.bucket;
+    if (!bucket) return;
+    event.preventDefault();
+    onBucketSelect?.(bucket);
+  };
 
   return (
     <div
       ref={containerRef}
-      className={cn("w-full", className)}
+      className={cn(
+        "w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[#6da4ff]/70",
+        className,
+      )}
       style={{ height }}
       role="img"
       aria-label={`History trend chart for ${metricCopy.label.toLowerCase()}`}
+      tabIndex={0}
+      onKeyDown={handleKeyboardSelect}
     />
   );
 }

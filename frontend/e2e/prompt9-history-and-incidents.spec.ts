@@ -1,6 +1,12 @@
 import fs from "node:fs/promises";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+function operationsLink(page: Page, name: string) {
+  return page
+    .getByRole("navigation", { name: "Operations" })
+    .getByRole("link", { name });
+}
 
 function cameraPayload() {
   return {
@@ -52,6 +58,16 @@ function historySeriesPayload() {
     granularity: "1h",
     class_names: ["car", "bus"],
     rows,
+    coverage_status: "populated",
+    coverage_by_bucket: rows.map((row) => ({
+      bucket: row.bucket,
+      status: row.total_count > 0 ? "populated" : "zero",
+      reason: null,
+    })),
+    effective_from: "2026-04-12T00:00:00Z",
+    effective_to: "2026-04-19T00:00:00Z",
+    bucket_count: rows.length,
+    bucket_span: "1h",
   };
 }
 
@@ -116,18 +132,23 @@ test("history renders quickly, CSV export works, and incidents show signed previ
   await expect(page).toHaveURL(/\/live$/);
 
   // Warm the dev server route chunk before measuring the history render budget.
-  await page.getByRole("link", { name: "History" }).click();
-  await expect(page).toHaveURL(/\/history$/);
+  await operationsLink(page, "History").click();
+  await expect(page).toHaveURL(/\/history(?:\?|$)/);
   await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
-  await page.getByRole("link", { name: "Live" }).click();
+  await operationsLink(page, "Live").click();
   await expect(page).toHaveURL(/\/live$/);
 
   await page.evaluate(() => {
     (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart = performance.now();
   });
-  await page.getByRole("link", { name: "History" }).click();
-  await expect(page).toHaveURL(/\/history$/);
+  await operationsLink(page, "History").click();
+  await expect(page).toHaveURL(/\/history(?:\?|$)/);
   await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /bucket review/i })).toBeVisible();
+  const chart = page.getByRole("img", { name: /history trend chart/i });
+  await chart.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/visible samples/i)).toBeVisible();
   const historyRenderMs = await page.evaluate(() => {
     const startedAt = (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart;
     if (typeof startedAt !== "number") {
@@ -150,7 +171,7 @@ test("history renders quickly, CSV export works, and incidents show signed previ
   const csv = await fs.readFile(downloadPath, "utf-8");
   expect(csv).toContain("bucket,class_name,event_count");
 
-  await page.getByRole("link", { name: "Incidents" }).click();
+  await operationsLink(page, "Incidents").click();
   await expect(page).toHaveURL(/\/incidents$/);
   await expect(
     page.getByRole("img", { name: /incident preview for forklift gate/i }),
@@ -213,7 +234,7 @@ test("history filter state survives navigation via URL", async ({ page }) => {
   await page.locator("#kc-login").click();
 
   await expect(page).toHaveURL(/\/live$/);
-  await page.getByRole("link", { name: "History" }).click();
+  await operationsLink(page, "History").click();
   await expect(page).toHaveURL(/\/history/);
 
   await page.getByLabel("Show speed").check();
@@ -222,7 +243,7 @@ test("history filter state survives navigation via URL", async ({ page }) => {
   await expect(page).toHaveURL(/speed=1/);
   await expect(page).toHaveURL(/speedThreshold=60/);
 
-  await page.getByRole("link", { name: "Live" }).click();
+  await operationsLink(page, "Live").click();
   await expect(page).toHaveURL(/\/live$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/history.*speed=1.*speedThreshold=60/);
@@ -231,6 +252,8 @@ test("history filter state survives navigation via URL", async ({ page }) => {
 });
 
 test("deep link with speed params applies state on load", async ({ page }) => {
+  const historySeriesRequests: URL[] = [];
+
   await page.route("**/api/v1/cameras", async (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -249,13 +272,11 @@ test("deep link with speed params applies state on load", async ({ page }) => {
   );
   await page.route("**/api/v1/history/series**", async (route) => {
     const url = new URL(route.request().url());
-    expect(url.searchParams.get("include_speed")).toBe("true");
-    expect(url.searchParams.get("speed_threshold")).toBe("60");
-    expect(url.searchParams.get("granularity")).toBe("5m");
+    historySeriesRequests.push(url);
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        granularity: "5m",
+        granularity: url.searchParams.get("granularity") ?? "1h",
         class_names: ["car"],
         rows: [],
         granularity_adjusted: false,
@@ -271,7 +292,18 @@ test("deep link with speed params applies state on load", async ({ page }) => {
   await page.locator("#password").fill("argus-admin-pass");
   await page.locator("#kc-login").click();
 
+  await expect(page).toHaveURL(/\/live$/);
   await page.goto("/history?speed=1&speedThreshold=60&granularity=5m");
   await expect(page.getByLabel("Show speed")).toBeChecked();
   await expect(page.getByLabel("Speed threshold")).toHaveValue("60");
+  await expect
+    .poll(() =>
+      historySeriesRequests.some(
+        (request) =>
+          request.searchParams.get("include_speed") === "true" &&
+          request.searchParams.get("speed_threshold") === "60" &&
+          request.searchParams.get("granularity") === "5m",
+      ),
+    )
+    .toBe(true);
 });
