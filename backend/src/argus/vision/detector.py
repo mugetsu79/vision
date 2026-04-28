@@ -3,12 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Any
+from typing import Any, Protocol
 
 import cv2
 import numpy as np
 from numpy.typing import NDArray
 
+from argus.models.enums import DetectorCapability
 from argus.vision.runtime import (
     RuntimeExecutionPolicy,
     create_session_options,
@@ -30,7 +31,23 @@ class DetectionModelConfig:
     iou_threshold: float = 0.45
 
 
+class RuntimeDetector(Protocol):
+    capability: DetectorCapability
+
+    def detect(
+        self,
+        frame: NDArray[np.uint8],
+        allowed_classes: Iterable[str] | None = None,
+    ) -> list[Detection]: ...
+
+    def update_runtime_vocabulary(self, vocabulary: list[str]) -> None: ...
+
+    def describe_runtime_state(self) -> dict[str, object]: ...
+
+
 class YoloDetector:
+    capability = DetectorCapability.FIXED_VOCAB
+
     def __init__(
         self,
         model_config: DetectionModelConfig,
@@ -70,6 +87,16 @@ class YoloDetector:
             and prediction.class_name in allowed
         ]
         return _apply_nms(filtered, self.model_config.iou_threshold)
+
+    def update_runtime_vocabulary(self, vocabulary: list[str]) -> None:
+        return None
+
+    def describe_runtime_state(self) -> dict[str, object]:
+        return {
+            "capability": self.capability,
+            "classes": list(self.model_config.classes),
+            "selected_provider": self.selected_provider,
+        }
 
     def _prepare_tensor(self, frame: NDArray[np.uint8]) -> NDArray[np.float32]:
         target_width = int(self.model_config.input_shape["width"])

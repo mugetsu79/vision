@@ -33,7 +33,13 @@ from argus.inference.publisher import (
     TelemetryFrame,
     TelemetryTrack,
 )
-from argus.models.enums import ProcessingMode, RuleAction, TrackerType
+from argus.models.enums import (
+    DetectorCapability,
+    ProcessingMode,
+    RuleAction,
+    RuntimeVocabularySource,
+    TrackerType,
+)
 from argus.services.incident_capture import (
     IncidentClipCaptureService,
     IncidentTriggeredEvent,
@@ -54,10 +60,15 @@ from argus.vision.anpr import LineCrossingAnprProcessor
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
 from argus.vision.count_events import CountEventProcessor, CountEventRecord
-from argus.vision.detector import DetectionModelConfig, YoloDetector
+from argus.vision.detector import YoloDetector
+from argus.vision.detector_factory import build_detector as _build_detector
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
-from argus.vision.runtime import import_onnxruntime, resolve_execution_policy
+from argus.vision.runtime import (
+    RuntimeExecutionPolicy,
+    import_onnxruntime,
+    resolve_execution_policy,
+)
 from argus.vision.tracker import TrackerConfig, create_tracker
 from argus.vision.types import Detection
 from argus.vision.zones import Zones
@@ -67,10 +78,22 @@ type Frame = NDArray[np.uint8]
 logger = logging.getLogger(__name__)
 
 
+class RuntimeVocabularySettings(BaseModel):
+    terms: list[str] = Field(default_factory=list)
+    source: RuntimeVocabularySource = RuntimeVocabularySource.DEFAULT
+    version: int = 0
+    updated_at: datetime | None = None
+
+
 class ModelSettings(BaseModel):
     name: str
     path: str
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB
+    capability_config: dict[str, Any] = Field(default_factory=dict)
     classes: list[str]
+    runtime_vocabulary: RuntimeVocabularySettings = Field(
+        default_factory=RuntimeVocabularySettings
+    )
     input_shape: dict[str, int]
     confidence_threshold: float = 0.25
     iou_threshold: float = 0.45
@@ -204,6 +227,20 @@ class StreamClient(Protocol):
         *,
         ts: datetime,
     ) -> None: ...
+
+
+def build_detector(
+    *,
+    model: ModelSettings,
+    runtime: Any,
+    runtime_policy: RuntimeExecutionPolicy,
+) -> Detector:
+    return _build_detector(
+        model=model,
+        runtime=runtime,
+        runtime_policy=runtime_policy,
+        yolo_detector_cls=YoloDetector,
+    )
 
 
 @dataclass(slots=True)
@@ -885,15 +922,8 @@ async def build_runtime_engine(
         runtime_policy.profile_overridden,
         list(runtime_policy.available_providers),
     )
-    detector = YoloDetector(
-        DetectionModelConfig(
-            name=config.model.name,
-            path=config.model.path,
-            classes=config.model.classes,
-            input_shape=config.model.input_shape,
-            confidence_threshold=config.model.confidence_threshold,
-            iou_threshold=config.model.iou_threshold,
-        ),
+    detector = build_detector(
+        model=config.model,
         runtime=runtime,
         runtime_policy=runtime_policy,
     )

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import numpy as np
@@ -13,8 +13,8 @@ from argus.core import metrics as core_metrics
 from argus.inference import engine as engine_module
 from argus.inference.engine import (
     CameraCommand,
-    CameraSourceConfig,
     CameraSettings,
+    CameraSourceConfig,
     EngineConfig,
     InferenceEngine,
     ModelSettings,
@@ -23,7 +23,14 @@ from argus.inference.engine import (
     TrackerSettings,
 )
 from argus.inference.publisher import TelemetryFrame
-from argus.models.enums import CountEventType, ProcessingMode, RuleAction, TrackerType
+from argus.models.enums import (
+    CountEventType,
+    DetectorCapability,
+    ProcessingMode,
+    RuleAction,
+    RuntimeVocabularySource,
+    TrackerType,
+)
 from argus.services.incident_capture import IncidentTriggeredEvent
 from argus.streaming.mediamtx import (
     PrivacyPolicy,
@@ -698,6 +705,187 @@ def test_worker_main_configures_logging_and_reuses_settings(
     assert captured["awaitable"].__class__.__name__ == "_Awaitable"
 
 
+def _runtime_policy_for_tests() -> RuntimeExecutionPolicy:
+    return RuntimeExecutionPolicy(
+        host=HostClassification(
+            system="darwin",
+            machine="x86_64",
+            cpu_vendor=CpuVendor.INTEL,
+            available_providers=(ExecutionProvider.CPU.value,),
+            profile=ExecutionProfile.MACOS_X86_64_INTEL,
+            profile_overridden=False,
+        ),
+        provider=ExecutionProvider.CPU.value,
+        available_providers=(ExecutionProvider.CPU.value,),
+        provider_overridden=False,
+        inter_op_threads=None,
+        intra_op_threads=None,
+    )
+
+
+def _patch_runtime_engine_build_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    build_detector: object | None = None,
+) -> tuple[object, RuntimeExecutionPolicy]:
+    fake_runtime = object()
+    runtime_policy = _runtime_policy_for_tests()
+
+    monkeypatch.setattr(
+        engine_module,
+        "create_camera_source",
+        lambda camera_config: _FakeFrameSource([]),
+    )
+    monkeypatch.setattr(engine_module, "import_onnxruntime", lambda: fake_runtime)
+    monkeypatch.setattr(
+        engine_module,
+        "resolve_execution_policy",
+        lambda runtime, **kwargs: runtime_policy,
+    )
+    monkeypatch.setattr(engine_module, "YoloDetector", lambda *args, **kwargs: object())
+    if build_detector is not None:
+        monkeypatch.setattr(engine_module, "build_detector", build_detector, raising=False)
+
+    class _StubMediaMTXClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        async def register_stream(
+            self,
+            *,
+            camera_id: UUID,
+            rtsp_url: str,
+            profile: PublishProfile,
+            stream_kind: str,
+            privacy: PrivacyPolicy,
+            target_fps: int,
+            target_width: int | None = None,
+            target_height: int | None = None,
+        ) -> StreamRegistration:
+            return StreamRegistration(
+                camera_id=camera_id,
+                mode=StreamMode.PASSTHROUGH,
+                path_name=f"cameras/{camera_id}/passthrough",
+                read_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+                managed_path_config=True,
+                ingest_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+            )
+
+    monkeypatch.setattr(engine_module, "MediaMTXClient", _StubMediaMTXClient)
+
+    class _StubTokenIssuer:
+        @classmethod
+        def from_settings(cls, settings: object) -> _StubTokenIssuer:
+            return cls()
+
+        def issue_publish_token(
+            self, *, subject: str, camera_id: UUID, path_name: str
+        ) -> str:
+            return "publish-token"
+
+        def issue_internal_read_token(
+            self,
+            *,
+            camera_id: UUID,
+            path_name: str,
+            ttl_seconds: int | None = None,
+        ) -> str:
+            return "read-token"
+
+        def build_internal_rtsp_url(
+            self,
+            *,
+            camera_id: UUID,
+            path_name: str,
+            rtsp_url: str,
+            ttl_seconds: int | None = None,
+        ) -> str:
+            del camera_id, path_name, ttl_seconds
+            return f"{rtsp_url}?jwt=read-token"
+
+    monkeypatch.setattr(engine_module, "MediaMTXTokenIssuer", _StubTokenIssuer)
+    return fake_runtime, runtime_policy
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_uses_detector_factory_for_fixed_vocab_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    detector_calls: dict[str, object] = {}
+
+    def fake_build_detector(*, model: object, runtime: object, runtime_policy: object) -> object:
+        detector_calls["model"] = model
+        detector_calls["runtime"] = runtime
+        detector_calls["runtime_policy"] = runtime_policy
+        return object()
+
+    fake_runtime, runtime_policy = _patch_runtime_engine_build_dependencies(
+        monkeypatch,
+        build_detector=fake_build_detector,
+    )
+
+    await engine_module.build_runtime_engine(
+        _engine_config(camera_id),
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    assert detector_calls["runtime"] is fake_runtime
+    assert detector_calls["runtime_policy"] is runtime_policy
+    model = detector_calls["model"]
+    assert model.capability == DetectorCapability.FIXED_VOCAB
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_passes_runtime_vocabulary_to_detector_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    detector_calls: dict[str, object] = {}
+
+    def fake_build_detector(*, model: object, runtime: object, runtime_policy: object) -> object:
+        detector_calls["model"] = model
+        detector_calls["runtime"] = runtime
+        detector_calls["runtime_policy"] = runtime_policy
+        return object()
+
+    _patch_runtime_engine_build_dependencies(monkeypatch, build_detector=fake_build_detector)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="YOLO World",
+                path="/models/yolo-world.onnx",
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={
+                    "supports_runtime_vocabulary_updates": True,
+                    "max_runtime_terms": 32,
+                    "prompt_format": "labels",
+                    "execution_profiles": ["x86_64_gpu", "arm64_jetson"],
+                },
+                classes=[],
+                runtime_vocabulary={
+                    "terms": ["forklift", "pallet jack"],
+                    "source": RuntimeVocabularySource.MANUAL,
+                    "version": 1,
+                },
+                input_shape={"width": 96, "height": 96},
+            )
+        }
+    )
+
+    await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    model = detector_calls["model"]
+    assert model.capability == DetectorCapability.OPEN_VOCAB
+    assert model.runtime_vocabulary.terms == ["forklift", "pallet jack"]
+    assert model.runtime_vocabulary.version == 1
+
+
 @pytest.mark.asyncio
 async def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_models(
     monkeypatch: pytest.MonkeyPatch,
@@ -1290,7 +1478,12 @@ async def test_engine_records_generic_count_events_with_mixed_zones() -> None:
     config = _engine_config(camera_id).model_copy(
         update={
             "zones": [
-                {"id": "driveway", "type": "line", "points": [[50, 0], [50, 64]], "class_names": ["car"]},
+                {
+                    "id": "driveway",
+                    "type": "line",
+                    "points": [[50, 0], [50, 64]],
+                    "class_names": ["car"],
+                },
                 {"id": "yard", "polygon": [[40, 40], [63, 40], [63, 63], [40, 63]]},
             ]
         }
@@ -1361,7 +1554,12 @@ async def test_engine_resets_count_event_state_on_tracker_change() -> None:
     config = _engine_config(camera_id).model_copy(
         update={
             "zones": [
-                {"id": "driveway", "type": "line", "points": [[50, 0], [50, 64]], "class_names": ["car"]}
+                {
+                    "id": "driveway",
+                    "type": "line",
+                    "points": [[50, 0], [50, 64]],
+                    "class_names": ["car"],
+                }
             ]
         }
     )
@@ -1422,7 +1620,12 @@ async def test_engine_continues_when_count_event_persistence_fails(
     config = _engine_config(camera_id).model_copy(
         update={
             "zones": [
-                {"id": "driveway", "type": "line", "points": [[50, 0], [50, 64]], "class_names": ["car"]}
+                {
+                    "id": "driveway",
+                    "type": "line",
+                    "points": [[50, 0], [50, 64]],
+                    "class_names": ["car"],
+                }
             ]
         }
     )
