@@ -73,6 +73,7 @@ from argus.api.contracts import (
     WorkerModelSettings,
     WorkerPrivacySettings,
     WorkerPublishSettings,
+    WorkerRuntimeCapability,
     WorkerRuntimeStatus,
     WorkerStreamSettings,
     WorkerTrackerSettings,
@@ -2637,7 +2638,12 @@ def _model_to_response(model: Model) -> ModelResponse:
 
 
 def _model_capability(model: Model) -> DetectorCapability:
-    return getattr(model, "capability", None) or DetectorCapability.FIXED_VOCAB
+    capability = getattr(model, "capability", None)
+    if capability is None:
+        return DetectorCapability.FIXED_VOCAB
+    if isinstance(capability, DetectorCapability):
+        return capability
+    return DetectorCapability(str(capability))
 
 
 def _model_capability_config(model: Model) -> dict[str, object]:
@@ -2830,6 +2836,7 @@ def _camera_to_worker_config(
         ),
         active_classes=list(camera.active_classes),
         runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
+        runtime_capability=_worker_runtime_capability(primary_model),
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
         homography=_homography_to_worker_payload(camera.homography),
@@ -2849,6 +2856,27 @@ def _model_to_worker_settings(
         classes=list(model.classes),
         input_shape=dict(model.input_shape),
         runtime_vocabulary=runtime_vocabulary or RuntimeVocabularyState(),
+    )
+
+
+def _worker_runtime_capability(model: Model) -> WorkerRuntimeCapability:
+    capability_config = _model_capability_config(model)
+    execution_profiles = capability_config.get("execution_profiles")
+    return WorkerRuntimeCapability(
+        execution_profiles=(
+            list(execution_profiles)
+            if isinstance(execution_profiles, list)
+            else []
+        ),
+        detector_capabilities=[_model_capability(model)],
+        hot_runtime_vocabulary_updates=bool(
+            capability_config.get("supports_runtime_vocabulary_updates", False)
+        ),
+        max_runtime_terms=(
+            int(capability_config["max_runtime_terms"])
+            if capability_config.get("max_runtime_terms") is not None
+            else None
+        ),
     )
 
 

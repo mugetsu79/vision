@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import CameraCommandPayload, QueryRequest, QueryResponse, TenantContext
 from argus.core.events import NatsJetStreamClient
+from argus.models.enums import DetectorCapability, QueryResolutionMode, RuntimeVocabularySource
 from argus.models.tables import AuditLog, Camera, Model, Site, Tenant
 
 
@@ -20,6 +22,15 @@ class QueryServiceResult:
     provider: str
     model: str
     latency_ms: int
+
+
+@dataclass(slots=True, frozen=True)
+class QueryCameraDetectorContext:
+    resolution_mode: QueryResolutionMode
+    allowed_classes: list[str]
+    runtime_vocabulary: list[str]
+    runtime_vocabulary_version: int = 0
+    max_runtime_terms: int | None = None
 
 
 class QueryAuditLogger(Protocol):
@@ -46,6 +57,13 @@ class CameraClassInventory(Protocol):
         tenant_context: TenantContext,
         camera_ids: list[UUID],
     ) -> list[str]: ...
+
+    async def detector_context_for_cameras(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+    ) -> QueryCameraDetectorContext: ...
 
 
 class QueryParser(Protocol):
@@ -93,11 +111,17 @@ class QueryService:
         payload: QueryRequest,
     ) -> QueryResponse:
         await self.quota_enforcer.assert_query_allowed(tenant_context=tenant_context)
-        allowed_classes = await self.inventory.allowed_classes_for_cameras(
+        detector_context = await _detector_context_for_inventory(
+            self.inventory,
             tenant_context=tenant_context,
             camera_ids=payload.camera_ids,
         )
-        if not allowed_classes:
+        terms_for_resolution = (
+            detector_context.allowed_classes
+            if detector_context.resolution_mode is QueryResolutionMode.FIXED_FILTER
+            else detector_context.allowed_classes or detector_context.runtime_vocabulary
+        )
+        if not terms_for_resolution:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No matching cameras or classes were found for this tenant.",
@@ -105,10 +129,31 @@ class QueryService:
 
         parser_result = await self.parser.resolve_classes(
             prompt=payload.prompt,
-            allowed_classes=allowed_classes,
+            allowed_classes=terms_for_resolution,
         )
         parser_metadata = cast(_ParserMetadata, parser_result)
-        resolved_classes = _resolved_classes_from_parser_result(parser_result)
+        resolved_terms = _resolved_classes_from_parser_result(parser_result)
+        if (
+            detector_context.max_runtime_terms is not None
+            and len(resolved_terms) > detector_context.max_runtime_terms
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "runtime_vocabulary exceeds "
+                    f"max_runtime_terms={detector_context.max_runtime_terms}."
+                ),
+            )
+        resolved_classes = (
+            resolved_terms
+            if detector_context.resolution_mode is QueryResolutionMode.FIXED_FILTER
+            else []
+        )
+        resolved_vocabulary = (
+            resolved_terms
+            if detector_context.resolution_mode is QueryResolutionMode.OPEN_VOCAB
+            else []
+        )
         result = QueryServiceResult(
             resolved_classes=resolved_classes,
             provider=parser_metadata.provider,
@@ -116,10 +161,14 @@ class QueryService:
             latency_ms=parser_metadata.latency_ms,
         )
 
-        command = CameraCommandPayload(active_classes=result.resolved_classes)
         if self.events is None:
             raise RuntimeError("Query events publisher is not configured.")
         for camera_id in payload.camera_ids:
+            command = _camera_command_for_query(
+                detector_context=detector_context,
+                resolved_classes=result.resolved_classes,
+                resolved_vocabulary=resolved_vocabulary,
+            )
             await self.events.publish(f"cmd.camera.{camera_id}", command)
 
         await self.audit_logger.record_query(
@@ -132,7 +181,9 @@ class QueryService:
         )
 
         return QueryResponse(
+            resolution_mode=detector_context.resolution_mode,
             resolved_classes=result.resolved_classes,
+            resolved_vocabulary=resolved_vocabulary,
             provider=result.provider,
             model=result.model,
             latency_ms=result.latency_ms,
@@ -172,6 +223,127 @@ class SQLCameraClassInventory:
                 if class_name not in allowed:
                     allowed.append(class_name)
         return allowed
+
+    async def detector_context_for_cameras(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+    ) -> QueryCameraDetectorContext:
+        async with self.session_factory() as session:
+            statement = (
+                select(
+                    Camera.id,
+                    Camera.runtime_vocabulary,
+                    Camera.runtime_vocabulary_version,
+                    Model.classes,
+                    Model.capability,
+                    Model.capability_config,
+                )
+                .join(Site, Site.id == Camera.site_id)
+                .join(Model, Model.id == Camera.primary_model_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Camera.id.in_(camera_ids))
+            )
+            rows = (await session.execute(statement)).all()
+
+        if len(rows) != len(set(camera_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="One or more cameras were not found for this tenant.",
+            )
+
+        capabilities = {_coerce_detector_capability(row.capability) for row in rows}
+        if len(capabilities) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Selected cameras have incompatible detector query semantics.",
+            )
+        capability = next(iter(capabilities), DetectorCapability.FIXED_VOCAB)
+        if capability is DetectorCapability.FIXED_VOCAB:
+            return QueryCameraDetectorContext(
+                resolution_mode=QueryResolutionMode.FIXED_FILTER,
+                allowed_classes=_dedupe_terms(
+                    class_name for row in rows for class_name in row.classes
+                ),
+                runtime_vocabulary=[],
+            )
+
+        capability_configs = [dict(row.capability_config or {}) for row in rows]
+        max_terms_values = [
+            int(config["max_runtime_terms"])
+            for config in capability_configs
+            if config.get("max_runtime_terms") is not None
+        ]
+        return QueryCameraDetectorContext(
+            resolution_mode=QueryResolutionMode.OPEN_VOCAB,
+            allowed_classes=_dedupe_terms(
+                term
+                for row in rows
+                for term in ((row.runtime_vocabulary or []) or row.classes)
+            ),
+            runtime_vocabulary=_dedupe_terms(
+                term for row in rows for term in (row.runtime_vocabulary or [])
+            ),
+            runtime_vocabulary_version=max(
+                (int(row.runtime_vocabulary_version or 0) for row in rows),
+                default=0,
+            ),
+            max_runtime_terms=min(max_terms_values) if max_terms_values else None,
+        )
+
+
+async def _detector_context_for_inventory(
+    inventory: CameraClassInventory,
+    *,
+    tenant_context: TenantContext,
+    camera_ids: list[UUID],
+) -> QueryCameraDetectorContext:
+    detector_context = getattr(inventory, "detector_context_for_cameras", None)
+    if callable(detector_context):
+        return await detector_context(tenant_context=tenant_context, camera_ids=camera_ids)
+    allowed_classes = await inventory.allowed_classes_for_cameras(
+        tenant_context=tenant_context,
+        camera_ids=camera_ids,
+    )
+    return QueryCameraDetectorContext(
+        resolution_mode=QueryResolutionMode.FIXED_FILTER,
+        allowed_classes=allowed_classes,
+        runtime_vocabulary=[],
+    )
+
+
+def _camera_command_for_query(
+    *,
+    detector_context: QueryCameraDetectorContext,
+    resolved_classes: list[str],
+    resolved_vocabulary: list[str],
+) -> CameraCommandPayload:
+    if detector_context.resolution_mode is QueryResolutionMode.OPEN_VOCAB:
+        return CameraCommandPayload(
+            active_classes=None,
+            runtime_vocabulary=list(resolved_vocabulary),
+            runtime_vocabulary_source=RuntimeVocabularySource.QUERY,
+            runtime_vocabulary_version=detector_context.runtime_vocabulary_version + 1,
+        )
+    return CameraCommandPayload(active_classes=list(resolved_classes))
+
+
+def _coerce_detector_capability(value: object) -> DetectorCapability:
+    if value is None:
+        return DetectorCapability.FIXED_VOCAB
+    if isinstance(value, DetectorCapability):
+        return value
+    return DetectorCapability(str(value))
+
+
+def _dedupe_terms(terms: Iterable[object]) -> list[str]:
+    deduped: list[str] = []
+    for term in terms:
+        value = str(term).strip()
+        if value and value not in deduped:
+            deduped.append(value)
+    return deduped
 
 
 def _resolved_classes_from_parser_result(parser_result: object) -> list[str]:

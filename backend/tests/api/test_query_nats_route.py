@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException, status
 from httpx import ASGITransport, AsyncClient
 
-from argus.api.contracts import TenantContext
+from argus.api.contracts import QueryRequest, TenantContext
 from argus.core.config import Settings
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.security import (
@@ -18,7 +18,7 @@ from argus.core.security import (
     get_current_websocket_user,
 )
 from argus.main import create_app
-from argus.models.enums import RoleEnum
+from argus.models.enums import QueryResolutionMode, RoleEnum, RuntimeVocabularySource
 from argus.services.query import QueryService, QueryServiceResult
 
 
@@ -33,8 +33,59 @@ class StubInventory:
         return ["bus", "car", "truck"]
 
 
+@dataclass(slots=True, frozen=True)
+class StubDetectorContext:
+    resolution_mode: QueryResolutionMode
+    allowed_classes: list[str]
+    runtime_vocabulary: list[str]
+    runtime_vocabulary_version: int = 0
+    max_runtime_terms: int | None = None
+
+
+@dataclass
+class FixedVocabInventory(StubInventory):
+    async def detector_context_for_cameras(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+    ) -> StubDetectorContext:
+        return StubDetectorContext(
+            resolution_mode=QueryResolutionMode.FIXED_FILTER,
+            allowed_classes=["bus", "car", "truck"],
+            runtime_vocabulary=[],
+        )
+
+
+@dataclass
+class OpenVocabInventory(StubInventory):
+    async def allowed_classes_for_cameras(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+    ) -> list[str]:
+        return ["forklift", "pallet jack"]
+
+    async def detector_context_for_cameras(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+    ) -> StubDetectorContext:
+        return StubDetectorContext(
+            resolution_mode=QueryResolutionMode.OPEN_VOCAB,
+            allowed_classes=["forklift", "pallet jack"],
+            runtime_vocabulary=["forklift"],
+            runtime_vocabulary_version=1,
+            max_runtime_terms=32,
+        )
+
+
 @dataclass
 class StubParser:
+    resolved_classes: list[str] | None = None
+
     async def resolve_classes(
         self,
         *,
@@ -42,7 +93,7 @@ class StubParser:
         allowed_classes: list[str],
     ) -> QueryServiceResult:
         return QueryServiceResult(
-            resolved_classes=["bus", "truck"],
+            resolved_classes=self.resolved_classes or ["bus", "truck"],
             provider="keyword-fallback",
             model="fallback",
             latency_ms=3,
@@ -62,6 +113,14 @@ class NullAuditLogger:
         latency_ms: int,
     ) -> None:
         return None
+
+
+@dataclass
+class CapturingEvents:
+    published: list[tuple[str, object]]
+
+    async def publish(self, subject: str, payload: object) -> None:
+        self.published.append((subject, payload))
 
 
 @dataclass
@@ -90,6 +149,86 @@ class RejectingQuotaEnforcer:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Tenant query rate limit exceeded.",
         )
+
+
+@pytest.mark.asyncio
+async def test_query_service_reports_fixed_filter_mode_and_command_payload() -> None:
+    camera_id = uuid4()
+    tenant_context = TenantContext(
+        tenant_id=uuid4(),
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="operator-1",
+            email="operator@argus.local",
+            role=RoleEnum.OPERATOR,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+    events = CapturingEvents(published=[])
+    service = QueryService(
+        inventory=FixedVocabInventory(),
+        parser=StubParser(resolved_classes=["bus"]),
+        events=events,
+        audit_logger=NullAuditLogger(),
+    )
+
+    response = await service.resolve_query(
+        tenant_context,
+        payload=QueryRequest(prompt="only show buses", camera_ids=[camera_id]),
+    )
+
+    assert response.resolution_mode == QueryResolutionMode.FIXED_FILTER
+    assert response.resolved_classes == ["bus"]
+    assert response.resolved_vocabulary == []
+    assert events.published[0][0] == f"cmd.camera.{camera_id}"
+    command = events.published[0][1]
+    assert command.active_classes == ["bus"]
+    assert command.runtime_vocabulary is None
+
+
+@pytest.mark.asyncio
+async def test_query_service_reports_open_vocab_mode_and_command_payload() -> None:
+    camera_id = uuid4()
+    tenant_context = TenantContext(
+        tenant_id=uuid4(),
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="operator-1",
+            email="operator@argus.local",
+            role=RoleEnum.OPERATOR,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+    events = CapturingEvents(published=[])
+    service = QueryService(
+        inventory=OpenVocabInventory(),
+        parser=StubParser(resolved_classes=["forklift", "pallet jack"]),
+        events=events,
+        audit_logger=NullAuditLogger(),
+    )
+
+    response = await service.resolve_query(
+        tenant_context,
+        payload=QueryRequest(prompt="forklifts and pallet jacks", camera_ids=[camera_id]),
+    )
+
+    assert response.resolution_mode == QueryResolutionMode.OPEN_VOCAB
+    assert response.resolved_classes == []
+    assert response.resolved_vocabulary == ["forklift", "pallet jack"]
+    assert events.published[0][0] == f"cmd.camera.{camera_id}"
+    command = events.published[0][1]
+    assert command.active_classes is None
+    assert command.runtime_vocabulary == ["forklift", "pallet jack"]
+    assert command.runtime_vocabulary_source == RuntimeVocabularySource.QUERY
+    assert command.runtime_vocabulary_version == 2
 
 
 @pytest.mark.asyncio

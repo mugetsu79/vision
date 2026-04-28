@@ -357,6 +357,13 @@ class CameraCommandPayload(BaseModel):
     zones: list[WorkerZone] | None = None
 
 
+class WorkerRuntimeCapability(BaseModel):
+    execution_profiles: list[str] = Field(default_factory=list)
+    detector_capabilities: list[DetectorCapability] = Field(default_factory=list)
+    hot_runtime_vocabulary_updates: bool = False
+    max_runtime_terms: int | None = None
+
+
 class WorkerConfigResponse(BaseModel):
     camera_id: UUID
     mode: ProcessingMode
@@ -369,6 +376,7 @@ class WorkerConfigResponse(BaseModel):
     privacy: WorkerPrivacySettings = Field(default_factory=WorkerPrivacySettings)
     active_classes: list[str] = Field(default_factory=list)
     runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
+    runtime_capability: WorkerRuntimeCapability = Field(default_factory=WorkerRuntimeCapability)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[WorkerZone] = Field(default_factory=list)
     homography: dict[str, Any] | None = None
