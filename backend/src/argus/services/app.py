@@ -136,6 +136,7 @@ class AppServices:
     cameras: CameraService
     models: ModelService
     edge: EdgeService
+    operations: OperationsService
     history: HistoryService
     incidents: IncidentService
     streams: StreamService

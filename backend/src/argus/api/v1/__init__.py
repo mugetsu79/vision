@@ -9,6 +9,7 @@ from argus.api.v1 import (
     history,
     incidents,
     models,
+    operations,
     query,
     sites,
     streams,
@@ -22,6 +23,7 @@ router.include_router(sites.router)
 router.include_router(cameras.router)
 router.include_router(models.router)
 router.include_router(edge.router)
+router.include_router(operations.router)
 router.include_router(history.router)
 router.include_router(export.router)
 router.include_router(incidents.router)

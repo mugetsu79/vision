@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
@@ -435,6 +436,100 @@ class EdgeHeartbeatRequest(BaseModel):
 class EdgeHeartbeatResponse(BaseModel):
     status: str
     received_at: datetime
+
+
+class FleetLifecycleMode(StrEnum):
+    MANUAL_DEV = "manual_dev"
+    SUPERVISED = "supervised"
+    MIXED = "mixed"
+
+
+class FleetNodeStatus(StrEnum):
+    HEALTHY = "healthy"
+    STALE = "stale"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"
+
+
+class WorkerDesiredState(StrEnum):
+    DESIRED = "desired"
+    NOT_DESIRED = "not_desired"
+    MANUAL = "manual"
+    SUPERVISED = "supervised"
+
+
+class WorkerRuntimeStatus(StrEnum):
+    RUNNING = "running"
+    STALE = "stale"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"
+    NOT_REPORTED = "not_reported"
+
+
+class FleetSummary(BaseModel):
+    desired_workers: int
+    running_workers: int
+    stale_nodes: int
+    offline_nodes: int
+    native_unavailable_cameras: int
+
+
+class FleetNodeSummary(BaseModel):
+    id: UUID | None = None
+    kind: Literal["central", "edge"]
+    hostname: str
+    site_id: UUID | None = None
+    status: FleetNodeStatus
+    version: str | None = None
+    last_seen_at: datetime | None = None
+    assigned_camera_ids: list[UUID] = Field(default_factory=list)
+    reported_camera_count: int | None = None
+
+
+class FleetCameraWorkerSummary(BaseModel):
+    camera_id: UUID
+    camera_name: str
+    site_id: UUID
+    node_id: UUID | None = None
+    node_hostname: str | None = None
+    processing_mode: ProcessingMode
+    desired_state: WorkerDesiredState
+    runtime_status: WorkerRuntimeStatus
+    lifecycle_owner: Literal["manual_dev", "central_supervisor", "edge_supervisor", "none"]
+    dev_run_command: str | None = None
+    detail: str | None = None
+
+
+class FleetDeliveryDiagnostic(BaseModel):
+    camera_id: UUID
+    camera_name: str
+    processing_mode: ProcessingMode
+    assigned_node_id: UUID | None = None
+    source_capability: SourceCapability | None = None
+    default_profile: BrowserDeliveryProfileId
+    available_profiles: list[BrowserDeliveryProfile] = Field(default_factory=list)
+    native_status: NativeAvailability = Field(default_factory=NativeAvailability)
+    selected_stream_mode: Literal["passthrough", "transcode"]
+
+
+class FleetOverviewResponse(BaseModel):
+    mode: FleetLifecycleMode
+    generated_at: datetime
+    summary: FleetSummary
+    nodes: list[FleetNodeSummary]
+    camera_workers: list[FleetCameraWorkerSummary]
+    delivery_diagnostics: list[FleetDeliveryDiagnostic]
+
+
+class FleetBootstrapRequest(BaseModel):
+    site_id: UUID
+    hostname: str = Field(min_length=1, max_length=255)
+    version: str = Field(min_length=1, max_length=64)
+
+
+class FleetBootstrapResponse(EdgeRegisterResponse):
+    dev_compose_command: str
+    supervisor_environment: dict[str, str] = Field(default_factory=dict)
 
 
 class QueryRequest(BaseModel):
