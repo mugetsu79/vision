@@ -114,3 +114,15 @@ describe("product brand SVG assets", () => {
     expect(compatibilityLockup).toBe(sourceLockup);
   });
 });
+
+describe("Vezor visual system tokens", () => {
+  test("defines OmniSight lens color tokens and field motion classes", async () => {
+    const css = await readRepoFile("frontend/src/index.css");
+
+    expect(css).toContain("--vezor-lens-cerulean");
+    expect(css).toContain("--vezor-lens-violet");
+    expect(css).toContain("--vezor-surface-depth");
+    expect(css).toContain(".omnisight-field");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+});

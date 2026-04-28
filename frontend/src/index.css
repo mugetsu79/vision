@@ -15,6 +15,15 @@
   --argus-focus: rgba(124, 166, 255, 0.56);
   --argus-accent: #74a8ff;
   --argus-accent-soft: rgba(116, 168, 255, 0.12);
+  --vezor-lens-cerulean: #6ebdff;
+  --vezor-lens-violet: #7e53ff;
+  --vezor-lens-aqua: #76e0ff;
+  --vezor-success: #72e3a6;
+  --vezor-attention: #f2bd5c;
+  --vezor-risk: #f08aa2;
+  --vezor-surface-depth: rgba(9, 14, 23, 0.82);
+  --vezor-surface-raised: rgba(13, 20, 32, 0.92);
+  --vezor-shadow-depth: 0 28px 80px -54px rgba(63, 121, 255, 0.68);
   color: var(--argus-text);
   background:
     radial-gradient(circle at top, rgba(42, 108, 255, 0.16), transparent 34%),
@@ -61,4 +70,82 @@ select {
 
 #root {
   min-height: 100vh;
+}
+
+.omnisight-field {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.omnisight-field__lens {
+  position: absolute;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(224, 247, 255, 0.96) 0 8%, transparent 9%),
+    radial-gradient(circle at 44% 42%, var(--vezor-lens-cerulean) 0 24%, var(--vezor-lens-violet) 58%, rgba(34, 18, 71, 0.7) 82%);
+  box-shadow:
+    0 0 44px rgba(112, 177, 255, 0.42),
+    0 0 120px rgba(105, 87, 255, 0.24);
+}
+
+.omnisight-field__ring {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid rgba(218, 239, 255, 0.16);
+  transform: rotateX(64deg) rotateZ(-18deg);
+}
+
+.omnisight-field__surface {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 13, 22, 0.68);
+  box-shadow: 0 22px 56px -44px rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+.omnisight-field--entry .omnisight-field__lens {
+  width: 13rem;
+  height: 13rem;
+  left: calc(50% - 6.5rem);
+  top: 18%;
+}
+
+.omnisight-field--shell .omnisight-field__lens {
+  width: 4.75rem;
+  height: 4.75rem;
+  right: 4rem;
+  top: 2rem;
+  opacity: 0.22;
+}
+
+.omnisight-field--quiet .omnisight-field__lens {
+  width: 3rem;
+  height: 3rem;
+  right: 1.5rem;
+  top: 1.25rem;
+  opacity: 0.12;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .omnisight-field__ring {
+    animation: omnisight-orbit 18s ease-in-out infinite alternate;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omnisight-field__ring {
+    animation: none;
+  }
+}
+
+@keyframes omnisight-orbit {
+  from {
+    transform: rotateX(64deg) rotateZ(-18deg) translate3d(0, 0, 0);
+  }
+  to {
+    transform: rotateX(64deg) rotateZ(12deg) translate3d(0.4rem, -0.2rem, 0);
+  }
 }

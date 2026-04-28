@@ -22,7 +22,7 @@ export function PageUtilityBar({
   return (
     <section
       className={cn(
-        "rounded-[1.4rem] border border-white/[0.06] bg-[rgba(10,15,22,0.72)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur-md",
+        "rounded-[1.1rem] border border-white/[0.08] bg-[color:var(--vezor-surface-depth)] px-4 py-3 shadow-[var(--vezor-shadow-depth)] backdrop-blur-md",
         className,
       )}
     >
