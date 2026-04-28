@@ -10,11 +10,12 @@ Active branch:
 - `codex/source-aware-delivery-calibration-fixes`
 
 Remote state:
-- `origin/codex/source-aware-delivery-calibration-fixes` is pushed through `1d2ee26`.
-- Local `HEAD` is `1d2ee26`.
+- `origin/codex/source-aware-delivery-calibration-fixes` contains all implementation work through `1d2ee26`.
+- The branch may also contain handoff-only commits after `1d2ee26`; treat `1d2ee26` as the verified implementation checkpoint, not necessarily the branch tip.
 - The old handoff branch `codex/precise-counting-occupancy` is not the active continuation branch for this work.
 
 Latest relevant commits:
+- `fa94d88 docs(handoff): refresh operations and logo status`
 - `1d2ee26 fix(brand): remove logo background tile`
 - `f7ca875 fix(brand): use uploaded argus icon logo`
 - `f00499f fix(operations): satisfy generated type checks`
@@ -35,14 +36,12 @@ cd ~/vision
 git fetch origin
 git switch codex/source-aware-delivery-calibration-fixes
 git pull --rebase origin codex/source-aware-delivery-calibration-fixes
-git rev-parse --short HEAD
+git log --oneline -5
 ```
 
-Expected short SHA:
-
-```text
-1d2ee26
-```
+Expected result:
+- the recent history includes `docs(handoff): refresh operations and logo status`
+- the recent history includes `1d2ee26 fix(brand): remove logo background tile`
 
 ## Current Baseline
 
@@ -145,7 +144,7 @@ Earlier History verification on this branch:
 
 Recommended next-chat starting point:
 
-1. Pull `codex/source-aware-delivery-calibration-fixes` on the iMac and confirm `HEAD` is `1d2ee26`.
+1. Pull `codex/source-aware-delivery-calibration-fixes` on the iMac and confirm recent history includes `1d2ee26 fix(brand): remove logo background tile`.
 2. Recreate backend and frontend containers so the new API and UI assets are active:
 
 ```bash
