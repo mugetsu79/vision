@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -15,6 +16,10 @@ from argus.services.app import IncidentService
 
 def _compiled_sql(statement: object) -> str:
     return str(statement.compile(compile_kwargs={"literal_binds": True}))
+
+
+def _compiled_where_sql(statement: Any) -> str:
+    return _compiled_sql(statement.whereclause)
 
 
 class _ScalarResult:
@@ -182,17 +187,18 @@ async def test_update_review_state_is_idempotent() -> None:
 async def test_update_review_state_raises_404_when_incident_not_in_tenant_scope() -> None:
     session_factory = _FakeSessionFactory(None)
     service = IncidentService(session_factory, audit_logger=None)
+    incident_id = uuid4()
 
     with pytest.raises(HTTPException) as exc_info:
         await service.update_review_state(
             _tenant_context(),
-            incident_id=uuid4(),
+            incident_id=incident_id,
             review_status=IncidentReviewStatus.REVIEWED,
         )
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Incident not found."
     statement = session_factory.state["last_statement"]
-    sql = _compiled_sql(statement)
-    assert "sites.tenant_id" in sql
-    assert "incidents.id" in sql
+    where_sql = _compiled_where_sql(statement)
+    assert "sites.tenant_id" in where_sql
+    assert f"incidents.id = '{incident_id.hex}'" in where_sql
