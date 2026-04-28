@@ -13,6 +13,10 @@ from argus.models.tables import Incident
 from argus.services.app import IncidentService
 
 
+def _compiled_sql(statement: object) -> str:
+    return str(statement.compile(compile_kwargs={"literal_binds": True}))
+
+
 class _ScalarResult:
     def __init__(self, row: tuple[Incident, str] | None) -> None:
         self.row = row
@@ -121,6 +125,7 @@ async def test_update_review_state_marks_incident_reviewed_and_audits() -> None:
     assert incident.review_status == IncidentReviewStatus.REVIEWED
     assert incident.reviewed_at is not None
     assert incident.reviewed_by_subject == "operator-1"
+    assert len(audit.calls) == 1
     assert audit.calls[0]["action"] == "incident.review"
     assert audit.calls[0]["target"] == f"incident:{incident.id}"
     assert audit.calls[0]["tenant_context"] == context
@@ -175,7 +180,8 @@ async def test_update_review_state_is_idempotent() -> None:
 
 @pytest.mark.asyncio
 async def test_update_review_state_raises_404_when_incident_not_in_tenant_scope() -> None:
-    service = IncidentService(_FakeSessionFactory(None), audit_logger=None)
+    session_factory = _FakeSessionFactory(None)
+    service = IncidentService(session_factory, audit_logger=None)
 
     with pytest.raises(HTTPException) as exc_info:
         await service.update_review_state(
@@ -186,3 +192,7 @@ async def test_update_review_state_raises_404_when_incident_not_in_tenant_scope(
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Incident not found."
+    statement = session_factory.state["last_statement"]
+    sql = _compiled_sql(statement)
+    assert "sites.tenant_id" in sql
+    assert "incidents.id" in sql

@@ -45,6 +45,7 @@ from argus.inference.publisher import TelemetryFrame, TelemetryTrack
 from argus.main import create_app
 from argus.models.enums import (
     DetectorCapability,
+    IncidentReviewStatus,
     ModelFormat,
     ModelTask,
     ProcessingMode,
@@ -599,6 +600,7 @@ class FakeIncidentService:
         *,
         camera_id: UUID | None = None,
         incident_type: str | None = None,
+        review_status: IncidentReviewStatus | None = None,
         limit: int = 50,
     ) -> list[IncidentResponse]:
         return [
@@ -610,6 +612,7 @@ class FakeIncidentService:
                 type=incident_type or "ppe-missing",
                 payload={"hard_hat": False},
                 snapshot_url="https://minio.local/snapshots/1.jpg",
+                review_status=review_status or IncidentReviewStatus.PENDING,
             )
         ][:limit]
 
