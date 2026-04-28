@@ -1,6 +1,6 @@
 # Fleet Operations Workbench Design
 
-> **Status:** Approved for implementation planning
+> **Status:** Phase 1 implemented; supervisor lifecycle controls remain follow-on work
 >
 > **Date:** 2026-04-28
 >
@@ -10,7 +10,7 @@
 
 ## 1. Context
 
-The handoff document identifies Fleet / Operations as the next remaining product hardening track after boundary setup, source-aware browser delivery, native routing, and History workbench work.
+The handoff document identified Fleet / Operations as the next remaining product hardening track after boundary setup, source-aware browser delivery, native routing, and History workbench work. Phase 1 has now landed under the `/settings` route as the Fleet and operations workbench.
 
 The current product has real worker building blocks, but their lifecycle is still developer-oriented:
 
@@ -18,10 +18,10 @@ The current product has real worker building blocks, but their lifecycle is stil
 - edge development has `infra/docker-compose.edge.yml`, which runs one `inference-worker` container for one camera
 - Helm has an `edge-worker` deployment with one configured camera id
 - `backend/src/argus/inference/scheduler.py` can spawn per-camera workers from database camera state, but it is not exposed as a product contract
-- the Settings route still renders placeholder copy
-- edge registration and heartbeat exist, but operators cannot see assignment or health from the UI
+- the Settings route has been replaced by a Fleet and operations workbench
+- edge registration and heartbeat exist; Phase 1 exposes assignment and node health, while true per-worker runtime reports remain follow-on supervisor work
 
-This creates an unclear mental model: it is not obvious who starts a worker, who stops it, whether the UI should control processes, or how dev differs from production.
+Phase 1 makes the mental model visible, but lifecycle control is still intentionally limited. It shows who owns a worker, how to run local dev workers, what runtime state is currently reported, and where production should use a supervisor instead of backend shell execution.
 
 ---
 
@@ -304,9 +304,9 @@ This reuses the source-aware fields already added to camera responses. It should
 
 ## 9. UI Design
 
-The route remains `/settings`, but the page title becomes **Fleet & Operations**.
+The route remains `/settings`, but the page title is **Fleet and operations** and the navigation labels the route as **Operations**.
 
-Navigation can continue to label the route `Settings` for one iteration if changing the nav is distracting. The page itself should make the operational purpose clear.
+The page should make the operational purpose clear while preserving the existing route for compatibility.
 
 Page sections:
 
@@ -356,7 +356,7 @@ The page should use dense operational layout, not a marketing hero. It should fa
 Phase 1 actions:
 
 - generate edge bootstrap material
-- copy manual central worker command
+- copy manual central worker command with local dev token fetch
 - copy edge compose command
 - refresh fleet overview
 
@@ -387,6 +387,8 @@ Bootstrap responses contain one-time secret material and should:
 Runtime diagnostic fields must not expose RTSP passwords, JWTs, API keys, or NATS seeds.
 
 Copyable commands should use placeholders for secrets unless the command is generated immediately after bootstrap and is shown once.
+
+Local development commands may include the seeded local-dev token fetch for `admin-dev` because those credentials are already documented for local-only use. Production commands should not embed operator passwords or long-lived secrets.
 
 ---
 

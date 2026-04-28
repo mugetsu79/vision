@@ -10,6 +10,8 @@ The project supports three processing modes:
 
 Vezor separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, or `540p5`.
 
+The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, and edge bootstrap material. In local development, workers are still launched from copyable commands because there is no local supervisor process yet. In production, Start/Stop/Restart controls should go through a central or edge supervisor that reconciles desired state and reports actual runtime state back to the control plane.
+
 ## What’s In This Repo
 
 - `backend/`: FastAPI API, services, inference worker, schema, migrations, auth, streaming integration
@@ -50,9 +52,18 @@ From [/Users/yann.moren/vision](/Users/yann.moren/vision):
 
 ```bash
 make dev-up
-cd backend && python3 -m uv run alembic upgrade head
-cd ../frontend && corepack pnpm generate:api
-cd ..
+until docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv --version >/dev/null 2>&1; do
+  echo "waiting for backend Python environment..."
+  sleep 3
+done
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
+until curl -fsS http://127.0.0.1:8000/healthz >/dev/null; do
+  echo "waiting for backend health..."
+  sleep 3
+done
+corepack pnpm --dir frontend generate:api
 ```
 
 Open:
@@ -70,6 +81,19 @@ The local stack ships with seeded development credentials:
 - password: `argus-admin-pass`
 
 Use those only for local development.
+
+### Local Worker Lifecycle
+
+The dev stack starts platform services, not per-camera inference workers. To run a central worker locally:
+
+1. Open [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings).
+2. Use the Operations page's copyable camera-worker command.
+3. Run that command in a terminal on the machine that should own the worker.
+4. Stop the worker with `Ctrl-C`.
+
+Those commands fetch a local development bearer token and set `ARGUS_API_BEARER_TOKEN="$TOKEN"` for you. They are a development bridge, not the production control model.
+
+In production, UI lifecycle controls should update desired state or send a constrained lifecycle request. A central or edge supervisor should start, stop, restart, monitor, and report worker runtime state. The backend API should not become a generic remote shell runner.
 
 ## Common Commands
 
@@ -153,7 +177,8 @@ The repo already includes:
 - shared telemetry WebSocket state that survives route changes and keeps the live wall warm across short navigation hops
 - metric-aware history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, CSV/Parquet export, and a clear split between `occupancy`, `count_events`, and raw `observations`
 - incident clip storage
-- edge worker support
+- Fleet and Operations workbench at `/settings`, including node summaries, camera worker lifecycle state, delivery diagnostics, edge bootstrap material, and copy/paste-safe local worker commands
+- edge worker support and a production-oriented supervisor lifecycle model
 - hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions
 - Docker Compose and Helm assets
 - CI-oriented full validation flow

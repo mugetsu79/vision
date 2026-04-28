@@ -63,6 +63,7 @@ These items are complete and should not be re-planned:
 - Settings is relabeled as Operations in app navigation
 - the product logo now uses `argus-icon-from-upload.svg`, with the dark background tile removed so the sidebar mark renders on transparent canvas
 - Operations dev worker commands are copy/paste-safe and fetch a local dev bearer token instead of emitting `ARGUS_API_BEARER_TOKEN=<token>`
+- Root README and active design docs have been refreshed to describe the Operations workbench, dev worker command bridge, and production supervisor lifecycle model.
 
 ## Fleet / Operations Phase 1
 
@@ -98,7 +99,7 @@ Lifecycle control note:
 - Those buttons should not make the backend shell out directly.
 - The intended production path is UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the process on the correct node -> worker reports runtime truth.
 - Dev uses copyable shell commands because there is not yet a local dev supervisor process. That is a temporary bridge, not the production control model.
-- The Fleet / Operations design doc now records this under `Start/Stop Button Model`.
+- The Fleet / Operations design doc records this under `Start/Stop Button Model`; the root README and umbrella operator-hardening design now carry the same model.
 
 ## Product Model To Preserve
 
@@ -145,6 +146,10 @@ Browser smoke:
 
 Known non-blocking validation issue:
 - Full `corepack pnpm --dir frontend lint` still fails on pre-existing unrelated files outside the logo/operations patch. Do not treat those lint failures as part of the logo cleanup unless the next task is specifically to pay down lint debt.
+
+Docs verification:
+- `git diff --check`
+  - passed for the README, design doc, and handoff updates
 
 Earlier History verification on this branch:
 - `python3 -m uv run pytest tests/services/test_history_service.py tests/api/test_history_endpoints.py tests/api/test_export_endpoints.py -q`
@@ -248,6 +253,8 @@ Infra:
 - `infra/helm/argus/templates/deployment-edge-worker.yaml`
 
 Docs:
+- `README.md`
+- `docs/superpowers/specs/2026-04-26-operator-setup-history-delivery-hardening-design.md`
 - `docs/superpowers/specs/2026-04-28-fleet-operations-workbench-design.md`
 - `docs/superpowers/plans/2026-04-28-fleet-operations-workbench-implementation-plan.md`
 - `docs/imac-master-orin-lab-test-guide.md`
