@@ -32,7 +32,7 @@ export function CameraStepSummary({
         { label: "Tracker", value: data.trackerType },
         { label: "Browser delivery", value: data.browserDeliveryProfile },
         { label: "Frame cadence", value: `skip ${data.frameSkip}, cap ${data.fpsCap} FPS` },
-        { label: "Count boundaries", value: data.boundarySummary },
+        { label: "Event boundaries", value: data.boundarySummary },
         {
           label: "Privacy",
           value: `faces ${String(data.blurFaces)}, plates ${String(data.blurPlates)}`,

@@ -494,6 +494,8 @@ describe("CameraWizard", () => {
     fireEvent.click(polygonCanvas, { clientX: 0, clientY: 50 });
     await user.click(screen.getByRole("button", { name: /next/i }));
     expect(screen.getByText(/class scope/i)).toBeInTheDocument();
+    expect(screen.getByText(/event boundaries/i)).toBeInTheDocument();
+    expect(screen.queryByText(/count boundaries/i)).not.toBeInTheDocument();
     expect(screen.getByText(/person, car/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /create camera/i }));
 
