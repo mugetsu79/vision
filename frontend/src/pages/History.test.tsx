@@ -415,6 +415,25 @@ describe("HistoryPage", () => {
     });
   });
 
+  test("refreshes following-now bounds without filter interaction", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-04-27T12:34:56.000Z"));
+    renderPage("/history?window=last_1h&follow=1");
+
+    await screen.findByTestId("history-trend-chart");
+    recordedRequests = [];
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    await waitFor(() => {
+      const latest = historyRequests("/api/v1/history/series", "occupancy").at(-1);
+      expect(latest?.searchParams.get("from")).toBe("2026-04-27T11:35:00.000Z");
+      expect(latest?.searchParams.get("to")).toBe("2026-04-27T12:35:00.000Z");
+    });
+  });
+
   test("class filter is populated by /history/classes", async () => {
     renderPage();
     await waitFor(() => {

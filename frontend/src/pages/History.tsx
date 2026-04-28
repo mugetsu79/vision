@@ -40,6 +40,7 @@ export function HistoryPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [, setFollowNowRefreshKey] = useState(0);
 
   const applyState = useCallback(
     (next: HistoryFilterState | ((prev: HistoryFilterState) => HistoryFilterState)) => {
@@ -75,6 +76,14 @@ export function HistoryPage() {
     const parsed = readHistoryFiltersFromSearch(new URLSearchParams(location.search));
     setState(parsed);
   }, [location.search]);
+
+  useEffect(() => {
+    if (state.windowMode !== "relative" || !state.followNow) return;
+    const interval = window.setInterval(() => {
+      setFollowNowRefreshKey((key) => key + 1);
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [state.followNow, state.relativeWindow, state.windowMode]);
 
   const resolvedWindow =
     state.windowMode === "relative" && state.followNow

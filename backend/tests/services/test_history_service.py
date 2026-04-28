@@ -699,6 +699,8 @@ async def test_fetch_series_rows_occupancy_uses_peak_concurrency_sql() -> None:
     assert "count(*)::bigint as active_count" in sql
     assert "count(distinct track_id)" not in sql
     assert "sum(occupancy_by_camera.event_count)::bigint as event_count" not in sql
+    assert "ts < :ends_at" in sql
+    assert "ts <= :ends_at" not in sql
 
 
 @pytest.mark.asyncio
@@ -726,6 +728,36 @@ async def test_fetch_series_rows_counts_raw_observations() -> None:
     statement = session_cm.execute.await_args.args[0]
     sql = " ".join(str(statement).split()).lower()
     assert "count(*)::bigint as event_count" in sql
+    assert "ts < :ends_at" in sql
+    assert "ts <= :ends_at" not in sql
+
+
+@pytest.mark.asyncio
+async def test_fetch_series_rows_aggregate_uses_exclusive_end_bucket() -> None:
+    service = HistoryService(session_factory=MagicMock())
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session_cm)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+    execute_result = MagicMock()
+    execute_result.mappings.return_value.all.return_value = []
+    session_cm.execute = AsyncMock(return_value=execute_result)
+    service.session_factory = MagicMock(return_value=session_cm)
+
+    starts = datetime(2026, 4, 24, 14, 0, tzinfo=UTC)
+    await service._fetch_series_rows_aggregate(
+        camera_ids=None,
+        class_names=None,
+        granularity="1h",
+        starts_at=starts,
+        ends_at=starts + timedelta(hours=1),
+        metric=HistoryMetric.COUNT_EVENTS,
+    )
+
+    statement = session_cm.execute.await_args.args[0]
+    sql = " ".join(str(statement).split()).lower()
+    assert "bucket < :ends_at" in sql
+    assert "bucket <= :ends_at" not in sql
 
 
 @pytest.mark.asyncio
@@ -784,6 +816,36 @@ async def test_fetch_series_rows_with_speed_occupancy_uses_peak_concurrency_sql(
     assert "count(*)::bigint as active_count" in sql
     assert "count(distinct track_id)" not in sql
     assert "sum(occupancy_by_camera.event_count)::bigint as event_count" in sql
+    assert "ts < :ends_at" in sql
+    assert "ts <= :ends_at" not in sql
+
+
+@pytest.mark.asyncio
+async def test_fetch_series_rows_with_speed_from_count_events_uses_exclusive_end() -> None:
+    service = HistoryService(session_factory=MagicMock())
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session_cm)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+    execute_result = MagicMock()
+    execute_result.mappings.return_value.all.return_value = []
+    session_cm.execute = AsyncMock(return_value=execute_result)
+    service.session_factory = MagicMock(return_value=session_cm)
+
+    starts = datetime(2026, 4, 24, 14, 0, tzinfo=UTC)
+    await service._fetch_series_rows_with_speed_from_count_events(
+        camera_ids=None,
+        class_names=None,
+        granularity="1m",
+        starts_at=starts,
+        ends_at=starts + timedelta(minutes=30),
+        speed_threshold=50.0,
+    )
+
+    statement = session_cm.execute.await_args.args[0]
+    sql = " ".join(str(statement).split()).lower()
+    assert "ts < :ends_at" in sql
+    assert "ts <= :ends_at" not in sql
 
 
 @pytest.mark.asyncio
@@ -814,3 +876,5 @@ async def test_fetch_history_rows_occupancy_uses_peak_concurrency_sql() -> None:
     assert "max(active_count)::bigint as event_count" in sql
     assert "count(*)::bigint as active_count" in sql
     assert "count(distinct track_id)" not in sql
+    assert "ts < :ends_at" in sql
+    assert "ts <= :ends_at" not in sql

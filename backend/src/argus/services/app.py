@@ -1311,7 +1311,7 @@ class HistoryService:
                   count(*)::bigint AS event_count
                 FROM count_events
                 WHERE ts >= :starts_at
-                  AND ts <= :ends_at
+                  AND ts < :ends_at
                   {' '.join(filters)}
                 GROUP BY 1, 2, 3
                 ORDER BY 1 ASC, 3 ASC, 2 ASC
@@ -1329,7 +1329,7 @@ class HistoryService:
                     count(*)::bigint AS active_count
                   FROM tracking_events
                   WHERE ts >= :starts_at
-                    AND ts <= :ends_at
+                    AND ts < :ends_at
                     {' '.join(filters)}
                   GROUP BY 1, 2, 3, 4
                 )
@@ -1356,7 +1356,7 @@ class HistoryService:
                   {count_expr} AS event_count
                 FROM tracking_events
                 WHERE ts >= :starts_at
-                  AND ts <= :ends_at
+                  AND ts < :ends_at
                   {' '.join(filters)}
                 GROUP BY 1, 2, 3
                   ORDER BY 1 ASC, 3 ASC, 2 ASC
@@ -1405,7 +1405,7 @@ class HistoryService:
               SUM(event_count)::bigint AS event_count
             FROM {view_name}
             WHERE bucket >= :starts_at
-              AND bucket <= :ends_at
+              AND bucket < :ends_at
               {' '.join(filters)}
             GROUP BY 1, 2
             ORDER BY 1 ASC, 2 ASC
@@ -1455,7 +1455,7 @@ class HistoryService:
                     count(*)::bigint AS active_count
                   FROM tracking_events
                   WHERE ts >= :starts_at
-                    AND ts <= :ends_at
+                    AND ts < :ends_at
                     {' '.join(filters)}
                   GROUP BY 1, 2, 3, 4
                 ),
@@ -1486,7 +1486,7 @@ class HistoryService:
                   count(*)::bigint AS event_count
                 FROM tracking_events
                 WHERE ts >= :starts_at
-                  AND ts <= :ends_at
+                  AND ts < :ends_at
                   {' '.join(filters)}
                 GROUP BY 1, 2
                 ORDER BY 1 ASC, 2 ASC
@@ -1548,7 +1548,7 @@ class HistoryService:
                     count(*)::bigint AS active_count
                   FROM tracking_events
                   WHERE ts >= :starts_at
-                    AND ts <= :ends_at
+                    AND ts < :ends_at
                     {' '.join(filters)}
                   GROUP BY 1, 2, 3, 4
                 ),
@@ -1574,7 +1574,7 @@ class HistoryService:
                     {threshold_expr} AS over_threshold_count
                   FROM tracking_events
                   WHERE ts >= :starts_at
-                    AND ts <= :ends_at
+                    AND ts < :ends_at
                     {' '.join(filters)}
                   GROUP BY 1, 2
                 )
@@ -1615,7 +1615,7 @@ class HistoryService:
                   {threshold_expr} AS over_threshold_count
                 FROM tracking_events
                 WHERE ts >= :starts_at
-                  AND ts <= :ends_at
+                  AND ts < :ends_at
                   {' '.join(filters)}
                 GROUP BY 1, 2
                 ORDER BY 1 ASC, 2 ASC
@@ -1675,7 +1675,7 @@ class HistoryService:
               {threshold_expr} AS over_threshold_count
             FROM count_events
             WHERE ts >= :starts_at
-              AND ts <= :ends_at
+              AND ts < :ends_at
               {' '.join(filters)}
             GROUP BY 1, 2
             ORDER BY 1 ASC, 2 ASC
@@ -1720,7 +1720,7 @@ class HistoryService:
               bool_or(speed_kph IS NOT NULL) AS has_speed_data
             FROM tracking_events
             WHERE ts >= :starts_at
-              AND ts <= :ends_at
+              AND ts < :ends_at
               {' '.join(filters)}
             GROUP BY class_name
             ORDER BY event_count DESC, class_name ASC
@@ -1757,7 +1757,7 @@ class HistoryService:
               bool_or(speed_kph IS NOT NULL) AS has_speed_data
             FROM count_events
             WHERE ts >= :starts_at
-              AND ts <= :ends_at
+              AND ts < :ends_at
               {' '.join(filters)}
             GROUP BY class_name
             ORDER BY event_count DESC, class_name ASC
@@ -1793,7 +1793,7 @@ class HistoryService:
               array_agg(DISTINCT event_type ORDER BY event_type) AS event_types
             FROM count_events
             WHERE ts >= :starts_at
-              AND ts <= :ends_at
+              AND ts < :ends_at
               {' '.join(filters)}
             GROUP BY boundary_id
             ORDER BY boundary_id ASC
