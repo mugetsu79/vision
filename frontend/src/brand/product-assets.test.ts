@@ -11,6 +11,12 @@ const uploadedIconMarkers = [
   "<title>Argus \u2014 Icon</title>",
   'id="brandGrad"',
   'filter="url(#innerShadow)"',
+] as const;
+
+const boxedBackgroundMarkers = [
+  'id="bg"',
+  "Obsidian background",
+  'fill="url(#bg)"',
   '<rect x="200" y="25" width="200" height="200"',
 ] as const;
 
@@ -54,6 +60,10 @@ describe("product brand SVG assets", () => {
         expect(svg).toContain(marker);
       }
 
+      for (const marker of boxedBackgroundMarkers) {
+        expect(svg).not.toContain(marker);
+      }
+
       for (const marker of previousGeneratedSymbolMarkers) {
         expect(svg).not.toContain(marker);
       }
@@ -85,6 +95,10 @@ describe("product brand SVG assets", () => {
 
       for (const marker of uploadedIconMarkers) {
         expect(svg).toContain(`data-upload-marker: ${marker}`);
+      }
+
+      for (const marker of boxedBackgroundMarkers) {
+        expect(svg).not.toContain(marker);
       }
 
       for (const marker of previousGeneratedSymbolMarkers) {
