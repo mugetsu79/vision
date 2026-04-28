@@ -436,6 +436,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents/{incident_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Incident Review */
+        patch: operations["update_incident_review_api_v1_incidents__incident_id__review_patch"];
+        trace?: never;
+    };
     "/api/v1/streams/{camera_id}/offer": {
         parameters: {
             query?: never;
@@ -1154,6 +1171,21 @@ export interface components {
              * @default 0
              */
             storage_bytes: number;
+            /** @default pending */
+            review_status: components["schemas"]["IncidentReviewStatus"];
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By Subject */
+            reviewed_by_subject?: string | null;
+        };
+        /**
+         * IncidentReviewStatus
+         * @enum {string}
+         */
+        IncidentReviewStatus: "pending" | "reviewed";
+        /** IncidentReviewUpdate */
+        IncidentReviewUpdate: {
+            review_status: components["schemas"]["IncidentReviewStatus"];
         };
         /** LegacyZone */
         LegacyZone: {
@@ -2748,6 +2780,7 @@ export interface operations {
             query?: {
                 camera_id?: string | null;
                 type?: string | null;
+                review_status?: components["schemas"]["IncidentReviewStatus"] | null;
                 limit?: number;
             };
             header?: {
@@ -2765,6 +2798,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_incident_review_api_v1_incidents__incident_id__review_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentReviewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentResponse"];
                 };
             };
             /** @description Validation Error */
