@@ -406,6 +406,55 @@ async def test_query_series_count_events_use_count_event_storage(
 
 
 @pytest.mark.asyncio
+async def test_query_series_count_events_unaligned_window_uses_raw_count_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = HistoryService(session_factory=MagicMock())
+    service._ensure_camera_access = AsyncMock()
+
+    raw_count_event_rows = AsyncMock(
+        return_value=[
+            {
+                "bucket": datetime(2026, 4, 24, 11, 0, tzinfo=UTC),
+                "class_name": "person",
+                "event_count": 5,
+            },
+            {
+                "bucket": datetime(2026, 4, 24, 12, 0, tzinfo=UTC),
+                "class_name": "person",
+                "event_count": 6,
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        service,
+        "_fetch_series_rows_from_count_events",
+        raw_count_event_rows,
+        raising=False,
+    )
+    aggregate = AsyncMock(return_value=[])
+    monkeypatch.setattr(service, "_fetch_series_rows_aggregate", aggregate)
+
+    starts = datetime(2026, 4, 24, 11, 34, tzinfo=UTC)
+    response = await service.query_series(
+        _tenant_context(),
+        camera_ids=None,
+        class_names=None,
+        granularity="1h",
+        starts_at=starts,
+        ends_at=starts + timedelta(hours=1),
+        metric=HistoryMetric.COUNT_EVENTS,
+    )
+
+    raw_count_event_rows.assert_awaited_once()
+    aggregate.assert_not_awaited()
+    assert response.rows[0].bucket == datetime(2026, 4, 24, 11, 0, tzinfo=UTC)
+    assert response.rows[0].values == {"person": 5}
+    assert response.rows[1].bucket == datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    assert response.rows[1].values == {"person": 6}
+
+
+@pytest.mark.asyncio
 async def test_query_series_returns_zero_buckets_for_empty_valid_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

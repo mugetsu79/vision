@@ -1028,7 +1028,11 @@ class HistoryService:
                     ends_at=ends_at,
                     speed_threshold=speed_threshold,
                 )
-            else:
+            elif _history_window_aligned_to_granularity(
+                starts_at,
+                ends_at,
+                effective_granularity,
+            ):
                 rows = await self._fetch_series_rows_aggregate(
                     camera_ids=camera_ids,
                     class_names=class_names,
@@ -1036,6 +1040,14 @@ class HistoryService:
                     starts_at=starts_at,
                     ends_at=ends_at,
                     metric=metric,
+                )
+            else:
+                rows = await self._fetch_series_rows_from_count_events(
+                    camera_ids=camera_ids,
+                    class_names=class_names,
+                    granularity=effective_granularity,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
                 )
         elif include_speed:
             rows = await self._fetch_series_rows_with_speed(
@@ -1492,6 +1504,51 @@ class HistoryService:
                 ORDER BY 1 ASC, 2 ASC
                 """
             )
+        if camera_ids:
+            statement = statement.bindparams(bindparam("camera_ids", expanding=True))
+        if class_names:
+            statement = statement.bindparams(bindparam("class_names", expanding=True))
+
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement, parameters)).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _fetch_series_rows_from_count_events(
+        self,
+        *,
+        camera_ids: list[UUID] | None,
+        class_names: list[str] | None,
+        granularity: str,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> list[dict[str, Any]]:
+        interval = _GRANULARITY_INTERVAL[granularity]
+        parameters: dict[str, Any] = {
+            "starts_at": starts_at,
+            "ends_at": ends_at,
+        }
+        filters: list[str] = []
+        if camera_ids:
+            filters.append("AND camera_id IN :camera_ids")
+            parameters["camera_ids"] = camera_ids
+        if class_names:
+            filters.append("AND class_name IN :class_names")
+            parameters["class_names"] = class_names
+
+        statement = text(
+            f"""
+            SELECT
+              time_bucket(INTERVAL '{interval}', ts) AS bucket,
+              class_name,
+              count(*)::bigint AS event_count
+            FROM count_events
+            WHERE ts >= :starts_at
+              AND ts < :ends_at
+              {' '.join(filters)}
+            GROUP BY 1, 2
+            ORDER BY 1 ASC, 2 ASC
+            """
+        )
         if camera_ids:
             statement = statement.bindparams(bindparam("camera_ids", expanding=True))
         if class_names:
@@ -2765,6 +2822,17 @@ def _align_history_bucket_start(value: datetime, granularity: str) -> datetime:
     if granularity == "1d":
         return value.replace(hour=0, minute=0, second=0, microsecond=0)
     raise ValueError(f"Unsupported history granularity: {granularity}")
+
+
+def _history_window_aligned_to_granularity(
+    starts_at: datetime,
+    ends_at: datetime,
+    granularity: str,
+) -> bool:
+    return (
+        _align_history_bucket_start(starts_at, granularity) == starts_at.astimezone(UTC)
+        and _align_history_bucket_start(ends_at, granularity) == ends_at.astimezone(UTC)
+    )
 
 
 def _history_bucket_range(
