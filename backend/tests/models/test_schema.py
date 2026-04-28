@@ -56,10 +56,20 @@ def test_event_hypertables_include_ts_in_primary_key() -> None:
 def test_sqlalchemy_enums_use_database_values_not_member_names() -> None:
     camera_columns = Base.metadata.tables["cameras"].columns
     model_columns = Base.metadata.tables["models"].columns
+    incident_columns = Base.metadata.tables["incidents"].columns
 
     assert list(camera_columns["processing_mode"].type.enums) == ["central", "edge", "hybrid"]
     assert list(camera_columns["tracker_type"].type.enums) == ["botsort", "bytetrack", "ocsort"]
     assert list(model_columns["task"].type.enums) == ["detect", "classify", "attribute"]
+    assert list(incident_columns["review_status"].type.enums) == ["pending", "reviewed"]
+
+
+def test_incidents_table_tracks_review_state() -> None:
+    incident_columns = Base.metadata.tables["incidents"].columns.keys()
+
+    assert "review_status" in incident_columns
+    assert "reviewed_at" in incident_columns
+    assert "reviewed_by_subject" in incident_columns
 
 
 def test_schema_exposes_open_vocab_tables_and_columns() -> None:

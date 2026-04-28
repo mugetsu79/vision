@@ -12,6 +12,7 @@ from argus.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryK
 from argus.models.enums import (
     CountEventType,
     DetectorCapability,
+    IncidentReviewStatus,
     ModelFormat,
     ModelTask,
     ProcessingMode,
@@ -311,6 +312,13 @@ class Incident(UUIDPrimaryKeyMixin, Base):
     snapshot_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     clip_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     storage_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    review_status: Mapped[IncidentReviewStatus] = mapped_column(
+        enum_column(IncidentReviewStatus, "incident_review_status_enum"),
+        nullable=False,
+        default=IncidentReviewStatus.PENDING,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class AuditLog(UUIDPrimaryKeyMixin, Base):

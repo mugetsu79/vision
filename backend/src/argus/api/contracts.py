@@ -15,6 +15,7 @@ from argus.models.enums import (
     DetectorCapability,
     HistoryCoverageStatus,
     HistoryMetric,
+    IncidentReviewStatus,
     ModelFormat,
     ModelTask,
     ProcessingMode,
@@ -658,6 +659,13 @@ class IncidentResponse(BaseModel):
     snapshot_url: str | None = None
     clip_url: str | None = None
     storage_bytes: int = 0
+    review_status: IncidentReviewStatus = IncidentReviewStatus.PENDING
+    reviewed_at: datetime | None = None
+    reviewed_by_subject: str | None = None
+
+
+class IncidentReviewUpdate(BaseModel):
+    review_status: IncidentReviewStatus
 
 
 class StreamOfferRequest(BaseModel):

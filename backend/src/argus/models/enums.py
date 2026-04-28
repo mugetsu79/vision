@@ -61,6 +61,11 @@ class HistoryCoverageStatus(StrEnum):
     ACCESS_LIMITED = "access_limited"
 
 
+class IncidentReviewStatus(StrEnum):
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+
+
 class CountEventType(StrEnum):
     LINE_CROSS = "line_cross"
     ZONE_ENTER = "zone_enter"
