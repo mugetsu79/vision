@@ -593,6 +593,7 @@ export interface components {
             tracker_type: components["schemas"]["TrackerType"];
             /** Active Classes */
             active_classes?: string[];
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /** Attribute Rules */
             attribute_rules?: {
                 [key: string]: unknown;
@@ -642,6 +643,7 @@ export interface components {
             tracker_type: components["schemas"]["TrackerType"];
             /** Active Classes */
             active_classes: string[];
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /** Attribute Rules */
             attribute_rules: {
                 [key: string]: unknown;
@@ -713,6 +715,7 @@ export interface components {
             tracker_type?: components["schemas"]["TrackerType"] | null;
             /** Active Classes */
             active_classes?: string[] | null;
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"] | null;
             /** Attribute Rules */
             attribute_rules?: {
                 [key: string]: unknown;
@@ -739,6 +742,11 @@ export interface components {
          * @enum {string}
          */
         CountEventType: "line_cross" | "zone_enter" | "zone_exit";
+        /**
+         * DetectorCapability
+         * @enum {string}
+         */
+        DetectorCapability: "fixed_vocab" | "open_vocab";
         /** EdgeHeartbeatRequest */
         EdgeHeartbeatRequest: {
             /**
@@ -1180,6 +1188,20 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ModelCapabilityConfig */
+        ModelCapabilityConfig: {
+            /**
+             * Supports Runtime Vocabulary Updates
+             * @default false
+             */
+            supports_runtime_vocabulary_updates: boolean;
+            /** Max Runtime Terms */
+            max_runtime_terms?: number | null;
+            /** Prompt Format */
+            prompt_format?: ("labels" | "phrases") | null;
+            /** Execution Profiles */
+            execution_profiles?: string[];
+        };
         /** ModelCreate */
         ModelCreate: {
             /** Name */
@@ -1190,6 +1212,9 @@ export interface components {
             /** Path */
             path: string;
             format: components["schemas"]["ModelFormat"];
+            /** @default fixed_vocab */
+            capability: components["schemas"]["DetectorCapability"];
+            capability_config?: components["schemas"]["ModelCapabilityConfig"];
             /** Classes */
             classes?: string[] | null;
             /** Input Shape */
@@ -1223,6 +1248,9 @@ export interface components {
             /** Path */
             path: string;
             format: components["schemas"]["ModelFormat"];
+            /** @default fixed_vocab */
+            capability: components["schemas"]["DetectorCapability"];
+            capability_config?: components["schemas"]["ModelCapabilityConfig"];
             /** Classes */
             classes: string[];
             /** Input Shape */
@@ -1251,6 +1279,8 @@ export interface components {
             /** Path */
             path?: string | null;
             format?: components["schemas"]["ModelFormat"] | null;
+            capability?: components["schemas"]["DetectorCapability"] | null;
+            capability_config?: components["schemas"]["ModelCapabilityConfig"] | null;
             /** Classes */
             classes?: string[] | null;
             /** Input Shape */
@@ -1331,10 +1361,19 @@ export interface components {
             /** Camera Ids */
             camera_ids: string[];
         };
+        /**
+         * QueryResolutionMode
+         * @enum {string}
+         */
+        QueryResolutionMode: "fixed_filter" | "open_vocab";
         /** QueryResponse */
         QueryResponse: {
+            /** @default fixed_filter */
+            resolution_mode: components["schemas"]["QueryResolutionMode"];
             /** Resolved Classes */
             resolved_classes: string[];
+            /** Resolved Vocabulary */
+            resolved_vocabulary?: string[];
             /** Provider */
             provider: string;
             /** Model */
@@ -1343,6 +1382,25 @@ export interface components {
             latency_ms: number;
             /** Camera Ids */
             camera_ids: string[];
+        };
+        /**
+         * RuntimeVocabularySource
+         * @enum {string}
+         */
+        RuntimeVocabularySource: "default" | "query" | "manual";
+        /** RuntimeVocabularyState */
+        RuntimeVocabularyState: {
+            /** Terms */
+            terms?: string[];
+            /** @default default */
+            source: components["schemas"]["RuntimeVocabularySource"];
+            /**
+             * Version
+             * @default 0
+             */
+            version: number;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** SiteCreate */
         SiteCreate: {
@@ -1533,6 +1591,8 @@ export interface components {
             privacy?: components["schemas"]["WorkerPrivacySettings"];
             /** Active Classes */
             active_classes?: string[];
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
+            runtime_capability?: components["schemas"]["WorkerRuntimeCapability"];
             /** Attribute Rules */
             attribute_rules?: {
                 [key: string]: unknown;
@@ -1571,12 +1631,16 @@ export interface components {
             name: string;
             /** Path */
             path: string;
+            /** @default fixed_vocab */
+            capability: components["schemas"]["DetectorCapability"];
+            capability_config?: components["schemas"]["ModelCapabilityConfig"];
             /** Classes */
             classes: string[];
             /** Input Shape */
             input_shape: {
                 [key: string]: number;
             };
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /**
              * Confidence Threshold
              * @default 0.25
@@ -1623,6 +1687,20 @@ export interface components {
             subject_prefix: string;
             /** Http Fallback Url */
             http_fallback_url?: string | null;
+        };
+        /** WorkerRuntimeCapability */
+        WorkerRuntimeCapability: {
+            /** Execution Profiles */
+            execution_profiles?: string[];
+            /** Detector Capabilities */
+            detector_capabilities?: components["schemas"]["DetectorCapability"][];
+            /**
+             * Hot Runtime Vocabulary Updates
+             * @default false
+             */
+            hot_runtime_vocabulary_updates: boolean;
+            /** Max Runtime Terms */
+            max_runtime_terms?: number | null;
         };
         /**
          * WorkerRuntimeStatus

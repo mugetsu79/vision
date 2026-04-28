@@ -147,9 +147,16 @@ export function AgentInput({
         {resolution ? (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/8 pt-4">
             <Badge className="border-[#31538b] bg-[#101a2a] text-[#dce9ff]">
-              {resolution.resolved_classes.join(", ")}
+              {resolution.resolution_mode === "open_vocab"
+                ? (resolution.resolved_vocabulary ?? []).join(", ")
+                : resolution.resolved_classes.join(", ")}
             </Badge>
             <span className="text-sm text-[#b8c9e2]">
+              {resolution.resolution_mode === "open_vocab"
+                ? "Applied detector vocabulary"
+                : "Resolved classes"}
+            </span>
+            <span className="text-sm text-[#8095b6]">
               {resolution.model}
             </span>
             <span className="text-sm text-[#8095b6]">{resolution.latency_ms} ms</span>

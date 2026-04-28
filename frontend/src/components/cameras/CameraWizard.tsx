@@ -15,6 +15,7 @@ import type {
   CreateCameraInput,
   UpdateCameraInput,
 } from "@/hooks/use-cameras";
+import type { components } from "@/lib/api.generated";
 import { resolveAccessToken, toApiError } from "@/lib/api";
 import { frontendConfig } from "@/lib/config";
 import type { FrameSize } from "@/components/cameras/boundary-geometry";
@@ -22,6 +23,8 @@ import { denormalizePointList, normalizePointList } from "@/components/cameras/b
 
 type Point = [number, number];
 type SerializedZone = NonNullable<CreateCameraInput["zones"]>[number];
+type DetectorCapability = components["schemas"]["DetectorCapability"];
+type ModelCapabilityConfig = components["schemas"]["ModelCapabilityConfig"];
 type BrowserDeliveryProfile = "native" | "1080p15" | "720p10" | "540p5";
 type BoundaryType = "line" | "polygon";
 type BrowserDeliveryProfilePayload = {
@@ -76,7 +79,14 @@ const DEFAULT_BROWSER_DELIVERY_PROFILES: BrowserDeliveryProfilePayload[] = [
 ];
 
 export type SiteOption = { id: string; name: string };
-export type ModelOption = { id: string; name: string; version: string; classes: string[] };
+export type ModelOption = {
+  id: string;
+  name: string;
+  version: string;
+  classes: string[];
+  capability?: DetectorCapability;
+  capability_config?: ModelCapabilityConfig;
+};
 
 export type CameraWizardData = {
   name: string;
@@ -86,6 +96,8 @@ export type CameraWizardData = {
   primaryModelId: string;
   secondaryModelId: string;
   activeClasses: string[];
+  runtimeVocabulary: string[];
+  runtimeVocabularyVersion: number;
   trackerType: "botsort" | "bytetrack" | "ocsort";
   blurFaces: boolean;
   blurPlates: boolean;
@@ -195,6 +207,10 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     primaryModelId: initialCamera?.primary_model_id ?? "",
     secondaryModelId: initialCamera?.secondary_model_id ?? "",
     activeClasses: initialCamera?.active_classes ? [...initialCamera.active_classes] : [],
+    runtimeVocabulary: initialCamera?.runtime_vocabulary?.terms
+      ? [...initialCamera.runtime_vocabulary.terms]
+      : [],
+    runtimeVocabularyVersion: initialCamera?.runtime_vocabulary?.version ?? 0,
     trackerType: initialCamera?.tracker_type ?? "botsort",
     blurFaces: initialCamera?.privacy.blur_faces ?? true,
     blurPlates: initialCamera?.privacy.blur_plates ?? true,
@@ -452,11 +468,32 @@ function areStringArraysEqual(left: string[], right: string[]) {
   return left.every((item, index) => item === right[index]);
 }
 
+function parseRuntimeVocabulary(value: string) {
+  return value
+    .split(",")
+    .map((term) => term.trim())
+    .filter(Boolean);
+}
+
+function runtimeVocabularyPayload(data: CameraWizardData, incrementVersion = false) {
+  const baseVersion =
+    data.runtimeVocabulary.length > 0
+      ? Math.max(1, data.runtimeVocabularyVersion)
+      : data.runtimeVocabularyVersion;
+
+  return {
+    terms: data.runtimeVocabulary,
+    source: "manual" as const,
+    version: incrementVersion ? baseVersion + 1 : baseVersion,
+  };
+}
+
 function toCreatePayload(
   data: CameraWizardData,
   setupFrameSize: FrameSize,
+  primaryModelCapability: DetectorCapability,
 ): CreateCameraInput {
-  return {
+  const payload: CreateCameraInput = {
     site_id: data.siteId,
     name: data.name.trim(),
     rtsp_url: data.rtspUrl.trim(),
@@ -482,11 +519,18 @@ function toCreatePayload(
     frame_skip: data.frameSkip,
     fps_cap: data.fpsCap,
   };
+
+  if (primaryModelCapability === "open_vocab") {
+    payload.runtime_vocabulary = runtimeVocabularyPayload(data);
+  }
+
+  return payload;
 }
 
 function toUpdatePayload(
   data: CameraWizardData,
   setupFrameSize: FrameSize,
+  primaryModelCapability: DetectorCapability,
 ): UpdateCameraInput {
   const payload: UpdateCameraInput = {
     site_id: data.siteId,
@@ -515,6 +559,10 @@ function toUpdatePayload(
 
   if (data.rtspUrl.trim()) {
     payload.rtsp_url = data.rtspUrl.trim();
+  }
+
+  if (primaryModelCapability === "open_vocab") {
+    payload.runtime_vocabulary = runtimeVocabularyPayload(data, true);
   }
 
   return payload;
@@ -610,6 +658,9 @@ export function CameraWizard({
     () => models.find((model) => model.id === data.primaryModelId) ?? null,
     [data.primaryModelId, models],
   );
+  const selectedPrimaryModelCapability =
+    selectedPrimaryModel?.capability ?? "fixed_vocab";
+  const showsRuntimeVocabulary = selectedPrimaryModelCapability === "open_vocab";
   const selectedPrimaryModelClasses = useMemo(
     () => selectedPrimaryModel?.classes ?? [],
     [selectedPrimaryModel],
@@ -681,6 +732,17 @@ export function CameraWizard({
         };
       }
 
+      if (selectedPrimaryModelCapability === "open_vocab") {
+        if (current.activeClasses.length === 0) {
+          return current;
+        }
+
+        return {
+          ...current,
+          activeClasses: [],
+        };
+      }
+
       const nextActiveClasses = pruneActiveClasses(
         current.activeClasses,
         selectedPrimaryModelClasses,
@@ -700,6 +762,7 @@ export function CameraWizard({
     modelsError,
     modelsLoading,
     selectedPrimaryModel,
+    selectedPrimaryModelCapability,
     selectedPrimaryModelClasses,
     selectedPrimaryModelClassesKey,
   ]);
@@ -970,9 +1033,9 @@ export function CameraWizard({
 
     try {
       if (isEditMode) {
-        await onSubmit(toUpdatePayload(data, setupFrameSize));
+        await onSubmit(toUpdatePayload(data, setupFrameSize, selectedPrimaryModelCapability));
       } else {
-        await onSubmit(toCreatePayload(data, setupFrameSize));
+        await onSubmit(toCreatePayload(data, setupFrameSize, selectedPrimaryModelCapability));
       }
     } catch (submitFailure) {
       const fallback = isEditMode
@@ -1122,10 +1185,13 @@ export function CameraWizard({
                     setData((current) => ({
                       ...current,
                       primaryModelId: nextPrimaryModelId,
-                      activeClasses: pruneActiveClasses(
-                        current.activeClasses,
-                        nextPrimaryModel?.classes ?? [],
-                      ),
+                      activeClasses:
+                        nextPrimaryModel?.capability === "open_vocab"
+                          ? []
+                          : pruneActiveClasses(
+                              current.activeClasses,
+                              nextPrimaryModel?.classes ?? [],
+                            ),
                     }));
                   }}
                 >
@@ -1138,7 +1204,32 @@ export function CameraWizard({
                 </Select>
               </label>
               {selectedPrimaryModel ? (
-                <div className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-4">
+                showsRuntimeVocabulary ? (
+                  <label className="grid gap-2 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-4 text-sm text-[#d8e2f2]">
+                    <span className="text-sm font-medium text-[#eef4ff]">
+                      Runtime vocabulary
+                    </span>
+                    <Input
+                      aria-label="Runtime vocabulary"
+                      placeholder="forklift, pallet jack"
+                      value={data.runtimeVocabulary.join(", ")}
+                      onChange={(event) =>
+                        setData((current) => ({
+                          ...current,
+                          runtimeVocabulary: parseRuntimeVocabulary(event.target.value),
+                        }))
+                      }
+                    />
+                    <span className="text-xs text-[#8ea4c7]">
+                      {data.runtimeVocabulary.length}
+                      {selectedPrimaryModel.capability_config?.max_runtime_terms
+                        ? ` / ${selectedPrimaryModel.capability_config.max_runtime_terms}`
+                        : ""}{" "}
+                      terms
+                    </span>
+                  </label>
+                ) : (
+                  <div className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium text-[#eef4ff]">Active class scope</p>
@@ -1175,7 +1266,8 @@ export function CameraWizard({
                       This model does not expose class metadata, so there is nothing to narrow.
                     </p>
                   )}
-                </div>
+                  </div>
+                )
               ) : (
                 <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
                   Select a primary model to choose the persistent class scope for this camera.

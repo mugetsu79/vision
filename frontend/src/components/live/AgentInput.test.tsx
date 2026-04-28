@@ -119,4 +119,59 @@ describe("AgentInput", () => {
       ],
     });
   });
+
+  test("renders open-vocab query results as applied detector vocabulary", async () => {
+    const user = userEvent.setup();
+    const onResolved = vi.fn();
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          resolution_mode: "open_vocab",
+          resolved_classes: [],
+          resolved_vocabulary: ["forklift", "pallet jack"],
+          provider: "deterministic",
+          model: "query-rules-v1",
+          latency_ms: 18,
+          camera_ids: ["11111111-1111-1111-1111-111111111111"],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <AgentInput
+          cameras={[
+            {
+              id: "11111111-1111-1111-1111-111111111111",
+              name: "North Gate",
+            },
+          ]}
+          onResolved={onResolved}
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.type(
+      screen.getByLabelText(new RegExp(`query ${productBrand.name}`, "i")),
+      "forklifts and pallet jacks",
+    );
+    await user.click(screen.getByRole("button", { name: /apply query/i }));
+
+    expect(await screen.findByText(/applied detector vocabulary/i)).toBeInTheDocument();
+    expect(screen.getByText(/forklift, pallet jack/i)).toBeInTheDocument();
+    expect(onResolved).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resolution_mode: "open_vocab",
+        resolved_vocabulary: ["forklift", "pallet jack"],
+      }),
+      expect.objectContaining({
+        scope: "all",
+      }),
+    );
+  });
 });

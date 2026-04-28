@@ -104,6 +104,35 @@ describe("CameraWizard", () => {
     expect(screen.getByLabelText(/browser delivery profile/i)).toHaveValue("540p5");
   });
 
+  test("shows runtime vocabulary editor for open-vocab models", async () => {
+    const user = userEvent.setup();
+
+    renderWizard({
+      models: [
+        {
+          id: "open-model",
+          name: "YOLO World",
+          version: "1",
+          classes: [],
+          capability: "open_vocab",
+          capability_config: {
+            max_runtime_terms: 32,
+            supports_runtime_vocabulary_updates: true,
+          },
+        },
+      ],
+    });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "open-model");
+
+    expect(screen.getByLabelText(/runtime vocabulary/i)).toBeInTheDocument();
+    expect(screen.queryByText(/active class scope/i)).not.toBeInTheDocument();
+  });
+
   test("probes a new RTSP source before showing browser delivery profiles", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
@@ -159,12 +188,19 @@ describe("CameraWizard", () => {
 
   test("reprobes an existing camera before showing stale stored browser profiles", async () => {
     const user = userEvent.setup();
-    vi.spyOn(global, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse(String(init?.body));
+    vi.spyOn(global, "fetch").mockImplementation((_input, init) => {
+      const rawBody = init?.body;
+      if (typeof rawBody !== "string") {
+        throw new Error("Expected source probe request body.");
+      }
+      const body = JSON.parse(rawBody) as {
+        camera_id?: string | null;
+        rtsp_url?: string | null;
+      };
       expect(body.camera_id).toBe("camera-1");
       expect(body.rtsp_url).toBeNull();
 
-      return new Response(
+      return Promise.resolve(new Response(
         JSON.stringify({
           source_capability: {
             width: 1280,
@@ -198,7 +234,7 @@ describe("CameraWizard", () => {
           status: 200,
           headers: { "Content-Type": "application/json" },
         },
-      );
+      ));
     });
 
     renderWizard({
@@ -472,10 +508,10 @@ describe("CameraWizard", () => {
       configurable: true,
       value: revokeObjectURL,
     });
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation((input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/api/v1/cameras/camera-1/setup-preview")) {
-        return new Response(
+        return Promise.resolve(new Response(
           JSON.stringify({
             camera_id: "camera-1",
             preview_url: "/api/v1/cameras/camera-1/setup-preview/image?rev=12345",
@@ -486,13 +522,13 @@ describe("CameraWizard", () => {
             status: 200,
             headers: { "Content-Type": "application/json" },
           },
-        );
+        ));
       }
 
-      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xdb]), {
+      return Promise.resolve(new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xdb]), {
         status: 200,
         headers: { "Content-Type": "image/jpeg" },
-      });
+      }));
     });
 
     renderWizard({
@@ -607,10 +643,10 @@ describe("CameraWizard", () => {
   test("surfaces a step-level calibration error when the analytics still cannot be captured", async () => {
     const user = userEvent.setup();
 
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation((input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/api/v1/cameras/camera-1/setup-preview")) {
-        return new Response(
+        return Promise.resolve(new Response(
           JSON.stringify({
             detail:
               "Unable to capture an analytics still from the camera source right now. Retry the capture after confirming the camera stream is reachable.",
@@ -619,7 +655,7 @@ describe("CameraWizard", () => {
             status: 503,
             headers: { "Content-Type": "application/json" },
           },
-        );
+        ));
       }
 
       throw new Error(`Unexpected fetch to ${url}`);
