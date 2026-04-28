@@ -170,6 +170,26 @@ class DatabaseAuditLogger:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
+    def add_to_session(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_context: TenantContext,
+        action: str,
+        target: str,
+        meta: dict[str, Any] | None = None,
+    ) -> None:
+        session.add(
+            AuditLog(
+                tenant_id=tenant_context.tenant_id,
+                actor_id=None,
+                action=action,
+                target=target,
+                meta=meta,
+                ts=datetime.now(tz=UTC),
+            )
+        )
+
     async def record(
         self,
         *,
@@ -179,15 +199,12 @@ class DatabaseAuditLogger:
         meta: dict[str, Any] | None = None,
     ) -> None:
         async with self.session_factory() as session:
-            session.add(
-                AuditLog(
-                    tenant_id=tenant_context.tenant_id,
-                    actor_id=None,
-                    action=action,
-                    target=target,
-                    meta=meta,
-                    ts=datetime.now(tz=UTC),
-                )
+            self.add_to_session(
+                session,
+                tenant_context=tenant_context,
+                action=action,
+                target=target,
+                meta=meta,
             )
             await session.commit()
 
@@ -2240,26 +2257,24 @@ class IncidentService:
                 else:
                     incident.reviewed_at = None
                     incident.reviewed_by_subject = None
+                if self.audit_logger is not None:
+                    self.audit_logger.add_to_session(
+                        session,
+                        tenant_context=tenant_context,
+                        action="incident.review",
+                        target=f"incident:{incident_id}",
+                        meta={
+                            "review_status": review_status.value,
+                            "previous_review_status": previous_review_status.value,
+                            "camera_id": str(incident.camera_id),
+                            "incident_type": incident.type,
+                            "user_subject": tenant_context.user.subject,
+                        },
+                    )
                 await session.commit()
                 await session.refresh(incident)
 
-            response = _incident_response(incident, camera_name)
-
-        if changed and self.audit_logger is not None:
-            await self.audit_logger.record(
-                tenant_context=tenant_context,
-                action="incident.review",
-                target=f"incident:{incident_id}",
-                meta={
-                    "review_status": review_status.value,
-                    "previous_review_status": previous_review_status.value,
-                    "camera_id": str(response.camera_id),
-                    "incident_type": response.type,
-                    "user_subject": tenant_context.user.subject,
-                },
-            )
-
-        return response
+            return _incident_response(incident, camera_name)
 
 
 def _incident_response(incident: Incident, camera_name: str | None) -> IncidentResponse:

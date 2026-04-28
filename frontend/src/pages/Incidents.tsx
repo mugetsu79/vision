@@ -265,6 +265,9 @@ function IncidentEvidenceHero({
   const nextReviewStatus: IncidentReviewStatus =
     incident.review_status === "pending" ? "reviewed" : "pending";
   const actionLabel = incident.review_status === "pending" ? "Review" : "Reopen";
+  const mutationErrorMessage = reviewMutation.error
+    ? reviewMutationErrorMessage(reviewMutation.error)
+    : null;
 
   return (
     <section
@@ -338,15 +341,13 @@ function IncidentEvidenceHero({
           {reviewMutation.isPending ? "Saving" : actionLabel}
         </Button>
 
-        {reviewMutation.error ? (
+        {mutationErrorMessage ? (
           <p
             aria-live="polite"
             role="alert"
             className="basis-full text-sm text-[#f0b7c1]"
           >
-            {reviewMutation.error instanceof Error
-              ? reviewMutation.error.message
-              : "Failed to update review state."}
+            {mutationErrorMessage}
           </p>
         ) : null}
       </div>
@@ -459,4 +460,16 @@ export function formatIncidentTime(timestamp: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function reviewMutationErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    if (/insufficient role/i.test(error.message)) {
+      return "Operator access is required to change review state.";
+    }
+
+    return error.message;
+  }
+
+  return "Failed to update review state.";
 }

@@ -49,9 +49,17 @@ class _FakeSession:
         self.state["last_statement"] = statement
         return _ScalarResult(self.state.get("row"))  # type: ignore[arg-type]
 
+    def add(self, obj: object) -> None:
+        added_objects = self.state.setdefault("added_objects", [])
+        if isinstance(added_objects, list):
+            added_objects.append(obj)
+
     async def commit(self) -> None:
         self.commits += 1
         self.state["commits"] = int(self.state.get("commits", 0)) + 1
+        self.state["added_objects_at_commit"] = list(
+            self.state.get("added_objects", [])
+        )
 
     async def refresh(self, obj: object) -> None:
         self.refreshes += 1
@@ -70,8 +78,9 @@ class _FakeAuditLogger:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    async def record(self, **kwargs: object) -> None:
+    def add_to_session(self, session: _FakeSession, **kwargs: object) -> None:
         self.calls.append(kwargs)
+        session.add({"audit": kwargs})
 
 
 def _tenant_context(tenant_id=None) -> TenantContext:  # noqa: ANN001
@@ -112,8 +121,9 @@ def _incident() -> Incident:
 async def test_update_review_state_marks_incident_reviewed_and_audits() -> None:
     incident = _incident()
     audit = _FakeAuditLogger()
+    session_factory = _FakeSessionFactory((incident, "Forklift Gate"))
     service = IncidentService(
-        _FakeSessionFactory((incident, "Forklift Gate")),
+        session_factory,
         audit_logger=audit,
     )
     context = _tenant_context()
@@ -141,6 +151,9 @@ async def test_update_review_state_marks_incident_reviewed_and_audits() -> None:
         "incident_type": "ppe-missing",
         "user_subject": "operator-1",
     }
+    added_objects_at_commit = session_factory.state["added_objects_at_commit"]
+    assert len(added_objects_at_commit) == 1
+    assert added_objects_at_commit[0]["audit"] == audit.calls[0]
 
 
 @pytest.mark.asyncio

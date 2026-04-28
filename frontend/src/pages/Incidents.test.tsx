@@ -19,9 +19,9 @@ import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
 
-function jsonResponse(body: unknown) {
+function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -252,6 +252,55 @@ describe("IncidentsPage", () => {
 
     await waitFor(() => {
       expect(patchBodies[1]).toEqual({ review_status: "pending" });
+    });
+  });
+
+  test("explains operator access requirement when review is denied", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraPayload()]));
+      }
+
+      if (url.pathname === "/api/v1/incidents") {
+        const reviewStatus = url.searchParams.get("review_status");
+        return Promise.resolve(
+          jsonResponse(reviewStatus === "reviewed" ? [] : [incidentPayload()]),
+        );
+      }
+
+      if (
+        url.pathname ===
+        "/api/v1/incidents/99999999-9999-9999-9999-999999999999/review"
+      ) {
+        return Promise.resolve(jsonResponse({ detail: "Insufficient role." }, 403));
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <IncidentsPage />
+      </QueryClientProvider>,
+    );
+
+    const hero = await screen.findByRole("region", { name: /selected evidence/i });
+    await user.click(within(hero).getByRole("button", { name: /^review$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Operator access is required to change review state.",
+    );
+
+    await user.selectOptions(screen.getByLabelText(/review status/i), ["reviewed"]);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
 });
