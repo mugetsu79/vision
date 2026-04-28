@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from pathlib import Path
+import hashlib
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from argus.core.config import Settings
-from argus.core.db import CountEventStore, DatabaseManager
+from argus.core.db import CountEventStore, DatabaseManager, TrackingEventStore
 from argus.models.enums import CountEventType
 from argus.vision.count_events import CountEventRecord
+from argus.vision.types import Detection
 
 
 class _CaptureSession:
@@ -29,7 +32,7 @@ class _CaptureSessionFactory:
     def __init__(self, session: _CaptureSession) -> None:
         self.session = session
 
-    def __call__(self) -> "_CaptureSessionContext":
+    def __call__(self) -> _CaptureSessionContext:
         return _CaptureSessionContext(self.session)
 
 
@@ -42,6 +45,11 @@ class _CaptureSessionContext:
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
+
+
+def _expected_vocabulary_hash(terms: list[str]) -> str:
+    payload = json.dumps([term.strip() for term in terms if term.strip()], separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -91,12 +99,68 @@ async def test_count_event_store_preserves_core_fields() -> None:
     assert session.committed is True
     assert len(session.rows) == 1
     row = session.rows[0]
-    assert getattr(row, "camera_id") == camera_id
-    assert getattr(row, "event_type") == CountEventType.LINE_CROSS
-    assert getattr(row, "boundary_id") == "driveway"
-    assert getattr(row, "speed_kph") == 37.5
-    assert getattr(row, "payload") == {"source": "test", "count": 1}
-    assert getattr(row, "attributes") == {"direction": "north", "lane": 2}
+    assert row.camera_id == camera_id
+    assert row.event_type == CountEventType.LINE_CROSS
+    assert row.boundary_id == "driveway"
+    assert row.speed_kph == 37.5
+    assert row.payload == {"source": "test", "count": 1}
+    assert row.attributes == {"direction": "north", "lane": 2}
+
+
+@pytest.mark.asyncio
+async def test_tracking_event_store_records_vocabulary_attribution() -> None:
+    session = _CaptureSession()
+    store = TrackingEventStore(_CaptureSessionFactory(session))
+    camera_id = uuid4()
+    expected_hash = _expected_vocabulary_hash(["forklift", "pallet jack"])
+
+    await store.record(
+        camera_id,
+        datetime(2026, 4, 25, 12, 30, tzinfo=UTC),
+        [
+            Detection(
+                class_name="forklift",
+                confidence=0.93,
+                bbox=(1.0, 2.0, 3.0, 4.0),
+                track_id=7,
+            )
+        ],
+        vocabulary_version=2,
+        vocabulary_hash=expected_hash,
+    )
+
+    assert session.committed is True
+    row = session.rows[0]
+    assert row.vocabulary_version == 2
+    assert row.vocabulary_hash == expected_hash
+
+
+@pytest.mark.asyncio
+async def test_count_event_store_records_vocabulary_attribution() -> None:
+    session = _CaptureSession()
+    store = CountEventStore(_CaptureSessionFactory(session))
+    camera_id = uuid4()
+    expected_hash = _expected_vocabulary_hash(["forklift", "pallet jack"])
+
+    await store.record(
+        camera_id,
+        [
+            CountEventRecord(
+                ts=datetime(2026, 4, 25, 12, 30, tzinfo=UTC),
+                class_name="forklift",
+                track_id=7,
+                event_type=CountEventType.LINE_CROSS,
+                boundary_id="dock-door",
+            )
+        ],
+        vocabulary_version=2,
+        vocabulary_hash=expected_hash,
+    )
+
+    assert session.committed is True
+    row = session.rows[0]
+    assert row.vocabulary_version == 2
+    assert row.vocabulary_hash == expected_hash
 
 
 def test_count_events_migration_exists() -> None:

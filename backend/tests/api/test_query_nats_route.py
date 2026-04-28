@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 from dataclasses import dataclass
 from uuid import UUID, uuid4
@@ -82,6 +84,32 @@ class OpenVocabInventory(StubInventory):
         )
 
 
+class RecordingOpenVocabInventory(OpenVocabInventory):
+    def __init__(self) -> None:
+        self.snapshots: list[dict[str, object]] = []
+
+    async def record_runtime_vocabulary_snapshot(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+        terms: list[str],
+        source: RuntimeVocabularySource,
+        version: int,
+        vocabulary_hash: str,
+    ) -> None:
+        self.snapshots.append(
+            {
+                "tenant_id": tenant_context.tenant_id,
+                "camera_ids": list(camera_ids),
+                "terms": list(terms),
+                "source": source,
+                "version": version,
+                "vocabulary_hash": vocabulary_hash,
+            }
+        )
+
+
 @dataclass
 class StubParser:
     resolved_classes: list[str] | None = None
@@ -149,6 +177,11 @@ class RejectingQuotaEnforcer:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Tenant query rate limit exceeded.",
         )
+
+
+def _expected_vocabulary_hash(terms: list[str]) -> str:
+    payload = json.dumps([term.strip() for term in terms if term.strip()], separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -229,6 +262,49 @@ async def test_query_service_reports_open_vocab_mode_and_command_payload() -> No
     assert command.runtime_vocabulary == ["forklift", "pallet jack"]
     assert command.runtime_vocabulary_source == RuntimeVocabularySource.QUERY
     assert command.runtime_vocabulary_version == 2
+
+
+@pytest.mark.asyncio
+async def test_query_service_records_runtime_vocabulary_snapshot_for_open_vocab() -> None:
+    camera_id = uuid4()
+    tenant_context = TenantContext(
+        tenant_id=uuid4(),
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="operator-1",
+            email="operator@argus.local",
+            role=RoleEnum.OPERATOR,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+    events = CapturingEvents(published=[])
+    inventory = RecordingOpenVocabInventory()
+    service = QueryService(
+        inventory=inventory,
+        parser=StubParser(resolved_classes=["forklift", "pallet jack"]),
+        events=events,
+        audit_logger=NullAuditLogger(),
+    )
+
+    await service.resolve_query(
+        tenant_context,
+        payload=QueryRequest(prompt="forklifts and pallet jacks", camera_ids=[camera_id]),
+    )
+
+    assert inventory.snapshots == [
+        {
+            "tenant_id": tenant_context.tenant_id,
+            "camera_ids": [camera_id],
+            "terms": ["forklift", "pallet jack"],
+            "source": RuntimeVocabularySource.QUERY,
+            "version": 2,
+            "vocabulary_hash": _expected_vocabulary_hash(["forklift", "pallet jack"]),
+        }
+    ]
 
 
 @pytest.mark.asyncio

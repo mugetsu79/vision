@@ -71,6 +71,7 @@ from argus.vision.runtime import (
 )
 from argus.vision.tracker import TrackerConfig, create_tracker
 from argus.vision.types import Detection
+from argus.vision.vocabulary import hash_vocabulary
 from argus.vision.zones import Zones
 
 type Frame = NDArray[np.uint8]
@@ -194,11 +195,26 @@ class Publisher(Protocol):
 
 
 class TrackingStore(Protocol):
-    async def record(self, camera_id: UUID, ts: datetime, detections: list[Detection]) -> None: ...
+    async def record(
+        self,
+        camera_id: UUID,
+        ts: datetime,
+        detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None: ...
 
 
 class CountEventStoreProtocol(Protocol):
-    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None: ...
+    async def record(
+        self,
+        camera_id: UUID,
+        events: list[CountEventRecord],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None: ...
 
 
 class RuleEvaluator(Protocol):
@@ -554,10 +570,23 @@ class InferenceEngine:
         )
         await self.publisher.publish(telemetry)
         stage_timer.record_stage("publish_telemetry", ended_at=loop.time())
-        await self.tracking_store.record(self.config.camera_id, current_ts, tracked)
+        vocabulary_version = self._state.runtime_vocabulary_version
+        vocabulary_hash = hash_vocabulary(self.runtime_vocabulary)
+        await self.tracking_store.record(
+            self.config.camera_id,
+            current_ts,
+            tracked,
+            vocabulary_version=vocabulary_version,
+            vocabulary_hash=vocabulary_hash,
+        )
         stage_timer.record_stage("persist_tracking", ended_at=loop.time())
         try:
-            await self._count_event_store.record(self.config.camera_id, count_events)
+            await self._count_event_store.record(
+                self.config.camera_id,
+                count_events,
+                vocabulary_version=vocabulary_version,
+                vocabulary_hash=vocabulary_hash,
+            )
         except Exception:
             logger.exception(
                 "Failed to persist count events for camera %s",
@@ -1116,7 +1145,15 @@ def _telemetry_track_from_detection(detection: Detection) -> TelemetryTrack:
 
 
 class _NoopTrackingStore:
-    async def record(self, camera_id: UUID, ts: datetime, detections: list[Detection]) -> None:
+    async def record(
+        self,
+        camera_id: UUID,
+        ts: datetime,
+        detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
         return None
 
 
@@ -1160,7 +1197,14 @@ def _polygon_zone_definitions(zone_definitions: list[dict[str, Any]]) -> list[di
 
 
 class _NoopCountEventStore:
-    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None:
+    async def record(
+        self,
+        camera_id: UUID,
+        events: list[CountEventRecord],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
         return None
 
 

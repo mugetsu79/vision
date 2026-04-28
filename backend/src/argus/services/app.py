@@ -53,6 +53,7 @@ from argus.api.contracts import (
     HistorySeriesRow,
     HomographyPayload,
     IncidentResponse,
+    ModelCapabilityConfig,
     ModelCreate,
     ModelResponse,
     ModelUpdate,
@@ -97,6 +98,7 @@ from argus.models.tables import (
     APIKey,
     AuditLog,
     Camera,
+    CameraVocabularySnapshot,
     EdgeNode,
     Incident,
     Model,
@@ -117,6 +119,7 @@ from argus.streaming.webrtc import (
 from argus.vision.camera import _probe_video_dimensions, capture_still_image
 from argus.vision.model_metadata import resolve_model_classes
 from argus.vision.source_probe import probe_rtsp_source
+from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
@@ -754,6 +757,12 @@ class CameraService:
                 fps_cap=payload.fps_cap,
             )
             session.add(camera)
+            if _model_capability(primary_model) is DetectorCapability.OPEN_VOCAB:
+                _record_camera_vocabulary_snapshot(
+                    session=session,
+                    camera=camera,
+                    runtime_vocabulary=runtime_vocabulary,
+                )
             await session.commit()
             await session.refresh(camera)
         await self.audit_logger.record(
@@ -773,7 +782,9 @@ class CameraService:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
             update_data = payload.model_dump(exclude_unset=True, mode="python")
+            runtime_vocabulary_was_provided = "runtime_vocabulary" in update_data
             primary_model_id = update_data.get("primary_model_id", camera.primary_model_id)
+            primary_model_changed = primary_model_id != camera.primary_model_id
             primary_model = await _load_model(session, primary_model_id)
             if primary_model.task is not ModelTask.DETECT:
                 raise HTTPException(
@@ -858,6 +869,15 @@ class CameraService:
             for field_name, value in update_data.items():
                 setattr(camera, field_name, value)
 
+            if (
+                _model_capability(primary_model) is DetectorCapability.OPEN_VOCAB
+                and (runtime_vocabulary_was_provided or primary_model_changed)
+            ):
+                _record_camera_vocabulary_snapshot(
+                    session=session,
+                    camera=camera,
+                    runtime_vocabulary=runtime_vocabulary,
+                )
             await session.commit()
             await session.refresh(camera)
         await self.audit_logger.record(
@@ -2628,7 +2648,7 @@ def _model_to_response(model: Model) -> ModelResponse:
         path=model.path,
         format=model.format,
         capability=_model_capability(model),
-        capability_config=_model_capability_config(model),
+        capability_config=ModelCapabilityConfig.model_validate(_model_capability_config(model)),
         classes=list(model.classes),
         input_shape=dict(model.input_shape),
         sha256=model.sha256,
@@ -2703,7 +2723,9 @@ def _validate_runtime_vocabulary(
     terms: list[str],
     primary_model: Model,
 ) -> None:
-    max_terms = int(_model_capability_config(primary_model).get("max_runtime_terms") or 0)
+    max_terms = int(
+        cast(Any, _model_capability_config(primary_model).get("max_runtime_terms") or 0)
+    )
     if max_terms > 0 and len(terms) > max_terms:
         raise HTTPException(
             status_code=HTTP_422_UNPROCESSABLE,
@@ -2720,6 +2742,26 @@ def _runtime_vocabulary_state_from_camera(camera: Camera) -> RuntimeVocabularySt
         ),
         version=int(getattr(camera, "runtime_vocabulary_version", None) or 0),
         updated_at=getattr(camera, "runtime_vocabulary_updated_at", None),
+    )
+
+
+def _record_camera_vocabulary_snapshot(
+    *,
+    session: AsyncSession,
+    camera: Camera,
+    runtime_vocabulary: RuntimeVocabularyState,
+) -> None:
+    if camera.id is None:
+        camera.id = uuid.uuid4()
+    terms = normalize_vocabulary_terms(runtime_vocabulary.terms)
+    session.add(
+        CameraVocabularySnapshot(
+            camera_id=camera.id,
+            version=runtime_vocabulary.version,
+            vocabulary_hash=hash_vocabulary(terms),
+            source=runtime_vocabulary.source,
+            terms=terms,
+        )
     )
 
 
@@ -2745,7 +2787,9 @@ def _resolve_camera_detector_state(
         terms=runtime_vocabulary.terms,
         primary_model=primary_model,
     )
-    return list(active_classes or []), runtime_vocabulary
+    return list(active_classes or []), runtime_vocabulary.model_copy(
+        update={"terms": normalize_vocabulary_terms(runtime_vocabulary.terms)}
+    )
 
 
 def _camera_to_response(camera: Camera) -> CameraResponse:
@@ -2852,7 +2896,7 @@ def _model_to_worker_settings(
         name=model.name,
         path=model.path,
         capability=_model_capability(model),
-        capability_config=_model_capability_config(model),
+        capability_config=ModelCapabilityConfig.model_validate(_model_capability_config(model)),
         classes=list(model.classes),
         input_shape=dict(model.input_shape),
         runtime_vocabulary=runtime_vocabulary or RuntimeVocabularyState(),
@@ -2873,7 +2917,7 @@ def _worker_runtime_capability(model: Model) -> WorkerRuntimeCapability:
             capability_config.get("supports_runtime_vocabulary_updates", False)
         ),
         max_runtime_terms=(
-            int(capability_config["max_runtime_terms"])
+            int(cast(Any, capability_config["max_runtime_terms"]))
             if capability_config.get("max_runtime_terms") is not None
             else None
         ),

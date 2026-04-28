@@ -77,7 +77,15 @@ class _RecordingStore:
     def __init__(self) -> None:
         self.rows: list[tuple[datetime, list[Detection]]] = []
 
-    async def record(self, camera_id, ts: datetime, detections: list[Detection]) -> None:
+    async def record(
+        self,
+        camera_id,
+        ts: datetime,
+        detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
         self.rows.append((ts, detections))
 
 

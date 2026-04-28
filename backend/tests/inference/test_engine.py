@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -139,7 +141,15 @@ class _FakeTrackingStore:
     def __init__(self) -> None:
         self.records: list[tuple[UUID, list[Detection]]] = []
 
-    async def record(self, camera_id: UUID, ts: datetime, detections: list[Detection]) -> None:
+    async def record(
+        self,
+        camera_id: UUID,
+        ts: datetime,
+        detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
         self.records.append((camera_id, detections))
 
 
@@ -147,7 +157,14 @@ class _FakeCountEventStore:
     def __init__(self) -> None:
         self.records: list[tuple[UUID, list[CountEventRecord]]] = []
 
-    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None:
+    async def record(
+        self,
+        camera_id: UUID,
+        events: list[CountEventRecord],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
         if events:
             self.records.append((camera_id, list(events)))
 
@@ -156,7 +173,14 @@ class _FailingCountEventStore:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def record(self, camera_id: UUID, events: list[CountEventRecord]) -> None:
+    async def record(
+        self,
+        camera_id: UUID,
+        events: list[CountEventRecord],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
         self.calls += 1
         if events:
             raise RuntimeError("count event persistence failed")
@@ -299,6 +323,11 @@ def _metric_sample_value(metric: object, sample_name: str, labels: dict[str, str
     return 0.0
 
 
+def _expected_vocabulary_hash(terms: list[str]) -> str:
+    payload = json.dumps([term.strip() for term in terms if term.strip()], separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 @pytest.mark.asyncio
 async def test_engine_applies_live_class_and_tracker_updates_without_restart() -> None:
     camera_id = uuid4()
@@ -429,6 +458,144 @@ async def test_engine_preserves_normalized_detection_shape_for_open_vocab() -> N
     await engine.close()
 
     assert telemetry.counts == {"forklift": 1}
+
+
+@pytest.mark.asyncio
+async def test_engine_attributes_tracking_and_count_events_to_runtime_vocabulary() -> None:
+    camera_id = uuid4()
+    detector_calls = 0
+    expected_hash = _expected_vocabulary_hash(["forklift", "pallet jack"])
+
+    class _OpenVocabCrossingDetector(_FakeOpenVocabDetector):
+        def detect(
+            self,
+            frame: np.ndarray,
+            allowed_classes: list[str] | None = None,
+        ) -> list[Detection]:
+            nonlocal detector_calls
+            detector_calls += 1
+            self.detect_calls.append(None if allowed_classes is None else list(allowed_classes))
+            bbox = (
+                (10.0, 10.0, 30.0, 30.0)
+                if detector_calls == 1
+                else (60.0, 10.0, 80.0, 30.0)
+            )
+            return [
+                Detection(
+                    class_name="forklift",
+                    confidence=0.95,
+                    bbox=bbox,
+                )
+            ]
+
+    class _SingleTrackTracker:
+        def update(
+            self,
+            detections: list[Detection],
+            frame: np.ndarray | None = None,
+        ) -> list[Detection]:
+            return [detection.with_updates(track_id=7) for detection in detections]
+
+    class _AttributionTrackingStore:
+        def __init__(self) -> None:
+            self.records: list[dict[str, object]] = []
+
+        async def record(
+            self,
+            camera_id: UUID,
+            ts: datetime,
+            detections: list[Detection],
+            *,
+            vocabulary_version: int | None = None,
+            vocabulary_hash: str | None = None,
+        ) -> None:
+            self.records.append(
+                {
+                    "camera_id": camera_id,
+                    "detections": list(detections),
+                    "vocabulary_version": vocabulary_version,
+                    "vocabulary_hash": vocabulary_hash,
+                }
+            )
+
+    class _AttributionCountEventStore:
+        def __init__(self) -> None:
+            self.records: list[dict[str, object]] = []
+
+        async def record(
+            self,
+            camera_id: UUID,
+            events: list[CountEventRecord],
+            *,
+            vocabulary_version: int | None = None,
+            vocabulary_hash: str | None = None,
+        ) -> None:
+            if events:
+                self.records.append(
+                    {
+                        "camera_id": camera_id,
+                        "events": list(events),
+                        "vocabulary_version": vocabulary_version,
+                        "vocabulary_hash": vocabulary_hash,
+                    }
+                )
+
+    tracking_store = _AttributionTrackingStore()
+    count_store = _AttributionCountEventStore()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="YOLO World",
+                path="/models/yolo-world.onnx",
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={"supports_runtime_vocabulary_updates": True},
+                classes=[],
+                runtime_vocabulary={
+                    "terms": ["forklift", "pallet jack"],
+                    "source": RuntimeVocabularySource.QUERY,
+                    "version": 2,
+                },
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": [],
+            "zones": [
+                {
+                    "id": "dock-door",
+                    "type": "line",
+                    "points": [[50, 0], [50, 64]],
+                    "class_names": ["forklift"],
+                }
+            ],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((64, 64, 3), dtype=np.uint8), np.zeros((64, 64, 3), dtype=np.uint8)]
+        ),
+        detector=_OpenVocabCrossingDetector(
+            runtime_vocabulary=["forklift", "pallet jack"],
+        ),
+        tracker_factory=lambda tracker_type: _SingleTrackTracker(),
+        publisher=_FakePublisher(),
+        tracking_store=tracking_store,
+        count_event_store=count_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert [record["vocabulary_version"] for record in tracking_store.records] == [2, 2]
+    assert [record["vocabulary_hash"] for record in tracking_store.records] == [
+        expected_hash,
+        expected_hash,
+    ]
+    assert count_store.records[0]["vocabulary_version"] == 2
+    assert count_store.records[0]["vocabulary_hash"] == expected_hash
 
 
 @pytest.mark.asyncio

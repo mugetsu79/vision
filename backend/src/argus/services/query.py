@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from argus.api.contracts import CameraCommandPayload, QueryRequest, QueryResponse, TenantContext
 from argus.core.events import NatsJetStreamClient
 from argus.models.enums import DetectorCapability, QueryResolutionMode, RuntimeVocabularySource
-from argus.models.tables import AuditLog, Camera, Model, Site, Tenant
+from argus.models.tables import AuditLog, Camera, CameraVocabularySnapshot, Model, Site, Tenant
+from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
 
 @dataclass(slots=True, frozen=True)
@@ -64,6 +65,17 @@ class CameraClassInventory(Protocol):
         tenant_context: TenantContext,
         camera_ids: list[UUID],
     ) -> QueryCameraDetectorContext: ...
+
+    async def record_runtime_vocabulary_snapshot(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+        terms: list[str],
+        source: RuntimeVocabularySource,
+        version: int,
+        vocabulary_hash: str,
+    ) -> None: ...
 
 
 class QueryParser(Protocol):
@@ -170,6 +182,13 @@ class QueryService:
                 resolved_vocabulary=resolved_vocabulary,
             )
             await self.events.publish(f"cmd.camera.{camera_id}", command)
+        await _record_runtime_vocabulary_snapshot_for_inventory(
+            self.inventory,
+            tenant_context=tenant_context,
+            camera_ids=payload.camera_ids,
+            detector_context=detector_context,
+            resolved_vocabulary=resolved_vocabulary,
+        )
 
         await self.audit_logger.record_query(
             tenant_context=tenant_context,
@@ -292,6 +311,49 @@ class SQLCameraClassInventory:
             max_runtime_terms=min(max_terms_values) if max_terms_values else None,
         )
 
+    async def record_runtime_vocabulary_snapshot(
+        self,
+        *,
+        tenant_context: TenantContext,
+        camera_ids: list[UUID],
+        terms: list[str],
+        source: RuntimeVocabularySource,
+        version: int,
+        vocabulary_hash: str,
+    ) -> None:
+        normalized_terms = normalize_vocabulary_terms(terms)
+        now = datetime.now(tz=UTC)
+        async with self.session_factory() as session:
+            statement = (
+                select(Camera)
+                .join(Site, Site.id == Camera.site_id)
+                .join(Model, Model.id == Camera.primary_model_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Camera.id.in_(camera_ids))
+                .where(Model.capability == DetectorCapability.OPEN_VOCAB)
+            )
+            cameras = list((await session.execute(statement)).scalars().all())
+            if len(cameras) != len(set(camera_ids)):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="One or more cameras were not found for this tenant.",
+                )
+            for camera in cameras:
+                camera.runtime_vocabulary = list(normalized_terms)
+                camera.runtime_vocabulary_source = source
+                camera.runtime_vocabulary_version = version
+                camera.runtime_vocabulary_updated_at = now
+                session.add(
+                    CameraVocabularySnapshot(
+                        camera_id=camera.id,
+                        version=version,
+                        vocabulary_hash=vocabulary_hash,
+                        source=source,
+                        terms=list(normalized_terms),
+                    )
+                )
+            await session.commit()
+
 
 async def _detector_context_for_inventory(
     inventory: CameraClassInventory,
@@ -301,7 +363,10 @@ async def _detector_context_for_inventory(
 ) -> QueryCameraDetectorContext:
     detector_context = getattr(inventory, "detector_context_for_cameras", None)
     if callable(detector_context):
-        return await detector_context(tenant_context=tenant_context, camera_ids=camera_ids)
+        return cast(
+            QueryCameraDetectorContext,
+            await detector_context(tenant_context=tenant_context, camera_ids=camera_ids),
+        )
     allowed_classes = await inventory.allowed_classes_for_cameras(
         tenant_context=tenant_context,
         camera_ids=camera_ids,
@@ -310,6 +375,31 @@ async def _detector_context_for_inventory(
         resolution_mode=QueryResolutionMode.FIXED_FILTER,
         allowed_classes=allowed_classes,
         runtime_vocabulary=[],
+    )
+
+
+async def _record_runtime_vocabulary_snapshot_for_inventory(
+    inventory: CameraClassInventory,
+    *,
+    tenant_context: TenantContext,
+    camera_ids: list[UUID],
+    detector_context: QueryCameraDetectorContext,
+    resolved_vocabulary: list[str],
+) -> None:
+    if detector_context.resolution_mode is not QueryResolutionMode.OPEN_VOCAB:
+        return
+    recorder = getattr(inventory, "record_runtime_vocabulary_snapshot", None)
+    if not callable(recorder):
+        return
+    version = detector_context.runtime_vocabulary_version + 1
+    normalized_terms = normalize_vocabulary_terms(resolved_vocabulary)
+    await recorder(
+        tenant_context=tenant_context,
+        camera_ids=camera_ids,
+        terms=normalized_terms,
+        source=RuntimeVocabularySource.QUERY,
+        version=version,
+        vocabulary_hash=hash_vocabulary(normalized_terms),
     )
 
 

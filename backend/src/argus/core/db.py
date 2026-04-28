@@ -52,6 +52,9 @@ class TrackingEventStore:
         camera_id: UUID,
         ts: datetime,
         detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
     ) -> None:
         if not detections:
             return
@@ -67,6 +70,8 @@ class TrackingEventStore:
                 direction_deg=detection.direction_deg,
                 zone_id=detection.zone_id,
                 attributes=dict(detection.attributes) if detection.attributes else None,
+                vocabulary_version=vocabulary_version,
+                vocabulary_hash=vocabulary_hash,
                 bbox={
                     "x1": detection.bbox[0],
                     "y1": detection.bbox[1],
@@ -94,6 +99,9 @@ class CountEventStore:
         self,
         camera_id: UUID,
         events: list[CountEventRecord],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
     ) -> None:
         if not events:
             return
@@ -116,6 +124,8 @@ class CountEventStore:
                             confidence=event.confidence,
                             attributes=dict(event.attributes) if event.attributes else None,
                             payload=dict(event.payload),
+                            vocabulary_version=vocabulary_version,
+                            vocabulary_hash=vocabulary_hash,
                         )
                         for event in events
                     ]

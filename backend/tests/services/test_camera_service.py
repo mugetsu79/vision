@@ -50,13 +50,13 @@ class _FakeSession:
     async def refresh(self, camera: Camera) -> None:
         return None
 
-    def add(self, camera: Camera) -> None:
-        if camera.id is None:
+    def add(self, camera: object) -> None:
+        if getattr(camera, "id", None) is None:
             camera.id = uuid4()
         now = datetime.now(tz=UTC)
-        if camera.created_at is None:
+        if hasattr(camera, "created_at") and camera.created_at is None:
             camera.created_at = now
-        if camera.updated_at is None:
+        if hasattr(camera, "updated_at") and camera.updated_at is None:
             camera.updated_at = now
 
 
