@@ -4,13 +4,15 @@ import { describe, expect, test } from "vitest";
 import { OmniSightField } from "@/components/brand/OmniSightField";
 
 describe("OmniSightField", () => {
-  test("renders decorative entry variant with stable lens hooks", () => {
+  test("renders decorative entry variant with logo-derived field hooks", () => {
     render(<OmniSightField variant="entry" />);
 
     const field = screen.getByTestId("omnisight-field");
     expect(field).toHaveAttribute("aria-hidden", "true");
     expect(field).toHaveClass("omnisight-field--entry");
-    expect(field.querySelector(".omnisight-field__lens")).not.toBeNull();
+    expect(field.querySelector(".omnisight-field__lens")).toBeNull();
+    expect(field.querySelector(".omnisight-field__mark-stack")).not.toBeNull();
+    expect(field.querySelectorAll(".omnisight-field__mark-layer")).toHaveLength(3);
     expect(field.querySelectorAll(".omnisight-field__ring")).toHaveLength(2);
     expect(field.querySelectorAll(".omnisight-field__surface").length).toBeGreaterThan(
       0,
@@ -22,7 +24,8 @@ describe("OmniSightField", () => {
 
     const field = screen.getByTestId("omnisight-field");
     expect(field).toHaveClass("omnisight-field--quiet");
-    expect(field.querySelector(".omnisight-field__lens")).not.toBeNull();
+    expect(field.querySelector(".omnisight-field__lens")).toBeNull();
+    expect(field.querySelector(".omnisight-field__mark-stack")).not.toBeNull();
     expect(field.querySelectorAll(".omnisight-field__surface")).toHaveLength(0);
   });
 });

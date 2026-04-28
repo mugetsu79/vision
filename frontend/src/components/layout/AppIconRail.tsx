@@ -23,7 +23,7 @@ export function AppIconRail({
   return (
     <aside className="sticky top-0 z-10 flex h-screen w-[4.75rem] shrink-0 flex-col border-r border-white/[0.06] bg-[linear-gradient(180deg,rgba(7,10,15,0.98),rgba(10,14,20,0.96))] px-2 py-4">
       <div className="flex h-full flex-col items-center gap-4">
-        <ProductLockup symbolOnly className="size-11 rounded-[1rem]" />
+        <ProductLockup symbolOnly className="size-11" />
         <button
           aria-label={contextRailExpanded ? "Hide section rail" : "Show section rail"}
           className="grid size-9 place-items-center rounded-[0.95rem] border border-white/[0.06] bg-white/[0.03] text-[#9fb0c9] transition duration-200 hover:border-[#35598d] hover:bg-white/[0.06] hover:text-[#eef4ff]"

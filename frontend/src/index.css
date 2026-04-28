@@ -80,22 +80,50 @@ select {
   isolation: isolate;
 }
 
-.omnisight-field__lens {
-  position: absolute;
-  border-radius: 9999px;
-  background:
-    radial-gradient(circle at 35% 30%, rgba(224, 247, 255, 0.96) 0 8%, transparent 9%),
-    radial-gradient(circle at 44% 42%, var(--vezor-lens-cerulean) 0 24%, var(--vezor-lens-violet) 58%, rgba(34, 18, 71, 0.7) 82%);
-  box-shadow:
-    0 0 44px rgba(112, 177, 255, 0.42),
-    0 0 120px rgba(105, 87, 255, 0.24);
-}
-
 .omnisight-field__ring {
   position: absolute;
   border-radius: 9999px;
   border: 1px solid rgba(218, 239, 255, 0.16);
   transform: rotateX(64deg) rotateZ(-18deg);
+}
+
+.omnisight-field__mark-stack {
+  position: absolute;
+  width: 12rem;
+  height: 12rem;
+  transform-style: preserve-3d;
+  transform: rotateX(58deg) rotateZ(-12deg);
+  filter:
+    drop-shadow(0 0 22px rgba(110, 189, 255, 0.38))
+    drop-shadow(0 0 56px rgba(126, 83, 255, 0.24));
+}
+
+.omnisight-field__mark-layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: 50% 50%;
+  user-select: none;
+}
+
+.omnisight-field__mark-layer--back {
+  opacity: 0.2;
+  transform: translate3d(-1rem, 0.9rem, -3rem) scale(0.92);
+  filter: blur(2px) saturate(1.25);
+}
+
+.omnisight-field__mark-layer--middle {
+  opacity: 0.34;
+  transform: translate3d(-0.42rem, 0.38rem, -1.4rem) scale(0.97);
+  filter: blur(0.8px) saturate(1.12);
+}
+
+.omnisight-field__mark-layer--front {
+  opacity: 0.95;
+  transform: translate3d(0, 0, 0);
 }
 
 .omnisight-field__surface {
@@ -106,46 +134,46 @@ select {
   backdrop-filter: blur(10px);
 }
 
-.omnisight-field--entry .omnisight-field__lens {
-  width: clamp(10rem, 18vw, 13rem);
-  height: clamp(10rem, 18vw, 13rem);
+.omnisight-field--entry .omnisight-field__mark-stack {
+  width: clamp(12rem, 24vw, 18rem);
+  height: clamp(12rem, 24vw, 18rem);
   left: clamp(24rem, 58vw, 52rem);
-  top: 18%;
+  top: 14%;
   opacity: 0.82;
 }
 
-.omnisight-field--overview .omnisight-field__lens {
-  width: 11rem;
-  height: 11rem;
-  left: calc(50% - 5.5rem);
+.omnisight-field--overview .omnisight-field__mark-stack {
+  width: 13rem;
+  height: 13rem;
+  left: calc(50% - 6.5rem);
   top: 20%;
   opacity: 0.78;
 }
 
-.omnisight-field--shell .omnisight-field__lens {
-  width: 4.75rem;
-  height: 4.75rem;
+.omnisight-field--shell .omnisight-field__mark-stack {
+  width: 5.5rem;
+  height: 5.5rem;
   right: 4rem;
   top: 2rem;
-  opacity: 0.22;
+  opacity: 0.18;
 }
 
-.omnisight-field--quiet .omnisight-field__lens {
-  width: 3rem;
-  height: 3rem;
+.omnisight-field--quiet .omnisight-field__mark-stack {
+  width: 3.5rem;
+  height: 3.5rem;
   right: 1.5rem;
   top: 1.25rem;
   opacity: 0.12;
 }
 
 @media (max-width: 900px) {
-  .omnisight-field--entry .omnisight-field__lens {
-    width: 11rem;
-    height: 11rem;
+  .omnisight-field--entry .omnisight-field__mark-stack {
+    width: 10rem;
+    height: 10rem;
     left: auto;
-    right: -1.25rem;
+    right: -1rem;
     top: 8rem;
-    opacity: 0.28;
+    opacity: 0.24;
   }
 
   .omnisight-field--entry .omnisight-field__ring,
@@ -158,10 +186,15 @@ select {
   .omnisight-field__ring {
     animation: omnisight-orbit 18s ease-in-out infinite alternate;
   }
+
+  .omnisight-field__mark-stack {
+    animation: omnisight-mark-drift 16s ease-in-out infinite alternate;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .omnisight-field__ring {
+  .omnisight-field__ring,
+  .omnisight-field__mark-stack {
     animation: none;
   }
 }
@@ -172,6 +205,15 @@ select {
   }
   to {
     transform: rotateX(64deg) rotateZ(12deg) translate3d(0.4rem, -0.2rem, 0);
+  }
+}
+
+@keyframes omnisight-mark-drift {
+  from {
+    transform: rotateX(58deg) rotateZ(-12deg) translate3d(0, 0, 0);
+  }
+  to {
+    transform: rotateX(58deg) rotateZ(-6deg) translate3d(0.35rem, -0.15rem, 0);
   }
 }
 

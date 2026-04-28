@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { productBrand } from "@/brand/product";
 
 type OmniSightFieldVariant = "entry" | "overview" | "shell" | "quiet";
 
@@ -26,6 +27,8 @@ const overviewSurfaces = [
   },
 ];
 
+const markLayers = ["back", "middle", "front"] as const;
+
 export function OmniSightField({
   variant = "shell",
   className,
@@ -40,7 +43,20 @@ export function OmniSightField({
     >
       <div className="omnisight-field__ring left-[calc(50%_-_11rem)] top-[18%] h-40 w-[22rem]" />
       <div className="omnisight-field__ring left-[calc(50%_-_10rem)] top-[22%] h-36 w-80 rotate-[25deg] opacity-60" />
-      <div className="omnisight-field__lens" />
+      <div className="omnisight-field__mark-stack">
+        {markLayers.map((layer) => (
+          <img
+            key={layer}
+            alt=""
+            className={cn(
+              "omnisight-field__mark-layer",
+              `omnisight-field__mark-layer--${layer}`,
+            )}
+            draggable={false}
+            src={productBrand.runtimeAssets.symbol}
+          />
+        ))}
+      </div>
       {showSurfaces
         ? overviewSurfaces.map((surface) => (
             <div

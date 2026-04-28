@@ -48,8 +48,12 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     expect(
-      screen.getByRole("img", { name: new RegExp(`${productBrand.name} product lockup`, "i") }),
+      screen.getByRole("group", { name: new RegExp(`${productBrand.name} product lockup`, "i") }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /vezor symbol/i })).toHaveAttribute(
+      "src",
+      "/brand/product-symbol-ui.svg",
+    );
     expect(
       screen.getByRole("heading", { name: /omnisight for every live environment/i }),
     ).toBeInTheDocument();
