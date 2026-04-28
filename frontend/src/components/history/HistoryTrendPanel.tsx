@@ -44,7 +44,7 @@ export function HistoryTrendPanel({
   const reviewBucketLabel = series.selectedBucket ? "Review selected bucket" : "Review first bucket";
 
   return (
-    <section className="overflow-hidden rounded-lg border border-white/10 bg-[#050912]">
+    <section className="overflow-hidden rounded-[1.1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(5,9,18,0.98))] shadow-[0_22px_56px_-46px_rgba(63,121,255,0.42)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Trend</p>

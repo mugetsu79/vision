@@ -146,6 +146,7 @@ export function TelemetryCanvas({
   return (
     <canvas
       ref={canvasRef}
+      aria-label="Telemetry overlay"
       className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );

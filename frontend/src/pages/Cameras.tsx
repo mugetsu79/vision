@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { RequireRole } from "@/components/auth/RequireRole";
 import { CameraWizard } from "@/components/cameras/CameraWizard";
+import { OmniSightField } from "@/components/brand/OmniSightField";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
@@ -79,93 +80,90 @@ function CamerasContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,29,0.95),rgba(8,11,18,0.92))] shadow-[0_24px_72px_-54px_rgba(0,0,0,0.9)]">
-        <div className="border-b border-white/8 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9db3d3]">
-                Scenes
-              </p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-[0.01em] text-[#f4f8ff]">
-                {omniLabels.sceneSetupTitle}
-              </h2>
-              <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                Scene setup connects source streams, models, privacy rules, event boundaries, and calibration so {brandName} can understand each environment.
-              </p>
-            </div>
-            <Button onClick={openCreateWizard}>Add camera</Button>
+    <div className="space-y-5 p-5 sm:p-6">
+      <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+        <OmniSightField variant="quiet" className="opacity-50" />
+        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9db3d3]">
+              Scenes
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[0.01em] text-[#f4f8ff]">
+              {omniLabels.sceneSetupTitle}
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
+              Scene setup connects source streams, models, privacy rules, event boundaries, and calibration so {brandName} can understand each environment.
+            </p>
           </div>
+          <Button onClick={openCreateWizard}>Add camera</Button>
         </div>
+      </section>
 
-        <div className="px-6 py-6">
-          <div className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-[#0b1320]">
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Name</TH>
-                  <TH>Site</TH>
-                  <TH>Mode</TH>
-                  <TH>Delivery</TH>
-                  <TH>Tracker</TH>
-                  <TH>Actions</TH>
+      <section className="overflow-hidden rounded-[1.1rem] border border-white/8 bg-[#0b1320]">
+        <Table>
+          <THead>
+            <TR>
+              <TH>Name</TH>
+              <TH>Site</TH>
+              <TH>Mode</TH>
+              <TH>Delivery</TH>
+              <TH>Tracker</TH>
+              <TH>Actions</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {camerasLoading ? (
+              <TR>
+                <TD colSpan={6} className="text-[#9eb2cf]">
+                  Loading cameras...
+                </TD>
+              </TR>
+            ) : cameras.length === 0 ? (
+              <TR>
+                <TD colSpan={6} className="text-[#9eb2cf]">
+                  {omniEmptyStates.noScenes}
+                </TD>
+              </TR>
+            ) : (
+              cameras.map((camera) => (
+                <TR key={camera.id}>
+                  <TD className="font-medium text-[#eef4ff]">{camera.name}</TD>
+                  <TD>{siteNameById.get(camera.site_id) ?? "Unknown site"}</TD>
+                  <TD>{camera.processing_mode}</TD>
+                  <TD>
+                    <div className="font-medium text-[#eef4ff]">
+                      {camera.browser_delivery?.default_profile ?? "720p10"}
+                    </div>
+                    {camera.source_capability ? (
+                      <div className="mt-1 text-xs text-[#93a7c5]">
+                        source {`${camera.source_capability.width}×${camera.source_capability.height}`}
+                      </div>
+                    ) : null}
+                  </TD>
+                  <TD>{camera.tracker_type}</TD>
+                  <TD>
+                    <div className="flex gap-2">
+                      <button
+                        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                        type="button"
+                        onClick={() => openEditWizard(camera)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722]"
+                        type="button"
+                        onClick={() => void handleDeleteCamera(camera)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </TD>
                 </TR>
-              </THead>
-              <TBody>
-                {camerasLoading ? (
-                  <TR>
-                    <TD colSpan={6} className="text-[#9eb2cf]">
-                      Loading cameras...
-                    </TD>
-                  </TR>
-                ) : cameras.length === 0 ? (
-                  <TR>
-                    <TD colSpan={6} className="text-[#9eb2cf]">
-                      {omniEmptyStates.noScenes}
-                    </TD>
-                  </TR>
-                ) : (
-                  cameras.map((camera) => (
-                    <TR key={camera.id}>
-                      <TD className="font-medium text-[#eef4ff]">{camera.name}</TD>
-                      <TD>{siteNameById.get(camera.site_id) ?? "Unknown site"}</TD>
-                      <TD>{camera.processing_mode}</TD>
-                      <TD>
-                        <div className="font-medium text-[#eef4ff]">
-                          {camera.browser_delivery?.default_profile ?? "720p10"}
-                        </div>
-                        {camera.source_capability ? (
-                          <div className="mt-1 text-xs text-[#93a7c5]">
-                            source {`${camera.source_capability.width}×${camera.source_capability.height}`}
-                          </div>
-                        ) : null}
-                      </TD>
-                      <TD>{camera.tracker_type}</TD>
-                      <TD>
-                        <div className="flex gap-2">
-                          <button
-                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
-                            type="button"
-                            onClick={() => openEditWizard(camera)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722]"
-                            type="button"
-                            onClick={() => void handleDeleteCamera(camera)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </TD>
-                    </TR>
-                  ))
-                )}
-              </TBody>
-            </Table>
-          </div>
-        </div>
+              ))
+            )}
+          </TBody>
+        </Table>
       </section>
 
       {wizardMode ? (

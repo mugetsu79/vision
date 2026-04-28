@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { HistoryBucketDetail } from "@/components/history/HistoryBucketDetail";
 import { HistoryToolbar } from "@/components/history/HistoryToolbar";
 import { HistoryTrendPanel } from "@/components/history/HistoryTrendPanel";
+import { OmniSightField } from "@/components/brand/OmniSightField";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -211,13 +212,19 @@ export function HistoryPage() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-4">
-        <PageHeader
-          eyebrow="History"
-          title={omniLabels.historyTitle}
-          description="Explore how signals, events, and scene patterns change over time."
-        />
+        <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+          <OmniSightField variant="quiet" className="opacity-50" />
+          <div className="relative z-10">
+            <PageHeader
+              className="border-b-0 pb-0"
+              eyebrow="History"
+              title={omniLabels.historyTitle}
+              description="Explore how signals, events, and scene patterns change over time."
+            />
+          </div>
+        </section>
 
         <HistoryToolbar
           state={state}

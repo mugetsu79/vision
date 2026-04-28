@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { OmniSightField } from "@/components/brand/OmniSightField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -80,118 +81,115 @@ export function IncidentsPage() {
     error instanceof Error ? error.message : "Failed to load incidents.";
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,16,25,0.98),rgba(5,8,13,0.97))] shadow-[0_30px_90px_-70px_rgba(104,160,255,0.6)]">
-        <div className="border-b border-white/8 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9fb6d8]">
-                Incidents
-              </p>
-              <h2 className="mt-2 text-3xl font-semibold text-[#f4f8ff]">
-                Evidence Desk
-              </h2>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[#9eb0cb]">
-                Review evidence records, confirm state, and move from signal to decision without leaving the desk.
-              </p>
-            </div>
-
-            <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-              {incidents.length} records
-            </Badge>
+    <div className="space-y-5 p-5 sm:p-6">
+      <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+        <OmniSightField variant="quiet" className="opacity-50" />
+        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9fb6d8]">
+              Incidents
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold text-[#f4f8ff]">
+              Evidence Desk
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#9eb0cb]">
+              Review evidence records, confirm state, and move from signal to decision without leaving the desk.
+            </p>
           </div>
-        </div>
 
-        <div className="grid gap-4 border-b border-white/8 px-6 py-5 lg:grid-cols-3">
-          <label className="space-y-2 text-sm text-[#d9e5f7]">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
-              Camera filter
-            </span>
-            <Select
-              aria-label="Camera filter"
-              value={selectedCameraId ?? ""}
-              onChange={(event) =>
-                setSelectedCameraId(event.target.value.length > 0 ? event.target.value : null)
-              }
-            >
-              <option value="">All cameras</option>
-              {cameras.map((camera) => (
-                <option key={camera.id} value={camera.id}>
-                  {camera.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          <label className="space-y-2 text-sm text-[#d9e5f7]">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
-              Incident type
-            </span>
-            <Select
-              aria-label="Incident type"
-              value={selectedType ?? ""}
-              onChange={(event) =>
-                setSelectedType(event.target.value.length > 0 ? event.target.value : null)
-              }
-            >
-              <option value="">All types</option>
-              {selectedType && !incidentTypes.includes(selectedType) ? (
-                <option value={selectedType}>{selectedType}</option>
-              ) : null}
-              {incidentTypes.map((incidentType) => (
-                <option key={incidentType} value={incidentType}>
-                  {incidentType}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          <label className="space-y-2 text-sm text-[#d9e5f7]">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
-              Review status
-            </span>
-            <Select
-              aria-label="Review status"
-              value={selectedReviewStatus}
-              onChange={(event) =>
-                setSelectedReviewStatus(event.target.value as ReviewFilter)
-              }
-            >
-              <option value="pending">Pending</option>
-              <option value="reviewed">Reviewed</option>
-              <option value="all">All statuses</option>
-            </Select>
-          </label>
-        </div>
-
-        <div className="px-6 py-6">
-          {isLoading ? (
-            <StatusMessage>Loading evidence records...</StatusMessage>
-          ) : error ? (
-            <StatusMessage tone="danger">{errorMessage}</StatusMessage>
-          ) : incidents.length === 0 ? (
-            <StatusMessage>{omniEmptyStates.noEvidence}</StatusMessage>
-          ) : selectedIncident ? (
-            <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
-              <IncidentQueue
-                incidents={incidents}
-                selectedIncidentId={selectedIncident.id}
-                cameraNamesById={cameraNamesById}
-                onSelect={setSelectedIncidentId}
-              />
-              <IncidentEvidenceHero
-                incident={selectedIncident}
-                cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
-                reviewMutation={reviewMutation}
-              />
-              <IncidentFactsPanel
-                incident={selectedIncident}
-                cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
-              />
-            </div>
-          ) : null}
+          <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+            {incidents.length} records
+          </Badge>
         </div>
       </section>
+
+      <section className="grid gap-4 rounded-[1.1rem] border border-white/10 bg-[#07101c] px-5 py-5 lg:grid-cols-3">
+        <label className="space-y-2 text-sm text-[#d9e5f7]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
+            Camera filter
+          </span>
+          <Select
+            aria-label="Camera filter"
+            value={selectedCameraId ?? ""}
+            onChange={(event) =>
+              setSelectedCameraId(event.target.value.length > 0 ? event.target.value : null)
+            }
+          >
+            <option value="">All cameras</option>
+            {cameras.map((camera) => (
+              <option key={camera.id} value={camera.id}>
+                {camera.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+
+        <label className="space-y-2 text-sm text-[#d9e5f7]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
+            Incident type
+          </span>
+          <Select
+            aria-label="Incident type"
+            value={selectedType ?? ""}
+            onChange={(event) =>
+              setSelectedType(event.target.value.length > 0 ? event.target.value : null)
+            }
+          >
+            <option value="">All types</option>
+            {selectedType && !incidentTypes.includes(selectedType) ? (
+              <option value={selectedType}>{selectedType}</option>
+            ) : null}
+            {incidentTypes.map((incidentType) => (
+              <option key={incidentType} value={incidentType}>
+                {incidentType}
+              </option>
+            ))}
+          </Select>
+        </label>
+
+        <label className="space-y-2 text-sm text-[#d9e5f7]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
+            Review status
+          </span>
+          <Select
+            aria-label="Review status"
+            value={selectedReviewStatus}
+            onChange={(event) =>
+              setSelectedReviewStatus(event.target.value as ReviewFilter)
+            }
+          >
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="all">All statuses</option>
+          </Select>
+        </label>
+      </section>
+
+      {isLoading ? (
+        <StatusMessage>Loading evidence records...</StatusMessage>
+      ) : error ? (
+        <StatusMessage tone="danger">{errorMessage}</StatusMessage>
+      ) : incidents.length === 0 ? (
+        <StatusMessage>{omniEmptyStates.noEvidence}</StatusMessage>
+      ) : selectedIncident ? (
+        <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+          <IncidentQueue
+            incidents={incidents}
+            selectedIncidentId={selectedIncident.id}
+            cameraNamesById={cameraNamesById}
+            onSelect={setSelectedIncidentId}
+          />
+          <IncidentEvidenceHero
+            incident={selectedIncident}
+            cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
+            reviewMutation={reviewMutation}
+          />
+          <IncidentFactsPanel
+            incident={selectedIncident}
+            cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -229,7 +227,7 @@ function IncidentQueue({
               onClick={() => onSelect(incident.id)}
               className={`block w-full px-4 py-3 text-left transition ${
                 selected
-                  ? "bg-[#152238] text-white"
+                  ? "bg-[linear-gradient(135deg,rgba(110,189,255,0.16),rgba(126,83,255,0.14))] text-white shadow-[inset_3px_0_0_rgba(118,224,255,0.72)]"
                   : "text-[#c5d3ea] hover:bg-white/[0.04]"
               }`}
             >
@@ -290,7 +288,7 @@ function IncidentEvidenceHero({
         {incident.snapshot_url ? (
           <img
             src={incident.snapshot_url}
-            alt={`Incident preview for ${cameraName}`}
+            alt={`Incident evidence for ${cameraName}`}
             className="aspect-video w-full object-cover"
           />
         ) : (

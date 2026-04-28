@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Copy, RefreshCw, Server, ShieldAlert, TerminalSquare } from "lucide-react";
 
+import { OmniSightField } from "@/components/brand/OmniSightField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,38 +64,37 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <section className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,29,0.95),rgba(8,11,18,0.92))] shadow-[0_24px_72px_-54px_rgba(0,0,0,0.9)]">
-        <div className="border-b border-white/8 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-[#9db3d3]">
-                Operations
-              </p>
-              <h1 className="mt-3 text-3xl font-semibold text-[#f4f8ff]">
-                {omniLabels.operationsTitle}
-              </h1>
-              <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-                Monitor planned workers, runtime reports, bootstrap material, and stream diagnostics for the fleet.
-              </p>
-            </div>
-            <Button type="button" onClick={() => void fleet.refetch()}>
-              <RefreshCw className="mr-2 size-4" />
-              Refresh
-            </Button>
+    <div className="space-y-5 p-5 sm:p-6">
+      <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+        <OmniSightField variant="quiet" className="opacity-50" />
+        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase text-[#9db3d3]">
+              Operations
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold text-[#f4f8ff]">
+              {omniLabels.operationsTitle}
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
+              Monitor planned workers, runtime reports, bootstrap material, and stream diagnostics for the fleet.
+            </p>
           </div>
+          <Button type="button" onClick={() => void fleet.refetch()}>
+            <RefreshCw className="mr-2 size-4" />
+            Refresh
+          </Button>
         </div>
+      </section>
 
-        <div className="grid gap-3 px-6 py-5 md:grid-cols-5">
-          <SummaryTile label="Planned workers" value={fleet.data.summary.desired_workers} />
-          <SummaryTile label="Running workers" value={fleet.data.summary.running_workers} />
-          <SummaryTile label="Stale nodes" value={fleet.data.summary.stale_nodes} />
-          <SummaryTile label="Offline nodes" value={fleet.data.summary.offline_nodes} />
-          <SummaryTile
-            label="Native unavailable"
-            value={fleet.data.summary.native_unavailable_cameras}
-          />
-        </div>
+      <section className="grid gap-3 rounded-[1.1rem] border border-white/10 bg-[#07101c] p-4 md:grid-cols-5">
+        <SummaryTile label="Planned workers" value={fleet.data.summary.desired_workers} />
+        <SummaryTile label="Running workers" value={fleet.data.summary.running_workers} />
+        <SummaryTile label="Stale nodes" value={fleet.data.summary.stale_nodes} />
+        <SummaryTile label="Offline nodes" value={fleet.data.summary.offline_nodes} />
+        <SummaryTile
+          label="Native unavailable"
+          value={fleet.data.summary.native_unavailable_cameras}
+        />
       </section>
 
       <section className="rounded-[1.25rem] border border-white/10 bg-[#0f172a] px-5 py-4">

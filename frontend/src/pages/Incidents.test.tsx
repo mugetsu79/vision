@@ -170,6 +170,40 @@ describe("IncidentsPage", () => {
     });
   });
 
+  test("keeps snapshot evidence inspectable", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraPayload()]));
+      }
+
+      if (url.pathname === "/api/v1/incidents") {
+        return Promise.resolve(
+          jsonResponse([
+            incidentPayload({
+              snapshot_url: "https://minio.local/signed/incidents/forklift-gate.jpg",
+            }),
+          ]),
+        );
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <IncidentsPage />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole("img", { name: /incident evidence/i }),
+    ).toBeInTheDocument();
+  });
+
   test("persists review state from the evidence hero", async () => {
     const user = userEvent.setup();
     const requests: Request[] = [];

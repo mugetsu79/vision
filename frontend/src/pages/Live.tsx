@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { InspectorPanel } from "@/components/layout/InspectorPanel";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageUtilityBar } from "@/components/layout/PageUtilityBar";
+import { OmniSightField } from "@/components/brand/OmniSightField";
 import { AgentInput, type LiveQueryScope } from "@/components/live/AgentInput";
 import { DynamicStats } from "@/components/live/DynamicStats";
 import { LiveSparkline } from "@/components/live/LiveSparkline";
@@ -68,23 +69,29 @@ function WorkspacePage() {
   }, [cameras, classFiltersByCamera, framesByCamera]);
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0 space-y-5">
-        <PageHeader
-          eyebrow="Live"
-          title={omniLabels.liveTitle}
-          description="Watch scenes, signals, and operator intent converge in one live spatial intelligence layer."
-          actions={
-            <>
-              <Badge className={connectionBadgeClass(connectionState)}>
-                {connectionBadgeLabel(connectionState)}
-              </Badge>
-              <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-                {cameras.length} connected scenes
-              </Badge>
-            </>
-          }
-        />
+        <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+          <OmniSightField variant="quiet" className="opacity-50" />
+          <div className="relative z-10">
+            <PageHeader
+              className="border-b-0 pb-0"
+              eyebrow="Live"
+              title={omniLabels.liveTitle}
+              description="Watch scenes, signals, and operator intent converge in one live spatial intelligence layer."
+              actions={
+                <>
+                  <Badge className={connectionBadgeClass(connectionState)}>
+                    {connectionBadgeLabel(connectionState)}
+                  </Badge>
+                  <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+                    {cameras.length} connected scenes
+                  </Badge>
+                </>
+              }
+            />
+          </div>
+        </section>
 
         <PageUtilityBar
           label="Workspace utility"
@@ -135,7 +142,7 @@ function WorkspacePage() {
               return (
                 <article
                   key={camera.id}
-                  className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,14,22,0.98),rgba(4,7,12,0.96))] shadow-[0_18px_48px_-36px_rgba(5,14,28,0.95)]"
+                  className="overflow-hidden rounded-[1.1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(10,16,26,0.96),rgba(5,8,13,0.98))] shadow-[0_22px_56px_-44px_rgba(63,121,255,0.52)] transition duration-200 hover:border-[rgba(118,224,255,0.28)] hover:shadow-[0_28px_70px_-50px_rgba(63,121,255,0.72)]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
                     <div>

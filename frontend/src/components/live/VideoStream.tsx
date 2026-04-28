@@ -468,6 +468,7 @@ export function VideoStream({
     >
       <video
         ref={videoRef}
+        aria-label={`${cameraName} video stream`}
         autoPlay
         className={transport === "mjpeg" ? "hidden" : "h-full w-full object-cover"}
         muted
@@ -477,7 +478,7 @@ export function VideoStream({
       {transport === "mjpeg" ? (
         <img
           ref={imageRef}
-          alt={`${cameraName} live stream`}
+          alt={`${cameraName} video stream`}
           className="h-full w-full object-cover"
           src={mjpegUrl}
         />

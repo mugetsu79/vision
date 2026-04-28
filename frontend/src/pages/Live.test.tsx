@@ -21,14 +21,14 @@ vi.mock("@/components/live/VideoStream", () => ({
     cameraName: string;
     defaultProfile: string;
   }) => (
-    <div data-testid={`stream-${cameraName}`}>
+    <div aria-label={`${cameraName} video stream`} data-testid={`stream-${cameraName}`}>
       {cameraName} stream {defaultProfile}
     </div>
   ),
 }));
 
 vi.mock("@/components/live/TelemetryCanvas", () => ({
-  TelemetryCanvas: () => null,
+  TelemetryCanvas: () => <canvas aria-label="Telemetry overlay" />,
 }));
 
 vi.mock("@/components/live/LiveSparkline", () => ({
@@ -244,6 +244,8 @@ describe("LivePage", () => {
     expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
     expect(screen.getByTestId("stream-North Gate")).toBeInTheDocument();
     expect(screen.getByTestId("stream-Depot Yard")).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/video stream/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByLabelText(/telemetry overlay/i).length).toBeGreaterThanOrEqual(2);
 
     expect(FakeWebSocket.instances[0]?.url).toContain("/ws/telemetry");
     expect(FakeWebSocket.instances[0]?.url).toContain("access_token=dashboard-token");
