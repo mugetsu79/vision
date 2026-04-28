@@ -34,6 +34,7 @@ export function IncidentsPage() {
     limit: 50,
   });
   const reviewMutation = useUpdateIncidentReview();
+  const resetReviewMutation = reviewMutation.reset;
 
   const cameraNamesById = useMemo(
     () => new Map(cameras.map((camera) => [camera.id, camera.name])),
@@ -63,6 +64,16 @@ export function IncidentsPage() {
       setSelectedIncidentId(incidents[0].id);
     }
   }, [incidents, selectedIncidentId]);
+
+  useEffect(() => {
+    resetReviewMutation();
+  }, [
+    resetReviewMutation,
+    selectedCameraId,
+    selectedIncidentId,
+    selectedReviewStatus,
+    selectedType,
+  ]);
 
   const errorMessage =
     error instanceof Error ? error.message : "Failed to load incidents.";
@@ -328,7 +339,11 @@ function IncidentEvidenceHero({
         </Button>
 
         {reviewMutation.error ? (
-          <p className="basis-full text-sm text-[#f0b7c1]">
+          <p
+            aria-live="polite"
+            role="alert"
+            className="basis-full text-sm text-[#f0b7c1]"
+          >
             {reviewMutation.error instanceof Error
               ? reviewMutation.error.message
               : "Failed to update review state."}

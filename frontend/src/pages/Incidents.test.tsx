@@ -171,9 +171,10 @@ describe("IncidentsPage", () => {
   test("persists review state from the evidence hero", async () => {
     const user = userEvent.setup();
     const requests: Request[] = [];
+    const patchBodies: Array<{ review_status?: string }> = [];
     let incident = incidentPayload();
 
-    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       const request =
         input instanceof Request ? input : new Request(String(input), init);
       requests.push(request);
@@ -198,11 +199,17 @@ describe("IncidentsPage", () => {
         url.pathname ===
         "/api/v1/incidents/99999999-9999-9999-9999-999999999999/review"
       ) {
-        incident = incidentPayload({
-          review_status: "reviewed",
-          reviewed_at: "2026-04-18T10:20:00Z",
-          reviewed_by_subject: "analyst-1",
-        });
+        const body = (await request.clone().json()) as { review_status?: string };
+        patchBodies.push(body);
+        incident = incidentPayload(
+          body.review_status === "reviewed"
+            ? {
+                review_status: "reviewed",
+                reviewed_at: "2026-04-18T10:20:00Z",
+                reviewed_by_subject: "analyst-1",
+              }
+            : { review_status: "pending" },
+        );
         return Promise.resolve(
           jsonResponse(incident),
         );
@@ -230,6 +237,7 @@ describe("IncidentsPage", () => {
         "/api/v1/incidents/99999999-9999-9999-9999-999999999999/review",
     );
     expect(reviewRequest?.method).toBe("PATCH");
+    expect(patchBodies[0]).toEqual({ review_status: "reviewed" });
 
     await user.selectOptions(screen.getByLabelText(/review status/i), ["reviewed"]);
 
@@ -239,5 +247,11 @@ describe("IncidentsPage", () => {
     expect(
       within(reviewedHero).getByRole("button", { name: /^reopen$/i }),
     ).toBeInTheDocument();
+
+    await user.click(within(reviewedHero).getByRole("button", { name: /^reopen$/i }));
+
+    await waitFor(() => {
+      expect(patchBodies[1]).toEqual({ review_status: "pending" });
+    });
   });
 });
