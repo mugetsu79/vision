@@ -6,10 +6,12 @@
 >
 > **Primary consumers of this doc:** (1) human reviewers, (2) `ai-coder-prompt-v4.md` which feeds Codex / Claude Code.
 >
-> **Current implementation checkpoint (2026-04-24):**
+> **Current implementation checkpoint (2026-04-28):**
 > - `/live` is the canonical operator wall; `/dashboard` is retained only as a legacy redirect.
 > - Live tiles now combine browser video delivery, telemetry overlays, and a per-camera 30-minute occupancy sparkline backed by a shared app-level telemetry store.
 > - `/history` is metric-aware: operators can switch between `occupancy`, precise `count_events`, and raw `observations`, with URL-backed filters, `/api/v1/history/classes` discovery, optional speed overlays/thresholds, and backend granularity auto-adjustment for wide windows.
+> - The `/settings` route is now the Operations workbench for fleet state, edge bootstrap, delivery diagnostics, and local-dev worker command generation.
+> - Worker lifecycle has an explicit dev-vs-production split: local development uses copyable shell commands, while production start/stop/restart should be mediated by a supervisor reconciler instead of direct API shell execution.
 > - Native ingest and browser delivery are decoupled: processed workers ingest camera RTSP directly, while MediaMTX remains the authenticated distribution/publication layer for passthrough plus processed renditions such as `annotated` or `preview`.
 > - Standard self-describing ONNX metadata is now the default truth for model inventory; camera `active_classes` and NL query scope narrow behavior later without falsifying the model record.
 > - Worker startup resolves a host-aware ONNX Runtime policy and logs stage timing summaries so central, Jetson, Intel Linux, and lab macOS hosts can be reasoned about explicitly.
@@ -90,7 +92,7 @@
 | Process                | Runs on              | Responsibility                                                             |
 |------------------------|----------------------|----------------------------------------------------------------------------|
 | `api`                  | Master               | FastAPI app — REST, WS, SSE, signaling, auth, CRUD                         |
-| `scheduler`            | Master               | Spawns / supervises central-mode workers, rebalances on camera changes     |
+| `scheduler` / supervisor | Master + Edge       | Scheduler declares desired worker ownership; supervisor-backed production control starts, stops, restarts, drains, and reports runtime truth |
 | `inference-worker`     | Master or Edge       | One per camera: capture → preprocess → YOLO → tracker → speed → privacy → publish |
 | `mediamtx`             | Master + Edge        | RTSP ingest, re-pack to WebRTC / LL-HLS / MJPEG, per-stream auth tokens    |
 | `nats`                 | Master (+ edge leaf) | JetStream event bus (tracking events, telemetry, commands)                 |
@@ -343,6 +345,8 @@ GET    /api/v1/history/series              -- bucketed counts; optional speed pe
 GET    /api/v1/history/classes             -- observed classes for filter hydration in a window
 GET    /api/v1/export                       -- CSV / Parquet
 GET    /api/v1/incidents
+GET    /api/v1/operations/fleet             -- fleet, node, worker, and delivery state for Operations
+POST   /api/v1/operations/bootstrap         -- one-time edge bootstrap material and dev compose helper
 
 POST   /api/v1/streams/{camera_id}/offer    -- WebRTC SDP offer (returns answer); optional `profile=<rendition_id>`
 GET    /api/v1/streams/{camera_id}/hls.m3u8 -- LL-HLS fallback; optional `profile=<rendition_id>`
@@ -361,7 +365,9 @@ Model registration contract:
 - If supplied `classes` disagree with embedded metadata, the API rejects the request with a validation error instead of storing a false inventory.
 - `Model.classes` remains the full detector inventory; `Camera.active_classes` and query resolution narrow runtime scope later.
 
-All endpoints auth-gated except `/healthz`, `/readyz`, `/metrics` (internal). RBAC: `viewer` read-only, `operator` can issue commands (`/query`, start/stop), `admin` full CRUD, `superadmin` cross-tenant. Tenant users authenticate in tenant realms; `superadmin` authenticates in a dedicated `platform-admin` realm and assumes tenant context explicitly. Tokens with missing or unrecognized role claims must be rejected rather than silently downgraded.
+All endpoints auth-gated except `/healthz`, `/readyz`, `/metrics` (internal). RBAC: `viewer` read-only, `operator` can issue commands (`/query`, lifecycle desired-state changes), `admin` full CRUD, `superadmin` cross-tenant. Tenant users authenticate in tenant realms; `superadmin` authenticates in a dedicated `platform-admin` realm and assumes tenant context explicitly. Tokens with missing or unrecognized role claims must be rejected rather than silently downgraded.
+
+Operations lifecycle invariant: the UI may request Start, Stop, Restart, or Drain, but the backend must not become a generic remote shell. Lifecycle actions update desired state or issue constrained supervisor requests; central and edge supervisors reconcile processes on their own hosts and report runtime state back via heartbeats/telemetry. Local development keeps copyable shell commands as a temporary bridge until a dev supervisor exists.
 
 ### 5.4 LLM adapter (`src/argus/llm/`)
 
@@ -416,7 +422,7 @@ src/
 │   ├── Sites.tsx, Cameras.tsx  -- CRUD
 │   ├── History.tsx             -- URL-backed filters, class discovery, speed overlays, export
 │   ├── Incidents.tsx
-│   └── Settings.tsx            -- per-tenant settings, API keys, users
+│   └── Settings.tsx            -- Operations workbench: fleet state, bootstrap, worker lifecycle, delivery diagnostics
 ```
 
 ---

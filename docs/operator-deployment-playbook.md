@@ -45,13 +45,15 @@ From [/Users/yann.moren/vision](/Users/yann.moren/vision):
 
 ```bash
 make dev-up
-cd backend && python3 -m uv run alembic upgrade head
-cd ../frontend && corepack pnpm generate:api
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
+corepack pnpm --dir frontend generate:api
 ```
 
 Then open:
 
 - [http://127.0.0.1:3000](http://127.0.0.1:3000) for the frontend
+- [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings) for the Operations workbench
 - [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz) for backend health
 - [http://127.0.0.1:8080](http://127.0.0.1:8080) for Keycloak
 - [http://127.0.0.1:9001](http://127.0.0.1:9001) for MinIO console
@@ -74,7 +76,14 @@ Do not treat it as the final production topology for a real multi-site rollout.
 - backend health responds `200`
 - login works through Keycloak
 - you can create a site and camera
+- Operations shows truthful node, worker, and delivery state for the current lab setup
 - tests and Playwright pass locally
+
+### Worker lifecycle model
+
+The lab UI can show desired worker ownership, runtime freshness, delivery diagnostics, and copyable local-dev worker commands from the Operations page. Those shell commands are a development bridge for workstations where no supervisor is running yet.
+
+Production lifecycle controls should not shell out from the browser or API container. Start, stop, restart, and drain should write desired state or send a constrained lifecycle request; a central or edge supervisor then owns the actual process reconciliation and reports runtime truth back through heartbeats.
 
 ## 2. First Production Site
 
@@ -334,8 +343,9 @@ That path gives the best ratio of learning to operational risk.
 
 ```bash
 make dev-up
-cd backend && python3 -m uv run alembic upgrade head
-cd ../frontend && corepack pnpm generate:api
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
+corepack pnpm --dir frontend generate:api
 ```
 
 ### Local/dev shutdown

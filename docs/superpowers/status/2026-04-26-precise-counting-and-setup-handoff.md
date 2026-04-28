@@ -10,11 +10,12 @@ Active branch:
 - `codex/source-aware-delivery-calibration-fixes`
 
 Remote state:
-- `origin/codex/source-aware-delivery-calibration-fixes` contains all implementation work through `24b7935`.
+- `origin/codex/source-aware-delivery-calibration-fixes` contains all implementation work through `24b7935` plus follow-up docs and brand cleanup commits.
 - The branch may also contain handoff-only commits after `24b7935`; treat `24b7935` as the verified implementation checkpoint for worker command UX, not necessarily the branch tip.
 - The old handoff branch `codex/precise-counting-occupancy` is not the active continuation branch for this work.
 
 Latest relevant commits:
+- `docs(operations): sync long-lived deployment docs`
 - `24b7935 fix(operations): make dev worker command copy pasteable`
 - `fa94d88 docs(handoff): refresh operations and logo status`
 - `1d2ee26 fix(brand): remove logo background tile`
@@ -42,6 +43,7 @@ git log --oneline -5
 
 Expected result:
 - the recent history includes `24b7935 fix(operations): make dev worker command copy pasteable`
+- the recent history includes `docs(operations): sync long-lived deployment docs`
 - the recent history includes `docs(handoff): refresh operations and logo status`
 - the recent history includes `1d2ee26 fix(brand): remove logo background tile`
 
@@ -59,11 +61,11 @@ These items are complete and should not be re-planned:
 - camera wizard/table/live UI expose source capability and native-unavailable reasons
 - central native browser delivery routes through processed stream access instead of fragile passthrough relay startup
 - History follow-now, zero/no-telemetry semantics, unified search, bucket review, exports, and accessibility fixes are implemented
-- Fleet / Operations phase 1 is implemented under the Settings route
+- Fleet / Operations phase 1 is implemented under `/settings`
 - Settings is relabeled as Operations in app navigation
 - the product logo now uses `argus-icon-from-upload.svg`, with the dark background tile removed so the sidebar mark renders on transparent canvas
-- Operations dev worker commands are copy/paste-safe and fetch a local dev bearer token instead of emitting `ARGUS_API_BEARER_TOKEN=<token>`
-- Root README and active design docs have been refreshed to describe the Operations workbench, dev worker command bridge, and production supervisor lifecycle model.
+- Operations dev worker commands are copy/paste-safe and fetch a local dev bearer token instead of emitting a literal bearer-token placeholder.
+- Root README, active design docs, product spec, runbook, operator deployment playbook, and iMac/Orin lab guide have been refreshed to describe the Operations workbench, dev worker command bridge, and production supervisor lifecycle model.
 
 ## Fleet / Operations Phase 1
 
@@ -99,7 +101,7 @@ Lifecycle control note:
 - Those buttons should not make the backend shell out directly.
 - The intended production path is UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the process on the correct node -> worker reports runtime truth.
 - Dev uses copyable shell commands because there is not yet a local dev supervisor process. That is a temporary bridge, not the production control model.
-- The Fleet / Operations design doc records this under `Start/Stop Button Model`; the root README and umbrella operator-hardening design now carry the same model.
+- The Fleet / Operations design doc records this under `Start/Stop Button Model`; the root README, umbrella operator-hardening design, product spec, runbook, operator deployment playbook, and iMac/Orin lab guide now carry the same model.
 
 ## Product Model To Preserve
 
@@ -149,7 +151,8 @@ Known non-blocking validation issue:
 
 Docs verification:
 - `git diff --check`
-  - passed for the README, design doc, and handoff updates
+  - passed for the README, design doc, handoff, product spec, runbook, operator deployment playbook, and iMac/Orin lab guide updates
+- targeted stale-doc search checked for the deprecated container-venv Alembic path, unsafe bearer-token placeholders, and stale Settings-page language
 
 Earlier History verification on this branch:
 - `python3 -m uv run pytest tests/services/test_history_service.py tests/api/test_history_endpoints.py tests/api/test_export_endpoints.py -q`
@@ -254,6 +257,9 @@ Infra:
 
 Docs:
 - `README.md`
+- `product-spec-v4.md`
+- `docs/runbook.md`
+- `docs/operator-deployment-playbook.md`
 - `docs/superpowers/specs/2026-04-26-operator-setup-history-delivery-hardening-design.md`
 - `docs/superpowers/specs/2026-04-28-fleet-operations-workbench-design.md`
 - `docs/superpowers/plans/2026-04-28-fleet-operations-workbench-implementation-plan.md`

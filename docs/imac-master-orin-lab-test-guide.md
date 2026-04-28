@@ -49,6 +49,7 @@ After you finish:
 - you can create a site
 - you can create cameras
 - you can run inference workers
+- you can inspect worker state and copy local worker commands from **Operations** at `/settings`
 - you can view live telemetry
 - you can confirm history and incidents
 - you can compare `central` processing against `edge` processing
@@ -59,6 +60,7 @@ After you finish:
 - The Radeon 580 is **not** the hardened central GPU target for Vezor.
 - This guide assumes you are doing a **functional test with 2 cameras**, not a scale test.
 - The Jetson portion is the more realistic Vezor architecture test.
+- Local worker commands in this guide are a dev bridge. Production start, stop, restart, and drain should be handled by a supervisor reconciler, with the Operations UI changing desired state or sending constrained lifecycle requests rather than shelling out from the API.
 
 ### 1.4 A few words explained in plain language
 
@@ -369,7 +371,7 @@ Then run the setup commands:
 ```bash
 cd "$HOME/vision"
 docker compose -f infra/docker-compose.dev.yml exec backend \
-  /tmp/argus-backend-venv/bin/alembic upgrade head
+  python -m uv run alembic upgrade head
 
 cd "$HOME/vision/frontend"
 corepack pnpm generate:api
@@ -385,6 +387,7 @@ Why this guide uses the container command:
 Now check the main pages in your browser:
 
 - [http://127.0.0.1:3000](http://127.0.0.1:3000)
+- [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings)
 - [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz)
 - [http://127.0.0.1:8080](http://127.0.0.1:8080)
 - [http://127.0.0.1:9001](http://127.0.0.1:9001)
@@ -392,6 +395,7 @@ Now check the main pages in your browser:
 What good looks like:
 
 - the frontend opens
+- the Operations page opens from `/settings`
 - the health URL returns `{"status":"ok"}`
 - the Keycloak page opens
 - the MinIO console opens
@@ -426,7 +430,7 @@ against the same database the backend container uses:
 ```bash
 cd "$HOME/vision"
 docker compose -f infra/docker-compose.dev.yml exec backend \
-  /tmp/argus-backend-venv/bin/alembic upgrade head
+  python -m uv run alembic upgrade head
 
 docker exec infra-postgres-1 psql -U argus -d argus -c '\dt'
 docker exec infra-postgres-1 psql -U argus -d argus -c 'select * from alembic_version;'
@@ -435,7 +439,7 @@ docker exec infra-postgres-1 psql -U argus -d argus -c 'select * from alembic_ve
 What good looks like:
 
 - the `models` table appears in `\dt`
-- `alembic_version` shows `0003_prompt11_quota`
+- `alembic_version` shows `0005_source_capability`
 
 ### 2.5 Get the model metadata
 
@@ -645,10 +649,20 @@ What good looks like:
 
 Open a **new Terminal window or tab** on the iMac.
 
+Preferred local-dev path: open **Operations** at [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings) and copy the command from the camera's worker card. The copied command fetches a fresh local dev token before setting `ARGUS_API_BEARER_TOKEN`.
+
+The explicit command below is the same idea written out for this lab guide:
+
 Run:
 
 ```bash
 cd "$HOME/vision/backend"
+TOKEN="$(
+  curl -s \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
 ARGUS_API_BASE_URL="http://127.0.0.1:8000" \
 ARGUS_API_BEARER_TOKEN="$TOKEN" \
 ARGUS_DB_URL="postgresql+asyncpg://argus:argus@127.0.0.1:5432/argus" \
@@ -666,10 +680,18 @@ Leave this terminal window open.
 
 Open a **second new Terminal window or tab** on the iMac.
 
+Preferred local-dev path: use the **Operations** copy button for camera 2. The explicit command below is kept for repeatable lab troubleshooting:
+
 Run:
 
 ```bash
 cd "$HOME/vision/backend"
+TOKEN="$(
+  curl -s \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
 ARGUS_API_BASE_URL="http://127.0.0.1:8000" \
 ARGUS_API_BEARER_TOKEN="$TOKEN" \
 ARGUS_DB_URL="postgresql+asyncpg://argus:argus@127.0.0.1:5432/argus" \
@@ -689,6 +711,8 @@ What good looks like in the worker windows:
 - there is no immediate crash
 - you do not see a `401` error
 - you do not see a missing-model-path error
+
+A single first-frame message such as `ffmpeg rawvideo capture failed (no frame produced within 20s)` followed by `Camera capture lost, reconnecting` and then a successful frame is usually the RTSP cold-start retry path, not an auth failure. Treat it as a problem only if it repeats continuously or the worker never reaches detect/publish stages.
 
 If the worker crashes immediately with `ModuleNotFoundError: No module named 'numpy'`, go back to the backend directory and install the host-side `vision` dependencies:
 

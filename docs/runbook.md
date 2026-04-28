@@ -5,6 +5,14 @@ See also:
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 
+## Worker Lifecycle And Operations
+
+The Operations workbench currently lives at `/settings` in the frontend. It is the operator-facing view for fleet state, camera worker ownership, delivery diagnostics, edge bootstrap material, and copyable local-dev worker commands.
+
+Local development can still start workers from a shell because there is no local supervisor process yet. Use the Operations copy button or the lab guide commands so the token fetch, API URL, database URL, NATS URL, and MinIO settings stay in sync with the current dev stack.
+
+Production start, stop, restart, and drain actions must be supervisor-backed. The intended path is: UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the worker process on the correct node -> worker heartbeat/runtime reports truth back to Operations. The API must not become a generic remote shell.
+
 ## Secrets With SOPS And Age
 
 Vezor stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.
@@ -62,10 +70,11 @@ For a single-node edge deployment:
 1. Place the edge model weights under `/Users/yann.moren/vision/models/`.
 2. Export the required HQ bootstrap values:
    - `ARGUS_API_BASE_URL`
+   - `ARGUS_API_BEARER_TOKEN` or supervisor-provisioned edge credential
    - `ARGUS_EDGE_CAMERA_ID`
    - `ARGUS_NATS_URL` if the default leaf upstream does not match your HQ
 3. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
-4. Confirm MediaMTX, OTEL Collector, and the worker metrics endpoint are reachable.
+4. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
 
 ## Model Metadata And Scope
 
