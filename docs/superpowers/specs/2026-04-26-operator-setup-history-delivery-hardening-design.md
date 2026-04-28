@@ -1,6 +1,6 @@
 # Operator Setup, History, Delivery, and Fleet Hardening Design
 
-> **Status:** Partially implemented; Fleet / Operations phase 1, History review, source-aware delivery, and setup hardening have landed on the active branch
+> **Status:** Partially implemented; setup hardening, source-aware delivery, History review, Fleet / Operations phase 1, Evidence Desk review queue, and open-vocab control-plane foundations have landed on the active branch
 >
 > **Date:** 2026-04-26
 >
@@ -17,6 +17,8 @@ The current repo has the underlying technical pieces for:
 - MediaMTX-backed browser delivery
 - edge registration and worker configuration
 - history queries with multiple metrics
+- persisted incident review state
+- detector capability metadata and runtime vocabulary state
 
 But several operator-facing surfaces still expose backend truth too directly:
 
@@ -51,6 +53,7 @@ Examples from the current product behavior:
 - The browser delivery picker offers `1080p15` even when the native camera stream is only `1280x720`.
 - The current `Settings` route does not help an operator understand or manage workers at all.
 - In development, worker startup is still a shell-owned process, but the Operations page now emits copy/paste-safe commands that fetch the local dev token. This remains acceptable for debugging but is not the production control model.
+- The Evidence Desk now reviews captured incidents with persisted pending/reviewed state. It does not record new footage by itself; incident clips are still captured in the worker pipeline.
 
 ---
 
@@ -69,7 +72,7 @@ Examples from the current product behavior:
 - Replacing the current vision pipeline architecture wholesale
 - Building full infrastructure orchestration into the browser
 - Replacing Helm, Compose, or host-level service managers
-- Solving open-vocabulary detector support in this design
+- Solving the true target-runtime open-vocabulary model backend in this design
 
 ---
 
@@ -86,6 +89,7 @@ These are separate implementation tracks, but they should share one operator mod
 
 - the product should present **stable concepts** such as analytics frame, live window, valid stream options, and worker health
 - the product should stop leaking low-level implementation details such as raw pixel entry, hardcoded rendition catalogs, and ad-hoc shell commands
+- production should be described as a Linux master plus supervisor-managed central/edge workers, with the iMac + Jetson path treated as lab/pilot validation
 
 ---
 

@@ -11,10 +11,13 @@
 > - Live tiles now combine browser video delivery, telemetry overlays, and a per-camera 30-minute occupancy sparkline backed by a shared app-level telemetry store.
 > - `/history` is metric-aware: operators can switch between `occupancy`, precise `count_events`, and raw `observations`, with URL-backed filters, `/api/v1/history/classes` discovery, optional speed overlays/thresholds, and backend granularity auto-adjustment for wide windows.
 > - The `/settings` route is now the Operations workbench for fleet state, edge bootstrap, delivery diagnostics, and local-dev worker command generation.
+> - `/incidents` is now the Evidence Desk: a captured-incident review queue with persisted `pending` / `reviewed` state, signed clip access, clip-only evidence handling, review/reopen actions, and audit logging.
 > - Worker lifecycle has an explicit dev-vs-production split: local development uses copyable shell commands, while production start/stop/restart should be mediated by a supervisor reconciler instead of direct API shell execution.
 > - Native ingest and browser delivery are decoupled: processed workers ingest camera RTSP directly, while MediaMTX remains the authenticated distribution/publication layer for passthrough plus processed renditions such as `annotated` or `preview`.
 > - Standard self-describing ONNX metadata is now the default truth for model inventory; camera `active_classes` and NL query scope narrow behavior later without falsifying the model record.
+> - Detector capability contracts now distinguish `fixed_vocab` and `open_vocab`, with persisted runtime vocabulary state, vocabulary snapshot attribution, and capability-aware query commands. This is the open-vocabulary control-plane foundation; true open-vocabulary model backend validation remains a target-runtime concern.
 > - Worker startup resolves a host-aware ONNX Runtime policy and logs stage timing summaries so central, Jetson, Intel Linux, and lab macOS hosts can be reasoned about explicitly.
+> - The iMac + Jetson guide is a pilot/lab topology. Production should use a Linux `amd64` master with supervisor-managed workers and Jetson edge nodes where local inference is needed.
 
 ---
 
@@ -231,6 +234,10 @@ cameras(
   secondary_model_id NULL,            -- FK → models (attribute classifier, e.g. PPE)
   tracker_type,                       -- enum: 'botsort' | 'bytetrack' | 'ocsort'
   active_classes jsonb,               -- ['car','bus','person','bicycle','worker',...]
+  runtime_vocabulary jsonb,           -- open-vocab detector terms
+  runtime_vocabulary_source,          -- enum: 'default' | 'query' | 'manual'
+  runtime_vocabulary_version int,
+  runtime_vocabulary_updated_at NULL,
   attribute_rules jsonb,              -- see §5.1.7 — e.g. person must wear hi-vis in zone_A
   zones jsonb,                        -- [{id, name, polygon:[[x,y],...], kind}]
   homography jsonb,                   -- {src:[[x,y]*4], dst:[[x,y]*4], ref_distance_m}
@@ -242,6 +249,8 @@ cameras(
 models(
   id, name, version, task,             -- task ∈ {detect, classify, attribute}
   path, format,                        -- format ∈ {onnx, engine}
+  capability,                          -- enum: 'fixed_vocab' | 'open_vocab'
+  capability_config jsonb,
   classes jsonb,                       -- label list
   input_shape jsonb,                   -- {h,w,c}
   sha256, size_bytes, license
@@ -261,6 +270,8 @@ tracking_events(                       -- hypertable, chunk 1 day
   speed_kph real NULL, direction_deg real NULL,
   zone_id NULL,                        -- which configured zone the centroid sits in
   attributes jsonb NULL,               -- e.g. {hi_vis:true, hard_hat:false}
+  vocabulary_version int NULL,
+  vocabulary_hash text NULL,
   bbox jsonb                           -- {x,y,w,h} in pixels
 )
 rule_events(                           -- hypertable: detected rule matches
@@ -269,11 +280,24 @@ rule_events(                           -- hypertable: detected rule matches
   event_payload jsonb,
   snapshot_url NULL
 )
+camera_vocabulary_snapshots(
+  id uuid, camera_id, version int,
+  vocabulary_hash text,
+  source,
+  terms jsonb,
+  created_at
+)
 -- continuous aggregate: events_1m (tracking_events, per-camera per-class counts)
 -- continuous aggregate: events_1h (tracking_events, per-camera per-class counts)
 
 -- Operations ---------------------------------------------------------
-incidents(id, camera_id, ts, type, payload jsonb, snapshot_url)
+incidents(
+  id, camera_id, ts, type, payload jsonb,
+  snapshot_url NULL, clip_url NULL, storage_bytes,
+  review_status,                    -- enum: 'pending' | 'reviewed'
+  reviewed_at NULL,
+  reviewed_by_subject NULL
+)
 audit_log(id, tenant_id, actor_id, action, target, meta jsonb, ts)
 ```
 
@@ -309,12 +333,13 @@ class EngineConfig(BaseModel):
     model: ModelRef
     tracker: TrackerConfig
     privacy: PrivacyConfig
-    active_classes: list[str]           # dynamically updated via control-plane subject
+    active_classes: list[str]           # fixed-vocab filter, dynamically updated via control-plane subject
+    runtime_vocabulary: list[str]       # open-vocab detector vocabulary, versioned and hot-updated where supported
 ```
 
-Event flow: `capture → preprocess → detect → filter(active_classes) → track → speed → privacy → { publish(TrackingEvent) , push_frame(mediamtx) }`.
+Event flow: `capture → preprocess → detect(runtime_vocabulary when open-vocab) → filter(active_classes/operator filter) → track → speed → privacy → { publish(TrackingEvent) , push_frame(mediamtx) }`.
 
-Control plane: subscribe to NATS subject `cmd.camera.<id>` for live updates to `active_classes`, `tracker_type`, `privacy`. No restart required.
+Control plane: subscribe to NATS subject `cmd.camera.<id>` for live updates to `active_classes`, `runtime_vocabulary`, `tracker_type`, `privacy`, zones, and attribute rules. No restart required when the selected detector/runtime supports hot updates.
 
 Streaming policy:
 
@@ -339,12 +364,13 @@ POST   /api/v1/edge/register                -- edge node bootstrap (returns NATS
 POST   /api/v1/edge/telemetry               -- JSON fallback if NATS unreachable (batched)
 POST   /api/v1/edge/heartbeat
 
-POST   /api/v1/query                        -- LLM NL → active_classes
+POST   /api/v1/query                        -- LLM NL -> active_classes for fixed-vocab, runtime_vocabulary for open-vocab
 GET    /api/v1/history                      ?camera_id=&from=&to=&granularity=
 GET    /api/v1/history/series              -- bucketed counts; optional speed percentiles / threshold breaches
 GET    /api/v1/history/classes             -- observed classes for filter hydration in a window
 GET    /api/v1/export                       -- CSV / Parquet
-GET    /api/v1/incidents
+GET    /api/v1/incidents              ?camera_id=&incident_type=&limit=&review_status=
+PATCH  /api/v1/incidents/{id}/review  -- operator review/reopen; persisted and audited
 GET    /api/v1/operations/fleet             -- fleet, node, worker, and delivery state for Operations
 POST   /api/v1/operations/bootstrap         -- one-time edge bootstrap material and dev compose helper
 
@@ -364,10 +390,14 @@ Model registration contract:
 - `classes` may be omitted for self-describing ONNX models.
 - If supplied `classes` disagree with embedded metadata, the API rejects the request with a validation error instead of storing a false inventory.
 - `Model.classes` remains the full detector inventory; `Camera.active_classes` and query resolution narrow runtime scope later.
+- `Model.capability` distinguishes `fixed_vocab` from `open_vocab`.
+- `open_vocab` models may have empty or seed `classes`, but must declare runtime vocabulary support in `capability_config` before cameras can use mutable detector vocabulary.
 
 All endpoints auth-gated except `/healthz`, `/readyz`, `/metrics` (internal). RBAC: `viewer` read-only, `operator` can issue commands (`/query`, lifecycle desired-state changes), `admin` full CRUD, `superadmin` cross-tenant. Tenant users authenticate in tenant realms; `superadmin` authenticates in a dedicated `platform-admin` realm and assumes tenant context explicitly. Tokens with missing or unrecognized role claims must be rejected rather than silently downgraded.
 
 Operations lifecycle invariant: the UI may request Start, Stop, Restart, or Drain, but the backend must not become a generic remote shell. Lifecycle actions update desired state or issue constrained supervisor requests; central and edge supervisors reconcile processes on their own hosts and report runtime state back via heartbeats/telemetry. Local development keeps copyable shell commands as a temporary bridge until a dev supervisor exists.
+
+Production topology invariant: the production master should run on Linux `amd64` with the control plane, storage, streaming, auth, observability, and central supervisor. Jetson Orin edge nodes should run edge supervisors, inference worker(s), local MediaMTX, NATS leaf, and OTEL collector near the cameras. A macOS iMac master is acceptable for lab/pilot evaluation, not as the long-term production HQ node.
 
 ### 5.4 LLM adapter (`src/argus/llm/`)
 
@@ -421,7 +451,7 @@ src/
 │   ├── Live.tsx                -- canonical live wall; `/dashboard` redirects here
 │   ├── Sites.tsx, Cameras.tsx  -- CRUD
 │   ├── History.tsx             -- URL-backed filters, class discovery, speed overlays, export
-│   ├── Incidents.tsx
+│   ├── Incidents.tsx           -- Evidence Desk: captured incident review queue
 │   └── Settings.tsx            -- Operations workbench: fleet state, bootstrap, worker lifecycle, delivery diagnostics
 ```
 

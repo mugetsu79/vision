@@ -13,6 +13,62 @@ Local development can still start workers from a shell because there is no local
 
 Production start, stop, restart, and drain actions must be supervisor-backed. The intended path is: UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the worker process on the correct node -> worker heartbeat/runtime reports truth back to Operations. The API must not become a generic remote shell.
 
+## Production Topology
+
+The supported production shape is not the local Docker Compose dev stack.
+
+Run production as:
+
+- Linux `amd64` master / HQ node
+  - frontend
+  - FastAPI backend
+  - PostgreSQL/TimescaleDB
+  - Keycloak
+  - Redis
+  - NATS JetStream
+  - MinIO
+  - MediaMTX
+  - observability stack
+  - central supervisor for central/hybrid workers
+- Jetson Orin Nano Super 8 GB edge node where local inference is required
+  - edge supervisor
+  - inference worker service/container
+  - local MediaMTX
+  - NATS leaf
+  - OTEL collector
+- Tailscale or WireGuard between HQ and sites
+
+An iMac can be used as a lab or pilot master, especially with a Jetson edge node, but production should move the master role to Linux with backups, TLS, real OIDC configuration, and supervisor-owned workers.
+
+## Current Production Gaps
+
+Before calling a deployment production-ready, verify that the following are implemented or supplied by the deployment platform:
+
+- supervisor-backed Start/Stop/Restart/Drain for central and edge workers
+- per-worker heartbeat with camera id, status, freshness, restart count, and last error
+- persistent assignment/reassignment model or an equivalent supervised placement source
+- backup and restore for Postgres/TimescaleDB and incident object storage
+- TLS termination and stable DNS
+- scoped edge credentials with a rotation path
+- log and metric collection from both master and edge nodes
+- soak testing for the first site before adding more cameras
+
+The current Operations page should render unknown runtime precision honestly as `not_reported`, `unknown`, `stale`, or `offline`. Do not treat missing heartbeat detail as proof that a worker is running.
+
+## Incident Evidence And Review
+
+The Evidence Desk at `/incidents` reviews incidents that the worker pipeline already captured. It does not create new recordings or run a separate matching engine.
+
+Current behavior:
+
+- incident clips are captured by `IncidentClipCaptureService`
+- `clip_url` is the primary evidence artifact today
+- `snapshot_url` is supported by API/UI but may be null
+- review state is persisted as `pending` or `reviewed`
+- operator review/reopen actions write audit entries
+
+If a still preview is required for a deployment, add snapshot generation as a separate feature rather than assuming every incident row has one.
+
 ## Secrets With SOPS And Age
 
 Vezor stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.
@@ -76,9 +132,13 @@ For a single-node edge deployment:
 3. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
 4. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
 
+This Compose path is appropriate for lab and pilot bring-up. In production, the same edge responsibilities should be run under a supervisor so they restart after reboot, report per-worker status, and can receive constrained lifecycle requests from the control plane.
+
 ## Model Metadata And Scope
 
 `/Users/yann.moren/vision/models/` is only where local model files live; it does not define semantic class scope by itself. In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later. When an ONNX model exposes embedded class metadata, treat that as the source of truth for registration and runtime inventory. Use `Camera.active_classes` only to narrow the operational scope. Custom reduced-class models remain an advanced optional path.
+
+The current branch also includes detector capability contracts for `fixed_vocab` and `open_vocab`, runtime vocabulary persistence, vocabulary snapshots, and capability-aware query commands. Treat this as the control-plane foundation for open-vocabulary detection. A true open-vocabulary model backend should still be validated separately on the target central and Jetson runtimes.
 
 ## Authentication Alternative
 

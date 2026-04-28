@@ -1,17 +1,40 @@
-# Argus V4 — AI Coder Prompt Blueprint
+# Vezor V4 — AI Coder Prompt Blueprint
 
-> Paired with `argus_v4_spec.md`. Feed that spec first, then this file prompt-by-prompt to Codex / Claude Code. **Do not skip the verification gates between prompts.**
+> Paired with `product-spec-v4.md`. This file is now a blueprint and maintenance reference, not a fresh empty-repo checklist. The current branch already implements many prompt outcomes; use the checkpoint below before deciding what remains. **Do not skip verification gates between meaningful changes.**
+
+## Current Branch Checkpoint
+
+As of 2026-04-28 on `codex/source-aware-delivery-calibration-fixes`, the product already includes:
+
+- `/live` as the canonical operator wall
+- `/history` with metric-aware filters, speed-aware series, export, class discovery, and explicit zero/gap semantics
+- `/settings` relabeled as Operations, with fleet state, worker lifecycle read model, delivery diagnostics, edge bootstrap, and copyable dev worker commands
+- `/incidents` as the Evidence Desk, with persisted `pending` / `reviewed` state and review/reopen actions
+- fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, and capability-aware query commands
+- source-aware native/browser delivery split
+- iMac + Jetson lab guide for pilot validation
+
+Still missing or intentionally deferred:
+
+- supervisor-backed Start/Stop/Restart/Drain in Operations
+- per-worker heartbeat and last-error reporting from central and Jetson supervisors
+- persistent worker assignment/reassignment workflows
+- production edge credential rotation automation
+- incident still snapshot generation
+- a true open-vocabulary detector backend validated on production central and Jetson runtimes
+
+Production deployment should be described as a Linux `amd64` master plus Jetson edge nodes. The iMac + Jetson setup is a lab/pilot topology, not the final production master shape.
 
 ---
 
 ## Bootstrapping instruction (paste first, once)
 
-> You are going to build `Argus V4`, a **domain-agnostic** hybrid edge/central video analytics platform for 5–50 sites and 25–250 cameras. The product is **not a car counter**. Spec §10 enumerates the capability surface: all 80 COCO classes are built-in, and any custom ONNX detector or secondary attribute classifier (PPE, forklifts, weapons, ANPR, uniforms, wildlife, fire/smoke, abandoned objects, etc.) plugs in with config only — no code changes. A single deployment can run traffic counting, worksite PPE compliance, retail analytics, and perimeter security on different cameras of the same tenant, simultaneously. Counting / measurement modes include instantaneous, cumulative, line-crossing, speed, dwell, density, trajectory, proximity, attribute combinations, loitering, and abandoned-object detection. Reference edge hardware is the **NVIDIA Jetson Orin Nano Super 8 GB** on JetPack 6.2; reference central hardware is an **NVIDIA L4 24 GB** GPU. Before writing any code, read `argus_v4_spec.md` end-to-end and reply with a one-paragraph acknowledgment that lists: (a) the three processing modes, (b) the five supported LLM providers / adapters, (c) the four RBAC roles, (d) the five green gates that must pass between prompts, (e) the two ADRs under `docs/ADR/` and their decisions, and (f) at least four verticals from spec §10.4 that this codebase must support at feature-parity. Do not generate code yet.
+> You are going to build or maintain `Vezor V4`, a **domain-agnostic** hybrid edge/central video analytics platform for 5–50 sites and 25–250 cameras. The product is **not a car counter**. Spec §10 enumerates the capability surface: all 80 COCO classes are built-in, and any custom ONNX detector or secondary attribute classifier (PPE, forklifts, weapons, ANPR, uniforms, wildlife, fire/smoke, abandoned objects, etc.) plugs in with config only — no code changes. A single deployment can run traffic counting, worksite PPE compliance, retail analytics, and perimeter security on different cameras of the same tenant, simultaneously. Counting / measurement modes include instantaneous, cumulative, line-crossing, speed, dwell, density, trajectory, proximity, attribute combinations, loitering, and abandoned-object detection. Reference edge hardware is the **NVIDIA Jetson Orin Nano Super 8 GB** on JetPack 6.2; reference central hardware is an **NVIDIA L4 24 GB** GPU. Before writing any code, read `product-spec-v4.md` end-to-end and reply with a one-paragraph acknowledgment that lists: (a) the three processing modes, (b) the supported LLM providers / adapters, (c) the four RBAC roles, (d) the verification gates relevant to the requested change, (e) the two ADRs under `docs/ADR/` and their decisions, and (f) at least four verticals from spec §10.4 that this codebase must support at feature-parity. Do not generate code yet.
 >
 > **Absolute rule — no V1 reuse:** a `/v1/` directory may exist in the repo as historical reference. You must not read it, port it, copy it, or import from it. If you find yourself tempted to reuse Flask / Flask-SocketIO / eventlet / MobileNet-SSD / SORT / jQuery / Bootstrap / the V1 SQLite schema, stop and rewrite from first principles using V4's stack.
 >
 > Ground rules for every prompt:
-> - Always obey `argus_v4_spec.md`. If a prompt conflicts with the spec, the spec wins and you must ask before diverging.
+> - Always obey `product-spec-v4.md`. If a prompt conflicts with the spec, the spec wins and you must ask before diverging.
 > - Python 3.12, `uv` for deps, Ruff + mypy --strict, Pydantic v2, SQLAlchemy 2.x async.
 > - Frontend: React 19 + Vite 6 + TypeScript strict + Tailwind v4 + shadcn/ui + TanStack Query.
 > - All Docker images are multi-arch (`linux/amd64` + `linux/arm64`); the edge image is built against `nvcr.io/nvidia/l4t-jetpack:r36.4.0` and must boot on Jetson Orin Nano Super 8 GB at the 25 W power mode.
@@ -82,7 +105,7 @@
 >
 > Honor `frame_skip` and `fps_cap`. Handle reconnection with exponential backoff (max 60s). Emit structured logs on reconnect.
 >
-> Implement `inference/engine.py` as an async loop that takes an `EngineConfig` (Pydantic) and runs: capture → preprocess → detect → filter → track → speed → attributes → zones → rules → privacy → publish. Subscribe to `cmd.camera.<id>` for live reconfiguration of `active_classes`, `tracker_type`, `privacy`, `attribute_rules`, and `zones` — no restart required.
+> Implement or maintain `inference/engine.py` as an async loop that takes an `EngineConfig` (Pydantic) and runs: capture → preprocess → detect → filter → track → speed → attributes → zones → rules → privacy → publish. Subscribe to `cmd.camera.<id>` for live reconfiguration of `active_classes` for fixed-vocab cameras, `runtime_vocabulary` for open-vocab cameras, `tracker_type`, `privacy`, `attribute_rules`, and `zones` — no restart required when the selected detector/runtime supports hot updates.
 >
 > **Dual publish profiles (critical for Orin Nano):**
 >
@@ -132,9 +155,9 @@
 > - `providers/ollama.py` and `providers/vllm.py` hit local HTTP endpoints with JSON-mode.
 > - `parser.py` composes the prompt, calls the configured provider, validates via Instructor, falls back to a keyword matcher on failure. Responses are audit-logged with prompt + model + latency.
 >
-> `POST /api/v1/query` takes `{prompt, camera_ids[]}`, runs the LLM, and publishes `cmd.camera.<id>` with the new `active_classes` for each camera. Returns the resolved class list.
+> `POST /api/v1/query` takes `{prompt, camera_ids[]}`, runs the LLM, and publishes `cmd.camera.<id>` with `active_classes` for fixed-vocab cameras or `runtime_vocabulary` for open-vocab cameras. Returns the resolution mode, resolved filter/classes or applied detector vocabulary, targeted cameras, model/provider, and latency.
 >
-> **Verification:** gates; contract tests for every route; a test that POSTs to `/api/v1/query` with `"only watch buses and trucks"` flips the worker's `active_classes` observable via NATS within 1s.
+> **Verification:** gates; contract tests for every route; a test that POSTs to `/api/v1/query` with `"only watch buses and trucks"` flips the worker's `active_classes` for fixed-vocab cameras within 1s; a separate open-vocab test applies a runtime vocabulary update and records the new vocabulary snapshot/version.
 
 ---
 
@@ -155,8 +178,8 @@
 > In `frontend/`:
 >
 > 1. Generate a TypeScript API client from the OpenAPI schema (`openapi-typescript` + `openapi-fetch`). Wire TanStack Query with typed hooks (`useSites`, `useCameras`, etc.).
-> 2. Implement OIDC PKCE login via `oidc-client-ts` against Keycloak. Store the user in a Zustand store. Add a `<RequireAuth>` boundary and a `<RequireRole role>` component. Frontend auth must fail closed: callback/session failures return the user to sign-in, and tokens without a recognized Argus role must be rejected instead of defaulting to `viewer`.
-> 3. Build the app shell: operations nav (`Live`, `History`, `Incidents`) plus configuration surfaces (`Sites`, `Cameras`, `Settings`), tenant switcher (only for `superadmin` users authenticated via the `platform-admin` realm), and user menu with logout. Keep `/dashboard` only as a legacy redirect to `/live`, not as a first-class nav destination. The visual system must be dark-first and clearly aligned to the Argus brand brief: obsidian / charcoal surfaces, luminous off-white typography, restrained cerulean-to-violet glow accents, premium geometric sans styling, and a matte-screen control-room feel. Avoid generic light SaaS visuals.
+> 2. Implement OIDC PKCE login via `oidc-client-ts` against Keycloak. Store the user in a Zustand store. Add a `<RequireAuth>` boundary and a `<RequireRole role>` component. Frontend auth must fail closed: callback/session failures return the user to sign-in, and tokens without a recognized Vezor role must be rejected instead of defaulting to `viewer`.
+> 3. Build the app shell: operations nav (`Live`, `History`, `Incidents`) plus configuration surfaces (`Sites`, `Cameras`, `Operations` at the existing `/settings` route), tenant switcher (only for `superadmin` users authenticated via the `platform-admin` realm), and user menu with logout. Keep `/dashboard` only as a legacy redirect to `/live`, not as a first-class nav destination. The visual system must be dark-first and clearly aligned to the Vezor brand brief: obsidian / charcoal surfaces, luminous off-white typography, restrained cerulean-to-violet glow accents, premium geometric sans styling, and a matte-screen control-room feel. Avoid generic light SaaS visuals.
 > 4. Implement `pages/Sites.tsx` and `pages/Cameras.tsx` as shadcn data tables with create/edit dialogs. The camera form must include: processing-mode select (central / edge / hybrid), RTSP URL (masked), primary / secondary model selectors, tracker type, privacy toggles, browser delivery profile selection (`native`, `1080p15`, `720p10`, `540p5`) with clear native-ingest versus browser-delivery messaging, and a `HomographyEditor` component for 4 src + 4 dst points on a frame snapshot + ref distance.
 >
 > **Verification:** gates; Playwright test: login → create site → create camera with homography → verify it shows on the Cameras table.
@@ -174,7 +197,7 @@
 >
 > Implement `components/DynamicStats.tsx` that auto-generates stat cards from the live occupancy `counts` object in each telemetry frame (one card per distinct `class_name`). No hardcoded class list.
 >
-> Implement `components/AgentInput.tsx` — chat bar wired to `POST /api/v1/query`, supports per-camera or global scope, shows the resolved class list + model + latency inline.
+> Implement `components/AgentInput.tsx` — chat bar wired to `POST /api/v1/query`, supports per-camera or global scope, and shows whether the result updated fixed-vocab filters or applied open-vocab detector vocabulary, plus model/provider and latency inline.
 >
 > Implement `components/LiveSparkline.tsx` and `hooks/use-live-sparkline.ts` so each live tile shows a 30-minute occupancy sparkline seeded from `/api/v1/history/series?metric=occupancy` and kept warm by the shared telemetry store. The right-edge value should represent latest occupancy, not cumulative detections.
 >
@@ -195,11 +218,11 @@
 > - Optional speed overlays and thresholding backed by `GET /api/v1/history/series?include_speed=true`.
 > - ECharts time-series with one line per class, brush zoom, CSV/Parquet export buttons that call `/api/v1/export`, and backend-driven granularity adjustment when the requested window is too wide for the chosen bucket size. Export must preserve the selected metric.
 >
-> Implement `pages/Incidents.tsx` listing recent incidents with snapshot previews (MinIO signed URLs), filterable by camera and type.
+> Implement or maintain `pages/Incidents.tsx` as the Evidence Desk: a captured-incident review queue with camera/type/review-status filters, selected evidence hero, signed clip access, clip-only state when `snapshot_url` is null, Incident facts panel, and persisted Review/Reopen actions. The page does not create incidents or start recording by itself; worker-side incident capture owns evidence generation.
 >
 > Add a server-side aggregation endpoint that returns denormalized rows suitable for ECharts directly (to avoid client-side reshaping on huge ranges).
 >
-> **Verification:** gates; a seeded 7-day dataset renders within 500ms on the History page; CSV export of a 24h range downloads and validates.
+> **Verification:** gates; a seeded 7-day dataset renders within 500ms on the History page; CSV export of a 24h range downloads and validates; Evidence Desk can mark an incident reviewed, filter to reviewed, reopen it, and preserve state across reload.
 
 ---
 
@@ -215,8 +238,9 @@
 > 8. GitHub Actions: `ci.yml` (lint → type → test → build images → push to GHCR on tags), `release.yml` (semantic-release, publish Helm chart, sign images with cosign, generate SBOM with syft).
 > 9. Playwright E2E matrix runs against compose in CI.
 > 10. Copy the two seed ADRs (`ADR-0001-identity-provider.md`, `ADR-0002-central-gpu.md`) into `docs/ADR/` and add a short `docs/ADR/README.md` explaining the MADR format and how to add new ADRs.
+> 11. Add the production worker lifecycle layer: central supervisor for Linux master workers, edge supervisor for Jetson workers, per-worker heartbeat/status/last-error reporting, constrained lifecycle command handling, and Operations UI controls that change desired state or request supervisor action. Do not implement this as browser/API shell execution.
 >
-> **Verification:** gates; `helm template` renders cleanly; compose-edge boots on a Jetson Orin Nano Super dev box (or qemu arm64) and registers with HQ; GitHub Actions pipeline is green end-to-end.
+> **Verification:** gates; `helm template` renders cleanly; compose-edge boots on a Jetson Orin Nano Super dev box (or qemu arm64) and registers with HQ; supervisor-managed workers recover after restart; Operations reports desired versus actual runtime state honestly; GitHub Actions pipeline is green end-to-end.
 
 ---
 
@@ -233,7 +257,7 @@
 3. Paste **Prompt 1** verbatim. After Codex finishes, run the five gates locally yourself as a sanity check.
 4. Commit (`feat: scaffold v4 monorepo`), then paste **Prompt 2**. Repeat.
 5. Never skip the gates between prompts — debt compounds fast in a multi-service system like this.
-6. If Codex proposes a change that conflicts with `argus_v4_spec.md`, it must stop and ask. Reject silent divergence.
+6. If Codex proposes a change that conflicts with `product-spec-v4.md`, it must stop and ask. Reject silent divergence.
 
 ---
 

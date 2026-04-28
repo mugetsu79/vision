@@ -6,6 +6,17 @@ It is the short decision document.
 
 For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md).
 
+## Current Implementation Posture
+
+As of the current branch, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. The backend and worker contracts also include fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, and capability-aware query commands.
+
+The strongest production-ready paths are still:
+
+- `central` with a Linux `amd64` master node
+- `edge` with Jetson Orin Nano Super 8 GB inference nodes
+
+The main missing production layer is worker lifecycle automation. Operations can show desired worker state, node state, delivery diagnostics, and bootstrap material, but production Start/Stop/Restart/Drain still needs a central or edge supervisor contract that reconciles desired state to real processes and reports per-worker runtime truth.
+
 ## Core Terms
 
 - `master node` / `HQ node`: the central Vezor control plane and primary services node. It runs the API, PostgreSQL/TimescaleDB, Keycloak, NATS JetStream, MediaMTX, the frontend, and central workers.
@@ -82,6 +93,51 @@ Operationally, though:
 - generic `x86` edge nodes are plausible, especially with NVIDIA GPUs
 - generic `arm64` edge nodes other than Jetson are possible in principle, but are not as production-hardened in this repo yet
 
+## Dev, Pilot, And Production Topologies
+
+### Dev
+
+Use Docker Compose on one developer machine. The frontend and backend run locally, and camera workers are started from copyable commands in Operations.
+
+This is correct for:
+
+- UI/API development
+- model and camera setup validation
+- iMac functional testing
+- short lab demos
+
+It is not the production lifecycle model.
+
+### iMac + Jetson Pilot
+
+Use the 2019 iMac as a temporary master and the Jetson Orin Nano as a real edge node. This validates the two-node product workflow:
+
+- iMac hosts the dev control plane
+- Jetson runs edge inference
+- Operations shows the intended central/edge split
+- History and Evidence Desk prove that events and clips return to the master
+
+This is a strong pilot topology, but the iMac remains a lab master. It should not be treated as the long-term production HQ node.
+
+### Production
+
+Use a Linux `amd64` master deployment and Jetson edge deployments:
+
+```text
+Operators
+  -> HTTPS / OIDC
+  -> Linux master / HQ
+       API, frontend, Postgres/Timescale, Keycloak, NATS, MinIO,
+       Redis, MediaMTX, observability, central supervisor
+  -> overlay network
+  -> Jetson Orin site edge
+       edge supervisor, inference worker(s), local MediaMTX,
+       NATS leaf, OTEL collector
+  -> cameras on the site LAN
+```
+
+In this shape, Operations does not run shell commands. It changes desired state or sends a constrained lifecycle request. The central or edge supervisor owns the real process and reports heartbeat, worker status, metrics, and last error back to the control plane.
+
 ## Browser Delivery Model
 
 Vezor separates analytics ingest from operator viewing:
@@ -137,6 +193,13 @@ For most real deployments:
 1. start with `central` in the lab
 2. move bandwidth-sensitive or privacy-sensitive cameras to `edge`
 3. introduce `hybrid` only when the central second-stage analytics justify the added complexity
+
+For the specific iMac + Jetson evaluation path:
+
+1. validate the iMac-only dev stack
+2. move one camera to the Jetson edge node
+3. confirm Live, History, Operations, and Evidence Desk all work across the split
+4. translate the master side to Linux production before treating the setup as customer-ready
 
 ## Related Documents
 

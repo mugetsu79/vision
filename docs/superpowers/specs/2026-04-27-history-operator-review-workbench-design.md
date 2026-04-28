@@ -56,7 +56,7 @@ The design is intentionally phased:
    - evidence slots remain harmless when no thumbnail exists
 3. **Phase 3: Video and NL review**
    - jump to retained video at a selected time
-   - natural-language search after the open-vocabulary hybrid detector work gives NL a stronger product role
+   - natural-language search after true open-vocabulary runtime validation gives NL a stronger product role
 
 ---
 
@@ -211,7 +211,7 @@ Selecting a search result should be deterministic:
 - bucket/gap/speed result selects a bucket and, if needed, adjusts the visible window
 - future backend-wide result may return a jump target containing filters plus a selected bucket/time range
 
-Natural-language search is deferred until the open-vocabulary hybrid detector work lands. At that point, NL can sit above deterministic tokens instead of replacing them.
+Natural-language search is deferred until the open-vocabulary runtime path is validated beyond the current control-plane foundation. At that point, NL can sit above deterministic tokens instead of replacing them.
 
 ---
 
@@ -500,4 +500,4 @@ These are intentionally deferred:
 - whether broad backend search lands immediately after current-window search or waits for evidence/video work
 - exact thumbnail/evidence contract
 - retained video storage and jump URL contract
-- NL search grammar after open-vocabulary hybrid detector implementation
+- NL search grammar after open-vocabulary runtime validation

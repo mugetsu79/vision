@@ -23,6 +23,37 @@ Related documents:
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
 
+## How This Lab Maps To Production
+
+This guide uses the iMac as a temporary master because it is convenient for bring-up. The production shape is different:
+
+```text
+Operator browser
+  -> HTTPS / OIDC
+  -> Linux master / HQ
+       frontend, API, Postgres/Timescale, Keycloak, Redis, NATS,
+       MinIO, MediaMTX, observability, central supervisor
+  -> Tailscale or WireGuard
+  -> Jetson Orin edge node
+       edge supervisor, inference worker(s), local MediaMTX,
+       NATS leaf, OTEL collector
+  -> RTSP cameras on the site LAN
+```
+
+Use this lab to prove the product workflow:
+
+- the iMac can host the control plane for evaluation
+- the Jetson can own edge inference
+- events, history, incident clips, and review state flow back to the master
+- Operations shows the central/edge split honestly
+
+Before production, replace:
+
+- iMac dev compose with a Linux `amd64` master deployment
+- copied worker commands with supervisor-managed workers
+- local dev tokens with scoped production credentials
+- ad-hoc terminal monitoring with central metrics, logs, alerts, and backup procedures
+
 ## 1. Before You Start
 
 ### 1.1 What you need
@@ -51,7 +82,7 @@ After you finish:
 - you can run inference workers
 - you can inspect worker state and copy local worker commands from **Operations** at `/settings`
 - you can view live telemetry
-- you can confirm history and incidents
+- you can confirm history and Evidence Desk incident review
 - you can compare `central` processing against `edge` processing
 
 ### 1.3 Important limits of this lab
@@ -61,6 +92,7 @@ After you finish:
 - This guide assumes you are doing a **functional test with 2 cameras**, not a scale test.
 - The Jetson portion is the more realistic Vezor architecture test.
 - Local worker commands in this guide are a dev bridge. Production start, stop, restart, and drain should be handled by a supervisor reconciler, with the Operations UI changing desired state or sending constrained lifecycle requests rather than shelling out from the API.
+- The current Evidence Desk primarily reviews incident clips. Snapshot URLs are supported by the API/UI but current capture can legitimately produce clip-only incidents.
 
 ### 1.4 A few words explained in plain language
 
@@ -723,10 +755,10 @@ python3 -m uv sync --group runtime --group dev --group llm --group vision
 
 Then rerun the worker command.
 
-### 2.15 Check the live dashboard
+### 2.15 Check Live
 
 1. Go back to the browser on the iMac
-2. Open the **Dashboard**
+2. Open **Live**
 3. Wait up to 30 seconds
 
 What good looks like:
@@ -740,7 +772,16 @@ What good looks like:
 1. Open **History**
 2. Confirm that some event data appears after the workers have been running for a short time
 3. Open **Incidents**
-4. If nothing appears yet, let the cameras run longer or create a scene that triggers detections
+4. Confirm the Evidence Desk layout opens with the Queue, evidence area, and Incident facts panel
+5. If nothing appears yet, let the cameras run longer or create a scene that triggers a rule/event
+6. When an incident exists, open the signed clip and mark the incident reviewed
+7. Switch the review filter to Reviewed and confirm the reviewed incident can be reopened
+
+What good looks like:
+
+- clip-only incidents show a clear evidence state instead of a broken snapshot
+- `Open clip` is available when clip storage succeeded
+- review state survives page reloads
 
 ### 2.17 Run the full validation suite on the iMac
 
@@ -758,7 +799,6 @@ What good looks like:
 - frontend tests pass
 - Playwright passes
 - Helm rendering succeeds
-- health checks succeed
 
 ### 2.18 Test A is a pass only if all of these are true
 
@@ -766,8 +806,8 @@ What good looks like:
 - you can create a site
 - you can create both cameras
 - both workers stay up
-- both cameras appear in Dashboard
-- at least one of History or Incidents shows real data
+- both cameras appear in Live
+- History or Evidence Desk shows real data once a detection/rule event has occurred
 - `make verify-all` succeeds
 
 If all of that works, move to Test B.
@@ -869,6 +909,9 @@ cd "$HOME/vision"
 What good looks like:
 
 - the script ends with `Jetson preflight passed.`
+- JetPack, CUDA, TensorRT, Docker, and `nvidia-container-toolkit` checks pass
+- NVDEC is present
+- NVENC is reported absent, which is expected on Orin Nano
 
 If it ends with one or more `FAIL` lines, stop here and fix those issues before continuing.
 
@@ -1018,7 +1061,7 @@ What good looks like:
 
 Back on the iMac browser:
 
-1. Open **Dashboard**
+1. Open **Live**
 2. Wait up to 30 seconds
 
 What good looks like:
@@ -1027,7 +1070,7 @@ What good looks like:
 - `Lab Camera 2` comes back online
 - both still render in the operator UI
 
-Now open **History** and **Incidents** again and confirm that data continues to arrive.
+Now open **History** and **Incidents** again and confirm that data continues to arrive. In Incidents, use the Evidence Desk review filter to confirm pending/reviewed state still behaves across the central/edge split.
 
 ### 3.10 Optional: check Jetson worker metrics
 
@@ -1047,8 +1090,21 @@ What good looks like:
 - camera 1 still works in `central` mode
 - camera 2 works in `edge` mode from the Jetson
 - the Jetson worker keeps running
-- the Dashboard still shows both cameras
-- History and Incidents still work
+- Live still shows both cameras
+- History and Evidence Desk still work
+- Operations shows the central/edge split and does not invent unknown worker state
+
+### 3.12 Production readiness gap
+
+This lab is clean only when the product workflow works. Production readiness still needs:
+
+- Linux master deployment
+- TLS and real OIDC realm configuration
+- supervisor-managed central and edge workers
+- per-worker heartbeat and last-error reporting
+- backups for database and incident object storage
+- edge credential rotation
+- soak testing over multiple days
 
 ## 4. Pass / Fail Rules And Troubleshooting
 
@@ -1142,13 +1198,13 @@ done
 
 If the backend still rejects the request after that, the response should now be a readable validation error such as an unreadable ONNX path instead of a generic 500.
 
-### 4.6 If the Dashboard tiles stay offline
+### 4.6 If the Live tiles stay offline
 
 What to do:
 
 1. confirm the worker process is still running
 2. confirm the camera RTSP URL works from the machine running that worker
-3. wait 30 seconds and refresh the Dashboard
+3. wait 30 seconds and refresh Live
 4. check worker logs for connection errors
 
 ### 4.7 If the Jetson cannot reach the iMac
@@ -1176,7 +1232,7 @@ If you are intentionally testing a reduced-class custom model, treat that as an 
 3. do not treat the default self-describing `yolo12n.onnx` COCO model as a reduced-class model by manually declaring a smaller class list
 4. do not use that reduced-class setup as the default COCO-first lab path
 
-If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the model record in Argus was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
+If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the Vezor model record was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
 
 ### 4.9 If `make verify-all` fails
 

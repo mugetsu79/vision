@@ -1,8 +1,29 @@
 # Open-Vocab Hybrid Detector Design
 
 **Date:** 2026-04-26  
-**Status:** Proposed  
+**Status:** Partially implemented; control-plane foundation landed, target-runtime open-vocab backend validation remains
 **Scope:** Product behavior, backend contracts, worker runtime design, UI behavior, and rollout boundaries for adding first-class open-vocabulary detector support alongside the current fixed-vocabulary model path.
+
+## 0. Implementation Checkpoint
+
+The current branch has implemented the control-plane and UI foundation for this design:
+
+- `Model.capability` supports `fixed_vocab` and `open_vocab`.
+- camera runtime vocabulary state is persisted.
+- vocabulary snapshot attribution exists for history/count explainability.
+- query resolution can produce `fixed_filter` or `open_vocab` results.
+- worker commands include `runtime_vocabulary`, source, and version fields.
+- the detector factory has fixed-vocab and open-vocab branches.
+- Camera setup and Live query UI expose capability-aware behavior.
+- the Evidence Desk review queue has landed as the incident review surface.
+
+Important limitation:
+
+- the current open-vocab detector adapter still wraps the existing detector interface and updates the configured vocabulary; it should be treated as the contract/runtime-state foundation. A true open-vocabulary model backend, prompt encoder, or target-specific open-vocab runtime still needs validation on the production central and Jetson profiles.
+
+Production dependency:
+
+- central and edge workers need supervisor-backed lifecycle management before this becomes an operator-safe production feature at fleet scale.
 
 ## 1. Goal
 
@@ -22,19 +43,19 @@ Jetson is the first validated edge target, but the architecture must remain port
 
 ## 2. Why This Change Is Needed
 
-The current system is good at:
+Before this track, the system was good at:
 
 - closed-label COCO detectors
 - closed-label custom ONNX detectors
 - natural-language to class-subset resolution within an already known model taxonomy
 
-The current system is not yet capable of:
+The remaining gap is full target-runtime proof for:
 
-- changing detector-side vocabulary at runtime
-- representing detector capability honestly when the model is not closed-label
-- preserving query/history/rules/incidents semantics when detections come from a mutable runtime vocabulary
+- a true open-vocabulary model backend
+- changing prompt/text vocabulary against that backend on central and Jetson runtimes
+- performance and memory validation for central and Jetson open-vocab profiles
 
-Today, the architecture assumes:
+The old architecture assumed:
 
 - `Model.classes` is canonical and complete
 - `Camera.active_classes` is a subset of `Model.classes`
@@ -563,4 +584,3 @@ The design is successful if:
 - detections from open-vocab cameras flow through tracking, occupancy, count events, history, rules, and incidents as normalized labels
 - central and Jetson deployments share the same product semantics
 - the contract leaves room for broader ARM64/x86 edge hardware in future updates
-

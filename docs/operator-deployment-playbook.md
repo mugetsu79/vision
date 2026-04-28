@@ -6,6 +6,54 @@ Use it when you want to decide what to deploy, where to deploy it, and in what o
 
 For the shorter decision guide, use [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md).
 
+## Current Implementation Snapshot
+
+The current product includes the operator workflows needed for a serious pilot:
+
+- Live wall with source-aware browser delivery
+- metric-aware History with exports
+- Fleet and Operations workbench at `/settings`
+- Evidence Desk incident review queue at `/incidents`
+- central and edge worker configuration paths
+- fixed-vocab and open-vocab detector capability contracts
+- Jetson edge compose stack and preflight tooling
+
+The production-critical layer still missing is supervisor-backed lifecycle control. Today, local development uses copyable commands and edge development uses Compose. Production should replace both with a central or edge supervisor that starts, stops, restarts, drains, monitors, and reports camera workers.
+
+## Dev Versus Production
+
+Do not confuse the local dev stack with production.
+
+### Development
+
+- one workstation can run the full stack with `make dev-up`
+- workers are started manually from Operations copy buttons or lab guide commands
+- local seeded credentials such as `admin-dev` are acceptable only inside the dev stack
+- stop means `Ctrl-C` or `docker compose stop`
+
+### Production
+
+- the master runs on Linux `amd64`, preferably through Helm/k3s or an equivalent supervised service platform
+- Jetson edge nodes run a small edge stack near the cameras
+- all worker processes are owned by a local supervisor, not the browser or API container
+- Operations writes desired state or lifecycle requests, then displays reported runtime truth
+- edge credentials are scoped, rotated, and provisioned through bootstrap, not copied from local dev tokens
+
+Production topology:
+
+```text
+Operator browser
+  -> HTTPS / OIDC
+  -> Linux master / HQ
+       frontend, API, Postgres/Timescale, Keycloak, Redis, NATS,
+       MinIO, MediaMTX, observability, central supervisor
+  -> Tailscale or WireGuard
+  -> Jetson Orin edge node
+       edge supervisor, inference worker(s), local MediaMTX,
+       NATS leaf, OTEL collector
+  -> site cameras
+```
+
 ## 1. Smallest Lab Setup
 
 This is the recommended first deployment for evaluation, local validation, UI review, and basic architecture proof.
@@ -85,6 +133,17 @@ The lab UI can show desired worker ownership, runtime freshness, delivery diagno
 
 Production lifecycle controls should not shell out from the browser or API container. Start, stop, restart, and drain should write desired state or send a constrained lifecycle request; a central or edge supervisor then owns the actual process reconciliation and reports runtime truth back through heartbeats.
 
+### iMac + Jetson pilot interpretation
+
+When the iMac is used as the master and the Jetson is used as edge, treat the result as a pilot proving the product flow:
+
+- sign in and configure the site on the iMac
+- run central camera workers on the iMac for comparison
+- move one camera to Jetson edge mode
+- confirm Live, History, Operations, and Evidence Desk all continue to work
+
+That setup answers whether the product behaves correctly on the intended split architecture. It does not answer final production availability, backup, TLS, secret rotation, or supervisor lifecycle questions. Those belong to the Linux master production deployment.
+
 ## 2. First Production Site
 
 This is the recommended first real deployment for one site going into production.
@@ -115,6 +174,8 @@ Move to `edge` mode for specific cameras if:
 - 32-64 GB RAM
 - fast SSD storage
 - optional NVIDIA L4 if you want central inference at meaningful scale
+- production backup target for database and object storage
+- TLS termination and stable DNS
 
 #### Site hardware
 
@@ -122,6 +183,8 @@ Two supported patterns:
 
 - no edge compute, just cameras reaching HQ
 - one Jetson Orin Nano Super 8 GB for local inference
+
+For the Jetson pattern, run the device in 25 W Super mode, validate JetPack/CUDA/TensorRT/NVDEC with the preflight script, and keep the first production profile conservative: one or two cameras per Jetson before scaling.
 
 ### Network pattern
 
@@ -149,7 +212,21 @@ Two supported patterns:
 2. Add a single production site.
 3. Connect one or two cameras first.
 4. Validate live viewing, telemetry, privacy behavior, incidents, and history.
-5. Only then add the rest of the site’s cameras.
+5. Validate Operations runtime truth: desired worker count, node health, worker heartbeat freshness, and last-error reporting.
+6. Only then add the rest of the site’s cameras.
+
+### Production lifecycle requirements
+
+Before calling a site production-ready, the deployment needs:
+
+- central supervisor for central and hybrid workers
+- edge supervisor for Jetson-owned workers
+- worker heartbeat with per-camera runtime state
+- restart policy after worker crash or device reboot
+- drain behavior for planned maintenance
+- logs and metrics visible from the central observability stack
+- backup and restore procedure for Postgres/TimescaleDB and incident object storage
+- scoped edge credentials with rotation path
 
 ### Inference Runtime Overrides
 
@@ -175,8 +252,10 @@ Use the overrides sparingly. Prefer the automatic policy for normal deployment, 
 - operators can log in and view the site
 - at least one production camera runs cleanly for multiple days
 - incidents and clip storage work
+- Evidence Desk pending/reviewed state survives reloads and can be audited
 - metrics and logs are visible
-- no recurring stream/auth/database failures appear during soak
+- Operations shows desired state versus runtime state without inventing unknown worker status
+- no recurring stream/auth/database/worker-supervisor failures appear during soak
 
 ## 3. Multi-Site Rollout
 
@@ -368,6 +447,8 @@ Then:
 ```bash
 docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d
 ```
+
+This compose command is appropriate for lab and pilot edge bring-up. In production, run the same edge responsibilities under the chosen supervisor model so workers restart after reboot, expose runtime state, and receive lifecycle commands from the control plane.
 
 ### Helm render validation
 

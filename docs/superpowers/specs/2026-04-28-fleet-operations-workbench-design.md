@@ -23,6 +23,8 @@ The current product has real worker building blocks, but their lifecycle is stil
 
 Phase 1 makes the mental model visible, but lifecycle control is still intentionally limited. It shows who owns a worker, how to run local dev workers, what runtime state is currently reported, and where production should use a supervisor instead of backend shell execution.
 
+The current product now also has the Evidence Desk review queue and open-vocab control-plane foundation. That makes Operations more important: detector capability and review workflows are meaningful only when workers are placed, started, restarted, and observed honestly across central and edge nodes.
+
 ---
 
 ## 2. Product Position
@@ -170,6 +172,23 @@ In production:
 
 The Operations UI should show this distinction directly. Operators should never have to infer whether a camera is unmanaged, manually managed, or supervisor-managed.
 
+Production deployment shape:
+
+```text
+Operator browser
+  -> HTTPS / OIDC
+  -> Linux master / HQ
+       frontend, API, Postgres/Timescale, Keycloak, Redis, NATS,
+       MinIO, MediaMTX, observability, central supervisor
+  -> Tailscale or WireGuard
+  -> Jetson Orin edge node
+       edge supervisor, inference worker(s), local MediaMTX,
+       NATS leaf, OTEL collector
+  -> site cameras
+```
+
+The iMac + Jetson setup is a lab/pilot topology for validating this shape. It should not be described as the production master deployment.
+
 ---
 
 ## 5. Phase 1 Scope
@@ -195,6 +214,7 @@ It does not include:
 - live log streaming
 - node draining
 - camera reassignment mutation
+- production-grade per-worker heartbeat and last-error reporting
 
 These are intentionally deferred until the status model is trustworthy.
 
@@ -447,3 +467,4 @@ After Phase 1:
 4. Add camera reassignment UI.
 5. Add live logs and recent failure summaries.
 6. Add edge credential rotation.
+7. Add production deployment validation for Linux master plus Jetson edge, including reboot recovery and multi-day soak.

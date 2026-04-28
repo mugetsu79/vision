@@ -12,6 +12,8 @@ Vezor separates **native ingest for analytics** from **browser delivery for oper
 
 The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, and edge bootstrap material. In local development, workers are still launched from copyable commands because there is no local supervisor process yet. In production, Start/Stop/Restart controls should go through a central or edge supervisor that reconciles desired state and reports actual runtime state back to the control plane.
 
+The current branch has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, and the Evidence Desk incident review queue. The main production gap is lifecycle automation: a production supervisor or edge agent still needs to own worker start/stop/restart/drain and report per-worker runtime truth.
+
 ## What’s In This Repo
 
 - `backend/`: FastAPI API, services, inference worker, schema, migrations, auth, streaming integration
@@ -148,6 +150,37 @@ Use this when:
 
 For the detailed decision matrix, see [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md).
 
+## Production Deployment Shape
+
+The development stack is intentionally convenient, but it is not the final production shape.
+
+In production, deploy Vezor as:
+
+- **Production master / HQ node** on Linux `amd64`
+  - frontend
+  - FastAPI backend
+  - PostgreSQL/TimescaleDB
+  - Keycloak
+  - NATS JetStream
+  - MinIO
+  - Redis
+  - MediaMTX
+  - OpenTelemetry, Prometheus, Grafana, Loki, Tempo, Alertmanager
+  - central supervisor for central and selected hybrid workers
+- **Jetson Orin edge node** per site when local inference is needed
+  - edge supervisor
+  - inference worker container or service
+  - local MediaMTX
+  - NATS leaf
+  - OTEL collector
+  - Jetson 25 W Super mode with TensorRT/NVDEC enabled
+- **Overlay network**
+  - Tailscale or WireGuard between sites and HQ
+  - TLS/OIDC for operators
+  - scoped edge credentials, not copied local dev tokens
+
+The iMac + Jetson path documented in the lab guide is a valuable pilot topology: the iMac can act as a temporary master while the Jetson validates edge inference. For production, replace the iMac dev stack with a Linux master deployment and replace copied worker commands with supervisor-managed workers.
+
 ## Hardware Guidance
 
 ### Good current targets
@@ -176,14 +209,25 @@ The repo already includes:
 - unified live workspace at `/live` with NL query-driven filtering, per-camera video tiles, and 30-minute occupancy sparklines (`/dashboard` now redirects)
 - shared telemetry WebSocket state that survives route changes and keeps the live wall warm across short navigation hops
 - metric-aware history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, CSV/Parquet export, and a clear split between `occupancy`, `count_events`, and raw `observations`
-- incident clip storage
+- Evidence Desk incident review at `/incidents`, including pending/reviewed state, review/reopen actions, signed clip access, clip-only evidence handling, and review audit entries
+- incident clip storage; snapshot fields exist but current capture primarily stores clips
 - Fleet and Operations workbench at `/settings`, including node summaries, camera worker lifecycle state, delivery diagnostics, edge bootstrap material, and copy/paste-safe local worker commands
 - edge worker support and a production-oriented supervisor lifecycle model
+- fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, and capability-aware query commands
 - hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions
 - Docker Compose and Helm assets
 - CI-oriented full validation flow
 
 The most mature operational paths today are `central` and `edge`.
+
+Still missing for production hardening:
+
+- supervisor-backed Start/Stop/Restart/Drain actions in Operations
+- per-worker runtime heartbeat and last-error reporting from central and edge supervisors
+- persistent worker assignment/reassignment workflows
+- production edge credential rotation automation
+- a real open-vocabulary detector backend beyond the current capability/runtime-vocabulary contract over the existing detector interface
+- incident still snapshot generation, if still previews become required evidence rather than optional convenience
 
 ## Model And Camera Scope
 

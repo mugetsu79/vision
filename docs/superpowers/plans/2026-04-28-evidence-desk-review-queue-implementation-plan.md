@@ -1,6 +1,8 @@
 # Evidence Desk Review Queue Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Status:** Implemented and pushed on `codex/source-aware-delivery-calibration-fixes` through `e4a7331 fix(incidents): tighten review audit and permission feedback`. Do not re-plan these tasks unless changing the feature.
 
 **Goal:** Redesign `/incidents` into a triage-first Evidence Desk with persisted pending/reviewed state for captured incident records.
 
@@ -27,7 +29,7 @@
 - `frontend/src/pages/Incidents.test.tsx` — cover queue, clip-only evidence, filters, and review mutation.
 - `frontend/e2e/prompt9-history-and-incidents.spec.ts` — update mocked incidents route and assertions for Evidence Desk.
 
-Do not update README, product spec, runbook, playbook, or lab guide docs in this task unless implementation creates a narrow contract note that is otherwise absent. Those broader docs were already updated in earlier work.
+The implementation has since been followed by a documentation synchronization pass that updates README, product spec, runbook, playbook, and lab guide with the current Evidence Desk and production topology status.
 
 ---
 

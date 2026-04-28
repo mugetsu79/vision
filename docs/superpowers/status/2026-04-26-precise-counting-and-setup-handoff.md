@@ -4,6 +4,11 @@ Date: 2026-04-28
 
 Purpose: paste this document into a fresh project chat to continue from the current repo state without redoing completed setup, source-aware delivery, native routing, History work, Fleet / Operations phase 1, logo cleanup, or worker lifecycle reasoning.
 
+Update note, 2026-04-28:
+- This handoff predates the open-vocab control-plane work and Evidence Desk review queue implementation.
+- The active branch has since been pushed through `e4a7331 fix(incidents): tighten review audit and permission feedback`.
+- Do not treat the "Immediate Next Step" section below as current; iMac validation and Task 8 Evidence Desk work have been completed.
+
 ## Current Branch State
 
 Active branch:
@@ -66,6 +71,8 @@ These items are complete and should not be re-planned:
 - the product logo now uses `argus-icon-from-upload.svg`, with the dark background tile removed so the sidebar mark renders on transparent canvas
 - Operations dev worker commands are copy/paste-safe and fetch a local dev bearer token instead of emitting a literal bearer-token placeholder.
 - Root README, active design docs, product spec, runbook, operator deployment playbook, and iMac/Orin lab guide have been refreshed to describe the Operations workbench, dev worker command bridge, and production supervisor lifecycle model.
+- Open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, capability-aware query commands, detector factory/interface work, Camera/Live UI plumbing, and Evidence Desk Task 8 are implemented on the continuation branch.
+- Evidence Desk now has persisted pending/reviewed review state, review/reopen actions, clip-only evidence handling, and audit logging.
 
 ## Fleet / Operations Phase 1
 
@@ -163,7 +170,7 @@ Earlier History verification on this branch:
 
 ## Immediate Next Step
 
-Recommended next-chat starting point:
+Historical next-chat starting point from the Operations checkpoint. This is no longer current after the Evidence Desk and open-vocab continuation work:
 
 1. Pull `codex/source-aware-delivery-calibration-fixes` on the iMac and confirm recent history includes `24b7935 fix(operations): make dev worker command copy pasteable`.
 2. Recreate backend and frontend containers so the new API and UI assets are active:
@@ -188,15 +195,15 @@ corepack pnpm --dir frontend generate:api
 
 ## Secondary Future Task
 
-After iMac validation of Fleet / Operations phase 1, continue with the open-vocab hybrid detector track.
+Historical note: after iMac validation of Fleet / Operations phase 1, the branch continued with the open-vocab hybrid detector track.
 
 Reference docs:
 - `docs/superpowers/specs/2026-04-26-open-vocab-hybrid-detector-design.md`
 - `docs/superpowers/plans/2026-04-26-open-vocab-hybrid-detector-implementation-plan.md`
 
-Important note:
-- Natural-language history/search can become richer once open-vocab hybrid detection exists.
-- Do not mix open-vocab implementation into Fleet / Operations validation or follow-up bug fixes.
+Current note:
+- Natural-language history/search can become richer once true open-vocabulary runtime validation lands.
+- Remaining production hardening is supervisor lifecycle control, per-worker heartbeat/last-error reporting, worker assignment/reassignment, and production Linux master plus Jetson edge validation.
 
 ## Known Follow-Up Risks
 

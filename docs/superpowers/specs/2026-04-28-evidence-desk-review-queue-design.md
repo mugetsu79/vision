@@ -1,8 +1,28 @@
 # Evidence Desk Review Queue Design
 
 **Date:** 2026-04-28
-**Status:** Approved for implementation planning
+**Status:** Implemented on `codex/source-aware-delivery-calibration-fixes`
 **Scope:** Task 8 refinement for the open-vocab hybrid detector track. This spec replaces the narrow UI-only Task 8 interpretation with an evidence review queue that matches the current incident capture implementation.
+
+## 0. Implementation Checkpoint
+
+The Evidence Desk review queue has landed:
+
+- `/incidents` defaults to pending incidents.
+- operators can filter by camera, incident type, and review status.
+- the UI shows a queue, selected evidence area, and Incident facts panel.
+- clip-only incidents render an intentional evidence state when `snapshot_url` is null.
+- operators can mark incidents reviewed and reopen reviewed incidents.
+- review state persists in the database.
+- review changes are audited in the same transaction as the review update.
+- viewer users can read incidents; operator or higher is required to change review state.
+
+Still not implemented by this task:
+
+- new recording behavior
+- still snapshot generation
+- arbitrary forensic search over incident payload criteria
+- assignments, comments, escalation, and case management
 
 ## 1. Goal
 
