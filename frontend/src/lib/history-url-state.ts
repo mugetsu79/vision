@@ -1,7 +1,11 @@
 export type HistoryGranularity = "1m" | "5m" | "1h" | "1d";
 export type HistoryMetric = "occupancy" | "count_events" | "observations";
 export type HistoryWindowMode = "relative" | "absolute";
-export type RelativeHistoryWindow = "last_15m" | "last_1h" | "last_24h" | "last_7d";
+export type RelativeHistoryWindow =
+  | "last_15m"
+  | "last_1h"
+  | "last_24h"
+  | "last_7d";
 
 export interface HistoryFilterState {
   from: Date;
@@ -18,7 +22,11 @@ export interface HistoryFilterState {
 }
 
 const GRANULARITIES = new Set<HistoryGranularity>(["1m", "5m", "1h", "1d"]);
-const HISTORY_METRICS = new Set<HistoryMetric>(["occupancy", "count_events", "observations"]);
+const HISTORY_METRICS = new Set<HistoryMetric>([
+  "occupancy",
+  "count_events",
+  "observations",
+]);
 const RELATIVE_HISTORY_WINDOWS = new Set<RelativeHistoryWindow>([
   "last_15m",
   "last_1h",
@@ -46,19 +54,22 @@ const HISTORY_METRIC_COPY: Record<
     label: "Occupancy",
     description: "peak visible occupancy snapshots",
     countLabel: "visible samples",
-    emptyState: "No occupancy snapshots in this window for the selected cameras and classes.",
+    emptyState:
+      "No occupancy snapshots in this window for the selected scenes and signals.",
   },
   count_events: {
-    label: "Count events",
+    label: "Event boundaries",
     description: "crossings, entries, and exits",
     countLabel: "events",
-    emptyState: "No crossings, entries, or exits in this window for the selected cameras and classes.",
+    emptyState:
+      "No crossings, entries, or exits in this window for the selected scenes and signals.",
   },
   observations: {
     label: "Raw tracking samples",
     description: "per-frame tracking density for debugging",
     countLabel: "tracking samples",
-    emptyState: "No raw tracking samples in this window for the selected cameras and classes.",
+    emptyState:
+      "No tracking samples in this window for the selected scenes and signals.",
   },
 };
 
@@ -141,12 +152,18 @@ export function readHistoryFiltersFromSearch(
   const relativeWindow = toRelativeWindow(params.get("window"));
   const hasAbsoluteBound = params.has("from") || params.has("to");
   const relativeBounds = resolveRelativeWindow(relativeWindow, now);
-  const windowMode: HistoryWindowMode = hasAbsoluteBound ? "absolute" : "relative";
+  const windowMode: HistoryWindowMode = hasAbsoluteBound
+    ? "absolute"
+    : "relative";
   const followNow = hasAbsoluteBound ? false : params.get("follow") !== "0";
 
   return {
-    from: hasAbsoluteBound ? toDate(params.get("from"), defaults.from) : relativeBounds.from,
-    to: hasAbsoluteBound ? toDate(params.get("to"), defaults.to) : relativeBounds.to,
+    from: hasAbsoluteBound
+      ? toDate(params.get("from"), defaults.from)
+      : relativeBounds.from,
+    to: hasAbsoluteBound
+      ? toDate(params.get("to"), defaults.to)
+      : relativeBounds.to,
     windowMode,
     relativeWindow,
     followNow,

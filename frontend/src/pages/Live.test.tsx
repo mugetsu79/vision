@@ -234,6 +234,10 @@ describe("LivePage", () => {
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
     expect(await screen.findByRole("heading", { name: /live intelligence/i })).toBeInTheDocument();
+    expect(screen.getByTestId("live-intelligence-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("ask-vezor-dock")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-portal-grid")).toBeInTheDocument();
+    expect(screen.getByTestId("spatial-instrument-rail")).toBeInTheDocument();
     expect(screen.getByText(/^signals in view$/i)).toBeInTheDocument();
     expect(screen.getByText(/^resolved intent$/i)).toBeInTheDocument();
     expect(screen.queryByText(/live command surface/i)).not.toBeInTheDocument();
@@ -242,6 +246,8 @@ describe("LivePage", () => {
     expect(screen.queryByText(/current command resolution/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/\d+ connected scenes/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("scene-portal")).toHaveLength(2);
+    expect(screen.getByText(/active scenes/i)).toBeInTheDocument();
     expect(screen.getByTestId("stream-North Gate")).toBeInTheDocument();
     expect(screen.getByTestId("stream-Depot Yard")).toBeInTheDocument();
     expect(screen.getAllByLabelText(/video stream/i).length).toBeGreaterThanOrEqual(2);
@@ -400,7 +406,7 @@ describe("LivePage", () => {
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
     expect(
-      screen.getByText(/native unavailable: privacy filtering required/i),
+      screen.getByText(/direct stream unavailable: privacy filtering required/i),
     ).toBeInTheDocument();
   });
 

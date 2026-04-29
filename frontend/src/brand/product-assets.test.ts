@@ -4,58 +4,37 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
+import { productBrand } from "@/brand/product";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-
-const standaloneSymbolMarkers = [
-  'id="vezor-symbol-core"',
-  'id="symbol-shards"',
-  'id="symbol-eye"',
-  'viewBox="48 48 416 416"',
-] as const;
-
-const surroundingSymbolMarkers = [
-  "Soft aura behind the medallion",
-  "Gradient disc",
-  '<circle cx="300" cy="125" r="95"',
-  '<circle cx="300" cy="125" r="82"',
-  "Rounded square background",
-  "Medallion ring",
-  'id="bg"',
-] as const;
 
 async function readRepoFile(pathFromRoot: string): Promise<string> {
   return readFile(resolve(repoRoot, pathFromRoot), "utf8");
 }
 
-describe("product brand SVG assets", () => {
-  test("source and runtime symbol assets use the standalone Vezor mark without a circular medallion", async () => {
-    const sourceSymbol = await readRepoFile(
-      "docs/brand/assets/source/vezor-symbol-product-ui.svg",
-    );
-    const productSymbol = await readRepoFile(
-      "frontend/public/brand/product-symbol-ui.svg",
-    );
-    const compatibilitySymbol = await readRepoFile(
-      "frontend/public/brand/argus-symbol-ui.svg",
-    );
+async function readRepoBuffer(pathFromRoot: string): Promise<Buffer> {
+  return readFile(resolve(repoRoot, pathFromRoot));
+}
 
-    for (const svg of [sourceSymbol, productSymbol, compatibilitySymbol]) {
-      expect(svg).toContain('role="img"');
-      expect(svg).toContain("<desc>");
+function expectPng(buffer: Buffer) {
+  expect(buffer.subarray(1, 4).toString("ascii")).toBe("PNG");
+}
 
-      for (const marker of standaloneSymbolMarkers) {
-        expect(svg).toContain(marker);
-      }
+describe("product brand logo assets", () => {
+  test("uses the official 2D and 3D logo assets from docs/brand at runtime", async () => {
+    expect(productBrand.runtimeAssets.logo2d).toBe("/brand/2d_logo_no_ring.png");
+    expect(productBrand.runtimeAssets.logo3d).toBe("/brand/3d_logo_no_bg.png");
 
-      for (const marker of surroundingSymbolMarkers) {
-        expect(svg).not.toContain(marker);
-      }
-    }
+    const source2d = await readRepoBuffer("docs/brand/2d_logo_no_ring.png");
+    const runtime2d = await readRepoBuffer("frontend/public/brand/2d_logo_no_ring.png");
+    const source3d = await readRepoBuffer("docs/brand/3d_logo_no_bg.png");
+    const runtime3d = await readRepoBuffer("frontend/public/brand/3d_logo_no_bg.png");
 
-    expect(productSymbol).toBe(sourceSymbol);
-    expect(compatibilitySymbol).toBe(sourceSymbol);
+    expectPng(source2d);
+    expectPng(source3d);
+    expect(runtime2d.equals(source2d)).toBe(true);
+    expect(runtime3d.equals(source3d)).toBe(true);
   });
-
 });
 
 describe("Vezor visual system tokens", () => {

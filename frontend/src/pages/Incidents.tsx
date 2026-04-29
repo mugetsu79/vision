@@ -21,7 +21,9 @@ export function IncidentsPage() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedReviewStatus, setSelectedReviewStatus] =
     useState<ReviewFilter>("pending");
-  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(
+    null,
+  );
 
   const reviewStatus =
     selectedReviewStatus === "all" ? null : selectedReviewStatus;
@@ -44,7 +46,8 @@ export function IncidentsPage() {
   );
 
   const incidentTypes = useMemo(
-    () => Array.from(new Set(incidents.map((incident) => incident.type))).sort(),
+    () =>
+      Array.from(new Set(incidents.map((incident) => incident.type))).sort(),
     [incidents],
   );
 
@@ -62,7 +65,10 @@ export function IncidentsPage() {
       return;
     }
 
-    if (!selectedIncidentId || !incidents.some((incident) => incident.id === selectedIncidentId)) {
+    if (
+      !selectedIncidentId ||
+      !incidents.some((incident) => incident.id === selectedIncidentId)
+    ) {
       setSelectedIncidentId(incidents[0].id);
     }
   }, [incidents, selectedIncidentId]);
@@ -81,19 +87,20 @@ export function IncidentsPage() {
     error instanceof Error ? error.message : "Failed to load incidents.";
 
   return (
-    <div className="space-y-5 p-5 sm:p-6">
-      <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+    <div data-testid="evidence-desk-workspace" className="space-y-5 p-4 sm:p-6">
+      <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
         <OmniSightField variant="quiet" className="opacity-50" />
         <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9fb6d8]">
-              Incidents
+              Evidence
             </p>
             <h2 className="mt-2 text-3xl font-semibold text-[#f4f8ff]">
-              Evidence Desk
+              {omniLabels.evidenceTitle}
             </h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-[#9eb0cb]">
-              Review evidence records, confirm state, and move from signal to decision without leaving the desk.
+              Review evidence records, confirm state, and move from signal to
+              decision without leaving the desk.
             </p>
           </div>
 
@@ -103,19 +110,24 @@ export function IncidentsPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 rounded-[1.1rem] border border-white/10 bg-[#07101c] px-5 py-5 lg:grid-cols-3">
+      <section
+        data-testid="evidence-filter-bar"
+        className="grid gap-4 rounded-[1rem] border border-white/10 bg-[#07101c] px-5 py-5 lg:grid-cols-3"
+      >
         <label className="space-y-2 text-sm text-[#d9e5f7]">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
-            Camera filter
+            Scene filter
           </span>
           <Select
-            aria-label="Camera filter"
+            aria-label="Scene filter"
             value={selectedCameraId ?? ""}
             onChange={(event) =>
-              setSelectedCameraId(event.target.value.length > 0 ? event.target.value : null)
+              setSelectedCameraId(
+                event.target.value.length > 0 ? event.target.value : null,
+              )
             }
           >
-            <option value="">All cameras</option>
+            <option value="">All scenes</option>
             {cameras.map((camera) => (
               <option key={camera.id} value={camera.id}>
                 {camera.name}
@@ -126,13 +138,15 @@ export function IncidentsPage() {
 
         <label className="space-y-2 text-sm text-[#d9e5f7]">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
-            Incident type
+            Event type
           </span>
           <Select
-            aria-label="Incident type"
+            aria-label="Event type"
             value={selectedType ?? ""}
             onChange={(event) =>
-              setSelectedType(event.target.value.length > 0 ? event.target.value : null)
+              setSelectedType(
+                event.target.value.length > 0 ? event.target.value : null,
+              )
             }
           >
             <option value="">All types</option>
@@ -207,11 +221,14 @@ function IncidentQueue({
 }) {
   return (
     <aside
-      aria-label="Incident queue"
-      className="min-w-0 rounded-lg border border-white/10 bg-white/[0.025]"
+      aria-label="Review Queue"
+      data-testid="review-queue"
+      className="min-w-0 rounded-[1rem] border border-white/10 bg-white/[0.025]"
     >
       <div className="border-b border-white/8 px-4 py-3">
-        <h3 className="text-lg font-semibold text-[#eef4ff]">{omniLabels.reviewQueueTitle}</h3>
+        <h3 className="text-lg font-semibold text-[#eef4ff]">
+          {omniLabels.reviewQueueTitle}
+        </h3>
       </div>
 
       <div className="divide-y divide-white/8">
@@ -260,7 +277,8 @@ function IncidentEvidenceHero({
 }) {
   const nextReviewStatus: IncidentReviewStatus =
     incident.review_status === "pending" ? "reviewed" : "pending";
-  const actionLabel = incident.review_status === "pending" ? "Review" : "Reopen";
+  const actionLabel =
+    incident.review_status === "pending" ? "Review" : "Reopen";
   const mutationErrorMessage = reviewMutation.error
     ? reviewMutationErrorMessage(reviewMutation.error)
     : null;
@@ -268,12 +286,15 @@ function IncidentEvidenceHero({
   return (
     <section
       aria-label="Selected evidence"
-      className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#050911]"
+      data-testid="evidence-media"
+      className="min-w-0 overflow-hidden rounded-[1rem] border border-white/10 bg-[#050911]"
     >
       <div className="border-b border-white/8 px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-xl font-semibold text-[#f3f7ff]">{cameraName}</h3>
+            <h3 className="text-xl font-semibold text-[#f3f7ff]">
+              {cameraName}
+            </h3>
             <p className="mt-1 text-sm text-[#8fa4c4]">
               {incident.type} at {formatIncidentTime(incident.ts)}
             </p>
@@ -288,7 +309,7 @@ function IncidentEvidenceHero({
         {incident.snapshot_url ? (
           <img
             src={incident.snapshot_url}
-            alt={`Incident evidence for ${cameraName}`}
+            alt={`Evidence record for ${cameraName}`}
             className="aspect-video w-full object-cover"
           />
         ) : (
@@ -359,11 +380,16 @@ function IncidentFactsPanel({
   cameraName: string;
 }) {
   const facts = [
-    ["Camera", cameraName],
-    ["Incident type", incident.type],
+    ["Scene", cameraName],
+    ["Event type", incident.type],
     ["Timestamp", formatIncidentTime(incident.ts)],
     ["Review status", incident.review_status],
-    ["Reviewed at", incident.reviewed_at ? formatIncidentTime(incident.reviewed_at) : "Not reviewed"],
+    [
+      "Reviewed at",
+      incident.reviewed_at
+        ? formatIncidentTime(incident.reviewed_at)
+        : "Not reviewed",
+    ],
     ["Reviewed by", incident.reviewed_by_subject ?? "Not reviewed"],
     ["Storage", storageLabel(incident.storage_bytes)],
   ];
@@ -371,10 +397,13 @@ function IncidentFactsPanel({
   return (
     <aside
       aria-label="Facts"
-      className="min-w-0 rounded-lg border border-white/10 bg-white/[0.025]"
+      data-testid="facts-rail"
+      className="min-w-0 rounded-[1rem] border border-white/10 bg-white/[0.025]"
     >
       <div className="border-b border-white/8 px-4 py-3">
-        <h3 className="text-lg font-semibold text-[#eef4ff]">{omniLabels.factsTitle}</h3>
+        <h3 className="text-lg font-semibold text-[#eef4ff]">
+          {omniLabels.factsTitle}
+        </h3>
       </div>
 
       <dl className="divide-y divide-white/8">
@@ -425,7 +454,7 @@ function StatusMessage({
 }) {
   return (
     <div
-      className={`rounded-lg border px-4 py-3 text-sm ${
+      className={`rounded-[1rem] border px-4 py-3 text-sm ${
         tone === "danger"
           ? "border-[#6f2d3b] bg-[#2a0d16] text-[#f0b7c1]"
           : "border-white/10 bg-white/[0.025] text-[#9eb0cb]"
@@ -436,8 +465,15 @@ function StatusMessage({
   );
 }
 
-function cameraNameFor(incident: Incident, cameraNamesById: Map<string, string>) {
-  return incident.camera_name ?? cameraNamesById.get(incident.camera_id) ?? incident.camera_id;
+function cameraNameFor(
+  incident: Incident,
+  cameraNamesById: Map<string, string>,
+) {
+  return (
+    incident.camera_name ??
+    cameraNamesById.get(incident.camera_id) ??
+    incident.camera_id
+  );
 }
 
 export function storageLabel(storageBytes: number) {

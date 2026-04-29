@@ -28,7 +28,7 @@ export function ProductLockup({
         className={cn("block select-none", baseClasses, className)}
         decoding="async"
         draggable={false}
-        src={productBrand.runtimeAssets.symbol}
+        src={productBrand.runtimeAssets.logo2d}
       />
     );
   }
@@ -41,14 +41,14 @@ export function ProductLockup({
       {...props}
     >
       <img
-        alt={`${productBrand.name} symbol`}
+        alt={`${productBrand.name} 2D logo`}
         className="aspect-square h-full w-auto shrink-0"
         decoding="async"
         draggable={false}
-        src={productBrand.runtimeAssets.symbol}
+        src={productBrand.runtimeAssets.logo2d}
       />
       <span className="flex items-center gap-2">
-        <span className="text-[2.15rem] font-extrabold leading-none tracking-[-0.04em] text-[#f4f8ff] drop-shadow-[0_10px_22px_rgba(0,0,0,0.45)]">
+        <span className="text-[2.15rem] font-extrabold leading-none tracking-normal text-[#f4f8ff] drop-shadow-[0_10px_22px_rgba(0,0,0,0.45)]">
           {productBrand.name}
         </span>
         <span className="mt-1 text-[0.44rem] font-bold uppercase leading-[1.5] tracking-[0.34em] text-[#9eabc1]">

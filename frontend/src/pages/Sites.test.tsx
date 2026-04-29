@@ -107,6 +107,15 @@ describe("SitesPage", () => {
       </QueryClientProvider>,
     );
 
+    expect(await screen.findByTestId("sites-workspace")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /^sites$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/manage deployment locations/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/camera placement/i)).not.toBeInTheDocument();
+
     await user.click(await screen.findByRole("button", { name: /add site/i }));
     await user.type(screen.getByLabelText(/site name/i), "HQ");
     await user.type(screen.getByLabelText(/description/i), "Main site");
@@ -114,7 +123,9 @@ describe("SitesPage", () => {
     await user.type(screen.getByLabelText(/time zone/i), "Europe/Zurich");
     await user.click(screen.getByRole("button", { name: /save site/i }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     await waitFor(() =>
       expect(screen.getByRole("cell", { name: "HQ" })).toBeInTheDocument(),
     );

@@ -7,7 +7,8 @@ import type { CoverageCopy } from "@/lib/history-workbench";
 import type { HistoryMetric } from "@/lib/history-url-state";
 
 const HistoryTrendChart = lazy(async () => ({
-  default: (await import("@/components/history/HistoryTrendChart")).HistoryTrendChart,
+  default: (await import("@/components/history/HistoryTrendChart"))
+    .HistoryTrendChart,
 }));
 
 type TrendSeries = {
@@ -40,15 +41,22 @@ export function HistoryTrendPanel({
   coverage: CoverageCopy;
   onBucketSelect: (bucket: string) => void;
 }) {
-  const reviewBucket = series.selectedBucket ?? series.points[0]?.bucket ?? null;
-  const reviewBucketLabel = series.selectedBucket ? "Review selected bucket" : "Review first bucket";
+  const reviewBucket =
+    series.selectedBucket ?? series.points[0]?.bucket ?? null;
+  const reviewBucketLabel = series.selectedBucket
+    ? "Review selected bucket"
+    : "Review first bucket";
 
   return (
-    <section className="overflow-hidden rounded-[1.1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(5,9,18,0.98))] shadow-[0_22px_56px_-46px_rgba(63,121,255,0.42)]">
+    <section className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(5,9,18,0.98))] shadow-[0_22px_56px_-46px_rgba(63,121,255,0.42)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Trend</p>
-          <p className="mt-1 text-sm text-[#dce6f7]">{bucketCopy(granularity)}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
+            Pattern trend
+          </p>
+          <p className="mt-1 text-sm text-[#dce6f7]">
+            {bucketCopy(granularity)}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select
@@ -56,7 +64,8 @@ export function HistoryTrendPanel({
             className="h-8 w-44 rounded-xl px-3 py-1.5 text-xs"
             value={series.selectedBucket ?? ""}
             onChange={(event) => {
-              if (event.currentTarget.value) onBucketSelect(event.currentTarget.value);
+              if (event.currentTarget.value)
+                onBucketSelect(event.currentTarget.value);
             }}
           >
             <option value="">Select bucket</option>
@@ -78,7 +87,13 @@ export function HistoryTrendPanel({
           <Badge>{coverage.label}</Badge>
         </div>
       </div>
-      <Suspense fallback={<div className="px-6 py-16 text-sm text-[#93a7c5]">Loading chart...</div>}>
+      <Suspense
+        fallback={
+          <div className="px-6 py-16 text-sm text-[#93a7c5]">
+            Loading chart...
+          </div>
+        }
+      >
         <HistoryTrendChart
           className="px-2 py-4"
           metric={metric}
@@ -97,9 +112,12 @@ export function HistoryTrendPanel({
 }
 
 function bucketCopy(granularity: string): string {
-  if (granularity === "1h") return "Hourly buckets - timestamps mark bucket starts";
-  if (granularity === "1d") return "Daily buckets - timestamps mark bucket starts";
-  if (granularity === "5m") return "5-minute buckets - timestamps mark bucket starts";
+  if (granularity === "1h")
+    return "Hourly buckets - timestamps mark bucket starts";
+  if (granularity === "1d")
+    return "Daily buckets - timestamps mark bucket starts";
+  if (granularity === "5m")
+    return "5-minute buckets - timestamps mark bucket starts";
   return "1-minute buckets - timestamps mark bucket starts";
 }
 

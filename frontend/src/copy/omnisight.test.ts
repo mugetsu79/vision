@@ -22,7 +22,7 @@ describe("omnisight copy", () => {
         label: "Intelligence",
         items: [
           { label: "Live", to: "/live" },
-          { label: "History", to: "/history" },
+          { label: "Patterns", to: "/history" },
           { label: "Evidence", to: "/incidents" },
         ],
       },
@@ -42,6 +42,8 @@ describe("omnisight copy", () => {
     expect(omniEmptyStates.noSignals).toBe(
       "Live telemetry has not produced visible signals yet.",
     );
-    expect(omniPlaceExamples.askVezor).toBe("show people near restricted zones");
+    expect(omniPlaceExamples.askVezor).toBe(
+      "show people near restricted zones",
+    );
   });
 });

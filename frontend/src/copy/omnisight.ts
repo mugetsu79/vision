@@ -36,7 +36,7 @@ export const omniNavGroups = [
     label: "Intelligence",
     items: [
       { label: "Live", to: "/live" },
-      { label: "History", to: "/history" },
+      { label: "Patterns", to: "/history" },
       { label: "Evidence", to: "/incidents" },
     ],
   },

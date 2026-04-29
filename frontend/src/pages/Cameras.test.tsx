@@ -132,17 +132,29 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: /scene setup/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /scene setup/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("scene-setup-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-inventory-table")).toBeInTheDocument();
     expect(screen.getByText(/^Scenes$/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Cameras$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no cameras yet/i)).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /add camera/i }));
+    expect(
+      screen.queryByRole("button", { name: /add camera/i }),
+    ).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /add scene/i }));
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
-    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.type(
+      screen.getByLabelText(/rtsp url/i),
+      "rtsp://camera.local/live",
+    );
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    await waitFor(() => expect(screen.getByLabelText(/primary model/i)).toHaveValue(""));
+    await waitFor(() =>
+      expect(screen.getByLabelText(/primary model/i)).toHaveValue(""),
+    );
     expect(
       within(screen.getByLabelText(/primary model/i)).getByRole("option", {
         name: /vezor radar 1\.0\.0/i,
@@ -201,10 +213,13 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: /add camera/i }));
+    await user.click(await screen.findByRole("button", { name: /add scene/i }));
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
-    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.type(
+      screen.getByLabelText(/rtsp url/i),
+      "rtsp://camera.local/live",
+    );
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(
@@ -415,21 +430,31 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: /add camera/i }));
+    await user.click(await screen.findByRole("button", { name: /add scene/i }));
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
-    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.type(
+      screen.getByLabelText(/rtsp url/i),
+      "rtsp://camera.local/live",
+    );
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    await waitFor(() => expect(screen.getByLabelText(/primary model/i)).toHaveValue(""));
-    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await waitFor(() =>
+      expect(screen.getByLabelText(/primary model/i)).toHaveValue(""),
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/primary model/i),
+      "model-1",
+    );
     await user.click(screen.getByLabelText("person"));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     for (let count = 0; count < 4; count += 1) {
-      await user.click(screen.getByRole("button", { name: /add source point/i }));
+      await user.click(
+        screen.getByRole("button", { name: /add source point/i }),
+      );
       await user.click(
         screen.getByRole("button", { name: /add destination point/i }),
       );

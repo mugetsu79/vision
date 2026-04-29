@@ -27,7 +27,10 @@ vi.mock("@/lib/auth", () => ({
 import { AppShell } from "@/components/layout/AppShell";
 import { createQueryClient } from "@/app/query-client";
 import { oidcManager } from "@/lib/auth";
-import { type WorkspaceNavItem, workspaceNavGroups } from "@/components/layout/TopNav";
+import {
+  type WorkspaceNavItem,
+  workspaceNavGroups,
+} from "@/components/layout/TopNav";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
@@ -76,7 +79,11 @@ describe("AppShell", () => {
     expect(
       screen.getByRole("navigation", { name: /primary workspace/i }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--shell");
+    expect(screen.getByTestId("spatial-cockpit-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("spatial-workspace-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("omnisight-field")).toHaveClass(
+      "omnisight-field--shell",
+    );
     expect(screen.getByTestId("workspace-transition")).toBeInTheDocument();
     const intelligenceNav = screen.getByRole("navigation", {
       name: /intelligence/i,
@@ -85,12 +92,26 @@ describe("AppShell", () => {
 
     expect(intelligenceNav).toBeInTheDocument();
     expect(controlNav).toBeInTheDocument();
-    expect(within(intelligenceNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
-    expect(within(intelligenceNav).getByRole("link", { name: "History" })).toBeInTheDocument();
-    expect(within(intelligenceNav).getByRole("link", { name: "Evidence" })).toBeInTheDocument();
-    expect(within(controlNav).getByRole("link", { name: "Operations" })).toBeInTheDocument();
-    expect(within(controlNav).getByRole("link", { name: "Sites" })).toBeInTheDocument();
-    expect(within(controlNav).getByRole("link", { name: "Scenes" })).toBeInTheDocument();
+    expect(
+      within(intelligenceNav).getByRole("link", { name: "Live" }),
+    ).toBeInTheDocument();
+    expect(
+      within(intelligenceNav).getByRole("link", { name: "Patterns" }),
+    ).toBeInTheDocument();
+    expect(
+      within(intelligenceNav).getByRole("link", { name: "Evidence" }),
+    ).toBeInTheDocument();
+    expect(
+      within(controlNav).getByRole("link", { name: "Operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(controlNav).getByRole("link", { name: "Sites" }),
+    ).toBeInTheDocument();
+    expect(
+      within(controlNav).getByRole("link", { name: "Scenes" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/platform status/i)).toBeInTheDocument();
+    expect(screen.getByText(/all systems operational/i)).toBeInTheDocument();
     expect(screen.queryByText(/management/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/configuration surfaces stay one step away/i),
@@ -131,19 +152,37 @@ describe("AppShell", () => {
     expect(
       screen.getByRole("navigation", { name: /primary workspace/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /intelligence/i })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /control/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /intelligence/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /control/i }),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /hide section rail/i }));
+    await user.click(
+      screen.getByRole("button", { name: /hide section rail/i }),
+    );
 
-    expect(screen.getByRole("navigation", { name: /primary workspace/i })).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /intelligence/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /control/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /primary workspace/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: /intelligence/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: /control/i }),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /show section rail/i }));
+    await user.click(
+      screen.getByRole("button", { name: /show section rail/i }),
+    );
 
-    expect(screen.getByRole("navigation", { name: /intelligence/i })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /control/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /intelligence/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /control/i }),
+    ).toBeInTheDocument();
   });
 
   test("routes authenticated users into the refreshed omnisight workspace", async () => {
@@ -165,12 +204,23 @@ describe("AppShell", () => {
     const primaryWorkspaceNav = await screen.findByRole("navigation", {
       name: /primary workspace/i,
     });
-    expect(await screen.findByRole("heading", { name: /live intelligence/i })).toBeInTheDocument();
     expect(
-      screen.queryByText(/operator-grade visibility without native-bandwidth waste/i),
+      await screen.findByRole("heading", { name: /live intelligence/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /operator-grade visibility without native-bandwidth waste/i,
+      ),
     ).not.toBeInTheDocument();
-    expect(within(primaryWorkspaceNav).getByRole("link", { name: "Live" })).toBeInTheDocument();
-    expect(within(primaryWorkspaceNav).queryByRole("link", { name: "Cameras" })).not.toBeInTheDocument();
+    expect(
+      within(primaryWorkspaceNav).getByRole("link", { name: "Live" }),
+    ).toBeInTheDocument();
+    expect(
+      within(primaryWorkspaceNav).getByRole("link", { name: "Patterns" }),
+    ).toBeInTheDocument();
+    expect(
+      within(primaryWorkspaceNav).queryByRole("link", { name: "Cameras" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("navigation", {
         name: /intelligence/i,

@@ -11,8 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { omniLabels } from "@/copy/omnisight";
 import { COCO_CLASSES } from "@/lib/coco-classes";
-import { buildHistorySearchResults, type HistorySearchResult } from "@/lib/history-search";
-import { buildBucketDetails, buildDisplaySeries, getCoverageCopy } from "@/lib/history-workbench";
+import {
+  buildHistorySearchResults,
+  type HistorySearchResult,
+} from "@/lib/history-search";
+import {
+  buildBucketDetails,
+  buildDisplaySeries,
+  getCoverageCopy,
+} from "@/lib/history-workbench";
 import {
   type HistoryFilterState,
   type HistoryMetric,
@@ -39,14 +46,20 @@ export function HistoryPage() {
     readHistoryFiltersFromSearch(new URLSearchParams(location.search)),
   );
   const [showAllClasses, setShowAllClasses] = useState(false);
-  const [isDownloading, setIsDownloading] = useState<"csv" | "parquet" | null>(null);
+  const [isDownloading, setIsDownloading] = useState<"csv" | "parquet" | null>(
+    null,
+  );
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [, setFollowNowRefreshKey] = useState(0);
 
   const applyState = useCallback(
-    (next: HistoryFilterState | ((prev: HistoryFilterState) => HistoryFilterState)) => {
+    (
+      next:
+        | HistoryFilterState
+        | ((prev: HistoryFilterState) => HistoryFilterState),
+    ) => {
       setState((prev) => {
         const resolved = typeof next === "function" ? next(prev) : next;
         return resolved;
@@ -64,7 +77,10 @@ export function HistoryPage() {
       : location.search;
     if (search !== currentSearch) {
       selfWrittenSearchRef.current = search;
-      navigate({ pathname: location.pathname, search: `?${search}` }, { replace: true });
+      navigate(
+        { pathname: location.pathname, search: `?${search}` },
+        { replace: true },
+      );
     }
   }, [state, location.pathname, location.search, navigate]);
 
@@ -76,7 +92,9 @@ export function HistoryPage() {
       selfWrittenSearchRef.current = null;
       return;
     }
-    const parsed = readHistoryFiltersFromSearch(new URLSearchParams(location.search));
+    const parsed = readHistoryFiltersFromSearch(
+      new URLSearchParams(location.search),
+    );
     setState(parsed);
   }, [location.search]);
 
@@ -153,13 +171,18 @@ export function HistoryPage() {
   );
   const validSelectedBucket = useMemo(() => {
     if (!selectedBucket) return null;
-    return data?.rows.some((row) => row.bucket === selectedBucket) ? selectedBucket : null;
+    return data?.rows.some((row) => row.bucket === selectedBucket)
+      ? selectedBucket
+      : null;
   }, [data?.rows, selectedBucket]);
   const bucketDetail = useMemo(
     () => (data ? buildBucketDetails(data, validSelectedBucket) : null),
     [data, validSelectedBucket],
   );
-  const coverageCopy = useMemo(() => getCoverageCopy(data?.coverage_status), [data?.coverage_status]);
+  const coverageCopy = useMemo(
+    () => getCoverageCopy(data?.coverage_status),
+    [data?.coverage_status],
+  );
 
   const chartEmpty = !isLoading && (data?.rows.length ?? 0) === 0;
   const granularityBumped = data?.granularity_adjusted === true;
@@ -173,7 +196,9 @@ export function HistoryPage() {
     try {
       await downloadHistoryExport(filters, format);
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : `Failed to export ${format}.`);
+      setDownloadError(
+        error instanceof Error ? error.message : `Failed to export ${format}.`,
+      );
     } finally {
       setIsDownloading(null);
     }
@@ -182,15 +207,30 @@ export function HistoryPage() {
   function applyPresetRange(relativeWindow: RelativeHistoryWindow) {
     applyState((prev) => {
       const { from, to } = resolveRelativeWindow(relativeWindow);
-      return { ...prev, from, to, windowMode: "relative", relativeWindow, followNow: true };
+      return {
+        ...prev,
+        from,
+        to,
+        windowMode: "relative",
+        relativeWindow,
+        followNow: true,
+      };
     });
   }
 
   function resumeFollowingNow() {
     applyState((prev) => {
-      const relativeWindow = prev.windowMode === "relative" ? prev.relativeWindow : "last_24h";
+      const relativeWindow =
+        prev.windowMode === "relative" ? prev.relativeWindow : "last_24h";
       const { from, to } = resolveRelativeWindow(relativeWindow);
-      return { ...prev, from, to, windowMode: "relative", relativeWindow, followNow: true };
+      return {
+        ...prev,
+        from,
+        to,
+        windowMode: "relative",
+        relativeWindow,
+        followNow: true,
+      };
     });
   }
 
@@ -199,7 +239,10 @@ export function HistoryPage() {
       applyState((previous) => ({ ...previous, cameraIds: [result.cameraId] }));
     }
     if (result.type === "class") {
-      applyState((previous) => ({ ...previous, classNames: [result.className] }));
+      applyState((previous) => ({
+        ...previous,
+        classNames: [result.className],
+      }));
     }
     if (result.type === "boundary" && result.cameraId) {
       const cameraId = result.cameraId;
@@ -212,9 +255,12 @@ export function HistoryPage() {
   }
 
   return (
-    <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div
+      data-testid="patterns-workspace"
+      className="grid gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_360px]"
+    >
       <div className="space-y-4">
-        <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+        <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
           <OmniSightField variant="quiet" className="opacity-50" />
           <div className="relative z-10">
             <PageHeader
@@ -237,12 +283,18 @@ export function HistoryPage() {
           onSearchSelect={selectSearchResult}
         />
 
-        <section className="rounded-lg border border-white/10 bg-[#07101c] p-4">
+        <section
+          data-testid="pattern-export-surface"
+          className="rounded-[1rem] border border-white/10 bg-[#07101c] p-4"
+        >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="text-sm text-[#dce6f7]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Export</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
+                Export
+              </p>
               <p className="mt-1">
-                Export the current pattern view at {state.granularity} granularity.
+                Export the current pattern view at {state.granularity}{" "}
+                granularity.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -258,7 +310,10 @@ export function HistoryPage() {
               >
                 Last 7d
               </Button>
-              <Button disabled={isDownloading !== null} onClick={() => void handleDownload("csv")}>
+              <Button
+                disabled={isDownloading !== null}
+                onClick={() => void handleDownload("csv")}
+              >
                 {isDownloading === "csv" ? "Downloading..." : "Download CSV"}
               </Button>
               <Button
@@ -266,42 +321,50 @@ export function HistoryPage() {
                 className="bg-white/[0.06] text-[#edf3ff] shadow-none hover:bg-white/[0.1]"
                 onClick={() => void handleDownload("parquet")}
               >
-                {isDownloading === "parquet" ? "Downloading..." : "Download Parquet"}
+                {isDownloading === "parquet"
+                  ? "Downloading..."
+                  : "Download Parquet"}
               </Button>
             </div>
           </div>
-          {downloadError ? <p className="mt-3 text-sm text-[#f0b7c1]">{downloadError}</p> : null}
+          {downloadError ? (
+            <p className="mt-3 text-sm text-[#f0b7c1]">{downloadError}</p>
+          ) : null}
         </section>
 
         {isLoading ? (
-          <div className="rounded-lg border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
-            Loading history...
+          <div className="rounded-[1rem] border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
+            Loading patterns...
           </div>
         ) : error ? (
-          <div className="rounded-lg border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#f0b7c1]">
-            {error instanceof Error ? error.message : "Failed to load history."}
+          <div className="rounded-[1rem] border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#f0b7c1]">
+            {error instanceof Error
+              ? error.message
+              : "Failed to load patterns."}
           </div>
         ) : chartEmpty ? (
-          <div className="space-y-4 rounded-lg border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
+          <div className="space-y-4 rounded-[1rem] border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
             <p>{metricCopy.emptyState}</p>
-            <Button onClick={() => applyPresetRange("last_7d")}>Try last 7 days</Button>
+            <Button onClick={() => applyPresetRange("last_7d")}>
+              Try last 7 days
+            </Button>
           </div>
         ) : data ? (
           <div className="space-y-3">
             {granularityBumped ? (
-              <p className="rounded-md border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
+              <p className="rounded-[0.85rem] border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
                 Granularity adjusted to {data.granularity}.
               </p>
             ) : null}
             {speedCapped ? (
-              <p className="rounded-md border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
+              <p className="rounded-[0.85rem] border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
                 Speed panel capped at 20 classes.
               </p>
             ) : null}
             {speedRequestedButEmpty ? (
-              <p className="rounded-md border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
-                None of the selected classes have speed data in this window - try widening the range or check camera
-                homography.
+              <p className="rounded-[0.85rem] border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
+                None of the selected signals have speed data in this window -
+                try widening the range or check scene calibration.
               </p>
             ) : null}
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -325,26 +388,42 @@ export function HistoryPage() {
         ) : null}
       </div>
 
-      <aside className="space-y-6">
-        <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(4,7,12,0.96))]">
+      <aside data-testid="patterns-instrument-rail" className="space-y-4">
+        <section
+          data-testid="pattern-filter-rail"
+          className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(4,7,12,0.96))]"
+        >
           <div className="border-b border-white/8 px-5 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">Filters</p>
-            <h3 className="mt-2 text-lg font-semibold text-[#f3f7ff]">Scope the historical view</h3>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">
+              Filters
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-[#f3f7ff]">
+              Scope the historical view
+            </h3>
           </div>
 
           <div className="space-y-4 px-5 py-5">
             <label className="space-y-2 text-sm text-[#d9e5f7]">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Metric</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
+                Metric
+              </span>
               <Select
                 aria-label="Metric"
                 value={metric}
-                onChange={(e) => applyState((p) => ({ ...p, metric: e.target.value as HistoryMetric }))}
+                onChange={(e) =>
+                  applyState((p) => ({
+                    ...p,
+                    metric: e.target.value as HistoryMetric,
+                  }))
+                }
               >
                 <option value="occupancy">
-                  {historyMetricCopy("occupancy").label} — {historyMetricCopy("occupancy").description}
+                  {historyMetricCopy("occupancy").label} —{" "}
+                  {historyMetricCopy("occupancy").description}
                 </option>
                 <option value="count_events">
-                  {historyMetricCopy("count_events").label} — {historyMetricCopy("count_events").description}
+                  {historyMetricCopy("count_events").label} —{" "}
+                  {historyMetricCopy("count_events").description}
                 </option>
                 <option value="observations">
                   {historyMetricCopy("observations").label} (debug) —{" "}
@@ -353,18 +432,25 @@ export function HistoryPage() {
               </Select>
               {state.metric === null ? (
                 <p className="text-xs text-[#8ea8cf]">
-                  Automatically using {metricCopy.label.toLowerCase()} for the selected cameras.
+                  Automatically using {metricCopy.label.toLowerCase()} for the
+                  selected scenes.
                 </p>
               ) : null}
             </label>
 
             <label className="space-y-2 text-sm text-[#d9e5f7]">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Granularity</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
+                Granularity
+              </span>
               <Select
                 aria-label="Granularity"
                 value={state.granularity}
                 onChange={(e) =>
-                  applyState((p) => ({ ...p, granularity: e.target.value as HistoryFilterState["granularity"] }))
+                  applyState((p) => ({
+                    ...p,
+                    granularity: e.target
+                      .value as HistoryFilterState["granularity"],
+                  }))
                 }
               >
                 <option value="1m">1 minute</option>
@@ -375,14 +461,22 @@ export function HistoryPage() {
             </label>
 
             <label className="space-y-2 text-sm text-[#d9e5f7]">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Camera filters</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
+                Scene filters
+              </span>
               <Select
-                aria-label="Camera filters"
+                aria-label="Scene filters"
                 multiple
-                className="min-h-36 rounded-[1.5rem] py-3"
+                className="min-h-36 py-3"
                 value={state.cameraIds}
                 onChange={(e) =>
-                  applyState((p) => ({ ...p, cameraIds: Array.from(e.currentTarget.selectedOptions, (o) => o.value) }))
+                  applyState((p) => ({
+                    ...p,
+                    cameraIds: Array.from(
+                      e.currentTarget.selectedOptions,
+                      (o) => o.value,
+                    ),
+                  }))
                 }
               >
                 {cameras.map((camera) => (
@@ -394,20 +488,31 @@ export function HistoryPage() {
             </label>
 
             <div className="space-y-2 text-sm text-[#d9e5f7]">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">Class filters</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
+                Class filters
+              </span>
               <Select
                 aria-label="Class filters"
                 multiple
-                className="min-h-36 rounded-[1.5rem] py-3"
+                className="min-h-36 py-3"
                 value={state.classNames}
                 onChange={(e) =>
-                  applyState((p) => ({ ...p, classNames: Array.from(e.currentTarget.selectedOptions, (o) => o.value) }))
+                  applyState((p) => ({
+                    ...p,
+                    classNames: Array.from(
+                      e.currentTarget.selectedOptions,
+                      (o) => o.value,
+                    ),
+                  }))
                 }
               >
                 {observedClasses.map((entry) => (
                   <option key={entry.class_name} value={entry.class_name}>
-                    {entry.class_name} ({entry.event_count} {metricCopy.countLabel})
-                    {entry.has_speed_data ? "" : " — no speed data in this window"}
+                    {entry.class_name} ({entry.event_count}{" "}
+                    {metricCopy.countLabel})
+                    {entry.has_speed_data
+                      ? ""
+                      : " — no speed data in this window"}
                   </option>
                 ))}
                 {showAllClasses
@@ -423,7 +528,9 @@ export function HistoryPage() {
                 className="text-xs text-[#8ea8cf] underline"
                 onClick={() => setShowAllClasses((v) => !v)}
               >
-                {showAllClasses ? "Hide unseen classes" : "Show all 80 COCO classes"}
+                {showAllClasses
+                  ? "Hide unseen classes"
+                  : "Show all 80 COCO classes"}
               </button>
             </div>
 
@@ -432,7 +539,9 @@ export function HistoryPage() {
                 type="checkbox"
                 aria-label="Show speed"
                 checked={state.speed}
-                onChange={(e) => applyState((p) => ({ ...p, speed: e.target.checked }))}
+                onChange={(e) =>
+                  applyState((p) => ({ ...p, speed: e.target.checked }))
+                }
               />
               <span>Show speed</span>
             </label>
@@ -477,16 +586,24 @@ function resolveHistoryMetric(
     selectedCameraIds.length === 0
       ? cameras
       : cameras.filter((camera) => selectedCameraIds.includes(camera.id));
-  return selectedCameras.length > 0 && selectedCameras.every(cameraHasCountBoundaries)
+  return selectedCameras.length > 0 &&
+    selectedCameras.every(cameraHasCountBoundaries)
     ? "count_events"
     : "occupancy";
 }
 
-function cameraHasCountBoundaries(camera: { zones?: Array<Record<string, unknown>> }): boolean {
+function cameraHasCountBoundaries(camera: {
+  zones?: Array<Record<string, unknown>>;
+}): boolean {
   return (
     camera.zones?.some((zone) => {
-      const zoneType = typeof zone?.type === "string" ? zone.type.toLowerCase() : null;
-      return zoneType === "line" || zoneType === "polygon" || Array.isArray(zone?.polygon);
+      const zoneType =
+        typeof zone?.type === "string" ? zone.type.toLowerCase() : null;
+      return (
+        zoneType === "line" ||
+        zoneType === "polygon" ||
+        Array.isArray(zone?.polygon)
+      );
     }) ?? false
   );
 }

@@ -27,14 +27,13 @@
   color: var(--argus-text);
   background:
     radial-gradient(circle at top, rgba(42, 108, 255, 0.16), transparent 34%),
-    radial-gradient(circle at 84% 14%, rgba(132, 88, 255, 0.14), transparent 28%),
+    radial-gradient(
+      circle at 84% 14%,
+      rgba(132, 88, 255, 0.14),
+      transparent 28%
+    ),
     linear-gradient(180deg, #05070c 0%, #0a1018 48%, #121927 100%);
-  font-family:
-    "Avenir Next",
-    "Suisse Intl",
-    "Poppins",
-    "Segoe UI",
-    sans-serif;
+  font-family: "Avenir Next", "Suisse Intl", "Poppins", "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -87,15 +86,48 @@ select {
   transform: rotateX(64deg) rotateZ(-18deg);
 }
 
+.omnisight-field__ring--secondary {
+  opacity: 0.6;
+  rotate: 25deg;
+}
+
+.omnisight-field__orbital-map {
+  position: absolute;
+  inset: 5%;
+  border-radius: 9999px;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(118, 224, 255, 0.16),
+      transparent 2.5rem
+    ),
+    conic-gradient(
+      from 210deg at 50% 50%,
+      transparent 0 18%,
+      rgba(110, 189, 255, 0.34) 24%,
+      transparent 31% 58%,
+      rgba(126, 83, 255, 0.26) 66%,
+      transparent 73% 100%
+    );
+  mask-image: radial-gradient(
+    ellipse at center,
+    transparent 0 27%,
+    #000 27.5% 29%,
+    transparent 29.5% 37%,
+    #000 37.5% 38.5%,
+    transparent 39%
+  );
+  opacity: 0.48;
+}
+
 .omnisight-field__mark-stack {
   position: absolute;
   width: 12rem;
-  height: 12rem;
+  aspect-ratio: 1;
   transform-style: preserve-3d;
-  transform: rotateX(58deg) rotateZ(-12deg);
-  filter:
-    drop-shadow(0 0 22px rgba(110, 189, 255, 0.38))
-    drop-shadow(0 0 56px rgba(126, 83, 255, 0.24));
+  transform: translate3d(0, 0, 0);
+  filter: drop-shadow(0 0 26px rgba(110, 189, 255, 0.32))
+    drop-shadow(0 0 64px rgba(126, 83, 255, 0.22));
 }
 
 .omnisight-field__mark-layer {
@@ -110,14 +142,14 @@ select {
 }
 
 .omnisight-field__mark-layer--back {
-  opacity: 0.2;
-  transform: translate3d(-1rem, 0.9rem, -3rem) scale(0.92);
-  filter: blur(2px) saturate(1.25);
+  opacity: 0.16;
+  transform: translate3d(-1.15rem, 0.85rem, -3rem) scale(0.9);
+  filter: blur(2.2px) saturate(1.2);
 }
 
 .omnisight-field__mark-layer--middle {
-  opacity: 0.34;
-  transform: translate3d(-0.42rem, 0.38rem, -1.4rem) scale(0.97);
+  opacity: 0.26;
+  transform: translate3d(-0.5rem, 0.36rem, -1.4rem) scale(0.96);
   filter: blur(0.8px) saturate(1.12);
 }
 
@@ -126,41 +158,115 @@ select {
   transform: translate3d(0, 0, 0);
 }
 
-.omnisight-field__surface {
+.omnisight-field__node {
   position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(8, 13, 22, 0.68);
-  box-shadow: 0 22px 56px -44px rgba(0, 0, 0, 0.95);
-  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  max-width: 10rem;
+  color: rgba(229, 241, 255, 0.9);
+  text-shadow: 0 10px 26px rgba(0, 0, 0, 0.72);
+}
+
+.omnisight-field__node-dot {
+  margin-top: 0.28rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: var(--vezor-lens-cerulean);
+  box-shadow: 0 0 18px rgba(118, 224, 255, 0.72);
+}
+
+.omnisight-field__node-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.omnisight-field__node-copy span:first-child {
+  font-weight: 700;
+}
+
+.omnisight-field__node-copy span:last-child {
+  color: rgba(151, 169, 196, 0.9);
+  font-size: 0.66rem;
 }
 
 .omnisight-field--entry .omnisight-field__mark-stack {
-  width: clamp(12rem, 24vw, 18rem);
-  height: clamp(12rem, 24vw, 18rem);
-  left: clamp(24rem, 58vw, 52rem);
-  top: 14%;
-  opacity: 0.82;
+  width: clamp(16rem, 30vw, 27rem);
+  left: 60%;
+  top: 46%;
+  opacity: 0.76;
+  transform: translate3d(-50%, -50%, 0);
+}
+
+.omnisight-field--entry .omnisight-field__orbital-map {
+  inset: 6% 18%;
+  opacity: 0.62;
+}
+
+.omnisight-field--entry .omnisight-field__ring--primary {
+  left: calc(60% - 15rem);
+  top: calc(46% - 7rem);
+  width: 30rem;
+  height: 14rem;
+}
+
+.omnisight-field--entry .omnisight-field__ring--secondary {
+  left: calc(60% - 17rem);
+  top: calc(46% - 8rem);
+  width: 34rem;
+  height: 16rem;
 }
 
 .omnisight-field--overview .omnisight-field__mark-stack {
-  width: 13rem;
-  height: 13rem;
-  left: calc(50% - 6.5rem);
+  width: 16rem;
+  left: calc(50% - 8rem);
   top: 20%;
   opacity: 0.78;
 }
 
 .omnisight-field--shell .omnisight-field__mark-stack {
-  width: 5.5rem;
-  height: 5.5rem;
-  right: 4rem;
-  top: 2rem;
+  width: clamp(12rem, 18vw, 18rem);
+  right: clamp(4rem, 10vw, 9rem);
+  top: 3rem;
+  opacity: 0.08;
+}
+
+.omnisight-field--shell .omnisight-field__orbital-map {
+  inset: auto clamp(2rem, 6vw, 5rem) auto auto;
+  top: 1.5rem;
+  width: clamp(18rem, 32vw, 30rem);
+  height: clamp(12rem, 22vw, 20rem);
+  opacity: 0.14;
+}
+
+.omnisight-field--shell .omnisight-field__ring--primary {
+  left: auto;
+  right: clamp(6rem, 13vw, 12rem);
+  top: 2.25rem;
   opacity: 0.18;
+}
+
+.omnisight-field--shell .omnisight-field__ring--secondary {
+  left: auto;
+  right: clamp(5rem, 11vw, 10rem);
+  top: 4.5rem;
+  opacity: 0.12;
+}
+
+.omnisight-field--shell .omnisight-field__node {
+  opacity: 0.12;
+}
+
+.omnisight-field--shell .omnisight-field__node-copy {
+  opacity: 0;
 }
 
 .omnisight-field--quiet .omnisight-field__mark-stack {
   width: 3.5rem;
-  height: 3.5rem;
   right: 1.5rem;
   top: 1.25rem;
   opacity: 0.12;
@@ -168,17 +274,47 @@ select {
 
 @media (max-width: 900px) {
   .omnisight-field--entry .omnisight-field__mark-stack {
-    width: 10rem;
-    height: 10rem;
-    left: auto;
-    right: -1rem;
-    top: 8rem;
-    opacity: 0.24;
+    width: clamp(9.5rem, 48vw, 12rem);
+    left: 50%;
+    right: auto;
+    top: 12.25rem;
+    opacity: 0.14;
+    transform: translate3d(-50%, -50%, 0);
   }
 
   .omnisight-field--entry .omnisight-field__ring,
-  .omnisight-field--entry .omnisight-field__surface {
-    opacity: 0.55;
+  .omnisight-field--entry .omnisight-field__orbital-map {
+    opacity: 0.32;
+  }
+
+  .omnisight-field--entry .omnisight-field__ring--primary {
+    left: 50%;
+    top: 7.5rem;
+    width: min(82vw, 20rem);
+    height: 9.5rem;
+    translate: -50% 0;
+    transform: rotateX(64deg) rotateZ(-18deg);
+  }
+
+  .omnisight-field--entry .omnisight-field__ring--secondary {
+    left: 50%;
+    top: 8.4rem;
+    width: min(88vw, 22rem);
+    height: 10.5rem;
+    translate: -50% 0;
+    transform: rotateX(64deg) rotateZ(-18deg);
+  }
+
+  .omnisight-field--shell .omnisight-field__ring--primary {
+    right: 1rem;
+    width: min(70vw, 16rem);
+    height: 8rem;
+  }
+
+  .omnisight-field--shell .omnisight-field__ring--secondary {
+    right: 0.5rem;
+    width: min(76vw, 18rem);
+    height: 8.5rem;
   }
 }
 
@@ -210,10 +346,12 @@ select {
 
 @keyframes omnisight-mark-drift {
   from {
-    transform: rotateX(58deg) rotateZ(-12deg) translate3d(0, 0, 0);
+    translate: 0 0;
+    scale: 1;
   }
   to {
-    transform: rotateX(58deg) rotateZ(-6deg) translate3d(0.35rem, -0.15rem, 0);
+    translate: 0.35rem -0.15rem;
+    scale: 1.01;
   }
 }
 

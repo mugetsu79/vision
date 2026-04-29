@@ -132,29 +132,51 @@ describe("IncidentsPage", () => {
     expect(
       await screen.findByRole("heading", { name: /evidence desk/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /review queue/i })).toBeInTheDocument();
+    expect(screen.getByTestId("evidence-desk-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("evidence-filter-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("review-queue")).toBeInTheDocument();
+    expect(screen.getByTestId("evidence-media")).toBeInTheDocument();
+    expect(screen.getByTestId("facts-rail")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /review queue/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /facts/i })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: /^facts$/i })).toBeInTheDocument();
-    expect(screen.queryByRole("complementary", { name: /incident facts/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("complementary", { name: /^facts$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: /incident facts/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(/move from signal to decision/i),
     ).toBeInTheDocument();
 
     const hero = screen.getByRole("region", { name: /selected evidence/i });
     expect(within(hero).getByText(/clip-only evidence/i)).toBeInTheDocument();
-    expect(within(hero).getByRole("link", { name: /open clip/i })).toHaveAttribute(
+    expect(
+      within(hero).getByRole("link", { name: /open clip/i }),
+    ).toHaveAttribute(
       "href",
       "https://minio.local/signed/incidents/forklift-gate.mjpeg",
     );
-    expect(within(hero).getByRole("button", { name: /^review$/i })).toBeInTheDocument();
+    expect(
+      within(hero).getByRole("button", { name: /^review$/i }),
+    ).toBeInTheDocument();
 
     expect(screen.getAllByText("2.0 MB secured").length).toBeGreaterThan(0);
 
-    await user.selectOptions(screen.getByLabelText(/camera filter/i), [
+    expect(screen.queryByLabelText(/camera filter/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/incident type/i)).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/scene filter/i), [
       "11111111-1111-1111-1111-111111111111",
     ]);
-    await user.selectOptions(screen.getByLabelText(/incident type/i), ["ppe-missing"]);
-    await user.selectOptions(screen.getByLabelText(/review status/i), ["reviewed"]);
+    await user.selectOptions(screen.getByLabelText(/event type/i), [
+      "ppe-missing",
+    ]);
+    await user.selectOptions(screen.getByLabelText(/review status/i), [
+      "reviewed",
+    ]);
 
     await waitFor(() => {
       const incidentRequests = requests.filter(
@@ -184,7 +206,8 @@ describe("IncidentsPage", () => {
         return Promise.resolve(
           jsonResponse([
             incidentPayload({
-              snapshot_url: "https://minio.local/signed/incidents/forklift-gate.jpg",
+              snapshot_url:
+                "https://minio.local/signed/incidents/forklift-gate.jpg",
             }),
           ]),
         );
@@ -200,7 +223,7 @@ describe("IncidentsPage", () => {
     );
 
     expect(
-      await screen.findByRole("img", { name: /incident evidence/i }),
+      await screen.findByRole("img", { name: /evidence record/i }),
     ).toBeInTheDocument();
   });
 
@@ -235,7 +258,9 @@ describe("IncidentsPage", () => {
         url.pathname ===
         "/api/v1/incidents/99999999-9999-9999-9999-999999999999/review"
       ) {
-        const body = (await request.clone().json()) as { review_status?: string };
+        const body = (await request.clone().json()) as {
+          review_status?: string;
+        };
         patchBodies.push(body);
         incident = incidentPayload(
           body.review_status === "reviewed"
@@ -246,9 +271,7 @@ describe("IncidentsPage", () => {
               }
             : { review_status: "pending" },
         );
-        return Promise.resolve(
-          jsonResponse(incident),
-        );
+        return Promise.resolve(jsonResponse(incident));
       }
 
       return Promise.resolve(new Response("Not found", { status: 404 }));
@@ -260,7 +283,9 @@ describe("IncidentsPage", () => {
       </QueryClientProvider>,
     );
 
-    const hero = await screen.findByRole("region", { name: /selected evidence/i });
+    const hero = await screen.findByRole("region", {
+      name: /selected evidence/i,
+    });
     await user.click(within(hero).getByRole("button", { name: /^review$/i }));
 
     expect(
@@ -275,7 +300,9 @@ describe("IncidentsPage", () => {
     expect(reviewRequest?.method).toBe("PATCH");
     expect(patchBodies[0]).toEqual({ review_status: "reviewed" });
 
-    await user.selectOptions(screen.getByLabelText(/review status/i), ["reviewed"]);
+    await user.selectOptions(screen.getByLabelText(/review status/i), [
+      "reviewed",
+    ]);
 
     const reviewedHero = await screen.findByRole("region", {
       name: /selected evidence/i,
@@ -284,7 +311,9 @@ describe("IncidentsPage", () => {
       within(reviewedHero).getByRole("button", { name: /^reopen$/i }),
     ).toBeInTheDocument();
 
-    await user.click(within(reviewedHero).getByRole("button", { name: /^reopen$/i }));
+    await user.click(
+      within(reviewedHero).getByRole("button", { name: /^reopen$/i }),
+    );
 
     await waitFor(() => {
       expect(patchBodies[1]).toEqual({ review_status: "pending" });
@@ -314,7 +343,9 @@ describe("IncidentsPage", () => {
         url.pathname ===
         "/api/v1/incidents/99999999-9999-9999-9999-999999999999/review"
       ) {
-        return Promise.resolve(jsonResponse({ detail: "Insufficient role." }, 403));
+        return Promise.resolve(
+          jsonResponse({ detail: "Insufficient role." }, 403),
+        );
       }
 
       return Promise.resolve(new Response("Not found", { status: 404 }));
@@ -326,14 +357,18 @@ describe("IncidentsPage", () => {
       </QueryClientProvider>,
     );
 
-    const hero = await screen.findByRole("region", { name: /selected evidence/i });
+    const hero = await screen.findByRole("region", {
+      name: /selected evidence/i,
+    });
     await user.click(within(hero).getByRole("button", { name: /^review$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Operator access is required to change review state.",
     );
 
-    await user.selectOptions(screen.getByLabelText(/review status/i), ["reviewed"]);
+    await user.selectOptions(screen.getByLabelText(/review status/i), [
+      "reviewed",
+    ]);
 
     await waitFor(() => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();

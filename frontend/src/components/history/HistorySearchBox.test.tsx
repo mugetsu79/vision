@@ -7,8 +7,20 @@ import { HistorySearchBox } from "@/components/history/HistorySearchBox";
 import type { HistorySearchResult } from "@/lib/history-search";
 
 const results: HistorySearchResult[] = [
-  { id: "class:car", type: "class", group: "Classes", label: "car", className: "car" },
-  { id: "camera:gate", type: "camera", group: "Cameras", label: "Gate camera", cameraId: "cam-1" },
+  {
+    id: "class:car",
+    type: "class",
+    group: "Classes",
+    label: "car",
+    className: "car",
+  },
+  {
+    id: "camera:gate",
+    type: "camera",
+    group: "Scenes",
+    label: "Gate scene",
+    cameraId: "cam-1",
+  },
 ];
 
 describe("HistorySearchBox", () => {
@@ -25,7 +37,7 @@ describe("HistorySearchBox", () => {
       />,
     );
 
-    const input = screen.getByRole("combobox", { name: /search history/i });
+    const input = screen.getByRole("combobox", { name: /search patterns/i });
     await user.click(input);
     await user.keyboard("{ArrowDown}{Enter}");
 
@@ -49,13 +61,15 @@ describe("HistorySearchBox", () => {
 
     render(<Harness />);
 
-    const input = screen.getByRole("combobox", { name: /search history/i });
+    const input = screen.getByRole("combobox", { name: /search patterns/i });
     expect(screen.getByRole("listbox")).toBeInTheDocument();
 
     await user.click(input);
     await user.keyboard("{Escape}");
 
-    await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument(),
+    );
     expect(input).toHaveValue("");
   });
 });

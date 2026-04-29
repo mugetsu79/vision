@@ -2,7 +2,7 @@ import type { Camera } from "@/hooks/use-cameras";
 import type { HistoryClassesResponse, HistorySeriesResponse } from "@/hooks/use-history";
 
 export type HistorySearchResult =
-  | { id: string; type: "camera"; group: "Cameras"; label: string; cameraId: string }
+  | { id: string; type: "camera"; group: "Scenes"; label: string; cameraId: string }
   | { id: string; type: "class"; group: "Classes"; label: string; className: string }
   | { id: string; type: "boundary"; group: "Boundaries"; label: string; boundaryId: string; cameraId?: string }
   | { id: string; type: "bucket"; group: "Buckets" | "Gaps" | "Speed breaches"; label: string; bucket: string };
@@ -31,7 +31,7 @@ export function buildHistorySearchResults({
       results.push({
         id: `camera:${camera.id}`,
         type: "camera",
-        group: "Cameras",
+        group: "Scenes",
         label: camera.name,
         cameraId: camera.id,
       });

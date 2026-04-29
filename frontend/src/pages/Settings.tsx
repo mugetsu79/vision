@@ -1,5 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Copy, RefreshCw, Server, ShieldAlert, TerminalSquare } from "lucide-react";
+import {
+  Copy,
+  RefreshCw,
+  Server,
+  ShieldAlert,
+  TerminalSquare,
+} from "lucide-react";
 
 import { OmniSightField } from "@/components/brand/OmniSightField";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +28,8 @@ export function SettingsPage() {
   const bootstrap = useCreateBootstrapMaterial();
   const [hostname, setHostname] = useState("");
   const [version, setVersion] = useState("0.1.0");
-  const [bootstrapResult, setBootstrapResult] = useState<FleetBootstrapResponse | null>(null);
+  const [bootstrapResult, setBootstrapResult] =
+    useState<FleetBootstrapResponse | null>(null);
   const firstSiteId = fleet.data?.camera_workers[0]?.site_id;
 
   const modeCopy = useMemo(() => {
@@ -36,7 +43,11 @@ export function SettingsPage() {
   }, [fleet.data?.mode]);
 
   async function handleBootstrap() {
-    if (!firstSiteId || hostname.trim().length === 0 || version.trim().length === 0) {
+    if (
+      !firstSiteId ||
+      hostname.trim().length === 0 ||
+      version.trim().length === 0
+    ) {
       return;
     }
     const result = await bootstrap.mutateAsync({
@@ -49,7 +60,7 @@ export function SettingsPage() {
 
   if (fleet.isLoading) {
     return (
-      <section className="rounded-[1.5rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
+      <section className="rounded-[1rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
         Loading operations...
       </section>
     );
@@ -57,15 +68,15 @@ export function SettingsPage() {
 
   if (fleet.isError || !fleet.data) {
     return (
-      <section className="rounded-[1.5rem] border border-[#5a2330] bg-[#241118] px-5 py-6 text-sm text-[#ffc2cd]">
+      <section className="rounded-[1rem] border border-[#5a2330] bg-[#241118] px-5 py-6 text-sm text-[#ffc2cd]">
         Failed to load fleet operations.
       </section>
     );
   }
 
   return (
-    <div className="space-y-5 p-5 sm:p-6">
-      <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+    <div data-testid="operations-workspace" className="space-y-5 p-4 sm:p-6">
+      <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
         <OmniSightField variant="quiet" className="opacity-50" />
         <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -76,7 +87,8 @@ export function SettingsPage() {
               {omniLabels.operationsTitle}
             </h1>
             <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-              Monitor planned workers, runtime reports, bootstrap material, and stream diagnostics for the fleet.
+              Monitor planned workers, runtime reports, bootstrap material, and
+              stream diagnostics for the fleet.
             </p>
           </div>
           <Button type="button" onClick={() => void fleet.refetch()}>
@@ -86,25 +98,43 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 rounded-[1.1rem] border border-white/10 bg-[#07101c] p-4 md:grid-cols-5">
-        <SummaryTile label="Planned workers" value={fleet.data.summary.desired_workers} />
-        <SummaryTile label="Running workers" value={fleet.data.summary.running_workers} />
-        <SummaryTile label="Stale nodes" value={fleet.data.summary.stale_nodes} />
-        <SummaryTile label="Offline nodes" value={fleet.data.summary.offline_nodes} />
+      <section
+        data-testid="edge-fleet-grid"
+        className="grid gap-3 rounded-[1rem] border border-white/10 bg-[#07101c] p-4 md:grid-cols-5"
+      >
         <SummaryTile
-          label="Native unavailable"
+          label="Planned workers"
+          value={fleet.data.summary.desired_workers}
+        />
+        <SummaryTile
+          label="Running workers"
+          value={fleet.data.summary.running_workers}
+        />
+        <SummaryTile
+          label="Stale nodes"
+          value={fleet.data.summary.stale_nodes}
+        />
+        <SummaryTile
+          label="Offline nodes"
+          value={fleet.data.summary.offline_nodes}
+        />
+        <SummaryTile
+          label="Direct streams unavailable"
           value={fleet.data.summary.native_unavailable_cameras}
         />
       </section>
 
-      <section className="rounded-[1.25rem] border border-white/10 bg-[#0f172a] px-5 py-4">
+      <section className="rounded-[1rem] border border-white/10 bg-[#0f172a] px-5 py-4">
         <div className="flex items-center gap-3">
           <TerminalSquare className="size-5 text-[#8fd3ff]" />
           <div>
-            <h2 className="text-base font-semibold text-[#f4f8ff]">{modeCopy}</h2>
+            <h2 className="text-base font-semibold text-[#f4f8ff]">
+              {modeCopy}
+            </h2>
             <p className="mt-1 text-sm text-[#93a7c5]">
-              Start and stop are owned by the local terminal in dev, and by a supervisor
-              in production. The UI changes desired state and shows diagnostics.
+              Start and stop are owned by the local terminal in dev, and by a
+              supervisor in production. The UI changes planned state and shows
+              diagnostics.
             </p>
           </div>
         </div>
@@ -114,12 +144,18 @@ export function SettingsPage() {
         <Panel title="Nodes" icon={<Server className="size-4" />}>
           <div className="flex flex-col gap-3">
             {fleet.data.nodes.map((node) => (
-              <div key={node.id ?? "central"} className="rounded-[1rem] border border-white/10 p-3">
+              <div
+                key={node.id ?? "central"}
+                className="rounded-[1rem] border border-white/10 p-3"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-[#f4f8ff]">{node.hostname}</p>
+                    <p className="font-medium text-[#f4f8ff]">
+                      {node.hostname}
+                    </p>
                     <p className="mt-1 text-xs text-[#93a7c5]">
-                      {node.kind} - {node.assigned_camera_ids?.length ?? 0} assigned cameras
+                      {node.kind} - {node.assigned_camera_ids?.length ?? 0}{" "}
+                      assigned scenes
                     </p>
                   </div>
                   <Badge>{node.status}</Badge>
@@ -129,7 +165,10 @@ export function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel title="Bootstrap edge node" icon={<ShieldAlert className="size-4" />}>
+        <Panel
+          title="Bootstrap edge node"
+          icon={<ShieldAlert className="size-4" />}
+        >
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
               Hostname
@@ -166,13 +205,22 @@ export function SettingsPage() {
         </Panel>
       </section>
 
-      <Panel title="Camera workers" icon={<TerminalSquare className="size-4" />}>
+      <Panel
+        title="Scene workers"
+        icon={<TerminalSquare className="size-4" />}
+        testId="worker-rail"
+      >
         <div className="flex flex-col gap-3">
           {fleet.data.camera_workers.map((worker) => (
-            <div key={worker.camera_id} className="rounded-[1rem] border border-white/10 p-3">
+            <div
+              key={worker.camera_id}
+              className="rounded-[1rem] border border-white/10 p-3"
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-medium text-[#f4f8ff]">{worker.camera_name}</p>
+                  <p className="font-medium text-[#f4f8ff]">
+                    {worker.camera_name}
+                  </p>
                   <p className="mt-1 text-xs text-[#93a7c5]">
                     {worker.processing_mode} - {worker.lifecycle_owner}
                   </p>
@@ -185,30 +233,41 @@ export function SettingsPage() {
               {worker.detail ? (
                 <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
               ) : null}
-              {worker.dev_run_command ? <CommandBlock text={worker.dev_run_command} /> : null}
+              {worker.dev_run_command ? (
+                <CommandBlock text={worker.dev_run_command} />
+              ) : null}
             </div>
           ))}
         </div>
       </Panel>
 
-      <Panel title={omniLabels.streamDiagnosticsTitle} icon={<Copy className="size-4" />}>
+      <Panel
+        title={omniLabels.streamDiagnosticsTitle}
+        icon={<Copy className="size-4" />}
+        testId="stream-diagnostics-rail"
+      >
         <div className="flex flex-col gap-3">
           {fleet.data.delivery_diagnostics.map((diagnostic) => (
-            <div key={diagnostic.camera_id} className="rounded-[1rem] border border-white/10 p-3">
+            <div
+              key={diagnostic.camera_id}
+              className="rounded-[1rem] border border-white/10 p-3"
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-medium text-[#f4f8ff]">
-                    {diagnostic.camera_name} delivery
+                    {diagnostic.camera_name} scene delivery
                   </p>
                   <p className="mt-1 text-xs text-[#93a7c5]">
-                    {formatSource(diagnostic.source_capability)} - {diagnostic.default_profile}
+                    {formatSource(diagnostic.source_capability)} -{" "}
+                    {diagnostic.default_profile}
                   </p>
                 </div>
                 <Badge>{diagnostic.selected_stream_mode}</Badge>
               </div>
               {diagnostic.native_status?.available === false ? (
                 <p className="mt-2 text-sm text-amber-100">
-                  Native unavailable: {formatReason(diagnostic.native_status?.reason)}
+                  Direct stream unavailable:{" "}
+                  {formatReason(diagnostic.native_status?.reason)}
                 </p>
               ) : null}
             </div>
@@ -221,7 +280,7 @@ export function SettingsPage() {
 
 function SummaryTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[1rem] border border-white/10 bg-[#101827] px-4 py-3">
+    <div className="rounded-[0.85rem] border border-white/10 bg-[#101827] px-4 py-3">
       <p className="text-xs text-[#93a7c5]">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-[#f4f8ff]">{value}</p>
     </div>
@@ -232,13 +291,18 @@ function Panel({
   title,
   icon,
   children,
+  testId,
 }: {
   title: string;
   icon: ReactNode;
   children: ReactNode;
+  testId?: string;
 }) {
   return (
-    <section className="rounded-[1.25rem] border border-white/10 bg-[#0b1120] p-4">
+    <section
+      data-testid={testId}
+      className="rounded-[1rem] border border-white/10 bg-[#0b1120] p-4"
+    >
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#f4f8ff]">
         {icon}
         <h2>{title}</h2>

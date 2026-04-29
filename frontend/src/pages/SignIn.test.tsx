@@ -50,9 +50,9 @@ describe("SignInPage", () => {
     expect(
       screen.getByRole("group", { name: new RegExp(`${productBrand.name} product lockup`, "i") }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /vezor symbol/i })).toHaveAttribute(
+    expect(screen.getByRole("img", { name: /vezor 2d logo/i })).toHaveAttribute(
       "src",
-      "/brand/product-symbol-ui.svg",
+      "/brand/2d_logo_no_ring.png",
     );
     expect(
       screen.getByRole("heading", { name: /omnisight for every live environment/i }),
@@ -60,6 +60,9 @@ describe("SignInPage", () => {
     expect(
       screen.getByText(/connects scenes, models, events, evidence, and edge operations/i),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("signin-spatial-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("signin-orbit-auth")).toBeInTheDocument();
+    expect(screen.queryByTestId("omnisight-empty-surface")).not.toBeInTheDocument();
     expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--entry");
     expect(
       screen.getByText(

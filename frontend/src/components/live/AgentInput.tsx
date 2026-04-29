@@ -77,14 +77,19 @@ export function AgentInput({
       });
       onResolved(data, selectedScope);
     } catch (error) {
-      setErrorMessage(toApiError(error, "Failed to resolve the query.").message);
+      setErrorMessage(
+        toApiError(error, "Failed to resolve the query.").message,
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,17,27,0.98),rgba(5,9,16,0.96))] shadow-[0_24px_64px_-46px_rgba(84,136,255,0.45)]">
+    <section
+      data-testid="ask-vezor-dock"
+      className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,17,27,0.98),rgba(5,9,16,0.96))] shadow-[0_24px_64px_-46px_rgba(84,136,255,0.45)]"
+    >
       <div className="border-b border-white/8 px-5 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">
           {omniLabels.askVezorTitle}
@@ -93,12 +98,15 @@ export function AgentInput({
           Resolve operator intent across live scenes.
         </h3>
         <p className="mt-2 text-sm text-[#8ca2c5]">
-          Ask {brandName} for the signals you need, then keep the live wall focused
-          while the underlying telemetry remains unchanged.
+          Ask {brandName} for the signals you need, then keep the live wall
+          focused while the underlying telemetry remains unchanged.
         </p>
       </div>
 
-      <form className="space-y-4 px-5 py-5" onSubmit={(event) => void handleSubmit(event)}>
+      <form
+        className="space-y-4 px-5 py-5"
+        onSubmit={(event) => void handleSubmit(event)}
+      >
         <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)_auto]">
           <label className="space-y-2 text-sm text-[#d9e5f7]">
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
@@ -131,7 +139,11 @@ export function AgentInput({
           </label>
 
           <div className="flex items-end">
-            <Button className="w-full xl:w-auto" disabled={queryDisabled} type="submit">
+            <Button
+              className="w-full xl:w-auto"
+              disabled={queryDisabled}
+              type="submit"
+            >
               {isSubmitting ? "Resolving..." : "Apply"}
             </Button>
           </div>
@@ -143,7 +155,9 @@ export function AgentInput({
           </p>
         ) : null}
 
-        {errorMessage ? <p className="text-sm text-[#f0b7c1]">{errorMessage}</p> : null}
+        {errorMessage ? (
+          <p className="text-sm text-[#f0b7c1]">{errorMessage}</p>
+        ) : null}
 
         {resolution ? (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/8 pt-4">
@@ -157,10 +171,10 @@ export function AgentInput({
                 ? "Applied detector vocabulary"
                 : "Resolved classes"}
             </span>
+            <span className="text-sm text-[#8095b6]">{resolution.model}</span>
             <span className="text-sm text-[#8095b6]">
-              {resolution.model}
+              {resolution.latency_ms} ms
             </span>
-            <span className="text-sm text-[#8095b6]">{resolution.latency_ms} ms</span>
           </div>
         ) : null}
       </form>

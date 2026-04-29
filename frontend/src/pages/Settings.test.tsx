@@ -90,18 +90,21 @@ vi.mock("@/hooks/use-operations", () => ({
     refetch: vi.fn(),
   }),
   useCreateBootstrapMaterial: () => ({
-    mutateAsync: vi.fn(() => Promise.resolve({
-      edge_node_id: "00000000-0000-0000-0000-000000000999",
-      api_key: "edge_secret_once",
-      nats_nkey_seed: "nats_secret_once",
-      subjects: [],
-      mediamtx_url: "http://mediamtx:9997",
-      overlay_network_hints: {},
-      dev_compose_command: "docker compose -f infra/docker-compose.edge.yml up inference-worker",
-      supervisor_environment: {
-        ARGUS_EDGE_NODE_ID: "00000000-0000-0000-0000-000000000999",
-      },
-    })),
+    mutateAsync: vi.fn(() =>
+      Promise.resolve({
+        edge_node_id: "00000000-0000-0000-0000-000000000999",
+        api_key: "edge_secret_once",
+        nats_nkey_seed: "nats_secret_once",
+        subjects: [],
+        mediamtx_url: "http://mediamtx:9997",
+        overlay_network_hints: {},
+        dev_compose_command:
+          "docker compose -f infra/docker-compose.edge.yml up inference-worker",
+        supervisor_environment: {
+          ARGUS_EDGE_NODE_ID: "00000000-0000-0000-0000-000000000999",
+        },
+      }),
+    ),
     isPending: false,
   }),
 }));
@@ -123,20 +126,39 @@ describe("SettingsPage operations workbench", () => {
   test("renders fleet operations instead of placeholder copy", () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: /operations/i })).toBeInTheDocument();
-    expect(screen.getAllByText(/stream diagnostics/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: /operations/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("operations-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("edge-fleet-grid")).toBeInTheDocument();
+    expect(screen.getByTestId("worker-rail")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-diagnostics-rail")).toBeInTheDocument();
+    expect(screen.getAllByText(/stream diagnostics/i).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.queryByText(/delivery truth/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/native unavailable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/desired state/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/camera workers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/assigned cameras/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/scene workers/i)).toBeInTheDocument();
     expect(screen.getByText(/manual dev mode/i)).toBeInTheDocument();
     expect(screen.getAllByText(/planned workers/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/prompt 7 uses this route/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/direct streams unavailable/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/prompt 7 uses this route/i),
+    ).not.toBeInTheDocument();
   });
 
   test("shows worker lifecycle and delivery diagnostics", () => {
     renderPage();
 
     expect(screen.getByText("Lobby")).toBeInTheDocument();
-    expect(screen.getByText(/argus.inference.engine --camera-id/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/argus.inference.engine --camera-id/i),
+    ).toBeInTheDocument();
     expect(screen.getByText("jetson-1")).toBeInTheDocument();
+    expect(screen.getByText(/direct stream unavailable:/i)).toBeInTheDocument();
     expect(screen.getByText(/privacy filtering required/i)).toBeInTheDocument();
     expect(screen.getByText(/1280 x 720/i)).toBeInTheDocument();
   });
@@ -147,7 +169,9 @@ describe("SettingsPage operations workbench", () => {
 
     await user.type(screen.getByLabelText(/hostname/i), "edge-kit-01");
     await user.type(screen.getByLabelText(/version/i), "0.1.0");
-    await user.click(screen.getByRole("button", { name: /generate bootstrap/i }));
+    await user.click(
+      screen.getByRole("button", { name: /generate bootstrap/i }),
+    );
 
     expect(await screen.findByText(/edge_secret_once/i)).toBeInTheDocument();
     expect(screen.getByText(/shown once/i)).toBeInTheDocument();

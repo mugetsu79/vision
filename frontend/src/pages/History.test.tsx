@@ -35,7 +35,10 @@ vi.mock("@/components/history/HistoryTrendChart", () => ({
       data-testid="history-trend-chart"
       onClick={() => onBucketSelect?.(series.points[0]?.bucket ?? "")}
     >
-      {series.classNames.join(",")}::{series.points.length}::speed={String(!!series.includeSpeed)}::threshold={String(series.speedThreshold ?? "none")}::metric={metric ?? "none"}::selected={series.selectedBucket ?? "none"}
+      {series.classNames.join(",")}::{series.points.length}::speed=
+      {String(!!series.includeSpeed)}::threshold=
+      {String(series.speedThreshold ?? "none")}::metric={metric ?? "none"}
+      ::selected={series.selectedBucket ?? "none"}
     </button>
   ),
 }));
@@ -52,7 +55,10 @@ const routerFuture = {
 let recordedRequests: URL[] = [];
 
 function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 function historySeriesResponse(overrides: Record<string, unknown> = {}) {
@@ -60,7 +66,11 @@ function historySeriesResponse(overrides: Record<string, unknown> = {}) {
     granularity: "1h",
     class_names: ["car", "bus"],
     rows: [
-      { bucket: "2026-04-12T00:00:00Z", values: { car: 22, bus: 6 }, total_count: 28 },
+      {
+        bucket: "2026-04-12T00:00:00Z",
+        values: { car: 22, bus: 6 },
+        total_count: 28,
+      },
     ],
     granularity_adjusted: false,
     speed_classes_capped: false,
@@ -102,13 +112,17 @@ function renderPage(initialEntry = "/history") {
 
 function findHistoryRequest(pathname: string, metric: string) {
   return recordedRequests.find(
-    (request) => request.pathname === pathname && request.searchParams.get("metric") === metric,
+    (request) =>
+      request.pathname === pathname &&
+      request.searchParams.get("metric") === metric,
   );
 }
 
 function historyRequests(pathname: string, metric: string) {
   return recordedRequests.filter(
-    (request) => request.pathname === pathname && request.searchParams.get("metric") === metric,
+    (request) =>
+      request.pathname === pathname &&
+      request.searchParams.get("metric") === metric,
   );
 }
 
@@ -131,11 +145,14 @@ describe("HistoryPage", () => {
     });
 
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
-      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/cameras")
+        return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
         if (url.searchParams.get("include_speed") === "true") {
           return Promise.resolve(
@@ -149,7 +166,11 @@ describe("HistoryPage", () => {
                     speed_p50: { car: 42 },
                     speed_p95: { car: 55 },
                     speed_sample_count: { car: 22 },
-                    over_threshold_count: url.searchParams.get("speed_threshold") ? { car: 5 } : null,
+                    over_threshold_count: url.searchParams.get(
+                      "speed_threshold",
+                    )
+                      ? { car: 5 }
+                      : null,
                   },
                 ],
                 speed_classes_used: ["car"],
@@ -172,94 +193,147 @@ describe("HistoryPage", () => {
   });
 
   test("hydrates filter state from URL and calls endpoint with include_speed", async () => {
-    renderPage("/history?metric=observations&speed=1&speedThreshold=50&granularity=5m");
-    expect(await screen.findByRole("heading", { name: /history & patterns/i })).toBeInTheDocument();
+    renderPage(
+      "/history?metric=observations&speed=1&speedThreshold=50&granularity=5m",
+    );
+    expect(
+      await screen.findByRole("heading", { name: /history & patterns/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("patterns-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("patterns-instrument-rail")).toBeInTheDocument();
+    expect(screen.getByTestId("pattern-export-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("pattern-filter-rail")).toBeInTheDocument();
+    expect(screen.getByLabelText(/search patterns/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/scene filters/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/camera filters/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/as .* buckets/i)).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
         "speed=true::threshold=50::metric=observations",
       ),
     );
-    expect(findHistoryRequest("/api/v1/history/series", "observations")).toBeDefined();
-    expect(findHistoryRequest("/api/v1/history/classes", "observations")).toBeDefined();
+    expect(
+      findHistoryRequest("/api/v1/history/series", "observations"),
+    ).toBeDefined();
+    expect(
+      findHistoryRequest("/api/v1/history/classes", "observations"),
+    ).toBeDefined();
   });
 
   test("defaults to count_events when selected cameras have count boundaries", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
       if (url.pathname === "/api/v1/cameras") {
-        return Promise.resolve(jsonResponse([cameraResponse({ zones: [{ type: "line" }] })]));
+        return Promise.resolve(
+          jsonResponse([cameraResponse({ zones: [{ type: "line" }] })]),
+        );
       }
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
-      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series")
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
     renderPage("/history?cameras=cam-1");
 
     await waitFor(() => {
-      expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
-      expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/series", "count_events"),
+      ).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/classes", "count_events"),
+      ).toBeDefined();
     });
     expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
-    expect(screen.getByTestId("history-trend-chart")).toHaveTextContent("metric=count_events");
+    expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
+      "metric=count_events",
+    );
   });
 
   test("defaults to count_events when selected cameras only have polygon zones", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
       if (url.pathname === "/api/v1/cameras") {
         return Promise.resolve(
           jsonResponse([
             cameraResponse({
-              zones: [{ id: "workspace", polygon: [[0, 0], [10, 0], [10, 10], [0, 10]] }],
+              zones: [
+                {
+                  id: "workspace",
+                  polygon: [
+                    [0, 0],
+                    [10, 0],
+                    [10, 10],
+                    [0, 10],
+                  ],
+                },
+              ],
             }),
           ]),
         );
       }
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
-      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series")
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
     renderPage("/history?cameras=cam-1");
 
     await waitFor(() => {
-      expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
-      expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/series", "count_events"),
+      ).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/classes", "count_events"),
+      ).toBeDefined();
     });
     expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
   });
 
   test("defaults to count_events with no explicit camera filter when the camera inventory has count boundaries", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
       if (url.pathname === "/api/v1/cameras") {
-        return Promise.resolve(jsonResponse([cameraResponse({ zones: [{ type: "line" }] })]));
+        return Promise.resolve(
+          jsonResponse([cameraResponse({ zones: [{ type: "line" }] })]),
+        );
       }
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
-      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series")
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
     renderPage("/history");
 
     await waitFor(() => {
-      expect(findHistoryRequest("/api/v1/history/series", "count_events")).toBeDefined();
-      expect(findHistoryRequest("/api/v1/history/classes", "count_events")).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/series", "count_events"),
+      ).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/classes", "count_events"),
+      ).toBeDefined();
     });
     expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
   });
 
   test("stays on occupancy when only some selected cameras have count boundaries", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
       if (url.pathname === "/api/v1/cameras") {
@@ -270,16 +344,22 @@ describe("HistoryPage", () => {
           ]),
         );
       }
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
-      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series")
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
     renderPage("/history?cameras=cam-1,cam-2");
 
     await waitFor(() => {
-      expect(findHistoryRequest("/api/v1/history/series", "occupancy")).toBeDefined();
-      expect(findHistoryRequest("/api/v1/history/classes", "occupancy")).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/series", "occupancy"),
+      ).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/history/classes", "occupancy"),
+      ).toBeDefined();
     });
     expect(screen.getByLabelText("Metric")).toHaveValue("occupancy");
   });
@@ -301,35 +381,57 @@ describe("HistoryPage", () => {
 
   test("empty result shows the Try last 7 days button", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
-      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/cameras")
+        return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
-        return Promise.resolve(jsonResponse(historySeriesResponse({ rows: [] })));
+        return Promise.resolve(
+          jsonResponse(historySeriesResponse({ rows: [] })),
+        );
       }
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /try last 7 days/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("button", { name: /try last 7 days/i }),
+      ).toBeInTheDocument(),
     );
   });
 
   test("renders zero coverage as no detections instead of generic emptiness", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
-      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/cameras")
+        return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
         return Promise.resolve(
           jsonResponse(
             historySeriesResponse({
               class_names: ["car"],
-              rows: [{ bucket: "2026-04-12T00:00:00Z", values: { car: 0 }, total_count: 0 }],
+              rows: [
+                {
+                  bucket: "2026-04-12T00:00:00Z",
+                  values: { car: 0 },
+                  total_count: 0,
+                },
+              ],
               coverage_status: "zero",
-              coverage_by_bucket: [{ bucket: "2026-04-12T00:00:00Z", status: "zero", reason: null }],
+              coverage_by_bucket: [
+                {
+                  bucket: "2026-04-12T00:00:00Z",
+                  status: "zero",
+                  reason: null,
+                },
+              ],
             }),
           ),
         );
@@ -340,24 +442,41 @@ describe("HistoryPage", () => {
     renderPage();
 
     await screen.findByText(/telemetry was valid and no detections/i);
-    expect(screen.getAllByText(/no detections/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/no detections/i).length).toBeGreaterThanOrEqual(
+      1,
+    );
     expect(screen.getByTestId("history-trend-chart")).toBeInTheDocument();
   });
 
   test("renders no telemetry coverage distinctly", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
-      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/cameras")
+        return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
         return Promise.resolve(
           jsonResponse(
             historySeriesResponse({
               class_names: ["car"],
-              rows: [{ bucket: "2026-04-12T00:00:00Z", values: { car: 0 }, total_count: 0 }],
+              rows: [
+                {
+                  bucket: "2026-04-12T00:00:00Z",
+                  values: { car: 0 },
+                  total_count: 0,
+                },
+              ],
               coverage_status: "no_telemetry",
-              coverage_by_bucket: [{ bucket: "2026-04-12T00:00:00Z", status: "no_telemetry", reason: null }],
+              coverage_by_bucket: [
+                {
+                  bucket: "2026-04-12T00:00:00Z",
+                  status: "no_telemetry",
+                  reason: null,
+                },
+              ],
             }),
           ),
         );
@@ -368,7 +487,9 @@ describe("HistoryPage", () => {
     renderPage();
 
     await screen.findByText(/no usable telemetry/i);
-    expect(screen.getAllByText(/no telemetry/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/no telemetry/i).length).toBeGreaterThanOrEqual(
+      1,
+    );
   });
 
   test("keeps last 7 days preset as the active relative window", async () => {
@@ -383,7 +504,10 @@ describe("HistoryPage", () => {
     await user.click(screen.getByLabelText(/show speed/i));
 
     await waitFor(() => {
-      const requests = historyRequests("/api/v1/history/series", "occupancy").filter(
+      const requests = historyRequests(
+        "/api/v1/history/series",
+        "occupancy",
+      ).filter(
         (request) => request.searchParams.get("include_speed") === "true",
       );
       expect(requests.length).toBeGreaterThanOrEqual(1);
@@ -407,7 +531,10 @@ describe("HistoryPage", () => {
     await user.click(screen.getByLabelText(/show speed/i));
 
     await waitFor(() => {
-      const requests = historyRequests("/api/v1/history/series", "occupancy").filter(
+      const requests = historyRequests(
+        "/api/v1/history/series",
+        "occupancy",
+      ).filter(
         (request) => request.searchParams.get("include_speed") === "true",
       );
       expect(requests.length).toBeGreaterThanOrEqual(1);
@@ -430,7 +557,9 @@ describe("HistoryPage", () => {
     });
 
     await waitFor(() => {
-      const latest = historyRequests("/api/v1/history/series", "occupancy").at(-1);
+      const latest = historyRequests("/api/v1/history/series", "occupancy").at(
+        -1,
+      );
       expect(latest?.searchParams.get("from")).toBe("2026-04-27T11:35:00.000Z");
       expect(latest?.searchParams.get("to")).toBe("2026-04-27T12:35:00.000Z");
     });
@@ -439,10 +568,14 @@ describe("HistoryPage", () => {
   test("class filter is populated by /history/classes", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByRole("option", { name: /car \(40 visible samples\)/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: /car \(40 visible samples\)/i }),
+      ).toBeInTheDocument();
     });
     expect(
-      screen.getByRole("option", { name: /person \(5 visible samples\) — no speed data in this window/i }),
+      screen.getByRole("option", {
+        name: /person \(5 visible samples\) — no speed data in this window/i,
+      }),
     ).toBeInTheDocument();
   });
 
@@ -450,7 +583,9 @@ describe("HistoryPage", () => {
     renderPage("/history?metric=observations");
 
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /raw tracking samples/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("heading", { name: /raw tracking samples/i }),
+      ).toBeInTheDocument(),
     );
     expect(
       screen.getByRole("option", {
@@ -463,15 +598,21 @@ describe("HistoryPage", () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByRole("option", { name: /car \(40 visible samples\)/i });
-    await user.click(screen.getByRole("button", { name: /show all 80 coco classes/i }));
-    expect(screen.getByRole("option", { name: /giraffe \(0\)/i })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /show all 80 coco classes/i }),
+    );
+    expect(
+      screen.getByRole("option", { name: /giraffe \(0\)/i }),
+    ).toBeInTheDocument();
   });
 
   test("downloads exports with the selected metric", async () => {
     const user = userEvent.setup();
     const createObjectURL = vi.fn(() => "blob:history");
     const revokeObjectURL = vi.fn();
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
     Object.defineProperty(window.URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -484,17 +625,23 @@ describe("HistoryPage", () => {
     });
 
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
-      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
-      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      if (url.pathname === "/api/v1/cameras")
+        return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series")
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
       if (url.pathname === "/api/v1/export") {
         return Promise.resolve(
           new Response("bucket,class_name,event_count\n", {
             status: 200,
-            headers: { "Content-Disposition": 'attachment; filename="history.csv"' },
+            headers: {
+              "Content-Disposition": 'attachment; filename="history.csv"',
+            },
           }),
         );
       }
@@ -507,7 +654,9 @@ describe("HistoryPage", () => {
     await user.click(screen.getByRole("button", { name: /download csv/i }));
 
     await waitFor(() => {
-      expect(findHistoryRequest("/api/v1/export", "count_events")).toBeDefined();
+      expect(
+        findHistoryRequest("/api/v1/export", "count_events"),
+      ).toBeDefined();
     });
     expect(createObjectURL).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalled();
@@ -521,7 +670,9 @@ describe("HistoryPage", () => {
 
     const createObjectURL = vi.fn(() => "blob:history");
     const revokeObjectURL = vi.fn();
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
     Object.defineProperty(window.URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -539,7 +690,9 @@ describe("HistoryPage", () => {
 
     await waitFor(() => {
       const request = findHistoryRequest("/api/v1/export", "count_events");
-      expect(request?.searchParams.get("from")).toBe("2026-04-27T11:34:00.000Z");
+      expect(request?.searchParams.get("from")).toBe(
+        "2026-04-27T11:34:00.000Z",
+      );
       expect(request?.searchParams.get("to")).toBe("2026-04-27T12:34:00.000Z");
     });
 
@@ -552,7 +705,9 @@ describe("HistoryPage", () => {
     renderPage();
 
     await screen.findByTestId("history-trend-chart");
-    expect(screen.getByRole("heading", { name: /bucket review/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /bucket review/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/select a bucket/i)).toBeInTheDocument();
 
     await user.click(screen.getByTestId("history-trend-chart"));
@@ -566,18 +721,29 @@ describe("HistoryPage", () => {
   test("selects any bucket from the accessible bucket picker", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
-      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/cameras")
+        return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
         return Promise.resolve(
           jsonResponse(
             historySeriesResponse({
               rows: [
-                { bucket: "2026-04-12T00:00:00Z", values: { car: 22, bus: 6 }, total_count: 28 },
-                { bucket: "2026-04-12T01:00:00Z", values: { car: 5, bus: 2 }, total_count: 7 },
+                {
+                  bucket: "2026-04-12T00:00:00Z",
+                  values: { car: 22, bus: 6 },
+                  total_count: 28,
+                },
+                {
+                  bucket: "2026-04-12T01:00:00Z",
+                  values: { car: 5, bus: 2 },
+                  total_count: 7,
+                },
               ],
             }),
           ),
@@ -589,20 +755,29 @@ describe("HistoryPage", () => {
     renderPage();
     await screen.findByTestId("history-trend-chart");
 
-    await user.selectOptions(screen.getByLabelText("Review bucket"), "2026-04-12T01:00:00Z");
+    await user.selectOptions(
+      screen.getByLabelText("Review bucket"),
+      "2026-04-12T01:00:00Z",
+    );
 
-    expect(screen.getByRole("heading", { name: /12 Apr, 01:00/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /12 Apr, 01:00/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/7 visible samples/i)).toBeInTheDocument();
   });
 
   test("shows following-now controls by default and resumes from absolute windows", async () => {
     const user = userEvent.setup();
-    renderPage("/history?from=2026-04-01T00%3A00%3A00.000Z&to=2026-04-02T00%3A00%3A00.000Z");
+    renderPage(
+      "/history?from=2026-04-01T00%3A00%3A00.000Z&to=2026-04-02T00%3A00%3A00.000Z",
+    );
 
     await screen.findByTestId("history-trend-chart");
     expect(screen.getByText(/absolute window/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /resume following now/i }));
+    await user.click(
+      screen.getByRole("button", { name: /resume following now/i }),
+    );
 
     expect(screen.getByText(/following now/i)).toBeInTheDocument();
   });
@@ -614,7 +789,9 @@ describe("HistoryPage", () => {
     await screen.findByTestId("history-trend-chart");
     expect(screen.getByText(/paused window/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /resume following now/i }));
+    await user.click(
+      screen.getByRole("button", { name: /resume following now/i }),
+    );
 
     expect(screen.getByLabelText("Time window")).toHaveValue("last_7d");
     expect(screen.getByText(/following now/i)).toBeInTheDocument();
@@ -628,14 +805,19 @@ describe("HistoryPage", () => {
 
     await screen.findByTestId("history-trend-chart");
     expect(screen.getByText(/paused window/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /resume following now/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /resume following now/i }),
+    ).toBeInTheDocument();
 
     recordedRequests = [];
     vi.setSystemTime(new Date("2026-04-27T13:34:56.000Z"));
     await user.click(screen.getByLabelText(/show speed/i));
 
     await waitFor(() => {
-      const requests = historyRequests("/api/v1/history/series", "occupancy").filter(
+      const requests = historyRequests(
+        "/api/v1/history/series",
+        "occupancy",
+      ).filter(
         (request) => request.searchParams.get("include_speed") === "true",
       );
       expect(requests.length).toBeGreaterThanOrEqual(1);
@@ -648,11 +830,14 @@ describe("HistoryPage", () => {
   test("clears chart selection when the selected bucket leaves the current series", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
-      if (url.pathname === "/api/v1/cameras") return Promise.resolve(jsonResponse([]));
-      if (url.pathname === "/api/v1/history/classes") return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/cameras")
+        return Promise.resolve(jsonResponse([]));
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
       if (url.pathname === "/api/v1/history/series") {
         if (url.searchParams.get("metric") === "count_events") {
           return Promise.resolve(
@@ -660,7 +845,11 @@ describe("HistoryPage", () => {
               historySeriesResponse({
                 metric: "count_events",
                 rows: [
-                  { bucket: "2026-04-13T00:00:00Z", values: { car: 7, bus: 3 }, total_count: 10 },
+                  {
+                    bucket: "2026-04-13T00:00:00Z",
+                    values: { car: 7, bus: 3 },
+                    total_count: 10,
+                  },
                 ],
               }),
             ),
@@ -675,9 +864,14 @@ describe("HistoryPage", () => {
     await screen.findByTestId("history-trend-chart");
 
     await user.click(screen.getByTestId("history-trend-chart"));
-    expect(screen.getByTestId("history-trend-chart")).toHaveTextContent("selected=2026-04-12T00:00:00Z");
+    expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
+      "selected=2026-04-12T00:00:00Z",
+    );
 
-    await user.selectOptions(screen.getByLabelText("Toolbar metric"), "count_events");
+    await user.selectOptions(
+      screen.getByLabelText("Toolbar metric"),
+      "count_events",
+    );
 
     await waitFor(() =>
       expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
@@ -691,7 +885,7 @@ describe("HistoryPage", () => {
     renderPage();
 
     await screen.findByTestId("history-trend-chart");
-    await user.type(screen.getByLabelText(/search history/i), "car");
+    await user.type(screen.getByLabelText(/search patterns/i), "car");
     await user.click(screen.getByRole("option", { name: "car" }));
 
     await waitFor(() => {
@@ -703,8 +897,8 @@ describe("HistoryPage", () => {
       expect(request).toBeDefined();
     });
 
-    await user.clear(screen.getByLabelText(/search history/i));
-    await user.type(screen.getByLabelText(/search history/i), "spike");
+    await user.clear(screen.getByLabelText(/search patterns/i));
+    await user.type(screen.getByLabelText(/search patterns/i), "spike");
     await user.click(screen.getByRole("option", { name: /28 events/i }));
 
     expect(screen.getByText(/28 visible samples/i)).toBeInTheDocument();
@@ -713,7 +907,8 @@ describe("HistoryPage", () => {
   test("unified search selects boundary summaries by matching camera zones", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       recordedRequests.push(url);
       if (url.pathname === "/api/v1/cameras") {
@@ -725,11 +920,14 @@ describe("HistoryPage", () => {
         return Promise.resolve(
           jsonResponse({
             ...classesResponse(),
-            boundaries: [{ boundary_id: "entry-line", event_types: ["line_cross"] }],
+            boundaries: [
+              { boundary_id: "entry-line", event_types: ["line_cross"] },
+            ],
           }),
         );
       }
-      if (url.pathname === "/api/v1/history/series") return Promise.resolve(jsonResponse(historySeriesResponse()));
+      if (url.pathname === "/api/v1/history/series")
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
@@ -737,7 +935,7 @@ describe("HistoryPage", () => {
     await screen.findByTestId("history-trend-chart");
     recordedRequests = [];
 
-    await user.type(screen.getByLabelText(/search history/i), "entry-line");
+    await user.type(screen.getByLabelText(/search patterns/i), "entry-line");
     await user.click(screen.getByRole("option", { name: "entry-line" }));
 
     await waitFor(() => {

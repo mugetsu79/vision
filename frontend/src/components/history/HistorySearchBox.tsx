@@ -17,14 +17,16 @@ export function HistorySearchBox({
   const listboxId = useId();
   const [activeIndex, setActiveIndex] = useState(-1);
   const isOpen = Boolean(value.trim() && results.length > 0);
-  const activeOptionId = isOpen && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
-  const grouped = results.reduce<Record<string, Array<{ result: HistorySearchResult; index: number }>>>(
-    (groups, result, index) => {
-      groups[result.group] = [...(groups[result.group] ?? []), { result, index }];
-      return groups;
-    },
-    {},
-  );
+  const activeOptionId =
+    isOpen && activeIndex >= 0
+      ? `${listboxId}-option-${activeIndex}`
+      : undefined;
+  const grouped = results.reduce<
+    Record<string, Array<{ result: HistorySearchResult; index: number }>>
+  >((groups, result, index) => {
+    groups[result.group] = [...(groups[result.group] ?? []), { result, index }];
+    return groups;
+  }, {});
 
   useEffect(() => {
     setActiveIndex(-1);
@@ -45,7 +47,9 @@ export function HistorySearchBox({
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => (current <= 0 ? results.length - 1 : current - 1));
+      setActiveIndex((current) =>
+        current <= 0 ? results.length - 1 : current - 1,
+      );
       return;
     }
     if (event.key === "Enter" && activeIndex >= 0) {
@@ -64,7 +68,7 @@ export function HistorySearchBox({
     <div className="relative">
       <Input
         role="combobox"
-        aria-label="Search history"
+        aria-label="Search patterns"
         aria-expanded={isOpen}
         aria-controls={isOpen ? listboxId : undefined}
         aria-activedescendant={activeOptionId}

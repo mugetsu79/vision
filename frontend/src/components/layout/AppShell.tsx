@@ -30,8 +30,11 @@ export function AppShell({ children }: PropsWithChildren) {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#080c12] text-[#eef4ff]">
-      <OmniSightField variant="shell" className="opacity-80" />
+    <main
+      data-testid="spatial-cockpit-shell"
+      className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_55%_36%,rgba(74,121,211,0.16),transparent_30%),linear-gradient(180deg,#05080d_0%,#08101a_48%,#03050a_100%)] text-[#eef4ff]"
+    >
+      <OmniSightField variant="shell" className="opacity-85" />
       <div
         className={cn(
           "relative z-10 grid min-h-screen grid-cols-[4.75rem_minmax(0,1fr)]",
@@ -44,10 +47,11 @@ export function AppShell({ children }: PropsWithChildren) {
           onToggleContextRail={toggleContextRail}
         />
         {isContextRailExpanded ? <AppContextRail /> : null}
-        <section className="min-w-0 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-          <div className="min-h-[calc(100vh-2rem)] rounded-[1.25rem] border border-white/[0.07] bg-[rgba(8,12,18,0.74)] shadow-[0_28px_86px_-60px_rgba(0,0,0,0.94)] backdrop-blur-xl">
-            <WorkspaceTransition>{children}</WorkspaceTransition>
-          </div>
+        <section
+          data-testid="spatial-workspace-stage"
+          className="min-w-0 px-4 py-4 sm:px-6 lg:px-8 lg:py-6"
+        >
+          <WorkspaceTransition>{children}</WorkspaceTransition>
         </section>
       </div>
     </main>

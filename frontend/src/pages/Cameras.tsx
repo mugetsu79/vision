@@ -80,8 +80,8 @@ function CamerasContent() {
   }
 
   return (
-    <div className="space-y-5 p-5 sm:p-6">
-      <section className="relative overflow-hidden rounded-[1.1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
+    <div data-testid="scene-setup-workspace" className="space-y-5 p-4 sm:p-6">
+      <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
         <OmniSightField variant="quiet" className="opacity-50" />
         <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -92,21 +92,26 @@ function CamerasContent() {
               {omniLabels.sceneSetupTitle}
             </h2>
             <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-              Scene setup connects source streams, models, privacy rules, event boundaries, and calibration so {brandName} can understand each environment.
+              Scene setup connects source streams, models, privacy rules, event
+              boundaries, and calibration so {brandName} can understand each
+              environment.
             </p>
           </div>
-          <Button onClick={openCreateWizard}>Add camera</Button>
+          <Button onClick={openCreateWizard}>Add scene</Button>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[1.1rem] border border-white/8 bg-[#0b1320]">
+      <section
+        data-testid="scene-inventory-table"
+        className="overflow-hidden rounded-[1rem] border border-white/8 bg-[#0b1320]"
+      >
         <Table>
           <THead>
             <TR>
-              <TH>Name</TH>
+              <TH>Scene</TH>
               <TH>Site</TH>
               <TH>Mode</TH>
-              <TH>Delivery</TH>
+              <TH>Stream</TH>
               <TH>Tracker</TH>
               <TH>Actions</TH>
             </TR>
@@ -115,7 +120,7 @@ function CamerasContent() {
             {camerasLoading ? (
               <TR>
                 <TD colSpan={6} className="text-[#9eb2cf]">
-                  Loading cameras...
+                  Loading scenes...
                 </TD>
               </TR>
             ) : cameras.length === 0 ? (
@@ -136,7 +141,8 @@ function CamerasContent() {
                     </div>
                     {camera.source_capability ? (
                       <div className="mt-1 text-xs text-[#93a7c5]">
-                        source {`${camera.source_capability.width}×${camera.source_capability.height}`}
+                        source{" "}
+                        {`${camera.source_capability.width}×${camera.source_capability.height}`}
                       </div>
                     ) : null}
                   </TD>
@@ -171,12 +177,12 @@ function CamerasContent() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#8ea4c7]">
-                {wizardMode === "create" ? "Create camera" : "Edit camera"}
+                {wizardMode === "create" ? "Create scene" : "Edit scene"}
               </p>
               <h3 className="mt-2 text-2xl font-semibold text-[#f4f8ff]">
                 {wizardMode === "create"
-                  ? "Complete the guided setup for a new camera."
-                  : `Update ${selectedCamera?.name ?? "camera"} without exposing the stored RTSP URL.`}
+                  ? "Complete the guided setup for a new scene."
+                  : `Update ${selectedCamera?.name ?? "scene"} without exposing the stored RTSP URL.`}
               </h3>
             </div>
             <Button
@@ -196,9 +202,13 @@ function CamerasContent() {
               classes: model.classes,
             }))}
             modelsError={
-              modelQueryEmpty && modelsError instanceof Error ? modelsError.message : null
+              modelQueryEmpty && modelsError instanceof Error
+                ? modelsError.message
+                : null
             }
-            modelsLoading={modelQueryEmpty && (modelsLoading || modelsRefreshing)}
+            modelsLoading={
+              modelQueryEmpty && (modelsLoading || modelsRefreshing)
+            }
             onRetryModels={() => void refetchModels()}
             sites={sites.map((site) => ({ id: site.id, name: site.name }))}
             onSubmit={async (payload) => {

@@ -12,20 +12,24 @@ describe("OmniSightField", () => {
     expect(field).toHaveClass("omnisight-field--entry");
     expect(field.querySelector(".omnisight-field__lens")).toBeNull();
     expect(field.querySelector(".omnisight-field__mark-stack")).not.toBeNull();
-    expect(field.querySelectorAll(".omnisight-field__mark-layer")).toHaveLength(3);
+    expect(field.querySelector(".omnisight-field__orbital-map")).not.toBeNull();
+    const layers = field.querySelectorAll<HTMLImageElement>(".omnisight-field__mark-layer");
+    expect(layers).toHaveLength(3);
+    for (const layer of layers) {
+      expect(layer).toHaveAttribute("src", "/brand/3d_logo_no_bg.png");
+    }
     expect(field.querySelectorAll(".omnisight-field__ring")).toHaveLength(2);
-    expect(field.querySelectorAll(".omnisight-field__surface").length).toBeGreaterThan(
-      0,
-    );
+    expect(field.querySelectorAll(".omnisight-field__surface")).toHaveLength(0);
   });
 
-  test("renders quiet variant without overview surfaces", () => {
-    render(<OmniSightField variant="quiet" />);
+  test("renders shell variant with meaningful orbital nodes instead of empty rectangles", () => {
+    render(<OmniSightField variant="shell" />);
 
     const field = screen.getByTestId("omnisight-field");
-    expect(field).toHaveClass("omnisight-field--quiet");
+    expect(field).toHaveClass("omnisight-field--shell");
     expect(field.querySelector(".omnisight-field__lens")).toBeNull();
     expect(field.querySelector(".omnisight-field__mark-stack")).not.toBeNull();
     expect(field.querySelectorAll(".omnisight-field__surface")).toHaveLength(0);
+    expect(field.querySelectorAll(".omnisight-field__node")).toHaveLength(4);
   });
 });
