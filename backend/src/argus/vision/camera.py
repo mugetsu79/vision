@@ -52,6 +52,22 @@ class CaptureHandle(Protocol):
     def release(self) -> None: ...
 
 
+@dataclass(slots=True)
+class _PrefetchedFrameCapture:
+    _capture: CaptureHandle
+    _first_frame: Frame
+    _has_first_frame: bool = True
+
+    def read(self) -> tuple[bool, Frame | None]:
+        if self._has_first_frame:
+            self._has_first_frame = False
+            return True, self._first_frame
+        return self._capture.read()
+
+    def release(self) -> None:
+        self._capture.release()
+
+
 class CameraSourceMode(StrEnum):
     X86_RTSP = "x86-rtsp"
     JETSON_RTSP = "jetson-rtsp"
@@ -227,7 +243,12 @@ def _resolve_capture_spec(
 def _default_capture_factory(source: str | int, backend: int | None) -> CaptureHandle:
     if _should_use_ffmpeg_rawvideo_capture(source=source, backend=backend):
         try:
-            return _FFmpegRawVideoCapture.create(cast(str, source))
+            raw_capture = _FFmpegRawVideoCapture.create(cast(str, source))
+            success, frame = raw_capture.read()
+            if success and frame is not None:
+                return _PrefetchedFrameCapture(raw_capture, frame)
+            raw_capture.release()
+            raise RuntimeError("ffmpeg rawvideo capture produced no first frame.")
         except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
             redacted_source = redact_url_secrets(source) if isinstance(source, str) else source
             LOGGER.warning(

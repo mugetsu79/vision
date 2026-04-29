@@ -353,6 +353,45 @@ def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(
     )
 
 
+def test_default_capture_factory_falls_back_when_rawvideo_has_no_first_frame(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class _NoFrameCapture:
+        released = False
+
+        def read(self) -> tuple[bool, np.ndarray | None]:
+            return False, None
+
+        def release(self) -> None:
+            self.released = True
+
+    raw_capture = _NoFrameCapture()
+    fallback_capture = _FakeCapture([np.zeros((4, 4, 3), dtype=np.uint8)])
+
+    monkeypatch.setattr(camera_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(camera_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        camera_module._FFmpegRawVideoCapture,
+        "create",
+        classmethod(lambda cls, source_uri: raw_capture),  # noqa: ARG005
+    )
+    monkeypatch.setattr(cv2, "VideoCapture", lambda source, backend=None: fallback_capture)
+    monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory("rtsp://camera.internal/live", cv2.CAP_FFMPEG)
+
+    assert capture is fallback_capture
+    assert raw_capture.released is True
+    assert any(
+        "FFmpeg rawvideo capture unavailable, falling back to OpenCV"
+        in record.message
+        and "produced no first frame" in record.message
+        for record in caplog.records
+    )
+
+
 def test_default_capture_factory_redacts_probe_timeout_source_uri(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
