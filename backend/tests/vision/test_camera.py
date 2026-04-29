@@ -527,6 +527,56 @@ def test_ffmpeg_rawvideo_capture_redacts_source_uri_in_stderr_log(
     )
 
 
+def test_ffmpeg_rawvideo_capture_assembles_frame_from_pipe_chunks() -> None:
+    frame = np.arange(2 * 4 * 3, dtype=np.uint8).reshape(2, 4, 3)
+    payload = frame.tobytes()
+
+    class _ChunkedStdout:
+        def __init__(self) -> None:
+            self._chunks = deque([payload[:5], payload[5:17], payload[17:]])
+
+        def read(self, size: int) -> bytes:
+            del size
+            return b""
+
+        def read1(self, size: int) -> bytes:
+            if not self._chunks:
+                return b""
+            chunk = self._chunks.popleft()
+            return chunk[:size]
+
+    class _FakeProcess:
+        stdout = _ChunkedStdout()
+        stderr = io.BytesIO(b"")
+
+        def poll(self) -> int | None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 0
+
+        def kill(self) -> None:
+            return None
+
+    capture = camera_module._FFmpegRawVideoCapture(
+        _process=_FakeProcess(),
+        _width=4,
+        _height=2,
+        _source_uri="rtsp://camera.internal/live",
+        _redacted_source_uri="rtsp://camera.internal/live",
+    )
+
+    capture._start_frame_pump()
+    ok, decoded = capture.read()
+
+    assert ok is True
+    assert decoded is not None
+    assert np.array_equal(decoded, frame)
+
+
 def test_probe_video_dimensions_falls_back_to_ffmpeg_when_ffprobe_returns_zero(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

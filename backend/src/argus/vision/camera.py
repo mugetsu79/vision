@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from logging import getLogger
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 import cv2
 import numpy as np
@@ -357,8 +357,8 @@ class _FFmpegRawVideoCapture:
         def pump() -> None:
             try:
                 while True:
-                    payload = stdout.read(frame_size)
-                    if len(payload) != frame_size:
+                    payload = _read_exact_frame_payload(stdout, frame_size)
+                    if payload is None:
                         return
                     frame = np.frombuffer(payload, dtype=np.uint8).reshape(
                         (height, width, 3)
@@ -422,6 +422,21 @@ class _FFmpegRawVideoCapture:
         except subprocess.TimeoutExpired:
             self._process.kill()
             self._process.wait(timeout=2.0)
+
+
+def _read_exact_frame_payload(stdout: object, frame_size: int) -> bytes | None:
+    payload = bytearray()
+    while len(payload) < frame_size:
+        remaining = frame_size - len(payload)
+        read1 = getattr(stdout, "read1", None)
+        if callable(read1):
+            chunk = read1(remaining)
+        else:
+            chunk = cast(Any, stdout).read(remaining)
+        if not chunk:
+            return None
+        payload.extend(chunk)
+    return bytes(payload)
 
 
 def _should_use_ffmpeg_rawvideo_capture(*, source: str | int, backend: int | None) -> bool:
