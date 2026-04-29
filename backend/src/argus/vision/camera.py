@@ -326,7 +326,7 @@ def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCap
 
 
 def _open_buffered_opencv_capture(source: str | int, backend: int | None) -> CaptureHandle:
-    return _LatestFrameCapture.create(_open_opencv_capture(source, backend))
+    return _LatestFrameCapture.create(cast(CaptureHandle, _open_opencv_capture(source, backend)))
 
 
 def _configure_opencv_capture(capture: cv2.VideoCapture) -> None:
