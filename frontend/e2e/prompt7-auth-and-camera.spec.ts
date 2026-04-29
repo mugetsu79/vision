@@ -1,5 +1,11 @@
 import { expect, test, type Page, type APIRequestContext } from "@playwright/test";
 
+function workspaceLink(page: Page, group: "Intelligence" | "Control", name: string) {
+  return page
+    .getByRole("navigation", { name: group })
+    .getByRole("link", { name });
+}
+
 async function readAccessToken(page: Page) {
   const accessToken = await page.evaluate(() => {
     for (const key of Object.keys(window.localStorage)) {
@@ -39,8 +45,8 @@ async function seedModel(request: APIRequestContext, accessToken: string) {
       name: modelName,
       version: modelVersion,
       task: "detect",
-      path: `/models/${suffix}.onnx`,
-      format: "onnx",
+      path: `/models/${suffix}.engine`,
+      format: "engine",
       classes: ["person", "car", "truck"],
       input_shape: { h: 640, w: 640, c: 3 },
       sha256: "a".repeat(64),
@@ -61,6 +67,7 @@ test("real login creates a site and camera through the prompt 7 flows", async ({
   const suffix = Date.now().toString();
   const siteName = `Prompt 7 Site ${suffix}`;
   const cameraName = `Prompt 7 Camera ${suffix}`;
+  const rtspUrl = `rtsp://127.0.0.1:1/prompt7-${suffix}`;
 
   await page.goto("/signin");
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -72,32 +79,49 @@ test("real login creates a site and camera through the prompt 7 flows", async ({
   await expect(page).toHaveURL(/\/live$/);
   const accessToken = await readAccessToken(page);
   const { modelLabel } = await seedModel(request, accessToken);
-  await page.getByRole("link", { name: "Sites" }).click();
+  await workspaceLink(page, "Control", "Sites").click();
   await page.getByRole("button", { name: "Add site" }).click();
   await page.getByLabel("Site name").fill(siteName);
   await page.getByLabel("Time zone").fill("Europe/Zurich");
   await page.getByRole("button", { name: "Save site" }).click();
   await expect(page.getByRole("cell", { name: siteName })).toBeVisible();
 
-  await page.getByRole("link", { name: "Cameras" }).click();
-  await page.getByRole("button", { name: "Add camera" }).click();
-  await page.getByLabel("Camera name").fill(cameraName);
-  await page.getByLabel("Site").selectOption({ label: siteName });
-  await page.getByLabel("RTSP URL").fill("rtsp://camera.local/live");
-  await page.getByRole("button", { name: "Next" }).click();
-  await page.getByLabel("Primary model").selectOption({ label: modelLabel });
-  await page.getByRole("button", { name: "Next" }).click();
-  await page.getByLabel("Browser delivery profile").selectOption("720p10");
-  await page.getByRole("button", { name: "Next" }).click();
+  await workspaceLink(page, "Control", "Scenes").click();
+  const sceneWorkspace = page.getByTestId("scene-setup-workspace");
+  await sceneWorkspace.getByRole("button", { name: "Add scene" }).click();
+  await sceneWorkspace.getByLabel("Camera name").fill(cameraName);
+  await sceneWorkspace.getByLabel("Site", { exact: true }).selectOption({ label: siteName });
+  await sceneWorkspace.getByLabel("RTSP URL").fill(rtspUrl);
+  await sceneWorkspace.getByRole("button", { name: "Next" }).click();
+  await sceneWorkspace.getByLabel("Primary model").selectOption({ label: modelLabel });
+  await sceneWorkspace.getByRole("button", { name: "Next" }).click();
+  await sceneWorkspace.getByLabel("Browser delivery profile").selectOption("720p10");
+  await sceneWorkspace.getByRole("button", { name: "Next" }).click();
 
   for (let count = 0; count < 4; count += 1) {
-    await page.getByRole("button", { name: "Add source point" }).click();
-    await page.getByRole("button", { name: "Add destination point" }).click();
+    await sceneWorkspace.getByRole("button", { name: "Add source point" }).click();
+    await sceneWorkspace.getByRole("button", { name: "Add destination point" }).click();
   }
 
-  await page.getByLabel("Reference distance (m)").fill("12.5");
-  await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("button", { name: "Create camera" }).click();
+  await sceneWorkspace.getByLabel("Reference distance (m)").fill("12.5");
+  await sceneWorkspace.getByRole("button", { name: "Next" }).click();
+  const createCameraResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url() === "http://127.0.0.1:8000/api/v1/cameras" &&
+      response.request().method() === "POST",
+    { timeout: 60_000 },
+  );
 
+  await sceneWorkspace.getByRole("button", { name: "Create camera" }).click();
+  const createCameraResponse = await createCameraResponsePromise;
+
+  if (!createCameraResponse.ok()) {
+    throw new Error(
+      `Camera create failed with ${createCameraResponse.status()}: ${await createCameraResponse.text()}`,
+    );
+  }
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/cameras$/);
   await expect(page.getByRole("cell", { name: cameraName })).toBeVisible();
 });

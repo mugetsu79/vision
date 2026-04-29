@@ -1,4 +1,11 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+function workspaceLink(page: Page, group: "Intelligence" | "Control", name: string) {
+  return page
+    .getByRole("navigation", { name: group })
+    .getByRole("link", { name });
+}
 
 function cameraPayload(id: string, name: string, profile: string, mode: string) {
   return {
@@ -272,10 +279,10 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
 
   await expect(page.getByText("car").first()).toBeVisible();
   await expect(page.getByText("bus")).toBeVisible();
-  await expect(page.getByText(/online/i).first()).toBeVisible();
+  await expect(page.getByText(/telemetry live/i).first()).toBeVisible();
 
-  await page.getByRole("textbox", { name: /query/i }).fill("only show cars");
-  await page.getByRole("button", { name: "Apply query" }).click();
+  await page.getByRole("textbox", { name: /ask vezor/i }).fill("only show cars");
+  await page.getByRole("button", { name: "Apply" }).click();
 
   await expect(page.getByText("query-rules-v1").first()).toBeVisible();
   await expect(page.getByText("car").first()).toBeVisible();
@@ -298,19 +305,19 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
     .toBe(false);
 });
 
-test("visiting /dashboard redirects to /live and only shows Live in Operations nav", async ({ page }) => {
+test("visiting /dashboard redirects to /live and omits the legacy Dashboard nav item", async ({ page }) => {
   await page.goto("/signin");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.locator("#username").fill("admin-dev");
   await page.locator("#password").fill("argus-admin-pass");
   await page.locator("#kc-login").click();
+  await expect(page).toHaveURL(/\/live$/);
 
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/live$/);
 
-  const operationsNav = page.locator("nav").getByRole("link");
-  await expect(operationsNav.filter({ hasText: /^Dashboard$/ })).toHaveCount(0);
-  await expect(operationsNav.filter({ hasText: /^Live$/ })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Dashboard" })).toHaveCount(0);
+  await expect(workspaceLink(page, "Intelligence", "Live")).toBeVisible();
 });
 
 test("live sparkline renders with seeded data and does not reset on history round-trip", async ({ page }) => {
@@ -376,9 +383,9 @@ test("live sparkline renders with seeded data and does not reset on history roun
   await expect(page.getByLabel(/person sparkline/i)).toBeVisible();
   await expect(page.getByLabel(/car sparkline/i)).toBeVisible();
 
-  await page.getByRole("link", { name: "History" }).click();
+  await workspaceLink(page, "Intelligence", "Patterns").click();
   await expect(page).toHaveURL(/\/history/);
-  await page.getByRole("link", { name: "Live" }).click();
+  await workspaceLink(page, "Intelligence", "Live").click();
   await expect(page).toHaveURL(/\/live$/);
   await expect(page.getByLabel(/person sparkline/i)).toBeVisible();
 });

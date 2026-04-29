@@ -2,10 +2,17 @@ import fs from "node:fs/promises";
 
 import { expect, test, type Page } from "@playwright/test";
 
-function operationsLink(page: Page, name: string) {
+const workspaceDestinations = {
+  Evidence: { group: "Intelligence", label: "Evidence" },
+  Live: { group: "Intelligence", label: "Live" },
+  Patterns: { group: "Intelligence", label: "Patterns" },
+} as const;
+
+function workspaceLink(page: Page, name: keyof typeof workspaceDestinations) {
+  const destination = workspaceDestinations[name];
   return page
-    .getByRole("navigation", { name: "Operations" })
-    .getByRole("link", { name });
+    .getByRole("navigation", { name: destination.group })
+    .getByRole("link", { name: destination.label });
 }
 
 function cameraPayload() {
@@ -201,16 +208,16 @@ test("history renders quickly, CSV export works, and incidents cover review flow
   await expect(page).toHaveURL(/\/live$/);
 
   // Warm the dev server route chunk before measuring the history render budget.
-  await operationsLink(page, "History").click();
+  await workspaceLink(page, "Patterns").click();
   await expect(page).toHaveURL(/\/history(?:\?|$)/);
   await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
-  await operationsLink(page, "Live").click();
+  await workspaceLink(page, "Live").click();
   await expect(page).toHaveURL(/\/live$/);
 
   await page.evaluate(() => {
     (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart = performance.now();
   });
-  await operationsLink(page, "History").click();
+  await workspaceLink(page, "Patterns").click();
   await expect(page).toHaveURL(/\/history(?:\?|$)/);
   await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /bucket review/i })).toBeVisible();
@@ -240,12 +247,12 @@ test("history renders quickly, CSV export works, and incidents cover review flow
   const csv = await fs.readFile(downloadPath, "utf-8");
   expect(csv).toContain("bucket,class_name,event_count");
 
-  await operationsLink(page, "Incidents").click();
+  await workspaceLink(page, "Evidence").click();
   await expect(page).toHaveURL(/\/incidents$/);
   await expect.poll(() => incidentReviewStatuses[0]).toBe("pending");
-  await expect(page.getByRole("heading", { name: "Queue" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review Queue" })).toBeVisible();
   await expect(
-    page.getByRole("complementary", { name: "Incident facts" }),
+    page.getByRole("complementary", { name: "Facts" }),
   ).toBeVisible();
   const evidence = page.getByRole("region", { name: /selected evidence/i });
   await expect(evidence.getByText("Clip-only evidence")).toBeVisible();
@@ -253,7 +260,9 @@ test("history renders quickly, CSV export works, and incidents cover review flow
 
   await evidence.getByRole("button", { name: "Review" }).click();
   await expect.poll(() => patchBodies[0]).toEqual({ review_status: "reviewed" });
-  await expect(page.getByText(/no incident records match/i)).toBeVisible();
+  await expect(page.getByText(/no evidence records match/i)).toBeVisible({
+    timeout: 20_000,
+  });
 
   await page.getByLabel("Review status").selectOption("reviewed");
   await expect.poll(() => incidentReviewStatuses.at(-1)).toBe("reviewed");
@@ -306,10 +315,10 @@ test("incidents render signed snapshot previews", async ({ page }) => {
   await page.locator("#kc-login").click();
 
   await expect(page).toHaveURL(/\/live$/);
-  await operationsLink(page, "Incidents").click();
+  await workspaceLink(page, "Evidence").click();
   await expect(page).toHaveURL(/\/incidents$/);
   await expect(
-    page.getByRole("img", { name: /incident preview for forklift gate/i }),
+    page.getByRole("img", { name: /evidence record for forklift gate/i }),
   ).toBeVisible();
 });
 
@@ -368,7 +377,7 @@ test("history filter state survives navigation via URL", async ({ page }) => {
   await page.locator("#kc-login").click();
 
   await expect(page).toHaveURL(/\/live$/);
-  await operationsLink(page, "History").click();
+  await workspaceLink(page, "Patterns").click();
   await expect(page).toHaveURL(/\/history/);
 
   await page.getByLabel("Show speed").check();
@@ -377,7 +386,7 @@ test("history filter state survives navigation via URL", async ({ page }) => {
   await expect(page).toHaveURL(/speed=1/);
   await expect(page).toHaveURL(/speedThreshold=60/);
 
-  await operationsLink(page, "Live").click();
+  await workspaceLink(page, "Live").click();
   await expect(page).toHaveURL(/\/live$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/history.*speed=1.*speedThreshold=60/);
