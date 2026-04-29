@@ -220,6 +220,12 @@ def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -
     assert capture.properties[cv2.CAP_PROP_READ_TIMEOUT_MSEC] == 20000
 
 
+def test_ffmpeg_rtsp_timeout_covers_worker_first_frame_wait() -> None:
+    assert camera_module._FFMPEG_RTSP_TIMEOUT_US == str(
+        int(camera_module._FFMPEG_FRAME_WAIT_TIMEOUT_S * 1_000_000)
+    )
+
+
 def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -297,12 +303,12 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
 
     assert ok is True
     assert decoded is not None
-    np.testing.assert_array_equal(decoded, frame)
+    assert np.array_equal(decoded, frame)
     capture.release()
     assert created_commands[0][:4] == ["ffmpeg", "-loglevel", "error", "-rtsp_transport"]
     assert "-timeout" in created_commands[0]
     timeout_index = created_commands[0].index("-timeout")
-    assert created_commands[0][timeout_index + 1] == "5000000"
+    assert created_commands[0][timeout_index + 1] == "20000000"
     assert "-rw_timeout" not in created_commands[0]
     assert "-analyzeduration" in created_commands[0]
     analyze_index = created_commands[0].index("-analyzeduration")
@@ -587,7 +593,7 @@ def test_probe_via_ffmpeg_uses_rtsp_timeout_and_redacts_timeout_error(
     assert isinstance(command, list)
     assert "-timeout" in command
     timeout_index = command.index("-timeout")
-    assert command[timeout_index + 1] == "5000000"
+    assert command[timeout_index + 1] == "20000000"
     kwargs = captured["kwargs"]
     assert isinstance(kwargs, dict)
     assert kwargs["timeout"] == 20.0
