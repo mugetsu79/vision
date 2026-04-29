@@ -231,6 +231,7 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
 ) -> None:
     frame = np.arange(2 * 4 * 3, dtype=np.uint8).reshape(2, 4, 3)
     created_commands: list[list[str]] = []
+    created_bufsizes: list[int] = []
 
     class _FakeStdout:
         def __init__(self, chunks: list[bytes]) -> None:
@@ -282,8 +283,9 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
         )
 
     def fake_popen(command: list[str], stdout: object, stderr: object, bufsize: int):
-        del stdout, stderr, bufsize
+        del stdout, stderr
         created_commands.append(command)
+        created_bufsizes.append(bufsize)
         return _FakeProcess(frame.tobytes())
 
     monkeypatch.setattr(camera_module.platform, "system", lambda: "Darwin")
@@ -316,6 +318,7 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     assert "-probesize" in created_commands[0]
     probesize_index = created_commands[0].index("-probesize")
     assert created_commands[0][probesize_index + 1] == "64000000"
+    assert created_bufsizes == [0]
 
 
 def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(

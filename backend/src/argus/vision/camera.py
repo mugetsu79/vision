@@ -314,7 +314,7 @@ class _FFmpegRawVideoCapture:
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            bufsize=max(1, width * height * 3 * 2),
+            bufsize=0,
         )
         instance = cls(
             _process=process,
