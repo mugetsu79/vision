@@ -25,8 +25,10 @@ class _FakeCapture:
         self._frames = deque(frames)
         self.released = False
         self.properties: dict[int, float] = {}
+        self.read_count = 0
 
     def read(self) -> tuple[bool, np.ndarray | None]:
+        self.read_count += 1
         if not self._frames:
             return False, None
         frame = self._frames.popleft()
@@ -344,7 +346,9 @@ def test_default_capture_factory_logs_ffmpeg_rawvideo_failure_reason(
 
     capture = _default_capture_factory("rtsp://camera.internal/live", cv2.CAP_FFMPEG)
 
-    assert capture is fallback_capture
+    assert capture is not fallback_capture
+    capture.release()
+    assert fallback_capture.released is True
     assert any(
         "FFmpeg rawvideo capture unavailable, falling back to OpenCV"
         in record.message
@@ -382,7 +386,15 @@ def test_default_capture_factory_falls_back_when_rawvideo_has_no_first_frame(
 
     capture = _default_capture_factory("rtsp://camera.internal/live", cv2.CAP_FFMPEG)
 
-    assert capture is fallback_capture
+    for _ in range(20):
+        if fallback_capture.read_count > 0:
+            break
+        import time as _time
+
+        _time.sleep(0.01)
+
+    assert capture is not raw_capture
+    assert fallback_capture.read_count > 0
     assert raw_capture.released is True
     assert any(
         "FFmpeg rawvideo capture unavailable, falling back to OpenCV"
@@ -419,7 +431,9 @@ def test_default_capture_factory_redacts_probe_timeout_source_uri(
 
     capture = _default_capture_factory(source_uri, cv2.CAP_FFMPEG)
 
-    assert capture is fallback_capture
+    assert capture is not fallback_capture
+    capture.release()
+    assert fallback_capture.released is True
     assert any(
         "FFmpeg rawvideo capture unavailable, falling back to OpenCV"
         in record.message

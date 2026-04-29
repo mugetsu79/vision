@@ -68,6 +68,55 @@ class _PrefetchedFrameCapture:
         self._capture.release()
 
 
+@dataclass(slots=True)
+class _LatestFrameCapture:
+    _capture: CaptureHandle
+    _read_timeout_s: float = _FFMPEG_FRAME_WAIT_TIMEOUT_S
+    _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
+    _new_frame_event: threading.Event = field(default_factory=threading.Event)
+    _closed: bool = False
+    _pump_done: bool = False
+
+    @classmethod
+    def create(
+        cls,
+        capture: CaptureHandle,
+        *,
+        read_timeout_s: float = _FFMPEG_FRAME_WAIT_TIMEOUT_S,
+    ) -> _LatestFrameCapture:
+        instance = cls(_capture=capture, _read_timeout_s=read_timeout_s)
+        instance._start_frame_pump()
+        return instance
+
+    def _start_frame_pump(self) -> None:
+        def pump() -> None:
+            try:
+                while not self._closed:
+                    success, frame = self._capture.read()
+                    if not success or frame is None:
+                        return
+                    self._latest_frame.append(frame)
+                    self._new_frame_event.set()
+            finally:
+                self._pump_done = True
+                self._new_frame_event.set()
+
+        threading.Thread(target=pump, daemon=True).start()
+
+    def read(self) -> tuple[bool, Frame | None]:
+        if not self._new_frame_event.wait(timeout=self._read_timeout_s):
+            return False, None
+        self._new_frame_event.clear()
+        try:
+            return True, self._latest_frame[0]
+        except IndexError:
+            return False, None
+
+    def release(self) -> None:
+        self._closed = True
+        self._capture.release()
+
+
 class CameraSourceMode(StrEnum):
     X86_RTSP = "x86-rtsp"
     JETSON_RTSP = "jetson-rtsp"
@@ -260,11 +309,11 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
         backend == cv2.CAP_FFMPEG
         and isinstance(source, str)
         and source.startswith(("rtsp://", "rtsps://"))
-        and "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ
     ):
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _OPENCV_FFMPEG_CAPTURE_OPTIONS
-    capture = _open_opencv_capture(source, backend)
-    return cast(CaptureHandle, capture)
+        if "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ:
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _OPENCV_FFMPEG_CAPTURE_OPTIONS
+        return _open_buffered_opencv_capture(source, backend)
+    return cast(CaptureHandle, _open_opencv_capture(source, backend))
 
 
 def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCapture:
@@ -274,6 +323,10 @@ def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCap
         capture = cv2.VideoCapture(source)
     _configure_opencv_capture(capture)
     return capture
+
+
+def _open_buffered_opencv_capture(source: str | int, backend: int | None) -> CaptureHandle:
+    return _LatestFrameCapture.create(_open_opencv_capture(source, backend))
 
 
 def _configure_opencv_capture(capture: cv2.VideoCapture) -> None:
