@@ -231,11 +231,13 @@ select {
 }
 
 .omnisight-field--stage .omnisight-field__mark-stack {
-  width: clamp(17rem, 34vw, 31rem);
-  right: clamp(1rem, 7vw, 7rem);
-  top: 48%;
+  --stage-mark-x: 0;
+  --stage-mark-y: -50%;
+  width: clamp(15rem, 28vw, 24rem);
+  right: clamp(1.5rem, 8vw, 9rem);
+  top: 36%;
   opacity: 0.96;
-  transform: translate3d(0, -50%, 0);
+  transform: translate3d(var(--stage-mark-x), var(--stage-mark-y), 0);
 }
 
 .omnisight-field--stage .omnisight-field__orbital-map {
@@ -246,16 +248,16 @@ select {
 
 .omnisight-field--stage .omnisight-field__ring--primary {
   right: clamp(0rem, 8vw, 8rem);
-  top: calc(50% - 7rem);
-  width: clamp(19rem, 39vw, 36rem);
-  height: clamp(9rem, 17vw, 16rem);
+  top: calc(36% - 5.25rem);
+  width: clamp(18rem, 34vw, 32rem);
+  height: clamp(8rem, 15vw, 14rem);
 }
 
 .omnisight-field--stage .omnisight-field__ring--secondary {
   right: clamp(-1rem, 6vw, 6rem);
-  top: calc(50% - 8rem);
-  width: clamp(22rem, 43vw, 40rem);
-  height: clamp(10rem, 19vw, 18rem);
+  top: calc(36% - 6rem);
+  width: clamp(20rem, 38vw, 35rem);
+  height: clamp(9rem, 17vw, 16rem);
 }
 
 .signin-lens-glint {
@@ -265,6 +267,50 @@ select {
     transparent 58%
   );
   filter: blur(14px);
+}
+
+.signin-animated-logo {
+  --signin-logo-x: 0;
+  --signin-logo-y: -50%;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+  right: clamp(0.5rem, 6vw, 6.5rem);
+  top: 36%;
+  width: clamp(15rem, 28vw, 24rem);
+  height: clamp(15rem, 28vw, 24rem);
+  max-width: calc(100vw - 3rem);
+  object-fit: cover;
+  border-radius: 9999px;
+  overflow: hidden;
+  opacity: 0.68;
+  mix-blend-mode: multiply;
+  filter: brightness(0.72) contrast(1.48) saturate(1.42)
+    drop-shadow(0 0 34px rgba(118, 224, 255, 0.28))
+    drop-shadow(0 28px 72px rgba(63, 109, 255, 0.22));
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 52%,
+    #000 0 46%,
+    rgba(0, 0, 0, 0.62) 55%,
+    transparent 72%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 52%,
+    #000 0 46%,
+    rgba(0, 0, 0, 0.62) 55%,
+    transparent 72%
+  );
+  transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0);
+}
+
+.signin-lens-stage .omnisight-field--stage {
+  z-index: 1;
+}
+
+.signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
+  opacity: 0.96;
+  filter: drop-shadow(0 0 30px rgba(110, 189, 255, 0.42))
+    drop-shadow(0 0 86px rgba(126, 83, 255, 0.28));
 }
 
 .omnisight-field--dashboard .omnisight-field__mark-stack {
@@ -391,12 +437,14 @@ select {
   }
 
   .omnisight-field--stage .omnisight-field__mark-stack {
-    width: clamp(10rem, 54vw, 15rem);
+    --stage-mark-x: -50%;
+    --stage-mark-y: -50%;
+    width: clamp(9rem, 44vw, 11rem);
     left: 50%;
     right: auto;
-    top: 10.5rem;
+    top: 10.25rem;
     opacity: 0.82;
-    transform: translate3d(-50%, -50%, 0);
+    transform: translate3d(var(--stage-mark-x), var(--stage-mark-y), 0);
   }
 
   .omnisight-field--stage .omnisight-field__orbital-map {
@@ -416,14 +464,29 @@ select {
 
   .omnisight-field--stage .omnisight-field__ring--primary {
     top: 6.9rem;
-    width: min(82vw, 20rem);
-    height: 9.5rem;
+    width: min(72vw, 17rem);
+    height: 8.5rem;
   }
 
   .omnisight-field--stage .omnisight-field__ring--secondary {
     top: 7.8rem;
-    width: min(88vw, 22rem);
-    height: 10.5rem;
+    width: min(78vw, 19rem);
+    height: 9.25rem;
+  }
+
+  .signin-animated-logo {
+    --signin-logo-x: -50%;
+    --signin-logo-y: -50%;
+    left: 50%;
+    right: auto;
+    top: 10.25rem;
+    width: clamp(9rem, 44vw, 11rem);
+    height: clamp(9rem, 44vw, 11rem);
+    opacity: 0.58;
+  }
+
+  .signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
+    opacity: 0.84;
   }
 
   .omnisight-field--shell .omnisight-field__ring--primary {
@@ -451,13 +514,36 @@ select {
   .signin-lens-glint {
     animation: signin-glint 4.8s ease-in-out infinite alternate;
   }
+
+  .signin-animated-logo {
+    animation: signin-logo-presence 5.6s ease-in-out infinite alternate;
+  }
+
+  .signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
+    animation: signin-stage-mark 6.2s ease-in-out infinite alternate;
+  }
+
+  .signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
+    animation: signin-orbital-scan 13s linear infinite;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .omnisight-field__ring,
   .omnisight-field__mark-stack,
-  .signin-lens-glint {
+  .signin-lens-glint,
+  .signin-animated-logo,
+  .signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
     animation: none;
+  }
+
+  .signin-animated-logo {
+    display: none;
+  }
+
+  .signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
+    opacity: 0.82;
+    filter: none;
   }
 }
 
@@ -489,6 +575,50 @@ select {
   to {
     opacity: 0.68;
     transform: translate3d(0.7rem, -0.3rem, 0) scale(1.08);
+  }
+}
+
+@keyframes signin-logo-presence {
+  from {
+    opacity: 0.4;
+    transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0)
+      scale(0.96) rotate(-1.5deg);
+  }
+  45% {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 0.52;
+    transform: translate3d(
+        calc(var(--signin-logo-x) - 0.65rem),
+        calc(var(--signin-logo-y) - 0.45rem),
+        0
+      )
+      scale(1.035) rotate(1.6deg);
+  }
+}
+
+@keyframes signin-stage-mark {
+  from {
+    transform: translate3d(var(--stage-mark-x), var(--stage-mark-y), 0)
+      scale(0.985) rotate(-1.2deg);
+  }
+  to {
+    transform: translate3d(
+        calc(var(--stage-mark-x) - 0.55rem),
+        calc(var(--stage-mark-y) - 0.35rem),
+        0
+      )
+      scale(1.035) rotate(1.4deg);
+  }
+}
+
+@keyframes signin-orbital-scan {
+  from {
+    transform: rotate(-4deg) scale(0.985);
+  }
+  to {
+    transform: rotate(356deg) scale(1.02);
   }
 }
 

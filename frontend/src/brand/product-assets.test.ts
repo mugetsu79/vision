@@ -20,20 +20,29 @@ function expectPng(buffer: Buffer) {
   expect(buffer.subarray(1, 4).toString("ascii")).toBe("PNG");
 }
 
+function expectMp4(buffer: Buffer) {
+  expect(buffer.subarray(4, 8).toString("ascii")).toBe("ftyp");
+}
+
 describe("product brand logo assets", () => {
-  test("uses the official 2D and 3D logo assets from docs/brand at runtime", async () => {
+  test("uses the official 2D, 3D, and animated logo assets from docs/brand at runtime", async () => {
     expect(productBrand.runtimeAssets.logo2d).toBe("/brand/2d_logo_no_ring.png");
     expect(productBrand.runtimeAssets.logo3d).toBe("/brand/3d_logo_no_bg.png");
+    expect(productBrand.runtimeAssets.logoAnimated).toBe("/brand/animated_logo.mp4");
 
     const source2d = await readRepoBuffer("docs/brand/2d_logo_no_ring.png");
     const runtime2d = await readRepoBuffer("frontend/public/brand/2d_logo_no_ring.png");
     const source3d = await readRepoBuffer("docs/brand/3d_logo_no_bg.png");
     const runtime3d = await readRepoBuffer("frontend/public/brand/3d_logo_no_bg.png");
+    const sourceAnimated = await readRepoBuffer("docs/brand/animated_logo.mp4");
+    const runtimeAnimated = await readRepoBuffer("frontend/public/brand/animated_logo.mp4");
 
     expectPng(source2d);
     expectPng(source3d);
+    expectMp4(sourceAnimated);
     expect(runtime2d.equals(source2d)).toBe(true);
     expect(runtime3d.equals(source3d)).toBe(true);
+    expect(runtimeAnimated.equals(sourceAnimated)).toBe(true);
   });
 });
 

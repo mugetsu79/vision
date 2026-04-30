@@ -61,6 +61,17 @@ describe("SignInPage", () => {
       screen.getByText(/connects scenes, models, events, evidence, and edge operations/i),
     ).toBeInTheDocument();
     expect(screen.getByTestId("signin-lens-stage")).toBeInTheDocument();
+    const animatedLogo = screen.getByTestId("signin-animated-logo");
+    if (!(animatedLogo instanceof HTMLVideoElement)) {
+      throw new Error("Expected the sign-in animated logo to render as a video");
+    }
+    expect(animatedLogo.tagName.toLowerCase()).toBe("video");
+    expect(animatedLogo).toHaveAttribute("src", productBrand.runtimeAssets.logoAnimated);
+    expect(animatedLogo).toHaveAttribute("poster", productBrand.runtimeAssets.logo3d);
+    expect(animatedLogo).toHaveAttribute("autoplay");
+    expect(animatedLogo).toHaveAttribute("loop");
+    expect(animatedLogo).toHaveAttribute("playsinline");
+    expect(animatedLogo.muted).toBe(true);
     expect(screen.getByTestId("signin-auth-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("omnisight-empty-surface")).not.toBeInTheDocument();
     expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--stage");

@@ -11,10 +11,22 @@ export function SignInPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_74%_42%,rgba(110,189,255,0.18),transparent_28%),linear-gradient(180deg,var(--vezor-canvas-obsidian)_0%,#080d15_52%,#10141d_100%)] px-6 py-8 text-[var(--argus-text)]">
       <div
-        className="absolute inset-0"
+        className="signin-lens-stage absolute inset-0"
         data-testid="signin-lens-stage"
       >
         <OmniSightField variant="stage" className="opacity-95" />
+        <video
+          aria-hidden="true"
+          autoPlay
+          className="signin-animated-logo"
+          data-testid="signin-animated-logo"
+          loop
+          muted
+          playsInline
+          poster={productBrand.runtimeAssets.logo3d}
+          preload="auto"
+          src={productBrand.runtimeAssets.logoAnimated}
+        />
         <div className="signin-lens-glint pointer-events-none absolute right-[18%] top-[38%] h-28 w-28 rounded-full" />
       </div>
 
@@ -43,7 +55,7 @@ export function SignInPage() {
             <ul className="grid max-w-xl grid-cols-3 gap-3 text-sm text-[#dbe8fb]">
               {["Scenes", "Evidence", "Operations"].map((label) => (
                 <li key={label} className="flex items-center gap-3">
-                  <span className="h-2 w-2 rounded-full bg-[var(--vezor-lens-aqua)] shadow-[0_0_18px_rgba(118,224,255,0.62)]" />
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--vezor-lens-aqua)] shadow-[0_0_18px_rgba(118,224,255,0.62)]" />
                   <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9db7dc]">
                     {label}
                   </span>
@@ -54,7 +66,7 @@ export function SignInPage() {
 
           <section
             data-testid="signin-auth-panel"
-            className="ml-auto w-full max-w-[25rem] rounded-[0.95rem] border border-white/[0.12] bg-[linear-gradient(180deg,rgba(10,15,25,0.94),rgba(5,8,14,0.92))] p-6 text-[var(--argus-text)] shadow-[0_32px_90px_-62px_rgba(73,126,255,0.72)] backdrop-blur-xl sm:p-7 lg:mt-64"
+            className="ml-auto w-full max-w-[25rem] rounded-[0.95rem] border border-white/[0.12] bg-[linear-gradient(180deg,rgba(10,15,25,0.94),rgba(5,8,14,0.92))] p-6 text-[var(--argus-text)] shadow-[0_32px_90px_-62px_rgba(73,126,255,0.72)] backdrop-blur-xl sm:p-7 lg:mt-80"
           >
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--argus-text-muted)]">
               Secure entry
