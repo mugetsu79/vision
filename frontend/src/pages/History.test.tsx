@@ -200,6 +200,7 @@ describe("HistoryPage", () => {
       await screen.findByRole("heading", { name: /history & patterns/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("patterns-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("patterns-workbench-toolbar")).toBeInTheDocument();
     expect(screen.getByTestId("patterns-instrument-rail")).toBeInTheDocument();
     expect(screen.getByTestId("pattern-export-surface")).toBeInTheDocument();
     expect(screen.getByTestId("pattern-filter-rail")).toBeInTheDocument();
@@ -212,6 +213,7 @@ describe("HistoryPage", () => {
         "speed=true::threshold=50::metric=observations",
       ),
     );
+    expect(screen.getByTestId("pattern-trend-panel")).toBeInTheDocument();
     expect(
       findHistoryRequest("/api/v1/history/series", "observations"),
     ).toBeDefined();

@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 
 import { InspectorPanel } from "@/components/layout/InspectorPanel";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { PageUtilityBar } from "@/components/layout/PageUtilityBar";
-import { OmniSightField } from "@/components/brand/OmniSightField";
+import {
+  StatusToneBadge,
+  WorkspaceBand,
+} from "@/components/layout/workspace-surfaces";
 import { AgentInput, type LiveQueryScope } from "@/components/live/AgentInput";
 import { DynamicStats } from "@/components/live/DynamicStats";
 import { LiveSparkline } from "@/components/live/LiveSparkline";
@@ -76,49 +77,21 @@ function WorkspacePage() {
       className="grid gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_340px]"
     >
       <section className="min-w-0 space-y-5">
-        <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
-          <OmniSightField variant="quiet" className="opacity-50" />
-          <div className="relative z-10">
-            <PageHeader
-              className="border-b-0 pb-0"
-              eyebrow="Live"
-              title={omniLabels.liveTitle}
-              description="Watch scenes, signals, and operator intent converge in one live spatial intelligence layer."
-              actions={
-                <>
-                  <Badge className={connectionBadgeClass(connectionState)}>
-                    {connectionBadgeLabel(connectionState)}
-                  </Badge>
-                  <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-                    {cameras.length} connected scenes
-                  </Badge>
-                </>
-              }
-            />
-          </div>
-        </section>
-
-        <PageUtilityBar
-          label="Workspace utility"
-          title="Ask Vezor without leaving the live wall"
-          description={
-            isLoading
-              ? "Loading connected scenes."
-              : "Resolved intent narrows the operator view while telemetry remains truthful."
-          }
+        <WorkspaceBand
+          eyebrow="Live"
+          title={omniLabels.liveTitle}
+          description="Watch scenes, signals, and operator intent converge in one live spatial intelligence layer."
           actions={
-            <Badge className={connectionBadgeClass(connectionState)}>
-              {connectionBadgeLabel(connectionState)}
-            </Badge>
+            <>
+              <StatusToneBadge tone={connectionTone(connectionState)}>
+                {connectionBadgeLabel(connectionState)}
+              </StatusToneBadge>
+              <StatusToneBadge tone="accent">
+                {cameras.length} connected scenes
+              </StatusToneBadge>
+            </>
           }
-        >
-          <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-            {activeQuery ? "Filtered view active" : "All signals visible"}
-          </Badge>
-          <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-            {cameras.length} connected scenes
-          </Badge>
-        </PageUtilityBar>
+        />
 
         <AgentInput
           cameras={cameras.map((camera) => ({
@@ -182,7 +155,7 @@ function WorkspacePage() {
                   <article
                     key={camera.id}
                     data-testid="scene-portal"
-                    className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(10,16,26,0.96),rgba(5,8,13,0.98))] shadow-[0_22px_56px_-44px_rgba(63,121,255,0.52)] transition duration-200 hover:border-[rgba(118,224,255,0.28)] hover:shadow-[0_28px_70px_-50px_rgba(63,121,255,0.72)]"
+                    className="overflow-hidden rounded-[0.9rem] border border-white/10 bg-[color:var(--vezor-surface-neutral)] shadow-[0_20px_56px_-48px_rgba(0,0,0,0.92)] transition duration-200 hover:border-[color:var(--vezor-border-focus)]"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
                       <div>
@@ -214,7 +187,7 @@ function WorkspacePage() {
                       </div>
                     </div>
 
-                    <div className="relative aspect-video bg-[#02050b]">
+                    <div className="relative aspect-video bg-[color:var(--vezor-media-black)]">
                       <VideoStream
                         cameraId={camera.id}
                         cameraName={camera.name}
@@ -309,17 +282,19 @@ function connectionBadgeLabel(connectionState: string): string {
   return "Telemetry connecting";
 }
 
-function connectionBadgeClass(connectionState: string): string {
+function connectionTone(
+  connectionState: string,
+): "healthy" | "attention" | "danger" | "accent" {
   if (connectionState === "open") {
-    return "border-[#1f654c] bg-[#082118] text-[#b6f7d2]";
+    return "healthy";
   }
   if (connectionState === "error") {
-    return "border-[#5d2f3b] bg-[#221018] text-[#ffd2db]";
+    return "danger";
   }
   if (connectionState === "closed") {
-    return "border-[#6a4b1c] bg-[#24180d] text-[#ffd9a9]";
+    return "attention";
   }
-  return "border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]";
+  return "accent";
 }
 
 function heartbeatBadgeLabel(status: "unknown" | "fresh" | "stale"): string {

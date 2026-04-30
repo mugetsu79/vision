@@ -4,8 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { HistoryBucketDetail } from "@/components/history/HistoryBucketDetail";
 import { HistoryToolbar } from "@/components/history/HistoryToolbar";
 import { HistoryTrendPanel } from "@/components/history/HistoryTrendPanel";
-import { OmniSightField } from "@/components/brand/OmniSightField";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -260,17 +259,11 @@ export function HistoryPage() {
       className="grid gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_360px]"
     >
       <div className="space-y-4">
-        <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
-          <OmniSightField variant="quiet" className="opacity-50" />
-          <div className="relative z-10">
-            <PageHeader
-              className="border-b-0 pb-0"
-              eyebrow="History"
-              title={omniLabels.historyTitle}
-              description="Explore how signals, events, and scene patterns change over time."
-            />
-          </div>
-        </section>
+        <WorkspaceBand
+          eyebrow="History"
+          title={omniLabels.historyTitle}
+          description="Explore how signals, events, and scene patterns change over time."
+        />
 
         <HistoryToolbar
           state={state}
@@ -285,7 +278,7 @@ export function HistoryPage() {
 
         <section
           data-testid="pattern-export-surface"
-          className="rounded-[1rem] border border-white/10 bg-[#07101c] p-4"
+          className="rounded-[0.85rem] border border-white/8 bg-white/[0.025] p-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="text-sm text-[#dce6f7]">
@@ -391,7 +384,7 @@ export function HistoryPage() {
       <aside data-testid="patterns-instrument-rail" className="space-y-4">
         <section
           data-testid="pattern-filter-rail"
-          className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(4,7,12,0.96))]"
+          className="overflow-hidden rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)]"
         >
           <div className="border-b border-white/8 px-5 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">

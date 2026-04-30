@@ -34,7 +34,10 @@ export function HistoryToolbar({
   const isFollowingNow = state.windowMode === "relative" && state.followNow;
 
   return (
-    <section className="rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] p-4 shadow-[var(--vezor-shadow-depth)]">
+    <section
+      data-testid="patterns-workbench-toolbar"
+      className="rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-neutral)] p-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">

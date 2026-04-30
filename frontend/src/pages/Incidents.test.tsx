@@ -136,6 +136,9 @@ describe("IncidentsPage", () => {
     expect(screen.getByTestId("evidence-filter-bar")).toBeInTheDocument();
     expect(screen.getByTestId("review-queue")).toBeInTheDocument();
     expect(screen.getByTestId("evidence-media")).toBeInTheDocument();
+    expect(screen.getByTestId("evidence-media")).toHaveClass(
+      "bg-[color:var(--vezor-media-black)]",
+    );
     expect(screen.getByTestId("facts-rail")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /review queue/i }),

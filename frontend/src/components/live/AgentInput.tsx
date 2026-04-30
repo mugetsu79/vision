@@ -88,23 +88,20 @@ export function AgentInput({
   return (
     <section
       data-testid="ask-vezor-dock"
-      className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,17,27,0.98),rgba(5,9,16,0.96))] shadow-[0_24px_64px_-46px_rgba(84,136,255,0.45)]"
+      className="rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] px-4 py-4"
     >
-      <div className="border-b border-white/8 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">
           {omniLabels.askVezorTitle}
         </p>
-        <h3 className="mt-2 text-lg font-semibold text-[#f3f7ff]">
-          Resolve operator intent across live scenes.
-        </h3>
-        <p className="mt-2 text-sm text-[#8ca2c5]">
+        <p className="max-w-2xl text-sm text-[#8ca2c5]">
           Ask {brandName} for the signals you need, then keep the live wall
-          focused while the underlying telemetry remains unchanged.
+          focused.
         </p>
       </div>
 
       <form
-        className="space-y-4 px-5 py-5"
+        className="space-y-4 pt-4"
         onSubmit={(event) => void handleSubmit(event)}
       >
         <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)_auto]">

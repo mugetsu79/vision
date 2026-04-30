@@ -48,7 +48,10 @@ export function HistoryTrendPanel({
     : "Review first bucket";
 
   return (
-    <section className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(5,9,18,0.98))] shadow-[0_22px_56px_-46px_rgba(63,121,255,0.42)]">
+    <section
+      data-testid="pattern-trend-panel"
+      className="overflow-hidden rounded-[0.9rem] border border-white/10 bg-[color:var(--vezor-surface-neutral)] shadow-[0_22px_56px_-48px_rgba(0,0,0,0.92)]"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">

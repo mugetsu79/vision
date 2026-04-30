@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { OmniSightField } from "@/components/brand/OmniSightField";
+import {
+  InstrumentRail,
+  StatusToneBadge,
+  WorkspaceBand,
+} from "@/components/layout/workspace-surfaces";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -88,31 +92,20 @@ export function IncidentsPage() {
 
   return (
     <div data-testid="evidence-desk-workspace" className="space-y-5 p-4 sm:p-6">
-      <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
-        <OmniSightField variant="quiet" className="opacity-50" />
-        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9fb6d8]">
-              Evidence
-            </p>
-            <h2 className="mt-2 text-3xl font-semibold text-[#f4f8ff]">
-              {omniLabels.evidenceTitle}
-            </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#9eb0cb]">
-              Review evidence records, confirm state, and move from signal to
-              decision without leaving the desk.
-            </p>
-          </div>
-
-          <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+      <WorkspaceBand
+        eyebrow="Evidence"
+        title={omniLabels.evidenceTitle}
+        description="Review evidence records, confirm state, and move from signal to decision without leaving the desk."
+        actions={
+          <StatusToneBadge tone="accent">
             {incidents.length} records
-          </Badge>
-        </div>
-      </section>
+          </StatusToneBadge>
+        }
+      />
 
       <section
-        data-testid="evidence-filter-bar"
-        className="grid gap-4 rounded-[1rem] border border-white/10 bg-[#07101c] px-5 py-5 lg:grid-cols-3"
+      data-testid="evidence-filter-bar"
+        className="grid gap-4 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] px-5 py-5 lg:grid-cols-3"
       >
         <label className="space-y-2 text-sm text-[#d9e5f7]">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
@@ -220,10 +213,10 @@ function IncidentQueue({
   onSelect: (incidentId: string) => void;
 }) {
   return (
-    <aside
+    <InstrumentRail
       aria-label="Review Queue"
       data-testid="review-queue"
-      className="min-w-0 rounded-[1rem] border border-white/10 bg-white/[0.025]"
+      className="min-w-0 overflow-hidden"
     >
       <div className="border-b border-white/8 px-4 py-3">
         <h3 className="text-lg font-semibold text-[#eef4ff]">
@@ -262,7 +255,7 @@ function IncidentQueue({
           );
         })}
       </div>
-    </aside>
+    </InstrumentRail>
   );
 }
 
@@ -287,7 +280,7 @@ function IncidentEvidenceHero({
     <section
       aria-label="Selected evidence"
       data-testid="evidence-media"
-      className="min-w-0 overflow-hidden rounded-[1rem] border border-white/10 bg-[#050911]"
+      className="min-w-0 overflow-hidden rounded-[0.9rem] border border-white/10 bg-[color:var(--vezor-media-black)]"
     >
       <div className="border-b border-white/8 px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -299,9 +292,11 @@ function IncidentEvidenceHero({
               {incident.type} at {formatIncidentTime(incident.ts)}
             </p>
           </div>
-          <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+          <StatusToneBadge
+            tone={incident.review_status === "pending" ? "attention" : "healthy"}
+          >
             {incident.review_status}
-          </Badge>
+          </StatusToneBadge>
         </div>
       </div>
 
@@ -395,10 +390,10 @@ function IncidentFactsPanel({
   ];
 
   return (
-    <aside
+    <InstrumentRail
       aria-label="Facts"
       data-testid="facts-rail"
-      className="min-w-0 rounded-[1rem] border border-white/10 bg-white/[0.025]"
+      className="min-w-0 overflow-hidden"
     >
       <div className="border-b border-white/8 px-4 py-3">
         <h3 className="text-lg font-semibold text-[#eef4ff]">
@@ -422,7 +417,7 @@ function IncidentFactsPanel({
           ))}
         </dl>
       </div>
-    </aside>
+    </InstrumentRail>
   );
 }
 

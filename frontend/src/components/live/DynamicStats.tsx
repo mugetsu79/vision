@@ -8,7 +8,7 @@ export function DynamicStats({ counts }: { counts: Record<string, number> }) {
     );
 
   return (
-    <section className="overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(9,15,24,0.98),rgba(5,8,13,0.96))]">
+    <section className="overflow-hidden rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)]">
       <div className="border-b border-white/8 px-5 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">
           {omniLabels.signalsInViewTitle}
@@ -25,7 +25,7 @@ export function DynamicStats({ counts }: { counts: Record<string, number> }) {
           entries.map(([className, count]) => (
             <div
               key={className}
-              className="rounded-[0.85rem] border border-white/8 bg-[linear-gradient(180deg,rgba(14,24,39,0.98),rgba(8,14,23,0.98))] px-4 py-3"
+              className="rounded-[0.85rem] border border-white/8 bg-black/25 px-4 py-3"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#88a3cc]">
                 {className}
