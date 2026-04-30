@@ -25,17 +25,17 @@ function expectMp4(buffer: Buffer) {
 }
 
 describe("product brand logo assets", () => {
-  test("uses the official 2D, 3D, and animated logo assets from docs/brand at runtime", async () => {
+  test("uses the official 2D, 3D, and no-background animated logo assets from docs/brand at runtime", async () => {
     expect(productBrand.runtimeAssets.logo2d).toBe("/brand/2d_logo_no_ring.png");
     expect(productBrand.runtimeAssets.logo3d).toBe("/brand/3d_logo_no_bg.png");
-    expect(productBrand.runtimeAssets.logoAnimated).toBe("/brand/animated_logo.mp4");
+    expect(productBrand.runtimeAssets.logoAnimated).toBe("/brand/logo-no-bg.mp4");
 
     const source2d = await readRepoBuffer("docs/brand/2d_logo_no_ring.png");
     const runtime2d = await readRepoBuffer("frontend/public/brand/2d_logo_no_ring.png");
     const source3d = await readRepoBuffer("docs/brand/3d_logo_no_bg.png");
     const runtime3d = await readRepoBuffer("frontend/public/brand/3d_logo_no_bg.png");
-    const sourceAnimated = await readRepoBuffer("docs/brand/animated_logo.mp4");
-    const runtimeAnimated = await readRepoBuffer("frontend/public/brand/animated_logo.mp4");
+    const sourceAnimated = await readRepoBuffer("docs/brand/logo-no-bg.mp4");
+    const runtimeAnimated = await readRepoBuffer("frontend/public/brand/logo-no-bg.mp4");
 
     expectPng(source2d);
     expectPng(source3d);
@@ -56,6 +56,11 @@ describe("Vezor visual system tokens", () => {
     expect(css).toContain(".omnisight-field");
     expect(css).toContain(".omnisight-field__mark-stack");
     expect(css).not.toContain(".omnisight-field__lens");
+    expect(css).not.toContain("@keyframes signin-stage-mark");
+    expect(css).not.toContain("animation: signin-stage-mark");
+    expect(css).toContain(
+      ".signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack",
+    );
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

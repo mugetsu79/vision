@@ -4,7 +4,7 @@ export const productBrand = {
   runtimeAssets: {
     logo2d: "/brand/2d_logo_no_ring.png",
     logo3d: "/brand/3d_logo_no_bg.png",
-    logoAnimated: "/brand/animated_logo.mp4",
+    logoAnimated: "/brand/logo-no-bg.mp4",
   },
 } as const;
 

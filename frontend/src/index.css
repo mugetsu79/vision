@@ -261,6 +261,7 @@ select {
 }
 
 .signin-lens-glint {
+  z-index: 2;
   background: radial-gradient(
     circle,
     rgba(118, 224, 255, 0.75),
@@ -274,40 +275,28 @@ select {
   --signin-logo-y: -50%;
   pointer-events: none;
   position: absolute;
-  z-index: 0;
+  z-index: 1;
   right: clamp(0.5rem, 6vw, 6.5rem);
   top: 36%;
   width: clamp(15rem, 28vw, 24rem);
   height: clamp(15rem, 28vw, 24rem);
   max-width: calc(100vw - 3rem);
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 9999px;
   overflow: hidden;
-  opacity: 0.68;
-  mix-blend-mode: multiply;
-  filter: brightness(0.72) contrast(1.48) saturate(1.42)
-    drop-shadow(0 0 34px rgba(118, 224, 255, 0.28))
+  opacity: 0.96;
+  mix-blend-mode: normal;
+  filter: drop-shadow(0 0 34px rgba(118, 224, 255, 0.28))
     drop-shadow(0 28px 72px rgba(63, 109, 255, 0.22));
-  -webkit-mask-image: radial-gradient(
-    circle at 50% 52%,
-    #000 0 46%,
-    rgba(0, 0, 0, 0.62) 55%,
-    transparent 72%
-  );
-  mask-image: radial-gradient(
-    circle at 50% 52%,
-    #000 0 46%,
-    rgba(0, 0, 0, 0.62) 55%,
-    transparent 72%
-  );
   transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0);
 }
 
 .signin-lens-stage .omnisight-field--stage {
-  z-index: 1;
+  z-index: 0;
 }
 
 .signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
+  display: none;
   opacity: 0.96;
   filter: drop-shadow(0 0 30px rgba(110, 189, 255, 0.42))
     drop-shadow(0 0 86px rgba(126, 83, 255, 0.28));
@@ -482,7 +471,7 @@ select {
     top: 10.25rem;
     width: clamp(9rem, 44vw, 11rem);
     height: clamp(9rem, 44vw, 11rem);
-    opacity: 0.58;
+    opacity: 0.92;
   }
 
   .signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
@@ -515,14 +504,6 @@ select {
     animation: signin-glint 4.8s ease-in-out infinite alternate;
   }
 
-  .signin-animated-logo {
-    animation: signin-logo-presence 5.6s ease-in-out infinite alternate;
-  }
-
-  .signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
-    animation: signin-stage-mark 6.2s ease-in-out infinite alternate;
-  }
-
   .signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
     animation: signin-orbital-scan 13s linear infinite;
   }
@@ -542,6 +523,7 @@ select {
   }
 
   .signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack {
+    display: block;
     opacity: 0.82;
     filter: none;
   }
@@ -575,41 +557,6 @@ select {
   to {
     opacity: 0.68;
     transform: translate3d(0.7rem, -0.3rem, 0) scale(1.08);
-  }
-}
-
-@keyframes signin-logo-presence {
-  from {
-    opacity: 0.4;
-    transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0)
-      scale(0.96) rotate(-1.5deg);
-  }
-  45% {
-    opacity: 0.72;
-  }
-  to {
-    opacity: 0.52;
-    transform: translate3d(
-        calc(var(--signin-logo-x) - 0.65rem),
-        calc(var(--signin-logo-y) - 0.45rem),
-        0
-      )
-      scale(1.035) rotate(1.6deg);
-  }
-}
-
-@keyframes signin-stage-mark {
-  from {
-    transform: translate3d(var(--stage-mark-x), var(--stage-mark-y), 0)
-      scale(0.985) rotate(-1.2deg);
-  }
-  to {
-    transform: translate3d(
-        calc(var(--stage-mark-x) - 0.55rem),
-        calc(var(--stage-mark-y) - 0.35rem),
-        0
-      )
-      scale(1.035) rotate(1.4deg);
   }
 }
 
