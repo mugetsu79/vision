@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID, uuid4
@@ -19,6 +20,7 @@ from argus.streaming.webrtc import (
     MediaMTXTokenIssuer,
     UserConcurrencyLimiter,
     WebRTCNegotiator,
+    _open_rtsp_capture,
     _open_rtsp_mjpeg_stream,
     resolve_stream_access,
 )
@@ -87,6 +89,51 @@ def test_resolve_stream_access_disables_passthrough_when_edge_privacy_is_require
 
     assert access.mode is StreamMode.FILTERED_PREVIEW
     assert access.path_name == f"cameras/{camera_id}/preview"
+
+
+def test_mjpeg_bridge_rtsp_capture_uses_ffmpeg_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeCapture:
+        def __init__(self) -> None:
+            self.released = False
+            self.properties: dict[int, float] = {}
+
+        def isOpened(self) -> bool:
+            return True
+
+        def release(self) -> None:
+            self.released = True
+
+        def set(self, prop_id: int, value: float) -> bool:
+            self.properties[prop_id] = value
+            return True
+
+    class FakeCv2:
+        CAP_FFMPEG = 1900
+        CAP_PROP_OPEN_TIMEOUT_MSEC = 53
+        CAP_PROP_READ_TIMEOUT_MSEC = 54
+
+        def __init__(self) -> None:
+            self.capture = FakeCapture()
+            self.calls: list[tuple[str, int]] = []
+
+        def VideoCapture(self, rtsp_url: str, backend: int) -> FakeCapture:  # noqa: N802
+            self.calls.append((rtsp_url, backend))
+            return self.capture
+
+    fake_cv2 = FakeCv2()
+    monkeypatch.delenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", raising=False)
+
+    capture = _open_rtsp_capture("rtsp://mediamtx.internal/live", fake_cv2)
+
+    assert capture is fake_cv2.capture
+    assert fake_cv2.calls == [("rtsp://mediamtx.internal/live", fake_cv2.CAP_FFMPEG)]
+    assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == (
+        "rtsp_transport;tcp|analyzeduration;60000000|probesize;64000000|timeout;20000000"
+    )
+    assert capture.properties[fake_cv2.CAP_PROP_OPEN_TIMEOUT_MSEC] == 20000
+    assert capture.properties[fake_cv2.CAP_PROP_READ_TIMEOUT_MSEC] == 20000
 
 
 def test_mediamtx_token_issuer_emits_jwks_and_path_scoped_read_tokens() -> None:

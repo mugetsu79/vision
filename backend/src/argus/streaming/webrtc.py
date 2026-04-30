@@ -20,6 +20,13 @@ from jose import jwt  # type: ignore[import-untyped]
 
 from argus.models.enums import ProcessingMode
 from argus.streaming.mediamtx import StreamMode
+from argus.vision.camera import (
+    _FFMPEG_ANALYZE_DURATION_US,
+    _FFMPEG_PROBE_SIZE,
+    _FFMPEG_RTSP_TIMEOUT_US,
+    _OPENCV_CAPTURE_OPEN_TIMEOUT_MS,
+    _OPENCV_CAPTURE_READ_TIMEOUT_MS,
+)
 
 if TYPE_CHECKING:
     from argus.core.config import Settings
@@ -445,6 +452,10 @@ MJPEG_CONTENT_TYPE = f"multipart/x-mixed-replace; boundary={MJPEG_BOUNDARY}"
 _MJPEG_FRAME_PREFIX = f"--{MJPEG_BOUNDARY}\r\nContent-Type: image/jpeg\r\n\r\n".encode()
 _MJPEG_STARTUP_RETRY_DELAYS_SECONDS = (0.25, 0.25, 0.5, 1.0, 1.0)
 _MJPEG_RUNTIME_RETRY_DELAYS_SECONDS = (0.25, 0.5, 1.0, 2.0, 2.0, 5.0)
+_OPENCV_FFMPEG_CAPTURE_OPTIONS = (
+    f"rtsp_transport;tcp|analyzeduration;{_FFMPEG_ANALYZE_DURATION_US}"
+    f"|probesize;{_FFMPEG_PROBE_SIZE}|timeout;{_FFMPEG_RTSP_TIMEOUT_US}"
+)
 
 
 async def _open_rtsp_mjpeg_stream(rtsp_url_source: RtspUrlSource) -> UpstreamProxyStream:
@@ -533,12 +544,30 @@ def _resolve_rtsp_url(rtsp_url_source: RtspUrlSource) -> str:
 
 def _open_rtsp_capture(rtsp_url: str, cv2: Any) -> Any:
     if "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ:
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _OPENCV_FFMPEG_CAPTURE_OPTIONS
     capture = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+    _configure_rtsp_capture_timeouts(capture, cv2)
     if not capture.isOpened():
         capture.release()
         raise RuntimeError(f"Unable to open RTSP stream {rtsp_url}.")
     return capture
+
+
+def _configure_rtsp_capture_timeouts(capture: Any, cv2: Any) -> None:
+    setter = getattr(capture, "set", None)
+    if not callable(setter):
+        return
+
+    for prop_id, value in (
+        (getattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC", None), _OPENCV_CAPTURE_OPEN_TIMEOUT_MS),
+        (getattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC", None), _OPENCV_CAPTURE_READ_TIMEOUT_MS),
+    ):
+        if prop_id is None:
+            continue
+        try:
+            setter(prop_id, value)
+        except Exception:  # pragma: no cover - backend-specific OpenCV failure
+            continue
 
 
 def _read_rtsp_frame(capture: Any) -> Any | None:
