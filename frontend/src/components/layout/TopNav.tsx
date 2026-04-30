@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   Clock3,
+  LayoutDashboard,
   type LucideIcon,
   MapPinned,
   Radio,
@@ -29,7 +30,9 @@ export const workspaceNavGroups = omniNavGroups.map((group) => ({
   items: group.items.map((item) => ({
     ...item,
     icon:
-      item.to === "/live"
+      item.to === "/dashboard"
+        ? LayoutDashboard
+        : item.to === "/live"
         ? Radio
         : item.to === "/history"
           ? Clock3
@@ -54,6 +57,10 @@ async function prefetchHistoryQuery(queryClient: QueryClient) {
 }
 
 export function prefetchWorkspaceRoute(route: string, queryClient?: QueryClient) {
+  if (route === "/dashboard") {
+    void import("@/pages/Dashboard");
+  }
+
   if (route === "/history") {
     void import("@/pages/History");
     void import("@/components/history/HistoryTrendChart");

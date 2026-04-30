@@ -39,8 +39,13 @@ export const router = createBrowserRouter([
       </AppProviders>
     ),
     children: [
-      { index: true, element: <Navigate to="live" replace /> },
-      { path: "dashboard", element: <Navigate to="/live" replace /> },
+      { index: true, element: <Navigate to="dashboard" replace /> },
+      {
+        path: "dashboard",
+        lazy: async () => ({
+          Component: (await import("@/pages/Dashboard")).DashboardPage,
+        }),
+      },
       {
         path: "live",
         lazy: async () => ({

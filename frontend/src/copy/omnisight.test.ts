@@ -21,6 +21,7 @@ describe("omnisight copy", () => {
       {
         label: "Intelligence",
         items: [
+          { label: "Dashboard", to: "/dashboard" },
           { label: "Live", to: "/live" },
           { label: "Patterns", to: "/history" },
           { label: "Evidence", to: "/incidents" },

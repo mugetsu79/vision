@@ -53,12 +53,12 @@ export function AppContextRail() {
       </div>
 
       <div className="mt-4 space-y-3 border-t border-white/[0.06] pt-4">
-        <div className="rounded-[1rem] border border-white/[0.08] bg-white/[0.035] px-3 py-3">
+        <div className="rounded-[1rem] border border-white/[0.08] bg-white/[0.025] px-3 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8fa2be]">
-            Platform status
+            Workspace
           </p>
-          <p className="mt-2 text-sm font-medium text-[#86e5aa]">
-            All systems operational
+          <p className="mt-2 text-sm font-medium text-[#bfd0e6]">
+            OmniSight control layer
           </p>
         </div>
         <TenantSwitcher />

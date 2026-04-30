@@ -93,6 +93,9 @@ describe("AppShell", () => {
     expect(intelligenceNav).toBeInTheDocument();
     expect(controlNav).toBeInTheDocument();
     expect(
+      within(intelligenceNav).getByRole("link", { name: "Dashboard" }),
+    ).toBeInTheDocument();
+    expect(
       within(intelligenceNav).getByRole("link", { name: "Live" }),
     ).toBeInTheDocument();
     expect(
@@ -110,8 +113,8 @@ describe("AppShell", () => {
     expect(
       within(controlNav).getByRole("link", { name: "Scenes" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/platform status/i)).toBeInTheDocument();
-    expect(screen.getByText(/all systems operational/i)).toBeInTheDocument();
+    expect(screen.getByText(/workspace/i)).toBeInTheDocument();
+    expect(screen.getByText(/omnisight control layer/i)).toBeInTheDocument();
     expect(screen.queryByText(/management/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/configuration surfaces stay one step away/i),
@@ -212,6 +215,9 @@ describe("AppShell", () => {
         /operator-grade visibility without native-bandwidth waste/i,
       ),
     ).not.toBeInTheDocument();
+    expect(
+      within(primaryWorkspaceNav).getByRole("link", { name: "Dashboard" }),
+    ).toBeInTheDocument();
     expect(
       within(primaryWorkspaceNav).getByRole("link", { name: "Live" }),
     ).toBeInTheDocument();
