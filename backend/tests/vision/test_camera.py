@@ -216,7 +216,7 @@ def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -
     assert calls[0].source == "rtsp://camera.internal/live"
     assert calls[0].backend == cv2.CAP_FFMPEG
     assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == (
-        "rtsp_transport;tcp|analyzeduration;60000000|probesize;64000000"
+        "rtsp_transport;tcp|analyzeduration;60000000|probesize;64000000|timeout;20000000"
     )
     assert capture.properties[cv2.CAP_PROP_OPEN_TIMEOUT_MSEC] == 20000
     assert capture.properties[cv2.CAP_PROP_READ_TIMEOUT_MSEC] == 20000

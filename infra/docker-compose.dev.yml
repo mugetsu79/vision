@@ -119,7 +119,7 @@ services:
       - >
         python -m pip install uv &&
         python -m uv sync --group runtime --group dev --group llm --group model-metadata &&
-        python -m uv run uvicorn argus.main:app --reload --reload-dir src --host 0.0.0.0 --port 8000
+        python -m uv run uvicorn argus.main:app --reload --reload-dir src --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 5
     environment:
       PYTHONPATH: /workspace/backend/src
       UV_PROJECT_ENVIRONMENT: /tmp/argus-backend-venv
