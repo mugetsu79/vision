@@ -20,7 +20,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-4 border-b border-white/[0.07] pb-5 sm:flex-row sm:items-end sm:justify-between",
+        "flex flex-col gap-4 border-b border-[color:var(--vezor-border-neutral)] pb-5 sm:flex-row sm:items-end sm:justify-between",
         className,
       )}
     >
@@ -31,7 +31,7 @@ export function PageHeader({
           </p>
         ) : null}
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-[0.01em] text-[#f4f7fb]">
+          <h1 className="text-2xl font-semibold tracking-normal text-[#f4f7fb]">
             {title}
           </h1>
           {description ? (

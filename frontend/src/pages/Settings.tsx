@@ -7,8 +7,12 @@ import {
   TerminalSquare,
 } from "lucide-react";
 
-import { OmniSightField } from "@/components/brand/OmniSightField";
-import { Badge } from "@/components/ui/badge";
+import {
+  InstrumentRail,
+  StatusToneBadge,
+  WorkspaceBand,
+  WorkspaceSurface,
+} from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
@@ -60,47 +64,37 @@ export function SettingsPage() {
 
   if (fleet.isLoading) {
     return (
-      <section className="rounded-[1rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
+      <WorkspaceSurface className="px-5 py-6 text-sm text-[#9bb0d0]">
         Loading operations...
-      </section>
+      </WorkspaceSurface>
     );
   }
 
   if (fleet.isError || !fleet.data) {
     return (
-      <section className="rounded-[1rem] border border-[#5a2330] bg-[#241118] px-5 py-6 text-sm text-[#ffc2cd]">
+      <WorkspaceSurface className="border-[#5a2330] bg-[#241118] px-5 py-6 text-sm text-[#ffc2cd]">
         Failed to load fleet operations.
-      </section>
+      </WorkspaceSurface>
     );
   }
 
   return (
     <div data-testid="operations-workspace" className="space-y-5 p-4 sm:p-6">
-      <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
-        <OmniSightField variant="quiet" className="opacity-50" />
-        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase text-[#9db3d3]">
-              Operations
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold text-[#f4f8ff]">
-              {omniLabels.operationsTitle}
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-              Monitor planned workers, runtime reports, bootstrap material, and
-              stream diagnostics for the fleet.
-            </p>
-          </div>
+      <WorkspaceBand
+        eyebrow="Operations"
+        title={omniLabels.operationsTitle}
+        description="Monitor planned workers, runtime reports, bootstrap material, and stream diagnostics for the fleet."
+        actions={
           <Button type="button" onClick={() => void fleet.refetch()}>
             <RefreshCw className="mr-2 size-4" />
             Refresh
           </Button>
-        </div>
-      </section>
+        }
+      />
 
       <section
         data-testid="edge-fleet-grid"
-        className="grid gap-3 rounded-[1rem] border border-white/10 bg-[#07101c] p-4 md:grid-cols-5"
+        className="grid gap-3 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-neutral)] p-4 md:grid-cols-5"
       >
         <SummaryTile
           label="Planned workers"
@@ -124,7 +118,7 @@ export function SettingsPage() {
         />
       </section>
 
-      <section className="rounded-[1rem] border border-white/10 bg-[#0f172a] px-5 py-4">
+      <WorkspaceSurface className="px-5 py-4">
         <div className="flex items-center gap-3">
           <TerminalSquare className="size-5 text-[#8fd3ff]" />
           <div>
@@ -138,7 +132,7 @@ export function SettingsPage() {
             </p>
           </div>
         </div>
-      </section>
+      </WorkspaceSurface>
 
       <section className="grid gap-4 xl:grid-cols-2">
         <Panel title="Nodes" icon={<Server className="size-4" />}>
@@ -158,7 +152,9 @@ export function SettingsPage() {
                       assigned scenes
                     </p>
                   </div>
-                  <Badge>{node.status}</Badge>
+                  <StatusToneBadge tone={statusTone(node.status)}>
+                    {node.status}
+                  </StatusToneBadge>
                 </div>
               </div>
             ))}
@@ -226,8 +222,12 @@ export function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge>{worker.desired_state}</Badge>
-                  <Badge>{worker.runtime_status}</Badge>
+                  <StatusToneBadge tone={statusTone(worker.desired_state)}>
+                    {worker.desired_state}
+                  </StatusToneBadge>
+                  <StatusToneBadge tone={statusTone(worker.runtime_status)}>
+                    {worker.runtime_status}
+                  </StatusToneBadge>
                 </div>
               </div>
               {worker.detail ? (
@@ -262,7 +262,9 @@ export function SettingsPage() {
                     {diagnostic.default_profile}
                   </p>
                 </div>
-                <Badge>{diagnostic.selected_stream_mode}</Badge>
+                <StatusToneBadge tone="muted">
+                  {diagnostic.selected_stream_mode}
+                </StatusToneBadge>
               </div>
               {diagnostic.native_status?.available === false ? (
                 <p className="mt-2 text-sm text-amber-100">
@@ -280,7 +282,7 @@ export function SettingsPage() {
 
 function SummaryTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[0.85rem] border border-white/10 bg-[#101827] px-4 py-3">
+    <div className="rounded-[0.75rem] border border-white/10 bg-black/25 px-4 py-3">
       <p className="text-xs text-[#93a7c5]">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-[#f4f8ff]">{value}</p>
     </div>
@@ -298,17 +300,19 @@ function Panel({
   children: ReactNode;
   testId?: string;
 }) {
+  const Surface = testId?.endsWith("-rail") ? InstrumentRail : WorkspaceSurface;
+
   return (
-    <section
+    <Surface
       data-testid={testId}
-      className="rounded-[1rem] border border-white/10 bg-[#0b1120] p-4"
+      className="p-4"
     >
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#f4f8ff]">
         {icon}
         <h2>{title}</h2>
       </div>
       {children}
-    </section>
+    </Surface>
   );
 }
 
@@ -329,4 +333,33 @@ function formatSource(source: FleetSourceCapability | null | undefined) {
 
 function formatReason(reason: string | null | undefined) {
   return (reason ?? "not reported").replaceAll("_", " ");
+}
+
+function statusTone(
+  status: string,
+): "healthy" | "attention" | "danger" | "muted" | "accent" {
+  const normalized = status.toLowerCase();
+  if (
+    normalized === "running" ||
+    normalized === "online" ||
+    normalized === "healthy" ||
+    normalized === "supervised"
+  ) {
+    return "healthy";
+  }
+  if (
+    normalized === "stale" ||
+    normalized === "manual" ||
+    normalized === "not_reported" ||
+    normalized === "unknown"
+  ) {
+    return "attention";
+  }
+  if (normalized === "offline" || normalized === "failed") {
+    return "danger";
+  }
+  if (normalized === "edge_supervisor") {
+    return "accent";
+  }
+  return "muted";
 }

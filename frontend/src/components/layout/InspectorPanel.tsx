@@ -20,7 +20,7 @@ export function InspectorPanel({
   return (
     <aside
       className={cn(
-        "rounded-[1.1rem] border border-white/[0.08] bg-[color:var(--vezor-surface-depth)] px-4 py-4 shadow-[var(--vezor-shadow-depth)]",
+        "rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] px-4 py-4",
         className,
       )}
     >
