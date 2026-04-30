@@ -66,7 +66,7 @@ describe("SitesPage", () => {
       created_at: "2026-04-18T10:00:00Z",
     };
     let sites: unknown[] = [];
-    const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const fetchMock = vi.spyOn(global, "fetch").mockImplementation((input) => {
       const request = input as Request;
       const url = new URL(request.url);
 
