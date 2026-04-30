@@ -32,4 +32,22 @@ describe("OmniSightField", () => {
     expect(field.querySelectorAll(".omnisight-field__surface")).toHaveLength(0);
     expect(field.querySelectorAll(".omnisight-field__node")).toHaveLength(4);
   });
+
+  test("renders stage variant without node labels competing with sign-in copy", () => {
+    render(<OmniSightField variant="stage" />);
+
+    const field = screen.getByTestId("omnisight-field");
+    expect(field).toHaveAttribute("aria-hidden", "true");
+    expect(field).toHaveClass("omnisight-field--stage");
+    expect(field.querySelector(".omnisight-field__mark-stack")).not.toBeNull();
+    expect(field.querySelectorAll(".omnisight-field__node")).toHaveLength(0);
+  });
+
+  test("renders dashboard variant with orbital nodes for the overview cockpit", () => {
+    render(<OmniSightField variant="dashboard" />);
+
+    const field = screen.getByTestId("omnisight-field");
+    expect(field).toHaveClass("omnisight-field--dashboard");
+    expect(field.querySelectorAll(".omnisight-field__node")).toHaveLength(4);
+  });
 });

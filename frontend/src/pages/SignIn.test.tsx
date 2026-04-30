@@ -60,10 +60,10 @@ describe("SignInPage", () => {
     expect(
       screen.getByText(/connects scenes, models, events, evidence, and edge operations/i),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("signin-spatial-stage")).toBeInTheDocument();
-    expect(screen.getByTestId("signin-orbit-auth")).toBeInTheDocument();
+    expect(screen.getByTestId("signin-lens-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("signin-auth-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("omnisight-empty-surface")).not.toBeInTheDocument();
-    expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--entry");
+    expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--stage");
     expect(
       screen.getByText(
         new RegExp(`use your ${productBrand.name} identity provider account to continue\\.`, "i"),

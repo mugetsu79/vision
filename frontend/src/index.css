@@ -230,6 +230,74 @@ select {
   height: 16rem;
 }
 
+.omnisight-field--stage .omnisight-field__mark-stack {
+  width: clamp(17rem, 34vw, 31rem);
+  right: clamp(1rem, 7vw, 7rem);
+  top: 48%;
+  opacity: 0.96;
+  transform: translate3d(0, -50%, 0);
+}
+
+.omnisight-field--stage .omnisight-field__orbital-map {
+  inset: 10% 4% 8% auto;
+  width: min(54vw, 44rem);
+  opacity: 0.5;
+}
+
+.omnisight-field--stage .omnisight-field__ring--primary {
+  right: clamp(0rem, 8vw, 8rem);
+  top: calc(50% - 7rem);
+  width: clamp(19rem, 39vw, 36rem);
+  height: clamp(9rem, 17vw, 16rem);
+}
+
+.omnisight-field--stage .omnisight-field__ring--secondary {
+  right: clamp(-1rem, 6vw, 6rem);
+  top: calc(50% - 8rem);
+  width: clamp(22rem, 43vw, 40rem);
+  height: clamp(10rem, 19vw, 18rem);
+}
+
+.signin-lens-glint {
+  background: radial-gradient(
+    circle,
+    rgba(118, 224, 255, 0.75),
+    transparent 58%
+  );
+  filter: blur(14px);
+}
+
+.omnisight-field--dashboard .omnisight-field__mark-stack {
+  width: clamp(13rem, 22vw, 22rem);
+  right: clamp(1rem, 6vw, 5rem);
+  top: clamp(1.5rem, 6vw, 4rem);
+  opacity: 0.22;
+}
+
+.omnisight-field--dashboard .omnisight-field__orbital-map {
+  inset: auto clamp(1rem, 4vw, 4rem) auto auto;
+  top: 1rem;
+  width: min(48vw, 40rem);
+  height: min(32vw, 25rem);
+  opacity: 0.24;
+}
+
+.omnisight-field--dashboard .omnisight-field__ring--primary {
+  left: auto;
+  right: clamp(2rem, 9vw, 9rem);
+  top: 2.5rem;
+  width: clamp(18rem, 34vw, 34rem);
+  height: clamp(9rem, 16vw, 16rem);
+}
+
+.omnisight-field--dashboard .omnisight-field__ring--secondary {
+  left: auto;
+  right: clamp(1rem, 7vw, 7rem);
+  top: 4.5rem;
+  width: clamp(21rem, 38vw, 38rem);
+  height: clamp(10rem, 18vw, 18rem);
+}
+
 .omnisight-field--overview .omnisight-field__mark-stack {
   width: 16rem;
   left: calc(50% - 8rem);
@@ -314,6 +382,42 @@ select {
     transform: rotateX(64deg) rotateZ(-18deg);
   }
 
+  .omnisight-field--stage .omnisight-field__mark-stack {
+    width: clamp(10rem, 54vw, 15rem);
+    left: 50%;
+    right: auto;
+    top: 10.5rem;
+    opacity: 0.82;
+    transform: translate3d(-50%, -50%, 0);
+  }
+
+  .omnisight-field--stage .omnisight-field__orbital-map {
+    inset: 3rem auto auto 50%;
+    width: min(88vw, 28rem);
+    height: 18rem;
+    opacity: 0.34;
+    translate: -50% 0;
+  }
+
+  .omnisight-field--stage .omnisight-field__ring--primary,
+  .omnisight-field--stage .omnisight-field__ring--secondary {
+    left: 50%;
+    right: auto;
+    translate: -50% 0;
+  }
+
+  .omnisight-field--stage .omnisight-field__ring--primary {
+    top: 6.9rem;
+    width: min(82vw, 20rem);
+    height: 9.5rem;
+  }
+
+  .omnisight-field--stage .omnisight-field__ring--secondary {
+    top: 7.8rem;
+    width: min(88vw, 22rem);
+    height: 10.5rem;
+  }
+
   .omnisight-field--shell .omnisight-field__ring--primary {
     right: 1rem;
     width: min(70vw, 16rem);
@@ -335,11 +439,16 @@ select {
   .omnisight-field__mark-stack {
     animation: omnisight-mark-drift 16s ease-in-out infinite alternate;
   }
+
+  .signin-lens-glint {
+    animation: signin-glint 4.8s ease-in-out infinite alternate;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .omnisight-field__ring,
-  .omnisight-field__mark-stack {
+  .omnisight-field__mark-stack,
+  .signin-lens-glint {
     animation: none;
   }
 }
@@ -361,6 +470,17 @@ select {
   to {
     translate: 0.35rem -0.15rem;
     scale: 1.01;
+  }
+}
+
+@keyframes signin-glint {
+  from {
+    opacity: 0.26;
+    transform: translate3d(-0.5rem, 0.2rem, 0) scale(0.92);
+  }
+  to {
+    opacity: 0.68;
+    transform: translate3d(0.7rem, -0.3rem, 0) scale(1.08);
   }
 }
 

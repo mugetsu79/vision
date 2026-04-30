@@ -1,7 +1,13 @@
 import { productBrand } from "@/brand/product";
 import { cn } from "@/lib/utils";
 
-type OmniSightFieldVariant = "entry" | "overview" | "shell" | "quiet";
+type OmniSightFieldVariant =
+  | "entry"
+  | "stage"
+  | "dashboard"
+  | "overview"
+  | "shell"
+  | "quiet";
 
 type OmniSightFieldProps = {
   variant?: OmniSightFieldVariant;
@@ -37,7 +43,8 @@ export function OmniSightField({
   variant = "shell",
   className,
 }: OmniSightFieldProps) {
-  const showNodes = variant === "overview" || variant === "shell";
+  const showNodes =
+    variant === "overview" || variant === "dashboard" || variant === "shell";
 
   return (
     <div
