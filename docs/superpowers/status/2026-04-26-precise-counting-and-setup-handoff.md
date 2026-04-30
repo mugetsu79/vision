@@ -6,7 +6,7 @@ Purpose: paste this document into a fresh project chat to continue from the curr
 
 Update note, 2026-04-28:
 - This handoff predates the open-vocab control-plane work and Evidence Desk review queue implementation.
-- The active branch has since been pushed through `e4a7331 fix(incidents): tighten review audit and permission feedback`.
+- The active branch has since been pushed through `01567ee fix(e2e): align verify suite with redesigned workspace`.
 - Do not treat the "Immediate Next Step" section below as current; iMac validation and Task 8 Evidence Desk work have been completed.
 
 ## Current Branch State
@@ -15,7 +15,7 @@ Active branch:
 - `codex/source-aware-delivery-calibration-fixes`
 
 Remote state:
-- `origin/codex/source-aware-delivery-calibration-fixes` contains all implementation work through `24b7935` plus follow-up docs and brand cleanup commits.
+- `origin/codex/source-aware-delivery-calibration-fixes` contains all implementation work through `01567ee`, including the Operations, source-aware delivery, open-vocab control-plane, Evidence Desk, UI redesign, camera capture fallback, and verify-all E2E repair commits.
 - The branch may also contain handoff-only commits after `24b7935`; treat `24b7935` as the verified implementation checkpoint for worker command UX, not necessarily the branch tip.
 - The old handoff branch `codex/precise-counting-occupancy` is not the active continuation branch for this work.
 

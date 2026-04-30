@@ -1,6 +1,7 @@
 # iMac And Jetson Dev Validation Handoff
 
 Date: 2026-04-28
+Updated: 2026-04-30
 
 Purpose: paste this document into a fresh project chat to continue from the current repo state and validate the full development stack first on the iMac, then with the iMac as temporary master and Jetson Orin Nano as edge node.
 
@@ -11,9 +12,9 @@ Active branch:
 
 Remote checkpoint:
 - `origin/codex/source-aware-delivery-calibration-fixes` is pushed through:
-  - `aee8e52 docs(deployment): clarify production topology and status`
-  - `e4a7331 fix(incidents): tighten review audit and permission feedback`
-  - `eb130bb test(incidents): harden evidence desk e2e assertions`
+  - `01567ee fix(e2e): align verify suite with redesigned workspace`
+  - `64489b8 fix(frontend): harden vitest browser globals`
+  - `bf26e79 fix(camera): satisfy opencv fallback typing`
 
 Current local repo note:
 - before this handoff was created, the branch matched origin and only pre-existing untracked scratch files were present
@@ -31,9 +32,10 @@ git log --oneline -5
 
 Expected recent history includes:
 
-- `aee8e52 docs(deployment): clarify production topology and status`
-- `e4a7331 fix(incidents): tighten review audit and permission feedback`
-- `eb130bb test(incidents): harden evidence desk e2e assertions`
+- `01567ee fix(e2e): align verify suite with redesigned workspace`
+- `64489b8 fix(frontend): harden vitest browser globals`
+- `bf26e79 fix(camera): satisfy opencv fallback typing`
+- `047e04a Implement Approach C app-wide redesign`
 
 ## Do Not Re-Plan Completed Work
 
@@ -71,6 +73,26 @@ These are already implemented and documented on the branch:
 
 ## Latest Verification Already Run
 
+Phase A iMac validation update, 2026-04-30:
+
+- the real iMac dev machine validated the two-camera central-worker flow
+- both video streams stayed live after the camera capture fallback fixes
+- camera 2 exposed an RTSP behavior where raw ffmpeg stdout could stall while OpenCV FFMPEG capture continued to read frames; the worker now falls back to an OpenCV latest-frame reader when the raw ffmpeg first frame path does not produce a frame
+- Operations correctly showed planned workers but `0` running workers when no per-worker heartbeat truth was reported; this is expected until supervisor/per-worker reporting lands
+- History showed event/sample increments after workers ran
+- Evidence Desk rendered correctly; no records is acceptable when no incident event has been captured
+- `make verify-all` passed on the iMac after installing Helm
+- the Playwright suite passed all 8 E2E tests after the redesigned workspace navigation and Prompt 7 camera-create race were repaired
+
+Current full-stack validation expectation:
+
+- `make verify-all`
+  - backend migrations, static checks, and tests pass
+  - frontend API generation, lint, tests, and build pass
+  - Playwright E2E passes: 8 tests
+  - Helm template rendering passes
+  - runtime health check returns `{"status":"ok"}`
+
 Evidence Desk / Task 8 verification before push:
 
 - `python3 -m uv run pytest tests/models/test_schema.py tests/api/test_prompt9_routes.py tests/services/test_incident_service.py tests/services/test_incident_capture.py -q`
@@ -99,12 +121,13 @@ Known warnings:
 
 ## Primary Next Goal
 
-Validate the full development stack in two phases:
+Validate the full development stack in two phases. Phase A is now clean on the real iMac; Phase B is the next manual validation target.
 
 1. **Phase A: iMac-only dev validation**
    - iMac runs the control plane
    - both cameras run as `central`
    - workers are started from Operations copyable commands
+   - status: passed on the real iMac as of 2026-04-30
 2. **Phase B: iMac master + Jetson Orin edge validation**
    - iMac remains temporary master
    - camera 1 remains `central` on the iMac
