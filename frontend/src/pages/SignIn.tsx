@@ -40,7 +40,7 @@ export function SignInPage() {
               {brandName} connects scenes, models, events, evidence, and edge
               operations into one spatial intelligence layer.
             </p>
-            <ul className="grid max-w-xl gap-3 text-sm text-[#dbe8fb] sm:grid-cols-3">
+            <ul className="grid max-w-xl grid-cols-3 gap-3 text-sm text-[#dbe8fb]">
               {["Scenes", "Evidence", "Operations"].map((label) => (
                 <li key={label} className="flex items-center gap-3">
                   <span className="h-2 w-2 rounded-full bg-[var(--vezor-lens-aqua)] shadow-[0_0_18px_rgba(118,224,255,0.62)]" />

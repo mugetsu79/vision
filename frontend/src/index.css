@@ -268,34 +268,42 @@ select {
 }
 
 .omnisight-field--dashboard .omnisight-field__mark-stack {
-  width: clamp(13rem, 22vw, 22rem);
-  right: clamp(1rem, 6vw, 5rem);
-  top: clamp(1.5rem, 6vw, 4rem);
-  opacity: 0.22;
+  width: clamp(10rem, 19vw, 19rem);
+  right: clamp(-5.5rem, -6vw, -3rem);
+  top: clamp(4.5rem, 8vw, 7rem);
+  opacity: 0.16;
 }
 
 .omnisight-field--dashboard .omnisight-field__orbital-map {
-  inset: auto clamp(1rem, 4vw, 4rem) auto auto;
-  top: 1rem;
-  width: min(48vw, 40rem);
-  height: min(32vw, 25rem);
-  opacity: 0.24;
+  inset: auto clamp(-8rem, -8vw, -4rem) auto auto;
+  top: 2rem;
+  width: min(42vw, 34rem);
+  height: min(26vw, 20rem);
+  opacity: 0.16;
 }
 
 .omnisight-field--dashboard .omnisight-field__ring--primary {
   left: auto;
-  right: clamp(2rem, 9vw, 9rem);
-  top: 2.5rem;
-  width: clamp(18rem, 34vw, 34rem);
-  height: clamp(9rem, 16vw, 16rem);
+  right: clamp(-5rem, -5vw, -2rem);
+  top: 5rem;
+  width: clamp(14rem, 27vw, 28rem);
+  height: clamp(7rem, 13vw, 13rem);
 }
 
 .omnisight-field--dashboard .omnisight-field__ring--secondary {
   left: auto;
-  right: clamp(1rem, 7vw, 7rem);
-  top: 4.5rem;
-  width: clamp(21rem, 38vw, 38rem);
-  height: clamp(10rem, 18vw, 18rem);
+  right: clamp(-6rem, -6vw, -3rem);
+  top: 6.2rem;
+  width: clamp(16rem, 31vw, 31rem);
+  height: clamp(8rem, 15vw, 15rem);
+}
+
+.omnisight-field--dashboard .omnisight-field__node {
+  opacity: 0.18;
+}
+
+.omnisight-field--dashboard .omnisight-field__node-copy {
+  display: none;
 }
 
 .omnisight-field--overview .omnisight-field__mark-stack {

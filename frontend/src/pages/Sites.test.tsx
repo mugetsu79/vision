@@ -71,7 +71,7 @@ describe("SitesPage", () => {
       const url = new URL(request.url);
 
       if (url.pathname === "/api/v1/cameras") {
-        return new Response(
+        return Promise.resolve(new Response(
           JSON.stringify([
             {
               id: "camera-1",
@@ -83,25 +83,25 @@ describe("SitesPage", () => {
             status: 200,
             headers: { "Content-Type": "application/json" },
           },
-        );
+        ));
       }
 
       if (url.pathname === "/api/v1/sites" && request.method === "POST") {
         sites = [createdSite];
-        return new Response(JSON.stringify(createdSite), {
+        return Promise.resolve(new Response(JSON.stringify(createdSite), {
           status: 201,
           headers: { "Content-Type": "application/json" },
-        });
+        }));
       }
 
       if (url.pathname === "/api/v1/sites") {
-        return new Response(JSON.stringify(sites), {
+        return Promise.resolve(new Response(JSON.stringify(sites), {
           status: 200,
           headers: { "Content-Type": "application/json" },
-        });
+        }));
       }
 
-      return new Response("Not found", { status: 404 });
+      return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
     render(
