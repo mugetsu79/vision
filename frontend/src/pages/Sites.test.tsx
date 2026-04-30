@@ -56,50 +56,53 @@ describe("SitesPage", () => {
 
   test("loads sites and creates a new site through the dialog", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .spyOn(global, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: "11111111-1111-1111-1111-111111111111",
-            tenant_id: "22222222-2222-2222-2222-222222222222",
-            name: "HQ",
-            description: "Main site",
-            tz: "Europe/Zurich",
-            geo_point: null,
-            created_at: "2026-04-18T10:00:00Z",
-          }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
+    const createdSite = {
+      id: "11111111-1111-1111-1111-111111111111",
+      tenant_id: "22222222-2222-2222-2222-222222222222",
+      name: "HQ",
+      description: "Main site",
+      tz: "Europe/Zurich",
+      geo_point: null,
+      created_at: "2026-04-18T10:00:00Z",
+    };
+    let sites: unknown[] = [];
+    const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return new Response(
           JSON.stringify([
             {
-              id: "11111111-1111-1111-1111-111111111111",
-              tenant_id: "22222222-2222-2222-2222-222222222222",
-              name: "HQ",
-              description: "Main site",
-              tz: "Europe/Zurich",
-              geo_point: null,
-              created_at: "2026-04-18T10:00:00Z",
+              id: "camera-1",
+              name: "Dock Scene",
+              site_id: "11111111-1111-1111-1111-111111111111",
             },
           ]),
           {
             status: 200,
             headers: { "Content-Type": "application/json" },
           },
-        ),
-      );
+        );
+      }
+
+      if (url.pathname === "/api/v1/sites" && request.method === "POST") {
+        sites = [createdSite];
+        return new Response(JSON.stringify(createdSite), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(JSON.stringify(sites), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response("Not found", { status: 404 });
+    });
 
     render(
       <QueryClientProvider client={createQueryClient()}>
@@ -109,11 +112,12 @@ describe("SitesPage", () => {
 
     expect(await screen.findByTestId("sites-workspace")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /^sites$/i }),
+      screen.getByRole("heading", { name: "Deployment Sites" }),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("site-context-grid")).toBeInTheDocument();
     expect(
-      screen.queryByText(/manage deployment locations/i),
-    ).not.toBeInTheDocument();
+      screen.getByText(/sites anchor deployment locations/i),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/camera placement/i)).not.toBeInTheDocument();
 
     await user.click(await screen.findByRole("button", { name: /add site/i }));
@@ -129,8 +133,16 @@ describe("SitesPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("cell", { name: "HQ" })).toBeInTheDocument(),
     );
+    expect(
+      screen.getAllByText(/deployment location/i).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("1 scene")).toBeInTheDocument();
 
-    const siteCreateRequest = fetchMock.mock.calls[1]?.[0];
+    const siteCreateRequest = fetchMock.mock.calls
+      .map((call) => call[0])
+      .find(
+        (request) => request instanceof Request && request.method === "POST",
+      );
     expect(siteCreateRequest).toBeInstanceOf(Request);
 
     const siteCreatePayload: unknown = await (siteCreateRequest as Request)
@@ -143,6 +155,6 @@ describe("SitesPage", () => {
       geo_point: null,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalled();
   });
 });

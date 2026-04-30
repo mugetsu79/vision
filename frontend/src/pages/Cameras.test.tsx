@@ -136,8 +136,14 @@ describe("CamerasPage", () => {
       await screen.findByRole("heading", { name: /scene setup/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("scene-setup-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-setup-sequence")).toBeInTheDocument();
     expect(screen.getByTestId("scene-inventory-table")).toBeInTheDocument();
     expect(screen.getByText(/^Scenes$/i)).toBeInTheDocument();
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Model")).toBeInTheDocument();
+    expect(screen.getByText("Privacy")).toBeInTheDocument();
+    expect(screen.getByText("Boundaries")).toBeInTheDocument();
+    expect(screen.getByText("Calibration")).toBeInTheDocument();
     expect(screen.queryByText(/^Cameras$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no cameras yet/i)).not.toBeInTheDocument();
     expect(

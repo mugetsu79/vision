@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 
 import { RequireRole } from "@/components/auth/RequireRole";
 import { CameraWizard } from "@/components/cameras/CameraWizard";
-import { OmniSightField } from "@/components/brand/OmniSightField";
+import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
@@ -81,29 +81,37 @@ function CamerasContent() {
 
   return (
     <div data-testid="scene-setup-workspace" className="space-y-5 p-4 sm:p-6">
-      <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5">
-        <OmniSightField variant="quiet" className="opacity-50" />
-        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9db3d3]">
-              Scenes
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[0.01em] text-[#f4f8ff]">
-              {omniLabels.sceneSetupTitle}
-            </h2>
-            <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-              Scene setup connects source streams, models, privacy rules, event
-              boundaries, and calibration so {brandName} can understand each
-              environment.
-            </p>
-          </div>
-          <Button onClick={openCreateWizard}>Add scene</Button>
-        </div>
+      <WorkspaceBand
+        eyebrow="Scenes"
+        title={omniLabels.sceneSetupTitle}
+        description={`Scene setup connects source streams, models, privacy rules, event boundaries, and calibration so ${brandName} can understand each environment.`}
+        actions={<Button onClick={openCreateWizard}>Add scene</Button>}
+      />
+
+      <section
+        data-testid="scene-setup-sequence"
+        className="grid gap-3 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] p-4 sm:grid-cols-5"
+      >
+        {["Source", "Model", "Privacy", "Boundaries", "Calibration"].map(
+          (step, index) => (
+            <div
+              key={step}
+              className="rounded-[0.75rem] border border-white/8 bg-black/20 px-3 py-3"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7f96b8]">
+                Step {index + 1}
+              </p>
+              <p className="mt-2 text-sm font-semibold text-[#f4f8ff]">
+                {step}
+              </p>
+            </div>
+          ),
+        )}
       </section>
 
       <section
         data-testid="scene-inventory-table"
-        className="overflow-hidden rounded-[1rem] border border-white/8 bg-[#0b1320]"
+        className="overflow-hidden rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
       >
         <Table>
           <THead>

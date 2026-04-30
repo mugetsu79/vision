@@ -1,12 +1,16 @@
 import { useState } from "react";
 
 import { RequireRole } from "@/components/auth/RequireRole";
-import { OmniSightField } from "@/components/brand/OmniSightField";
+import {
+  WorkspaceBand,
+  WorkspaceSurface,
+} from "@/components/layout/workspace-surfaces";
 import { SiteDialog } from "@/components/sites/SiteDialog";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
 import { omniEmptyStates } from "@/copy/omnisight";
+import { useCameras } from "@/hooks/use-cameras";
 import { useCreateSite, useSites } from "@/hooks/use-sites";
 
 export function SitesPage() {
@@ -21,30 +25,51 @@ function SitesContent() {
   const brandName = productBrand.name;
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: sites = [], isLoading } = useSites();
+  const { data: cameras = [] } = useCameras();
   const createSite = useCreateSite();
+  const sceneCountBySite = new Map<string, number>();
+  for (const camera of cameras) {
+    sceneCountBySite.set(
+      camera.site_id,
+      (sceneCountBySite.get(camera.site_id) ?? 0) + 1,
+    );
+  }
 
   return (
     <div data-testid="sites-workspace" className="space-y-5 p-4 sm:p-6">
-      <section className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[color:var(--vezor-surface-depth)] px-5 py-5 shadow-[var(--vezor-shadow-depth)]">
-        <OmniSightField variant="quiet" className="opacity-50" />
-        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9db3d3]">
-              Sites
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-normal text-[#f4f8ff]">
-              Sites
-            </h2>
-            <p className="mt-3 max-w-3xl text-sm text-[#93a7c5]">
-              Sites anchor scenes, time zones, and edge fleet context across{" "}
-              {brandName} operations.
-            </p>
-          </div>
-          <Button onClick={() => setDialogOpen(true)}>Add site</Button>
-        </div>
+      <WorkspaceBand
+        eyebrow="Sites"
+        title="Deployment Sites"
+        description={`Sites anchor deployment locations, time zones, scene context, and edge fleet planning across ${brandName}.`}
+        actions={<Button onClick={() => setDialogOpen(true)}>Add site</Button>}
+      />
+
+      <section data-testid="site-context-grid" className="grid gap-4 lg:grid-cols-3">
+        {sites.map((site) => {
+          const sceneCount = sceneCountBySite.get(site.id) ?? 0;
+          return (
+            <WorkspaceSurface key={site.id} className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
+                Deployment location
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-[#f4f8ff]">
+                {site.name}
+              </h2>
+              <p className="mt-2 text-sm text-[#9eb0cb]">{site.tz}</p>
+              <p className="mt-3 text-sm font-medium text-[#dce6f7]">
+                {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
+              </p>
+              {site.description ? (
+                <p className="mt-2 text-sm text-[#8fa4c4]">
+                  {site.description}
+                </p>
+              ) : null}
+            </WorkspaceSurface>
+          );
+        })}
       </section>
 
-      <section className="overflow-hidden rounded-[1rem] border border-white/8 bg-[#0b1320]">
+      <section className="overflow-hidden rounded-[0.9rem] border border-white/8 bg-[#0b1320]">
         <Table>
           <THead>
             <TR>
