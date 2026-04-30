@@ -21,6 +21,15 @@
   --vezor-success: #72e3a6;
   --vezor-attention: #f2bd5c;
   --vezor-risk: #f08aa2;
+  --vezor-canvas-obsidian: #03050a;
+  --vezor-canvas-ink: #05080d;
+  --vezor-graphite: #10151d;
+  --vezor-graphite-raised: #151b25;
+  --vezor-surface-neutral: rgba(13, 18, 27, 0.94);
+  --vezor-surface-rail: rgba(8, 12, 18, 0.88);
+  --vezor-media-black: #010307;
+  --vezor-border-neutral: rgba(176, 197, 226, 0.1);
+  --vezor-border-focus: rgba(118, 224, 255, 0.38);
   --vezor-surface-depth: rgba(9, 14, 23, 0.82);
   --vezor-surface-raised: rgba(13, 20, 32, 0.92);
   --vezor-shadow-depth: 0 28px 80px -54px rgba(63, 121, 255, 0.68);
