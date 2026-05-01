@@ -19,6 +19,7 @@ def build_model_create_payload(
     data = artifact_path.read_bytes()
     capability_config = entry.capability_config.model_dump(mode="json")
     capability_config["catalog_id"] = entry.id
+    resolved_classes = classes if classes is not None else list(entry.classes) or None
     return {
         "name": entry.name,
         "version": entry.version,
@@ -27,7 +28,7 @@ def build_model_create_payload(
         "format": entry.format.value,
         "capability": entry.capability.value,
         "capability_config": capability_config,
-        "classes": classes if classes is not None else list(entry.classes),
+        "classes": resolved_classes,
         "input_shape": entry.input_shape,
         "sha256": hashlib.sha256(data).hexdigest(),
         "size_bytes": len(data),

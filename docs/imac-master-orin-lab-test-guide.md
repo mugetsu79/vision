@@ -546,6 +546,14 @@ Keep this iMac terminal window open. Later commands in this guide reuse:
 
 The recommended model catalog can build the `POST /api/v1/models` payload for a local artifact. To print a fixed-vocab registration payload:
 
+If you pulled this branch onto an existing dev database, run migrations before registering `.pt` open-vocab presets so PostgreSQL accepts `format=pt`:
+
+```bash
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
+```
+
 ```bash
 cd "$HOME/vision/backend"
 python3 -m uv run python scripts/register_model_preset.py \
