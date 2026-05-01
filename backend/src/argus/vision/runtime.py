@@ -25,6 +25,7 @@ class CpuVendor(StrEnum):
 
 class ExecutionProfile(StrEnum):
     NVIDIA_LINUX_X86_64 = "linux-x86_64-nvidia"
+    LINUX_AARCH64_NVIDIA_JETSON = "linux-aarch64-nvidia-jetson"
     MACOS_APPLE_SILICON = "macos-arm64-apple-silicon"
     LINUX_X86_64_INTEL = "linux-x86_64-intel"
     LINUX_X86_64_AMD = "linux-x86_64-amd"
@@ -62,6 +63,11 @@ class RuntimeExecutionPolicy:
 
 _PROFILE_PROVIDER_PRIORITY: dict[ExecutionProfile, tuple[ExecutionProvider, ...]] = {
     ExecutionProfile.NVIDIA_LINUX_X86_64: (
+        ExecutionProvider.TENSORRT,
+        ExecutionProvider.CUDA,
+        ExecutionProvider.CPU,
+    ),
+    ExecutionProfile.LINUX_AARCH64_NVIDIA_JETSON: (
         ExecutionProvider.TENSORRT,
         ExecutionProvider.CUDA,
         ExecutionProvider.CPU,
@@ -170,6 +176,19 @@ def classify_host(
         )
     ):
         profile = ExecutionProfile.NVIDIA_LINUX_X86_64
+        profile_overridden = False
+    elif (
+        resolved_system == "linux"
+        and resolved_machine in {"aarch64", "arm64"}
+        and any(
+            provider in available_providers
+            for provider in (
+                ExecutionProvider.TENSORRT.value,
+                ExecutionProvider.CUDA.value,
+            )
+        )
+    ):
+        profile = ExecutionProfile.LINUX_AARCH64_NVIDIA_JETSON
         profile_overridden = False
     elif resolved_system == "darwin" and resolved_machine in {"arm64", "aarch64"}:
         profile = ExecutionProfile.MACOS_APPLE_SILICON

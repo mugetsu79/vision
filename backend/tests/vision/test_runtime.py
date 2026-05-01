@@ -39,6 +39,41 @@ def test_runtime_policy_prefers_tensorrt_for_linux_x86_nvidia_hosts() -> None:
     assert policy.host.cpu_vendor is CpuVendor.INTEL
 
 
+def test_runtime_policy_prefers_tensorrt_for_linux_aarch64_jetson_hosts() -> None:
+    policy = resolve_execution_policy(
+        _FakeRuntime(
+            providers=[
+                ExecutionProvider.CPU.value,
+                ExecutionProvider.CUDA.value,
+                ExecutionProvider.TENSORRT.value,
+            ]
+        ),
+        system="Linux",
+        machine="aarch64",
+        cpu_vendor=CpuVendor.UNKNOWN,
+    )
+
+    assert policy.profile is ExecutionProfile.LINUX_AARCH64_NVIDIA_JETSON
+    assert policy.provider == ExecutionProvider.TENSORRT.value
+
+
+def test_runtime_policy_prefers_cuda_for_linux_arm64_jetson_without_tensorrt() -> None:
+    policy = resolve_execution_policy(
+        _FakeRuntime(
+            providers=[
+                ExecutionProvider.CPU.value,
+                ExecutionProvider.CUDA.value,
+            ]
+        ),
+        system="Linux",
+        machine="arm64",
+        cpu_vendor=CpuVendor.UNKNOWN,
+    )
+
+    assert policy.profile is ExecutionProfile.LINUX_AARCH64_NVIDIA_JETSON
+    assert policy.provider == ExecutionProvider.CUDA.value
+
+
 def test_runtime_policy_prefers_coreml_for_macos_arm64_hosts() -> None:
     policy = resolve_execution_policy(
         _FakeRuntime(
