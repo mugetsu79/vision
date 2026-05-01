@@ -628,6 +628,19 @@ class InferenceEngine:
             if command.runtime_vocabulary_version is not None:
                 self._state.runtime_vocabulary_version = command.runtime_vocabulary_version
             self.detector.update_runtime_vocabulary(self._state.runtime_vocabulary)
+            if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
+                runtime_state: dict[str, object] = {}
+                describe_runtime_state = getattr(self.detector, "describe_runtime_state", None)
+                if callable(describe_runtime_state):
+                    runtime_state = dict(describe_runtime_state())
+                logger.info(
+                    "Updated open-vocab runtime vocabulary for camera %s "
+                    "runtime_backend=%s vocabulary_terms=%s vocabulary_version=%s",
+                    self.config.camera_id,
+                    runtime_state.get("runtime_backend", "unknown"),
+                    len(self._state.runtime_vocabulary),
+                    self._state.runtime_vocabulary_version,
+                )
         if command.tracker_type is not None and command.tracker_type != self._state.tracker_type:
             self._state.tracker_type = command.tracker_type
             self._tracker = self._tracker_factory(command.tracker_type)

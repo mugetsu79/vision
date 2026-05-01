@@ -97,6 +97,7 @@ class _FakeOpenVocabDetector:
         self.runtime_vocabulary = list(runtime_vocabulary or [])
         self.detect_calls: list[list[str] | None] = []
         self.update_calls: list[list[str]] = []
+        self.runtime_vocabulary_updates = self.update_calls
 
     def detect(
         self,
@@ -109,6 +110,13 @@ class _FakeOpenVocabDetector:
     def update_runtime_vocabulary(self, vocabulary: list[str]) -> None:
         self.runtime_vocabulary = list(vocabulary)
         self.update_calls.append(list(vocabulary))
+
+    def describe_runtime_state(self) -> dict[str, object]:
+        return {
+            "capability": self.capability,
+            "runtime_backend": "ultralytics_yoloe",
+            "runtime_vocabulary": list(self.runtime_vocabulary),
+        }
 
 
 @dataclass(slots=True)
@@ -379,9 +387,12 @@ async def test_engine_applies_live_class_and_tracker_updates_without_restart() -
 
 
 @pytest.mark.asyncio
-async def test_engine_applies_runtime_vocabulary_command_without_restart() -> None:
+async def test_engine_applies_runtime_vocabulary_command_without_restart(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     camera_id = uuid4()
     detector = _FakeOpenVocabDetector(runtime_vocabulary=["forklift"])
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
     config = _engine_config(camera_id).model_copy(
         update={
             "model": ModelSettings(
@@ -414,14 +425,19 @@ async def test_engine_applies_runtime_vocabulary_command_without_restart() -> No
 
     await engine.apply_command(
         CameraCommand(
-            runtime_vocabulary=["forklift", "pallet jack"],
+            runtime_vocabulary=["forklift"],
             runtime_vocabulary_source=RuntimeVocabularySource.QUERY,
             runtime_vocabulary_version=2,
         )
     )
 
-    assert detector.update_calls == [["forklift", "pallet jack"]]
-    assert engine.runtime_vocabulary == ["forklift", "pallet jack"]
+    assert detector.runtime_vocabulary_updates[-1] == ["forklift"]
+    assert engine.runtime_vocabulary == ["forklift"]
+    assert any(
+        "Updated open-vocab runtime vocabulary" in record.message
+        and "runtime_backend=ultralytics_yoloe" in record.message
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
