@@ -20,7 +20,7 @@ from jose import jwt  # type: ignore[import-untyped]
 
 from argus.models.enums import ProcessingMode
 from argus.streaming.mediamtx import StreamMode
-from argus.vision.camera import (
+from argus.vision.capture_options import (
     _FFMPEG_ANALYZE_DURATION_US,
     _FFMPEG_PROBE_SIZE,
     _FFMPEG_RTSP_TIMEOUT_US,
