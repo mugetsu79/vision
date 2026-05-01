@@ -489,6 +489,15 @@ function runtimeVocabularyPayload(data: CameraWizardData, incrementVersion = fal
   };
 }
 
+function formatModelOptionLabel(model: ModelOption) {
+  const capability = model.capability === "open_vocab" ? "open vocab" : "fixed vocab";
+  const backend = model.capability_config?.runtime_backend ?? "onnxruntime";
+  const readiness = model.capability_config?.readiness;
+  return `${model.name} ${model.version} - ${capability} - ${backend}${
+    readiness ? ` - ${readiness}` : ""
+  }`;
+}
+
 function toCreatePayload(
   data: CameraWizardData,
   setupFrameSize: FrameSize,
@@ -1203,7 +1212,7 @@ export function CameraWizard({
                   <option value="">Select a model</option>
                   {models.map((model) => (
                     <option key={model.id} value={model.id}>
-                      {model.name} {model.version}
+                      {formatModelOptionLabel(model)}
                     </option>
                   ))}
                 </Select>
@@ -1289,7 +1298,7 @@ export function CameraWizard({
                   <option value="">None</option>
                   {models.map((model) => (
                     <option key={model.id} value={model.id}>
-                      {model.name} {model.version}
+                      {formatModelOptionLabel(model)}
                     </option>
                   ))}
                 </Select>

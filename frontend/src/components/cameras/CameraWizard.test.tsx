@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -131,6 +131,41 @@ describe("CameraWizard", () => {
 
     expect(screen.getByLabelText(/runtime vocabulary/i)).toBeInTheDocument();
     expect(screen.queryByText(/active class scope/i)).not.toBeInTheDocument();
+  });
+
+  test("labels model options with capability and backend", async () => {
+    const user = userEvent.setup();
+
+    renderWizard({
+      models: [
+        {
+          id: "open-model",
+          name: "YOLOE-26N",
+          version: "2026.1",
+          classes: [],
+          capability: "open_vocab",
+          capability_config: {
+            supports_runtime_vocabulary_updates: true,
+            max_runtime_terms: 32,
+            runtime_backend: "ultralytics_yoloe",
+            readiness: "experimental",
+            requires_gpu: true,
+            supports_masks: true,
+          },
+        },
+      ],
+    });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(
+      within(screen.getByLabelText(/primary model/i)).getByRole("option", {
+        name: /open vocab - ultralytics_yoloe - experimental/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   test("probes a new RTSP source before showing browser delivery profiles", async () => {

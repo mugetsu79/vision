@@ -16,6 +16,7 @@ import {
   type CreateCameraInput,
   type UpdateCameraInput,
 } from "@/hooks/use-cameras";
+import { useModelCatalog, type ModelCatalogEntry } from "@/hooks/use-model-catalog";
 import { useModels } from "@/hooks/use-models";
 import { useSites } from "@/hooks/use-sites";
 
@@ -208,6 +209,8 @@ function CamerasContent() {
               name: model.name,
               version: model.version,
               classes: model.classes,
+              capability: model.capability,
+              capability_config: model.capability_config,
             }))}
             modelsError={
               modelQueryEmpty && modelsError instanceof Error
@@ -232,8 +235,53 @@ function CamerasContent() {
               closeWizard();
             }}
           />
+          <ModelCatalogHints />
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function ModelCatalogHints() {
+  const { data: catalog = [] } = useModelCatalog();
+  const visibleEntries = catalog
+    .filter((entry) => entry.registration_state !== "planned")
+    .slice(0, 4);
+
+  if (visibleEntries.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      data-testid="model-catalog-hints"
+      className="rounded-[0.9rem] border border-white/8 bg-[#0b1320] px-4 py-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+          Model catalog
+        </p>
+        <p className="text-xs text-[#93a7c5]">{catalog.length} presets</p>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {visibleEntries.map((entry) => (
+          <CatalogHintEntry key={entry.id} entry={entry} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CatalogHintEntry({ entry }: { entry: ModelCatalogEntry }) {
+  const backend = entry.capability_config.runtime_backend ?? "onnxruntime";
+  const readiness = entry.capability_config.readiness ?? "ready";
+
+  return (
+    <div className="rounded-[0.75rem] border border-white/8 bg-white/[0.03] px-3 py-3">
+      <p className="text-sm font-semibold text-[#eef4ff]">{entry.name}</p>
+      <p className="mt-1 text-xs text-[#9eb2cf]">
+        {entry.registration_state} - {entry.capability} - {backend} - {readiness}
+      </p>
     </div>
   );
 }

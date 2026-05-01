@@ -37,6 +37,13 @@ function renderPage() {
   );
 }
 
+function emptyModelCatalogResponse() {
+  return new Response(JSON.stringify([]), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 describe("CamerasPage", () => {
   beforeEach(() => {
     act(() => {
@@ -127,6 +134,10 @@ describe("CamerasPage", () => {
         );
       }
 
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
       throw new Error(`Unexpected request to ${url.pathname}`);
     });
 
@@ -167,6 +178,134 @@ describe("CamerasPage", () => {
       }),
     ).toBeInTheDocument();
     expect(modelRequests).toBeGreaterThanOrEqual(2);
+  });
+
+  test("shows catalog hints and passes model capability metadata into setup", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "HQ",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "open-model",
+              name: "YOLOE-26N",
+              version: "2026.1",
+              task: "detect",
+              path: "/models/yoloe-26n-seg.pt",
+              format: "pt",
+              capability: "open_vocab",
+              capability_config: {
+                supports_runtime_vocabulary_updates: true,
+                max_runtime_terms: 32,
+                runtime_backend: "ultralytics_yoloe",
+                readiness: "experimental",
+                requires_gpu: true,
+                supports_masks: true,
+              },
+              classes: [],
+              input_shape: { width: 640, height: 640 },
+              sha256: "b".repeat(64),
+              size_bytes: 2048,
+              license: "AGPL-3.0",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "yoloe-26n-open-vocab-pt",
+              name: "YOLOE-26N Open Vocab",
+              version: "2026.1",
+              task: "detect",
+              path_hint: "models/yoloe-26n-seg.pt",
+              format: "pt",
+              capability: "open_vocab",
+              capability_config: {
+                supports_runtime_vocabulary_updates: true,
+                max_runtime_terms: 32,
+                runtime_backend: "ultralytics_yoloe",
+                readiness: "experimental",
+                requires_gpu: true,
+                supports_masks: true,
+              },
+              classes: [],
+              input_shape: { width: 640, height: 640 },
+              registration_state: "unregistered",
+              registered_model_id: null,
+              artifact_exists: false,
+              note: "Preferred experimental open-vocab lab path.",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /add scene/i }));
+    expect(await screen.findByTestId("model-catalog-hints")).toHaveTextContent(
+      /YOLOE-26N Open Vocab/,
+    );
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(
+      within(screen.getByLabelText(/primary model/i)).getByRole("option", {
+        name: /open vocab - ultralytics_yoloe - experimental/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   test("shows a models loading failure inside the wizard instead of an empty silent select", async () => {
@@ -212,6 +351,10 @@ describe("CamerasPage", () => {
             headers: { "Content-Type": "application/json" },
           },
         );
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
       }
 
       throw new Error(`Unexpected request to ${url.pathname}`);
@@ -346,6 +489,10 @@ describe("CamerasPage", () => {
         });
       }
 
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
       throw new Error(`Unexpected request to ${url.pathname}`);
     });
 
@@ -429,6 +576,10 @@ describe("CamerasPage", () => {
             headers: { "Content-Type": "application/json" },
           },
         );
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
       }
 
       throw new Error(`Unexpected request to ${url.pathname}`);

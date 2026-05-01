@@ -266,6 +266,23 @@ export interface paths {
         patch: operations["update_model_api_v1_models__model_id__patch"];
         trace?: never;
     };
+    "/api/v1/model-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Model Catalog */
+        get: operations["list_model_catalog_api_v1_model_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/edge/register": {
         parameters: {
             query?: never;
@@ -1233,7 +1250,69 @@ export interface components {
             prompt_format?: ("labels" | "phrases") | null;
             /** Execution Profiles */
             execution_profiles?: string[];
+            /** Model Family */
+            model_family?: ("yolo11" | "yolo12" | "yolo26" | "yolo_world" | "yoloe") | null;
+            /** Runtime Backend */
+            runtime_backend?: ("onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine") | null;
+            /** Readiness */
+            readiness?: ("ready" | "experimental" | "planned") | null;
+            /** Recommended Profiles */
+            recommended_profiles?: string[];
+            /**
+             * Requires Gpu
+             * @default false
+             */
+            requires_gpu: boolean;
+            /**
+             * Supports Masks
+             * @default false
+             */
+            supports_masks: boolean;
+            /** Source Url */
+            source_url?: string | null;
         };
+        /** ModelCatalogEntryResponse */
+        ModelCatalogEntryResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Version */
+            version: string;
+            task: components["schemas"]["ModelTask"];
+            /** Path Hint */
+            path_hint: string;
+            format: components["schemas"]["ModelFormat"];
+            capability: components["schemas"]["DetectorCapability"];
+            capability_config: components["schemas"]["ModelCapabilityConfig"];
+            /** Classes */
+            classes?: string[];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** License */
+            license?: string | null;
+            registration_state: components["schemas"]["ModelCatalogRegistrationState"];
+            /** Registered Model Id */
+            registered_model_id?: string | null;
+            /**
+             * Artifact Exists
+             * @default false
+             */
+            artifact_exists: boolean;
+            /** Note */
+            note: string;
+        };
+        /**
+         * ModelCatalogRegistrationState
+         * @enum {string}
+         */
+        ModelCatalogRegistrationState: "unregistered" | "registered" | "missing_artifact" | "planned";
         /** ModelCreate */
         ModelCreate: {
             /** Name */
@@ -1264,7 +1343,7 @@ export interface components {
          * ModelFormat
          * @enum {string}
          */
-        ModelFormat: "onnx" | "engine";
+        ModelFormat: "onnx" | "engine" | "pt";
         /** ModelResponse */
         ModelResponse: {
             /**
@@ -2445,6 +2524,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_model_catalog_api_v1_model_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelCatalogEntryResponse"][];
                 };
             };
         };
