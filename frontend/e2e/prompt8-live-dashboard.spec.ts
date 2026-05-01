@@ -305,7 +305,7 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
     .toBe(false);
 });
 
-test("visiting /dashboard redirects to /live and omits the legacy Dashboard nav item", async ({ page }) => {
+test("visiting /dashboard renders the OmniSight overview and keeps Live available", async ({ page }) => {
   await page.goto("/signin");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.locator("#username").fill("admin-dev");
@@ -314,9 +314,11 @@ test("visiting /dashboard redirects to /live and omits the legacy Dashboard nav 
   await expect(page).toHaveURL(/\/live$/);
 
   await page.goto("/dashboard");
-  await expect(page).toHaveURL(/\/live$/);
+  await expect(page).toHaveURL(/\/dashboard$/);
 
-  await expect(page.getByRole("link", { name: "Dashboard" })).toHaveCount(0);
+  await expect(page.getByTestId("omnisight-overview")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "OmniSight Overview" })).toBeVisible();
+  await expect(workspaceLink(page, "Intelligence", "Dashboard")).toBeVisible();
   await expect(workspaceLink(page, "Intelligence", "Live")).toBeVisible();
 });
 
