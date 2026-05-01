@@ -1372,16 +1372,12 @@ async def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_engine_redacts_worker_ingest_url_in_logs(
+async def test_build_runtime_engine_logs_passthrough_delivery_without_ingest_token(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     camera_id = uuid4()
     fake_runtime = object()
-    redacted_url = (
-        f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
-        "?jwt=redacted"
-    )
     secret_url = (
         f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
         "?jwt=super-secret-token"
@@ -1484,8 +1480,12 @@ async def test_build_runtime_engine_redacts_worker_ingest_url_in_logs(
     )
 
     assert any(
-        "Worker ingesting from MediaMTX relay at" in record.message
-        and redacted_url in record.message
+        (
+            "Worker ingesting directly from camera RTSP while browser delivery "
+            "uses MediaMTX passthrough"
+        )
+        in record.message
+        and f"cameras/{camera_id}/passthrough" in record.message
         and "super-secret-token" not in record.message
         for record in caplog.records
     )
@@ -1627,7 +1627,7 @@ async def test_build_runtime_engine_uses_direct_camera_rtsp_for_processed_stream
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_engine_supplies_refreshable_worker_ingest_url_for_passthrough(
+async def test_build_runtime_engine_uses_direct_camera_rtsp_for_passthrough_detection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     camera_id = uuid4()
@@ -1733,6 +1733,11 @@ async def test_build_runtime_engine_supplies_refreshable_worker_ingest_url_for_p
     settings = engine_module.Settings(_env_file=None)
     config = _engine_config(camera_id).model_copy(
         update={
+            "camera": CameraSettings(
+                rtsp_url="rtsp://user:pass@camera.internal/live",
+                frame_skip=1,
+                fps_cap=25,
+            ),
             "stream": StreamSettings(
                 profile_id="native",
                 kind="passthrough",
@@ -1751,16 +1756,8 @@ async def test_build_runtime_engine_supplies_refreshable_worker_ingest_url_for_p
 
     assert len(captured_camera_configs) == 1
     camera_config = captured_camera_configs[0]
-    assert camera_config.source_uri.endswith("jwt=bootstrap-token")
-    assert camera_config.source_uri_factory is not None
-    assert camera_config.source_uri_factory() == (
-        f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
-        "?jwt=refreshed-token-1"
-    )
-    assert camera_config.source_uri_factory() == (
-        f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough"
-        "?jwt=refreshed-token-2"
-    )
+    assert camera_config.source_uri == "rtsp://user:pass@camera.internal/live"
+    assert camera_config.source_uri_factory is None
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
-from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 import cv2
@@ -926,30 +925,13 @@ async def build_runtime_engine(
     source_uri_factory = None
     if registration.mode is StreamMode.PASSTHROUGH:
         logger.info(
-            "Worker ingesting from MediaMTX relay at %s (registered for camera %s)",
-            redact_url_secrets(registration.ingest_path),
+            (
+                "Worker ingesting directly from camera RTSP while browser delivery "
+                "uses MediaMTX passthrough at %s (camera_id=%s)"
+            ),
+            redact_url_secrets(registration.read_path),
             config.camera_id,
         )
-        ingest_url_parts = urlsplit(registration.ingest_path)
-        ingest_path_name = ingest_url_parts.path.lstrip("/")
-        ingest_base_url = urlunsplit(
-            (
-                ingest_url_parts.scheme,
-                ingest_url_parts.netloc,
-                ingest_url_parts.path,
-                "",
-                ingest_url_parts.fragment,
-            )
-        )
-        source_uri = registration.ingest_path
-        if ingest_path_name != "":
-            def source_uri_factory() -> str:
-                return token_issuer.build_internal_rtsp_url(
-                    camera_id=config.camera_id,
-                    path_name=ingest_path_name,
-                    rtsp_url=ingest_base_url,
-                    ttl_seconds=settings.mediamtx_jwt_worker_ttl_seconds,
-                )
     else:
         logger.info(
             (
