@@ -54,6 +54,16 @@ class ModelCapabilityConfig(BaseModel):
     max_runtime_terms: int | None = None
     prompt_format: Literal["labels", "phrases"] | None = None
     execution_profiles: list[str] = Field(default_factory=list)
+    model_family: Literal["yolo11", "yolo12", "yolo26", "yolo_world", "yoloe"] | None = None
+    runtime_backend: (
+        Literal["onnxruntime", "ultralytics_yolo_world", "ultralytics_yoloe", "tensorrt_engine"]
+        | None
+    ) = None
+    readiness: Literal["ready", "experimental", "planned"] | None = None
+    recommended_profiles: list[str] = Field(default_factory=list)
+    requires_gpu: bool = False
+    supports_masks: bool = False
+    source_url: str | None = None
 
 
 class RuntimeVocabularyState(BaseModel):

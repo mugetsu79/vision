@@ -133,6 +133,108 @@ async def test_create_open_vocab_model_allows_empty_static_classes(
 
 
 @pytest.mark.asyncio
+async def test_create_open_vocab_ultralytics_model_requires_pt_format() -> None:
+    service = ModelService(session_factory=_FakeSessionFactory(), audit_logger=_FakeAuditLogger())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_model(
+            ModelCreate(
+                name="YOLOE-26N Open Vocab",
+                version="2026.1",
+                task=ModelTask.DETECT,
+                path="/models/yoloe-26n-seg.onnx",
+                format=ModelFormat.ONNX,
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={
+                    "supports_runtime_vocabulary_updates": True,
+                    "max_runtime_terms": 32,
+                    "prompt_format": "labels",
+                    "runtime_backend": "ultralytics_yoloe",
+                    "model_family": "yoloe",
+                    "readiness": "experimental",
+                    "requires_gpu": True,
+                },
+                classes=[],
+                input_shape={"width": 640, "height": 640},
+                sha256="b" * 64,
+                size_bytes=123456,
+                license="AGPL-3.0",
+            )
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "requires format=pt" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_create_open_vocab_ultralytics_model_accepts_pt_format() -> None:
+    session_factory = _FakeSessionFactory()
+    service = ModelService(session_factory=session_factory, audit_logger=_FakeAuditLogger())
+
+    response = await service.create_model(
+        ModelCreate(
+            name="YOLOE-26N Open Vocab",
+            version="2026.1",
+            task=ModelTask.DETECT,
+            path="/models/yoloe-26n-seg.pt",
+            format=ModelFormat.PT,
+            capability=DetectorCapability.OPEN_VOCAB,
+            capability_config={
+                "supports_runtime_vocabulary_updates": True,
+                "max_runtime_terms": 32,
+                "prompt_format": "labels",
+                "runtime_backend": "ultralytics_yoloe",
+                "model_family": "yoloe",
+                "readiness": "experimental",
+                "requires_gpu": True,
+                "execution_profiles": ["linux-aarch64-nvidia-jetson", "linux-x86_64-nvidia"],
+            },
+            classes=[],
+            input_shape={"width": 640, "height": 640},
+            sha256="c" * 64,
+            size_bytes=123456,
+            license="AGPL-3.0",
+        )
+    )
+
+    assert response.format == ModelFormat.PT
+    assert response.capability == DetectorCapability.OPEN_VOCAB
+    assert response.capability_config.runtime_backend == "ultralytics_yoloe"
+    assert session_factory.state["model"] is not None
+    assert session_factory.state["model"].classes == []
+
+
+@pytest.mark.asyncio
+async def test_create_engine_model_rejects_ready_tensorrt_backend_until_supported() -> None:
+    service = ModelService(session_factory=_FakeSessionFactory(), audit_logger=_FakeAuditLogger())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_model(
+            ModelCreate(
+                name="YOLO26n TensorRT",
+                version="2026.1",
+                task=ModelTask.DETECT,
+                path="/models/yolo26n.engine",
+                format=ModelFormat.ENGINE,
+                capability=DetectorCapability.FIXED_VOCAB,
+                capability_config={
+                    "runtime_backend": "tensorrt_engine",
+                    "readiness": "ready",
+                    "model_family": "yolo26",
+                },
+                classes=["person", "car"],
+                input_shape={"width": 640, "height": 640},
+                sha256="d" * 64,
+                size_bytes=123456,
+                license="AGPL-3.0",
+            )
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "TensorRT engine detector is not implemented" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
 async def test_update_model_rejects_class_mismatch_for_self_describing_onnx(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -75,6 +75,7 @@ class CountEventType(StrEnum):
 class ModelFormat(StrEnum):
     ONNX = "onnx"
     ENGINE = "engine"
+    PT = "pt"
 
 
 class RuleAction(StrEnum):

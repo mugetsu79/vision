@@ -2770,6 +2770,44 @@ def _model_capability_config(model: Model) -> dict[str, object]:
     return dict(getattr(model, "capability_config", None) or {})
 
 
+def _validate_model_runtime_backend(
+    *,
+    capability: DetectorCapability,
+    format: ModelFormat,
+    capability_config: dict[str, object],
+) -> None:
+    backend_value = capability_config.get("runtime_backend")
+    if backend_value is None:
+        return
+
+    backend = str(backend_value)
+    readiness = str(capability_config.get("readiness") or "ready")
+
+    if backend == "onnxruntime" and format is not ModelFormat.ONNX:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="runtime_backend=onnxruntime requires format=onnx.",
+        )
+
+    if backend in {"ultralytics_yolo_world", "ultralytics_yoloe"}:
+        if capability is not DetectorCapability.OPEN_VOCAB:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE,
+                detail=f"runtime_backend={backend} requires capability=open_vocab.",
+            )
+        if format is not ModelFormat.PT:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE,
+                detail=f"runtime_backend={backend} requires format=pt.",
+            )
+
+    if backend == "tensorrt_engine" and readiness == "ready":
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="TensorRT engine detector is not implemented; use readiness=planned.",
+        )
+
+
 def _resolve_model_classes_for_capability(
     *,
     capability: DetectorCapability,
@@ -2778,6 +2816,11 @@ def _resolve_model_classes_for_capability(
     classes: list[str] | None,
     capability_config: dict[str, object],
 ) -> list[str]:
+    _validate_model_runtime_backend(
+        capability=capability,
+        format=format,
+        capability_config=capability_config,
+    )
     if capability is DetectorCapability.OPEN_VOCAB:
         if capability_config.get("supports_runtime_vocabulary_updates") is not True:
             raise HTTPException(
