@@ -561,15 +561,13 @@ class CameraService:
             else PrivacySettings().model_dump(mode="python")
         )
         existing_source_capability: SourceCapability | None = None
+        source_capability: SourceCapability | None
         should_persist_probe = False
 
         if payload.camera_id is not None:
             async with self.session_factory() as session:
                 camera = await _load_camera(session, tenant_context.tenant_id, payload.camera_id)
                 supplied_rtsp_url = rtsp_url is not None
-                if rtsp_url is None:
-                    rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
-                    should_persist_probe = True
                 if payload.browser_delivery is None:
                     stored_browser_delivery = (
                         camera.browser_delivery
@@ -585,17 +583,23 @@ class CameraService:
                         camera.source_capability
                     )
 
-                source_capability = (
-                    await _probe_source_capability(rtsp_url, settings=self.settings)
-                    if rtsp_url is not None
-                    else None
-                )
-                if source_capability is None:
+                if not supplied_rtsp_url and existing_source_capability is not None:
                     source_capability = existing_source_capability
-                elif should_persist_probe and not supplied_rtsp_url:
-                    camera.source_capability = source_capability.model_dump(mode="python")
-                    await session.commit()
-                    await session.refresh(camera)
+                else:
+                    if rtsp_url is None:
+                        rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
+                        should_persist_probe = True
+                    source_capability = (
+                        await _probe_source_capability(rtsp_url, settings=self.settings)
+                        if rtsp_url is not None
+                        else None
+                    )
+                    if source_capability is None:
+                        source_capability = existing_source_capability
+                    elif should_persist_probe and not supplied_rtsp_url:
+                        camera.source_capability = source_capability.model_dump(mode="python")
+                        await session.commit()
+                        await session.refresh(camera)
         else:
             if rtsp_url is None:
                 raise HTTPException(

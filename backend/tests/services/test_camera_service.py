@@ -563,6 +563,112 @@ async def test_probe_camera_source_filters_existing_camera_with_stale_profiles(
 
 
 @pytest.mark.asyncio
+async def test_probe_camera_source_reuses_cached_capability_for_privacy_only_edit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=True,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    site_id = uuid4()
+    model_id = uuid4()
+    camera_id = uuid4()
+    now = datetime.now(tz=UTC)
+    camera = Camera(
+        id=camera_id,
+        site_id=site_id,
+        edge_node_id=None,
+        name="Dock Camera",
+        rtsp_url_encrypted=app_services.encrypt_rtsp_url("rtsp://existing-camera/live", settings),
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=model_id,
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography={
+            "src": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "dst": [[0, 0], [5, 0], [5, 5], [0, 5]],
+            "ref_distance_m": 5.0,
+        },
+        privacy={
+            "blur_faces": True,
+            "blur_plates": True,
+            "method": "gaussian",
+            "strength": 7,
+        },
+        browser_delivery=BrowserDeliverySettings(default_profile="720p10").model_dump(
+            mode="python"
+        ),
+        source_capability={
+            "width": 1280,
+            "height": 720,
+            "fps": 20,
+            "codec": "h264",
+            "aspect_ratio": "16:9",
+        },
+        frame_skip=1,
+        fps_cap=25,
+        created_at=now,
+        updated_at=now,
+    )
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="admin-1",
+            email="admin@argus.local",
+            role=RoleEnum.ADMIN,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    async def unexpected_probe(rtsp_url, *, settings):  # noqa: ANN001
+        raise AssertionError("privacy-only source probe should use cached capability")
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(app_services, "_probe_source_capability", unexpected_probe)
+
+    response = await service.probe_camera_source(
+        tenant_context,
+        CameraSourceProbeRequest(
+            camera_id=camera_id,
+            browser_delivery=BrowserDeliverySettings(default_profile="native"),
+            privacy=PrivacySettings(blur_faces=False, blur_plates=False),
+        ),
+    )
+
+    assert response.source_capability == SourceCapability(
+        width=1280,
+        height=720,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    assert response.browser_delivery.default_profile == "native"
+    assert response.browser_delivery.native_status is not None
+    assert response.browser_delivery.native_status.available is True
+
+
+@pytest.mark.asyncio
 async def test_probe_camera_source_falls_back_to_still_capture_without_ffprobe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
