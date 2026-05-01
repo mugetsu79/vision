@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from argus.migrations.alembic_config import configure_database_url
 
@@ -28,3 +31,14 @@ def test_configure_database_url_keeps_existing_value(monkeypatch) -> None:
 
     assert database_url == "postgresql+asyncpg://argus:argus@localhost:5432/argus"
     assert config.get_main_option("sqlalchemy.url") == database_url
+
+
+def test_revision_ids_fit_alembic_version_column() -> None:
+    config = Config()
+    migrations_path = Path(__file__).resolve().parents[2] / "src" / "argus" / "migrations"
+    config.set_main_option("script_location", str(migrations_path))
+
+    script = ScriptDirectory.from_config(config)
+    revision_ids = [revision.revision for revision in script.walk_revisions()]
+
+    assert all(len(revision_id) <= 32 for revision_id in revision_ids)

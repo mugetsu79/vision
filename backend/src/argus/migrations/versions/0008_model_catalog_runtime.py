@@ -1,6 +1,6 @@
 """model catalog open vocab runtime
 
-Revision ID: 0008_model_catalog_open_vocab_runtime
+Revision ID: 0008_model_catalog_runtime
 Revises: 0007_incident_review_state
 Create Date: 2026-05-01
 """
@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision = "0008_model_catalog_open_vocab_runtime"
+revision = "0008_model_catalog_runtime"
 down_revision = "0007_incident_review_state"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
