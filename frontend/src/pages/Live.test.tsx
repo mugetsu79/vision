@@ -481,13 +481,15 @@ describe("LivePage", () => {
         camera_id: "11111111-1111-1111-1111-111111111111",
         ts: new Date(Date.now() - 28_000).toISOString(),
         profile: "central-gpu",
-        stream_mode: "passthrough",
+        stream_mode: "annotated-whip",
         counts: {},
         tracks: [],
       });
     });
 
     expect(await screen.findByText(/telemetry stale/i)).toBeInTheDocument();
+    expect(screen.getByText(/native clean/i)).toBeInTheDocument();
+    expect(screen.queryByText(/annotated-whip/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^offline$/i)).not.toBeInTheDocument();
   });
 });

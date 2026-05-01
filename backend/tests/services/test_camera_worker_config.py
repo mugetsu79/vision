@@ -190,7 +190,7 @@ def test_edge_native_browser_delivery_keeps_passthrough_stream() -> None:
     assert config.model.classes == ["person", "car"]
 
 
-def test_central_native_browser_delivery_without_privacy_keeps_passthrough_stream() -> None:
+def test_central_native_browser_delivery_without_privacy_uses_clean_processed_stream() -> None:
     camera = Camera(
         id=uuid4(),
         site_id=uuid4(),
@@ -247,7 +247,7 @@ def test_central_native_browser_delivery_without_privacy_keeps_passthrough_strea
 
     assert config.stream.model_dump() == {
         "profile_id": "native",
-        "kind": "passthrough",
+        "kind": "transcode",
         "width": None,
         "height": None,
         "fps": 17,

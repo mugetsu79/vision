@@ -99,7 +99,7 @@ async def test_stream_service_resolves_edge_native_delivery_to_passthrough_acces
 
 
 @pytest.mark.asyncio
-async def test_stream_service_resolves_central_native_delivery_without_privacy_to_passthrough(
+async def test_stream_service_resolves_central_native_delivery_without_privacy_to_clean_processed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     camera_id = uuid4()
@@ -159,8 +159,8 @@ async def test_stream_service_resolves_central_native_delivery_without_privacy_t
 
     access = await service._resolve_stream_access(tenant_context, camera_id)
 
-    assert access.mode is StreamMode.PASSTHROUGH
-    assert access.path_name == f"cameras/{camera_id}/passthrough"
+    assert access.mode is StreamMode.ANNOTATED_WHIP
+    assert access.path_name == f"cameras/{camera_id}/annotated"
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,8 @@ import type { components } from "@/lib/api.generated";
 import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
 
 type QueryResponse = components["schemas"]["QueryResponse"];
+type CameraResponse = components["schemas"]["CameraResponse"];
+type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 
 export function LivePage() {
   return <WorkspacePage />;
@@ -211,7 +213,7 @@ function WorkspacePage() {
                         </div>
                         {frame ? (
                           <p className="text-xs text-[#9db3d3]">
-                            {frame.stream_mode}
+                            {formatStreamMode(camera, frame)}
                           </p>
                         ) : null}
                       </div>
@@ -315,6 +317,25 @@ function heartbeatBadgeClass(status: "unknown" | "fresh" | "stale"): string {
     return "border-[#6a4b1c] bg-[#24180d] text-[#ffd9a9]";
   }
   return "border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]";
+}
+
+function formatStreamMode(
+  camera: CameraResponse,
+  frame: TelemetryFrame,
+): string {
+  const defaultProfile = camera.browser_delivery?.default_profile ?? "720p10";
+  const privacyOff = !camera.privacy.blur_faces && !camera.privacy.blur_plates;
+
+  if (defaultProfile === "native" && privacyOff) {
+    return "native clean";
+  }
+  if (frame.stream_mode === "filtered-preview") {
+    return "filtered preview";
+  }
+  if (frame.stream_mode === "passthrough") {
+    return "passthrough";
+  }
+  return `${defaultProfile} processed`;
 }
 
 function formatNativeAvailabilityReason(

@@ -751,7 +751,10 @@ class InferenceEngine:
         stream_frame = frame.copy()
         if self._state.privacy.requires_filtering:
             stream_frame = self.privacy_filter.apply(stream_frame)
-        if self._stream_registration.mode is StreamMode.ANNOTATED_WHIP:
+        if (
+            self._stream_registration.mode is StreamMode.ANNOTATED_WHIP
+            and self.config.stream.profile_id != "native"
+        ):
             self._draw_annotations(stream_frame, detections)
         return stream_frame
 
