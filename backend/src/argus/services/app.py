@@ -7,6 +7,7 @@ import logging
 import math
 import secrets
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -3175,7 +3176,17 @@ def _resolve_worker_stream_settings(
 
 
 def _uses_processed_native_delivery(camera: Camera) -> bool:
-    return camera.processing_mode is ProcessingMode.CENTRAL and camera.edge_node_id is None
+    return (
+        camera.processing_mode is ProcessingMode.CENTRAL
+        and camera.edge_node_id is None
+        and _privacy_requires_filtering(camera.privacy)
+    )
+
+
+def _privacy_requires_filtering(privacy: Mapping[str, object] | None) -> bool:
+    if privacy is None:
+        return False
+    return bool(privacy.get("blur_faces")) or bool(privacy.get("blur_plates"))
 
 
 def _normalize_points(
