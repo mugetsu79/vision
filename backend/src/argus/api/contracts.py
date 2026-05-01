@@ -119,6 +119,33 @@ class ModelResponse(BaseModel):
     license: str | None = None
 
 
+class ModelCatalogRegistrationState(StrEnum):
+    UNREGISTERED = "unregistered"
+    REGISTERED = "registered"
+    MISSING_ARTIFACT = "missing_artifact"
+    PLANNED = "planned"
+
+
+class ModelCatalogEntryResponse(BaseModel):
+    id: str
+    name: str
+    version: str
+    task: ModelTask
+    path_hint: str
+    format: ModelFormat
+    capability: DetectorCapability
+    capability_config: ModelCapabilityConfig
+    classes: list[str] = Field(default_factory=list)
+    input_shape: dict[str, int]
+    sha256: str | None = None
+    size_bytes: int | None = None
+    license: str | None = None
+    registration_state: ModelCatalogRegistrationState
+    registered_model_id: UUID | None = None
+    artifact_exists: bool = False
+    note: str
+
+
 class HomographyPayload(BaseModel):
     src: list[list[float]]
     dst: list[list[float]]

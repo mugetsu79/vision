@@ -54,6 +54,7 @@ from argus.api.contracts import (
     HomographyPayload,
     IncidentResponse,
     ModelCapabilityConfig,
+    ModelCatalogEntryResponse,
     ModelCreate,
     ModelResponse,
     ModelUpdate,
@@ -107,6 +108,7 @@ from argus.models.tables import (
     Tenant,
     TrackingEvent,
 )
+from argus.services.model_catalog import resolve_catalog_status
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
@@ -412,6 +414,11 @@ class ModelService:
             statement = select(Model).order_by(Model.name, Model.version)
             models = (await session.execute(statement)).scalars().all()
         return [_model_to_response(model) for model in models]
+
+    async def list_catalog_status(self) -> list[ModelCatalogEntryResponse]:
+        async with self.session_factory() as session:
+            models = (await session.execute(select(Model))).scalars().all()
+        return resolve_catalog_status(list(models))
 
     async def create_model(self, payload: ModelCreate) -> ModelResponse:
         capability_config = payload.capability_config.model_dump(mode="python")
