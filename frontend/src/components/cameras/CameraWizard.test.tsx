@@ -118,6 +118,8 @@ describe("CameraWizard", () => {
           capability_config: {
             max_runtime_terms: 32,
             supports_runtime_vocabulary_updates: true,
+            requires_gpu: false,
+            supports_masks: false,
           },
         },
       ],

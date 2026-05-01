@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Callable
+from importlib import import_module
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -91,14 +92,11 @@ class OpenVocabDetector:
 
 
 def _load_ultralytics_model(path: str, backend: str) -> Any:
+    ultralytics: Any = import_module("ultralytics")
     if backend == "ultralytics_yolo_world":
-        from ultralytics import YOLOWorld
-
-        return YOLOWorld(path)
+        return ultralytics.YOLOWorld(path)
     if backend == "ultralytics_yoloe":
-        from ultralytics import YOLOE
-
-        return YOLOE(path)
+        return ultralytics.YOLOE(path)
     raise RuntimeError(f"Unsupported open-vocab runtime backend: {backend}")
 
 
@@ -122,12 +120,18 @@ def _detections_from_ultralytics_results(results: Iterable[Any]) -> list[Detecti
                 continue
             class_id = int(class_id_value)
             class_name = str(names.get(class_id, class_id))
+            bbox_tuple = (
+                float(bbox[0]),
+                float(bbox[1]),
+                float(bbox[2]),
+                float(bbox[3]),
+            )
             detections.append(
                 Detection(
                     class_name=class_name,
                     class_id=class_id,
                     confidence=round(float(confidence), 6),
-                    bbox=tuple(float(value) for value in bbox[:4]),
+                    bbox=bbox_tuple,
                 )
             )
     return detections

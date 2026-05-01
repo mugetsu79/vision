@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from argus.api.contracts import (
@@ -11,6 +12,9 @@ from argus.api.contracts import (
 )
 from argus.models.enums import DetectorCapability, ModelFormat, ModelTask
 from argus.models.tables import Model
+
+type ModelFamily = Literal["yolo11", "yolo12", "yolo26", "yolo_world", "yoloe"]
+type OpenVocabBackend = Literal["ultralytics_yolo_world", "ultralytics_yoloe"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +164,7 @@ def _fixed(
     id: str,
     name: str,
     version: str,
-    family: str,
+    family: ModelFamily,
     path_hint: str,
     note: str,
 ) -> ModelCatalogEntry:
@@ -195,9 +199,9 @@ def _open_vocab(
     id: str,
     name: str,
     version: str,
-    family: str,
+    family: Literal["yolo_world", "yoloe"],
     path_hint: str,
-    backend: str,
+    backend: OpenVocabBackend,
     note: str,
 ) -> ModelCatalogEntry:
     return ModelCatalogEntry(
