@@ -64,11 +64,27 @@ You need all of the following before you begin:
 - administrator access on the Jetson
 - the Vezor repository on both machines
 - 2 working RTSP camera URLs
-- 1 detector model file in ONNX format
+- 1 fixed-vocab detector model file in ONNX format
 - both machines and both cameras on the same local network
 - enough free disk space for Docker images and logs
 
-This guide assumes the model file is called `yolo12n.onnx`. If your file has a different name, replace it everywhere in the commands below. Treat it as a standard COCO-style self-describing ONNX model unless you are intentionally following the advanced reduced-class path later in this guide.
+Recommended fixed-vocab model order for this lab:
+
+1. `YOLO26n COCO` from `models/yolo26n.onnx` for the default fast path.
+2. `YOLO26s COCO` from `models/yolo26s.onnx` when you want more accuracy.
+3. `YOLO11n COCO` from `models/yolo11n.onnx` as the stable fallback.
+4. `YOLO12n COCO` from `models/yolo12n.onnx` only when comparing against the older lab baseline.
+
+Open-vocab lab models are experimental:
+
+1. `YOLOE-26N Open Vocab` from `models/yoloe-26n-seg.pt`.
+2. `YOLOv8s-Worldv2 Open Vocab` from `models/yolov8s-worldv2.pt`.
+
+Do not register raw `.engine` files as ready camera models until the TensorRT engine detector adapter lands. ONNX models can still use TensorRT or CUDA through ONNX Runtime providers when those providers are installed.
+
+The commands below still use `yolo12n.onnx` for backwards-compatible lab bring-up. For the forward-default path, replace `yolo12n.onnx` with `yolo26n.onnx` and use the matching preset or model record name.
+
+Treat fixed-vocab ONNX files as standard COCO-style self-describing models unless you are intentionally following the advanced reduced-class path later in this guide.
 
 This is the default COCO-first flow. The model is treated as a standard self-describing ONNX file, so registration should trust embedded metadata when it is available. You will set the persistent camera class scope in the UI instead of treating the model itself as a reduced-class custom artifact.
 
@@ -119,7 +135,7 @@ Write these values down somewhere:
 | Camera 1 RTSP URL | |
 | Camera 2 name | |
 | Camera 2 RTSP URL | |
-| ONNX model filename | |
+| Primary ONNX model filename | |
 
 ### 1.6 Use these exact test names
 
@@ -525,6 +541,41 @@ Keep this iMac terminal window open. Later commands in this guide reuse:
 - `MODEL_PATH`
 - `MODEL_SHA`
 - `MODEL_SIZE`
+
+### Optional: Register with a catalog preset helper
+
+The recommended model catalog can build the `POST /api/v1/models` payload for a local artifact. To print a fixed-vocab registration payload:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run python scripts/register_model_preset.py \
+  --catalog-id yolo26n-coco-onnx \
+  --artifact-path "$HOME/vision/models/yolo26n.onnx" \
+  --class person \
+  --class car
+```
+
+To register through the API:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run python scripts/register_model_preset.py \
+  --catalog-id yolo26n-coco-onnx \
+  --artifact-path "$HOME/vision/models/yolo26n.onnx" \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN"
+```
+
+For an experimental open-vocab lab model:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run python scripts/register_model_preset.py \
+  --catalog-id yoloe-26n-open-vocab-pt \
+  --artifact-path "$HOME/vision/models/yoloe-26n-seg.pt" \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN"
+```
 
 ### 2.7 Register the iMac model record
 

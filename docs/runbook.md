@@ -138,7 +138,15 @@ This Compose path is appropriate for lab and pilot bring-up. In production, the 
 
 `/Users/yann.moren/vision/models/` is only where local model files live; it does not define semantic class scope by itself. In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later. When an ONNX model exposes embedded class metadata, treat that as the source of truth for registration and runtime inventory. Use `Camera.active_classes` only to narrow the operational scope. Custom reduced-class models remain an advanced optional path.
 
-The current branch also includes detector capability contracts for `fixed_vocab` and `open_vocab`, runtime vocabulary persistence, vocabulary snapshots, and capability-aware query commands. Treat this as the control-plane foundation for open-vocabulary detection. A true open-vocabulary model backend should still be validated separately on the target central and Jetson runtimes.
+### Model Catalog And Open-Vocab Runtime
+
+`/api/v1/model-catalog` lists recommended local model presets. It does not download model files and does not replace registered `Model` rows. A camera can only select models that are registered in `/api/v1/models`.
+
+Fixed-vocab ONNX models use ONNX Runtime. Provider selection can choose TensorRT, CUDA, OpenVINO, CoreML, or CPU depending on host support.
+
+Open-vocab models use the Ultralytics adapter and are marked experimental until validated on the target central GPU and Jetson runtime. The supported first-pass formats are `.pt` model files for YOLOE and YOLO-World.
+
+Raw TensorRT `.engine` files are cataloged as planned only. They require a dedicated TensorRT engine detector adapter before they can be marked ready.
 
 ## Authentication Alternative
 
