@@ -209,21 +209,26 @@ class CameraSource:
 
     def _reconnect(self) -> None:
         self._capture.release()
-        delay = min(
-            self.config.reconnect_backoff_base * (2**self._reconnect_attempts),
-            self.config.reconnect_backoff_max,
-        )
-        LOGGER.warning(
-            "Camera capture lost, reconnecting",
-            extra={
+        while True:
+            delay = min(
+                self.config.reconnect_backoff_base * (2**self._reconnect_attempts),
+                self.config.reconnect_backoff_max,
+            )
+            log_extra = {
                 "source_uri": redact_url_secrets(self._current_source_uri),
                 "mode": self.mode.value,
                 "reconnect_delay_seconds": delay,
-            },
-        )
-        self._sleep(delay)
-        self._capture = self._open_capture()
-        self._reconnect_attempts += 1
+            }
+            LOGGER.warning("Camera capture lost, reconnecting", extra=log_extra)
+            self._sleep(delay)
+            try:
+                self._capture = self._open_capture()
+            except Exception:
+                LOGGER.exception("Camera reconnect attempt failed", extra=log_extra)
+                self._reconnect_attempts += 1
+                continue
+            self._reconnect_attempts += 1
+            return
 
 
 def create_camera_source(

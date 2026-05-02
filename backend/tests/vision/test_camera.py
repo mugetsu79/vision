@@ -200,6 +200,48 @@ def test_camera_source_refreshes_source_uri_on_reconnect_and_redacts_log(
     )
 
 
+def test_camera_source_retries_when_reconnect_open_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    reconnect_frame = np.full((2, 2, 3), 9, dtype=np.uint8)
+    capture_attempts: list[_FakeCapture | RuntimeError] = [
+        _FakeCapture([None]),
+        RuntimeError("temporary RTSP open failure"),
+        _FakeCapture([reconnect_frame]),
+    ]
+    sleep_calls: list[float] = []
+
+    def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
+        del source, backend
+        attempt = capture_attempts.pop(0)
+        if isinstance(attempt, RuntimeError):
+            raise attempt
+        return attempt
+
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+    source = create_camera_source(
+        CameraSourceConfig(
+            source_uri="rtsp://camera.internal/live",
+            reconnect_backoff_base=0.25,
+            reconnect_backoff_max=1.0,
+        ),
+        platform_info=PlatformInfo(machine="x86_64", jetson=False),
+        capture_factory=capture_factory,
+        sleep=sleep_calls.append,
+    )
+
+    frame = source.next_frame()
+
+    np.testing.assert_array_equal(frame, reconnect_frame)
+    assert sleep_calls == [0.25, 0.5]
+    assert source.reconnect_attempts == 0
+    assert any(
+        "Camera reconnect attempt failed" in record.message
+        and "temporary RTSP open failure" not in record.message
+        for record in caplog.records
+    )
+
+
 def test_default_capture_factory_prefers_tcp_for_x86_rtsp(monkeypatch: object) -> None:
     calls: list[_CaptureCall] = []
     capture = _FakeCapture([])
