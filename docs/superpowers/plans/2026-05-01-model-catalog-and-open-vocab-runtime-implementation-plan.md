@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status:** Completed on 2026-05-02 on branch `model-catalog-open-vocab-runtime`. This file is now historical implementation scaffolding; unchecked boxes below reflect the original plan format, not remaining Stream 1 work. Follow-up raw TensorRT `.engine` runtime work is tracked separately in `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md`.
+
 **Goal:** Add recommended model catalog options, Jetson-aware runtime selection, and a true Ultralytics-backed open-vocabulary detector path while preserving the current fixed-vocab video pipeline.
 
 **Architecture:** Keep registered `Model` rows as the canonical selectable inventory. Add a typed catalog as a registration aid, extend model capability config enough to validate runtime backends, add Jetson NVIDIA host classification, and introduce an Ultralytics open-vocab detector adapter selected by `DetectorCapability.OPEN_VOCAB` plus `runtime_backend`.

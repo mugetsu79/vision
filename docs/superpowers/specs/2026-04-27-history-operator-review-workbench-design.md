@@ -56,7 +56,7 @@ The design is intentionally phased:
    - evidence slots remain harmless when no thumbnail exists
 3. **Phase 3: Video and NL review**
    - jump to retained video at a selected time
-   - natural-language search after true open-vocabulary runtime validation gives NL a stronger product role
+   - natural-language search can later compose deterministic filters, review targets, and open-vocab runtime vocabulary updates
 
 ---
 
@@ -211,7 +211,7 @@ Selecting a search result should be deterministic:
 - bucket/gap/speed result selects a bucket and, if needed, adjusts the visible window
 - future backend-wide result may return a jump target containing filters plus a selected bucket/time range
 
-Natural-language search is deferred until the open-vocabulary runtime path is validated beyond the current control-plane foundation. At that point, NL can sit above deterministic tokens instead of replacing them.
+Natural-language search remains deferred as a History UX feature. Now that the open-vocab runtime path exists, NL should sit above deterministic tokens and explicit runtime vocabulary updates instead of replacing them.
 
 ---
 

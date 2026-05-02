@@ -598,10 +598,10 @@ python3 -m uv run python scripts/register_model_preset.py \
   --api-base-url http://127.0.0.1:8000 \
   --bearer-token "$TOKEN"
 
-# Stable balanced fallback, if you have models/yolo12s.onnx
+# Stable balanced fallback, if you have models/yolo11s.onnx
 python3 -m uv run python scripts/register_model_preset.py \
-  --catalog-id yolo12s-coco-onnx \
-  --artifact-path "$HOME/vision/models/yolo12s.onnx" \
+  --catalog-id yolo11s-coco-onnx \
+  --artifact-path "$HOME/vision/models/yolo11s.onnx" \
   --api-base-url http://127.0.0.1:8000 \
   --bearer-token "$TOKEN"
 ```
@@ -645,6 +645,8 @@ For fixed-vocab models, **Active class scope** is built from the selected model 
 - If every class is unchecked, the camera keeps the full selected model inventory active.
 
 For open-vocab models, the UI does not show the 80-class checkbox list. It shows **Runtime vocabulary** instead. Enter the labels you want that model to detect, such as `person, forklift, pallet jack`.
+
+For the most stable iMac tracking comparison, keep privacy strength at the default value because it only affects face/plate rendering, not detector identity. Use **Frame skip** `1`, start with **FPS cap** `20`, and raise to `25` only if both workers stay stable. Lower values such as frame skip `3` or FPS cap `5` reduce temporal evidence and usually make tracker IDs less stable.
 
 ### Legacy manual model registration path
 
@@ -736,7 +738,7 @@ What good looks like:
 7. In **Privacy, Processing & Delivery**:
    - leave privacy defaults as-is
    - Frame skip: `1`
-   - FPS cap: `25`
+   - FPS cap: `20`
    - Browser delivery profile: `720p10`
 8. Click **Continue**
 9. In **Calibration**:

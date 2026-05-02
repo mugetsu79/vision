@@ -140,13 +140,13 @@ This Compose path is appropriate for lab and pilot bring-up. In production, the 
 
 ### Model Catalog And Open-Vocab Runtime
 
-`/api/v1/model-catalog` lists recommended local model presets. It does not download model files and does not replace registered `Model` rows. A camera can only select models that are registered in `/api/v1/models`.
+`/api/v1/model-catalog` lists recommended local model presets. It does not download model files and does not replace registered `Model` rows. A camera can only select models that are registered in `/api/v1/models`. Use `backend/scripts/register_model_preset.py` when an operator has a catalog artifact on disk and wants to create the matching `Model` row without hand-writing JSON.
 
 Fixed-vocab ONNX models use ONNX Runtime. Provider selection can choose TensorRT, CUDA, OpenVINO, CoreML, or CPU depending on host support.
 
 Open-vocab models use the Ultralytics adapter and are marked experimental until validated on the target central GPU and Jetson runtime. The supported first-pass formats are `.pt` model files for YOLOE and YOLO-World.
 
-Raw TensorRT `.engine` files are cataloged as planned only. They require a dedicated TensorRT engine detector adapter before they can be marked ready.
+Raw TensorRT `.engine` files are cataloged as planned only. They require a dedicated TensorRT engine detector adapter before they can be marked ready. The planned design is in `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md`: keep ONNX as the canonical model row and attach target-specific validated engines as runtime artifacts later.
 
 ## Authentication Alternative
 

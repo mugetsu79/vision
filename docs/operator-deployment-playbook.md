@@ -15,7 +15,9 @@ The current product includes the operator workflows needed for a serious pilot:
 - Fleet and Operations workbench at `/settings`
 - Evidence Desk incident review queue at `/incidents`
 - central and edge worker configuration paths
+- model catalog presets and registration helper
 - fixed-vocab and open-vocab detector capability contracts
+- experimental Ultralytics-backed open-vocab `.pt` runtime path
 - Jetson edge compose stack and preflight tooling
 
 The production-critical layer still missing is supervisor-backed lifecycle control. Today, local development uses copyable commands and edge development uses Compose. Production should replace both with a central or edge supervisor that starts, stops, restarts, drains, monitors, and reports camera workers.
@@ -233,10 +235,13 @@ Before calling a site production-ready, the deployment needs:
 By default, the worker now chooses an execution-provider policy from host capabilities:
 
 - NVIDIA Linux `amd64`: TensorRT, then CUDA, then CPU
+- NVIDIA Linux `aarch64` Jetson: TensorRT, then CUDA, then CPU
 - Apple Silicon macOS: CoreML, then CPU
 - Intel Linux `amd64`: OpenVINO, then CPU
 - AMD Linux `amd64`: CPU in this first pass
-- Intel macOS: CPU fallback
+- Intel macOS: CoreML when available, then CPU
+
+This provider policy applies to ONNX Runtime models. Raw TensorRT `.engine` files are not selectable production models yet; use ONNX rows as the portable source model and treat standalone engine artifacts as the follow-up runtime-artifact design.
 
 For controlled benchmarking or mitigation, these environment variables can override the automatic choice:
 

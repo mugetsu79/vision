@@ -23,7 +23,7 @@ The current product has real worker building blocks, but their lifecycle is stil
 
 Phase 1 makes the mental model visible, but lifecycle control is still intentionally limited. It shows who owns a worker, how to run local dev workers, what runtime state is currently reported, and where production should use a supervisor instead of backend shell execution.
 
-The current product now also has the Evidence Desk review queue and open-vocab control-plane foundation. That makes Operations more important: detector capability and review workflows are meaningful only when workers are placed, started, restarted, and observed honestly across central and edge nodes.
+The current product now also has the Evidence Desk review queue, model catalog registration, and an experimental open-vocab runtime path. That makes Operations more important: detector capability, runtime backend choice, vocabulary state, and review workflows are meaningful only when workers are placed, started, restarted, and observed honestly across central and edge nodes.
 
 ---
 

@@ -1,6 +1,6 @@
 # Operator Setup, History, Delivery, and Fleet Hardening Design
 
-> **Status:** Partially implemented; setup hardening, source-aware delivery, History review, Fleet / Operations phase 1, Evidence Desk review queue, and open-vocab control-plane foundations have landed on the active branch
+> **Status:** Partially implemented; setup hardening, source-aware delivery, History review, Fleet / Operations phase 1, Evidence Desk review queue, model catalog registration, and experimental open-vocab runtime support have landed
 >
 > **Date:** 2026-04-26
 >
@@ -18,7 +18,7 @@ The current repo has the underlying technical pieces for:
 - edge registration and worker configuration
 - history queries with multiple metrics
 - persisted incident review state
-- detector capability metadata and runtime vocabulary state
+- detector capability metadata, model catalog presets, and runtime vocabulary state
 
 But several operator-facing surfaces still expose backend truth too directly:
 
@@ -72,7 +72,7 @@ Examples from the current product behavior:
 - Replacing the current vision pipeline architecture wholesale
 - Building full infrastructure orchestration into the browser
 - Replacing Helm, Compose, or host-level service managers
-- Solving the true target-runtime open-vocabulary model backend in this design
+- Solving the true target-runtime open-vocabulary model backend in this design; that later landed in the model catalog/open-vocab runtime stream
 
 ---
 

@@ -1,11 +1,8 @@
-# Next Chat Two-Stream Handoff
+# Next Chat Handoff: Stream 1 Closed, Stream 2 Next
 
-Date: 2026-05-01
+Date: 2026-05-02
 
-Purpose: paste this document into fresh chats so the next work can split cleanly into two streams:
-
-1. model catalog and open-vocabulary runtime implementation
-2. OmniSight UI/UX distinctiveness implementation
+Purpose: paste this document into a fresh chat after `model-catalog-open-vocab-runtime` has been merged. The next chat should treat point 1 as closed and continue with point 2: OmniSight UI/UX distinctiveness.
 
 ## Repository State To Start From
 
@@ -22,93 +19,70 @@ git log --oneline -8
 
 Expected:
 
-- `main` includes the native-stream stability fixes from `codex/omnisight-ui-distinctiveness-followup`
-- `main` includes the model catalog/open-vocab spec and plan
-- `main` includes the OmniSight UI/UX phase plans from Claude Code
-- untracked local scratch files may exist; do not stage them unless the user explicitly asks
+- `main` includes the native-stream stability fixes from `codex/omnisight-ui-distinctiveness-followup`.
+- `main` includes the completed model catalog and open-vocab runtime implementation from `model-catalog-open-vocab-runtime`.
+- `main` includes the OmniSight UI/UX phase plans from Claude Code.
+- untracked local scratch files may exist; do not stage them unless the user explicitly asks.
 
-## Recently Merged Context
+## Recently Closed: Point 1
 
-The merged branch was:
+Point 1 was:
 
-- `codex/omnisight-ui-distinctiveness-followup`
+```text
+model catalog and open-vocabulary runtime implementation
+```
 
-Important runtime fixes already on that branch:
-
-- `fix: prevent telemetry reload freeze`
-- `fix: bound native mjpeg stream capture`
-- `fix: avoid source reprobe on privacy edit`
-- `fix: ingest direct rtsp for passthrough detection`
-- `fix: avoid double camera reads for native overlay`
-
-Current video behavior:
-
-- native and `720p10` can show video
-- native/no-privacy avoids double camera reads by using worker-published clean native delivery rather than true central passthrough
-- Live UI should label internal native/no-privacy stream mode as clean native, not annotated intent
-- detection still runs in native mode; burned-in privacy annotations are bypassed only when privacy filters are off
-
-## Stream 1: Model Catalog And Open-Vocab Runtime
+Status: **closed on 2026-05-02**.
 
 Primary docs:
 
 - `docs/superpowers/specs/2026-05-01-model-catalog-and-open-vocab-runtime-design.md`
 - `docs/superpowers/plans/2026-05-01-model-catalog-and-open-vocab-runtime-implementation-plan.md`
+- `docs/imac-master-orin-lab-test-guide.md`
+- `docs/runbook.md`
 
-Mission:
+What landed:
 
-- add recommended model catalog options
-- make YOLO26/YOLO11 fixed-vocab ONNX registration straightforward
-- keep YOLO12 as lab compatibility, not the forward default
-- add Jetson ARM64 NVIDIA runtime classification
-- replace the current open-vocab wrapper with a true Ultralytics-backed YOLOE / YOLO-World adapter
-- keep raw TensorRT `.engine` marked planned until a dedicated engine detector exists
+- `ModelFormat.PT` and migration support for `.pt` model records.
+- `GET /api/v1/model-catalog`.
+- recommended catalog presets for YOLO26, YOLO11, YOLO12, YOLOE, YOLO-World, and planned TensorRT engine rows.
+- `backend/scripts/register_model_preset.py` for registering operator-provided local artifacts from catalog defaults.
+- validation for model format, capability, backend, and readiness combinations.
+- Linux `aarch64` NVIDIA Jetson runtime profile selection.
+- fixed-vocab ONNX Runtime path for YOLO26/YOLO11/YOLO12.
+- experimental Ultralytics-backed open-vocab `.pt` path for YOLOE and YOLO-World.
+- runtime vocabulary hot-swap for open-vocab workers.
+- capability-aware Live query behavior for fixed-vocab filters versus open-vocab detector vocabulary.
+- dynamic camera setup behavior: fixed-vocab active class scope uses the selected registered model classes, while open-vocab models use runtime vocabulary.
+- model catalog UI cards are hidden once all ready presets are registered or intentionally planned, so registered rows do not keep cluttering camera setup.
+- live stream recovery for delayed worker startup.
+- worker resilience for telemetry publish timeouts and camera reconnect open failures.
+- verify-all repair for the seeded model selector.
 
-Recommended execution mode:
+Manual lab notes from iMac testing:
+
+- YOLO26n was much faster than YOLO12n on the tested Intel iMac/CoreML path.
+- YOLO12n may still track more smoothly in some scenes because detector confidence and temporal consistency matter more than speed alone.
+- for tracking accuracy, prefer frame skip `1`; start with FPS cap `20`; raise only if both workers stay stable.
+- privacy blur strength affects rendering only; it does not change detector or tracker accuracy.
+
+Still intentionally not done:
+
+- raw TensorRT `.engine` detector runtime.
+
+TensorRT follow-up is documented here:
+
+- `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md`
+
+The current TensorRT posture is: keep ONNX as the canonical portable model row; let ONNX Runtime use TensorRT/CUDA providers when available; later attach validated target-specific `.engine` artifacts to the ONNX model instead of exposing standalone `.engine` files as normal camera models.
+
+## Next Chat: Point 2
+
+Point 2 is:
 
 ```text
-Use superpowers:executing-plans or superpowers:subagent-driven-development.
-Execute docs/superpowers/plans/2026-05-01-model-catalog-and-open-vocab-runtime-implementation-plan.md task by task.
+OmniSight UI/UX distinctiveness implementation
 ```
-
-Key implementation decisions already made:
-
-- registered `Model` rows remain the canonical selectable camera inventory
-- the catalog is a registration aid, not a parallel runtime registry
-- fixed-vocab ready path is ONNX Runtime with provider selection
-- open-vocab experimental path is Ultralytics `.pt`
-- raw `.engine` records must not be advertised as ready
-- model binaries stay out of git
-
-First tasks to run:
-
-1. Extend model contracts and validation with `ModelFormat.PT`.
-2. Add recommended model catalog API.
-3. Add Jetson NVIDIA runtime profile.
-4. Implement the true open-vocab detector adapter.
-
-Verification focus:
-
-```bash
-cd "$HOME/vision/backend"
-python3 -m uv run pytest tests/services/test_model_service.py tests/services/test_model_catalog.py tests/vision/test_runtime.py tests/vision/test_open_vocab_detector.py tests/vision/test_detector_factory.py tests/inference/test_engine.py -q
-python3 -m uv run ruff check src tests
-python3 -m uv run mypy src
-cd "$HOME/vision"
-corepack pnpm --dir frontend build
-corepack pnpm --dir frontend exec vitest run src/components/cameras/CameraWizard.test.tsx src/pages/Cameras.test.tsx
-```
-
-Manual validation target:
-
-- register `YOLO26n COCO` from `models/yolo26n.onnx`
-- register `YOLOE-26N Open Vocab` from `models/yoloe-26n-seg.pt`
-- create one fixed-vocab camera and one open-vocab camera
-- start workers
-- update open-vocab terms from Live query
-- confirm worker updates detector vocabulary without restart
-
-## Stream 2: OmniSight UI/UX Distinctiveness
 
 Primary docs:
 
@@ -124,13 +98,6 @@ Mission:
 - make OmniSight feel less generic
 - land token, typography, surface, hero, motion, and optional WebGL lens phases in order
 - keep the working video and setup flows stable while making pages more distinctive
-
-Phase summary:
-
-- Phase 1: `--vz-*` tokens, brand fonts, lighter shell, Button variants, WorkspaceBand density/accent, primitive token migration
-- Phase 2: CSS lens/brackets, `useLensTilt`, `OmniSightLens`, `WorkspaceHero`, dashboard rewrite, sign-in rewrite, Live tile brackets, Sites cleanup
-- Phase 3: Framer Motion, motion presets, nav focus shaft, evidence cross-fade, Patterns bucket shaft, toast provider/hook, tightened transitions
-- Phase 4: opt-in WebGL lens behind `VITE_FEATURE_WEBGL_LENS`, capability check, optional GLB upgrade, bundle audit
 
 Recommended execution mode:
 
@@ -161,34 +128,15 @@ Important UI notes:
 - avoid landing-page marketing composition inside the product
 - keep video/evidence zones sharply black and inspection-oriented
 
-## Coordination Between Streams
-
-The streams can run separately, but they touch shared frontend areas:
-
-- Camera wizard/model select may be touched by Stream 1.
-- Surface primitives and workspace shell may be touched by Stream 2.
-
-To avoid collisions:
-
-- run Stream 1 first if model functionality is more urgent
-- run Stream 2 first if visual QA/demo polish is more urgent
-- if both run in parallel, keep Stream 1 frontend scope to model metadata/catalog UI only, and keep Stream 2 away from model behavior
-
 ## Known Cautions
 
-- Do not use `git add -A`; there are unrelated untracked scratch files in the workspace.
-- Do not mark TensorRT `.engine` support as ready until a real detector adapter exists.
-- Do not assume OpenVocabDetector is currently real; it is control-plane ready but runtime-incomplete until Stream 1 lands.
+- Do not use `git add -A`; unrelated untracked scratch files may exist.
+- Do not mark TensorRT `.engine` support as ready until a real detector adapter and validation workflow exist.
 - Do not reintroduce double RTSP reads for native/no-privacy delivery.
 - Do not revert user-created or Claude-created untracked files unless explicitly asked.
+- Stream 2 may touch camera/setup surfaces visually; preserve the model selection behavior from Stream 1.
 
-## Suggested Branch Names
-
-For Stream 1:
-
-```bash
-git switch -c codex/model-catalog-open-vocab-runtime
-```
+## Suggested Branch Name
 
 For Stream 2:
 
@@ -197,13 +145,6 @@ git switch -c codex/omnisight-ui-spec-implementation
 ```
 
 ## Completion Target
-
-Stream 1 is complete when:
-
-- YOLO26/YOLO11 catalog presets can be registered
-- Jetson runtime profile is recognized
-- YOLOE or YOLO-World `.pt` can run through a true open-vocab adapter
-- Live query hot-swaps runtime vocabulary without worker restart
 
 Stream 2 is complete when:
 

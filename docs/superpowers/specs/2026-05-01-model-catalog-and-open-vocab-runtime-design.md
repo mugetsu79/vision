@@ -1,28 +1,29 @@
 # Model Catalog And Open-Vocab Runtime Design
 
 **Date:** 2026-05-01
-**Status:** Proposed
+**Status:** Implemented; Stream 1 closed on 2026-05-02
 **Scope:** Recommended detector model options, model registration/catalog flow, Jetson runtime profile support, and a true open-vocabulary detector backend for central and edge workers.
 
-## 0. Current Checkpoint
+## 0. Implementation Result
 
-The product already has the important control-plane foundation:
+This design is no longer just a proposal. The model catalog and open-vocabulary runtime stream landed on branch `model-catalog-open-vocab-runtime` and closes Stream 1.
 
-- `Model` records are stored in Postgres and served through `/api/v1/models`.
-- Camera setup selects models dynamically from registered `Model` records.
-- `Model.capability` supports `fixed_vocab` and `open_vocab`.
-- Camera runtime vocabulary state is persisted and included in worker config.
-- The query path can produce fixed-vocab filters or open-vocab runtime vocabulary updates.
-- The worker has a capability-aware detector factory.
-- The `vision` dependency group already includes `ultralytics`, so a true open-vocab adapter can use Ultralytics model APIs without creating a new dependency family.
+The implemented baseline is:
 
-The remaining gaps are concrete:
+- `Model` records remain the canonical selectable camera inventory served through `/api/v1/models`.
+- `GET /api/v1/model-catalog` exposes recommended presets and their registration/artifact status.
+- `backend/scripts/register_model_preset.py` registers a preset from a local operator-provided artifact without hand-writing JSON.
+- `ModelFormat.PT` supports experimental Ultralytics-backed open-vocab `.pt` models.
+- Fixed-vocab COCO models use portable ONNX artifacts with ONNX Runtime provider selection.
+- Open-vocab YOLOE and YOLO-World presets use a true Ultralytics adapter and update detector vocabulary at runtime.
+- Camera setup renders fixed-vocab active class scope from the selected model inventory and renders runtime vocabulary controls for open-vocab models.
+- Live query commands distinguish fixed-vocab class filters from open-vocab detector vocabulary updates.
+- Worker config includes persisted runtime vocabulary and vocabulary snapshot attribution.
+- Linux `aarch64` NVIDIA Jetson hosts are classified as `linux-aarch64-nvidia-jetson`.
 
-- The UI can only select models that have already been registered. There is no first-class recommended model catalog.
-- `models/` is a local artifact location, not a registry. The repository does not ship model binaries.
-- Current `open_vocab` runtime still wraps the fixed-vocab YOLO detector. It changes the class list but does not run YOLO-World or YOLOE prompt behavior.
-- `ModelFormat.ENGINE` exists, but the current detector path always uses ONNX Runtime `InferenceSession`. Raw TensorRT `.engine` files should not be advertised as ready until a real TensorRT engine detector exists.
-- Jetson Orin Nano Super is Linux `aarch64`; current runtime profile selection handles NVIDIA providers on Linux `x86_64`, but not Jetson as a first-class host profile.
+The only intentionally unimplemented item is raw TensorRT `.engine` runtime support. TensorRT remains available as an ONNX Runtime provider path where installed, but standalone `.engine` files must stay planned until the runtime-artifact design in `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md` is implemented.
+
+The sections below document the design that was implemented.
 
 ## 1. Goals
 

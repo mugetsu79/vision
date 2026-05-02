@@ -1,7 +1,7 @@
 # TensorRT Engine Artifact Runtime Design
 
 **Date:** 2026-05-02
-**Status:** Proposed
+**Status:** Proposed follow-up after the model catalog/open-vocab stream
 **Scope:** Add validated TensorRT `.engine` artifacts as optional target-specific accelerators beside canonical ONNX model records.
 
 ## 0. Current Checkpoint

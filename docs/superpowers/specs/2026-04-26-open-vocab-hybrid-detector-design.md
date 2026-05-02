@@ -1,12 +1,14 @@
 # Open-Vocab Hybrid Detector Design
 
 **Date:** 2026-04-26  
-**Status:** Partially implemented; control-plane foundation landed, target-runtime open-vocab backend validation remains
+**Status:** Implemented in stages; control-plane foundation, model catalog registration, and experimental Ultralytics `.pt` open-vocab runtime have landed
 **Scope:** Product behavior, backend contracts, worker runtime design, UI behavior, and rollout boundaries for adding first-class open-vocabulary detector support alongside the current fixed-vocabulary model path.
 
 ## 0. Implementation Checkpoint
 
-The current branch has implemented the control-plane and UI foundation for this design:
+This design was implemented in two stages.
+
+The first stage landed the control-plane and UI foundation:
 
 - `Model.capability` supports `fixed_vocab` and `open_vocab`.
 - camera runtime vocabulary state is persisted.
@@ -17,9 +19,20 @@ The current branch has implemented the control-plane and UI foundation for this 
 - Camera setup and Live query UI expose capability-aware behavior.
 - the Evidence Desk review queue has landed as the incident review surface.
 
-Important limitation:
+The follow-up model catalog/open-vocab runtime stream closed the original runtime gap:
 
-- the current open-vocab detector adapter still wraps the existing detector interface and updates the configured vocabulary; it should be treated as the contract/runtime-state foundation. A true open-vocabulary model backend, prompt encoder, or target-specific open-vocab runtime still needs validation on the production central and Jetson profiles.
+- `ModelFormat.PT` supports `.pt` open-vocab model records.
+- the recommended model catalog exposes YOLOE and YOLO-World presets.
+- `backend/scripts/register_model_preset.py` registers local artifacts from catalog defaults.
+- the worker can load an Ultralytics-backed YOLOE or YOLO-World adapter instead of wrapping the fixed-vocab detector.
+- Live query updates can hot-swap detector vocabulary without restarting the worker.
+
+Remaining validation work is operational, not a missing product contract:
+
+- soak the experimental `.pt` path on the production central GPU profile.
+- soak the experimental `.pt` path on Jetson when model size, memory, and provider support are acceptable.
+- implement supervisor-backed lifecycle reporting before treating open-vocab as fleet-safe production behavior.
+- keep raw TensorRT `.engine` support planned until the runtime-artifact design is implemented.
 
 Production dependency:
 
@@ -49,11 +62,11 @@ Before this track, the system was good at:
 - closed-label custom ONNX detectors
 - natural-language to class-subset resolution within an already known model taxonomy
 
-The remaining gap is full target-runtime proof for:
+The remaining work after the model catalog stream is production proof, not basic runtime capability:
 
-- a true open-vocabulary model backend
-- changing prompt/text vocabulary against that backend on central and Jetson runtimes
 - performance and memory validation for central and Jetson open-vocab profiles
+- operational visibility for which runtime vocabulary and backend are active
+- supervisor-backed restart/recovery when an experimental model fails
 
 The old architecture assumed:
 

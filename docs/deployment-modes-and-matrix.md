@@ -8,7 +8,7 @@ For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Us
 
 ## Current Implementation Posture
 
-As of the current branch, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. The backend and worker contracts also include fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, and capability-aware query commands.
+As of the current branch, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. The backend and worker contracts also include a recommended model catalog, fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, capability-aware query commands, Jetson-aware runtime profile selection, and an experimental Ultralytics-backed open-vocab `.pt` detector path.
 
 The strongest production-ready paths are still:
 
@@ -16,6 +16,8 @@ The strongest production-ready paths are still:
 - `edge` with Jetson Orin Nano Super 8 GB inference nodes
 
 The main missing production layer is worker lifecycle automation. Operations can show desired worker state, node state, delivery diagnostics, and bootstrap material, but production Start/Stop/Restart/Drain still needs a central or edge supervisor contract that reconciles desired state to real processes and reports per-worker runtime truth.
+
+Raw TensorRT `.engine` files remain a planned accelerator path, not a normal camera model choice. Fixed-vocab production testing should register portable ONNX model rows first; future TensorRT engines should attach as validated runtime artifacts to those ONNX rows.
 
 ## Core Terms
 

@@ -213,7 +213,7 @@ The repo already includes:
 - incident clip storage; snapshot fields exist but current capture primarily stores clips
 - Fleet and Operations workbench at `/settings`, including node summaries, camera worker lifecycle state, delivery diagnostics, edge bootstrap material, and copy/paste-safe local worker commands
 - edge worker support and a production-oriented supervisor lifecycle model
-- fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, and capability-aware query commands
+- model catalog presets, fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, capability-aware query commands, and an experimental Ultralytics-backed open-vocab `.pt` runtime path
 - hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions
 - Docker Compose and Helm assets
 - CI-oriented full validation flow
@@ -226,7 +226,7 @@ Still missing for production hardening:
 - per-worker runtime heartbeat and last-error reporting from central and edge supervisors
 - persistent worker assignment/reassignment workflows
 - production edge credential rotation automation
-- a real open-vocabulary detector backend beyond the current capability/runtime-vocabulary contract over the existing detector interface
+- validated raw TensorRT `.engine` runtime artifacts; TensorRT remains an ONNX Runtime provider path today, while standalone `.engine` files are documented as planned follow-up work
 - incident still snapshot generation, if still previews become required evidence rather than optional convenience
 
 ## Model And Camera Scope

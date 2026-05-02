@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Current checkpoint:** Tasks covering schema/contracts, runtime vocabulary state, capability-aware query commands, detector factory/interface, UI plumbing, and the Evidence Desk review queue have landed on `codex/source-aware-delivery-calibration-fixes`. Treat remaining work as production hardening and true open-vocabulary runtime validation, especially central/Jetson model backend proof and supervisor-backed lifecycle reporting.
+> **Current checkpoint:** Tasks covering schema/contracts, runtime vocabulary state, capability-aware query commands, detector factory/interface, UI plumbing, and the Evidence Desk review queue landed on `codex/source-aware-delivery-calibration-fixes`. The later `model-catalog-open-vocab-runtime` stream added model catalog registration and the experimental Ultralytics-backed `.pt` open-vocab runtime. Treat remaining work as production hardening, central/Jetson soak validation, and supervisor-backed lifecycle reporting.
 
 **Goal:** Add hybrid fixed-vocab and open-vocab detector support across central and edge workers, preserve normalized analytics/history/incidents behavior, and redesign Incidents into an evidence-first review workspace.
 
