@@ -35,7 +35,6 @@ async function seedModel(request: APIRequestContext, accessToken: string) {
   const suffix = Date.now().toString();
   const modelName = `Prompt 7 Model ${suffix}`;
   const modelVersion = `1.0.${suffix}`;
-  const modelLabel = `${modelName} ${modelVersion}`;
 
   const response = await request.post("http://127.0.0.1:8000/api/v1/models", {
     headers: {
@@ -56,8 +55,10 @@ async function seedModel(request: APIRequestContext, accessToken: string) {
   });
 
   expect(response.ok()).toBeTruthy();
+  const model = (await response.json()) as { id: string };
+  expect(model.id).toBeTruthy();
 
-  return { modelLabel, suffix };
+  return { modelId: model.id };
 }
 
 test("real login creates a site and camera through the prompt 7 flows", async ({
@@ -78,7 +79,7 @@ test("real login creates a site and camera through the prompt 7 flows", async ({
 
   await expect(page).toHaveURL(/\/live$/);
   const accessToken = await readAccessToken(page);
-  const { modelLabel } = await seedModel(request, accessToken);
+  const { modelId } = await seedModel(request, accessToken);
   await workspaceLink(page, "Control", "Sites").click();
   await page.getByRole("button", { name: "Add site" }).click();
   await page.getByLabel("Site name").fill(siteName);
@@ -93,7 +94,7 @@ test("real login creates a site and camera through the prompt 7 flows", async ({
   await sceneWorkspace.getByLabel("Site", { exact: true }).selectOption({ label: siteName });
   await sceneWorkspace.getByLabel("RTSP URL").fill(rtspUrl);
   await sceneWorkspace.getByRole("button", { name: "Next" }).click();
-  await sceneWorkspace.getByLabel("Primary model").selectOption({ label: modelLabel });
+  await sceneWorkspace.getByLabel("Primary model").selectOption(modelId);
   await sceneWorkspace.getByRole("button", { name: "Next" }).click();
   await sceneWorkspace.getByLabel("Browser delivery profile").selectOption("720p10");
   await sceneWorkspace.getByRole("button", { name: "Next" }).click();
