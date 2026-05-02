@@ -64,25 +64,25 @@ You need all of the following before you begin:
 - administrator access on the Jetson
 - the Vezor repository on both machines
 - 2 working RTSP camera URLs
-- 1 fixed-vocab detector model file in ONNX format
+- at least 1 fixed-vocab detector model file in ONNX format
 - both machines and both cameras on the same local network
 - enough free disk space for Docker images and logs
 
-Recommended fixed-vocab model order for this lab:
+Recommended fixed-vocab model order for iMac central testing:
 
-1. `YOLO26n COCO` from `models/yolo26n.onnx` for the default fast path.
-2. `YOLO26s COCO` from `models/yolo26s.onnx` when you want more accuracy.
-3. `YOLO11n COCO` from `models/yolo11n.onnx` as the stable fallback.
-4. `YOLO12n COCO` from `models/yolo12n.onnx` only when comparing against the older lab baseline.
+1. `YOLO26n COCO` from `models/yolo26n.onnx` is the default iMac test model.
+2. `YOLO26s COCO` from `models/yolo26s.onnx` is the next accuracy step when the artifact is available and the iMac has enough headroom.
+3. `YOLO11n COCO` from `models/yolo11n.onnx` is the stable fallback.
+4. `YOLO12n COCO` from `models/yolo12n.onnx` is only the older compatibility baseline.
 
 Open-vocab lab models are experimental:
 
 1. `YOLOE-26N Open Vocab` from `models/yoloe-26n-seg.pt`.
 2. `YOLOv8s-Worldv2 Open Vocab` from `models/yolov8s-worldv2.pt`.
 
-Do not register raw `.engine` files as ready camera models until the TensorRT engine detector adapter lands. ONNX models can still use TensorRT or CUDA through ONNX Runtime providers when those providers are installed.
+Use ONNX files for fixed-vocab COCO testing. Files such as `yolo26n.pt` and `yolo12n.pt` are not the standard fixed-vocab runtime path in this guide; use their exported `.onnx` files instead. For open-vocab testing, use the `.pt` catalog presets. `yoloe-26n-seg.onnx` is not the active open-vocab path until an ONNX open-vocab adapter exists.
 
-The commands below still use `yolo12n.onnx` for backwards-compatible lab bring-up. For the forward-default path, replace `yolo12n.onnx` with `yolo26n.onnx` and use the matching preset or model record name.
+Do not register raw `.engine` files as ready camera models until the TensorRT engine detector adapter lands. ONNX models can still use TensorRT or CUDA through ONNX Runtime providers when those providers are installed.
 
 Treat fixed-vocab ONNX files as standard COCO-style self-describing models unless you are intentionally following the advanced reduced-class path later in this guide.
 
@@ -144,8 +144,8 @@ To keep the commands simple, use these names:
 - Site name: `Lab Site`
 - Camera 1 name: `Lab Camera 1`
 - Camera 2 name: `Lab Camera 2`
-- iMac model record name: `YOLO12n COCO iMac`
-- Jetson model record name: `YOLO12n COCO Edge`
+- iMac model record name: `YOLO26n COCO`
+- Jetson model record name: `YOLO26n COCO Edge`
 
 If you choose different names, you must also change the matching commands later in the guide.
 
@@ -358,13 +358,13 @@ cd "$HOME/vision"
 mkdir -p models
 ```
 
-Copy your ONNX model file into:
+Copy your preferred ONNX model files into this directory. For the default iMac test path, make sure this file exists:
 
 ```text
-$HOME/vision/models/yolo12n.onnx
+$HOME/vision/models/yolo26n.onnx
 ```
 
-If your file has a different name, keep note of the new path and replace it in the commands below.
+If you also want the compatibility baseline, keep `yolo12n.onnx` in the same directory. If your preferred file has a different name, keep note of the new path and replace it in the commands below.
 
 Verify it exists:
 
@@ -498,9 +498,11 @@ Use a path under this checkout's `models/` directory. In local Docker developmen
 Run:
 
 ```bash
-MODEL_PATH="$PWD/models/yolo12n.onnx"
+PRIMARY_MODEL_FILENAME="${PRIMARY_MODEL_FILENAME:-yolo26n.onnx}"
+MODEL_PATH="$PWD/models/$PRIMARY_MODEL_FILENAME"
 MODEL_SHA="$(shasum -a 256 "$MODEL_PATH" | awk '{print $1}')"
 MODEL_SIZE="$(stat -f%z "$MODEL_PATH")"
+echo "$PRIMARY_MODEL_FILENAME"
 echo "$MODEL_PATH"
 echo "$MODEL_SHA"
 echo "$MODEL_SIZE"
@@ -508,9 +510,10 @@ echo "$MODEL_SIZE"
 
 What good looks like:
 
-- the first line is the model path
-- the second line is a long SHA-256 hash
-- the third line is a file size number
+- the first line is the model filename, usually `yolo26n.onnx`
+- the second line is the model path
+- the third line is a long SHA-256 hash
+- the fourth line is a file size number
 
 ### 2.6 Get a Vezor admin token on the iMac
 
@@ -538,15 +541,18 @@ What good looks like:
 Keep this iMac terminal window open. Later commands in this guide reuse:
 
 - `TOKEN`
+- `PRIMARY_MODEL_FILENAME`
 - `MODEL_PATH`
 - `MODEL_SHA`
 - `MODEL_SIZE`
 
-### Optional: Register with a catalog preset helper
+### 2.7 Register the model records you want to compare
 
-The recommended model catalog can build the `POST /api/v1/models` payload for a local artifact. To print a fixed-vocab registration payload:
+The model catalog shown in the UI is a recommendation list. It does not download model files and it does not create selectable camera models by itself. The **Primary model** picker only shows registered `/api/v1/models` rows.
 
-If you pulled this branch onto an existing dev database, run migrations before registering `.pt` open-vocab presets so PostgreSQL accepts `format=pt`:
+For iMac testing, register every local artifact that you want to compare, then choose the best registered model in the camera wizard. Start with `YOLO26n COCO`; keep `YOLO12n COCO` only as the older baseline.
+
+If you pulled this branch onto an existing dev database, run migrations before registering models. This is required for `.pt` open-vocab presets and harmless for ONNX presets:
 
 ```bash
 cd "$HOME/vision"
@@ -554,16 +560,14 @@ docker compose -f infra/docker-compose.dev.yml exec backend \
   python -m uv run alembic upgrade head
 ```
 
+Check which local model artifacts are available:
+
 ```bash
-cd "$HOME/vision/backend"
-python3 -m uv run python scripts/register_model_preset.py \
-  --catalog-id yolo26n-coco-onnx \
-  --artifact-path "$HOME/vision/models/yolo26n.onnx" \
-  --class person \
-  --class car
+cd "$HOME/vision"
+ls -lh models
 ```
 
-To register through the API:
+Register the recommended iMac default:
 
 ```bash
 cd "$HOME/vision/backend"
@@ -574,10 +578,46 @@ python3 -m uv run python scripts/register_model_preset.py \
   --bearer-token "$TOKEN"
 ```
 
-For an experimental open-vocab lab model:
+Register the older baseline only when you want to compare against the previous lab setup:
 
 ```bash
-cd "$HOME/vision/backend"
+python3 -m uv run python scripts/register_model_preset.py \
+  --catalog-id yolo12n-coco-onnx \
+  --artifact-path "$HOME/vision/models/yolo12n.onnx" \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN"
+```
+
+Register additional fixed-vocab ONNX models if the files exist locally:
+
+```bash
+# Higher accuracy than YOLO26n, if you have models/yolo26s.onnx
+python3 -m uv run python scripts/register_model_preset.py \
+  --catalog-id yolo26s-coco-onnx \
+  --artifact-path "$HOME/vision/models/yolo26s.onnx" \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN"
+
+# Stable fallback, if you have models/yolo11n.onnx
+python3 -m uv run python scripts/register_model_preset.py \
+  --catalog-id yolo11n-coco-onnx \
+  --artifact-path "$HOME/vision/models/yolo11n.onnx" \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN"
+
+# Stable balanced fallback, if you have models/yolo11s.onnx
+python3 -m uv run python scripts/register_model_preset.py \
+  --catalog-id yolo11s-coco-onnx \
+  --artifact-path "$HOME/vision/models/yolo11s.onnx" \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN"
+```
+
+For fixed-vocab ONNX registrations, do not pass `--class` unless you intentionally want to declare a custom class list. The normal COCO path leaves classes unspecified so the backend reads the embedded ONNX class metadata. That is what makes the UI class scope match the selected model.
+
+For an experimental open-vocab model:
+
+```bash
 python3 -m uv run python scripts/register_model_preset.py \
   --catalog-id yoloe-26n-open-vocab-pt \
   --artifact-path "$HOME/vision/models/yoloe-26n-seg.pt" \
@@ -585,9 +625,37 @@ python3 -m uv run python scripts/register_model_preset.py \
   --bearer-token "$TOKEN"
 ```
 
-### 2.7 Register the iMac model record
+Only use the `.pt` open-vocab catalog presets for open-vocab testing. Do not register `yolo26n.pt`, `yolo12n.pt`, or `yoloe-26n-seg.onnx` as the standard camera model path for this guide.
 
-This model record uses the **iMac path** to the model file. It is only for Test A, and it is a standard self-describing COCO ONNX registration.
+Verify what the backend registered:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/models |
+  python3 -c 'import json,sys; [print("{} {} | {} | {} | {} classes | {}".format(m["name"], m["version"], m["capability"], m["format"], len(m["classes"]), m["path"])) for m in json.load(sys.stdin)]'
+```
+
+What good looks like:
+
+- `YOLO26n COCO 2026.1` is present
+- the fixed-vocab ONNX rows show `80 classes`
+- the model catalog cards for registered artifacts change from `unregistered` to `registered` or `missing artifact`
+
+### How model choice and active class scope work in the UI
+
+In **Cameras > Add/Edit camera > Models & Tracking**, the **Primary model** dropdown is populated from registered `/api/v1/models` rows. The catalog panel below it is only a status and recommendation panel.
+
+For fixed-vocab models, **Active class scope** is built from the selected model row's `classes` field:
+
+- `YOLO26n COCO`, `YOLO26s COCO`, `YOLO11n COCO`, and `YOLO12n COCO` all expose the COCO class inventory, so the UI shows the same 80 class names even though the model weights differ.
+- If you switch from one fixed-vocab model to another, Vezor keeps only the checked classes that exist in the newly selected model.
+- If every class is unchecked, the camera keeps the full selected model inventory active.
+
+For open-vocab models, the UI does not show the 80-class checkbox list. It shows **Runtime vocabulary** instead. Enter the labels you want that model to detect, such as `person, forklift, pallet jack`.
+
+### Legacy manual model registration path
+
+Skip this section if you used the catalog preset helper above. This manual record uses the **iMac path** to the model file. It is only for Test A, and it is a standard self-describing COCO ONNX registration.
 
 Run:
 
@@ -599,7 +667,7 @@ IMAC_MODEL_ID="$(
     -X POST \
     http://127.0.0.1:8000/api/v1/models \
     -d "{
-      \"name\": \"YOLO12n COCO iMac\",
+      \"name\": \"YOLO26n COCO iMac\",
       \"version\": \"lab-imac\",
       \"task\": \"detect\",
       \"path\": \"$MODEL_PATH\",
@@ -626,7 +694,7 @@ If you get a message that the model already exists:
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models | python3 -m json.tool
 ```
 
-2. find the existing `YOLO12n COCO iMac` entry
+2. find the existing `YOLO26n COCO iMac` entry
 3. reuse its `id`
 
 ### 2.8 Sign in to the Vezor UI
@@ -667,7 +735,7 @@ What good looks like:
    - RTSP URL: paste your camera 1 RTSP URL
 4. Click **Continue**
 5. In **Models & Tracking**:
-   - Primary model: `YOLO12n COCO iMac`
+   - Primary model: choose the best registered iMac model, usually `YOLO26n COCO`
    - Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
    - Tracker type: keep `botsort`
    - Secondary model: leave empty
@@ -698,7 +766,7 @@ Repeat the same process, but use:
 - Site: `Lab Site`
 - Processing mode: `central`
 - RTSP URL: paste your camera 2 RTSP URL
-- Primary model: `YOLO12n COCO iMac`
+- Primary model: choose the same registered iMac model as camera 1, usually `YOLO26n COCO`
 - Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
 - Tracker type: `botsort`
 - Browser delivery profile: `720p10`
@@ -944,10 +1012,10 @@ cd "$HOME/vision"
 mkdir -p models
 ```
 
-Copy the same ONNX model file to:
+Copy the same ONNX model file that you selected for edge testing to:
 
 ```text
-$HOME/vision/models/yolo12n.onnx
+$HOME/vision/models/yolo26n.onnx
 ```
 
 Verify it exists:
@@ -976,11 +1044,12 @@ If it ends with one or more `FAIL` lines, stop here and fix those issues before 
 
 ### 3.3 Create the Jetson-specific model record on the iMac
 
-The Jetson container sees the model file at `/models/yolo12n.onnx`, not at your home-directory path. That is why you need a second model record, even though the embedded ONNX class metadata is the same.
+The Jetson container sees the model file at `/models/$PRIMARY_MODEL_FILENAME`, not at your home-directory path. That is why you need a second model record, even though the embedded ONNX class metadata is the same.
 
-Back on the iMac, in any Terminal window where `TOKEN`, `MODEL_SHA`, and `MODEL_SIZE` still exist, run:
+Back on the iMac, in any Terminal window where `TOKEN`, `PRIMARY_MODEL_FILENAME`, `MODEL_SHA`, and `MODEL_SIZE` still exist, run:
 
 ```bash
+EDGE_MODEL_PATH="/models/$PRIMARY_MODEL_FILENAME"
 EDGE_MODEL_ID="$(
   curl -s \
     -H "Authorization: Bearer $TOKEN" \
@@ -988,10 +1057,10 @@ EDGE_MODEL_ID="$(
     -X POST \
     http://127.0.0.1:8000/api/v1/models \
     -d "{
-      \"name\": \"YOLO12n COCO Edge\",
+      \"name\": \"YOLO26n COCO Edge\",
       \"version\": \"lab-edge\",
       \"task\": \"detect\",
-      \"path\": \"/models/yolo12n.onnx\",
+      \"path\": \"$EDGE_MODEL_PATH\",
       \"format\": \"onnx\",
       \"input_shape\": {\"width\": 640, \"height\": 640},
       \"sha256\": \"$MODEL_SHA\",
@@ -1018,7 +1087,7 @@ Back in the browser on the iMac:
 Change these values:
 
 - Processing mode: `edge`
-- Primary model: `YOLO12n COCO Edge`
+- Primary model: `YOLO26n COCO Edge`
 - Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
 
 Keep these values:
@@ -1191,8 +1260,8 @@ What to do:
 1. get a fresh token
 2. confirm the camera ID again
 3. confirm the model path is:
-   - the full iMac path for `YOLO12n COCO iMac`
-   - `/models/yolo12n.onnx` for `YOLO12n COCO Edge`
+   - the full iMac path for the selected iMac model, for example `$HOME/vision/models/yolo26n.onnx`
+   - `/models/yolo26n.onnx` for the matching Jetson edge model when `PRIMARY_MODEL_FILENAME=yolo26n.onnx`
 4. restart the worker
 
 ### 4.3 If the worker says `401` or `403`
@@ -1217,8 +1286,8 @@ docker compose -f infra/docker-compose.edge.yml up -d
 
 What to check:
 
-1. the file exists at `$HOME/vision/models/yolo12n.onnx` on the Jetson
-2. the container model path in the model record is `/models/yolo12n.onnx`
+1. the file exists at `$HOME/vision/models/yolo26n.onnx` on the Jetson, or at the filename you selected with `PRIMARY_MODEL_FILENAME`
+2. the container model path in the model record is `/models/yolo26n.onnx`, or `/models/$PRIMARY_MODEL_FILENAME` for another selected ONNX file
 3. the edge compose worker is using the `../models:/models:ro` volume mount
 
 ### 4.5 If model registration returns `500 Internal Server Error` on the iMac
@@ -1235,7 +1304,8 @@ What to do:
 
 ```bash
 cd "$HOME/vision"
-MODEL_PATH="$PWD/models/yolo12n.onnx"
+PRIMARY_MODEL_FILENAME="${PRIMARY_MODEL_FILENAME:-yolo26n.onnx}"
+MODEL_PATH="$PWD/models/$PRIMARY_MODEL_FILENAME"
 ```
 
 2. recreate the backend container once:
@@ -1288,7 +1358,7 @@ If you are intentionally testing a reduced-class custom model, treat that as an 
 
 1. use a genuinely custom reduced-class artifact whose embedded metadata already matches the reduced inventory you want to operate, or use a model format that explicitly requires declared classes
 2. choose matching persistent `active_classes` in the camera UI
-3. do not treat the default self-describing `yolo12n.onnx` COCO model as a reduced-class model by manually declaring a smaller class list
+3. do not treat a default self-describing COCO model such as `yolo26n.onnx` or `yolo12n.onnx` as a reduced-class model by manually declaring a smaller class list
 4. do not use that reduced-class setup as the default COCO-first lab path
 
 If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the Vezor model record was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
