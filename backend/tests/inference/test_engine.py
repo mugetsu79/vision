@@ -145,6 +145,18 @@ class _FakePublisher:
         return None
 
 
+class _FailingPublisher:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def publish(self, frame: TelemetryFrame) -> None:
+        self.calls += 1
+        raise TimeoutError("nats publish timed out")
+
+    async def close(self) -> None:
+        return None
+
+
 class _FakeAttributeClassifier:
     def classify(
         self,
@@ -981,6 +993,43 @@ async def test_engine_diagnostics_log_frame_stage_boundaries(
     assert any("Worker frame capture completed" in message for message in messages)
     assert any("Worker frame publish_stream starting" in message for message in messages)
     assert any("Worker frame completed" in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_engine_continues_and_persists_history_when_telemetry_publish_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    publisher = _FailingPublisher()
+    tracking_store = _FakeTrackingStore()
+    caplog.set_level(logging.ERROR, logger="argus.inference.engine")
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=publisher,
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+    )
+
+    await engine.start()
+    telemetry = await engine.run_once(ts=datetime(2026, 4, 21, 19, 40, tzinfo=UTC))
+
+    assert telemetry.camera_id == camera_id
+    assert publisher.calls == 1
+    assert len(tracking_store.records) == 1
+    assert "publish_telemetry" in engine.last_stage_timings
+    assert engine.last_stage_timings["publish_telemetry"] >= 0.0
+    assert any(
+        record.levelname == "ERROR"
+        and record.name == "argus.inference.engine"
+        and "Failed to publish live telemetry" in record.message
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio

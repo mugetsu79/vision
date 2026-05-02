@@ -569,7 +569,13 @@ class InferenceEngine:
             counts=_counts_by_class(tracked),
             tracks=[_telemetry_track_from_detection(detection) for detection in tracked],
         )
-        await self.publisher.publish(telemetry)
+        try:
+            await self.publisher.publish(telemetry)
+        except Exception:
+            logger.exception(
+                "Failed to publish live telemetry for camera %s; continuing worker loop.",
+                self.config.camera_id,
+            )
         stage_timer.record_stage("publish_telemetry", ended_at=loop.time())
         vocabulary_version = self._state.runtime_vocabulary_version
         vocabulary_hash = hash_vocabulary(self.runtime_vocabulary)
