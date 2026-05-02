@@ -601,14 +601,14 @@ python3 -m uv run python scripts/register_model_preset.py \
 # Stable fallback, if you have models/yolo11n.onnx
 python3 -m uv run python scripts/register_model_preset.py \
   --catalog-id yolo11n-coco-onnx \
-  --artifact-path "$HOME/vision/models/yolo11n.onnx" \
+  --artifact-path "$HOME/vision/models/yolo12n.onnx" \
   --api-base-url http://127.0.0.1:8000 \
   --bearer-token "$TOKEN"
 
 # Stable balanced fallback, if you have models/yolo11s.onnx
 python3 -m uv run python scripts/register_model_preset.py \
   --catalog-id yolo11s-coco-onnx \
-  --artifact-path "$HOME/vision/models/yolo11s.onnx" \
+  --artifact-path "$HOME/vision/models/yolo12s.onnx" \
   --api-base-url http://127.0.0.1:8000 \
   --bearer-token "$TOKEN"
 ```
