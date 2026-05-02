@@ -17,6 +17,7 @@ const HLS_RETRY_DELAY_MS = 1_000;
 const MAX_HLS_STARTUP_RETRIES = 3;
 const STREAM_RECONNECT_BASE_DELAY_MS = 1_000;
 const STREAM_RECONNECT_MAX_DELAY_MS = 5_000;
+const WEBRTC_FIRST_FRAME_TIMEOUT_MS = 8_000;
 const HEARTBEAT_STALE_AFTER_MS = 15_000;
 const HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS = 3_000;
 const WEBRTC_DISCONNECT_GRACE_MS = 2_000;
@@ -210,6 +211,7 @@ export function VideoStream({
 
     let disposed = false;
     let stopWebRtc: (() => void) | null = null;
+    let firstFrameTimer: number | null = null;
     setTransport("connecting");
 
     const startStream = async () => {
@@ -227,6 +229,15 @@ export function VideoStream({
         });
         if (!disposed) {
           setTransport("webrtc");
+          firstFrameTimer = window.setTimeout(() => {
+            if (disposed || firstFrameSentRef.current) {
+              return;
+            }
+
+            stopWebRtc?.();
+            stopWebRtc = null;
+            setWebrtcFailed(true);
+          }, WEBRTC_FIRST_FRAME_TIMEOUT_MS);
         }
       } catch {
         stopWebRtc?.();
@@ -240,6 +251,9 @@ export function VideoStream({
 
     return () => {
       disposed = true;
+      if (firstFrameTimer !== null) {
+        window.clearTimeout(firstFrameTimer);
+      }
       stopWebRtc?.();
     };
   }, [accessToken, cameraId, sessionToken, tenantId]);
@@ -429,12 +443,11 @@ export function VideoStream({
     const previousStatus = heartbeatStatusRef.current;
     heartbeatStatusRef.current = nextStatus;
 
-    if (
-      previousStatus === "stale" &&
-      nextStatus === "fresh" &&
-      transport !== "connecting" &&
-      transport !== "webrtc"
-    ) {
+    const recoveredFromUnavailable =
+      (previousStatus === "unknown" || previousStatus === "stale") &&
+      nextStatus === "fresh";
+
+    if (recoveredFromUnavailable && transport !== "connecting" && transport !== "webrtc") {
       requestSessionRestart("recovery");
     }
 

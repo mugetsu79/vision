@@ -590,6 +590,128 @@ describe("VideoStream", () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount);
   });
 
+  test("restarts the live tile after a late-starting worker first reports a fresh heartbeat", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response("upstream failed", { status: 502 }));
+    isSupportedMock.mockReturnValue(false);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return false;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    const freshHeartbeatTs = new Date().toISOString();
+    const { rerender } = await act(async () => {
+      const view = render(
+        <VideoStream
+          cameraId="46464646-4646-4646-4646-464646464646"
+          cameraName="Late Worker"
+          defaultProfile="720p10"
+          heartbeatTs={null}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      return view;
+    });
+
+    expect(screen.getByRole("img", { name: /late worker live stream/i })).toBeInTheDocument();
+    const initialFetchCount = fetchMock.mock.calls.length;
+
+    await act(async () => {
+      rerender(
+        <VideoStream
+          cameraId="46464646-4646-4646-4646-464646464646"
+          cameraName="Late Worker"
+          defaultProfile="720p10"
+          heartbeatTs={freshHeartbeatTs}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_500);
+    });
+
+    expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount);
+  });
+
+  test("falls back to HLS when WebRTC negotiates but does not deliver a first frame", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    await act(async () => {
+      render(
+        <VideoStream
+          cameraId="47474747-4747-4747-4747-474747474747"
+          cameraName="Silent WebRTC"
+          defaultProfile="720p10"
+          heartbeatTs={new Date().toISOString()}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/webrtc live/i)).toBeInTheDocument();
+    expect(loadSourceMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadSourceMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
+  });
+
   test("does not restart an active WebRTC session just because telemetry heartbeat becomes stale", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
