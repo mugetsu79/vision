@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { RequireRole } from "@/components/auth/RequireRole";
-import { CameraWizard } from "@/components/cameras/CameraWizard";
+import { CameraWizard, type ModelOption } from "@/components/cameras/CameraWizard";
 import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -17,7 +17,7 @@ import {
   type UpdateCameraInput,
 } from "@/hooks/use-cameras";
 import { useModelCatalog, type ModelCatalogEntry } from "@/hooks/use-model-catalog";
-import { useModels } from "@/hooks/use-models";
+import { useModels, type Model } from "@/hooks/use-models";
 import { useSites } from "@/hooks/use-sites";
 
 export function CamerasPage() {
@@ -50,6 +50,14 @@ function CamerasContent() {
     [sites],
   );
   const modelQueryEmpty = models.length === 0;
+  const wizardModels = useMemo(
+    () =>
+      toWizardModelOptions(models, [
+        selectedCamera?.primary_model_id,
+        selectedCamera?.secondary_model_id,
+      ]),
+    [models, selectedCamera?.primary_model_id, selectedCamera?.secondary_model_id],
+  );
 
   function openCreateWizard() {
     void refetchModels();
@@ -204,14 +212,7 @@ function CamerasContent() {
 
           <CameraWizard
             initialCamera={selectedCamera}
-            models={models.map((model) => ({
-              id: model.id,
-              name: model.name,
-              version: model.version,
-              classes: model.classes,
-              capability: model.capability,
-              capability_config: model.capability_config,
-            }))}
+            models={wizardModels}
             modelsError={
               modelQueryEmpty && modelsError instanceof Error
                 ? modelsError.message
@@ -235,17 +236,59 @@ function CamerasContent() {
               closeWizard();
             }}
           />
-          <ModelCatalogHints />
+          <ModelCatalogHints modelInventoryCount={wizardModels.length} />
         </section>
       ) : null}
     </div>
   );
 }
 
-function ModelCatalogHints() {
+function toWizardModelOptions(
+  models: Model[],
+  pinnedModelIds: Array<string | null | undefined>,
+): ModelOption[] {
+  const pinnedIds = new Set(pinnedModelIds.filter((id): id is string => Boolean(id)));
+  const optionsByKey = new Map<string, ModelOption>();
+
+  for (const model of models) {
+    const option: ModelOption = {
+      id: model.id,
+      name: model.name,
+      version: model.version,
+      classes: model.classes,
+      capability: model.capability,
+      capability_config: model.capability_config,
+    };
+    const key = modelOptionKey(option);
+    const current = optionsByKey.get(key);
+    if (!current || (pinnedIds.has(option.id) && !pinnedIds.has(current.id))) {
+      optionsByKey.set(key, option);
+    }
+  }
+
+  return Array.from(optionsByKey.values());
+}
+
+function modelOptionKey(model: ModelOption) {
+  return [
+    model.name.trim().toLowerCase(),
+    model.version.trim().toLowerCase(),
+    model.capability ?? "fixed_vocab",
+    model.capability_config?.runtime_backend ?? "onnxruntime",
+    model.capability_config?.readiness ?? "ready",
+  ].join("\u0000");
+}
+
+function ModelCatalogHints({ modelInventoryCount }: { modelInventoryCount: number }) {
   const { data: catalog = [] } = useModelCatalog();
+  if (modelInventoryCount > 0) {
+    return null;
+  }
+
   const visibleEntries = catalog
-    .filter((entry) => entry.registration_state !== "planned")
+    .filter((entry) => entry.registration_state === "unregistered")
+    .filter((entry) => entry.artifact_exists)
+    .filter((entry) => (entry.capability_config.readiness ?? "ready") === "ready")
     .slice(0, 4);
 
   if (visibleEntries.length === 0) {
@@ -261,7 +304,7 @@ function ModelCatalogHints() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
           Model catalog
         </p>
-        <p className="text-xs text-[#93a7c5]">{catalog.length} presets</p>
+        <p className="text-xs text-[#93a7c5]">{visibleEntries.length} available presets</p>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         {visibleEntries.map((entry) => (

@@ -180,7 +180,7 @@ describe("CamerasPage", () => {
     expect(modelRequests).toBeGreaterThanOrEqual(2);
   });
 
-  test("shows catalog hints and passes model capability metadata into setup", async () => {
+  test("hides catalog hints once registered models are available", async () => {
     const user = userEvent.setup();
 
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
@@ -292,8 +292,8 @@ describe("CamerasPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: /add scene/i }));
-    expect(await screen.findByTestId("model-catalog-hints")).toHaveTextContent(
-      /YOLOE-26N Open Vocab/,
+    await waitFor(() =>
+      expect(screen.queryByTestId("model-catalog-hints")).not.toBeInTheDocument(),
     );
 
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
@@ -306,6 +306,184 @@ describe("CamerasPage", () => {
         name: /open vocab - ultralytics_yoloe - experimental/i,
       }),
     ).toBeInTheDocument();
+  });
+
+  test("shows catalog hints only when no registered models are available", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "HQ",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "yolo26n-coco-onnx",
+              name: "YOLO26n COCO",
+              version: "2026.1",
+              task: "detect",
+              path_hint: "models/yolo26n.onnx",
+              format: "onnx",
+              capability: "fixed_vocab",
+              capability_config: {
+                supports_runtime_vocabulary_updates: false,
+                runtime_backend: "onnxruntime",
+                readiness: "ready",
+                requires_gpu: false,
+                supports_masks: false,
+              },
+              classes: [],
+              input_shape: { width: 640, height: 640 },
+              registration_state: "unregistered",
+              registered_model_id: null,
+              artifact_exists: true,
+              note: "Default fast detector.",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /add scene/i }));
+    expect(await screen.findByTestId("model-catalog-hints")).toHaveTextContent(
+      /YOLO26n COCO/,
+    );
+  });
+
+  test("deduplicates repeated registered model options", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "HQ",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        const duplicate = {
+          name: "YOLO12n COCO iMac",
+          version: "lab-imac",
+          task: "detect",
+          path: "/models/yolo12n.onnx",
+          format: "onnx",
+          capability: "fixed_vocab",
+          capability_config: {
+            supports_runtime_vocabulary_updates: false,
+            runtime_backend: "onnxruntime",
+            requires_gpu: false,
+            supports_masks: false,
+          },
+          classes: ["person", "car"],
+          input_shape: { width: 640, height: 640 },
+          sha256: "a".repeat(64),
+          size_bytes: 1024,
+          license: "AGPL-3.0",
+        };
+        return new Response(
+          JSON.stringify([
+            { ...duplicate, id: "model-1" },
+            { ...duplicate, id: "model-2" },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /add scene/i }));
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/primary model/i)).not.toBeDisabled(),
+    );
+    expect(
+      within(screen.getByLabelText(/primary model/i)).getAllByRole("option", {
+        name: /YOLO12n COCO iMac lab-imac - fixed vocab - onnxruntime/i,
+      }),
+    ).toHaveLength(1);
   });
 
   test("shows a models loading failure inside the wizard instead of an empty silent select", async () => {
