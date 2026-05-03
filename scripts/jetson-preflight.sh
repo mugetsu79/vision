@@ -94,6 +94,12 @@ else
   fail "Docker daemon is not reachable"
 fi
 
+if docker compose version >/dev/null 2>&1; then
+  pass "Docker Compose v2 plugin is available"
+else
+  fail "Docker Compose v2 plugin is missing"
+fi
+
 if command -v nvidia-ctk >/dev/null 2>&1; then
   pass "nvidia-ctk is installed"
 else

@@ -971,8 +971,14 @@ Run:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl ca-certificates docker.io docker-compose-plugin gstreamer1.0-tools
+sudo apt-get install -y git curl ca-certificates docker.io gstreamer1.0-tools
+sudo apt-get install -y docker-compose-v2 || sudo apt-get install -y docker-compose-plugin
+sudo systemctl enable --now docker
+docker --version
+docker compose version
 ```
+
+On JetPack 6 / Ubuntu 22.04 ARM64, the Ubuntu package repositories can expose Docker Compose v2 as `docker-compose-v2` rather than `docker-compose-plugin`. Install Compose in its own command so a missing Compose package name does not abort the Docker install.
 
 #### Step 2: Ensure your user can run Docker
 
@@ -1031,7 +1037,7 @@ cd "$HOME/vision"
 What good looks like:
 
 - the script ends with `Jetson preflight passed.`
-- JetPack, CUDA, TensorRT, Docker, and `nvidia-container-toolkit` checks pass
+- JetPack, CUDA, TensorRT, Docker, Docker Compose v2, and `nvidia-container-toolkit` checks pass
 - NVDEC is present
 - NVENC is reported absent, which is expected on Orin Nano
 
@@ -1277,7 +1283,26 @@ docker compose -f infra/docker-compose.edge.yml down
 docker compose -f infra/docker-compose.edge.yml up -d
 ```
 
-### 4.4 If the Jetson says the model file does not exist
+### 4.4 If `docker compose` is missing on the Jetson
+
+Ubuntu's Jetson ARM64 repositories may not provide a package named `docker-compose-plugin`. First try the Ubuntu Compose v2 package:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker-compose-v2
+docker compose version
+```
+
+If that package is not available on your image, try the Docker plugin package name:
+
+```bash
+sudo apt-get install -y docker-compose-plugin
+docker compose version
+```
+
+Do not install Compose in the same `apt-get install` command as `docker.io`; if the Compose package name is unavailable, apt aborts the whole transaction.
+
+### 4.5 If the Jetson says the model file does not exist
 
 What to check:
 
@@ -1285,7 +1310,7 @@ What to check:
 2. the container model path in the model record is `/models/yolo26n.onnx`, or `/models/$PRIMARY_MODEL_FILENAME` for another selected ONNX file
 3. the edge compose worker is using the `../models:/models:ro` volume mount
 
-### 4.5 If model registration returns `500 Internal Server Error` on the iMac
+### 4.6 If model registration returns `500 Internal Server Error` on the iMac
 
 Most likely causes:
 
@@ -1322,7 +1347,7 @@ done
 
 If the backend still rejects the request after that, the response should now be a readable validation error such as an unreadable ONNX path instead of a generic 500.
 
-### 4.6 If the Live tiles stay offline
+### 4.7 If the Live tiles stay offline
 
 What to do:
 
@@ -1331,7 +1356,7 @@ What to do:
 3. wait 30 seconds and refresh Live
 4. check worker logs for connection errors
 
-### 4.7 If the Jetson cannot reach the iMac
+### 4.8 If the Jetson cannot reach the iMac
 
 Check:
 
@@ -1347,7 +1372,7 @@ curl -s "http://$IMAC_IP:8000/healthz"
 curl -s "http://$IMAC_IP:8080/realms/argus-dev/.well-known/openid-configuration" | head
 ```
 
-### 4.8 Advanced: reduced-class custom models
+### 4.9 Advanced: reduced-class custom models
 
 If you are intentionally testing a reduced-class custom model, treat that as an advanced optional workflow:
 
@@ -1358,7 +1383,7 @@ If you are intentionally testing a reduced-class custom model, treat that as an 
 
 If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the Vezor model record was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
 
-### 4.9 If `make verify-all` fails
+### 4.10 If `make verify-all` fails
 
 Run it again and read the first failing section carefully. The most common failure buckets are:
 
@@ -1374,7 +1399,7 @@ docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
 
-### 4.10 If local API generation says `openapi-typescript: command not found`
+### 4.11 If local API generation says `openapi-typescript: command not found`
 
 This means the host-side frontend dependencies were not installed cleanly.
 
@@ -1392,7 +1417,7 @@ What good looks like:
 - `openapi-typescript --version` prints a version
 - `generate:api` writes `src/lib/api.generated.ts` without error
 
-### 4.11 If `127.0.0.1:9001` does not open
+### 4.12 If `127.0.0.1:9001` does not open
 
 This means MinIO is not healthy yet.
 
@@ -1410,7 +1435,7 @@ What good looks like:
 - MinIO logs no longer show `Invalid credentials`
 - `curl -I` returns an HTTP response instead of connection refused
 
-### 4.12 What to do after a successful lab
+### 4.13 What to do after a successful lab
 
 If both tests pass:
 
@@ -1419,7 +1444,7 @@ If both tests pass:
 3. add cameras gradually, not all at once
 4. move on to a more production-like deployment only after the Jetson path stays stable
 
-### 4.13 Clean shutdown
+### 4.14 Clean shutdown
 
 When you are done testing:
 
