@@ -146,6 +146,7 @@ services:
     volumes:
       - ../backend:/workspace/backend
       - ${PWD}/models:${PWD}/models:ro
+      - ${PWD}/models:/models:ro
     depends_on:
       - minio
       - postgres

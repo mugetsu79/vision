@@ -493,7 +493,7 @@ What good looks like:
 
 Vezor needs the model hash and file size when you register a model. For a self-describing ONNX file, the backend will read the embedded class metadata during registration, so you do not need to send `classes` for the default COCO-first path.
 
-Use a path under this checkout's `models/` directory. In local Docker development, `make dev-up` bind-mounts that same absolute host path into the backend container so registration-time ONNX validation and the later host-side worker both read the same file.
+Use a path under this checkout's `models/` directory. In local Docker development, `make dev-up` bind-mounts that same absolute host path into the backend container so registration-time ONNX validation and the later host-side worker both read the same file. It also bind-mounts the same directory at `/models` so the iMac backend can validate Jetson edge model records that use container paths such as `/models/yolo26n.onnx`.
 
 Run:
 
@@ -1060,11 +1060,17 @@ If it ends with one or more `FAIL` lines, stop here and fix those issues before 
 
 The Jetson container sees the model file at `/models/$PRIMARY_MODEL_FILENAME`, not at your home-directory path. That is why you need a second model record, even though the embedded ONNX class metadata is the same.
 
-Back on the iMac, in any Terminal window where `TOKEN`, `PRIMARY_MODEL_FILENAME`, `MODEL_SHA`, and `MODEL_SIZE` still exist, run:
+Back on the iMac, run this from the repository root. It recomputes the model metadata so the command does not depend on variables from an older terminal session.
 
 ```bash
+cd "$HOME/vision"
+PRIMARY_MODEL_FILENAME="${PRIMARY_MODEL_FILENAME:-yolo26n.onnx}"
+MODEL_PATH="$PWD/models/$PRIMARY_MODEL_FILENAME"
+MODEL_SHA="$(shasum -a 256 "$MODEL_PATH" | awk '{print $1}')"
+MODEL_SIZE="$(stat -f%z "$MODEL_PATH")"
 EDGE_MODEL_PATH="/models/$PRIMARY_MODEL_FILENAME"
-EDGE_MODEL_ID="$(
+
+EDGE_MODEL_RESPONSE="$(
   curl -s \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
@@ -1080,15 +1086,24 @@ EDGE_MODEL_ID="$(
       \"sha256\": \"$MODEL_SHA\",
       \"size_bytes\": $MODEL_SIZE,
       \"license\": \"lab\"
-    }" |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'
+    }"
 )"
+echo "$EDGE_MODEL_RESPONSE"
+EDGE_MODEL_ID="$(python3 -c 'import json,sys; payload=json.load(sys.stdin); print(payload.get("id") or payload)' <<<"$EDGE_MODEL_RESPONSE")"
 echo "$EDGE_MODEL_ID"
 ```
 
 What good looks like:
 
 - the command prints a UUID
+
+If the response says the backend cannot read `/models/...`, pull the latest guide changes and recreate the backend container once:
+
+```bash
+cd "$HOME/vision"
+git pull --ff-only
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
+```
 
 ### 3.4 Edit camera 2 in the Vezor UI
 
