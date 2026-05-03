@@ -965,7 +965,7 @@ Boot the Jetson and log in.
 
 Open **Terminal** on the Jetson.
 
-#### Step 1: Install Git, curl, Docker, and GStreamer tools
+#### Step 1: Install Git, curl, Docker, Compose, and JetPack runtime components
 
 Run:
 
@@ -973,12 +973,25 @@ Run:
 sudo apt-get update
 sudo apt-get install -y git curl ca-certificates docker.io gstreamer1.0-tools
 sudo apt-get install -y docker-compose-v2 || sudo apt-get install -y docker-compose-plugin
+sudo apt-get install -y nvidia-jetpack-runtime nvidia-container-toolkit nvidia-l4t-gstreamer
 sudo systemctl enable --now docker
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
 docker --version
 docker compose version
 ```
 
 On JetPack 6 / Ubuntu 22.04 ARM64, the Ubuntu package repositories can expose Docker Compose v2 as `docker-compose-v2` rather than `docker-compose-plugin`. Install Compose in its own command so a missing Compose package name does not abort the Docker install.
+
+If `nvidia-jetpack-runtime` is not available on your image but `nvidia-jetpack` is available, install the full metapackage instead:
+
+```bash
+sudo apt-get install -y nvidia-jetpack
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+The Jetson edge stack needs the JetPack runtime components, not just Docker. The preflight checks CUDA, TensorRT, NVIDIA GStreamer/NVDEC, and NVIDIA Container Toolkit before the edge worker starts.
 
 #### Step 2: Ensure your user can run Docker
 

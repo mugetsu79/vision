@@ -55,11 +55,17 @@ check_command docker
 check_command gst-inspect-1.0
 
 if command -v dpkg-query >/dev/null 2>&1; then
-  check_command_output "JetPack 6.2 is installed" '^6\.2' dpkg-query -W -f='${Version}' nvidia-jetpack
+  if dpkg-query -W -f='${Version}' nvidia-jetpack >/dev/null 2>&1; then
+    check_command_output "JetPack 6.2.x metapackage is installed" '^6\.2' dpkg-query -W -f='${Version}' nvidia-jetpack
+  else
+    check_command_output "Jetson Linux 36.4/36.5 base is installed" '^36\.[45]' dpkg-query -W -f='${Version}' nvidia-l4t-core
+  fi
   if dpkg-query -W -f='${Version}' libnvinfer10 >/dev/null 2>&1; then
     check_command_output "TensorRT 10.x runtime is installed" '^10\.' dpkg-query -W -f='${Version}' libnvinfer10
+  elif dpkg-query -W -f='${Version}' tensorrt-libs >/dev/null 2>&1; then
+    check_command_output "TensorRT 10.x runtime is installed" '^10\.' dpkg-query -W -f='${Version}' tensorrt-libs
   else
-    fail "TensorRT 10.x runtime package libnvinfer10 is missing"
+    fail "TensorRT 10.x runtime package libnvinfer10 or tensorrt-libs is missing"
   fi
   if dpkg-query -W -f='${Version}' nvidia-container-toolkit >/dev/null 2>&1; then
     pass "nvidia-container-toolkit package is installed"
@@ -72,6 +78,8 @@ fi
 
 if command -v nvcc >/dev/null 2>&1; then
   check_command_output "CUDA 12.6 toolchain is installed" 'release 12\.6' nvcc --version
+elif command -v dpkg-query >/dev/null 2>&1 && dpkg-query -W -f='${Version}' cuda-runtime-12-6 >/dev/null 2>&1; then
+  pass "CUDA 12.6 runtime package is installed"
 else
   check_file_contains "/usr/local/cuda/version.json" '"cuda": *"12\.6' "CUDA 12.6 runtime metadata is present"
 fi
