@@ -538,6 +538,16 @@ What good looks like:
 
 - you see the first part of a long token followed by `...`
 
+Verify the token before using it for later copy/paste commands:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/models |
+  python3 -m json.tool | head
+```
+
+If the response says `Token verification failed`, generate a fresh token in the same terminal and rerun the API command. Backend restarts and time passing can make an older shell token stale.
+
 Keep this iMac terminal window open. Later commands in this guide reuse:
 
 - `TOKEN`
@@ -655,7 +665,7 @@ Skip this section if you used the catalog preset helper above. This manual recor
 Run:
 
 ```bash
-IMAC_MODEL_ID="$(
+IMAC_MODEL_RESPONSE="$(
   curl -s \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
@@ -671,9 +681,10 @@ IMAC_MODEL_ID="$(
       \"sha256\": \"$MODEL_SHA\",
       \"size_bytes\": $MODEL_SIZE,
       \"license\": \"lab\"
-    }" |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'
+    }"
 )"
+echo "$IMAC_MODEL_RESPONSE"
+IMAC_MODEL_ID="$(python3 -c 'import json,sys; payload=json.load(sys.stdin); print(payload.get("id") or payload)' <<<"$IMAC_MODEL_RESPONSE")"
 echo "$IMAC_MODEL_ID"
 ```
 
@@ -781,15 +792,30 @@ You need the camera IDs to start the workers.
 Run:
 
 ```bash
-CAMERA_ONE_ID="$(
-  curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/cameras |
-  CAMERA_NAME='Lab Camera 1' python3 -c 'import json,os,sys; name=os.environ["CAMERA_NAME"]; cameras=json.load(sys.stdin); print(next(camera["id"] for camera in cameras if camera["name"] == name))'
+CAMERAS_RESPONSE="$(
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    http://127.0.0.1:8000/api/v1/cameras
 )"
+echo "$CAMERAS_RESPONSE"
 
-CAMERA_TWO_ID="$(
-  curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/cameras |
-  CAMERA_NAME='Lab Camera 2' python3 -c 'import json,os,sys; name=os.environ["CAMERA_NAME"]; cameras=json.load(sys.stdin); print(next(camera["id"] for camera in cameras if camera["name"] == name))'
-)"
+lookup_camera_id() {
+  CAMERA_NAME="$1" python3 -c '
+import json, os, sys
+payload = json.load(sys.stdin)
+if not isinstance(payload, list):
+    raise SystemExit(f"Expected camera list, got: {payload}")
+name = os.environ["CAMERA_NAME"]
+for camera in payload:
+    if camera.get("name") == name:
+        print(camera["id"])
+        break
+else:
+    raise SystemExit(f"Camera not found: {name}")
+' <<<"$CAMERAS_RESPONSE"
+}
+
+CAMERA_ONE_ID="$(lookup_camera_id 'Lab Camera 1')"
+CAMERA_TWO_ID="$(lookup_camera_id 'Lab Camera 2')"
 
 echo "$CAMERA_ONE_ID"
 echo "$CAMERA_TWO_ID"
@@ -798,6 +824,8 @@ echo "$CAMERA_TWO_ID"
 What good looks like:
 
 - both commands print UUIDs
+
+If the response says `Token verification failed`, generate a fresh `TOKEN` in this terminal and rerun the lookup.
 
 ### 2.13 Start the iMac worker for camera 1
 
@@ -1137,12 +1165,31 @@ What good looks like:
 Back on the iMac, run:
 
 ```bash
+CAMERAS_RESPONSE="$(
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    http://127.0.0.1:8000/api/v1/cameras
+)"
+echo "$CAMERAS_RESPONSE"
+
 CAMERA_TWO_ID="$(
-  curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/cameras |
-  CAMERA_NAME='Lab Camera 2' python3 -c 'import json,os,sys; name=os.environ["CAMERA_NAME"]; cameras=json.load(sys.stdin); print(next(camera["id"] for camera in cameras if camera["name"] == name))'
+  CAMERA_NAME='Lab Camera 2' python3 -c '
+import json, os, sys
+payload = json.load(sys.stdin)
+if not isinstance(payload, list):
+    raise SystemExit(f"Expected camera list, got: {payload}")
+name = os.environ["CAMERA_NAME"]
+for camera in payload:
+    if camera.get("name") == name:
+        print(camera["id"])
+        break
+else:
+    raise SystemExit(f"Camera not found: {name}")
+' <<<"$CAMERAS_RESPONSE"
 )"
 echo "$CAMERA_TWO_ID"
 ```
+
+If the response says `Token verification failed`, generate a fresh `TOKEN` on the iMac and rerun the lookup.
 
 ### 3.6 Get a fresh admin token on the Jetson
 
