@@ -117,15 +117,15 @@ def test_jetson_rtsp_capture_falls_back_to_software_decode_when_nvdec_has_no_fra
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     frame = np.full((4, 4, 3), 5, dtype=np.uint8)
-    opened_sources: list[str | int] = []
-    captures = iter([_FakeCapture([None]), _FakeCapture([frame])])
+    opened_sources: list[str] = []
 
-    def open_capture(source: str | int, backend: int | None) -> _FakeCapture:
-        del backend
+    def open_raw_capture(source: str) -> _FakeCapture:
         opened_sources.append(source)
-        return next(captures)
+        if len(opened_sources) == 1:
+            raise RuntimeError("NVDEC produced no first frame")
+        return _FakeCapture([frame])
 
-    monkeypatch.setattr(camera_module, "_open_opencv_capture", open_capture)
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_raw_capture)
     caplog.set_level(logging.WARNING, logger="argus.vision.camera")
 
     capture = _default_capture_factory(
@@ -148,32 +148,81 @@ def test_jetson_rtsp_capture_falls_back_to_software_decode_when_nvdec_has_no_fra
     assert any("falling back to software decode" in record.message for record in caplog.records)
 
 
+def test_jetson_rtsp_capture_uses_native_gstreamer_rawvideo_before_opencv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.full((4, 4, 3), 6, dtype=np.uint8)
+    opened_sources: list[str] = []
+
+    def open_raw_capture(source: str) -> _FakeCapture:
+        opened_sources.append(source)
+        return _FakeCapture([frame])
+
+    def fail_opencv_capture(source: str | int, backend: int | None) -> _FakeCapture:
+        raise AssertionError(f"OpenCV should not read Jetson GStreamer RTSP: {source}, {backend}")
+
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_rawvideo_capture",
+        open_raw_capture,
+        raising=False,
+    )
+    monkeypatch.setattr(camera_module, "_open_opencv_capture", fail_opencv_capture)
+
+    capture = _default_capture_factory(
+        (
+            "rtspsrc location=rtsp://camera.internal/live protocols=tcp latency=200 "
+            "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+            "nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
+            "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
+        ),
+        cv2.CAP_GSTREAMER,
+    )
+
+    ok, actual_frame = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(actual_frame, frame)
+    assert opened_sources == [
+        (
+            "rtspsrc location=rtsp://camera.internal/live protocols=tcp latency=200 "
+            "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+            "nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
+            "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
+        )
+    ]
+
+
 def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no_frame(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     frame = np.full((4, 4, 3), 7, dtype=np.uint8)
-    opened_sources: list[str | int] = []
-    nvdec_capture = _FakeCapture([None])
-    software_capture = _FakeCapture([None])
     raw_capture = _FakeCapture([frame])
+    gstreamer_sources: list[str] = []
     raw_sources: list[str] = []
 
-    def open_capture(source: str | int, backend: int | None) -> _FakeCapture:
-        del backend
-        opened_sources.append(source)
-        if len(opened_sources) == 1:
-            return nvdec_capture
-        if len(opened_sources) == 2:
-            return software_capture
-        raise AssertionError("unexpected OpenCV fallback open")
+    def open_raw_gstreamer_capture(source: str) -> _FakeCapture:
+        gstreamer_sources.append(source)
+        raise RuntimeError("GStreamer produced no first frame")
 
     def create_raw_capture(cls: type[object], source_uri: str) -> _FakeCapture:
         del cls
         raw_sources.append(source_uri)
         return raw_capture
 
-    monkeypatch.setattr(camera_module, "_open_opencv_capture", open_capture)
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_rawvideo_capture",
+        open_raw_gstreamer_capture,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "_open_opencv_capture",
+        lambda source, backend: (_ for _ in ()).throw(  # noqa: ARG005
+            AssertionError("OpenCV fallback should not run when ffmpeg rawvideo works")
+        ),
+    )
     monkeypatch.setattr(
         camera_module._FFmpegRawVideoCapture,
         "create",
@@ -195,8 +244,8 @@ def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no
 
     assert ok is True
     np.testing.assert_array_equal(actual_frame, frame)
-    assert nvdec_capture.released is True
-    assert software_capture.released is True
+    assert "nvv4l2decoder" in gstreamer_sources[0]
+    assert "avdec_h264" in gstreamer_sources[1]
     assert raw_sources == ["rtsp://user:secret@camera.internal/live"]
     assert any("ffmpeg rawvideo fallback is active" in record.message for record in caplog.records)
     assert all("secret" not in str(getattr(record, "source_uri", "")) for record in caplog.records)
@@ -456,6 +505,91 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     assert "-probesize" in created_commands[0]
     probesize_index = created_commands[0].index("-probesize")
     assert created_commands[0][probesize_index + 1] == "64000000"
+    assert created_bufsizes == [0]
+
+
+def test_gstreamer_rawvideo_capture_uses_nvdec_pipeline_with_fdsink(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.arange(2 * 4 * 3, dtype=np.uint8).reshape(2, 4, 3)
+    created_commands: list[list[str]] = []
+    created_bufsizes: list[int] = []
+
+    class _FakeStdout:
+        def __init__(self, chunks: list[bytes]) -> None:
+            self._chunks = deque(chunks)
+
+        def read(self, size: int) -> bytes:
+            if not self._chunks:
+                return b""
+            chunk = self._chunks.popleft()
+            assert len(chunk) == size
+            return chunk
+
+    class _FakeProcess:
+        def __init__(self, payload: bytes) -> None:
+            self.stdout = _FakeStdout([payload])
+            self.stderr = io.BytesIO(b"")
+            self._returncode: int | None = None
+
+        def poll(self) -> int | None:
+            return self._returncode
+
+        def terminate(self) -> None:
+            self._returncode = 0
+
+        def wait(self, timeout: float | None = None) -> int:
+            self._returncode = 0
+            return 0
+
+        def kill(self) -> None:
+            self._returncode = -9
+
+    def fake_run(
+        command: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+    ):
+        assert check is True
+        assert capture_output is True
+        assert text is True
+        assert timeout == 20.0
+        assert command[0] == "ffprobe"
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout='{"streams":[{"width":4,"height":2}]}',
+            stderr="",
+        )
+
+    def fake_popen(command: list[str], stdout: object, stderr: object, bufsize: int):
+        del stdout, stderr
+        created_commands.append(command)
+        created_bufsizes.append(bufsize)
+        return _FakeProcess(frame.tobytes())
+
+    monkeypatch.setattr(camera_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(camera_module.subprocess, "Popen", fake_popen)
+
+    capture = camera_module._GStreamerRawVideoCapture.create(
+        "rtspsrc location=rtsp://camera.internal/live protocols=tcp latency=200 "
+        "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+        "nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
+        "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
+    )
+    ok, decoded = capture.read()
+
+    assert ok is True
+    assert decoded is not None
+    assert np.array_equal(decoded, frame)
+    capture.release()
+    assert created_commands[0][:2] == ["gst-launch-1.0", "-q"]
+    assert "nvv4l2decoder" in created_commands[0]
+    assert "fdsink" in created_commands[0]
+    assert "appsink" not in created_commands[0]
+    assert "video/x-raw,format=BGR,width=4,height=2" in created_commands[0]
     assert created_bufsizes == [0]
 
 
@@ -812,6 +946,52 @@ def test_probe_video_dimensions_falls_back_to_ffmpeg_when_ffprobe_returns_zero(
     assert calls == ["ffprobe", "ffmpeg"]
     assert any(
         "falling back to ffmpeg probe" in record.message for record in caplog.records
+    )
+
+
+def test_probe_video_dimensions_falls_back_to_ffmpeg_when_ffprobe_exits_nonzero(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    source_uri = "rtsp://user:secret@relay/stream"
+    calls: list[str] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        if command[0] == "ffprobe":
+            calls.append("ffprobe")
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=command,
+                stderr=f"failed to open {source_uri}",
+            )
+        if command[0] == "ffmpeg":
+            calls.append("ffmpeg")
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout="",
+                stderr=(
+                    f"Input #0, rtsp, from '{source_uri}':\n"
+                    "  Stream #0:0: Audio: aac, 16000 Hz, mono, fltp\n"
+                    "  Stream #0:1: Video: h264 (Main), yuv420p(progressive),"
+                    " 1280x720, 25 fps, 25 tbr\n"
+                    "Output #0, null, to 'pipe:':\n"
+                ),
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(camera_module.subprocess, "run", fake_run)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    width, height = camera_module._probe_video_dimensions(source_uri)
+
+    assert (width, height) == (1280, 720)
+    assert calls == ["ffprobe", "ffmpeg"]
+    assert any(
+        "falling back to ffmpeg probe" in record.message
+        and "secret" not in record.message
+        for record in caplog.records
     )
 
 

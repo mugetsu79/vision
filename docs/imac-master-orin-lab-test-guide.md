@@ -1433,7 +1433,7 @@ If `printf` shows anything other than `<192.168.1.229>` with your real IP, reset
 
 ### 4.5 If the worker repeats `Camera capture lost, reconnecting`
 
-The worker reached the camera ingest stage, but it cannot read frames from the RTSP source. First separate a camera/network problem from a container/GStreamer problem.
+The worker reached the camera ingest stage, but it cannot read frames from the RTSP source. First separate a camera/network problem from a container/GStreamer problem. The Jetson worker's intended capture path is native GStreamer/NVDEC through `gst-launch-1.0` piping raw BGR frames into Python; it does not depend on pip OpenCV having GStreamer support.
 
 On the Jetson host:
 
@@ -1495,7 +1495,7 @@ What the container check means:
 
 - if `nvv4l2decoder` is missing, rerun the Jetson preflight and fix the NVIDIA runtime/NVDEC setup before relying on hardware decode
 - if `avdec_h264` is missing, pull the latest repo and rebuild the edge image; the fallback path needs the `gstreamer1.0-libav` package inside the container
-- if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker now tries NVDEC first, then `avdec_h264`, then FFmpeg rawvideo if OpenCV cannot read the GStreamer pipeline inside the container
+- if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker uses a native GStreamer raw-frame reader first, then `avdec_h264`, then FFmpeg rawvideo only as a last-resort fallback
 - if both container decode paths work but the worker still reconnects forever, capture the worker logs plus the GStreamer command results before changing model settings
 
 The ONNX Runtime line `CPUExecutionProvider` is a performance concern, not the reason for `Camera capture lost`; that message happens before detection.

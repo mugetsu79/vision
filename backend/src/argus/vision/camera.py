@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import subprocess
 import threading
 import time
@@ -321,30 +322,42 @@ def _open_jetson_gstreamer_capture_with_fallback(
     source: str,
     backend: int | None,
 ) -> CaptureHandle:
-    capture = _open_opencv_capture(source, backend)
-    success, frame = capture.read()
-    if success and frame is not None:
-        return _PrefetchedFrameCapture(capture, frame)
+    try:
+        return _open_gstreamer_rawvideo_capture(source)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        LOGGER.warning(
+            "Jetson native GStreamer capture unavailable; falling back to software decode: %s",
+            _redact_capture_exception_message(exc, source=source),
+            extra={"source_uri": _redact_gstreamer_source_uri(source)},
+        )
 
-    capture.release()
     fallback_source = _jetson_software_decode_pipeline(source)
-    LOGGER.warning(
-        "Jetson NVDEC capture produced no first frame; falling back to software decode",
-        extra={"source_uri": _redact_gstreamer_source_uri(source)},
-    )
-    fallback_capture = _open_opencv_capture(fallback_source, backend)
-    success, frame = fallback_capture.read()
-    if success and frame is not None:
-        return _PrefetchedFrameCapture(fallback_capture, frame)
-    fallback_capture.release()
-    LOGGER.warning(
-        "Jetson software decode capture produced no first frame; falling back to ffmpeg rawvideo",
-        extra={"source_uri": _redact_gstreamer_source_uri(fallback_source)},
-    )
+    try:
+        return _open_gstreamer_rawvideo_capture(fallback_source)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        LOGGER.warning(
+            "Jetson software GStreamer capture unavailable; falling back to ffmpeg rawvideo: %s",
+            _redact_capture_exception_message(exc, source=fallback_source),
+            extra={"source_uri": _redact_gstreamer_source_uri(fallback_source)},
+        )
+
     rawvideo_capture = _try_open_rawvideo_capture_from_gstreamer_source(fallback_source)
     if rawvideo_capture is not None:
         return rawvideo_capture
     return cast(CaptureHandle, _open_opencv_capture(fallback_source, backend))
+
+
+def _open_gstreamer_rawvideo_capture(source: str) -> CaptureHandle:
+    capture = _GStreamerRawVideoCapture.create(source)
+    success, frame = capture.read()
+    if success and frame is not None:
+        LOGGER.warning(
+            "Jetson native GStreamer rawvideo capture is active",
+            extra={"source_uri": _redact_gstreamer_source_uri(source)},
+        )
+        return _PrefetchedFrameCapture(capture, frame)
+    capture.release()
+    raise RuntimeError("GStreamer rawvideo capture produced no first frame.")
 
 
 def _try_open_rawvideo_capture_from_gstreamer_source(source: str) -> CaptureHandle | None:
@@ -433,6 +446,149 @@ def _configure_opencv_capture(capture: cv2.VideoCapture) -> None:
             setter(prop_id, value)
         except Exception:  # pragma: no cover - backend-specific OpenCV failure
             continue
+
+@dataclass(slots=True)
+class _GStreamerRawVideoCapture:
+    _process: subprocess.Popen[bytes]
+    _width: int
+    _height: int
+    _source_uri: str
+    _redacted_source_uri: str
+    _stderr_tail: deque[str] = field(default_factory=lambda: deque(maxlen=20))
+    _stderr_reported: bool = False
+    _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
+    _new_frame_event: threading.Event = field(default_factory=threading.Event)
+    _frame_pump_done: bool = False
+
+    @classmethod
+    def create(cls, source: str) -> _GStreamerRawVideoCapture:
+        source_uri = _extract_gstreamer_source_uri(source)
+        if source_uri is None:
+            raise RuntimeError("GStreamer pipeline does not include an rtspsrc location.")
+        width, height = _probe_video_dimensions(source_uri)
+        pipeline = _gstreamer_rawvideo_pipeline(source, width=width, height=height)
+        command = ["gst-launch-1.0", "-q", *shlex.split(pipeline)]
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+        instance = cls(
+            _process=process,
+            _width=width,
+            _height=height,
+            _source_uri=source_uri,
+            _redacted_source_uri=redact_url_secrets(source_uri),
+        )
+        instance._start_stderr_pump()
+        instance._start_frame_pump()
+        return instance
+
+    def _start_stderr_pump(self) -> None:
+        stderr = self._process.stderr
+        if stderr is None:
+            return
+
+        def pump() -> None:
+            try:
+                for raw_line in stderr:
+                    line = raw_line.decode("utf-8", errors="replace").rstrip()
+                    if line:
+                        self._stderr_tail.append(self._sanitize_stderr_line(line))
+            except (OSError, ValueError):
+                return
+
+        threading.Thread(target=pump, daemon=True).start()
+
+    def _start_frame_pump(self) -> None:
+        stdout = self._process.stdout
+        if stdout is None:
+            self._frame_pump_done = True
+            self._new_frame_event.set()
+            return
+
+        frame_size = self._width * self._height * 3
+        width = self._width
+        height = self._height
+
+        def pump() -> None:
+            try:
+                while True:
+                    payload = _read_exact_frame_payload(stdout, frame_size)
+                    if payload is None:
+                        return
+                    frame = np.frombuffer(payload, dtype=np.uint8).reshape(
+                        (height, width, 3)
+                    ).copy()
+                    self._latest_frame.append(frame)
+                    self._new_frame_event.set()
+            except (OSError, ValueError):
+                return
+            finally:
+                self._frame_pump_done = True
+                self._new_frame_event.set()
+
+        threading.Thread(target=pump, daemon=True).start()
+
+    def read(self) -> tuple[bool, Frame | None]:
+        if not self._new_frame_event.wait(timeout=_FFMPEG_FRAME_WAIT_TIMEOUT_S):
+            self._report_stderr(
+                f"no frame produced within {_FFMPEG_FRAME_WAIT_TIMEOUT_S:.0f}s"
+            )
+            return False, None
+        self._new_frame_event.clear()
+        try:
+            frame = self._latest_frame[0]
+        except IndexError:
+            if self._frame_pump_done:
+                self._report_stderr("GStreamer frame pump exited")
+            return False, None
+        return True, frame
+
+    def _report_stderr(self, reason: str) -> None:
+        if self._stderr_reported:
+            return
+        self._stderr_reported = True
+        tail = list(self._stderr_tail)
+        if tail:
+            LOGGER.warning(
+                "GStreamer rawvideo capture failed (%s); last stderr: %s",
+                reason,
+                " | ".join(tail),
+            )
+        else:
+            LOGGER.warning(
+                "GStreamer rawvideo capture failed (%s); no stderr captured",
+                reason,
+            )
+
+    def _sanitize_stderr_line(self, line: str) -> str:
+        if self._redacted_source_uri == self._source_uri:
+            return line
+        return line.replace(self._source_uri, self._redacted_source_uri)
+
+    def release(self) -> None:
+        if self._process.poll() is not None:
+            return
+        self._process.terminate()
+        try:
+            self._process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            self._process.wait(timeout=2.0)
+
+
+def _gstreamer_rawvideo_pipeline(source: str, *, width: int, height: int) -> str:
+    appsink_caps = "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
+    fdsink_caps = (
+        f"video/x-raw,format=BGR,width={width},height={height} ! "
+        "fdsink fd=1 sync=false"
+    )
+    if appsink_caps not in source:
+        raise RuntimeError("GStreamer pipeline does not include the expected BGR appsink caps.")
+    return source.replace(appsink_caps, fdsink_caps)
+
 
 @dataclass(slots=True)
 class _FFmpegRawVideoCapture:
@@ -671,6 +827,12 @@ def _probe_via_ffprobe(source_uri: str) -> tuple[int, int]:
             "ffprobe timed out while probing video dimensions "
             f"after {_FFMPEG_DIMENSION_PROBE_TIMEOUT_S:.0f}s."
         ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            "ffprobe failed while probing video dimensions: "
+            f"returncode={exc.returncode} "
+            f"stderr={_redact_process_output(exc.stderr, source_uri)!r}"
+        ) from exc
     payload = json.loads(completed.stdout)
     streams = payload.get("streams", [])
     if not streams:
@@ -696,6 +858,16 @@ def _probe_via_ffprobe(source_uri: str) -> tuple[int, int]:
             f"stderr={completed.stderr!r}"
         )
     return width, height
+
+
+def _redact_process_output(output: object, source_uri: str) -> str:
+    if isinstance(output, bytes):
+        text = output.decode("utf-8", errors="replace")
+    elif output is None:
+        text = ""
+    else:
+        text = str(output)
+    return text.replace(source_uri, redact_url_secrets(source_uri))
 
 
 def _probe_via_ffmpeg(source_uri: str) -> tuple[int, int]:
