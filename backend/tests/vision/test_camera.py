@@ -148,6 +148,60 @@ def test_jetson_rtsp_capture_falls_back_to_software_decode_when_nvdec_has_no_fra
     assert any("falling back to software decode" in record.message for record in caplog.records)
 
 
+def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no_frame(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    frame = np.full((4, 4, 3), 7, dtype=np.uint8)
+    opened_sources: list[str | int] = []
+    nvdec_capture = _FakeCapture([None])
+    software_capture = _FakeCapture([None])
+    raw_capture = _FakeCapture([frame])
+    raw_sources: list[str] = []
+
+    def open_capture(source: str | int, backend: int | None) -> _FakeCapture:
+        del backend
+        opened_sources.append(source)
+        if len(opened_sources) == 1:
+            return nvdec_capture
+        if len(opened_sources) == 2:
+            return software_capture
+        raise AssertionError("unexpected OpenCV fallback open")
+
+    def create_raw_capture(cls: type[object], source_uri: str) -> _FakeCapture:
+        del cls
+        raw_sources.append(source_uri)
+        return raw_capture
+
+    monkeypatch.setattr(camera_module, "_open_opencv_capture", open_capture)
+    monkeypatch.setattr(
+        camera_module._FFmpegRawVideoCapture,
+        "create",
+        classmethod(create_raw_capture),
+    )
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory(
+        (
+            "rtspsrc location=rtsp://user:secret@camera.internal/live protocols=tcp "
+            "latency=200 drop-on-latency=true ! rtph264depay ! h264parse ! "
+            "nvv4l2decoder ! nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
+            "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
+        ),
+        cv2.CAP_GSTREAMER,
+    )
+
+    ok, actual_frame = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(actual_frame, frame)
+    assert nvdec_capture.released is True
+    assert software_capture.released is True
+    assert raw_sources == ["rtsp://user:secret@camera.internal/live"]
+    assert any("ffmpeg rawvideo fallback is active" in record.message for record in caplog.records)
+    assert all("secret" not in str(getattr(record, "source_uri", "")) for record in caplog.records)
+
+
 def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
     capture_attempts = [
         _FakeCapture(

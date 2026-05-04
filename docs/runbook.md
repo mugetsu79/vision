@@ -117,7 +117,7 @@ Then run the local preflight:
 /Users/yann.moren/vision/scripts/jetson-preflight.sh
 ```
 
-The preflight checks JetPack/L4T compatibility, CUDA 12.6, TensorRT 10.x, NVDEC availability, the expected lack of NVENC on Orin Nano, Docker, Docker Compose v2, NVIDIA Container Toolkit, and the GStreamer RTSP/H264 elements used by the host diagnostics and worker fallback path.
+The preflight checks JetPack/L4T compatibility, CUDA 12.6, TensorRT 10.x, NVDEC availability, the expected lack of NVENC on Orin Nano, Docker, Docker Compose v2, NVIDIA Container Toolkit, FFmpeg/FFprobe, and the GStreamer RTSP/H264 elements used by the host diagnostics and worker fallback path.
 
 ## Edge Bring-Up
 

@@ -64,6 +64,8 @@ fi
 
 check_command docker
 check_command gst-inspect-1.0
+check_command ffmpeg
+check_command ffprobe
 
 if command -v gst-inspect-1.0 >/dev/null 2>&1; then
   check_gst_element rtspsrc "GStreamer RTSP source element is available"

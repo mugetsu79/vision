@@ -12,6 +12,7 @@ def test_edge_compose_requires_master_runtime_environment() -> None:
     assert "${ARGUS_DB_URL:?" in compose
     assert "${ARGUS_NATS_URL:?" in compose
     assert "${ARGUS_MINIO_ENDPOINT:?" in compose
+    assert "YOLO_CONFIG_DIR: /tmp" in compose
 
 
 def test_edge_compose_does_not_default_master_services_to_jetson_host() -> None:

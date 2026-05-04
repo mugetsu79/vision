@@ -336,11 +336,39 @@ def _open_jetson_gstreamer_capture_with_fallback(
     success, frame = fallback_capture.read()
     if success and frame is not None:
         return _PrefetchedFrameCapture(fallback_capture, frame)
+    fallback_capture.release()
     LOGGER.warning(
-        "Jetson software decode capture produced no first frame",
+        "Jetson software decode capture produced no first frame; falling back to ffmpeg rawvideo",
         extra={"source_uri": _redact_gstreamer_source_uri(fallback_source)},
     )
-    return fallback_capture
+    rawvideo_capture = _try_open_rawvideo_capture_from_gstreamer_source(fallback_source)
+    if rawvideo_capture is not None:
+        return rawvideo_capture
+    return cast(CaptureHandle, _open_opencv_capture(fallback_source, backend))
+
+
+def _try_open_rawvideo_capture_from_gstreamer_source(source: str) -> CaptureHandle | None:
+    source_uri = _extract_gstreamer_source_uri(source)
+    if source_uri is None:
+        return None
+    try:
+        raw_capture = _FFmpegRawVideoCapture.create(source_uri)
+        success, frame = raw_capture.read()
+        if success and frame is not None:
+            LOGGER.warning(
+                "Jetson ffmpeg rawvideo fallback is active",
+                extra={"source_uri": redact_url_secrets(source_uri)},
+            )
+            return _PrefetchedFrameCapture(raw_capture, frame)
+        raw_capture.release()
+        raise RuntimeError("ffmpeg rawvideo capture produced no first frame.")
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        LOGGER.warning(
+            "Jetson ffmpeg rawvideo fallback unavailable: %s",
+            _redact_capture_exception_message(exc, source=source_uri),
+            extra={"source_uri": redact_url_secrets(source_uri)},
+        )
+        return None
 
 
 def _should_try_jetson_software_decode_fallback(
@@ -364,10 +392,17 @@ def _jetson_software_decode_pipeline(source: str) -> str:
 
 
 def _redact_gstreamer_source_uri(source: str) -> str:
+    source_uri = _extract_gstreamer_source_uri(source)
+    if source_uri is None:
+        return source
+    return source.replace(source_uri, redact_url_secrets(source_uri))
+
+
+def _extract_gstreamer_source_uri(source: str) -> str | None:
     match = re.search(r"\blocation=([^\s]+)", source)
     if match is None:
-        return source
-    return source.replace(match.group(1), redact_url_secrets(match.group(1)))
+        return None
+    return match.group(1)
 
 
 def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCapture:

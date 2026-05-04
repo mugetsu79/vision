@@ -1000,7 +1000,7 @@ Run:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl ca-certificates docker.io \
+sudo apt-get install -y git curl ca-certificates docker.io ffmpeg \
   gstreamer1.0-tools gstreamer1.0-plugins-good \
   gstreamer1.0-plugins-bad gstreamer1.0-libav
 sudo apt-get install -y docker-compose-v2 || sudo apt-get install -y docker-compose-plugin
@@ -1022,7 +1022,7 @@ sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-The Jetson edge stack needs the JetPack runtime components, not just Docker. The GStreamer plugin packages are needed for RTSP/H264 host diagnostics and software-decode fallback. The preflight checks CUDA, TensorRT, NVIDIA GStreamer/NVDEC, the software H264 decoder, and NVIDIA Container Toolkit before the edge worker starts.
+The Jetson edge stack needs the JetPack runtime components, not just Docker. The GStreamer plugin packages and FFmpeg are needed for RTSP/H264 host diagnostics and capture fallback. The preflight checks CUDA, TensorRT, NVIDIA GStreamer/NVDEC, the software H264 decoder, FFmpeg/FFprobe, and NVIDIA Container Toolkit before the edge worker starts.
 
 #### Step 2: Ensure your user can run Docker
 
@@ -1455,7 +1455,7 @@ If the host says `no element "h264parse"` or `no element "avdec_h264"`, install 
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y gstreamer1.0-tools gstreamer1.0-plugins-good \
+sudo apt-get install -y ffmpeg gstreamer1.0-tools gstreamer1.0-plugins-good \
   gstreamer1.0-plugins-bad gstreamer1.0-libav
 ```
 
@@ -1495,7 +1495,7 @@ What the container check means:
 
 - if `nvv4l2decoder` is missing, rerun the Jetson preflight and fix the NVIDIA runtime/NVDEC setup before relying on hardware decode
 - if `avdec_h264` is missing, pull the latest repo and rebuild the edge image; the fallback path needs the `gstreamer1.0-libav` package inside the container
-- if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker now tries NVDEC first and falls back to `avdec_h264` when the first frame does not arrive
+- if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker now tries NVDEC first, then `avdec_h264`, then FFmpeg rawvideo if OpenCV cannot read the GStreamer pipeline inside the container
 - if both container decode paths work but the worker still reconnects forever, capture the worker logs plus the GStreamer command results before changing model settings
 
 The ONNX Runtime line `CPUExecutionProvider` is a performance concern, not the reason for `Camera capture lost`; that message happens before detection.

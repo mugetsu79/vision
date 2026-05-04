@@ -22,7 +22,7 @@ services:
       ARGUS_ENABLE_WORKER_METRICS_SERVER: "true"
       ARGUS_WORKER_METRICS_PORT: "9108"
       ARGUS_PUBLISH_PROFILE: jetson-nano
-      YOLO_CONFIG_DIR: /tmp/Ultralytics
+      YOLO_CONFIG_DIR: /tmp
     ports:
       - "9108:9108"
     volumes:
