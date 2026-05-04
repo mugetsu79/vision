@@ -186,7 +186,8 @@ The Jetson must be able to reach these iMac ports:
 - `8000` Vezor backend API
 - `8080` Keycloak
 - `5432` PostgreSQL
-- `7422` NATS leaf upstream
+- `4222` NATS JetStream for the direct lab edge worker path
+- `7422` NATS leaf upstream for future leaf-node hardening
 - `9000` MinIO
 
 ### 1.9 Check for port conflicts before you start the stack
@@ -196,7 +197,7 @@ Before you run Vezor for the first time, make sure nothing else on the iMac is a
 Run:
 
 ```bash
-for PORT in 3000 5432 6379 7422 8000 8080 9000 9001; do
+for PORT in 3000 4222 5432 6379 7422 8000 8080 9000 9001; do
   echo "Checking port $PORT"
   lsof -nP -iTCP:$PORT -sTCP:LISTEN || true
 done
@@ -999,7 +1000,9 @@ Run:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl ca-certificates docker.io gstreamer1.0-tools
+sudo apt-get install -y git curl ca-certificates docker.io \
+  gstreamer1.0-tools gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-libav
 sudo apt-get install -y docker-compose-v2 || sudo apt-get install -y docker-compose-plugin
 sudo apt-get install -y nvidia-jetpack-runtime nvidia-container-toolkit nvidia-l4t-gstreamer
 sudo systemctl enable --now docker
@@ -1019,7 +1022,7 @@ sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-The Jetson edge stack needs the JetPack runtime components, not just Docker. The preflight checks CUDA, TensorRT, NVIDIA GStreamer/NVDEC, and NVIDIA Container Toolkit before the edge worker starts.
+The Jetson edge stack needs the JetPack runtime components, not just Docker. The GStreamer plugin packages are needed for RTSP/H264 host diagnostics and software-decode fallback. The preflight checks CUDA, TensorRT, NVIDIA GStreamer/NVDEC, the software H264 decoder, and NVIDIA Container Toolkit before the edge worker starts.
 
 #### Step 2: Ensure your user can run Docker
 
@@ -1224,19 +1227,24 @@ CAMERA_TWO_ID="PASTE_CAMERA_TWO_ID_HERE"
 echo "$CAMERA_TWO_ID"
 ```
 
-### 3.7 Point the Jetson NATS leaf config to the iMac
+### 3.7 Use direct iMac NATS for this lab
+
+For the current iMac + Jetson lab, point the edge worker directly at the iMac NATS listener on port `4222`. This is the simplest reliable path while the supervisor/leaf-node bootstrap is still being hardened.
 
 On the Jetson:
 
 ```bash
 cd "$HOME/vision"
-sed -i "s#nats://host.docker.internal:7422#nats://$IMAC_IP:7422#" infra/nats/leaf.conf
-grep -n "urls" infra/nats/leaf.conf
+export ARGUS_NATS_URL="nats://$IMAC_IP:4222"
+echo "$ARGUS_NATS_URL"
 ```
 
 What good looks like:
 
-- the `grep` output shows the iMac IP address and port `7422`
+- the output shows the iMac IP address and port `4222`
+- `docker compose ... config` in the next section succeeds without asking for `ARGUS_NATS_URL`
+
+The edge compose file still starts a local `nats-leaf` service because that is the intended production shape. In this lab path, the worker uses `ARGUS_NATS_URL` directly and the leaf service can be treated as future hardening.
 
 ### 3.8 Start the Jetson edge stack
 
@@ -1262,6 +1270,7 @@ export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
 export ARGUS_MINIO_ACCESS_KEY="argus"
 export ARGUS_MINIO_SECRET_KEY="argus-dev-secret"
 export ARGUS_EDGE_CAMERA_ID="$CAMERA_TWO_ID"
+export ARGUS_NATS_URL="nats://$IMAC_IP:4222"
 
 curl -fsS "$ARGUS_API_BASE_URL/healthz"
 curl -fsS \
@@ -1287,6 +1296,7 @@ What good looks like:
 - the container starts
 - there is no `401 Unauthorized`
 - there is no `httpx.ConnectError: All connection attempts failed`
+- there is no `nats.errors.TimeoutError`
 - there is no “model file not found”
 - the worker keeps running
 - the `/run/secrets` warning is harmless in this local-dev Compose path
@@ -1387,7 +1397,9 @@ For the Jetson container:
 ```bash
 cd "$HOME/vision"
 docker compose -f infra/docker-compose.edge.yml down
-docker compose -f infra/docker-compose.edge.yml up -d
+export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
+export ARGUS_NATS_URL="nats://$IMAC_IP:4222"
+docker compose -f infra/docker-compose.edge.yml up -d --force-recreate --no-build inference-worker
 ```
 
 ### 4.4 If the worker says `httpx.ConnectError: All connection attempts failed`
@@ -1405,6 +1417,7 @@ export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@$IMAC_IP:5432/argus"
 export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
 export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
 export ARGUS_EDGE_CAMERA_ID="$CAMERA_TWO_ID"
+export ARGUS_NATS_URL="nats://$IMAC_IP:4222"
 
 curl -fsS "$ARGUS_API_BASE_URL/healthz"
 curl -fsS \
@@ -1436,25 +1449,54 @@ gst-launch-1.0 -v \
 What the host check means:
 
 - if it fails, the Jetson cannot reach the camera stream; check the RTSP URL, credentials, camera IP, route, and firewall
-- if it runs, the camera path works from the Jetson host and the next check is the worker container
+- if it runs, the camera path works from the Jetson host and the next check is decode/container behavior
 
-Then test the worker container's Jetson decode path:
+If the host says `no element "h264parse"` or `no element "avdec_h264"`, install the GStreamer plugin packages and rerun the host check:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y gstreamer1.0-tools gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-libav
+```
+
+Then test software decode on the host:
+
+```bash
+gst-launch-1.0 -v \
+  rtspsrc location="$RTSP_URL" protocols=tcp latency=200 \
+  ! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! fakesink
+```
+
+Then test the worker container's decode elements:
 
 ```bash
 docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
   --entrypoint gst-inspect-1.0 inference-worker nvv4l2decoder
 
 docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint gst-inspect-1.0 inference-worker avdec_h264
+```
+
+Now test both container decode paths:
+
+```bash
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
   --entrypoint gst-launch-1.0 inference-worker \
   -v rtspsrc location="$RTSP_URL" protocols=tcp latency=200 \
   ! rtph264depay ! h264parse ! nvv4l2decoder ! fakesink
+
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint gst-launch-1.0 inference-worker \
+  -v rtspsrc location="$RTSP_URL" protocols=tcp latency=200 \
+  ! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! fakesink
 ```
 
 What the container check means:
 
-- if `nvv4l2decoder` is missing, rerun the Jetson preflight and fix the NVIDIA runtime/NVDEC setup before starting the worker
-- if host GStreamer works but container GStreamer fails, recreate the edge image after pulling the latest code; the worker pipeline uses RTSP over TCP with a small jitter buffer
-- if both checks work but the worker still reconnects forever, capture the worker logs plus the two GStreamer command results before changing model settings
+- if `nvv4l2decoder` is missing, rerun the Jetson preflight and fix the NVIDIA runtime/NVDEC setup before relying on hardware decode
+- if `avdec_h264` is missing, pull the latest repo and rebuild the edge image; the fallback path needs the `gstreamer1.0-libav` package inside the container
+- if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker now tries NVDEC first and falls back to `avdec_h264` when the first frame does not arrive
+- if both container decode paths work but the worker still reconnects forever, capture the worker logs plus the GStreamer command results before changing model settings
 
 The ONNX Runtime line `CPUExecutionProvider` is a performance concern, not the reason for `Camera capture lost`; that message happens before detection.
 

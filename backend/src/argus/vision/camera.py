@@ -312,7 +312,62 @@ def _default_capture_factory(source: str | int, backend: int | None) -> CaptureH
         if "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ:
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _OPENCV_FFMPEG_CAPTURE_OPTIONS
         return _open_buffered_opencv_capture(source, backend)
+    if _should_try_jetson_software_decode_fallback(source=source, backend=backend):
+        return _open_jetson_gstreamer_capture_with_fallback(cast(str, source), backend)
     return cast(CaptureHandle, _open_opencv_capture(source, backend))
+
+
+def _open_jetson_gstreamer_capture_with_fallback(
+    source: str,
+    backend: int | None,
+) -> CaptureHandle:
+    capture = _open_opencv_capture(source, backend)
+    success, frame = capture.read()
+    if success and frame is not None:
+        return _PrefetchedFrameCapture(capture, frame)
+
+    capture.release()
+    fallback_source = _jetson_software_decode_pipeline(source)
+    LOGGER.warning(
+        "Jetson NVDEC capture produced no first frame; falling back to software decode",
+        extra={"source_uri": _redact_gstreamer_source_uri(source)},
+    )
+    fallback_capture = _open_opencv_capture(fallback_source, backend)
+    success, frame = fallback_capture.read()
+    if success and frame is not None:
+        return _PrefetchedFrameCapture(fallback_capture, frame)
+    LOGGER.warning(
+        "Jetson software decode capture produced no first frame",
+        extra={"source_uri": _redact_gstreamer_source_uri(fallback_source)},
+    )
+    return fallback_capture
+
+
+def _should_try_jetson_software_decode_fallback(
+    *,
+    source: str | int,
+    backend: int | None,
+) -> bool:
+    return (
+        backend == cv2.CAP_GSTREAMER
+        and isinstance(source, str)
+        and "nvv4l2decoder" in source
+    )
+
+
+def _jetson_software_decode_pipeline(source: str) -> str:
+    return source.replace(
+        "nvv4l2decoder ! nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
+        "video/x-raw,format=BGR ! ",
+        "avdec_h264 ! videoconvert ! video/x-raw,format=BGR ! ",
+    )
+
+
+def _redact_gstreamer_source_uri(source: str) -> str:
+    match = re.search(r"\blocation=([^\s]+)", source)
+    if match is None:
+        return source
+    return source.replace(match.group(1), redact_url_secrets(match.group(1)))
 
 
 def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCapture:

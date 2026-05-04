@@ -40,6 +40,7 @@ Do not confuse the local dev stack with production.
 - all worker processes are owned by a local supervisor, not the browser or API container
 - Operations writes desired state or lifecycle requests, then displays reported runtime truth
 - edge credentials are scoped, rotated, and provisioned through bootstrap, not copied from local dev tokens
+- the current iMac + Jetson lab should set the edge worker's `ARGUS_NATS_URL` directly to the iMac NATS listener; the NATS leaf shape is the production target once supervisor bootstrap owns credentials and routing
 
 Production topology:
 

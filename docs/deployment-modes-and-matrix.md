@@ -116,6 +116,7 @@ Use the 2019 iMac as a temporary master and the Jetson Orin Nano as a real edge 
 
 - iMac hosts the dev control plane
 - Jetson runs edge inference
+- the edge worker connects to the iMac API, Postgres, MinIO, and NATS listeners through explicit exported environment variables
 - Operations shows the intended central/edge split
 - History and Evidence Desk prove that events and clips return to the master
 

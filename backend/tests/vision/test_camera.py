@@ -112,6 +112,42 @@ def test_create_camera_source_builds_jetson_csi_pipeline() -> None:
     assert source.mode.value == "jetson-csi"
 
 
+def test_jetson_rtsp_capture_falls_back_to_software_decode_when_nvdec_has_no_frame(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    frame = np.full((4, 4, 3), 5, dtype=np.uint8)
+    opened_sources: list[str | int] = []
+    captures = iter([_FakeCapture([None]), _FakeCapture([frame])])
+
+    def open_capture(source: str | int, backend: int | None) -> _FakeCapture:
+        del backend
+        opened_sources.append(source)
+        return next(captures)
+
+    monkeypatch.setattr(camera_module, "_open_opencv_capture", open_capture)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory(
+        (
+            "rtspsrc location=rtsp://camera.internal/live protocols=tcp latency=200 "
+            "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+            "nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
+            "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
+        ),
+        cv2.CAP_GSTREAMER,
+    )
+
+    ok, actual_frame = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(actual_frame, frame)
+    assert "nvv4l2decoder" in str(opened_sources[0])
+    assert "avdec_h264" in str(opened_sources[1])
+    assert "nvv4l2decoder" not in str(opened_sources[1])
+    assert any("falling back to software decode" in record.message for record in caplog.records)
+
+
 def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
     capture_attempts = [
         _FakeCapture(

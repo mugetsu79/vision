@@ -9,7 +9,7 @@ services:
       ARGUS_API_BASE_URL: "${ARGUS_API_BASE_URL:?Set ARGUS_API_BASE_URL to the iMac/master API URL, for example http://192.168.1.20:8000}"
       ARGUS_API_BEARER_TOKEN: "${ARGUS_API_BEARER_TOKEN:?Set ARGUS_API_BEARER_TOKEN to a fresh access token for the master API}"
       ARGUS_DB_URL: "${ARGUS_DB_URL:?Set ARGUS_DB_URL to the iMac/master Postgres URL, for example postgresql+asyncpg://argus:argus@192.168.1.20:5432/argus}"
-      ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}
+      ARGUS_NATS_URL: "${ARGUS_NATS_URL:?Set ARGUS_NATS_URL to the master NATS URL, for example nats://192.168.1.20:4222}"
       ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
       ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
       ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889
@@ -22,6 +22,7 @@ services:
       ARGUS_ENABLE_WORKER_METRICS_SERVER: "true"
       ARGUS_WORKER_METRICS_PORT: "9108"
       ARGUS_PUBLISH_PROFILE: jetson-nano
+      YOLO_CONFIG_DIR: /tmp/Ultralytics
     ports:
       - "9108:9108"
     volumes:

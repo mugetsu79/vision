@@ -117,7 +117,7 @@ Then run the local preflight:
 /Users/yann.moren/vision/scripts/jetson-preflight.sh
 ```
 
-The preflight checks JetPack 6.2, CUDA 12.6, TensorRT 10.x, NVDEC availability, the expected lack of NVENC on Orin Nano, Docker, and `nvidia-container-toolkit`.
+The preflight checks JetPack/L4T compatibility, CUDA 12.6, TensorRT 10.x, NVDEC availability, the expected lack of NVENC on Orin Nano, Docker, Docker Compose v2, NVIDIA Container Toolkit, and the GStreamer RTSP/H264 elements used by the host diagnostics and worker fallback path.
 
 ## Edge Bring-Up
 
@@ -128,14 +128,14 @@ For a single-node edge deployment:
    - `ARGUS_API_BASE_URL`
    - `ARGUS_API_BEARER_TOKEN` or supervisor-provisioned edge credential
    - `ARGUS_DB_URL`
+   - `ARGUS_NATS_URL`
    - `ARGUS_MINIO_ENDPOINT`
    - `ARGUS_EDGE_CAMERA_ID`
-   - `ARGUS_NATS_URL` if the default leaf upstream does not match your HQ
 3. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
 4. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
 5. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
 
-This Compose path is appropriate for lab and pilot bring-up. In production, the same edge responsibilities should be run under a supervisor so they restart after reboot, report per-worker status, and can receive constrained lifecycle requests from the control plane.
+This Compose path is appropriate for lab and pilot bring-up. In the current iMac + Jetson lab, set `ARGUS_NATS_URL` directly to the master NATS listener, for example `nats://192.168.1.20:4222`. In production, the same edge responsibilities should be run under a supervisor so they restart after reboot, report per-worker status, and can receive constrained lifecycle requests from the control plane. The NATS leaf topology remains the intended hardened production shape once bootstrap and credentials are supervisor-managed.
 
 ## Model Metadata And Scope
 

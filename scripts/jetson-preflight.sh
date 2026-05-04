@@ -45,6 +45,17 @@ check_command_output() {
   fi
 }
 
+check_gst_element() {
+  local element="$1"
+  local description="$2"
+
+  if gst-inspect-1.0 "$element" >/dev/null 2>&1; then
+    pass "$description"
+  else
+    fail "$description"
+  fi
+}
+
 if [[ "$(uname -m)" == "aarch64" ]]; then
   pass "Jetson architecture is arm64"
 else
@@ -53,6 +64,15 @@ fi
 
 check_command docker
 check_command gst-inspect-1.0
+
+if command -v gst-inspect-1.0 >/dev/null 2>&1; then
+  check_gst_element rtspsrc "GStreamer RTSP source element is available"
+  check_gst_element rtph264depay "GStreamer H264 RTP depay element is available"
+  check_gst_element h264parse "GStreamer H264 parser element is available"
+  check_gst_element avdec_h264 "GStreamer software H264 decoder is available"
+  check_gst_element videoconvert "GStreamer video conversion element is available"
+  check_gst_element appsink "GStreamer appsink element is available"
+fi
 
 if command -v dpkg-query >/dev/null 2>&1; then
   if dpkg-query -W -f='${Version}' nvidia-jetpack >/dev/null 2>&1; then
