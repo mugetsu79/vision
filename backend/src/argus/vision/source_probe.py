@@ -27,7 +27,7 @@ def probe_rtsp_source(
         "error",
         "-rtsp_transport",
         "tcp",
-        "-timeout",
+        "-rw_timeout",
         _RTSP_TIMEOUT_US,
         "-analyzeduration",
         _ANALYZE_DURATION_US,
