@@ -1,8 +1,8 @@
-# Next Chat Handoff: Stream 1 Closed, Stream 2 Next
+# Next Chat Handoff: Stream 1 Closed, Jetson Validation Next, Stream 2 Later
 
-Date: 2026-05-02
+Date: 2026-05-04
 
-Purpose: paste this document into a fresh chat after `model-catalog-open-vocab-runtime` has been merged. The next chat should treat point 1 as closed and continue with point 2: OmniSight UI/UX distinctiveness.
+Purpose: paste this document into a fresh chat after `model-catalog-open-vocab-runtime` has been merged. The next chat should treat point 1 as closed, but should finish the iMac master + Jetson Orin edge validation before continuing with point 2: OmniSight UI/UX distinctiveness.
 
 ## Repository State To Start From
 
@@ -76,7 +76,111 @@ TensorRT follow-up is documented here:
 
 The current TensorRT posture is: keep ONNX as the canonical portable model row; let ONNX Runtime use TensorRT/CUDA providers when available; later attach validated target-specific `.engine` artifacts to the ONNX model instead of exposing standalone `.engine` files as normal camera models.
 
-## Next Chat: Point 2
+## Current Priority: Finish Jetson Validation
+
+Do this before Stream 2. The lab is currently testing:
+
+- iMac master at `192.168.1.229`
+- Jetson Orin Nano edge worker
+- camera 2 id `d1588564-f5c8-4d6b-8584-45697bca2dba`
+- edge model `YOLO26n COCO Edge` at `/models/yolo26n.onnx`
+- camera 2 active classes: `person`, `car`, `bicycle`, `motorcycle`, `bus`, `truck`
+- camera 2 browser delivery profile from the worker config: `720p10`, `kind=transcode`
+
+Known-good evidence from 2026-05-04:
+
+```text
+HTTP Request: GET http://192.168.1.229:8000/api/v1/cameras/d1588564-f5c8-4d6b-8584-45697bca2dba/worker-config "HTTP/1.1 200 OK"
+Worker ingesting directly from camera RTSP while browser delivery uses MediaMTX passthrough at rtsp://mediamtx:8554/cameras/d1588564-f5c8-4d6b-8584-45697bca2dba/passthrough
+Jetson native GStreamer rawvideo capture is active
+Inference stage timing summary ... stage_avg_ms={capture=9.4, detect=143.6, publish_stream=0.0, total=285.0, track=123.3}
+Inference stage timing summary ... stage_avg_ms={capture=7.9, detect=144.4, publish_stream=0.0, total=285.2, track=124.2}
+```
+
+This closes the RTSP/NVDEC/GStreamer capture problem. The worker is reading frames on the Jetson through the native GStreamer rawvideo path.
+
+### Open Jetson Issue 1: ONNX Runtime Is CPU Only
+
+Current evidence:
+
+```text
+Resolved inference runtime policy profile=cpu-fallback system=linux machine=aarch64 cpu_vendor=unknown detection_provider=CPUExecutionProvider attribute_provider=<disabled> provider_override=False profile_override=False available_providers=['AzureExecutionProvider', 'CPUExecutionProvider']
+Loaded detection model YOLO26n COCO Edge with provider CPUExecutionProvider
+```
+
+Root cause hypothesis:
+
+- `backend/Dockerfile.edge` creates a Python 3.12 virtualenv.
+- `backend/pyproject.toml` installs CPU-only `onnxruntime` on Linux `aarch64`.
+- the Dockerfile has a `JETSON_ORT_WHEEL_URL` hook, but no accelerated Jetson ONNX Runtime wheel is configured.
+- NVIDIA's Jetson AI Lab wheel found during debugging is `onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl`, which is Python 3.10, not Python 3.12.
+
+Verification command:
+
+```bash
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint /app/.venv/bin/python inference-worker \
+  -c "import onnxruntime as ort; print(ort.__version__); print(ort.get_available_providers())"
+```
+
+Bad current output: only `AzureExecutionProvider` and `CPUExecutionProvider`.
+
+Target output: includes `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`.
+
+Next implementation options:
+
+- preferred lab path: add a Jetson-specific Python 3.10 edge worker image/runtime and install the Jetson accelerated `onnxruntime-gpu` wheel from the Jetson AI Lab index
+- heavier path: build a Python 3.12-compatible ONNX Runtime wheel with TensorRT/CUDA providers for JetPack 6.x
+- later production path: implement the planned raw TensorRT `.engine` detector runtime from `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md`
+
+### Open Jetson Issue 2: iMac Live Page Does Not Show Jetson Video
+
+Current symptom:
+
+- the worker is running on the Jetson and telemetry timings are printed
+- the iMac Live page does not show a video stream for the Jetson camera
+
+Important evidence:
+
+```text
+Worker ingesting directly from camera RTSP while browser delivery uses MediaMTX passthrough at rtsp://mediamtx:8554/cameras/d1588564-f5c8-4d6b-8584-45697bca2dba/passthrough
+publish_stream=0.0
+```
+
+Root cause hypothesis:
+
+- for `ARGUS_PUBLISH_PROFILE=jetson-nano`, `MediaMTXClient._build_registration()` falls back to `StreamMode.PASSTHROUGH` when privacy filtering is off, even when the worker config says browser delivery `kind=transcode`
+- in passthrough mode, `InferenceEngine.run_once()` intentionally skips `push_frame()`, so no annotated/transcoded frames are published by the worker
+- the Jetson worker registers `cameras/<camera_id>/passthrough` on the Jetson's local MediaMTX service (`http://mediamtx:9997`, `rtsp://mediamtx:8554`)
+- the iMac backend resolves browser playback URLs against the iMac/master MediaMTX settings, not the Jetson MediaMTX instance
+- result: the browser likely asks iMac MediaMTX for `cameras/<camera_id>/passthrough`, while the available path is on Jetson MediaMTX
+
+Evidence to collect next:
+
+```bash
+# On the iMac/master
+curl -i "http://127.0.0.1:8888/cameras/d1588564-f5c8-4d6b-8584-45697bca2dba/passthrough/index.m3u8"
+docker compose -f infra/docker-compose.dev.yml logs --tail=120 mediamtx
+
+# On the Jetson
+curl -i "http://127.0.0.1:8888/cameras/d1588564-f5c8-4d6b-8584-45697bca2dba/passthrough/index.m3u8"
+docker compose -f infra/docker-compose.edge.yml logs --tail=120 mediamtx
+```
+
+Expected if the hypothesis is right:
+
+- iMac MediaMTX returns no stream / 404 for the edge camera path
+- Jetson MediaMTX has the camera path or has attempted to source it
+
+Likely fixes to design after confirming:
+
+- lab bridge: have iMac MediaMTX proxy the Jetson MediaMTX path for edge cameras, so existing browser URLs continue to work
+- worker publish path: for edge browser delivery, publish a processed/annotated stream to a path the iMac can read, or register that path centrally
+- API contract path: teach stream access resolution about edge node stream endpoints instead of always using master MediaMTX URLs
+
+Do not treat this as a capture failure; capture is already green.
+
+## Later: Point 2
 
 Point 2 is:
 
