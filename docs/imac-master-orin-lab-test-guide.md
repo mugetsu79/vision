@@ -1199,8 +1199,10 @@ On the Jetson:
 
 ```bash
 IMAC_IP="PUT_THE_IMAC_IP_HERE"
+printf '<%s>\n' "$IMAC_IP"
+curl -fsS "http://$IMAC_IP:8000/healthz"
 JETSON_TOKEN="$(
-  curl -s \
+  curl -fsS \
     --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
     "http://$IMAC_IP:8080/realms/argus-dev/protocol/openid-connect/token" |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
@@ -1209,6 +1211,8 @@ echo "${JETSON_TOKEN:0:32}..."
 ```
 
 Replace `PUT_THE_IMAC_IP_HERE` with the real iMac IP address you wrote down in section **1.5**.
+
+Use plain shell quotes (`"`) or no quotes. Do not paste smart quotes such as `“` or `”`. If `curl` says it cannot resolve a host beginning with `xn--`, the IP variable contains smart quotes; reset it with `IMAC_IP=192.168.1.229`.
 
 Now paste the camera 2 ID that you printed on the iMac in section **3.5**:
 
@@ -1378,6 +1382,7 @@ On the Jetson, reset the master-facing environment and test it before starting C
 ```bash
 cd "$HOME/vision"
 IMAC_IP="PUT_THE_IMAC_IP_HERE"
+printf '<%s>\n' "$IMAC_IP"
 export ARGUS_API_BASE_URL="http://$IMAC_IP:8000"
 export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@$IMAC_IP:5432/argus"
 export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
@@ -1394,7 +1399,7 @@ docker compose -f infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.
 docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
 ```
 
-If the first `curl` fails, check the iMac IP, firewall, and that the backend is listening on port `8000` from the LAN. If the second `curl` fails with auth, fetch a fresh `JETSON_TOKEN`.
+If `printf` shows anything other than `<192.168.1.229>` with your real IP, reset the variable with plain ASCII characters, for example `IMAC_IP=192.168.1.229`. If `curl` reports an `xn--...` hostname, the value still contains smart quotes. If the first `curl` fails after that, check the iMac IP, firewall, and that the backend is listening on port `8000` from the LAN. If the second `curl` fails with auth, fetch a fresh `JETSON_TOKEN`.
 
 ### 4.5 If `docker compose` is missing on the Jetson
 
