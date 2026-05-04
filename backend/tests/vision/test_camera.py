@@ -83,8 +83,12 @@ def test_create_camera_source_builds_jetson_rtsp_pipeline() -> None:
     )
 
     np.testing.assert_array_equal(source.next_frame(), frame)
-    assert "rtspsrc location=rtsp://camera.internal/live" in str(calls[0].source)
-    assert "nvv4l2decoder" in str(calls[0].source)
+    pipeline = str(calls[0].source)
+    assert "rtspsrc location=rtsp://camera.internal/live" in pipeline
+    assert "protocols=tcp" in pipeline
+    assert "latency=200" in pipeline
+    assert "nvv4l2decoder" in pipeline
+    assert "appsink drop=true max-buffers=1 sync=false" in pipeline
     assert source.mode.value == "jetson-rtsp"
 
 

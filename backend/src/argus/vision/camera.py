@@ -278,9 +278,10 @@ def _resolve_capture_spec(
 
     if platform_info.jetson:
         pipeline = (
-            f"rtspsrc location={source_uri} latency=0 ! "
+            f"rtspsrc location={source_uri} protocols=tcp latency=200 drop-on-latency=true ! "
             "rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! "
-            "video/x-raw,format=BGRx ! videoconvert ! appsink"
+            "video/x-raw,format=BGRx ! videoconvert ! video/x-raw,format=BGR ! "
+            "appsink drop=true max-buffers=1 sync=false"
         )
         return CameraSourceMode.JETSON_RTSP, pipeline, cv2.CAP_GSTREAMER
 

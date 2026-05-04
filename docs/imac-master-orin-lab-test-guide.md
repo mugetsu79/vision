@@ -1244,6 +1244,17 @@ On the Jetson:
 
 ```bash
 cd "$HOME/vision"
+docker compose -f infra/docker-compose.edge.yml build inference-worker
+
+# Refresh the token after the build, not before it. Large first builds can outlive a dev token.
+JETSON_TOKEN="$(
+  curl -fsS \
+    --resolve "localhost:8080:$IMAC_IP" \
+    --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
+    "http://localhost:8080/realms/argus-dev/protocol/openid-connect/token" |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
+
 export ARGUS_API_BASE_URL="http://$IMAC_IP:8000"
 export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
 export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@$IMAC_IP:5432/argus"
@@ -1259,7 +1270,7 @@ curl -fsS \
   python3 -m json.tool | head -40
 
 docker compose -f infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.yml
-docker compose -f infra/docker-compose.edge.yml up -d --build
+docker compose -f infra/docker-compose.edge.yml up -d --force-recreate --no-build inference-worker
 ```
 
 Now watch the logs:
@@ -1278,6 +1289,7 @@ What good looks like:
 - there is no `httpx.ConnectError: All connection attempts failed`
 - there is no “model file not found”
 - the worker keeps running
+- the `/run/secrets` warning is harmless in this local-dev Compose path
 
 ### 3.9 Confirm camera 2 is now working from the Jetson
 
@@ -1406,7 +1418,47 @@ docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference
 
 If `printf` shows anything other than `<192.168.1.229>` with your real IP, reset the variable with plain ASCII characters, for example `IMAC_IP=192.168.1.229`. If `curl` reports an `xn--...` hostname, the value still contains smart quotes. If the first `curl` fails after that, check the iMac IP, firewall, and that the backend is listening on port `8000` from the LAN. If the second `curl` fails with auth, fetch a fresh `JETSON_TOKEN` with the `curl --resolve "localhost:8080:$IMAC_IP"` command from section **3.6**.
 
-### 4.5 If `docker compose` is missing on the Jetson
+### 4.5 If the worker repeats `Camera capture lost, reconnecting`
+
+The worker reached the camera ingest stage, but it cannot read frames from the RTSP source. First separate a camera/network problem from a container/GStreamer problem.
+
+On the Jetson host:
+
+```bash
+set +H 2>/dev/null || true
+RTSP_URL="PASTE_THE_CAMERA_RTSP_URL_FROM_WORKER_CONFIG_HERE"
+
+gst-launch-1.0 -v \
+  rtspsrc location="$RTSP_URL" protocols=tcp latency=200 \
+  ! rtph264depay ! h264parse ! fakesink
+```
+
+What the host check means:
+
+- if it fails, the Jetson cannot reach the camera stream; check the RTSP URL, credentials, camera IP, route, and firewall
+- if it runs, the camera path works from the Jetson host and the next check is the worker container
+
+Then test the worker container's Jetson decode path:
+
+```bash
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint gst-inspect-1.0 inference-worker nvv4l2decoder
+
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint gst-launch-1.0 inference-worker \
+  -v rtspsrc location="$RTSP_URL" protocols=tcp latency=200 \
+  ! rtph264depay ! h264parse ! nvv4l2decoder ! fakesink
+```
+
+What the container check means:
+
+- if `nvv4l2decoder` is missing, rerun the Jetson preflight and fix the NVIDIA runtime/NVDEC setup before starting the worker
+- if host GStreamer works but container GStreamer fails, recreate the edge image after pulling the latest code; the worker pipeline uses RTSP over TCP with a small jitter buffer
+- if both checks work but the worker still reconnects forever, capture the worker logs plus the two GStreamer command results before changing model settings
+
+The ONNX Runtime line `CPUExecutionProvider` is a performance concern, not the reason for `Camera capture lost`; that message happens before detection.
+
+### 4.6 If `docker compose` is missing on the Jetson
 
 Ubuntu's Jetson ARM64 repositories may not provide a package named `docker-compose-plugin`. First try the Ubuntu Compose v2 package:
 
@@ -1425,7 +1477,7 @@ docker compose version
 
 Do not install Compose in the same `apt-get install` command as `docker.io`; if the Compose package name is unavailable, apt aborts the whole transaction.
 
-### 4.6 If the Jetson says the model file does not exist
+### 4.7 If the Jetson says the model file does not exist
 
 What to check:
 
@@ -1433,7 +1485,7 @@ What to check:
 2. the container model path in the model record is `/models/yolo26n.onnx`, or `/models/$PRIMARY_MODEL_FILENAME` for another selected ONNX file
 3. the edge compose worker is using the `../models:/models:ro` volume mount
 
-### 4.7 If model registration returns `500 Internal Server Error` on the iMac
+### 4.8 If model registration returns `500 Internal Server Error` on the iMac
 
 Most likely causes:
 
@@ -1470,7 +1522,7 @@ done
 
 If the backend still rejects the request after that, the response should now be a readable validation error such as an unreadable ONNX path instead of a generic 500.
 
-### 4.8 If the Live tiles stay offline
+### 4.9 If the Live tiles stay offline
 
 What to do:
 
@@ -1479,7 +1531,7 @@ What to do:
 3. wait 30 seconds and refresh Live
 4. check worker logs for connection errors
 
-### 4.9 If the Jetson cannot reach the iMac
+### 4.10 If the Jetson cannot reach the iMac
 
 Check:
 
@@ -1495,7 +1547,7 @@ curl -s "http://$IMAC_IP:8000/healthz"
 curl -s "http://$IMAC_IP:8080/realms/argus-dev/.well-known/openid-configuration" | head
 ```
 
-### 4.10 Advanced: reduced-class custom models
+### 4.11 Advanced: reduced-class custom models
 
 If you are intentionally testing a reduced-class custom model, treat that as an advanced optional workflow:
 
@@ -1506,7 +1558,7 @@ If you are intentionally testing a reduced-class custom model, treat that as an 
 
 If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the Vezor model record was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
 
-### 4.11 If `make verify-all` fails
+### 4.12 If `make verify-all` fails
 
 Run it again and read the first failing section carefully. The most common failure buckets are:
 
@@ -1522,7 +1574,7 @@ docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
 
-### 4.12 If local API generation says `openapi-typescript: command not found`
+### 4.13 If local API generation says `openapi-typescript: command not found`
 
 This means the host-side frontend dependencies were not installed cleanly.
 
@@ -1540,7 +1592,7 @@ What good looks like:
 - `openapi-typescript --version` prints a version
 - `generate:api` writes `src/lib/api.generated.ts` without error
 
-### 4.13 If `127.0.0.1:9001` does not open
+### 4.14 If `127.0.0.1:9001` does not open
 
 This means MinIO is not healthy yet.
 
@@ -1558,7 +1610,7 @@ What good looks like:
 - MinIO logs no longer show `Invalid credentials`
 - `curl -I` returns an HTTP response instead of connection refused
 
-### 4.14 What to do after a successful lab
+### 4.15 What to do after a successful lab
 
 If both tests pass:
 
@@ -1567,7 +1619,7 @@ If both tests pass:
 3. add cameras gradually, not all at once
 4. move on to a more production-like deployment only after the Jetson path stays stable
 
-### 4.15 Clean shutdown
+### 4.16 Clean shutdown
 
 When you are done testing:
 
