@@ -74,6 +74,27 @@ async def test_load_engine_config_sends_bearer_token_when_configured() -> None:
     assert seen_authorization == ["Bearer worker-token"]
 
 
+@pytest.mark.asyncio
+async def test_load_engine_config_reports_api_base_url_on_connect_error() -> None:
+    camera_id = uuid4()
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        api_base_url="http://192.168.1.20:8000",
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url=settings.api_base_url,
+    ) as client:
+        with pytest.raises(RuntimeError, match="ARGUS_API_BASE_URL"):
+            await load_engine_config(camera_id, settings=settings, http_client=client)
+
+
 def test_worker_api_headers_is_defined_before_main_guard() -> None:
     source = ENGINE_PATH.read_text(encoding="utf-8")
 

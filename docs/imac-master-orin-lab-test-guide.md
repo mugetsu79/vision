@@ -1244,6 +1244,14 @@ export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
 export ARGUS_MINIO_ACCESS_KEY="argus"
 export ARGUS_MINIO_SECRET_KEY="argus-dev-secret"
 export ARGUS_EDGE_CAMERA_ID="$CAMERA_TWO_ID"
+
+curl -fsS "$ARGUS_API_BASE_URL/healthz"
+curl -fsS \
+  -H "Authorization: Bearer $ARGUS_API_BEARER_TOKEN" \
+  "$ARGUS_API_BASE_URL/api/v1/cameras/$ARGUS_EDGE_CAMERA_ID/worker-config" |
+  python3 -m json.tool | head -40
+
+docker compose -f infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.yml
 docker compose -f infra/docker-compose.edge.yml up -d --build
 ```
 
@@ -1256,8 +1264,11 @@ docker compose -f infra/docker-compose.edge.yml logs -f inference-worker
 
 What good looks like:
 
+- the two `curl` commands succeed before Compose starts the worker
+- `docker compose ... config` succeeds, which proves the required edge variables are visible in this shell
 - the container starts
 - there is no `401 Unauthorized`
+- there is no `httpx.ConnectError: All connection attempts failed`
 - there is no “model file not found”
 - the worker keeps running
 
@@ -1358,7 +1369,34 @@ docker compose -f infra/docker-compose.edge.yml down
 docker compose -f infra/docker-compose.edge.yml up -d
 ```
 
-### 4.4 If `docker compose` is missing on the Jetson
+### 4.4 If the worker says `httpx.ConnectError: All connection attempts failed`
+
+The Jetson worker could not reach the iMac/master backend API. The usual cause is that `ARGUS_API_BASE_URL` was not exported in the same terminal where you ran `docker compose`, or it still points at `host.docker.internal`, which is the Jetson host on Linux.
+
+On the Jetson, reset the master-facing environment and test it before starting Compose:
+
+```bash
+cd "$HOME/vision"
+IMAC_IP="PUT_THE_IMAC_IP_HERE"
+export ARGUS_API_BASE_URL="http://$IMAC_IP:8000"
+export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@$IMAC_IP:5432/argus"
+export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
+export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
+export ARGUS_EDGE_CAMERA_ID="$CAMERA_TWO_ID"
+
+curl -fsS "$ARGUS_API_BASE_URL/healthz"
+curl -fsS \
+  -H "Authorization: Bearer $ARGUS_API_BEARER_TOKEN" \
+  "$ARGUS_API_BASE_URL/api/v1/cameras/$ARGUS_EDGE_CAMERA_ID/worker-config" |
+  python3 -m json.tool | head -40
+
+docker compose -f infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.yml
+docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
+```
+
+If the first `curl` fails, check the iMac IP, firewall, and that the backend is listening on port `8000` from the LAN. If the second `curl` fails with auth, fetch a fresh `JETSON_TOKEN`.
+
+### 4.5 If `docker compose` is missing on the Jetson
 
 Ubuntu's Jetson ARM64 repositories may not provide a package named `docker-compose-plugin`. First try the Ubuntu Compose v2 package:
 
@@ -1377,7 +1415,7 @@ docker compose version
 
 Do not install Compose in the same `apt-get install` command as `docker.io`; if the Compose package name is unavailable, apt aborts the whole transaction.
 
-### 4.5 If the Jetson says the model file does not exist
+### 4.6 If the Jetson says the model file does not exist
 
 What to check:
 
@@ -1385,7 +1423,7 @@ What to check:
 2. the container model path in the model record is `/models/yolo26n.onnx`, or `/models/$PRIMARY_MODEL_FILENAME` for another selected ONNX file
 3. the edge compose worker is using the `../models:/models:ro` volume mount
 
-### 4.6 If model registration returns `500 Internal Server Error` on the iMac
+### 4.7 If model registration returns `500 Internal Server Error` on the iMac
 
 Most likely causes:
 
@@ -1422,7 +1460,7 @@ done
 
 If the backend still rejects the request after that, the response should now be a readable validation error such as an unreadable ONNX path instead of a generic 500.
 
-### 4.7 If the Live tiles stay offline
+### 4.8 If the Live tiles stay offline
 
 What to do:
 
@@ -1431,7 +1469,7 @@ What to do:
 3. wait 30 seconds and refresh Live
 4. check worker logs for connection errors
 
-### 4.8 If the Jetson cannot reach the iMac
+### 4.9 If the Jetson cannot reach the iMac
 
 Check:
 
@@ -1447,7 +1485,7 @@ curl -s "http://$IMAC_IP:8000/healthz"
 curl -s "http://$IMAC_IP:8080/realms/argus-dev/.well-known/openid-configuration" | head
 ```
 
-### 4.9 Advanced: reduced-class custom models
+### 4.10 Advanced: reduced-class custom models
 
 If you are intentionally testing a reduced-class custom model, treat that as an advanced optional workflow:
 
@@ -1458,7 +1496,7 @@ If you are intentionally testing a reduced-class custom model, treat that as an 
 
 If you accidentally register a standard COCO model file as though it were a reduced-class model, the failure symptom is usually a metadata mismatch: the ONNX file reports the full COCO inventory, but the Vezor model record was declared with a smaller reduced-class list. Fix that by re-registering the model with its true embedded class inventory and then narrowing camera behavior through `active_classes`.
 
-### 4.10 If `make verify-all` fails
+### 4.11 If `make verify-all` fails
 
 Run it again and read the first failing section carefully. The most common failure buckets are:
 
@@ -1474,7 +1512,7 @@ docker compose -f infra/docker-compose.dev.yml ps
 docker compose -f infra/docker-compose.dev.yml logs --tail 80 backend
 ```
 
-### 4.11 If local API generation says `openapi-typescript: command not found`
+### 4.12 If local API generation says `openapi-typescript: command not found`
 
 This means the host-side frontend dependencies were not installed cleanly.
 
@@ -1492,7 +1530,7 @@ What good looks like:
 - `openapi-typescript --version` prints a version
 - `generate:api` writes `src/lib/api.generated.ts` without error
 
-### 4.12 If `127.0.0.1:9001` does not open
+### 4.13 If `127.0.0.1:9001` does not open
 
 This means MinIO is not healthy yet.
 
@@ -1510,7 +1548,7 @@ What good looks like:
 - MinIO logs no longer show `Invalid credentials`
 - `curl -I` returns an HTTP response instead of connection refused
 
-### 4.13 What to do after a successful lab
+### 4.14 What to do after a successful lab
 
 If both tests pass:
 
@@ -1519,7 +1557,7 @@ If both tests pass:
 3. add cameras gradually, not all at once
 4. move on to a more production-like deployment only after the Jetson path stays stable
 
-### 4.14 Clean shutdown
+### 4.15 Clean shutdown
 
 When you are done testing:
 

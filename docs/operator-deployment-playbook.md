@@ -450,6 +450,12 @@ sudo nvpmodel -m 2 && sudo jetson_clocks
 Then:
 
 ```bash
+export ARGUS_API_BASE_URL="http://<master-ip>:8000"
+export ARGUS_API_BEARER_TOKEN="<fresh-access-token>"
+export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@<master-ip>:5432/argus"
+export ARGUS_MINIO_ENDPOINT="<master-ip>:9000"
+export ARGUS_EDGE_CAMERA_ID="<camera-id>"
+docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.yml
 docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d
 ```
 

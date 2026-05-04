@@ -127,10 +127,13 @@ For a single-node edge deployment:
 2. Export the required HQ bootstrap values:
    - `ARGUS_API_BASE_URL`
    - `ARGUS_API_BEARER_TOKEN` or supervisor-provisioned edge credential
+   - `ARGUS_DB_URL`
+   - `ARGUS_MINIO_ENDPOINT`
    - `ARGUS_EDGE_CAMERA_ID`
    - `ARGUS_NATS_URL` if the default leaf upstream does not match your HQ
-3. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
-4. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
+3. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
+4. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
+5. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
 
 This Compose path is appropriate for lab and pilot bring-up. In production, the same edge responsibilities should be run under a supervisor so they restart after reboot, report per-worker status, and can receive constrained lifecycle requests from the control plane.
 

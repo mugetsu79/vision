@@ -2636,9 +2636,14 @@ def _edge_dev_compose_command(edge_node_id: UUID) -> str:
         f"{_local_dev_token_command()}\n\n"
         'ARGUS_EDGE_NODE_ID="'
         f'{edge_node_id}" \\\n'
-        'ARGUS_EDGE_CAMERA_ID="${ARGUS_EDGE_CAMERA_ID:-replace-with-camera-id}" \\\n'
-        'ARGUS_API_BASE_URL="${ARGUS_API_BASE_URL:-http://host.docker.internal:8000}" \\\n'
+        'ARGUS_EDGE_CAMERA_ID="${ARGUS_EDGE_CAMERA_ID:?'
+        'Set ARGUS_EDGE_CAMERA_ID to the camera UUID}" \\\n'
+        'ARGUS_API_BASE_URL="${ARGUS_API_BASE_URL:?'
+        'Set ARGUS_API_BASE_URL to the master API URL}" \\\n'
         'ARGUS_API_BEARER_TOKEN="$TOKEN" \\\n'
+        'ARGUS_DB_URL="${ARGUS_DB_URL:?Set ARGUS_DB_URL to the master Postgres URL}" \\\n'
+        'ARGUS_MINIO_ENDPOINT="${ARGUS_MINIO_ENDPOINT:?'
+        'Set ARGUS_MINIO_ENDPOINT to the master MinIO endpoint}" \\\n'
         "docker compose -f infra/docker-compose.edge.yml up inference-worker"
     )
 

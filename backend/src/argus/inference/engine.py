@@ -882,21 +882,28 @@ async def load_engine_config(
     http_client: httpx.AsyncClient | None = None,
 ) -> EngineConfig:
     headers = _worker_api_headers(settings)
-    if http_client is not None:
-        response = await http_client.get(
-            f"/api/v1/cameras/{camera_id}/worker-config",
-            headers=headers or None,
-        )
-        response.raise_for_status()
-        return EngineConfig.model_validate(response.json())
+    try:
+        if http_client is not None:
+            response = await http_client.get(
+                f"/api/v1/cameras/{camera_id}/worker-config",
+                headers=headers or None,
+            )
+            response.raise_for_status()
+            return EngineConfig.model_validate(response.json())
 
-    async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
-        response = await client.get(
-            f"/api/v1/cameras/{camera_id}/worker-config",
-            headers=headers or None,
-        )
-        response.raise_for_status()
-        return EngineConfig.model_validate(response.json())
+        async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
+            response = await client.get(
+                f"/api/v1/cameras/{camera_id}/worker-config",
+                headers=headers or None,
+            )
+            response.raise_for_status()
+            return EngineConfig.model_validate(response.json())
+    except httpx.ConnectError as exc:
+        raise RuntimeError(
+            "Unable to connect to the Vezor API while loading worker config "
+            f"for camera {camera_id}. ARGUS_API_BASE_URL is {settings.api_base_url!r}; "
+            "set it to the master API URL reachable from this worker."
+        ) from exc
 
 
 async def build_runtime_engine(

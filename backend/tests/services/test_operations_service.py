@@ -201,6 +201,9 @@ async def test_create_bootstrap_material_wraps_edge_registration() -> None:
     assert "<camera-id>" not in response.dev_compose_command
     assert "grant_type=password&client_id=argus-cli" in response.dev_compose_command
     assert 'ARGUS_API_BEARER_TOKEN="$TOKEN"' in response.dev_compose_command
+    assert 'ARGUS_API_BASE_URL="${ARGUS_API_BASE_URL:?' in response.dev_compose_command
+    assert 'ARGUS_DB_URL="${ARGUS_DB_URL:?' in response.dev_compose_command
+    assert 'ARGUS_MINIO_ENDPOINT="${ARGUS_MINIO_ENDPOINT:?' in response.dev_compose_command
     assert (
         "docker compose -f infra/docker-compose.edge.yml up inference-worker"
         in response.dev_compose_command

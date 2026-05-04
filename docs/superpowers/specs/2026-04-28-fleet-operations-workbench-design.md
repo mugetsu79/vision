@@ -153,9 +153,11 @@ TOKEN="$(
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 )"
 
-ARGUS_EDGE_CAMERA_ID="${ARGUS_EDGE_CAMERA_ID:-replace-with-camera-id}" \
-ARGUS_API_BASE_URL="${ARGUS_API_BASE_URL:-http://host.docker.internal:8000}" \
+ARGUS_EDGE_CAMERA_ID="replace-with-camera-id" \
+ARGUS_API_BASE_URL="http://<master-host>:8000" \
 ARGUS_API_BEARER_TOKEN="$TOKEN" \
+ARGUS_DB_URL="postgresql+asyncpg://argus:argus@<master-host>:5432/argus" \
+ARGUS_MINIO_ENDPOINT="<master-host>:9000" \
 docker compose -f infra/docker-compose.edge.yml up inference-worker
 ```
 
