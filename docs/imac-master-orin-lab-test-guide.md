@@ -1193,7 +1193,7 @@ If the response says `Token verification failed`, generate a fresh `TOKEN` on th
 
 ### 3.6 Get a fresh admin token on the Jetson
 
-Tokens are temporary. Generate a fresh one on the Jetson, using the iMac IP address.
+Tokens are temporary. Generate a fresh one on the Jetson. The request still uses the iMac IP for the network connection, but keeps `localhost` in the Keycloak URL through `curl --resolve`; that preserves the dev issuer that the backend trusts.
 
 On the Jetson:
 
@@ -1203,8 +1203,9 @@ printf '<%s>\n' "$IMAC_IP"
 curl -fsS "http://$IMAC_IP:8000/healthz"
 JETSON_TOKEN="$(
   curl -fsS \
+    --resolve "localhost:8080:$IMAC_IP" \
     --data 'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' \
-    "http://$IMAC_IP:8080/realms/argus-dev/protocol/openid-connect/token" |
+    "http://localhost:8080/realms/argus-dev/protocol/openid-connect/token" |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 )"
 echo "${JETSON_TOKEN:0:32}..."
@@ -1213,6 +1214,8 @@ echo "${JETSON_TOKEN:0:32}..."
 Replace `PUT_THE_IMAC_IP_HERE` with the real iMac IP address you wrote down in section **1.5**.
 
 Use plain shell quotes (`"`) or no quotes. Do not paste smart quotes such as `“` or `”`. If `curl` says it cannot resolve a host beginning with `xn--`, the IP variable contains smart quotes; reset it with `IMAC_IP=192.168.1.229`.
+
+Do not fetch the token from `http://$IMAC_IP:8080/...` in this dev lab. That creates a token whose issuer is the LAN IP address, and the backend rejects it with `401 Token verification failed`.
 
 Now paste the camera 2 ID that you printed on the iMac in section **3.5**:
 
@@ -1361,9 +1364,11 @@ The worker could not fetch its runtime config.
 
 What to do:
 
-1. create a fresh token
+1. create a fresh token with `curl --resolve "localhost:8080:$IMAC_IP"` as shown in section **3.6**
 2. make sure you exported `ARGUS_API_BEARER_TOKEN`
 3. restart the worker
+
+On the Jetson, a token fetched from `http://$IMAC_IP:8080/...` can look valid but still fail backend verification because its issuer is `http://$IMAC_IP:8080/realms/argus-dev`. Use the `localhost` URL plus `--resolve` so the issuer remains `http://localhost:8080/realms/argus-dev`.
 
 For the Jetson container:
 
@@ -1399,7 +1404,7 @@ docker compose -f infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.
 docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
 ```
 
-If `printf` shows anything other than `<192.168.1.229>` with your real IP, reset the variable with plain ASCII characters, for example `IMAC_IP=192.168.1.229`. If `curl` reports an `xn--...` hostname, the value still contains smart quotes. If the first `curl` fails after that, check the iMac IP, firewall, and that the backend is listening on port `8000` from the LAN. If the second `curl` fails with auth, fetch a fresh `JETSON_TOKEN`.
+If `printf` shows anything other than `<192.168.1.229>` with your real IP, reset the variable with plain ASCII characters, for example `IMAC_IP=192.168.1.229`. If `curl` reports an `xn--...` hostname, the value still contains smart quotes. If the first `curl` fails after that, check the iMac IP, firewall, and that the backend is listening on port `8000` from the LAN. If the second `curl` fails with auth, fetch a fresh `JETSON_TOKEN` with the `curl --resolve "localhost:8080:$IMAC_IP"` command from section **3.6**.
 
 ### 4.5 If `docker compose` is missing on the Jetson
 
