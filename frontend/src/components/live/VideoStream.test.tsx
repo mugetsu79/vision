@@ -26,8 +26,11 @@ let mediaPlayMock: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
 class FakeRTCPeerConnection {
   static instances: FakeRTCPeerConnection[] = [];
+  static remoteDescriptionBlocker: Promise<void> | null = null;
+  static remoteDescriptionCallCount = 0;
 
   connectionState = "connected";
+  closed = false;
   iceConnectionState = "connected";
   onconnectionstatechange: (() => void) | null = null;
   oniceconnectionstatechange: (() => void) | null = null;
@@ -39,6 +42,8 @@ class FakeRTCPeerConnection {
 
   static reset() {
     FakeRTCPeerConnection.instances = [];
+    FakeRTCPeerConnection.remoteDescriptionBlocker = null;
+    FakeRTCPeerConnection.remoteDescriptionCallCount = 0;
   }
 
   addTransceiver() {}
@@ -49,9 +54,14 @@ class FakeRTCPeerConnection {
 
   setLocalDescription() {}
 
-  setRemoteDescription() {}
+  setRemoteDescription() {
+    FakeRTCPeerConnection.remoteDescriptionCallCount += 1;
+    return FakeRTCPeerConnection.remoteDescriptionBlocker ?? Promise.resolve();
+  }
 
-  close() {}
+  close() {
+    this.closed = true;
+  }
 
   emitConnectionState(connectionState: string, iceConnectionState = connectionState) {
     this.connectionState = connectionState;
@@ -178,6 +188,7 @@ describe("VideoStream", () => {
     );
     expect(loadSourceMock.mock.calls[0]?.[0]).toContain("access_token=stream-token");
     expect(await screen.findByText(/standby preview/i)).toBeInTheDocument();
+    expect(FakeRTCPeerConnection.instances[0]?.closed).toBe(true);
   });
 
   test("starts playback after the HLS manifest is parsed", async () => {
@@ -790,6 +801,40 @@ describe("VideoStream", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("closes WebRTC peer when unmounted before negotiation finishes", async () => {
+    let releaseRemoteDescription!: () => void;
+    FakeRTCPeerConnection.remoteDescriptionBlocker = new Promise<void>((resolve) => {
+      releaseRemoteDescription = resolve;
+    });
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const view = render(
+      <VideoStream
+        cameraId="78787878-7878-7878-7878-787878787878"
+        cameraName="Unmounting WebRTC"
+        defaultProfile="native"
+        heartbeatTs={new Date().toISOString()}
+      />,
+    );
+
+    await waitFor(() => expect(FakeRTCPeerConnection.remoteDescriptionCallCount).toBe(1));
+    const peerConnection = FakeRTCPeerConnection.instances[0];
+    expect(peerConnection).toBeDefined();
+
+    view.unmount();
+    await act(async () => {
+      releaseRemoteDescription();
+      await Promise.resolve();
+    });
+
+    expect(peerConnection?.closed).toBe(true);
   });
 
   test("waits to start HLS fallback until the live tile is visible", async () => {

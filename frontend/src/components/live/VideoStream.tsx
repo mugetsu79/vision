@@ -216,7 +216,7 @@ export function VideoStream({
 
     const startStream = async () => {
       try {
-        stopWebRtc = await startWebRtc({
+        const stop = await startWebRtc({
           accessToken,
           cameraId,
           onConnectionLost: () => {
@@ -227,6 +227,12 @@ export function VideoStream({
           tenantId,
           videoElement: videoRef.current,
         });
+        if (disposed) {
+          stop();
+          return;
+        }
+
+        stopWebRtc = stop;
         if (!disposed) {
           setTransport("webrtc");
           firstFrameTimer = window.setTimeout(() => {
@@ -549,6 +555,11 @@ async function startWebRtc({
     }, WEBRTC_DISCONNECT_GRACE_MS);
   };
 
+  const stop = () => {
+    clearDisconnectTimer();
+    peerConnection.close();
+  };
+
   peerConnection.addTransceiver("video", { direction: "recvonly" });
   peerConnection.ontrack = (event) => {
     if (!videoElement) {
@@ -578,37 +589,40 @@ async function startWebRtc({
   peerConnection.onconnectionstatechange = handleConnectionLoss;
   peerConnection.oniceconnectionstatechange = handleConnectionLoss;
 
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
+  try {
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
 
-  const response = await fetch(buildApiUrl(`/api/v1/streams/${cameraId}/offer`), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
-    },
-    body: JSON.stringify({ sdp_offer: offer.sdp ?? "" }),
-  });
+    const response = await fetch(buildApiUrl(`/api/v1/streams/${cameraId}/offer`), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
+      },
+      body: JSON.stringify({ sdp_offer: offer.sdp ?? "" }),
+    });
 
-  if (!response.ok) {
-    throw new Error("Offer negotiation failed.");
+    if (!response.ok) {
+      throw new Error("Offer negotiation failed.");
+    }
+
+    const payload = (await response.json()) as { sdp_answer?: string };
+    if (!payload.sdp_answer) {
+      throw new Error("Missing SDP answer.");
+    }
+
+    await peerConnection.setRemoteDescription({
+      type: "answer",
+      sdp: payload.sdp_answer,
+    });
+
+  } catch (error) {
+    stop();
+    throw error;
   }
 
-  const payload = (await response.json()) as { sdp_answer?: string };
-  if (!payload.sdp_answer) {
-    throw new Error("Missing SDP answer.");
-  }
-
-  await peerConnection.setRemoteDescription({
-    type: "answer",
-    sdp: payload.sdp_answer,
-  });
-
-  return () => {
-    clearDisconnectTimer();
-    peerConnection.close();
-  };
+  return stop;
 }
 
 async function startHls({
