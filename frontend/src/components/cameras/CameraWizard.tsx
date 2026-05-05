@@ -26,7 +26,7 @@ type Point = [number, number];
 type SerializedZone = NonNullable<CreateCameraInput["zones"]>[number];
 type DetectorCapability = components["schemas"]["DetectorCapability"];
 type ModelCapabilityConfig = components["schemas"]["ModelCapabilityConfig"];
-type BrowserDeliveryProfile = "native" | "1080p15" | "720p10" | "540p5";
+type BrowserDeliveryProfile = "native" | "annotated" | "1080p15" | "720p10" | "540p5";
 type BoundaryType = "line" | "polygon";
 type BrowserDeliveryProfilePayload = {
   id: BrowserDeliveryProfile;
@@ -34,6 +34,8 @@ type BrowserDeliveryProfilePayload = {
   w?: number;
   h?: number;
   fps?: number;
+  label?: string | null;
+  description?: string | null;
   reason?: string | null;
   [key: string]: unknown;
 };
@@ -74,6 +76,7 @@ const DEFAULT_ANALYTICS_FRAME_SIZE: FrameSize = {
 
 const DEFAULT_BROWSER_DELIVERY_PROFILES: BrowserDeliveryProfilePayload[] = [
   { id: "native", kind: "passthrough" },
+  { id: "annotated", kind: "transcode" },
   { id: "1080p15", kind: "transcode", w: 1920, h: 1080, fps: 15 },
   { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10 },
   { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5 },
@@ -140,6 +143,7 @@ function toPointTupleArray(points: number[][] | undefined): Point[] {
 function isBrowserDeliveryProfile(value: unknown): value is BrowserDeliveryProfile {
   return (
     value === "native" ||
+    value === "annotated" ||
     value === "1080p15" ||
     value === "720p10" ||
     value === "540p5"
@@ -178,6 +182,23 @@ function resolveBrowserDeliveryProfile(
     return requestedProfile;
   }
   return profiles.find((profile) => profile.id === "720p10")?.id ?? profiles[0]?.id ?? "native";
+}
+
+function formatBrowserDeliveryProfileLabel(
+  profile: BrowserDeliveryProfilePayload,
+  processingMode: CameraWizardData["processingMode"],
+) {
+  if (profile.label) {
+    return profile.label;
+  }
+  const isEdge = processingMode === "edge";
+  if (profile.id === "native") {
+    return isEdge ? "Native edge passthrough" : "Native camera";
+  }
+  if (profile.id === "annotated") {
+    return isEdge ? "Annotated edge stream" : "Annotated";
+  }
+  return isEdge ? `${profile.id} edge bandwidth saver` : `${profile.id} viewer preview`;
 }
 
 function formatSourceSize(sourceCapability: SourceCapability | null) {
@@ -622,6 +643,7 @@ export function CameraWizard({
       "camera-source-probe",
       initialCamera?.id ?? "new",
       isEditMode && trimmedRtspUrl.length === 0 ? "stored" : trimmedRtspUrl,
+      data.processingMode,
       data.blurFaces,
       data.blurPlates,
       data.method,
@@ -640,6 +662,7 @@ export function CameraWizard({
         body: JSON.stringify({
           camera_id: initialCamera?.id ?? null,
           rtsp_url: isEditMode ? trimmedRtspUrl || null : trimmedRtspUrl,
+          processing_mode: data.processingMode,
           browser_delivery: buildBrowserDelivery(data),
           privacy: {
             blur_faces: data.blurFaces,
@@ -876,7 +899,9 @@ export function CameraWizard({
       case "Models & Tracking":
         return "Primary and secondary models shape what the camera observes, while the tracker stabilizes entity identity across frames.";
       case "Privacy, Processing & Delivery":
-        return "Analytics ingest remains native. Lower browser delivery profiles may activate an optional preview/transcode path to reduce bandwidth without changing inference quality.";
+        return data.processingMode === "edge"
+          ? "Native is clean passthrough. Processed profiles are built on the edge before browser delivery."
+          : "Native is clean passthrough. Processed preview profiles reduce master-to-browser viewing bandwidth only.";
       case "Calibration":
         return `Calibrate four source points, four destination points, a real-world distance, and any line or polygon boundaries so ${brandName} can map motion and count events inside the physical scene.`;
       case "Review":
@@ -884,7 +909,7 @@ export function CameraWizard({
       default:
         return "Configuration guidance appears here.";
     }
-  }, [brandName, stepTitle]);
+  }, [brandName, data.processingMode, stepTitle]);
 
   function updateData<Key extends keyof CameraWizardData>(
     key: Key,
@@ -1400,7 +1425,10 @@ export function CameraWizard({
                 >
                   {data.browserDeliveryProfiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>
-                      {profile.id}
+                      {formatBrowserDeliveryProfileLabel(
+                        profile,
+                        data.processingMode,
+                      )}
                     </option>
                   ))}
                 </Select>
@@ -1426,9 +1454,9 @@ export function CameraWizard({
                 </div>
               ) : null}
               <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-                Analytics ingest stays native. Lower browser delivery profiles may use
-                an optional preview/transcode path to reduce bandwidth while operator
-                playback remains smooth.
+                {data.processingMode === "edge"
+                  ? "Native stays clean passthrough. Processed profiles are published by the edge worker for annotated or reduced remote viewing."
+                  : "Native stays clean passthrough. Processed profiles are published by the central worker for annotated or reduced browser viewing."}
               </p>
             </>
           ) : null}

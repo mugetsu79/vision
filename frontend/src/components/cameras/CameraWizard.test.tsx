@@ -91,6 +91,11 @@ describe("CameraWizard", () => {
     const browserDeliveryProfile = screen.getByLabelText(
       /browser delivery profile/i,
     );
+    expect(
+      within(browserDeliveryProfile).getByRole("option", {
+        name: "720p10 viewer preview",
+      }),
+    ).toBeInTheDocument();
 
     await user.selectOptions(browserDeliveryProfile, "540p5");
     expect(browserDeliveryProfile).toHaveValue("540p5");
@@ -102,6 +107,69 @@ describe("CameraWizard", () => {
 
     await user.click(screen.getByRole("button", { name: /next/i }));
     expect(screen.getByLabelText(/browser delivery profile/i)).toHaveValue("540p5");
+  });
+
+  test("labels edge delivery profiles as edge-built bandwidth savers", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockImplementation((_input, init) => {
+      const rawBody = init?.body;
+      if (typeof rawBody !== "string") {
+        throw new Error("Expected source probe request body.");
+      }
+      const body = JSON.parse(rawBody) as {
+        processing_mode?: string;
+      };
+      expect(body.processing_mode).toBe("edge");
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            source_capability: {
+              width: 1280,
+              height: 720,
+              fps: 20,
+              codec: "h264",
+              aspect_ratio: "16:9",
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [
+                { id: "native", kind: "passthrough" },
+                { id: "annotated", kind: "transcode" },
+                { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10 },
+                { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5 },
+              ],
+              unsupported_profiles: [],
+              native_status: { available: true, reason: null },
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+    });
+
+    renderWizard();
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/processing mode/i), "edge");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    const browserDeliveryProfile = await screen.findByLabelText(
+      /browser delivery profile/i,
+    );
+    expect(
+      within(browserDeliveryProfile).getByRole("option", {
+        name: "720p10 edge bandwidth saver",
+      }),
+    ).toBeInTheDocument();
   });
 
   test("shows runtime vocabulary editor for open-vocab models", async () => {
@@ -220,7 +288,7 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(await screen.findByText(/source is 1280×720/i)).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "1080p15" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "1080p15 viewer preview" })).not.toBeInTheDocument();
   });
 
   test("uses probed source size for new-camera calibration authoring", async () => {
@@ -263,7 +331,7 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
     await user.click(screen.getByRole("button", { name: /next/i }));
-    expect(await screen.findByRole("option", { name: "1080p15" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "1080p15 viewer preview" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /next/i }));
 
@@ -380,7 +448,7 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(await screen.findByText(/source is 1280×720/i)).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "1080p15" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "1080p15 viewer preview" })).not.toBeInTheDocument();
   });
 
   test("hides unsupported browser profiles for the detected source size", async () => {
@@ -458,7 +526,7 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    expect(screen.queryByRole("option", { name: "1080p15" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "1080p15 viewer preview" })).not.toBeInTheDocument();
     expect(
       screen.getByText(/source is 1280×720, so 1080p15 is unavailable/i),
     ).toBeInTheDocument();
