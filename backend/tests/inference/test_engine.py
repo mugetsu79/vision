@@ -291,6 +291,18 @@ class _FakeStreamClient:
         self.pushed_modes.append(registration.mode)
 
 
+class _FailingStreamClient(_FakeStreamClient):
+    async def push_frame(
+        self,
+        registration: StreamRegistration,
+        frame: np.ndarray,
+        *,
+        ts: datetime,
+    ) -> None:
+        await super().push_frame(registration, frame, ts=ts)
+        raise RuntimeError("annotated publisher unavailable")
+
+
 class _RuleIncidentEngine:
     async def evaluate(
         self,
@@ -740,6 +752,53 @@ async def test_engine_publishes_clean_native_video_while_telemetry_tracks() -> N
     assert publisher.frames[0].stream_mode is StreamMode.ANNOTATED_WHIP
     assert len(publisher.frames[0].tracks) == 1
     assert publisher.frames[0].tracks[0].class_name == "car"
+
+
+@pytest.mark.asyncio
+async def test_engine_continues_when_annotated_video_publish_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    stream_client = _FailingStreamClient()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        }
+    )
+    caplog.set_level(logging.ERROR, logger="argus.inference.engine")
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    telemetry = await engine.run_once(ts=datetime(2026, 5, 5, 18, 45, tzinfo=UTC))
+    await engine.close()
+
+    assert telemetry.stream_mode is StreamMode.ANNOTATED_WHIP
+    assert publisher.frames == [telemetry]
+    assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
+    assert "publish_stream" in engine.last_stage_timings
+    assert any(
+        record.levelname == "ERROR"
+        and record.name == "argus.inference.engine"
+        and "Failed to publish live video stream" in record.message
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio

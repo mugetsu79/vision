@@ -542,18 +542,27 @@ class InferenceEngine:
                 stream_mode=self._stream_registration.mode.value,
                 path_name=self._stream_registration.path_name,
             )
-            await self.stream_client.push_frame(
-                self._stream_registration,
-                stream_frame,
-                ts=current_ts,
-            )
-            self._log_frame_diagnostic(
-                "Worker frame publish_stream completed",
-                frame_attempt=frame_attempt,
-                stage="publish_stream",
-                stream_mode=self._stream_registration.mode.value,
-                path_name=self._stream_registration.path_name,
-            )
+            try:
+                await self.stream_client.push_frame(
+                    self._stream_registration,
+                    stream_frame,
+                    ts=current_ts,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to publish live video stream for camera %s on path %s; "
+                    "continuing worker loop.",
+                    self.config.camera_id,
+                    self._stream_registration.path_name,
+                )
+            else:
+                self._log_frame_diagnostic(
+                    "Worker frame publish_stream completed",
+                    frame_attempt=frame_attempt,
+                    stage="publish_stream",
+                    stream_mode=self._stream_registration.mode.value,
+                    path_name=self._stream_registration.path_name,
+                )
             stage_timer.record_stage("publish_stream", ended_at=loop.time())
         else:
             stage_timer.record_skipped_stage("publish_stream")
