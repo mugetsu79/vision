@@ -191,6 +191,56 @@ describe("VideoStream", () => {
     expect(FakeRTCPeerConnection.instances[0]?.closed).toBe(true);
   });
 
+  test("retries WebRTC without HLS fallback when the stream path is not ready", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "WebRTC stream is not ready yet." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    await act(async () => {
+      render(
+        <VideoStream
+          cameraId="12121212-1212-1212-1212-121212121212"
+          cameraName="Stream Not Ready"
+          defaultProfile="annotated"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(loadHlsClientMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(loadHlsClientMock).not.toHaveBeenCalled();
+  });
+
   test("starts playback after the HLS manifest is parsed", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),

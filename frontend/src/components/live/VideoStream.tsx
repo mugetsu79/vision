@@ -22,6 +22,13 @@ const HEARTBEAT_STALE_AFTER_MS = 15_000;
 const HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS = 3_000;
 const WEBRTC_DISCONNECT_GRACE_MS = 2_000;
 
+class StreamNotReadyError extends Error {
+  constructor() {
+    super("WebRTC stream is not ready yet.");
+    this.name = "StreamNotReadyError";
+  }
+}
+
 export function VideoStream({
   cameraId,
   cameraName,
@@ -245,9 +252,14 @@ export function VideoStream({
             setWebrtcFailed(true);
           }, WEBRTC_FIRST_FRAME_TIMEOUT_MS);
         }
-      } catch {
+      } catch (error) {
         stopWebRtc?.();
         if (!disposed) {
+          if (error instanceof StreamNotReadyError) {
+            requestSessionRestart();
+            return;
+          }
+
           setWebrtcFailed(true);
         }
       }
@@ -602,6 +614,10 @@ async function startWebRtc({
       },
       body: JSON.stringify({ sdp_offer: offer.sdp ?? "" }),
     });
+
+    if (response.status === 404) {
+      throw new StreamNotReadyError();
+    }
 
     if (!response.ok) {
       throw new Error("Offer negotiation failed.");
