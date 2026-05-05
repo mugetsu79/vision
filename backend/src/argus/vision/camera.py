@@ -612,8 +612,7 @@ class _FFmpegRawVideoCapture:
             "error",
             "-rtsp_transport",
             "tcp",
-            "-rw_timeout",
-            _FFMPEG_RTSP_TIMEOUT_US,
+            *_ffmpeg_rawvideo_rtsp_timeout_args(),
             "-analyzeduration",
             _FFMPEG_ANALYZE_DURATION_US,
             "-probesize",
@@ -766,6 +765,12 @@ def _should_use_ffmpeg_rawvideo_capture(*, source: str | int, backend: int | Non
         and platform.system() == "Darwin"
         and platform.machine().lower() == "x86_64"
     )
+
+
+def _ffmpeg_rawvideo_rtsp_timeout_args() -> list[str]:
+    if platform.system() == "Darwin":
+        return ["-stimeout", _FFMPEG_RTSP_TIMEOUT_US]
+    return ["-rw_timeout", _FFMPEG_RTSP_TIMEOUT_US]
 
 
 _FFMPEG_VIDEO_LINE_PATTERN = re.compile(
