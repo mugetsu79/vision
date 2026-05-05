@@ -611,4 +611,7 @@ def _uses_central_delivery(
     processing_mode: ProcessingMode,
     edge_node_id: UUID | None,
 ) -> bool:
-    return processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID} and edge_node_id is None
+    return (
+        processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}
+        and edge_node_id is None
+    )

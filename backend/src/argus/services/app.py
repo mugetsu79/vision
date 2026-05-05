@@ -109,7 +109,7 @@ from argus.models.tables import (
     TrackingEvent,
 )
 from argus.services.model_catalog import resolve_catalog_status
-from argus.streaming.mediamtx import MediaMTXClient, StreamMode
+from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
     MediaMTXTokenIssuer,
