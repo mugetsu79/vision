@@ -143,6 +143,7 @@ function WorkspacePage() {
                 const frame = framesByCamera[camera.id];
                 const classFilter = classFiltersByCamera.get(camera.id) ?? null;
                 const heartbeatStatus = getHeartbeatStatus(frame);
+                const deliveryProfileLabel = formatDeliveryProfile(camera);
                 const visibleNow = Object.entries(frame?.counts ?? {}).reduce(
                   (total, [className, count]) => {
                     if (classFilter && !classFilter.includes(className)) {
@@ -166,7 +167,7 @@ function WorkspacePage() {
                         </h3>
                         <p className="mt-2 text-sm text-[#88a2c7]">
                           {camera.processing_mode} processing ·{" "}
-                          {camera.browser_delivery?.default_profile ?? "720p10"}
+                          {deliveryProfileLabel}
                         </p>
                         {camera.browser_delivery?.native_status?.available ===
                         false ? (
@@ -213,7 +214,7 @@ function WorkspacePage() {
                         </div>
                         {frame ? (
                           <p className="text-xs text-[#9db3d3]">
-                            {formatStreamMode(camera, frame)}
+                            {formatStreamMode(frame)}
                           </p>
                         ) : null}
                       </div>
@@ -319,23 +320,28 @@ function heartbeatBadgeClass(status: "unknown" | "fresh" | "stale"): string {
   return "border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]";
 }
 
-function formatStreamMode(
-  camera: CameraResponse,
-  frame: TelemetryFrame,
-): string {
+function formatDeliveryProfile(camera: CameraResponse): string {
   const defaultProfile = camera.browser_delivery?.default_profile ?? "720p10";
-  const privacyOff = !camera.privacy.blur_faces && !camera.privacy.blur_plates;
+  const profiles = camera.browser_delivery?.profiles ?? [];
+  const profile = profiles.find((candidate) => candidate.id === defaultProfile);
+  if (typeof profile?.label === "string" && profile.label.length > 0) {
+    return profile.label;
+  }
 
-  if (defaultProfile === "native" && privacyOff) {
-    return "native clean";
+  const isEdge = camera.processing_mode === "edge" || camera.edge_node_id !== null;
+  if (defaultProfile === "native") {
+    return isEdge ? "Native edge passthrough" : "Native camera";
   }
-  if (frame.stream_mode === "filtered-preview") {
-    return "filtered preview";
+  if (defaultProfile === "annotated") {
+    return isEdge ? "Annotated edge stream" : "Annotated";
   }
-  if (frame.stream_mode === "passthrough") {
-    return "passthrough";
-  }
-  return `${defaultProfile} processed`;
+  return isEdge
+    ? `${defaultProfile} edge bandwidth saver`
+    : `${defaultProfile} viewer preview`;
+}
+
+function formatStreamMode(frame: TelemetryFrame): string {
+  return frame.stream_mode;
 }
 
 function formatNativeAvailabilityReason(

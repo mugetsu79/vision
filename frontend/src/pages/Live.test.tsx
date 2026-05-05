@@ -410,6 +410,97 @@ describe("LivePage", () => {
     ).toBeInTheDocument();
   });
 
+  test("shows the resolved delivery profile label and actual passthrough stream mode", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["car", "bus"],
+            attribute_rules: [],
+            zones: [],
+            homography: {
+              src: [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+              ],
+              dst: [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+              ],
+              ref_distance_m: 10,
+            },
+            privacy: {
+              blur_faces: false,
+              blur_plates: false,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "native",
+              allow_native_on_demand: true,
+              profiles: [
+                {
+                  id: "native",
+                  kind: "passthrough",
+                  label: "Native camera",
+                },
+              ],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/central processing · Native camera/i)).toBeInTheDocument();
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit({
+        camera_id: "11111111-1111-1111-1111-111111111111",
+        ts: new Date().toISOString(),
+        profile: "central-gpu",
+        stream_mode: "passthrough",
+        counts: {},
+        tracks: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getAllByText(/telemetry live/i).length).toBeGreaterThanOrEqual(2),
+    );
+    expect(screen.getByText(/^passthrough$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/native clean/i)).not.toBeInTheDocument();
+  });
+
   test("shows telemetry stale instead of offline when the last worker frame is old", async () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
@@ -488,8 +579,8 @@ describe("LivePage", () => {
     });
 
     expect(await screen.findByText(/telemetry stale/i)).toBeInTheDocument();
-    expect(screen.getByText(/native clean/i)).toBeInTheDocument();
-    expect(screen.queryByText(/annotated-whip/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/annotated-whip/i)).toBeInTheDocument();
+    expect(screen.queryByText(/native clean/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^offline$/i)).not.toBeInTheDocument();
   });
 });
