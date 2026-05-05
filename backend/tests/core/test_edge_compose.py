@@ -15,6 +15,13 @@ def test_edge_compose_requires_master_runtime_environment() -> None:
     assert "YOLO_CONFIG_DIR: /tmp" in compose
 
 
+def test_edge_mediamtx_jwks_points_at_master_backend() -> None:
+    compose = EDGE_COMPOSE_PATH.read_text(encoding="utf-8")
+
+    assert "MTX_AUTHJWTJWKS: ${ARGUS_API_BASE_URL:?" in compose
+    assert "/.well-known/argus/mediamtx/jwks.json" in compose
+
+
 def test_edge_compose_does_not_default_master_services_to_jetson_host() -> None:
     compose = EDGE_COMPOSE_PATH.read_text(encoding="utf-8")
     db_fallback = "ARGUS_DB_URL:-postgresql+asyncpg://argus:argus@host.docker.internal:5432/argus"

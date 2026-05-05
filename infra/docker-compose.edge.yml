@@ -40,6 +40,8 @@ services:
 
   mediamtx:
     image: bluenviron/mediamtx:latest
+    environment:
+      MTX_AUTHJWTJWKS: ${ARGUS_API_BASE_URL:?Set ARGUS_API_BASE_URL to the iMac/master API URL}/.well-known/argus/mediamtx/jwks.json
     ports:
       - "8554:8554"
       - "8888:8888"

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     mediamtx_mjpeg_base_url: str = "http://localhost:8888"
     mediamtx_mjpeg_path_template: str = "{base}/{path}/mjpeg"
     mediamtx_whip_base_url: str = "http://localhost:8889"
+    edge_mediamtx_rtsp_base_urls: dict[str, str] = Field(default_factory=dict)
     mediamtx_username: str | None = None
     mediamtx_password: SecretStr | None = None
     mediamtx_jwt_issuer: str = "argus-mediamtx"

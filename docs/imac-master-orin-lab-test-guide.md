@@ -1248,6 +1248,29 @@ The edge compose file still starts a local `nats-leaf` service because that is t
 
 ### 3.8 Start the Jetson edge stack
 
+First configure the iMac backend to relay the Jetson's local MediaMTX passthrough
+path through the iMac MediaMTX instance. This keeps the browser pointed at the
+iMac while the actual edge camera video is pulled from Jetson MediaMTX on demand.
+
+On the Jetson, get the Jetson LAN IP:
+
+```bash
+hostname -I
+```
+
+On the iMac, from the repository root:
+
+```bash
+cd "$HOME/vision"
+JETSON_IP="PUT_THE_JETSON_IP_HERE"
+export ARGUS_EDGE_MEDIAMTX_RTSP_BASE_URLS="{\"*\":\"rtsp://$JETSON_IP:8554\"}"
+docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
+curl -fsS http://127.0.0.1:8000/healthz
+```
+
+For a multi-edge lab, replace the `*` key with the specific edge node UUID.
+The wildcard is intended for this single-Jetson validation path.
+
 On the Jetson:
 
 ```bash
@@ -1279,7 +1302,7 @@ curl -fsS \
   python3 -m json.tool | head -40
 
 docker compose -f infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.yml
-docker compose -f infra/docker-compose.edge.yml up -d --force-recreate --no-build inference-worker
+docker compose -f infra/docker-compose.edge.yml up -d --force-recreate --no-build mediamtx inference-worker
 ```
 
 Now watch the logs:
@@ -1300,6 +1323,8 @@ What good looks like:
 - there is no “model file not found”
 - the worker keeps running
 - the `/run/secrets` warning is harmless in this local-dev Compose path
+- Jetson MediaMTX can reach `/.well-known/argus/mediamtx/jwks.json` on the iMac
+  through `ARGUS_API_BASE_URL`, which lets the iMac relay read its RTSP path
 
 ### 3.9 Confirm camera 2 is now working from the Jetson
 
@@ -1313,6 +1338,22 @@ What good looks like:
 - `Lab Camera 1` stays online
 - `Lab Camera 2` comes back online
 - both still render in the operator UI
+
+If telemetry is visible but video is not, check the backend HLS proxy from the
+iMac before changing inference or NATS settings:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8000/api/v1/streams/$CAMERA_TWO_ID/hls.m3u8" |
+  head
+docker compose -f infra/docker-compose.dev.yml logs --tail=120 mediamtx
+```
+
+If this returns a playlist, MediaMTX routing is working and the browser should
+recover through WebRTC or LL-HLS. If it returns `404`, recheck
+`ARGUS_EDGE_MEDIAMTX_RTSP_BASE_URLS`, the Jetson IP, and the Jetson MediaMTX
+logs.
 
 Now open **History** and **Incidents** again and confirm that data continues to arrive. In Incidents, use the Evidence Desk review filter to confirm pending/reviewed state still behaves across the central/edge split.
 

@@ -178,6 +178,14 @@ Likely fixes to design after confirming:
 - worker publish path: for edge browser delivery, publish a processed/annotated stream to a path the iMac can read, or register that path centrally
 - API contract path: teach stream access resolution about edge node stream endpoints instead of always using master MediaMTX URLs
 
+Implementation update on 2026-05-05:
+
+- The lab bridge path is now implemented behind `ARGUS_EDGE_MEDIAMTX_RTSP_BASE_URLS`.
+- When an edge camera resolves to `passthrough` and an edge RTSP base is configured, the iMac backend keeps browser playback on the iMac MediaMTX URLs but configures the iMac MediaMTX path to pull `rtsp://<jetson>:8554/cameras/<camera_id>/passthrough` with an internal read JWT.
+- The iMac relay path is cached and refreshed before the internal read token expires instead of being replaced on every HLS resource request.
+- `infra/docker-compose.edge.yml` now points edge MediaMTX JWT validation at the iMac backend JWKS through `ARGUS_API_BASE_URL`.
+- Next lab validation: set `ARGUS_EDGE_MEDIAMTX_RTSP_BASE_URLS='{"*":"rtsp://<JETSON_IP>:8554"}'` before recreating the iMac backend, then recreate Jetson `mediamtx` and `inference-worker`.
+
 Do not treat this as a capture failure; capture is already green.
 
 ## Later: Point 2

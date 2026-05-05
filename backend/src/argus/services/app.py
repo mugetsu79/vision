@@ -109,7 +109,7 @@ from argus.models.tables import (
     TrackingEvent,
 )
 from argus.services.model_catalog import resolve_catalog_status
-from argus.streaming.mediamtx import MediaMTXClient
+from argus.streaming.mediamtx import MediaMTXClient, StreamMode
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
     MediaMTXTokenIssuer,
@@ -2333,6 +2333,7 @@ class StreamService:
         self.video_feed_limiter = UserConcurrencyLimiter(
             limit=settings.video_feed_max_concurrent_per_user
         )
+        self._edge_relay_refresh_after: dict[tuple[UUID, str, str], datetime] = {}
 
     async def close(self) -> None:
         await self.negotiator.close()
@@ -2418,7 +2419,7 @@ class StreamService:
             fps_cap=camera.fps_cap,
             processed_native=_uses_processed_native_delivery(camera),
         )
-        return resolve_stream_access(
+        access = resolve_stream_access(
             camera_id=camera.id,
             processing_mode=camera.processing_mode,
             edge_node_id=camera.edge_node_id,
@@ -2429,6 +2430,51 @@ class StreamService:
             hls_base_url=self.settings.mediamtx_hls_base_url,
             mjpeg_base_url=self.settings.mediamtx_mjpeg_base_url,
             mjpeg_path_template=self.settings.mediamtx_mjpeg_path_template,
+        )
+        await self._ensure_edge_passthrough_relay(camera=camera, access=access)
+        return access
+
+    async def _ensure_edge_passthrough_relay(
+        self,
+        *,
+        camera: Camera,
+        access: StreamAccess,
+    ) -> None:
+        if camera.edge_node_id is None or access.mode is not StreamMode.PASSTHROUGH:
+            return
+        edge_rtsp_base = self._edge_mediamtx_rtsp_base_url(camera.edge_node_id)
+        if edge_rtsp_base is None:
+            return
+        edge_rtsp_base = edge_rtsp_base.rstrip("/")
+        cache_key = (camera.id, access.path_name, edge_rtsp_base)
+        now = datetime.now(tz=UTC)
+        refresh_after = self._edge_relay_refresh_after.get(cache_key)
+        if refresh_after is not None and refresh_after > now:
+            return
+
+        edge_rtsp_url = f"{edge_rtsp_base}/{access.path_name}"
+        source = self.token_issuer.build_internal_rtsp_url(
+            camera_id=camera.id,
+            path_name=access.path_name,
+            rtsp_url=edge_rtsp_url,
+            ttl_seconds=self.settings.mediamtx_jwt_worker_ttl_seconds,
+        )
+        await self.mediamtx.ensure_path(
+            access.path_name,
+            source=source,
+            source_on_demand=True,
+        )
+        ttl_seconds = max(1, self.settings.mediamtx_jwt_worker_ttl_seconds)
+        self._edge_relay_refresh_after[cache_key] = now + timedelta(
+            seconds=max(1, int(ttl_seconds * 0.8))
+        )
+
+    def _edge_mediamtx_rtsp_base_url(self, edge_node_id: UUID) -> str | None:
+        base_urls = self.settings.edge_mediamtx_rtsp_base_urls
+        return (
+            base_urls.get(str(edge_node_id))
+            or base_urls.get("*")
+            or base_urls.get("default")
         )
 
     def _release_video_feed_slot(

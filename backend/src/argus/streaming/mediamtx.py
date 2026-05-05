@@ -619,6 +619,13 @@ class MediaMTXClient:
             },
         )
 
+    async def ensure_path(self, path_name: str, *, source: str, source_on_demand: bool) -> None:
+        await self._ensure_path(
+            path_name,
+            source=source,
+            source_on_demand=source_on_demand,
+        )
+
     async def _request(
         self,
         method: str,
