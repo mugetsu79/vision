@@ -24,7 +24,7 @@ Raw TensorRT `.engine` files remain a planned accelerator path, not a normal cam
 - `master node` / `HQ node`: the central Vezor control plane and primary services node. It runs the API, PostgreSQL/TimescaleDB, Keycloak, NATS JetStream, MediaMTX, the frontend, and central workers.
 - `edge node`: a site-local compute box that can run a Vezor inference worker, local MediaMTX, a NATS leaf node, and an OTEL collector.
 - `camera native ingest`: the stream the analytics pipeline uses internally.
-- `browser delivery`: the stream variant operators watch in the UI. This can be lower resolution or lower FPS than native ingest.
+- `browser delivery`: the stream variant operators watch in the UI. `native` is always clean camera passthrough, `annotated` is the full-rate worker-published processed stream, and reduced profiles such as `1080p15`, `720p10`, and `540p5` are processed viewing renditions.
 
 ## Processing Modes
 
@@ -146,10 +146,16 @@ In this shape, Operations does not run shell commands. It changes desired state 
 Vezor separates analytics ingest from operator viewing:
 
 - analytics can keep using the native stream
-- browsers can receive a lower-bitrate rendition such as `1080p15`, `720p10`, or `540p5`
+- browsers can receive `native`, `annotated`, or a lower-bitrate rendition such as `1080p15`, `720p10`, or `540p5`
 - privacy-safe preview/transcode paths can be used even when passthrough is allowed
 
-This means the system can reduce bandwidth for operator viewing without necessarily lowering inference quality.
+The bandwidth meaning depends on deployment mode:
+
+- In `central`, the master still pulls the camera stream for inference. Reduced browser delivery profiles only reduce master-to-browser bandwidth and browser decode load; they do not reduce camera-to-master ingest bandwidth.
+- In `edge`, the edge node ingests and processes locally. Non-native browser delivery profiles are built on the edge and can reduce edge-to-master/browser viewing bandwidth.
+- In `hybrid`, stream delivery follows the assigned worker location: an edge-assigned camera behaves like edge delivery, while a hybrid camera without an edge assignment is central-like for browser delivery.
+
+Telemetry and inference are independent from browser delivery in all modes. A clean `native` view, an `annotated` view, and a reduced viewer profile can all refer to the same underlying inference run.
 
 ## Mode Selection Table
 

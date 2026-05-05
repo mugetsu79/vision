@@ -751,7 +751,7 @@ What good looks like:
    - leave privacy defaults as-is
    - Frame skip: `1`
    - FPS cap: `20`
-   - Browser delivery profile: `720p10`
+   - Browser delivery profile: `720p10 viewer preview`
 8. Click **Continue**
 9. In **Calibration**:
    - click **Add source point** 4 times
@@ -776,7 +776,7 @@ Repeat the same process, but use:
 - Primary model: choose the same registered iMac model as camera 1, usually `YOLO26n COCO`
 - Persistent active classes: select `person`, `car`, `bus`, `truck`, `motorcycle`, `bicycle`
 - Tracker type: `botsort`
-- Browser delivery profile: `720p10`
+- Browser delivery profile: `720p10 viewer preview`
 - Calibration:
   - click **Add source point** 4 times
   - click **Add destination point** 4 times
@@ -785,6 +785,8 @@ Repeat the same process, but use:
 What good looks like:
 
 - `Lab Camera 1` and `Lab Camera 2` are both visible in the cameras table
+
+In this iMac-only central test, `720p10 viewer preview` reduces only iMac-to-browser viewing bandwidth and browser decode load. It does not reduce camera-to-iMac ingest bandwidth because central inference still pulls the native camera stream.
 
 ### 2.12 Get the camera IDs
 
@@ -1154,7 +1156,7 @@ Keep these values:
 
 - Site: `Lab Site`
 - Tracker type: `botsort`
-- Browser delivery profile: `720p10`
+- Browser delivery profile: `720p10 edge bandwidth saver`
 - Calibration: keep the existing values
 
 Save the changes.
@@ -1162,6 +1164,7 @@ Save the changes.
 What good looks like:
 
 - `Lab Camera 2` now shows `edge` in the cameras table
+- `720p10 edge bandwidth saver` means the Jetson builds the reduced viewing stream locally before remote browser delivery
 
 ### 3.5 Refresh the camera 2 ID just to be safe
 
@@ -1248,9 +1251,11 @@ The edge compose file still starts a local `nats-leaf` service because that is t
 
 ### 3.8 Start the Jetson edge stack
 
-First configure the iMac backend to relay the Jetson's local MediaMTX passthrough
-path through the iMac MediaMTX instance. This keeps the browser pointed at the
-iMac while the actual edge camera video is pulled from Jetson MediaMTX on demand.
+First configure the iMac backend to relay the Jetson's local MediaMTX browser
+stream path through the iMac MediaMTX instance. `native` relays clean passthrough;
+`annotated` and reduced profiles relay the worker-published processed stream. This
+keeps the browser pointed at the iMac while the actual edge camera video is pulled
+from Jetson MediaMTX on demand.
 
 On the Jetson, get the Jetson LAN IP:
 
@@ -1375,7 +1380,7 @@ What good looks like:
 - camera 1 still works in `central` mode
 - camera 2 works in `edge` mode from the Jetson
 - the Jetson worker keeps running
-- Live still shows both cameras
+- Live still shows both cameras, including camera 2 video relayed from Jetson MediaMTX
 - History and Evidence Desk still work
 - Operations shows the central/edge split and does not invent unknown worker state
 

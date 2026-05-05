@@ -565,7 +565,7 @@ export interface components {
              * Id
              * @enum {string}
              */
-            id: "native" | "1080p15" | "720p10" | "540p5";
+            id: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
             /**
              * Kind
              * @enum {string}
@@ -577,6 +577,10 @@ export interface components {
             h?: number | null;
             /** Fps */
             fps?: number | null;
+            /** Label */
+            label?: string | null;
+            /** Description */
+            description?: string | null;
             /** Reason */
             reason?: string | null;
         } & {
@@ -589,7 +593,7 @@ export interface components {
              * @default 720p10
              * @enum {string}
              */
-            default_profile: "native" | "1080p15" | "720p10" | "540p5";
+            default_profile: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
             /**
              * Allow Native On Demand
              * @default true
@@ -725,6 +729,10 @@ export interface components {
             camera_id?: string | null;
             /** Rtsp Url */
             rtsp_url?: string | null;
+            /** @default central */
+            processing_mode: components["schemas"]["ProcessingMode"];
+            /** Edge Node Id */
+            edge_node_id?: string | null;
             browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
             privacy?: components["schemas"]["PrivacySettings"] | null;
         };
@@ -929,7 +937,7 @@ export interface components {
              * Default Profile
              * @enum {string}
              */
-            default_profile: "native" | "1080p15" | "720p10" | "540p5";
+            default_profile: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
             /** Available Profiles */
             available_profiles?: components["schemas"]["BrowserDeliveryProfile"][];
             native_status?: components["schemas"]["NativeAvailability"];
@@ -1825,7 +1833,7 @@ export interface components {
              * @default native
              * @enum {string}
              */
-            profile_id: "native" | "1080p15" | "720p10" | "540p5";
+            profile_id: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
             /**
              * Kind
              * @default passthrough
