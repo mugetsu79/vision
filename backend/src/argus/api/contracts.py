@@ -242,12 +242,13 @@ class PrivacySettings(BaseModel):
     strength: int = Field(default=7, ge=1, le=100)
 
 
-BrowserDeliveryProfileId = Literal["native", "1080p15", "720p10", "540p5"]
+BrowserDeliveryProfileId = Literal["native", "annotated", "1080p15", "720p10", "540p5"]
 
 
 def _default_browser_delivery_profiles() -> list[dict[str, Any]]:
     return [
         {"id": "native", "kind": "passthrough"},
+        {"id": "annotated", "kind": "transcode"},
         {"id": "1080p15", "kind": "transcode", "w": 1920, "h": 1080, "fps": 15},
         {"id": "720p10", "kind": "transcode", "w": 1280, "h": 720, "fps": 10},
         {"id": "540p5", "kind": "transcode", "w": 960, "h": 540, "fps": 5},
@@ -268,6 +269,8 @@ class BrowserDeliveryProfile(BaseModel):
     w: int | None = Field(default=None, gt=0)
     h: int | None = Field(default=None, gt=0)
     fps: int | None = Field(default=None, ge=1)
+    label: str | None = None
+    description: str | None = None
     reason: str | None = None
 
     model_config = ConfigDict(extra="allow")
@@ -294,6 +297,8 @@ class BrowserDeliverySettings(BaseModel):
 class CameraSourceProbeRequest(BaseModel):
     camera_id: UUID | None = None
     rtsp_url: str | None = Field(default=None, min_length=1)
+    processing_mode: ProcessingMode = ProcessingMode.CENTRAL
+    edge_node_id: UUID | None = None
     browser_delivery: BrowserDeliverySettings | None = None
     privacy: PrivacySettings | None = None
 

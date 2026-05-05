@@ -569,11 +569,15 @@ class CameraService:
         )
         existing_source_capability: SourceCapability | None = None
         source_capability: SourceCapability | None
+        processing_mode = payload.processing_mode
+        edge_node_id = payload.edge_node_id
         should_persist_probe = False
 
         if payload.camera_id is not None:
             async with self.session_factory() as session:
                 camera = await _load_camera(session, tenant_context.tenant_id, payload.camera_id)
+                processing_mode = camera.processing_mode
+                edge_node_id = camera.edge_node_id
                 supplied_rtsp_url = rtsp_url is not None
                 if payload.browser_delivery is None:
                     stored_browser_delivery = (
@@ -626,6 +630,8 @@ class CameraService:
                 requested=requested_delivery,
                 source_capability=source_capability,
                 privacy=privacy,
+                processing_mode=processing_mode,
+                edge_node_id=edge_node_id,
             ),
         )
 
@@ -766,6 +772,8 @@ class CameraService:
                 requested=payload.browser_delivery,
                 source_capability=source_capability,
                 privacy=privacy,
+                processing_mode=payload.processing_mode,
+                edge_node_id=None,
             )
             camera = Camera(
                 site_id=payload.site_id,
@@ -900,6 +908,11 @@ class CameraService:
                         else None
                     ),
                     privacy=dict(update_data.get("privacy", camera.privacy)),
+                    processing_mode=update_data.get(
+                        "processing_mode",
+                        camera.processing_mode,
+                    ),
+                    edge_node_id=camera.edge_node_id,
                 ).model_dump(mode="python")
             if "homography" in update_data and update_data["homography"] is not None:
                 update_data["homography"] = dict(update_data["homography"])
@@ -2718,6 +2731,8 @@ def _camera_delivery_diagnostic(camera: Camera) -> FleetDeliveryDiagnostic:
         requested=requested,
         privacy=camera.privacy,
         source_capability=source_capability,
+        processing_mode=camera.processing_mode,
+        edge_node_id=camera.edge_node_id,
     )
     selected = _resolve_worker_stream_settings(
         browser_delivery=resolved,
@@ -3008,6 +3023,8 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         ),
         source_capability=source_capability,
         privacy=privacy.model_dump(mode="python"),
+        processing_mode=camera.processing_mode,
+        edge_node_id=camera.edge_node_id,
     )
     return CameraResponse(
         id=camera.id,
@@ -3139,6 +3156,9 @@ def derive_browser_profiles(source: SourceCapability | None) -> DerivedBrowserPr
         if candidate.kind == "passthrough":
             allowed.append(candidate)
             continue
+        if candidate.w is None and candidate.h is None:
+            allowed.append(candidate)
+            continue
         if (
             candidate.w is not None
             and candidate.h is not None
@@ -3153,39 +3173,121 @@ def derive_browser_profiles(source: SourceCapability | None) -> DerivedBrowserPr
     return DerivedBrowserProfiles(allowed=allowed, unsupported=unsupported)
 
 
+def _is_edge_delivery_context(
+    *,
+    processing_mode: ProcessingMode,
+    edge_node_id: UUID | None,
+) -> bool:
+    return processing_mode is ProcessingMode.EDGE or edge_node_id is not None
+
+
+def _decorate_browser_delivery_profile(
+    profile: BrowserDeliveryProfile,
+    *,
+    processing_mode: ProcessingMode,
+    edge_node_id: UUID | None,
+) -> BrowserDeliveryProfile:
+    is_edge = _is_edge_delivery_context(
+        processing_mode=processing_mode,
+        edge_node_id=edge_node_id,
+    )
+    if profile.id == "native":
+        return profile.model_copy(
+            update={
+                "label": "Native edge passthrough" if is_edge else "Native camera",
+                "description": (
+                    "Clean edge MediaMTX passthrough relayed to the browser."
+                    if is_edge
+                    else "Clean camera passthrough through master MediaMTX."
+                ),
+            }
+        )
+    if profile.id == "annotated":
+        return profile.model_copy(
+            update={
+                "label": "Annotated edge stream" if is_edge else "Annotated",
+                "description": (
+                    "Full-rate processed stream published by the edge worker."
+                    if is_edge
+                    else "Full-rate processed stream published by the central worker."
+                ),
+            }
+        )
+    if is_edge:
+        return profile.model_copy(
+            update={
+                "label": f"{profile.id} edge bandwidth saver",
+                "description": "Downscaled on the edge node before remote browser delivery.",
+            }
+        )
+    return profile.model_copy(
+        update={
+            "label": f"{profile.id} viewer preview",
+            "description": (
+                "Reduces master-to-browser bandwidth only; central inference still ingests "
+                "the native camera stream."
+            ),
+        }
+    )
+
+
 def _build_source_aware_browser_delivery(
     *,
     requested: BrowserDeliverySettings,
     source_capability: SourceCapability | None,
     privacy: dict[str, object],
+    processing_mode: ProcessingMode,
+    edge_node_id: UUID | None,
 ) -> BrowserDeliverySettings:
     derived_profiles = derive_browser_profiles(source_capability)
-    allowed_profile_ids = {profile.id for profile in derived_profiles.allowed}
-    default_profile = _resolve_default_browser_profile(
-        requested.default_profile,
-        allowed_profile_ids,
-    )
     native_available = (
         requested.allow_native_on_demand
         and not bool(privacy.get("blur_faces", True))
         and not bool(privacy.get("blur_plates", True))
     )
+    blocked_profile_ids: set[BrowserDeliveryProfileId] = set()
     native_reason = None
     if not requested.allow_native_on_demand:
         native_reason = "native_disabled"
+        blocked_profile_ids.add("native")
     elif not native_available:
         native_reason = "privacy_filtering_required"
+        blocked_profile_ids.add("native")
+
+    allowed_profile_ids = {
+        profile.id for profile in derived_profiles.allowed if profile.id not in blocked_profile_ids
+    }
+    default_profile = _resolve_default_browser_profile(
+        requested.default_profile,
+        allowed_profile_ids,
+    )
+    decorated_allowed = [
+        _decorate_browser_delivery_profile(
+            profile,
+            processing_mode=processing_mode,
+            edge_node_id=edge_node_id,
+        )
+        for profile in derived_profiles.allowed
+    ]
+    decorated_unsupported = [
+        _decorate_browser_delivery_profile(
+            profile,
+            processing_mode=processing_mode,
+            edge_node_id=edge_node_id,
+        )
+        for profile in derived_profiles.unsupported
+    ]
 
     return BrowserDeliverySettings(
         default_profile=default_profile,
         allow_native_on_demand=requested.allow_native_on_demand,
         profiles=[
             profile.model_dump(exclude_none=True, mode="python")
-            for profile in derived_profiles.allowed
+            for profile in decorated_allowed
         ],
         unsupported_profiles=[
             profile.model_dump(exclude_none=True, mode="python")
-            for profile in derived_profiles.unsupported
+            for profile in decorated_unsupported
         ],
         native_status=NativeAvailability(available=native_available, reason=native_reason),
     )
@@ -3195,10 +3297,15 @@ def _resolve_default_browser_profile(
     requested_profile: BrowserDeliveryProfileId,
     allowed_profile_ids: set[BrowserDeliveryProfileId],
 ) -> BrowserDeliveryProfileId:
-    for profile_id in (requested_profile, "720p10", "540p5", "native"):
+    fallback_order: tuple[BrowserDeliveryProfileId, ...]
+    if requested_profile == "native":
+        fallback_order = ("native", "annotated", "720p10", "540p5")
+    else:
+        fallback_order = (requested_profile, "720p10", "540p5", "annotated", "native")
+    for profile_id in fallback_order:
         if profile_id in allowed_profile_ids:
             return profile_id
-    return "native"
+    return "annotated" if "annotated" in allowed_profile_ids else "native"
 
 
 async def _probe_source_capability(
