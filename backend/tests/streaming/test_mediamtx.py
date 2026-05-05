@@ -102,6 +102,72 @@ async def test_mediamtx_client_registers_passthrough_for_privacy_off_jetson() ->
 
 
 @pytest.mark.asyncio
+async def test_mediamtx_client_registers_annotated_for_jetson_transcode_profile() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        return Response(200, json={"ok": True})
+
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+    )
+
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+        target_width=1280,
+        target_height=720,
+        target_fps=10,
+    )
+
+    assert registration.mode is StreamMode.ANNOTATED_WHIP
+    assert registration.path_name == f"cameras/{camera_id}/annotated"
+    assert (
+        registration.publish_path
+        == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated"
+    )
+    assert registration.target_width == 1280
+    assert registration.target_height == 720
+    assert registration.target_fps == 10
+    assert requests == [
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
+            {
+                "name": f"cameras/{camera_id}/passthrough",
+                "source": "rtsp://camera.internal/live",
+                "sourceOnDemand": True,
+            },
+        ),
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated",
+            {
+                "name": f"cameras/{camera_id}/annotated",
+                "source": "publisher",
+                "sourceOnDemand": False,
+            },
+        ),
+    ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_mediamtx_client_registers_filtered_preview_and_deletes_passthrough_when_privacy_turns_on(  # noqa: E501
 ) -> None:
     requests: list[tuple[str, str, dict[str, object] | None]] = []

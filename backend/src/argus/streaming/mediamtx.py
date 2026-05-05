@@ -491,7 +491,7 @@ class MediaMTXClient:
                 ingest_path=ingest_path,
             )
 
-        if profile is PublishProfile.CENTRAL_GPU:
+        if profile is PublishProfile.CENTRAL_GPU or not privacy.requires_filtering:
             annotated_name = f"cameras/{camera_id}/annotated"
             annotated_path = f"{self.rtsp_base_url}/{annotated_name}"
             await self._ensure_path(
