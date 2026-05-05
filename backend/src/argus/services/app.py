@@ -2430,7 +2430,6 @@ class StreamService:
         stream_settings = _resolve_worker_stream_settings(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
-            processed_native=_uses_processed_native_delivery(camera),
         )
         access = resolve_stream_access(
             camera_id=camera.id,
@@ -2737,7 +2736,6 @@ def _camera_delivery_diagnostic(camera: Camera) -> FleetDeliveryDiagnostic:
     selected = _resolve_worker_stream_settings(
         browser_delivery=resolved,
         fps_cap=camera.fps_cap,
-        processed_native=_uses_processed_native_delivery(camera),
     )
     return FleetDeliveryDiagnostic(
         camera_id=camera.id,
@@ -3059,8 +3057,20 @@ def _camera_to_worker_config(
     settings: Settings,
     rtsp_url: str,
 ) -> WorkerConfigResponse:
-    browser_delivery = BrowserDeliverySettings.model_validate(
+    requested_browser_delivery = BrowserDeliverySettings.model_validate(
         camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+    )
+    source_capability = (
+        SourceCapability.model_validate(camera.source_capability)
+        if camera.source_capability is not None
+        else None
+    )
+    browser_delivery = _build_source_aware_browser_delivery(
+        requested=requested_browser_delivery,
+        source_capability=source_capability,
+        privacy=camera.privacy,
+        processing_mode=camera.processing_mode,
+        edge_node_id=camera.edge_node_id,
     )
     return WorkerConfigResponse(
         camera_id=camera.id,
@@ -3077,7 +3087,6 @@ def _camera_to_worker_config(
         stream=_resolve_worker_stream_settings(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
-            processed_native=_uses_processed_native_delivery(camera),
         ),
         model=_model_to_worker_settings(
             primary_model,
@@ -3347,31 +3356,31 @@ def _resolve_worker_stream_settings(
     *,
     browser_delivery: BrowserDeliverySettings,
     fps_cap: int,
-    processed_native: bool = False,
 ) -> WorkerStreamSettings:
     profile_payloads = browser_delivery.profiles or BrowserDeliverySettings().profiles
     profiles_by_id = {str(profile["id"]): dict(profile) for profile in profile_payloads}
     if "native" not in profiles_by_id:
         profiles_by_id["native"] = {"id": "native", "kind": "passthrough"}
+    if "annotated" not in profiles_by_id:
+        profiles_by_id["annotated"] = {"id": "annotated", "kind": "transcode"}
     selected = profiles_by_id.get(browser_delivery.default_profile)
     if selected is None:
         selected = profiles_by_id["native"]
-    if browser_delivery.default_profile == "native" and processed_native:
-        return WorkerStreamSettings(
-            profile_id="native",
-            kind="transcode",
-            width=None,
-            height=None,
-            fps=max(1, fps_cap),
-        )
     kind = str(selected.get("kind", "passthrough"))
     if kind == "transcode":
+        target_width = selected.get("w")
+        target_height = selected.get("h")
+        target_fps = selected.get("fps")
         return WorkerStreamSettings(
             profile_id=browser_delivery.default_profile,
             kind="transcode",
-            width=int(selected["w"]),
-            height=int(selected["h"]),
-            fps=min(max(1, fps_cap), int(selected["fps"])),
+            width=int(target_width) if target_width is not None else None,
+            height=int(target_height) if target_height is not None else None,
+            fps=(
+                min(max(1, fps_cap), int(target_fps))
+                if target_fps is not None
+                else max(1, fps_cap)
+            ),
         )
     return WorkerStreamSettings(
         profile_id=browser_delivery.default_profile,
@@ -3380,10 +3389,6 @@ def _resolve_worker_stream_settings(
         height=None,
         fps=max(1, fps_cap),
     )
-
-
-def _uses_processed_native_delivery(camera: Camera) -> bool:
-    return camera.processing_mode is ProcessingMode.CENTRAL and camera.edge_node_id is None
 
 
 def _normalize_points(
@@ -3476,7 +3481,6 @@ async def _camera_setup_frame_size(camera: Camera, settings: Settings) -> FrameS
     stream_settings = _resolve_worker_stream_settings(
         browser_delivery=browser_delivery,
         fps_cap=camera.fps_cap,
-        processed_native=_uses_processed_native_delivery(camera),
     )
     if stream_settings.width is not None and stream_settings.height is not None:
         return FrameSize(width=stream_settings.width, height=stream_settings.height)
