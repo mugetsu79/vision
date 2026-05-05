@@ -2443,16 +2443,16 @@ class StreamService:
             mjpeg_base_url=self.settings.mediamtx_mjpeg_base_url,
             mjpeg_path_template=self.settings.mediamtx_mjpeg_path_template,
         )
-        await self._ensure_edge_passthrough_relay(camera=camera, access=access)
+        await self._ensure_edge_stream_relay(camera=camera, access=access)
         return access
 
-    async def _ensure_edge_passthrough_relay(
+    async def _ensure_edge_stream_relay(
         self,
         *,
         camera: Camera,
         access: StreamAccess,
     ) -> None:
-        if camera.edge_node_id is None or access.mode is not StreamMode.PASSTHROUGH:
+        if camera.edge_node_id is None:
             return
         edge_rtsp_base = self._edge_mediamtx_rtsp_base_url(camera.edge_node_id)
         if edge_rtsp_base is None:

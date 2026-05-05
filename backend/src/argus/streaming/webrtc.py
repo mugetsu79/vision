@@ -390,22 +390,22 @@ def resolve_stream_access(
     mjpeg_base_url: str,
     mjpeg_path_template: str = "{base}/{path}/mjpeg",
 ) -> StreamAccess:
-    if (
-        _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id)
-        and stream_kind == StreamMode.PASSTHROUGH.value
-        and not _privacy_requires_filtering(privacy)
-    ):
+    privacy_required = _privacy_requires_filtering(privacy)
+    central_delivery = _uses_central_delivery(
+        processing_mode=processing_mode,
+        edge_node_id=edge_node_id,
+    )
+    requested_passthrough = stream_kind == StreamMode.PASSTHROUGH.value
+
+    if requested_passthrough and not privacy_required:
         mode = StreamMode.PASSTHROUGH
         variant = "passthrough"
-    elif _uses_central_delivery(processing_mode=processing_mode, edge_node_id=edge_node_id):
-        mode = StreamMode.ANNOTATED_WHIP
-        variant = "annotated"
-    elif _privacy_requires_filtering(privacy):
+    elif privacy_required and not central_delivery:
         mode = StreamMode.FILTERED_PREVIEW
         variant = "preview"
     else:
-        mode = StreamMode.PASSTHROUGH
-        variant = "passthrough"
+        mode = StreamMode.ANNOTATED_WHIP
+        variant = "annotated"
 
     path_name = f"cameras/{camera_id}/{variant}"
     rtsp_base = rtsp_base_url.rstrip("/")
@@ -611,4 +611,4 @@ def _uses_central_delivery(
     processing_mode: ProcessingMode,
     edge_node_id: UUID | None,
 ) -> bool:
-    return processing_mode is ProcessingMode.CENTRAL and edge_node_id is None
+    return processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID} and edge_node_id is None

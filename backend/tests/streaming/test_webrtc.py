@@ -72,6 +72,27 @@ def test_resolve_stream_access_returns_passthrough_variant_for_central_native_pr
     assert access.mjpeg_url == f"http://mediamtx.internal:8890/cameras/{camera_id}/passthrough/mjpeg"
 
 
+def test_resolve_stream_access_returns_annotated_variant_for_edge_transcode_profile() -> None:
+    camera_id = uuid4()
+
+    access = resolve_stream_access(
+        camera_id=camera_id,
+        processing_mode=ProcessingMode.EDGE,
+        edge_node_id=uuid4(),
+        stream_kind="transcode",
+        privacy={"blur_faces": False, "blur_plates": False},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+
+    assert access.mode is StreamMode.ANNOTATED_WHIP
+    assert access.path_name == f"cameras/{camera_id}/annotated"
+    assert access.rtsp_url == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated"
+    assert access.whep_url == f"http://mediamtx.internal:8889/cameras/{camera_id}/annotated/whep"
+
+
 def test_resolve_stream_access_disables_passthrough_when_edge_privacy_is_required() -> None:
     camera_id = uuid4()
 
