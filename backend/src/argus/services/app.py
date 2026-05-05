@@ -14,6 +14,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
+from nats.js import api as js_api
 from sqlalchemy import bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -2551,7 +2552,11 @@ class NatsTelemetryService:
                 queue.get_nowait()
             queue.put_nowait(frame)
 
-        nats_subscription = await self.event_client.subscribe("evt.tracking.*", handle_message)
+        nats_subscription = await self.event_client.subscribe(
+            "evt.tracking.*",
+            handle_message,
+            deliver_policy=js_api.DeliverPolicy.NEW,
+        )
         return NatsTelemetrySubscription(
             event_client=self.event_client,
             queue=queue,

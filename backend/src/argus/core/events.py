@@ -105,7 +105,13 @@ class NatsJetStreamClient:
             span.set_attribute("messaging.destination.name", subject)
             await jetstream.publish(subject, payload.model_dump_json().encode("utf-8"))
 
-    async def subscribe(self, subject: str, handler: MessageHandler) -> Any:
+    async def subscribe(
+        self,
+        subject: str,
+        handler: MessageHandler,
+        *,
+        deliver_policy: js_api.DeliverPolicy | None = None,
+    ) -> Any:
         jetstream = self._require_jetstream()
 
         async def callback(message: Msg) -> None:
@@ -121,7 +127,12 @@ class NatsJetStreamClient:
                 )
                 await message.ack()
 
-        return await jetstream.subscribe(subject, cb=callback, manual_ack=True)
+        return await jetstream.subscribe(
+            subject,
+            cb=callback,
+            manual_ack=True,
+            deliver_policy=deliver_policy,
+        )
 
     def _require_jetstream(self) -> JetStreamContext:
         if self._jetstream is None:
