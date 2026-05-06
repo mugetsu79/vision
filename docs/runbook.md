@@ -161,6 +161,23 @@ For a single-node edge deployment:
 5. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d --build`.
 6. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
 
+Docker Compose interpolates the full service definition even for build-only
+commands such as `docker compose ... build inference-worker`. If you are doing a
+long first image build with a short-lived dev token, export all stable runtime
+values plus a temporary build-only token first:
+
+```bash
+export ARGUS_API_BASE_URL="http://<master-ip>:8000"
+export ARGUS_API_BEARER_TOKEN="build-only-token"
+export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@<master-ip>:5432/argus"
+export ARGUS_NATS_URL="nats://<master-ip>:4222"
+export ARGUS_MINIO_ENDPOINT="<master-ip>:9000"
+export ARGUS_EDGE_CAMERA_ID="<camera-id>"
+```
+
+After the build finishes, replace `ARGUS_API_BEARER_TOKEN` with a fresh real
+token before running `docker compose ... config`, `up`, or the worker itself.
+
 Before starting processed-stream tests, verify the edge image has the expected
 runtime pieces:
 

@@ -1316,6 +1316,18 @@ cd "$HOME/vision"
 # Jetson cp310 accelerated ONNX Runtime wheel URL. Leave it unset for dd66ec7.
 export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 
+# Compose interpolates the full service even for build-only and image-check
+# commands. Set the stable runtime values now, then replace the token below
+# after the image build so it is fresh for the actual worker start.
+export ARGUS_API_BASE_URL="http://$IMAC_IP:8000"
+export ARGUS_API_BEARER_TOKEN="build-only-token"
+export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@$IMAC_IP:5432/argus"
+export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
+export ARGUS_MINIO_ACCESS_KEY="argus"
+export ARGUS_MINIO_SECRET_KEY="argus-dev-secret"
+export ARGUS_EDGE_CAMERA_ID="$CAMERA_TWO_ID"
+export ARGUS_NATS_URL="nats://$IMAC_IP:4222"
+
 docker compose -f infra/docker-compose.edge.yml build --no-cache inference-worker
 
 docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
@@ -1325,7 +1337,7 @@ docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
 docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
   --entrypoint gst-inspect-1.0 inference-worker rtspclientsink
 
-# Refresh the token after the build, not before it. Large first builds can outlive a dev token.
+# Replace the build-only placeholder after the build. Large first builds can outlive a dev token.
 JETSON_TOKEN="$(
   curl -fsS \
     --resolve "localhost:8080:$IMAC_IP" \
@@ -1334,14 +1346,7 @@ JETSON_TOKEN="$(
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 )"
 
-export ARGUS_API_BASE_URL="http://$IMAC_IP:8000"
 export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
-export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@$IMAC_IP:5432/argus"
-export ARGUS_MINIO_ENDPOINT="$IMAC_IP:9000"
-export ARGUS_MINIO_ACCESS_KEY="argus"
-export ARGUS_MINIO_SECRET_KEY="argus-dev-secret"
-export ARGUS_EDGE_CAMERA_ID="$CAMERA_TWO_ID"
-export ARGUS_NATS_URL="nats://$IMAC_IP:4222"
 
 curl -fsS "$ARGUS_API_BASE_URL/healthz"
 curl -fsS \

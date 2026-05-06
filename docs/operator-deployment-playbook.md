@@ -461,6 +461,7 @@ Then:
 export ARGUS_API_BASE_URL="http://<master-ip>:8000"
 export ARGUS_API_BEARER_TOKEN="<fresh-access-token>"
 export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@<master-ip>:5432/argus"
+export ARGUS_NATS_URL="nats://<master-ip>:4222"
 export ARGUS_MINIO_ENDPOINT="<master-ip>:9000"
 export ARGUS_EDGE_CAMERA_ID="<camera-id>"
 export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
