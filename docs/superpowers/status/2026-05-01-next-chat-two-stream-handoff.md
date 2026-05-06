@@ -110,10 +110,11 @@ Loaded detection model YOLO26n COCO Edge with provider CPUExecutionProvider
 
 Root cause hypothesis:
 
-- `backend/Dockerfile.edge` creates a Python 3.12 virtualenv.
-- `backend/pyproject.toml` installs CPU-only `onnxruntime` on Linux `aarch64`.
-- the Dockerfile has a `JETSON_ORT_WHEEL_URL` hook, but no accelerated Jetson ONNX Runtime wheel is configured.
-- NVIDIA's Jetson AI Lab wheel found during debugging is `onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl`, which is Python 3.10, not Python 3.12.
+- prior to `525b9824`, `backend/Dockerfile.edge` created a Python 3.12 virtualenv.
+- the accelerated Jetson ONNX Runtime wheel found during debugging is `onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl`, which is Python 3.10, not Python 3.12.
+- `525b9824` changes the Jetson edge image to use the Jetson base image's system Python 3.10 virtualenv and wires `JETSON_ORT_WHEEL_URL` through edge Compose.
+- if `JETSON_ORT_WHEEL_URL` is unset during build, the image falls back to CPU `onnxruntime` and CPU provider output remains expected.
+- the central/backend image remains Python 3.12; there is no separate generic non-Jetson Python 3.12 edge image in the current Compose stack.
 
 Verification command:
 
@@ -127,11 +128,11 @@ Bad current output: only `AzureExecutionProvider` and `CPUExecutionProvider`.
 
 Target output: includes `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`.
 
-Next implementation options:
+Current validation order:
 
-- preferred lab path: add a Jetson-specific Python 3.10 edge worker image/runtime and install the Jetson accelerated `onnxruntime-gpu` wheel from the Jetson AI Lab index
-- heavier path: build a Python 3.12-compatible ONNX Runtime wheel with TensorRT/CUDA providers for JetPack 6.x
-- later production path: implement the planned raw TensorRT `.engine` detector runtime from `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md`
+1. Test `dd66ec7b` first if you want to isolate the Jetson processed-stream publisher fix. This still uses the previous Python runtime and should only be used to validate native plus annotated/reduced delivery behavior.
+2. Then pull the branch tip (`525b9824` or newer), export a compatible Jetson cp310 `JETSON_ORT_WHEEL_URL`, rebuild with `--no-cache`, and verify Python 3.10 plus ONNX Runtime providers inside the container.
+3. If provider output is still CPU-only after setting `JETSON_ORT_WHEEL_URL`, treat it as a wheel/runtime compatibility problem, not a browser delivery problem.
 
 ### Open Jetson Issue 2: iMac Live Page Does Not Show Jetson Video
 
@@ -187,6 +188,13 @@ Implementation update on 2026-05-05:
 - Next lab validation: set `ARGUS_EDGE_MEDIAMTX_RTSP_BASE_URLS='{"*":"rtsp://<JETSON_IP>:8554"}'` before recreating the iMac backend, then recreate Jetson `mediamtx` and `inference-worker`.
 
 Do not treat this as a capture failure; capture is already green.
+
+Implementation update on 2026-05-06:
+
+- `dd66ec7b` routes Jetson processed browser streams through the GStreamer/NVIDIA encoder publisher instead of the central FFmpeg/libx264 publisher.
+- At `dd66ec7b`, validate native, annotated, and reduced profiles on Jetson without mixing in the Python 3.10 runtime change.
+- `525b9824` then changes the Jetson edge image runtime to Python 3.10 for cp310 accelerated ONNX Runtime wheels.
+- Pulling branch tip includes both fixes; use the detached `dd66ec7b` checkpoint first only when you want a clean A/B test.
 
 ## Later: Point 2
 

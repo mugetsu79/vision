@@ -6,7 +6,7 @@
 
 **Architecture:** Treat browser delivery as a resolved stream contract that is independent from inference ingest. Backend profile resolution produces stable ids plus source-aware labels, worker config uses the resolved profile to decide passthrough versus processed publishing, MediaMTX registers matching central or edge paths, and the Live UI displays the actual stream mode instead of hiding it behind profile names.
 
-**Tech Stack:** Python 3.12, FastAPI/Pydantic, MediaMTX, pytest, React/TypeScript, Vitest, Playwright.
+**Tech Stack:** Python 3.12 for central/backend and local iMac workers, Python 3.10 for the Jetson edge image, FastAPI/Pydantic, MediaMTX, pytest, React/TypeScript, Vitest, Playwright.
 
 ---
 

@@ -253,6 +253,13 @@ For controlled benchmarking or mitigation, these environment variables can overr
 
 Use the overrides sparingly. Prefer the automatic policy for normal deployment, and only force a provider when you are measuring performance or isolating a runtime-specific issue.
 
+Current image packaging is narrower than the product model: `edge` remains a
+portable deployment role, but `infra/docker-compose.edge.yml` currently builds
+the Jetson-specific Python 3.10 edge worker image. That Python 3.10 choice is
+intentional for Jetson ONNX Runtime GPU wheels. The central/backend image remains
+Python 3.12. Do not assume a generic non-Jetson edge image exists until a
+hardware-specific image and bootstrap path are added.
+
 ### Success criteria
 
 - operators can log in and view the site
@@ -336,7 +343,7 @@ That classification should determine whether the site defaults to `central` or `
 ### Operational guardrails
 
 - standardize one edge hardware family first
-- keep one canonical edge image and one canonical bootstrap process
+- keep one canonical Jetson edge image and one canonical bootstrap process first
 - do not mix many experimental edge hardware types in the first rollout
 - use observability from day one, not after the fact
 

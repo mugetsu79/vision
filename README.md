@@ -32,8 +32,15 @@ The current branch has moved beyond a pure dev scaffold. The main operator workf
 - **Vision pipeline**: detector, tracker, privacy, zones, rules, homography, ANPR hooks
 - **Deployment targets**:
   - master/control plane: Linux `amd64` is the main production target
-  - edge inference: Jetson Orin Nano Super 8 GB is the hardened reference target
+  - edge inference: Jetson Orin Nano Super 8 GB is the hardened packaged target
   - lab/dev: macOS or Linux workstations are fine for bring-up and functional testing
+
+The central/backend image and local development environment use Python 3.12. The
+current `infra/docker-compose.edge.yml` path builds `backend/Dockerfile.edge`,
+which is a Jetson-oriented edge worker image that uses the Jetson base image's
+system Python 3.10 so cp310 Jetson ONNX Runtime GPU wheels can be installed.
+There is not currently a separate generic non-Jetson edge image that preserves
+Python 3.12.
 
 ## Quick Start
 
@@ -42,7 +49,7 @@ These steps bring up the local development stack.
 ### Prerequisites
 
 - Docker + Docker Compose
-- Python `3.12+`
+- Python `3.12+` for local development and the central/backend image
 - [`uv`](https://github.com/astral-sh/uv)
 - Node `22+`
 - Corepack enabled
@@ -187,7 +194,7 @@ The iMac + Jetson path documented in the lab guide is a valuable pilot topology:
 
 - **Master / HQ node**: Linux `amd64` server or workstation
 - **Central inference GPU**: NVIDIA L4 24 GB is the reference target
-- **Edge node**: Jetson Orin Nano Super 8 GB
+- **Edge node**: Jetson Orin Nano Super 8 GB with the Python 3.10 Jetson edge image
 
 ### Good lab / pilot setups
 
@@ -198,6 +205,13 @@ The iMac + Jetson path documented in the lab guide is a valuable pilot topology:
 ### Important note
 
 The repo supports useful lab and pilot workflows on macOS, but the long-term production central inference path is still centered on Linux + NVIDIA.
+
+`edge` is a deployment role, not a synonym for Jetson in the product model. In
+this repository's current packaging, however, the canonical edge Compose image
+is Jetson-specific. For non-Jetson edge hardware, either run a host worker with
+the central/backend Python 3.12 environment for lab testing, or add a dedicated
+edge image for that hardware family before treating it as a supported deployment
+target.
 
 ## Current State
 

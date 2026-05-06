@@ -1257,6 +1257,37 @@ stream path through the iMac MediaMTX instance. `native` relays clean passthroug
 keeps the browser pointed at the iMac while the actual edge camera video is pulled
 from Jetson MediaMTX on demand.
 
+#### Choose the validation checkpoint
+
+If you want to isolate the Jetson processed-stream publisher fix first, test
+commit `dd66ec7b` before pulling the full edge Python runtime refactor:
+
+```bash
+cd "$HOME/vision"
+git fetch origin
+git switch --detach dd66ec7b
+unset JETSON_ORT_WHEEL_URL
+```
+
+At `dd66ec7b`, the Jetson image still uses the previous Python runtime. Use that
+checkpoint only to validate native plus annotated/reduced stream delivery.
+Acceleration is still expected to resolve to CPU there.
+
+After that test, return to the branch tip to validate the Python 3.10 Jetson edge
+image and ONNX Runtime provider behavior:
+
+```bash
+cd "$HOME/vision"
+git switch codex/native-passthrough-contract
+git pull --ff-only origin codex/native-passthrough-contract
+```
+
+Commit `525b9824` and newer use the Jetson base image's system Python 3.10
+virtualenv in `backend/Dockerfile.edge`. That replaces the previous edge image
+runtime for this Compose path. The central/backend image remains Python 3.12,
+but there is no separate generic non-Jetson Python 3.12 edge image in this lab
+compose stack.
+
 On the Jetson, get the Jetson LAN IP:
 
 ```bash
@@ -1280,7 +1311,12 @@ On the Jetson:
 
 ```bash
 cd "$HOME/vision"
-docker compose -f infra/docker-compose.edge.yml build inference-worker
+
+# Only set this when testing the full Python 3.10 edge image and you have a
+# Jetson cp310 accelerated ONNX Runtime wheel URL. Leave it unset for dd66ec7.
+# export JETSON_ORT_WHEEL_URL="https://.../onnxruntime_gpu-...-cp310-cp310-linux_aarch64.whl"
+
+docker compose -f infra/docker-compose.edge.yml build --no-cache inference-worker
 
 # Refresh the token after the build, not before it. Large first builds can outlive a dev token.
 JETSON_TOKEN="$(
@@ -1330,6 +1366,10 @@ What good looks like:
 - the `/run/secrets` warning is harmless in this local-dev Compose path
 - Jetson MediaMTX can reach `/.well-known/argus/mediamtx/jwks.json` on the iMac
   through `ARGUS_API_BASE_URL`, which lets the iMac relay read its RTSP path
+- at `dd66ec7b`, annotated/reduced stream delivery should work but CPU ONNX Runtime is still expected
+- at branch tip `525b9824` or newer, `/app/.venv/bin/python` should report Python 3.10 inside the Jetson worker image
+- if `JETSON_ORT_WHEEL_URL` is set to a compatible cp310 Jetson ONNX Runtime GPU wheel, `onnxruntime.get_available_providers()` should include `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`
+- if `JETSON_ORT_WHEEL_URL` is unset, `CPUExecutionProvider` remains expected
 
 ### 3.9 Confirm camera 2 is now working from the Jetson
 
@@ -1373,6 +1413,19 @@ curl -s http://127.0.0.1:9108/metrics | head
 What good looks like:
 
 - you see Prometheus-style metrics text
+
+To check the Python and ONNX Runtime provider inside the edge image:
+
+```bash
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint /app/.venv/bin/python inference-worker \
+  -c "import sys, onnxruntime as ort; print(sys.version); print(ort.__version__); print(ort.get_available_providers())"
+```
+
+At branch tip `525b9824` or newer, Python should report `3.10.x`. If
+`JETSON_ORT_WHEEL_URL` was unset during the image build, CPU-only providers are
+expected. If you exported a compatible Jetson cp310 accelerated wheel before the
+build, expect `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`.
 
 ### 3.11 Test B is a pass only if all of these are true
 

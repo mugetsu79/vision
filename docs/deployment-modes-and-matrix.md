@@ -91,9 +91,12 @@ The software architecture is designed to be portable across `linux/amd64` and `l
 
 Operationally, though:
 
-- Jetson is the most explicitly packaged and validated edge target today
+- Jetson is the explicitly packaged and validated edge target today
+- the current Compose edge image is Jetson-specific and uses Python 3.10 for cp310 Jetson ONNX Runtime GPU wheels
+- the central/backend image remains Python 3.12
 - generic `x86` edge nodes are plausible, especially with NVIDIA GPUs
 - generic `arm64` edge nodes other than Jetson are possible in principle, but are not as production-hardened in this repo yet
+- there is no separate generic non-Jetson Python 3.12 edge image in the current Compose stack
 
 ## Dev, Pilot, And Production Topologies
 

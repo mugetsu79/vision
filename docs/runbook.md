@@ -119,6 +119,23 @@ Then run the local preflight:
 
 The preflight checks JetPack/L4T compatibility, CUDA 12.6, TensorRT 10.x, NVDEC availability, the expected lack of NVENC on Orin Nano, Docker, Docker Compose v2, NVIDIA Container Toolkit, FFmpeg/FFprobe, and the GStreamer RTSP/H264 elements used by the host diagnostics and worker fallback path.
 
+### Edge Image Runtime
+
+The current edge Compose path is Jetson-specific:
+
+- `infra/docker-compose.edge.yml` builds `backend/Dockerfile.edge`
+- that image uses the Jetson base image's system Python 3.10 virtualenv
+- the Python 3.10 runtime is intentional because the accelerated Jetson ONNX Runtime wheels available for this lab are `cp310`
+- `JETSON_ORT_WHEEL_URL` is passed as a build argument and should point to the Jetson accelerated `onnxruntime-gpu` wheel when testing CUDA/TensorRT providers
+- if `JETSON_ORT_WHEEL_URL` is unset, the image falls back to CPU ONNX Runtime and `CPUExecutionProvider` remains expected
+
+The central/backend image remains Python 3.12. There is no separate generic
+non-Jetson edge image still using Python 3.12 in the current Compose stack. For
+non-Jetson edge hardware, treat the product role as portable but the packaging
+as not yet hardened: run a host worker from the central/backend Python 3.12
+environment for lab experiments, or create a hardware-specific edge image before
+production use.
+
 ## Edge Bring-Up
 
 For a single-node edge deployment:
@@ -131,9 +148,10 @@ For a single-node edge deployment:
    - `ARGUS_NATS_URL`
    - `ARGUS_MINIO_ENDPOINT`
    - `ARGUS_EDGE_CAMERA_ID`
-3. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
-4. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d`.
-5. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
+3. If validating Jetson acceleration, export `JETSON_ORT_WHEEL_URL` before building the image.
+4. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
+5. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d --build`.
+6. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
 
 This Compose path is appropriate for lab and pilot bring-up. In the current iMac + Jetson lab, set `ARGUS_NATS_URL` directly to the master NATS listener, for example `nats://192.168.1.20:4222`. In production, the same edge responsibilities should be run under a supervisor so they restart after reboot, report per-worker status, and can receive constrained lifecycle requests from the control plane. The NATS leaf topology remains the intended hardened production shape once bootstrap and credentials are supervisor-managed.
 
