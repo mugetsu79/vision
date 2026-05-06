@@ -191,7 +191,7 @@ Do not treat this as a capture failure; capture is already green.
 
 Implementation update on 2026-05-06:
 
-- `dd66ec7b` routes Jetson processed browser streams through the GStreamer/NVIDIA encoder publisher instead of the central FFmpeg/libx264 publisher.
+- `dd66ec7b` routed Jetson processed browser streams through a GStreamer/NVIDIA encoder publisher, but Orin Nano exposes no `/dev/v4l2-nvenc`; branch tip now publishes processed Jetson streams through FFmpeg/libx264 on the edge instead.
 - At `dd66ec7b`, validate native, annotated, and reduced profiles on Jetson without mixing in the Python 3.10 runtime change.
 - `525b9824` then changes the Jetson edge image runtime to Python 3.10 for cp310 accelerated ONNX Runtime wheels.
 - Pulling branch tip includes both fixes; use the detached `dd66ec7b` checkpoint first only when you want a clean A/B test.

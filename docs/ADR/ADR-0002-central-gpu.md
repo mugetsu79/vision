@@ -11,7 +11,7 @@ V3 runs in a **true-hybrid** topology. Cameras marked `central` or `hybrid` have
 
 - **Scope:** mid-scale VMS, up to 50 sites and 250 cameras total. Expected steady-state central load: **30–50 concurrent streams**, with bursts to 75 during peak traffic hours or multi-site replay.
 - **Per-stream budget (reference workload):** YOLO12n FP16 @ 640×640, BoT-SORT, optional PPE secondary classifier, homography speed calc, privacy blur, WHIP push with NVENC. Measured on L4 24 GB: ~350 MB VRAM and ~3% GPU utilisation per 25 fps stream.
-- **Hard requirements:** hardware video encode (NVENC) — the edge Jetson Orin Nano lacks it, so the annotated-frame re-encode for live overlay can only happen centrally. TensorRT 10 support. INT8 support for future quantized models. PCIe form factor that fits 2U / 4U rack and standard workstation chassis.
+- **Hard requirements:** hardware video encode (NVENC) for high-density central processed streams. The edge Jetson Orin Nano lacks NVENC; edge processed profiles can still publish via software H.264 for low-rate lab/pilot workloads, but central hardware encode remains the capacity target. TensorRT 10 support. INT8 support for future quantized models. PCIe form factor that fits 2U / 4U rack and standard workstation chassis.
 - **Soft requirements:** low TDP (fits existing colocation power budget), good resale path (public-cloud equivalents available for staging), CUDA 12.6+ driver compatibility.
 
 Non-functional requirements: **reliability (no single GPU as sole failure domain once past 75 streams)**, **headroom for a local LLM fallback** (running a small Llama 3.x / Qwen for air-gapped deployments on the same box is desirable), and **operating-cost predictability** over a 3-year amortization window.

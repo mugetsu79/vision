@@ -1335,7 +1335,8 @@ docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
   -c "import sys, onnxruntime as ort; print(sys.version); print(ort.__version__); print(ort.get_available_providers())"
 
 docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
-  --entrypoint gst-inspect-1.0 inference-worker rtspclientsink
+  --entrypoint /bin/sh inference-worker \
+  -lc 'ffmpeg -hide_banner -encoders | grep -q libx264'
 
 # Replace the build-only placeholder after the build. Large first builds can outlive a dev token.
 JETSON_TOKEN="$(
@@ -1382,7 +1383,7 @@ What good looks like:
 - at branch tip `525b9824` or newer, `/app/.venv/bin/python` should report Python 3.10 inside the Jetson worker image
 - if `JETSON_ORT_WHEEL_URL` is set to a compatible cp310 Jetson ONNX Runtime GPU wheel, `onnxruntime.get_available_providers()` should include `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`
 - if `JETSON_ORT_WHEEL_URL` is unset, `CPUExecutionProvider` remains expected
-- `gst-inspect-1.0 rtspclientsink` should succeed inside the worker image; if it says `No such element or plugin`, pull the latest branch and rebuild the edge image with `--no-cache`
+- the FFmpeg/libx264 encoder check should exit successfully; Orin Nano has no NVENC, so processed annotated/reduced profiles use software H.264 publish on the edge
 
 ### 3.9 Confirm camera 2 is now working from the Jetson
 
@@ -1589,7 +1590,8 @@ docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
   --entrypoint gst-inspect-1.0 inference-worker avdec_h264
 
 docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
-  --entrypoint gst-inspect-1.0 inference-worker rtspclientsink
+  --entrypoint /bin/sh inference-worker \
+  -lc 'ffmpeg -hide_banner -encoders | grep -q libx264'
 ```
 
 Now test both container decode paths:
@@ -1610,7 +1612,7 @@ What the container check means:
 
 - if `nvv4l2decoder` is missing, rerun the Jetson preflight and fix the NVIDIA runtime/NVDEC setup before relying on hardware decode
 - if `avdec_h264` is missing, pull the latest repo and rebuild the edge image; the fallback path needs the `gstreamer1.0-libav` package inside the container
-- if `rtspclientsink` is missing, pull the latest repo and rebuild the edge image; processed annotated/reduced profiles need the `gstreamer1.0-rtsp` package inside the container
+- if the FFmpeg/libx264 check fails, pull the latest repo and rebuild the edge image; processed annotated/reduced profiles need software H.264 publish on Orin Nano because NVENC is absent
 - if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker uses a native GStreamer raw-frame reader first, then `avdec_h264`, then FFmpeg rawvideo only as a last-resort fallback
 - if both container decode paths work but the worker still reconnects forever, capture the worker logs plus the GStreamer command results before changing model settings
 

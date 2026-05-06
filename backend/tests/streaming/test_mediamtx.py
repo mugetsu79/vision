@@ -171,7 +171,7 @@ async def test_mediamtx_client_registers_annotated_for_jetson_transcode_profile(
 
 
 @pytest.mark.asyncio
-async def test_default_publisher_factory_uses_gstreamer_for_jetson_profile(
+async def test_default_publisher_factory_uses_ffmpeg_for_jetson_profile_without_nvenc(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     created: list[tuple[StreamRegistration, tuple[int, ...], str]] = []
@@ -185,7 +185,12 @@ async def test_default_publisher_factory_uses_gstreamer_for_jetson_profile(
         created.append((registration, tuple(int(value) for value in frame.shape), publish_url))
         return _FakeFramePublisher()
 
-    monkeypatch.setattr(_GStreamerFramePublisher, "create", fake_create)
+    async def fail_gstreamer_create(**kwargs: object) -> _FakeFramePublisher:
+        del kwargs
+        raise AssertionError("Jetson Orin Nano processed streams must not require NVENC")
+
+    monkeypatch.setattr(_GStreamerFramePublisher, "create", fail_gstreamer_create)
+    monkeypatch.setattr(_FFmpegFramePublisher, "create", fake_create)
 
     registration = StreamRegistration(
         camera_id=uuid4(),

@@ -837,21 +837,11 @@ async def _default_publisher_factory(
     publish_url: str,
 ) -> FramePublisher:
     if registration.publish_profile is PublishProfile.JETSON_NANO:
-        try:
-            return await _GStreamerFramePublisher.create(
-                registration=registration,
-                frame=frame,
-                publish_url=publish_url,
-            )
-        except RuntimeError:
-            LOGGER.warning(
-                "Jetson GStreamer publisher unavailable; falling back to ffmpeg.",
-                exc_info=True,
-                extra={
-                    "camera_id": str(registration.camera_id),
-                    "path_name": registration.path_name,
-                },
-            )
+        return await _FFmpegFramePublisher.create(
+            registration=registration,
+            frame=frame,
+            publish_url=publish_url,
+        )
     return await _FFmpegFramePublisher.create(
         registration=registration,
         frame=frame,
