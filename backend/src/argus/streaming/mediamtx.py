@@ -64,6 +64,7 @@ class StreamRegistration:
     target_width: int | None = None
     target_height: int | None = None
     ingest_path: str = ""
+    publish_profile: PublishProfile = PublishProfile.CENTRAL_GPU
 
 
 class FramePublisher(Protocol):
@@ -167,10 +168,11 @@ class _FFmpegFramePublisher:
         stderr_stream = getattr(process, "stderr", None)
         if stderr_stream is not None:
             stderr_task = asyncio.create_task(
-                cls._drain_stderr(
+                _drain_publisher_stderr(
                     stderr_stream,
                     camera_id=registration.camera_id,
                     path_name=registration.path_name or "<unknown>",
+                    publisher_name="ffmpeg",
                 )
             )
         return cls(
@@ -210,27 +212,161 @@ class _FFmpegFramePublisher:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._stderr_task
 
-    @staticmethod
-    async def _drain_stderr(
-        stream: asyncio.StreamReader,
+
+class _GStreamerFramePublisher:
+    def __init__(
+        self,
         *,
+        process: asyncio.subprocess.Process,
+        frame_shape: tuple[int, ...],
         camera_id: UUID,
         path_name: str,
+        stderr_task: asyncio.Task[None] | None,
     ) -> None:
-        while True:
-            line = await stream.readline()
-            if line == b"":
-                return
-            message = line.decode("utf-8", errors="replace").strip()
-            if message:
-                LOGGER.warning(
-                    "MediaMTX publisher ffmpeg stderr: %s",
-                    message,
-                    extra={
-                        "camera_id": str(camera_id),
-                        "path_name": path_name,
-                    },
+        self._process = process
+        self._frame_shape = frame_shape
+        self._camera_id = camera_id
+        self._path_name = path_name
+        self._stderr_task = stderr_task
+
+    @classmethod
+    async def create(
+        cls,
+        *,
+        registration: StreamRegistration,
+        frame: Frame,
+        publish_url: str,
+    ) -> _GStreamerFramePublisher:
+        width, height = _frame_dimensions(frame)
+        frame_shape = tuple(int(value) for value in frame.shape)
+        target_fps = max(1, registration.target_fps)
+        frame_size_bytes = width * height * 3
+        keyframe_interval = max(1, target_fps)
+        command = [
+            "gst-launch-1.0",
+            "-q",
+            "fdsrc",
+            "fd=0",
+            f"blocksize={frame_size_bytes}",
+            "do-timestamp=true",
+            "!",
+            "rawvideoparse",
+            f"width={width}",
+            f"height={height}",
+            "format=bgr",
+            f"framerate={target_fps}/1",
+            "!",
+            "queue",
+            "leaky=downstream",
+            "max-size-buffers=2",
+            "!",
+            "videoconvert",
+            "!",
+            "video/x-raw,format=I420",
+            "!",
+            "nvvidconv",
+            "!",
+            "video/x-raw(memory:NVMM),format=I420",
+            "!",
+            "nvv4l2h264enc",
+            "insert-sps-pps=true",
+            f"iframeinterval={keyframe_interval}",
+            f"idrinterval={keyframe_interval}",
+            f"bitrate={_target_h264_bitrate_bps(width=width, height=height, fps=target_fps)}",
+            "!",
+            "h264parse",
+            "config-interval=1",
+            "!",
+            "rtspclientsink",
+            f"location={publish_url}",
+            "protocols=tcp",
+        ]
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "GStreamer is required to publish processed live streams on Jetson."
+            ) from exc
+        stderr_task = None
+        stderr_stream = getattr(process, "stderr", None)
+        if stderr_stream is not None:
+            stderr_task = asyncio.create_task(
+                _drain_publisher_stderr(
+                    stderr_stream,
+                    camera_id=registration.camera_id,
+                    path_name=registration.path_name or "<unknown>",
+                    publisher_name="gstreamer",
                 )
+            )
+        return cls(
+            process=process,
+            frame_shape=frame_shape,
+            camera_id=registration.camera_id,
+            path_name=registration.path_name or "<unknown>",
+            stderr_task=stderr_task,
+        )
+
+    async def push_frame(self, frame: Frame, *, ts: datetime) -> None:
+        del ts
+        if tuple(int(value) for value in frame.shape) != self._frame_shape:
+            raise _PublisherRestartRequired("frame shape changed")
+        if not self.is_alive() or self._process.stdin is None:
+            raise _PublisherRestartRequired("publisher process is not running")
+        try:
+            self._process.stdin.write(frame.tobytes())
+            await self._process.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            raise _PublisherRestartRequired("publisher process closed its stdin") from exc
+
+    def is_alive(self) -> bool:
+        return self._process.returncode is None
+
+    async def close(self) -> None:
+        if self._process.stdin is not None and not self._process.stdin.is_closing():
+            self._process.stdin.close()
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(self._process.wait(), timeout=2.0)
+        if self._process.returncode is None:
+            self._process.kill()
+            await self._process.wait()
+        if self._stderr_task is not None:
+            if not self._stderr_task.done():
+                self._stderr_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._stderr_task
+
+
+async def _drain_publisher_stderr(
+    stream: asyncio.StreamReader,
+    *,
+    camera_id: UUID,
+    path_name: str,
+    publisher_name: str,
+) -> None:
+    while True:
+        line = await stream.readline()
+        if line == b"":
+            return
+        message = line.decode("utf-8", errors="replace").strip()
+        if message:
+            LOGGER.warning(
+                "MediaMTX publisher %s stderr: %s",
+                publisher_name,
+                message,
+                extra={
+                    "camera_id": str(camera_id),
+                    "path_name": path_name,
+                },
+            )
+
+
+def _target_h264_bitrate_bps(*, width: int, height: int, fps: int) -> int:
+    return max(750_000, min(4_000_000, (width * height * max(1, fps)) // 6))
 
 
 class MediaMTXClient:
@@ -489,6 +625,7 @@ class MediaMTXClient:
                 target_width=target_width,
                 target_height=target_height,
                 ingest_path=ingest_path,
+                publish_profile=profile,
             )
 
         if profile is PublishProfile.CENTRAL_GPU or not privacy.requires_filtering:
@@ -510,6 +647,7 @@ class MediaMTXClient:
                 target_width=target_width,
                 target_height=target_height,
                 ingest_path=ingest_path,
+                publish_profile=profile,
             )
 
         if privacy.requires_filtering:
@@ -525,6 +663,7 @@ class MediaMTXClient:
                 target_width=target_width,
                 target_height=target_height,
                 ingest_path=ingest_path,
+                publish_profile=profile,
             )
 
         return StreamRegistration(
@@ -537,6 +676,7 @@ class MediaMTXClient:
             target_width=target_width,
             target_height=target_height,
             ingest_path=ingest_path,
+            publish_profile=profile,
         )
 
     async def _ensure_publisher(
@@ -695,6 +835,22 @@ async def _default_publisher_factory(
     frame: Frame,
     publish_url: str,
 ) -> FramePublisher:
+    if registration.publish_profile is PublishProfile.JETSON_NANO:
+        try:
+            return await _GStreamerFramePublisher.create(
+                registration=registration,
+                frame=frame,
+                publish_url=publish_url,
+            )
+        except RuntimeError:
+            LOGGER.warning(
+                "Jetson GStreamer publisher unavailable; falling back to ffmpeg.",
+                exc_info=True,
+                extra={
+                    "camera_id": str(registration.camera_id),
+                    "path_name": registration.path_name,
+                },
+            )
     return await _FFmpegFramePublisher.create(
         registration=registration,
         frame=frame,

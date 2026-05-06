@@ -19,7 +19,9 @@ from argus.streaming.mediamtx import (
     PublishProfile,
     StreamMode,
     StreamRegistration,
+    _default_publisher_factory,
     _FFmpegFramePublisher,
+    _GStreamerFramePublisher,
     _prepare_frame_for_publish,
     probe_publish_profile,
 )
@@ -143,6 +145,7 @@ async def test_mediamtx_client_registers_annotated_for_jetson_transcode_profile(
     assert registration.target_width == 1280
     assert registration.target_height == 720
     assert registration.target_fps == 10
+    assert registration.publish_profile is PublishProfile.JETSON_NANO
     assert requests == [
         (
             "POST",
@@ -165,6 +168,50 @@ async def test_mediamtx_client_registers_annotated_for_jetson_transcode_profile(
     ]
 
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_default_publisher_factory_uses_gstreamer_for_jetson_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[tuple[StreamRegistration, tuple[int, ...], str]] = []
+
+    async def fake_create(
+        *,
+        registration: StreamRegistration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _FakeFramePublisher:
+        created.append((registration, tuple(int(value) for value in frame.shape), publish_url))
+        return _FakeFramePublisher()
+
+    monkeypatch.setattr(_GStreamerFramePublisher, "create", fake_create)
+
+    registration = StreamRegistration(
+        camera_id=uuid4(),
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        publish_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        path_name="cameras/example/annotated",
+        target_fps=10,
+        publish_profile=PublishProfile.JETSON_NANO,
+    )
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+    publisher = await _default_publisher_factory(
+        registration=registration,
+        frame=frame,
+        publish_url=registration.publish_path or "",
+    )
+
+    assert isinstance(publisher, _FakeFramePublisher)
+    assert created == [
+        (
+            registration,
+            (720, 1280, 3),
+            "rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -807,6 +854,82 @@ async def test_ffmpeg_frame_publisher_uses_short_gop_for_low_latency_hls(
     assert captured_command[captured_command.index("-g") + 1] == "10"
     assert captured_command[captured_command.index("-keyint_min") + 1] == "10"
     assert captured_command[captured_command.index("-sc_threshold") + 1] == "0"
+
+    await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_gstreamer_frame_publisher_uses_jetson_hardware_encoder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_command: list[str] = []
+
+    class _FakeStdin:
+        def write(self, data: bytes) -> None:
+            return None
+
+        async def drain(self) -> None:
+            return None
+
+        def is_closing(self) -> bool:
+            return False
+
+        def close(self) -> None:
+            return None
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = _FakeStdin()
+            self.stderr = None
+            self.returncode: int | None = None
+
+        async def wait(self) -> int:
+            self.returncode = 0
+            return 0
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> _FakeProcess:
+        del kwargs
+        captured_command.extend(command)
+        return _FakeProcess()
+
+    monkeypatch.setattr(
+        "argus.streaming.mediamtx.asyncio.create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    registration = StreamRegistration(
+        camera_id=uuid4(),
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        publish_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        path_name="cameras/example/annotated",
+        target_fps=10,
+        publish_profile=PublishProfile.JETSON_NANO,
+    )
+
+    publisher = await _GStreamerFramePublisher.create(
+        registration=registration,
+        frame=np.zeros((720, 1280, 3), dtype=np.uint8),
+        publish_url=registration.publish_path or "",
+    )
+
+    assert captured_command[:2] == ["gst-launch-1.0", "-q"]
+    assert "rawvideoparse" in captured_command
+    assert "format=bgr" in captured_command
+    assert "width=1280" in captured_command
+    assert "height=720" in captured_command
+    assert "framerate=10/1" in captured_command
+    assert "nvv4l2h264enc" in captured_command
+    assert "insert-sps-pps=true" in captured_command
+    assert "h264parse" in captured_command
+    assert "rtspclientsink" in captured_command
+    assert (
+        "location=rtsp://mediamtx.internal:8554/cameras/example/annotated"
+        in captured_command
+    )
 
     await publisher.close()
 
