@@ -66,10 +66,14 @@ class _PrefetchedFrameCapture:
 class _LatestFrameCapture:
     _capture: CaptureHandle
     _read_timeout_s: float = _FFMPEG_FRAME_WAIT_TIMEOUT_S
+    _release_join_timeout_s: float = 1.0
     _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
     _new_frame_event: threading.Event = field(default_factory=threading.Event)
+    _release_lock: threading.Lock = field(default_factory=threading.Lock)
+    _pump_thread: threading.Thread | None = None
     _closed: bool = False
     _pump_done: bool = False
+    _capture_released: bool = False
 
     @classmethod
     def create(
@@ -77,8 +81,13 @@ class _LatestFrameCapture:
         capture: CaptureHandle,
         *,
         read_timeout_s: float = _FFMPEG_FRAME_WAIT_TIMEOUT_S,
+        release_join_timeout_s: float = 1.0,
     ) -> _LatestFrameCapture:
-        instance = cls(_capture=capture, _read_timeout_s=read_timeout_s)
+        instance = cls(
+            _capture=capture,
+            _read_timeout_s=read_timeout_s,
+            _release_join_timeout_s=release_join_timeout_s,
+        )
         instance._start_frame_pump()
         return instance
 
@@ -92,10 +101,12 @@ class _LatestFrameCapture:
                     self._latest_frame.append(frame)
                     self._new_frame_event.set()
             finally:
+                self._release_capture()
                 self._pump_done = True
                 self._new_frame_event.set()
 
-        threading.Thread(target=pump, daemon=True).start()
+        self._pump_thread = threading.Thread(target=pump, daemon=True)
+        self._pump_thread.start()
 
     def read(self) -> tuple[bool, Frame | None]:
         if not self._new_frame_event.wait(timeout=self._read_timeout_s):
@@ -108,6 +119,22 @@ class _LatestFrameCapture:
 
     def release(self) -> None:
         self._closed = True
+        self._new_frame_event.set()
+        thread = self._pump_thread
+        if thread is not None and thread is not threading.current_thread() and thread.is_alive():
+            thread.join(timeout=max(0.0, self._release_join_timeout_s))
+        if thread is None or not thread.is_alive():
+            self._release_capture()
+            return
+        LOGGER.warning(
+            "Deferred OpenCV capture release until frame pump exits",
+        )
+
+    def _release_capture(self) -> None:
+        with self._release_lock:
+            if self._capture_released:
+                return
+            self._capture_released = True
         self._capture.release()
 
 

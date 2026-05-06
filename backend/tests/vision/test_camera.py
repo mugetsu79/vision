@@ -4,6 +4,7 @@ import io
 import logging
 import os
 import subprocess
+import threading
 from collections import deque
 from dataclasses import dataclass
 
@@ -40,6 +41,23 @@ class _FakeCapture:
 
     def release(self) -> None:
         self.released = True
+
+
+class _BlockingReadCapture:
+    def __init__(self) -> None:
+        self.read_started = threading.Event()
+        self.allow_read_exit = threading.Event()
+        self.released = threading.Event()
+        self.release_calls = 0
+
+    def read(self) -> tuple[bool, np.ndarray | None]:
+        self.read_started.set()
+        self.allow_read_exit.wait(timeout=2.0)
+        return False, None
+
+    def release(self) -> None:
+        self.release_calls += 1
+        self.released.set()
 
 
 @dataclass(slots=True)
@@ -411,6 +429,23 @@ def test_ffmpeg_rtsp_timeout_covers_worker_first_frame_wait() -> None:
     assert camera_module._FFMPEG_RTSP_TIMEOUT_US == str(
         int(camera_module._FFMPEG_FRAME_WAIT_TIMEOUT_S * 1_000_000)
     )
+
+
+def test_latest_frame_capture_release_waits_for_pump_before_releasing() -> None:
+    raw_capture = _BlockingReadCapture()
+    capture = camera_module._LatestFrameCapture.create(
+        raw_capture,
+        read_timeout_s=0.01,
+        release_join_timeout_s=0.01,
+    )
+    assert raw_capture.read_started.wait(timeout=1.0)
+
+    capture.release()
+
+    assert raw_capture.release_calls == 0
+    raw_capture.allow_read_exit.set()
+    assert raw_capture.released.wait(timeout=1.0)
+    assert raw_capture.release_calls == 1
 
 
 def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
