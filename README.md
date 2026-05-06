@@ -42,6 +42,13 @@ system Python 3.10 so cp310 Jetson ONNX Runtime GPU wheels can be installed.
 There is not currently a separate generic non-Jetson edge image that preserves
 Python 3.12.
 
+For the current JetPack 6 / Python 3.10 lab path, use this wheel URL before
+building the edge image when validating Jetson GPU providers:
+
+```bash
+export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
+```
+
 ## Quick Start
 
 These steps bring up the local development stack.

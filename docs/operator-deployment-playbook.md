@@ -463,8 +463,9 @@ export ARGUS_API_BEARER_TOKEN="<fresh-access-token>"
 export ARGUS_DB_URL="postgresql+asyncpg://argus:argus@<master-ip>:5432/argus"
 export ARGUS_MINIO_ENDPOINT="<master-ip>:9000"
 export ARGUS_EDGE_CAMERA_ID="<camera-id>"
+export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.yml
-docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d
+docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d --build
 ```
 
 This compose command is appropriate for lab and pilot edge bring-up. In production, run the same edge responsibilities under the chosen supervisor model so workers restart after reboot, expose runtime state, and receive lifecycle commands from the control plane.

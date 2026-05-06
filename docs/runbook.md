@@ -130,6 +130,12 @@ The current edge Compose path is Jetson-specific:
 - if `JETSON_ORT_WHEEL_URL` is unset, the image falls back to CPU ONNX Runtime and `CPUExecutionProvider` remains expected
 - processed annotated/reduced profiles publish through GStreamer `rtspclientsink`, so the edge image must include the `gstreamer1.0-rtsp` package
 
+For the current JetPack 6 / Python 3.10 lab path:
+
+```bash
+export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
+```
+
 The central/backend image remains Python 3.12. There is no separate generic
 non-Jetson edge image still using Python 3.12 in the current Compose stack. For
 non-Jetson edge hardware, treat the product role as portable but the packaging
@@ -149,7 +155,8 @@ For a single-node edge deployment:
    - `ARGUS_NATS_URL`
    - `ARGUS_MINIO_ENDPOINT`
    - `ARGUS_EDGE_CAMERA_ID`
-3. If validating Jetson acceleration, export `JETSON_ORT_WHEEL_URL` before building the image.
+3. If validating Jetson acceleration, export `JETSON_ORT_WHEEL_URL` before building the image:
+   `export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"`
 4. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
 5. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d --build`.
 6. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.

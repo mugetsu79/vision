@@ -1314,7 +1314,7 @@ cd "$HOME/vision"
 
 # Only set this when testing the full Python 3.10 edge image and you have a
 # Jetson cp310 accelerated ONNX Runtime wheel URL. Leave it unset for dd66ec7.
-# export JETSON_ORT_WHEEL_URL="https://.../onnxruntime_gpu-...-cp310-cp310-linux_aarch64.whl"
+export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 
 docker compose -f infra/docker-compose.edge.yml build --no-cache inference-worker
 
