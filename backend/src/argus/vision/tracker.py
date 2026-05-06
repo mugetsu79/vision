@@ -26,7 +26,8 @@ class TrackerConfig:
     model: str = "auto"
     proximity_thresh: float = 0.5
     appearance_thresh: float = 0.25
-    gmc_method: str = "orb"
+    # Traffic cameras are fixed; frame-to-frame GMC feature matching is costly and noisy.
+    gmc_method: str = "none"
 
     def to_namespace(self) -> SimpleNamespace:
         return SimpleNamespace(

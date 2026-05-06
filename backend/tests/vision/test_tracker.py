@@ -87,6 +87,12 @@ def test_real_botsort_backend_accepts_default_tracker_config() -> None:
     assert tracked[0].class_name == "car"
 
 
+def test_botsort_default_disables_global_motion_compensation_for_fixed_cameras() -> None:
+    tracker = create_tracker(TrackerConfig(tracker_type=TrackerType.BOTSORT, frame_rate=30))
+
+    assert tracker.backend.gmc.method is None
+
+
 def test_real_tracker_ages_state_on_empty_detection_frames() -> None:
     tracker = create_tracker(TrackerConfig(tracker_type=TrackerType.BYTETRACK, frame_rate=30))
 
