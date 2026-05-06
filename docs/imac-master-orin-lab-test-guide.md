@@ -1305,7 +1305,9 @@ curl -fsS http://127.0.0.1:8000/healthz
 ```
 
 For a multi-edge lab, replace the `*` key with the specific edge node UUID.
-The wildcard is intended for this single-Jetson validation path.
+The wildcard is intended for this single-Jetson validation path, including manual
+edge tests where the camera runs in edge mode but is not yet assigned to an edge
+node record in the database.
 
 On the Jetson:
 

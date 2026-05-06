@@ -2461,7 +2461,10 @@ class StreamService:
         camera: Camera,
         access: StreamAccess,
     ) -> None:
-        if camera.edge_node_id is None:
+        if (
+            camera.edge_node_id is None
+            and camera.processing_mode is not ProcessingMode.EDGE
+        ):
             return
         edge_rtsp_base = self._edge_mediamtx_rtsp_base_url(camera.edge_node_id)
         if edge_rtsp_base is None:
@@ -2490,10 +2493,10 @@ class StreamService:
             seconds=max(1, int(ttl_seconds * 0.8))
         )
 
-    def _edge_mediamtx_rtsp_base_url(self, edge_node_id: UUID) -> str | None:
+    def _edge_mediamtx_rtsp_base_url(self, edge_node_id: UUID | None) -> str | None:
         base_urls = self.settings.edge_mediamtx_rtsp_base_urls
         return (
-            base_urls.get(str(edge_node_id))
+            (base_urls.get(str(edge_node_id)) if edge_node_id is not None else None)
             or base_urls.get("*")
             or base_urls.get("default")
         )
