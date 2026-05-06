@@ -32,6 +32,12 @@ def test_edge_dockerfile_installs_jetson_onnxruntime_wheel_after_base_deps() -> 
     assert JETSON_ORT_INSTALL_COMMAND in dockerfile
 
 
+def test_edge_dockerfile_installs_gstreamer_rtsp_sink_plugin() -> None:
+    dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    assert "gstreamer1.0-rtsp" in dockerfile
+
+
 def test_edge_dockerfile_smoke_tests_python_stdlib_before_runtime() -> None:
     dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
     smoke_test = '/app/.venv/bin/python -c "import encodings, sys; print(sys.version)"'

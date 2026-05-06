@@ -128,6 +128,7 @@ The current edge Compose path is Jetson-specific:
 - the Python 3.10 runtime is intentional because the accelerated Jetson ONNX Runtime wheels available for this lab are `cp310`
 - `JETSON_ORT_WHEEL_URL` is passed as a build argument and should point to the Jetson accelerated `onnxruntime-gpu` wheel when testing CUDA/TensorRT providers
 - if `JETSON_ORT_WHEEL_URL` is unset, the image falls back to CPU ONNX Runtime and `CPUExecutionProvider` remains expected
+- processed annotated/reduced profiles publish through GStreamer `rtspclientsink`, so the edge image must include the `gstreamer1.0-rtsp` package
 
 The central/backend image remains Python 3.12. There is no separate generic
 non-Jetson edge image still using Python 3.12 in the current Compose stack. For
@@ -152,6 +153,23 @@ For a single-node edge deployment:
 4. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
 5. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d --build`.
 6. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
+
+Before starting processed-stream tests, verify the edge image has the expected
+runtime pieces:
+
+```bash
+docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint /app/.venv/bin/python inference-worker \
+  -c "import sys, onnxruntime as ort; print(sys.version); print(ort.__version__); print(ort.get_available_providers())"
+
+docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint gst-inspect-1.0 inference-worker rtspclientsink
+```
+
+Python should report `3.10.x`. CPU-only ONNX Runtime providers mean the image
+was built without `JETSON_ORT_WHEEL_URL`. Missing `rtspclientsink` means the
+edge image is stale or was built before the `gstreamer1.0-rtsp` package was
+added.
 
 This Compose path is appropriate for lab and pilot bring-up. In the current iMac + Jetson lab, set `ARGUS_NATS_URL` directly to the master NATS listener, for example `nats://192.168.1.20:4222`. In production, the same edge responsibilities should be run under a supervisor so they restart after reboot, report per-worker status, and can receive constrained lifecycle requests from the control plane. The NATS leaf topology remains the intended hardened production shape once bootstrap and credentials are supervisor-managed.
 

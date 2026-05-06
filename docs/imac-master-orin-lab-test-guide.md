@@ -1004,7 +1004,7 @@ Run:
 sudo apt-get update
 sudo apt-get install -y git curl ca-certificates docker.io ffmpeg \
   gstreamer1.0-tools gstreamer1.0-plugins-good \
-  gstreamer1.0-plugins-bad gstreamer1.0-libav
+  gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-rtsp
 sudo apt-get install -y docker-compose-v2 || sudo apt-get install -y docker-compose-plugin
 sudo apt-get install -y nvidia-jetpack-runtime nvidia-container-toolkit nvidia-l4t-gstreamer
 sudo systemctl enable --now docker
@@ -1318,6 +1318,13 @@ cd "$HOME/vision"
 
 docker compose -f infra/docker-compose.edge.yml build --no-cache inference-worker
 
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint /app/.venv/bin/python inference-worker \
+  -c "import sys, onnxruntime as ort; print(sys.version); print(ort.__version__); print(ort.get_available_providers())"
+
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint gst-inspect-1.0 inference-worker rtspclientsink
+
 # Refresh the token after the build, not before it. Large first builds can outlive a dev token.
 JETSON_TOKEN="$(
   curl -fsS \
@@ -1370,6 +1377,7 @@ What good looks like:
 - at branch tip `525b9824` or newer, `/app/.venv/bin/python` should report Python 3.10 inside the Jetson worker image
 - if `JETSON_ORT_WHEEL_URL` is set to a compatible cp310 Jetson ONNX Runtime GPU wheel, `onnxruntime.get_available_providers()` should include `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`
 - if `JETSON_ORT_WHEEL_URL` is unset, `CPUExecutionProvider` remains expected
+- `gst-inspect-1.0 rtspclientsink` should succeed inside the worker image; if it says `No such element or plugin`, pull the latest branch and rebuild the edge image with `--no-cache`
 
 ### 3.9 Confirm camera 2 is now working from the Jetson
 
@@ -1555,7 +1563,7 @@ If the host says `no element "h264parse"` or `no element "avdec_h264"`, install 
 ```bash
 sudo apt-get update
 sudo apt-get install -y ffmpeg gstreamer1.0-tools gstreamer1.0-plugins-good \
-  gstreamer1.0-plugins-bad gstreamer1.0-libav
+  gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-rtsp
 ```
 
 Then test software decode on the host:
@@ -1574,6 +1582,9 @@ docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
 
 docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
   --entrypoint gst-inspect-1.0 inference-worker avdec_h264
+
+docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
+  --entrypoint gst-inspect-1.0 inference-worker rtspclientsink
 ```
 
 Now test both container decode paths:
@@ -1594,6 +1605,7 @@ What the container check means:
 
 - if `nvv4l2decoder` is missing, rerun the Jetson preflight and fix the NVIDIA runtime/NVDEC setup before relying on hardware decode
 - if `avdec_h264` is missing, pull the latest repo and rebuild the edge image; the fallback path needs the `gstreamer1.0-libav` package inside the container
+- if `rtspclientsink` is missing, pull the latest repo and rebuild the edge image; processed annotated/reduced profiles need the `gstreamer1.0-rtsp` package inside the container
 - if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker uses a native GStreamer raw-frame reader first, then `avdec_h264`, then FFmpeg rawvideo only as a last-resort fallback
 - if both container decode paths work but the worker still reconnects forever, capture the worker logs plus the GStreamer command results before changing model settings
 
