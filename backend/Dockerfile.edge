@@ -5,7 +5,6 @@ ARG JETSON_ORT_WHEEL_URL=""
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_INSTALL_DIR=/opt/uv-python \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PYTHONPATH=/app/src
 
@@ -29,16 +28,21 @@ RUN apt-get update \
         libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock alembic.ini README.md ./
+COPY pyproject.toml uv.lock alembic.ini README.md requirements-edge.txt ./
 COPY src ./src
 
 RUN python3 -m pip install --no-cache-dir uv \
-    && uv python install 3.12 --install-dir "$UV_PYTHON_INSTALL_DIR" \
-    && uv sync --locked --no-dev --group runtime --group llm --group vision --python 3.12 --managed-python \
-    && if [ -n "$JETSON_ORT_WHEEL_URL" ]; then /app/.venv/bin/pip install --no-cache-dir "$JETSON_ORT_WHEEL_URL"; fi \
+    && python3 -m venv "$UV_PROJECT_ENVIRONMENT" \
+    && PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH" python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version" \
+    && uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" --no-cache -r requirements-edge.txt \
+    && if [ -n "$JETSON_ORT_WHEEL_URL" ]; then \
+        "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "$JETSON_ORT_WHEEL_URL"; \
+    else \
+        "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "onnxruntime>=1.20"; \
+    fi \
     && groupadd --system --gid 10001 argus \
     && useradd --system --uid 10001 --gid 10001 --create-home argus \
-    && chown -R argus:argus /app "$UV_PYTHON_INSTALL_DIR"
+    && chown -R argus:argus /app "$UV_PROJECT_ENVIRONMENT"
 
 USER argus
 

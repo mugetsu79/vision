@@ -7,7 +7,6 @@ import subprocess
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from logging import getLogger
 from typing import Any, Protocol
 from urllib.parse import urlencode, urlsplit, urlunsplit
@@ -16,6 +15,8 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel, ConfigDict
 
+from argus.compat import StrEnum
+
 
 class Frame(Protocol):
     shape: tuple[int, ...]
@@ -23,9 +24,9 @@ class Frame(Protocol):
     def tobytes(self) -> bytes: ...
 
 
-type CommandRunner = Callable[[list[str]], str]
-type PublishTokenFactory = Callable[[UUID, str], str]
-type ReadTokenFactory = Callable[[UUID, str], str]
+CommandRunner = Callable[[list[str]], str]
+PublishTokenFactory = Callable[[UUID, str], str]
+ReadTokenFactory = Callable[[UUID, str], str]
 
 LOGGER = getLogger(__name__)
 
@@ -75,7 +76,7 @@ class FramePublisher(Protocol):
     async def close(self) -> None: ...
 
 
-type PublisherFactory = Callable[..., Awaitable[FramePublisher]]
+PublisherFactory = Callable[..., Awaitable[FramePublisher]]
 
 
 @dataclass(slots=True)

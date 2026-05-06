@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from argus.compat import StrEnum
 
 
 class RoleEnum(StrEnum):

@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
-type Uint8Frame = NDArray[np.uint8]
+Uint8Frame = NDArray[np.uint8]
 
 
 def apply_clahe(

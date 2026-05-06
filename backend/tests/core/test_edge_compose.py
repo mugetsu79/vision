@@ -15,6 +15,12 @@ def test_edge_compose_requires_master_runtime_environment() -> None:
     assert "YOLO_CONFIG_DIR: /tmp" in compose
 
 
+def test_edge_compose_passes_jetson_ort_wheel_build_arg() -> None:
+    compose = EDGE_COMPOSE_PATH.read_text(encoding="utf-8")
+
+    assert "JETSON_ORT_WHEEL_URL: ${JETSON_ORT_WHEEL_URL:-}" in compose
+
+
 def test_edge_mediamtx_jwks_points_at_master_backend() -> None:
     compose = EDGE_COMPOSE_PATH.read_text(encoding="utf-8")
 

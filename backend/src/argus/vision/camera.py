@@ -11,7 +11,6 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import StrEnum
 from logging import getLogger
 from typing import Any, Protocol, cast
 
@@ -19,6 +18,7 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
+from argus.compat import StrEnum
 from argus.core.logging import redact_url_secrets
 from argus.vision.capture_options import (
     _FFMPEG_ANALYZE_DURATION_US,
@@ -33,17 +33,19 @@ from argus.vision.capture_options import (
 
 LOGGER = getLogger(__name__)
 
-type Frame = NDArray[np.uint8]
-type CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
-type MonotonicClock = Callable[[], float]
-type SleepFunction = Callable[[float], None]
-type SourceUriFactory = Callable[[], str]
+Frame = NDArray[np.uint8]
+MonotonicClock = Callable[[], float]
+SleepFunction = Callable[[float], None]
+SourceUriFactory = Callable[[], str]
 
 
 class CaptureHandle(Protocol):
     def read(self) -> tuple[bool, Frame | None]: ...
 
     def release(self) -> None: ...
+
+
+CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
 
 
 @dataclass(slots=True)

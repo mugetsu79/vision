@@ -7,7 +7,7 @@ import os
 from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from uuid import UUID, uuid4
@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException, status
 from jose import jwt  # type: ignore[import-untyped]
 
+from argus.compat import UTC
 from argus.models.enums import ProcessingMode
 from argus.streaming.mediamtx import StreamMode
 from argus.vision.capture_options import (
@@ -133,8 +134,8 @@ class UserConcurrencyLimiter:
             self._counts[key] = current - 1
 
 
-type RtspUrlSource = str | Callable[[], str]
-type MjpegStreamFactory = Callable[[RtspUrlSource], Awaitable[UpstreamProxyStream]]
+RtspUrlSource = str | Callable[[], str]
+MjpegStreamFactory = Callable[[RtspUrlSource], Awaitable[UpstreamProxyStream]]
 
 
 class MediaMTXTokenIssuer:

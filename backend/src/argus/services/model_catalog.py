@@ -13,8 +13,8 @@ from argus.api.contracts import (
 from argus.models.enums import DetectorCapability, ModelFormat, ModelTask
 from argus.models.tables import Model
 
-type ModelFamily = Literal["yolo11", "yolo12", "yolo26", "yolo_world", "yoloe"]
-type OpenVocabBackend = Literal["ultralytics_yolo_world", "ultralytics_yoloe"]
+ModelFamily = Literal["yolo11", "yolo12", "yolo26", "yolo_world", "yoloe"]
+OpenVocabBackend = Literal["ultralytics_yolo_world", "ultralytics_yoloe"]
 
 
 @dataclass(frozen=True, slots=True)

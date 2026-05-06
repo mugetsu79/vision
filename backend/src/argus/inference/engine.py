@@ -5,7 +5,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -16,6 +16,7 @@ from numpy.typing import NDArray
 from prometheus_client import start_http_server
 from pydantic import BaseModel, ConfigDict, Field
 
+from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.db import CountEventStore, DatabaseManager, TrackingEventStore
 from argus.core.events import EventMessage, NatsJetStreamClient
@@ -73,7 +74,7 @@ from argus.vision.types import Detection
 from argus.vision.vocabulary import hash_vocabulary
 from argus.vision.zones import Zones
 
-type Frame = NDArray[np.uint8]
+Frame = NDArray[np.uint8]
 
 logger = logging.getLogger(__name__)
 

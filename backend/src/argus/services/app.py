@@ -8,7 +8,7 @@ import math
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID
 
@@ -81,6 +81,7 @@ from argus.api.contracts import (
     WorkerStreamSettings,
     WorkerTrackerSettings,
 )
+from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.db import DatabaseManager
 from argus.core.events import EventMessage, NatsJetStreamClient

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Protocol, cast
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import CameraCommandPayload, QueryRequest, QueryResponse, TenantContext
+from argus.compat import UTC
 from argus.core.events import NatsJetStreamClient
 from argus.models.enums import DetectorCapability, QueryResolutionMode, RuntimeVocabularySource
 from argus.models.tables import AuditLog, Camera, CameraVocabularySnapshot, Model, Site, Tenant

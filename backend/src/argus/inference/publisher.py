@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from argus.streaming.mediamtx import PublishProfile, StreamMode
 
-type MonotonicClock = Callable[[], float]
+MonotonicClock = Callable[[], float]
 
 
 class TelemetryTrack(BaseModel):

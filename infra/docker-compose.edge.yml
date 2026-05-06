@@ -3,6 +3,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile.edge
+      args:
+        JETSON_ORT_WHEEL_URL: ${JETSON_ORT_WHEEL_URL:-}
     image: ghcr.io/mugetsu79/vision/argus-edge:${ARGUS_EDGE_TAG:-local}
     command: ["--camera-id", "${ARGUS_EDGE_CAMERA_ID:?Set ARGUS_EDGE_CAMERA_ID to the camera UUID assigned to this Jetson worker}"]
     environment:

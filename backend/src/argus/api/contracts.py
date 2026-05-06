@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from argus.compat import StrEnum
 from argus.core.security import AuthenticatedUser
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (

@@ -4,7 +4,7 @@ import asyncio
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
+from argus.compat import UTC
 from argus.models.enums import RuleAction
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.detector import DetectionModelConfig, YoloDetector

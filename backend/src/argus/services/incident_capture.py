@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from argus.core.events import EventMessage
 from argus.models.tables import Camera, Incident, Site, Tenant
 
-type Frame = NDArray[np.uint8]
+Frame = NDArray[np.uint8]
 
 
 class IncidentTriggeredEvent(BaseModel):

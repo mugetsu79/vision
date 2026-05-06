@@ -6,7 +6,7 @@ import hmac
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from fnmatch import fnmatch
 from typing import Annotated, Any
 
@@ -21,6 +21,7 @@ from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
+from argus.compat import UTC
 from argus.core.config import Settings
 from argus.models.enums import RoleEnum
 from argus.models.tables import APIKey

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import platform
 from dataclasses import dataclass
-from enum import StrEnum
 from importlib import import_module
 from pathlib import Path
 from typing import Any
+
+from argus.compat import StrEnum
 
 
 class ExecutionProvider(StrEnum):
