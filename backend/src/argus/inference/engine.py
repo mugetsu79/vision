@@ -149,6 +149,7 @@ class CameraCommand(BaseModel):
     runtime_vocabulary_version: int | None = None
     tracker_type: TrackerType | None = None
     privacy: PrivacyPolicy | None = None
+    stream: StreamSettings | None = None
     attribute_rules: list[dict[str, Any]] | None = None
     zones: list[dict[str, Any]] | None = None
 
@@ -634,6 +635,7 @@ class InferenceEngine:
         return telemetry
 
     async def apply_command(self, command: CameraCommand) -> None:
+        should_register_stream = False
         if command.active_classes is not None:
             self._state.active_classes = list(command.active_classes)
         if command.runtime_vocabulary is not None:
@@ -660,6 +662,9 @@ class InferenceEngine:
             self._state.tracker_type = command.tracker_type
             self._tracker = self._tracker_factory(command.tracker_type)
             self._count_event_processor = self._build_count_event_processor()
+        if command.stream is not None and command.stream != self.config.stream:
+            self.config.stream = command.stream
+            should_register_stream = True
         if command.privacy is not None and command.privacy != self._state.privacy:
             self._state.privacy = command.privacy
             self.privacy_filter = PrivacyFilter(
@@ -668,17 +673,18 @@ class InferenceEngine:
                     blur_plates=command.privacy.blur_plates,
                 )
             )
-            if self._started:
-                self._stream_registration = await self.stream_client.register_stream(
-                    camera_id=self.config.camera_id,
-                    rtsp_url=self.config.camera.rtsp_url,
-                    profile=self.profile,
-                    stream_kind=self.config.stream.kind,
-                    privacy=self._state.privacy,
-                    target_fps=self.config.stream.fps,
-                    target_width=self.config.stream.width,
-                    target_height=self.config.stream.height,
-                )
+            should_register_stream = True
+        if self._started and should_register_stream:
+            self._stream_registration = await self.stream_client.register_stream(
+                camera_id=self.config.camera_id,
+                rtsp_url=self.config.camera.rtsp_url,
+                profile=self.profile,
+                stream_kind=self.config.stream.kind,
+                privacy=self._state.privacy,
+                target_fps=self.config.stream.fps,
+                target_width=self.config.stream.width,
+                target_height=self.config.stream.height,
+            )
         if command.attribute_rules is not None:
             self._state.attribute_rules = list(command.attribute_rules)
         if command.zones is not None:

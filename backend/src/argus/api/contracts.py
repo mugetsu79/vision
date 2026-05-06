@@ -396,6 +396,7 @@ class CameraCommandPayload(BaseModel):
     runtime_vocabulary_version: int | None = None
     tracker_type: TrackerType | None = None
     privacy: WorkerPrivacySettings | None = None
+    stream: WorkerStreamSettings | None = None
     attribute_rules: list[dict[str, Any]] | None = None
     zones: list[WorkerZone] | None = None
 

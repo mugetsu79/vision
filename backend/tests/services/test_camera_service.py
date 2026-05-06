@@ -380,6 +380,7 @@ async def test_update_camera_reprobes_source_capability_when_rtsp_changes(
     assert response.browser_delivery.default_profile == "720p10"
     assert [profile["id"] for profile in response.browser_delivery.profiles] == [
         "native",
+        "annotated",
         "720p10",
         "540p5",
     ]
@@ -448,6 +449,7 @@ async def test_probe_camera_source_filters_profiles_before_create(
     assert response.browser_delivery.default_profile == "720p10"
     assert [profile["id"] for profile in response.browser_delivery.profiles] == [
         "native",
+        "annotated",
         "720p10",
         "540p5",
     ]
@@ -556,6 +558,7 @@ async def test_probe_camera_source_filters_existing_camera_with_stale_profiles(
     assert response.browser_delivery.default_profile == "720p10"
     assert [profile["id"] for profile in response.browser_delivery.profiles] == [
         "native",
+        "annotated",
         "720p10",
         "540p5",
     ]
@@ -729,6 +732,7 @@ async def test_probe_camera_source_falls_back_to_still_capture_without_ffprobe(
     assert response.browser_delivery.default_profile == "720p10"
     assert [profile["id"] for profile in response.browser_delivery.profiles] == [
         "native",
+        "annotated",
         "720p10",
         "540p5",
     ]
@@ -2350,3 +2354,112 @@ async def test_update_camera_publishes_zone_command_to_running_worker(
         }
     ]
     assert command_payload["active_classes"] == ["person"]
+
+
+@pytest.mark.asyncio
+async def test_update_camera_publishes_stream_profile_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    site_id = uuid4()
+    model_id = uuid4()
+    camera_id = uuid4()
+    now = datetime.now(tz=UTC)
+    events = _FakeEvents()
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=events,
+    )
+    camera = Camera(
+        id=camera_id,
+        site_id=site_id,
+        edge_node_id=None,
+        name="Camera",
+        rtsp_url_encrypted=app_services.encrypt_rtsp_url("rtsp://camera/live", settings),
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=model_id,
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography={
+            "src": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "dst": [[0, 0], [5, 0], [5, 5], [0, 5]],
+            "ref_distance_m": 5.0,
+        },
+        privacy={"blur_faces": False, "blur_plates": False},
+        browser_delivery=BrowserDeliverySettings(default_profile="native").model_dump(
+            mode="python"
+        ),
+        source_capability=None,
+        frame_skip=1,
+        fps_cap=25,
+        created_at=now,
+        updated_at=now,
+    )
+    payload = CameraUpdate(
+        browser_delivery=BrowserDeliverySettings(default_profile="720p10"),
+    )
+    model = Model(
+        id=model_id,
+        name="Vezor YOLO",
+        version="lab",
+        task=ModelTask.DETECT,
+        path="/models/yolo.onnx",
+        format=ModelFormat.ONNX,
+        classes=["person"],
+        input_shape={"width": 640, "height": 640},
+        sha256="a" * 64,
+        size_bytes=1024,
+        license="lab",
+    )
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    async def fake_load_model(session, model_id_arg):  # noqa: ANN001
+        assert model_id_arg == model_id
+        return model
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(app_services, "_load_model", fake_load_model)
+
+    user = AuthenticatedUser(
+        subject="admin-1",
+        email="admin@argus.local",
+        role=RoleEnum.ADMIN,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=None,
+        claims={},
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=user,
+    )
+
+    await service.update_camera(tenant_context, camera_id, payload)
+
+    assert events.calls
+    subject, command, _serialized = events.calls[0]
+    assert subject == f"cmd.camera.{camera_id}"
+    command_payload = command.model_dump(mode="python")  # type: ignore[attr-defined]
+    assert command_payload["stream"] == {
+        "profile_id": "720p10",
+        "kind": "transcode",
+        "width": 1280,
+        "height": 720,
+        "fps": 10,
+    }

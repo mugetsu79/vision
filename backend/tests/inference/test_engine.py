@@ -885,6 +885,82 @@ async def test_engine_registers_browser_delivery_dimensions_and_fps() -> None:
 
 
 @pytest.mark.asyncio
+async def test_engine_applies_stream_profile_command_without_restart() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    publisher = _FakePublisher()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource(
+            [
+                np.zeros((64, 64, 3), dtype=np.uint8),
+                np.zeros((64, 64, 3), dtype=np.uint8),
+            ]
+        ),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.apply_command(
+        CameraCommand(
+            stream=StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        )
+    )
+    await engine.run_once(ts=datetime(2026, 5, 6, 14, 0, tzinfo=UTC))
+    await engine.apply_command(
+        CameraCommand(
+            stream=StreamSettings(
+                profile_id="native",
+                kind="passthrough",
+                width=None,
+                height=None,
+                fps=25,
+            )
+        )
+    )
+    await engine.run_once(ts=datetime(2026, 5, 6, 14, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert stream_client.register_stream_calls == [
+        {
+            "stream_kind": "passthrough",
+            "target_fps": 25,
+            "target_width": None,
+            "target_height": None,
+        },
+        {
+            "stream_kind": "transcode",
+            "target_fps": 10,
+            "target_width": 1280,
+            "target_height": 720,
+        },
+        {
+            "stream_kind": "passthrough",
+            "target_fps": 25,
+            "target_width": None,
+            "target_height": None,
+        },
+    ]
+    assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
+    assert [frame.stream_mode for frame in publisher.frames] == [
+        StreamMode.ANNOTATED_WHIP,
+        StreamMode.PASSTHROUGH,
+    ]
+
+
+@pytest.mark.asyncio
 async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> None:
     camera_id = uuid4()
     event_client = _FakeEventClient()

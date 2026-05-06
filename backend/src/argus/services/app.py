@@ -968,6 +968,13 @@ class CameraService:
                 blur_faces=bool(camera.privacy.get("blur_faces", True)),
                 blur_plates=bool(camera.privacy.get("blur_plates", True)),
             ),
+            stream=_resolve_worker_stream_settings(
+                browser_delivery=BrowserDeliverySettings.model_validate(
+                    camera.browser_delivery
+                    or BrowserDeliverySettings().model_dump(mode="python")
+                ),
+                fps_cap=int(camera.fps_cap or 25),
+            ),
             attribute_rules=list(camera.attribute_rules),
             zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
         )
