@@ -124,8 +124,8 @@ def _person_head_bboxes(
         height = y2 - y1
         if width <= 2 or height <= 4:
             continue
-        head_height = max(2.0, height * 0.28)
-        head_width = max(2.0, width * 0.65)
+        head_height = max(2.0, height * 0.42)
+        head_width = max(2.0, width * 0.9)
         center_x = x1 + width / 2.0
         bboxes.append(
             (
@@ -164,7 +164,7 @@ def _pixelate_roi(roi: NDArray[np.uint8], strength: int) -> NDArray[np.uint8]:
 
 
 def _gaussian_blur_roi(roi: NDArray[np.uint8], strength: int) -> NDArray[np.uint8]:
-    kernel_size = max(3, strength | 1)
+    kernel_size = max(3, (max(1, strength) * 2 + 1) | 1)
     return np.asarray(
         cv2.GaussianBlur(roi, (kernel_size, kernel_size), sigmaX=0),
         dtype=np.uint8,

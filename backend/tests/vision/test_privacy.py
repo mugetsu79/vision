@@ -90,4 +90,5 @@ def test_privacy_filter_blurs_person_head_regions_without_face_detector() -> Non
     privacy_filter.apply(frame, detections=detections)
 
     assert not np.array_equal(frame[20:46, 48:80], original[20:46, 48:80])
+    assert not np.array_equal(frame[52:58, 44:84], original[52:58, 44:84])
     assert np.array_equal(frame[80:104, 48:80], original[80:104, 48:80])
