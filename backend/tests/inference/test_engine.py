@@ -64,6 +64,17 @@ class _FakeFrameSource:
         return None
 
 
+class _TimedFrameSource(_FakeFrameSource):
+    def last_stage_timings(self) -> dict[str, float]:
+        return {
+            "throttle": 0.001,
+            "read": 0.002,
+            "wait": 0.003,
+            "decode_read": 0.004,
+            "reconnect": 0.005,
+        }
+
+
 class _FakeDetector:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
@@ -1334,6 +1345,30 @@ async def test_engine_includes_detector_substage_timings_when_available() -> Non
     assert engine.last_stage_timings["detect_session"] == pytest.approx(0.002)
     assert engine.last_stage_timings["detect_parse"] == pytest.approx(0.003)
     assert engine.last_stage_timings["detect_nms"] == pytest.approx(0.004)
+
+
+@pytest.mark.asyncio
+async def test_engine_includes_capture_substage_timings_when_available() -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_TimedFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 7, 21, 10, tzinfo=UTC))
+
+    assert engine.last_stage_timings["capture_throttle"] == pytest.approx(0.001)
+    assert engine.last_stage_timings["capture_read"] == pytest.approx(0.002)
+    assert engine.last_stage_timings["capture_wait"] == pytest.approx(0.003)
+    assert engine.last_stage_timings["capture_decode_read"] == pytest.approx(0.004)
+    assert engine.last_stage_timings["capture_reconnect"] == pytest.approx(0.005)
 
 
 @pytest.mark.asyncio

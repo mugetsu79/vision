@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
 import pytest
 
@@ -304,6 +305,40 @@ def test_detector_exposes_last_stage_timings(vehicle_frame) -> None:
 
     assert set(detector.last_stage_timings()) == {"prepare", "session", "parse", "nms"}
     assert all(duration >= 0.0 for duration in detector.last_stage_timings().values())
+
+
+def test_detector_prepare_tensor_matches_yolo_rgb_nchw_layout(vehicle_frame) -> None:
+    model_config = DetectionModelConfig(
+        name="detector",
+        path="tests/fixtures/fake-detector.onnx",
+        classes=["car", "truck"],
+        input_shape={"width": 16, "height": 8},
+    )
+    runtime = _FakeRuntime(
+        providers=["CPUExecutionProvider"],
+        outputs=[np.zeros((0, 6), dtype=np.float32)],
+    )
+    detector = YoloDetector(
+        model_config,
+        runtime=runtime,
+        runtime_policy=_runtime_policy(
+            system="darwin",
+            machine="x86_64",
+            cpu_vendor=CpuVendor.INTEL,
+            profile=ExecutionProfile.MACOS_X86_64_INTEL,
+            provider=ExecutionProvider.CPU,
+            available_providers=(ExecutionProvider.CPU.value,),
+        ),
+    )
+
+    tensor = detector._prepare_tensor(vehicle_frame)
+
+    resized = cv2.resize(vehicle_frame, (16, 8), interpolation=cv2.INTER_LINEAR)
+    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    expected = np.transpose(rgb.astype(np.float32) / 255.0, (2, 0, 1))[np.newaxis, ...]
+    assert tensor.dtype == np.float32
+    assert tensor.shape == (1, 3, 8, 16)
+    np.testing.assert_allclose(tensor, expected, rtol=1e-6, atol=1e-6)
 
 
 def test_detector_uses_resolved_runtime_policy_provider_and_thread_overrides(vehicle_frame) -> None:

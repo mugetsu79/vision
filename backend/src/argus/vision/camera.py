@@ -12,6 +12,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from logging import getLogger
+from time import perf_counter
 from typing import Any, Protocol, cast
 
 import cv2
@@ -60,6 +61,12 @@ class _PrefetchedFrameCapture:
             return True, self._first_frame
         return self._capture.read()
 
+    def last_stage_timings(self) -> dict[str, float]:
+        last_stage_timings = getattr(self._capture, "last_stage_timings", None)
+        if not callable(last_stage_timings):
+            return {}
+        return dict(last_stage_timings())
+
     def release(self) -> None:
         self._capture.release()
 
@@ -76,6 +83,7 @@ class _LatestFrameCapture:
     _closed: bool = False
     _pump_done: bool = False
     _capture_released: bool = False
+    _last_stage_timings: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def create(
@@ -111,13 +119,29 @@ class _LatestFrameCapture:
         self._pump_thread.start()
 
     def read(self) -> tuple[bool, Frame | None]:
+        started_at = perf_counter()
         if not self._new_frame_event.wait(timeout=self._read_timeout_s):
+            completed_at = perf_counter()
+            self._last_stage_timings = {
+                "wait": max(0.0, completed_at - started_at),
+            }
             return False, None
+        waited_at = perf_counter()
         self._new_frame_event.clear()
         try:
-            return True, self._latest_frame[0]
+            frame = self._latest_frame[0]
         except IndexError:
+            self._last_stage_timings = {
+                "wait": max(0.0, waited_at - started_at),
+            }
             return False, None
+        self._last_stage_timings = {
+            "wait": max(0.0, waited_at - started_at),
+        }
+        return True, frame
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._last_stage_timings)
 
     def release(self) -> None:
         self._closed = True
@@ -185,17 +209,30 @@ class CameraSource:
         self._raw_frame_index = 0
         self._last_yield_at: float | None = None
         self._reconnect_attempts = 0
+        self._last_stage_timings: dict[str, float] = {}
 
     @property
     def reconnect_attempts(self) -> int:
         return self._reconnect_attempts
 
     def next_frame(self) -> Frame:
+        timings = {
+            "throttle": 0.0,
+            "read": 0.0,
+            "reconnect": 0.0,
+        }
+        throttle_started_at = self._monotonic()
         self._throttle()
+        timings["throttle"] = max(0.0, self._monotonic() - throttle_started_at)
         while True:
+            read_started_at = self._monotonic()
             success, frame = self._capture.read()
+            timings["read"] += max(0.0, self._monotonic() - read_started_at)
+            self._merge_capture_stage_timings(timings)
             if not success or frame is None:
+                reconnect_started_at = self._monotonic()
                 self._reconnect()
+                timings["reconnect"] += max(0.0, self._monotonic() - reconnect_started_at)
                 continue
 
             current_index = self._raw_frame_index
@@ -206,7 +243,11 @@ class CameraSource:
             if self._last_yield_at is None:
                 self._last_yield_at = self._monotonic()
             self._reconnect_attempts = 0
+            self._last_stage_timings = timings
             return frame
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._last_stage_timings)
 
     def close(self) -> None:
         self._capture.release()
@@ -259,6 +300,18 @@ class CameraSource:
                 continue
             self._reconnect_attempts += 1
             return
+
+    def _merge_capture_stage_timings(self, timings: dict[str, float]) -> None:
+        last_stage_timings = getattr(self._capture, "last_stage_timings", None)
+        if not callable(last_stage_timings):
+            return
+        for stage_name, duration in last_stage_timings().items():
+            if (
+                isinstance(stage_name, str)
+                and stage_name != "read"
+                and isinstance(duration, int | float)
+            ):
+                timings[stage_name] = timings.get(stage_name, 0.0) + float(duration)
 
 
 def create_camera_source(
@@ -476,6 +529,7 @@ def _configure_opencv_capture(capture: cv2.VideoCapture) -> None:
         except Exception:  # pragma: no cover - backend-specific OpenCV failure
             continue
 
+
 @dataclass(slots=True)
 class _GStreamerRawVideoCapture:
     _process: subprocess.Popen[bytes]
@@ -488,6 +542,7 @@ class _GStreamerRawVideoCapture:
     _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
     _new_frame_event: threading.Event = field(default_factory=threading.Event)
     _frame_pump_done: bool = False
+    _last_stage_timings: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def create(cls, source: str) -> _GStreamerRawVideoCapture:
@@ -544,12 +599,17 @@ class _GStreamerRawVideoCapture:
         def pump() -> None:
             try:
                 while True:
+                    read_started_at = perf_counter()
                     payload = _read_exact_frame_payload(stdout, frame_size)
                     if payload is None:
                         return
                     frame = np.frombuffer(payload, dtype=np.uint8).reshape(
                         (height, width, 3)
                     ).copy()
+                    completed_at = perf_counter()
+                    self._last_stage_timings = {
+                        "decode_read": max(0.0, completed_at - read_started_at),
+                    }
                     self._latest_frame.append(frame)
                     self._new_frame_event.set()
             except (OSError, ValueError):
@@ -561,19 +621,33 @@ class _GStreamerRawVideoCapture:
         threading.Thread(target=pump, daemon=True).start()
 
     def read(self) -> tuple[bool, Frame | None]:
+        started_at = perf_counter()
         if not self._new_frame_event.wait(timeout=_FFMPEG_FRAME_WAIT_TIMEOUT_S):
+            timings = dict(self._last_stage_timings)
+            timings["wait"] = max(0.0, perf_counter() - started_at)
+            self._last_stage_timings = timings
             self._report_stderr(
                 f"no frame produced within {_FFMPEG_FRAME_WAIT_TIMEOUT_S:.0f}s"
             )
             return False, None
+        waited_at = perf_counter()
         self._new_frame_event.clear()
         try:
             frame = self._latest_frame[0]
         except IndexError:
+            timings = dict(self._last_stage_timings)
+            timings["wait"] = max(0.0, waited_at - started_at)
+            self._last_stage_timings = timings
             if self._frame_pump_done:
                 self._report_stderr("GStreamer frame pump exited")
             return False, None
+        timings = dict(self._last_stage_timings)
+        timings["wait"] = max(0.0, waited_at - started_at)
+        self._last_stage_timings = timings
         return True, frame
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._last_stage_timings)
 
     def _report_stderr(self, reason: str) -> None:
         if self._stderr_reported:
@@ -631,6 +705,7 @@ class _FFmpegRawVideoCapture:
     _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
     _new_frame_event: threading.Event = field(default_factory=threading.Event)
     _frame_pump_done: bool = False
+    _last_stage_timings: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def create(cls, source_uri: str) -> _FFmpegRawVideoCapture:
@@ -704,12 +779,17 @@ class _FFmpegRawVideoCapture:
         def pump() -> None:
             try:
                 while True:
+                    read_started_at = perf_counter()
                     payload = _read_exact_frame_payload(stdout, frame_size)
                     if payload is None:
                         return
                     frame = np.frombuffer(payload, dtype=np.uint8).reshape(
                         (height, width, 3)
                     ).copy()
+                    completed_at = perf_counter()
+                    self._last_stage_timings = {
+                        "decode_read": max(0.0, completed_at - read_started_at),
+                    }
                     self._latest_frame.append(frame)
                     self._new_frame_event.set()
             except (OSError, ValueError):
@@ -721,22 +801,39 @@ class _FFmpegRawVideoCapture:
         threading.Thread(target=pump, daemon=True).start()
 
     def read(self) -> tuple[bool, Frame | None]:
+        started_at = perf_counter()
         if not self._new_frame_event.wait(timeout=_FFMPEG_FRAME_WAIT_TIMEOUT_S):
+            timings = dict(self._last_stage_timings)
+            timings["wait"] = max(0.0, perf_counter() - started_at)
+            self._last_stage_timings = timings
             self._report_stderr(
                 f"no frame produced within {_FFMPEG_FRAME_WAIT_TIMEOUT_S:.0f}s"
             )
             return False, None
+        waited_at = perf_counter()
         self._new_frame_event.clear()
         try:
             frame = self._latest_frame[0]
         except IndexError:
+            timings = dict(self._last_stage_timings)
+            timings["wait"] = max(0.0, waited_at - started_at)
+            self._last_stage_timings = timings
             if self._frame_pump_done:
                 self._report_stderr("ffmpeg frame pump exited")
             return False, None
         if self._frame_pump_done and len(self._latest_frame) == 0:
+            timings = dict(self._last_stage_timings)
+            timings["wait"] = max(0.0, waited_at - started_at)
+            self._last_stage_timings = timings
             self._report_stderr("ffmpeg frame pump exited")
             return False, None
+        timings = dict(self._last_stage_timings)
+        timings["wait"] = max(0.0, waited_at - started_at)
+        self._last_stage_timings = timings
         return True, frame
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._last_stage_timings)
 
     def _report_stderr(self, reason: str) -> None:
         if self._stderr_reported:

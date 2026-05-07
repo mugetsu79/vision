@@ -689,6 +689,7 @@ class InferenceEngine:
                 ts=current_ts,
             )
         stage_timer.record_stage("capture", ended_at=loop.time())
+        self._record_frame_source_substage_timings(stage_timer)
         processed = self.preprocessor(frame.copy())
         stage_timer.record_stage("preprocess", ended_at=loop.time())
         visible_classes = self._visible_classes()
@@ -944,6 +945,14 @@ class InferenceEngine:
         for stage_name, duration in last_stage_timings().items():
             if isinstance(stage_name, str) and isinstance(duration, int | float):
                 stage_timer.record_duration(f"detect_{stage_name}", float(duration))
+
+    def _record_frame_source_substage_timings(self, stage_timer: _FrameStageTimer) -> None:
+        last_stage_timings = getattr(self.frame_source, "last_stage_timings", None)
+        if not callable(last_stage_timings):
+            return
+        for stage_name, duration in last_stage_timings().items():
+            if isinstance(stage_name, str) and isinstance(duration, int | float):
+                stage_timer.record_duration(f"capture_{stage_name}", float(duration))
 
     def _face_privacy_classes(self) -> list[str]:
         if self.config.model.capability is DetectorCapability.OPEN_VOCAB:

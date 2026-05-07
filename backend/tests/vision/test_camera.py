@@ -43,6 +43,20 @@ class _FakeCapture:
         self.released = True
 
 
+class _TimedFakeCapture(_FakeCapture):
+    def __init__(
+        self,
+        frames: list[np.ndarray | None],
+        *,
+        stage_timings: dict[str, float],
+    ) -> None:
+        super().__init__(frames)
+        self._stage_timings = dict(stage_timings)
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._stage_timings)
+
+
 class _BlockingReadCapture:
     def __init__(self) -> None:
         self.read_started = threading.Event()
@@ -286,8 +300,6 @@ def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
         ),
     ]
     sleep_calls: list[float] = []
-    clock_values = iter([0.0, 0.0, 0.1, 0.1, 0.55, 0.55])
-
     def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
         return capture_attempts.pop(0)
 
@@ -299,7 +311,7 @@ def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
         ),
         platform_info=PlatformInfo(machine="x86_64", jetson=False),
         capture_factory=capture_factory,
-        monotonic=lambda: next(clock_values),
+        monotonic=lambda: 0.0,
         sleep=sleep_calls.append,
     )
 
@@ -310,6 +322,33 @@ def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
     assert int(second[0, 0, 0]) == 3
     assert sleep_calls == [0.5, 1.0]
     assert source.reconnect_attempts == 0
+
+
+def test_camera_source_exposes_capture_substage_timings() -> None:
+    frame = np.full((2, 2, 3), 8, dtype=np.uint8)
+    clock_values = iter([0.0, 0.0, 1.0, 1.02, 1.02])
+
+    def capture_factory(source: str | int, backend: int | None) -> _TimedFakeCapture:
+        del source, backend
+        return _TimedFakeCapture(
+            [frame],
+            stage_timings={"wait": 0.125, "decode_read": 0.025},
+        )
+
+    source = create_camera_source(
+        CameraSourceConfig(source_uri="rtsp://camera.internal/live", fps_cap=0),
+        platform_info=PlatformInfo(machine="x86_64", jetson=False),
+        capture_factory=capture_factory,
+        monotonic=lambda: next(clock_values),
+    )
+
+    np.testing.assert_array_equal(source.next_frame(), frame)
+
+    assert source.last_stage_timings()["throttle"] == pytest.approx(0.0)
+    assert source.last_stage_timings()["read"] == pytest.approx(0.02)
+    assert source.last_stage_timings()["wait"] == pytest.approx(0.125)
+    assert source.last_stage_timings()["decode_read"] == pytest.approx(0.025)
+    assert source.last_stage_timings()["reconnect"] == pytest.approx(0.0)
 
 
 def test_camera_source_refreshes_source_uri_on_reconnect_and_redacts_log(

@@ -122,10 +122,15 @@ class YoloDetector:
     def _prepare_tensor(self, frame: NDArray[np.uint8]) -> NDArray[np.float32]:
         target_width = int(self.model_config.input_shape["width"])
         target_height = int(self.model_config.input_shape["height"])
-        resized = cv2.resize(frame, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        normalized = rgb.astype(np.float32) / 255.0
-        return np.transpose(normalized, (2, 0, 1))[np.newaxis, ...]
+        blob = cv2.dnn.blobFromImage(
+            frame,
+            1.0 / 255.0,
+            (target_width, target_height),
+            (0.0, 0.0, 0.0),
+            True,
+            False,
+        )
+        return np.asarray(blob, dtype=np.float32)
 
     def _parse_predictions(
         self,
