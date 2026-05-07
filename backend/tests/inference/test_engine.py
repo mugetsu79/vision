@@ -76,6 +76,16 @@ class _FakeDetector:
         ]
 
 
+class _TimedFakeDetector(_FakeDetector):
+    def last_stage_timings(self) -> dict[str, float]:
+        return {
+            "prepare": 0.001,
+            "session": 0.002,
+            "parse": 0.003,
+            "nms": 0.004,
+        }
+
+
 class _SequenceDetector:
     def __init__(self, detections: list[list[Detection]]) -> None:
         self._detections = iter(detections)
@@ -1301,6 +1311,29 @@ async def test_engine_exposes_last_stage_timings_for_processed_frame() -> None:
     assert engine.last_stage_timings["attributes"] >= 0.0
     assert engine.last_stage_timings["publish_stream"] >= 0.0
     assert engine.last_stage_timings["total"] >= engine.last_stage_timings["detect"]
+
+
+@pytest.mark.asyncio
+async def test_engine_includes_detector_substage_timings_when_available() -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_TimedFakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 7, 20, 40, tzinfo=UTC))
+
+    assert engine.last_stage_timings["detect_prepare"] == pytest.approx(0.001)
+    assert engine.last_stage_timings["detect_session"] == pytest.approx(0.002)
+    assert engine.last_stage_timings["detect_parse"] == pytest.approx(0.003)
+    assert engine.last_stage_timings["detect_nms"] == pytest.approx(0.004)
 
 
 @pytest.mark.asyncio

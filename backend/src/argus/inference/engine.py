@@ -490,6 +490,9 @@ class _FrameStageTimer:
         self.durations[name] = max(0.0, current_at - self.last_mark_at)
         self.last_mark_at = current_at
 
+    def record_duration(self, name: str, duration: float) -> None:
+        self.durations[name] = max(0.0, duration)
+
     def record_skipped_stage(self, name: str) -> None:
         self.durations[name] = 0.0
 
@@ -697,6 +700,7 @@ class InferenceEngine:
             detection_count=len(detections),
         )
         stage_timer.record_stage("detect", ended_at=loop.time())
+        self._record_detector_substage_timings(stage_timer)
         filtered = self._filter_visible_detections(detections, visible_classes)
         tracked = self._tracker.update(filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
@@ -924,6 +928,14 @@ class InferenceEngine:
                 if class_name not in detector_classes:
                     detector_classes.append(class_name)
         return detector_classes
+
+    def _record_detector_substage_timings(self, stage_timer: _FrameStageTimer) -> None:
+        last_stage_timings = getattr(self.detector, "last_stage_timings", None)
+        if not callable(last_stage_timings):
+            return
+        for stage_name, duration in last_stage_timings().items():
+            if isinstance(stage_name, str) and isinstance(duration, int | float):
+                stage_timer.record_duration(f"detect_{stage_name}", float(duration))
 
     def _face_privacy_classes(self) -> list[str]:
         if self.config.model.capability is DetectorCapability.OPEN_VOCAB:

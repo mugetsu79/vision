@@ -271,6 +271,41 @@ def test_dense_detector_filters_after_selecting_best_class(vehicle_frame) -> Non
     assert detections == []
 
 
+def test_detector_exposes_last_stage_timings(vehicle_frame) -> None:
+    model_config = DetectionModelConfig(
+        name="detector",
+        path="tests/fixtures/fake-detector.onnx",
+        classes=["car", "truck"],
+        input_shape={"width": 640, "height": 640},
+    )
+    runtime = _FakeRuntime(
+        providers=["CPUExecutionProvider"],
+        outputs=[
+            np.array(
+                [[18.0, 48.0, 58.0, 74.0, 0.94, 0.0]],
+                dtype=np.float32,
+            )
+        ],
+    )
+    detector = YoloDetector(
+        model_config,
+        runtime=runtime,
+        runtime_policy=_runtime_policy(
+            system="darwin",
+            machine="x86_64",
+            cpu_vendor=CpuVendor.INTEL,
+            profile=ExecutionProfile.MACOS_X86_64_INTEL,
+            provider=ExecutionProvider.CPU,
+            available_providers=(ExecutionProvider.CPU.value,),
+        ),
+    )
+
+    detector.detect(vehicle_frame, allowed_classes={"car"})
+
+    assert set(detector.last_stage_timings()) == {"prepare", "session", "parse", "nms"}
+    assert all(duration >= 0.0 for duration in detector.last_stage_timings().values())
+
+
 def test_detector_uses_resolved_runtime_policy_provider_and_thread_overrides(vehicle_frame) -> None:
     model_config = DetectionModelConfig(
         name="detector",

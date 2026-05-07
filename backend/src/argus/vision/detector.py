@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from logging import getLogger
+from time import perf_counter
 from typing import Any, Protocol
 
 import cv2
@@ -65,6 +66,7 @@ class YoloDetector:
         )
         self.selected_provider = self.runtime_policy.provider
         self.input_name = self.session.get_inputs()[0].name
+        self._last_stage_timings: dict[str, float] = {}
         LOGGER.info(
             "Loaded detection model %s with provider %s",
             self.model_config.name,
@@ -82,15 +84,30 @@ class YoloDetector:
             for index, class_name in enumerate(self.model_config.classes)
             if class_name in allowed
         }
+        started_at = perf_counter()
         tensor = self._prepare_tensor(frame)
+        prepared_at = perf_counter()
         outputs = self.session.run(None, {self.input_name: tensor})
+        inferred_at = perf_counter()
         predictions = self._parse_predictions(
             outputs[0],
             frame.shape[1],
             frame.shape[0],
             allowed_class_ids=allowed_class_ids,
         )
-        return _apply_nms(predictions, self.model_config.iou_threshold)
+        parsed_at = perf_counter()
+        detections = _apply_nms(predictions, self.model_config.iou_threshold)
+        completed_at = perf_counter()
+        self._last_stage_timings = {
+            "prepare": max(0.0, prepared_at - started_at),
+            "session": max(0.0, inferred_at - prepared_at),
+            "parse": max(0.0, parsed_at - inferred_at),
+            "nms": max(0.0, completed_at - parsed_at),
+        }
+        return detections
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._last_stage_timings)
 
     def update_runtime_vocabulary(self, vocabulary: list[str]) -> None:
         return None
