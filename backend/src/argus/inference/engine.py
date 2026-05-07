@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import inspect
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -234,6 +236,145 @@ class EventSubscriber(Protocol):
     async def publish(self, subject: str, payload: BaseModel) -> Any: ...
 
 
+@dataclass(slots=True, frozen=True)
+class _TrackingPersistenceRecord:
+    camera_id: UUID
+    ts: datetime
+    detections: list[Detection]
+    vocabulary_version: int | None
+    vocabulary_hash: str | None
+
+
+class BufferedTrackingStore:
+    def __init__(
+        self,
+        wrapped_store: TrackingStore,
+        *,
+        max_queue_size: int = 256,
+        shutdown_timeout_seconds: float = 5.0,
+    ) -> None:
+        if max_queue_size < 1:
+            raise ValueError("max_queue_size must be at least 1")
+        if shutdown_timeout_seconds <= 0:
+            raise ValueError("shutdown_timeout_seconds must be greater than 0")
+        self.wrapped_store = wrapped_store
+        self.max_queue_size = max_queue_size
+        self.shutdown_timeout_seconds = shutdown_timeout_seconds
+        self.dropped_records = 0
+        self._queue: asyncio.Queue[_TrackingPersistenceRecord | None] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
+        self._worker_task: asyncio.Task[None] | None = None
+        self._closed = False
+
+    @property
+    def pending_count(self) -> int:
+        return self._queue.qsize()
+
+    async def record(
+        self,
+        camera_id: UUID,
+        ts: datetime,
+        detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
+        if not detections or self._closed:
+            return
+        self._ensure_worker()
+        record = _TrackingPersistenceRecord(
+            camera_id=camera_id,
+            ts=ts,
+            detections=list(detections),
+            vocabulary_version=vocabulary_version,
+            vocabulary_hash=vocabulary_hash,
+        )
+        try:
+            self._queue.put_nowait(record)
+        except asyncio.QueueFull:
+            self._drop_oldest_pending()
+            try:
+                self._queue.put_nowait(record)
+            except asyncio.QueueFull:
+                self.dropped_records += 1
+                logger.warning(
+                    "Dropped tracking persistence record for camera %s because the "
+                    "background queue remained full.",
+                    camera_id,
+                )
+
+    async def close(self) -> None:
+        self._closed = True
+        worker_task = self._worker_task
+        if worker_task is None:
+            return
+        if worker_task.done():
+            await worker_task
+            return
+        try:
+            await asyncio.wait_for(
+                self._queue.put(None),
+                timeout=self.shutdown_timeout_seconds,
+            )
+            await asyncio.wait_for(
+                worker_task,
+                timeout=self.shutdown_timeout_seconds,
+            )
+        except TimeoutError:
+            worker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await worker_task
+            logger.warning(
+                "Timed out while flushing tracking persistence queue; dropped %s "
+                "pending records.",
+                self._queue.qsize(),
+            )
+
+    def _ensure_worker(self) -> None:
+        if self._worker_task is None or self._worker_task.done():
+            self._worker_task = asyncio.create_task(
+                self._drain(),
+                name="argus-tracking-persistence",
+            )
+
+    def _drop_oldest_pending(self) -> None:
+        try:
+            dropped = self._queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return
+        self._queue.task_done()
+        if dropped is not None:
+            self.dropped_records += 1
+            logger.warning(
+                "Dropped oldest tracking persistence record for camera %s because "
+                "the background queue is full.",
+                dropped.camera_id,
+            )
+
+    async def _drain(self) -> None:
+        while True:
+            record = await self._queue.get()
+            try:
+                if record is None:
+                    return
+                await self.wrapped_store.record(
+                    record.camera_id,
+                    record.ts,
+                    record.detections,
+                    vocabulary_version=record.vocabulary_version,
+                    vocabulary_hash=record.vocabulary_hash,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to persist buffered tracking events for camera %s; "
+                    "continuing worker loop.",
+                    record.camera_id if record is not None else "<shutdown>",
+                )
+            finally:
+                self._queue.task_done()
+
+
 class StreamClient(Protocol):
     async def register_stream(
         self,
@@ -442,6 +583,11 @@ class InferenceEngine:
     async def close(self) -> None:
         if self.incident_capture is not None:
             await self.incident_capture.close()
+        tracking_store_close = getattr(self.tracking_store, "close", None)
+        if tracking_store_close is not None:
+            close_result = tracking_store_close()
+            if inspect.isawaitable(close_result):
+                await close_result
         await self.publisher.close()
         self.frame_source.close()
 
@@ -1077,7 +1223,11 @@ async def build_runtime_engine(
         detector=detector,
         tracker_factory=tracker_factory,
         publisher=publisher,
-        tracking_store=tracking_store or _NoopTrackingStore(),
+        tracking_store=BufferedTrackingStore(
+            tracking_store or _NoopTrackingStore(),
+            max_queue_size=settings.tracking_persistence_queue_size,
+            shutdown_timeout_seconds=settings.tracking_persistence_shutdown_timeout_seconds,
+        ),
         count_event_store=count_event_store or _NoopCountEventStore(),
         rule_engine=rule_engine or _NoopRuleEngine(),
         event_client=events_client,

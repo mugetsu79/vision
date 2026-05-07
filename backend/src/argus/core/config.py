@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     inference_execution_profile_override: ExecutionProfile | None = None
     inference_session_inter_op_threads: int | None = Field(default=None, ge=1)
     inference_session_intra_op_threads: int | None = Field(default=None, ge=1)
+    tracking_persistence_queue_size: int = Field(default=256, ge=1)
+    tracking_persistence_shutdown_timeout_seconds: float = Field(default=5.0, gt=0)
     websocket_telemetry_buffer_size: int = 32
     video_feed_max_concurrent_per_user: int = 10
 

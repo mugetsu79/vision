@@ -81,6 +81,15 @@ def test_settings_accept_worker_diagnostics_flag() -> None:
     assert settings.worker_diagnostics_enabled is True
 
 
+def test_settings_accept_tracking_persistence_queue_size() -> None:
+    settings = Settings(
+        _env_file=None,
+        tracking_persistence_queue_size=7,
+    )
+
+    assert settings.tracking_persistence_queue_size == 7
+
+
 def test_settings_reject_invalid_inference_provider_override() -> None:
     with pytest.raises(ValidationError):
         Settings(

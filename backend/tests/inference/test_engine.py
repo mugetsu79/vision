@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -179,6 +180,27 @@ class _FakeTrackingStore:
         vocabulary_version: int | None = None,
         vocabulary_hash: str | None = None,
     ) -> None:
+        self.records.append((camera_id, detections))
+
+
+class _BlockingTrackingStore:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.records: list[tuple[UUID, list[Detection]]] = []
+
+    async def record(
+        self,
+        camera_id: UUID,
+        ts: datetime,
+        detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
+        del ts, vocabulary_version, vocabulary_hash
+        self.started.set()
+        await self.release.wait()
         self.records.append((camera_id, detections))
 
 
@@ -1168,6 +1190,46 @@ async def test_engine_continues_and_persists_history_when_telemetry_publish_fail
 
 
 @pytest.mark.asyncio
+async def test_engine_buffers_tracking_persistence_off_frame_loop() -> None:
+    camera_id = uuid4()
+    blocking_store = _BlockingTrackingStore()
+    buffered_store = engine_module.BufferedTrackingStore(
+        blocking_store,
+        max_queue_size=4,
+        shutdown_timeout_seconds=1.0,
+    )
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=buffered_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+    )
+
+    try:
+        await engine.start()
+        telemetry = await asyncio.wait_for(
+            engine.run_once(ts=datetime(2026, 4, 21, 19, 40, tzinfo=UTC)),
+            timeout=0.2,
+        )
+        await asyncio.wait_for(blocking_store.started.wait(), timeout=0.2)
+
+        assert telemetry.camera_id == camera_id
+        assert blocking_store.records == []
+        assert engine.last_stage_timings["persist_tracking"] < 0.05
+    finally:
+        blocking_store.release.set()
+        await engine.close()
+
+    assert len(blocking_store.records) == 1
+
+
+@pytest.mark.asyncio
 async def test_engine_records_stage_duration_metrics_by_camera_and_stage() -> None:
     camera_id = uuid4()
     engine = InferenceEngine(
@@ -1421,6 +1483,32 @@ async def test_build_runtime_engine_uses_detector_factory_for_fixed_vocab_models
     assert detector_calls["runtime_policy"] is runtime_policy
     model = detector_calls["model"]
     assert model.capability == DetectorCapability.FIXED_VOCAB
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_buffers_tracking_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+    tracking_store = _FakeTrackingStore()
+
+    engine = await engine_module.build_runtime_engine(
+        _engine_config(camera_id),
+        settings=engine_module.Settings(
+            _env_file=None,
+            tracking_persistence_queue_size=7,
+        ),
+        events_client=_FakeEventClient(),
+        tracking_store=tracking_store,
+    )
+
+    try:
+        assert isinstance(engine.tracking_store, engine_module.BufferedTrackingStore)
+        assert engine.tracking_store.wrapped_store is tracking_store
+        assert engine.tracking_store.max_queue_size == 7
+    finally:
+        await engine.close()
 
 
 @pytest.mark.asyncio
