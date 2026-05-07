@@ -87,6 +87,14 @@ Frame = NDArray[np.uint8]
 logger = logging.getLogger(__name__)
 
 _FACE_PRIVACY_DETECTION_CLASSES = ("person", "pedestrian")
+_TIMEOUT_ERRORS: tuple[type[BaseException], ...] = (TimeoutError,)
+_asyncio_timeout_error = getattr(asyncio, "TimeoutError", None)
+if (
+    isinstance(_asyncio_timeout_error, type)
+    and issubclass(_asyncio_timeout_error, BaseException)
+    and _asyncio_timeout_error is not TimeoutError
+):
+    _TIMEOUT_ERRORS = (TimeoutError, _asyncio_timeout_error)
 
 
 class RuntimeVocabularySettings(BaseModel):
@@ -328,7 +336,7 @@ class BufferedTrackingStore:
                 worker_task,
                 timeout=self.shutdown_timeout_seconds,
             )
-        except TimeoutError:
+        except _TIMEOUT_ERRORS:
             worker_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await worker_task
@@ -397,7 +405,7 @@ class BufferedTrackingStore:
                 break
             try:
                 next_record = await asyncio.wait_for(self._queue.get(), timeout=timeout)
-            except TimeoutError:
+            except _TIMEOUT_ERRORS:
                 break
             if next_record is None:
                 self._queue.task_done()

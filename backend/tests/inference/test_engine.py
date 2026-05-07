@@ -1488,6 +1488,32 @@ async def test_buffered_tracking_store_batches_available_records() -> None:
 
 
 @pytest.mark.asyncio
+async def test_buffered_tracking_store_flushes_partial_batch_after_timeout() -> None:
+    camera_id = uuid4()
+    batch_store = _BatchTrackingStore()
+    buffered_store = engine_module.BufferedTrackingStore(
+        batch_store,
+        max_queue_size=8,
+        shutdown_timeout_seconds=1.0,
+        max_batch_size=3,
+        batch_flush_interval_seconds=0.01,
+    )
+
+    await buffered_store.record(
+        camera_id,
+        datetime(2026, 5, 7, 20, 55, tzinfo=UTC),
+        [Detection(class_name="car", confidence=0.9, bbox=(1, 2, 3, 4), track_id=1)],
+    )
+
+    await asyncio.sleep(0.05)
+    await buffered_store.close()
+
+    assert batch_store.records == []
+    assert len(batch_store.batches) == 1
+    assert len(batch_store.batches[0]) == 1
+
+
+@pytest.mark.asyncio
 async def test_engine_records_stage_duration_metrics_by_camera_and_stage() -> None:
     camera_id = uuid4()
     engine = InferenceEngine(
