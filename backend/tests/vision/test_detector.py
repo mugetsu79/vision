@@ -233,6 +233,44 @@ def test_detector_supports_channel_first_yolo_outputs(vehicle_frame) -> None:
     assert detections[1].bbox == pytest.approx((16.0, 5.7, 32.0, 11.7), rel=1e-6)
 
 
+def test_dense_detector_filters_after_selecting_best_class(vehicle_frame) -> None:
+    model_config = DetectionModelConfig(
+        name="detector",
+        path="tests/fixtures/fake-detector.onnx",
+        classes=["car", "truck", "person", "hi_vis_worker"],
+        input_shape={"width": 640, "height": 640},
+        confidence_threshold=0.2,
+    )
+    runtime = _FakeRuntime(
+        providers=["CPUExecutionProvider"],
+        outputs=[
+            np.array(
+                [
+                    [38.0, 61.0, 40.0, 26.0, 0.50, 0.03, 0.97, 0.01],
+                    [96.0, 58.0, 64.0, 40.0, 0.02, 0.04, 0.93, 0.01],
+                ],
+                dtype=np.float32,
+            )
+        ],
+    )
+    detector = YoloDetector(
+        model_config,
+        runtime=runtime,
+        runtime_policy=_runtime_policy(
+            system="darwin",
+            machine="x86_64",
+            cpu_vendor=CpuVendor.INTEL,
+            profile=ExecutionProfile.MACOS_X86_64_INTEL,
+            provider=ExecutionProvider.CPU,
+            available_providers=(ExecutionProvider.CPU.value,),
+        ),
+    )
+
+    detections = detector.detect(vehicle_frame, allowed_classes={"car"})
+
+    assert detections == []
+
+
 def test_detector_uses_resolved_runtime_policy_provider_and_thread_overrides(vehicle_frame) -> None:
     model_config = DetectionModelConfig(
         name="detector",

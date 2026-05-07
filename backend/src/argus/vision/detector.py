@@ -77,16 +77,20 @@ class YoloDetector:
         allowed_classes: Iterable[str] | None = None,
     ) -> list[Detection]:
         allowed = set(allowed_classes or self.model_config.classes)
+        allowed_class_ids = {
+            index
+            for index, class_name in enumerate(self.model_config.classes)
+            if class_name in allowed
+        }
         tensor = self._prepare_tensor(frame)
         outputs = self.session.run(None, {self.input_name: tensor})
-        predictions = self._parse_predictions(outputs[0], frame.shape[1], frame.shape[0])
-        filtered = [
-            prediction
-            for prediction in predictions
-            if prediction.confidence >= self.model_config.confidence_threshold
-            and prediction.class_name in allowed
-        ]
-        return _apply_nms(filtered, self.model_config.iou_threshold)
+        predictions = self._parse_predictions(
+            outputs[0],
+            frame.shape[1],
+            frame.shape[0],
+            allowed_class_ids=allowed_class_ids,
+        )
+        return _apply_nms(predictions, self.model_config.iou_threshold)
 
     def update_runtime_vocabulary(self, vocabulary: list[str]) -> None:
         return None
@@ -111,6 +115,8 @@ class YoloDetector:
         predictions: NDArray[np.float32],
         frame_width: int,
         frame_height: int,
+        *,
+        allowed_class_ids: set[int],
     ) -> list[Detection]:
         squeezed = np.asarray(predictions, dtype=np.float32)
         transposed_channel_first = False
@@ -145,7 +151,8 @@ class YoloDetector:
                     ),
                 )
                 for row in squeezed
-                if int(row[5]) < len(self.model_config.classes)
+                if int(row[5]) in allowed_class_ids
+                and float(row[4]) >= self.model_config.confidence_threshold
             ]
 
         if transposed_channel_first:
@@ -154,6 +161,7 @@ class YoloDetector:
                 frame_width=frame_width,
                 frame_height=frame_height,
                 has_objectness=False,
+                allowed_class_ids=allowed_class_ids,
             )
 
         if squeezed.shape[1] == 4 + len(self.model_config.classes):
@@ -162,6 +170,7 @@ class YoloDetector:
                 frame_width=frame_width,
                 frame_height=frame_height,
                 has_objectness=False,
+                allowed_class_ids=allowed_class_ids,
             )
 
         if squeezed.shape[1] >= 5 + len(self.model_config.classes):
@@ -170,6 +179,7 @@ class YoloDetector:
                 frame_width=frame_width,
                 frame_height=frame_height,
                 has_objectness=True,
+                allowed_class_ids=allowed_class_ids,
             )
 
         if squeezed.shape[1] < 6:
@@ -183,26 +193,39 @@ class YoloDetector:
         frame_width: int,
         frame_height: int,
         has_objectness: bool,
+        allowed_class_ids: set[int],
     ) -> list[Detection]:
         detections: list[Detection] = []
         class_offset = 5 if has_objectness else 4
         class_scores = predictions[:, class_offset:]
-        if class_scores.size == 0:
+        if class_scores.size == 0 or not allowed_class_ids:
             return detections
+        allowed_indices = np.fromiter(
+            sorted(allowed_class_ids),
+            dtype=np.int64,
+            count=len(allowed_class_ids),
+        )
+        allowed_indices = allowed_indices[allowed_indices < class_scores.shape[1]]
+        if allowed_indices.size == 0:
+            return detections
+        allowed_mask = np.zeros(class_scores.shape[1], dtype=np.bool_)
+        allowed_mask[allowed_indices] = True
         class_ids = np.argmax(class_scores, axis=1)
         class_confidences = class_scores[np.arange(len(class_ids)), class_ids]
         if has_objectness:
             confidences = predictions[:, 4] * class_confidences
         else:
             confidences = class_confidences
+        keep_indices = np.flatnonzero(
+            (confidences >= self.model_config.confidence_threshold)
+            & allowed_mask[class_ids]
+        )
         for row, class_id, confidence in zip(
-            predictions,
-            class_ids.tolist(),
-            confidences.tolist(),
+            predictions[keep_indices],
+            class_ids[keep_indices].tolist(),
+            confidences[keep_indices].tolist(),
             strict=False,
         ):
-            if class_id >= len(self.model_config.classes):
-                continue
             x_center, y_center, width, height = [float(value) for value in row[:4]]
             bbox = (
                 x_center - width / 2.0,
