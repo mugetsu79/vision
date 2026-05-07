@@ -16,6 +16,14 @@ from argus.streaming.mediamtx import PublishProfile, StreamMode
 
 MonotonicClock = Callable[[], float]
 logger = logging.getLogger(__name__)
+_TIMEOUT_ERRORS: tuple[type[BaseException], ...] = (TimeoutError,)
+_asyncio_timeout_error = getattr(asyncio, "TimeoutError", None)
+if (
+    isinstance(_asyncio_timeout_error, type)
+    and issubclass(_asyncio_timeout_error, BaseException)
+    and _asyncio_timeout_error is not TimeoutError
+):
+    _TIMEOUT_ERRORS = (TimeoutError, _asyncio_timeout_error)
 
 
 class TelemetryTrack(BaseModel):
@@ -79,15 +87,23 @@ class BufferedTelemetryPublisher:
         wrapped_publisher: PublisherTransport,
         *,
         max_queue_size: int = 64,
+        publish_timeout_seconds: float = 1.0,
         shutdown_timeout_seconds: float = 2.0,
+        drop_log_interval_frames: int = 100,
     ) -> None:
         if max_queue_size < 1:
             raise ValueError("max_queue_size must be at least 1")
+        if publish_timeout_seconds <= 0:
+            raise ValueError("publish_timeout_seconds must be greater than 0")
         if shutdown_timeout_seconds <= 0:
             raise ValueError("shutdown_timeout_seconds must be greater than 0")
+        if drop_log_interval_frames < 1:
+            raise ValueError("drop_log_interval_frames must be at least 1")
         self.wrapped_publisher = wrapped_publisher
         self.max_queue_size = max_queue_size
+        self.publish_timeout_seconds = publish_timeout_seconds
         self.shutdown_timeout_seconds = shutdown_timeout_seconds
+        self.drop_log_interval_frames = drop_log_interval_frames
         self.dropped_frames = 0
         self._queue: asyncio.Queue[TelemetryFrame | None] = asyncio.Queue(
             maxsize=max_queue_size
@@ -131,7 +147,7 @@ class BufferedTelemetryPublisher:
                     worker_task,
                     timeout=self.shutdown_timeout_seconds,
                 )
-            except TimeoutError:
+            except _TIMEOUT_ERRORS:
                 worker_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await worker_task
@@ -158,11 +174,14 @@ class BufferedTelemetryPublisher:
         self._queue.task_done()
         if dropped is not None:
             self.dropped_frames += 1
-            logger.warning(
-                "Dropped oldest live telemetry frame for camera %s because the "
-                "background queue is full.",
-                dropped.camera_id,
-            )
+            if self._should_log_dropped_frame():
+                logger.warning(
+                    "Dropped oldest live telemetry frame for camera %s because the "
+                    "background queue is full. dropped_frames=%s pending_frames=%s",
+                    dropped.camera_id,
+                    self.dropped_frames,
+                    self._queue.qsize(),
+                )
 
     async def _drain(self) -> None:
         while True:
@@ -170,7 +189,7 @@ class BufferedTelemetryPublisher:
             try:
                 if frame is None:
                     return
-                await self.wrapped_publisher.publish(frame)
+                await self._publish_with_timeout(frame)
             except Exception:
                 logger.exception(
                     "Failed to publish buffered live telemetry for camera %s; "
@@ -179,6 +198,26 @@ class BufferedTelemetryPublisher:
                 )
             finally:
                 self._queue.task_done()
+
+    def _should_log_dropped_frame(self) -> bool:
+        return (
+            self.dropped_frames == 1
+            or self.dropped_frames % self.drop_log_interval_frames == 0
+        )
+
+    async def _publish_with_timeout(self, frame: TelemetryFrame) -> None:
+        try:
+            await asyncio.wait_for(
+                self.wrapped_publisher.publish(frame),
+                timeout=self.publish_timeout_seconds,
+            )
+        except _TIMEOUT_ERRORS:
+            logger.warning(
+                "Timed out publishing live telemetry frame for camera %s after %.1fs; "
+                "dropping stale frame.",
+                frame.camera_id,
+                self.publish_timeout_seconds,
+            )
 
 
 class HttpPublisher:

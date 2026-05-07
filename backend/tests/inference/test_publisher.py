@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -43,6 +44,19 @@ class _BlockingPublisher:
         self.started.set()
         await self.release.wait()
         self.frames.append(frame)
+
+    async def close(self) -> None:
+        return None
+
+
+class _NeverPublisher:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+
+    async def publish(self, frame: TelemetryFrame) -> None:
+        del frame
+        self.started.set()
+        await asyncio.Event().wait()
 
     async def close(self) -> None:
         return None
@@ -171,3 +185,58 @@ async def test_buffered_telemetry_publisher_drops_oldest_queued_live_frame() -> 
 
     assert blocking.frames == [first, latest]
     assert publisher.dropped_frames == 1
+
+
+@pytest.mark.asyncio
+async def test_buffered_telemetry_publisher_times_out_stuck_transport(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    never = _NeverPublisher()
+    publisher = BufferedTelemetryPublisher(
+        never,
+        max_queue_size=2,
+        publish_timeout_seconds=0.01,
+        shutdown_timeout_seconds=1.0,
+    )
+    caplog.set_level(logging.WARNING, logger="argus.inference.publisher")
+
+    await publisher.publish(_telemetry_frame())
+    await asyncio.wait_for(never.started.wait(), timeout=0.2)
+    await asyncio.sleep(0.05)
+    await publisher.close()
+
+    assert any(
+        "Timed out publishing live telemetry frame" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_buffered_telemetry_publisher_throttles_drop_warnings(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    blocking = _BlockingPublisher()
+    publisher = BufferedTelemetryPublisher(
+        blocking,
+        max_queue_size=1,
+        shutdown_timeout_seconds=1.0,
+        drop_log_interval_frames=3,
+    )
+    caplog.set_level(logging.WARNING, logger="argus.inference.publisher")
+
+    try:
+        await publisher.publish(_telemetry_frame(1))
+        await asyncio.wait_for(blocking.started.wait(), timeout=0.2)
+        for track_id in range(2, 7):
+            await publisher.publish(_telemetry_frame(track_id))
+    finally:
+        blocking.release.set()
+        await publisher.close()
+
+    drop_warnings = [
+        record
+        for record in caplog.records
+        if "Dropped oldest live telemetry frame" in record.message
+    ]
+    assert publisher.dropped_frames == 4
+    assert len(drop_warnings) == 2
