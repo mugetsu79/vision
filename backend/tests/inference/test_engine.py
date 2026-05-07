@@ -204,6 +204,27 @@ class _BlockingTrackingStore:
         self.records.append((camera_id, detections))
 
 
+class _BatchTrackingStore:
+    def __init__(self) -> None:
+        self.records: list[tuple[UUID, list[Detection]]] = []
+        self.batches: list[list[object]] = []
+
+    async def record(
+        self,
+        camera_id: UUID,
+        ts: datetime,
+        detections: list[Detection],
+        *,
+        vocabulary_version: int | None = None,
+        vocabulary_hash: str | None = None,
+    ) -> None:
+        del ts, vocabulary_version, vocabulary_hash
+        self.records.append((camera_id, detections))
+
+    async def record_many(self, records: list[object]) -> None:
+        self.batches.append(list(records))
+
+
 class _FakeCountEventStore:
     def __init__(self) -> None:
         self.records: list[tuple[UUID, list[CountEventRecord]]] = []
@@ -1230,6 +1251,40 @@ async def test_engine_buffers_tracking_persistence_off_frame_loop() -> None:
 
 
 @pytest.mark.asyncio
+async def test_buffered_tracking_store_batches_available_records() -> None:
+    camera_id = uuid4()
+    batch_store = _BatchTrackingStore()
+    buffered_store = engine_module.BufferedTrackingStore(
+        batch_store,
+        max_queue_size=8,
+        shutdown_timeout_seconds=1.0,
+        max_batch_size=3,
+        batch_flush_interval_seconds=0.05,
+    )
+
+    await buffered_store.record(
+        camera_id,
+        datetime(2026, 4, 21, 19, 40, tzinfo=UTC),
+        [Detection(class_name="car", confidence=0.9, bbox=(1, 2, 3, 4), track_id=1)],
+    )
+    await buffered_store.record(
+        camera_id,
+        datetime(2026, 4, 21, 19, 40, 1, tzinfo=UTC),
+        [Detection(class_name="truck", confidence=0.8, bbox=(2, 3, 4, 5), track_id=2)],
+    )
+    await buffered_store.record(
+        camera_id,
+        datetime(2026, 4, 21, 19, 40, 2, tzinfo=UTC),
+        [Detection(class_name="bus", confidence=0.7, bbox=(3, 4, 5, 6), track_id=3)],
+    )
+    await buffered_store.close()
+
+    assert batch_store.records == []
+    assert len(batch_store.batches) == 1
+    assert len(batch_store.batches[0]) == 3
+
+
+@pytest.mark.asyncio
 async def test_engine_records_stage_duration_metrics_by_camera_and_stage() -> None:
     camera_id = uuid4()
     engine = InferenceEngine(
@@ -1498,15 +1553,19 @@ async def test_build_runtime_engine_buffers_tracking_persistence(
         settings=engine_module.Settings(
             _env_file=None,
             tracking_persistence_queue_size=7,
+            tracking_persistence_batch_size=5,
         ),
         events_client=_FakeEventClient(),
         tracking_store=tracking_store,
     )
 
     try:
+        assert isinstance(engine.publisher, engine_module.BufferedTelemetryPublisher)
+        assert engine.publisher.max_queue_size == 64
         assert isinstance(engine.tracking_store, engine_module.BufferedTrackingStore)
         assert engine.tracking_store.wrapped_store is tracking_store
         assert engine.tracking_store.max_queue_size == 7
+        assert engine.tracking_store.max_batch_size == 5
     finally:
         await engine.close()
 

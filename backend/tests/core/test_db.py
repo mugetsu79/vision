@@ -10,7 +10,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from argus.core.config import Settings
-from argus.core.db import CountEventStore, DatabaseManager, TrackingEventStore
+from argus.core.db import (
+    CountEventStore,
+    DatabaseManager,
+    TrackingEventBatchRecord,
+    TrackingEventStore,
+)
 from argus.models.enums import CountEventType
 from argus.vision.count_events import CountEventRecord
 from argus.vision.types import Detection
@@ -20,12 +25,14 @@ class _CaptureSession:
     def __init__(self) -> None:
         self.rows: list[object] = []
         self.committed = False
+        self.commit_count = 0
 
     def add_all(self, rows: list[object]) -> None:
         self.rows.extend(rows)
 
     async def commit(self) -> None:
         self.committed = True
+        self.commit_count += 1
 
 
 class _CaptureSessionFactory:
@@ -133,6 +140,51 @@ async def test_tracking_event_store_records_vocabulary_attribution() -> None:
     row = session.rows[0]
     assert row.vocabulary_version == 2
     assert row.vocabulary_hash == expected_hash
+
+
+@pytest.mark.asyncio
+async def test_tracking_event_store_batches_frames_in_one_commit() -> None:
+    session = _CaptureSession()
+    store = TrackingEventStore(_CaptureSessionFactory(session))
+    camera_id = uuid4()
+
+    await store.record_many(
+        [
+            TrackingEventBatchRecord(
+                camera_id=camera_id,
+                ts=datetime(2026, 4, 25, 12, 30, tzinfo=UTC),
+                detections=[
+                    Detection(
+                        class_name="car",
+                        confidence=0.93,
+                        bbox=(1.0, 2.0, 3.0, 4.0),
+                        track_id=7,
+                    )
+                ],
+                vocabulary_version=2,
+                vocabulary_hash="hash-a",
+            ),
+            TrackingEventBatchRecord(
+                camera_id=camera_id,
+                ts=datetime(2026, 4, 25, 12, 30, 1, tzinfo=UTC),
+                detections=[
+                    Detection(
+                        class_name="bus",
+                        confidence=0.88,
+                        bbox=(5.0, 6.0, 7.0, 8.0),
+                        track_id=8,
+                    )
+                ],
+                vocabulary_version=3,
+                vocabulary_hash="hash-b",
+            ),
+        ]
+    )
+
+    assert session.commit_count == 1
+    assert len(session.rows) == 2
+    assert [row.class_name for row in session.rows] == ["car", "bus"]
+    assert [row.vocabulary_version for row in session.rows] == [2, 3]
 
 
 @pytest.mark.asyncio

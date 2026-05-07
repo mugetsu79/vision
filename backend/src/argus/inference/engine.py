@@ -20,7 +20,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from argus.compat import UTC
 from argus.core.config import Settings
-from argus.core.db import CountEventStore, DatabaseManager, TrackingEventStore
+from argus.core.db import (
+    CountEventStore,
+    DatabaseManager,
+    TrackingEventBatchRecord,
+    TrackingEventStore,
+)
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.logging import configure_logging, redact_url_secrets
 from argus.core.metrics import (
@@ -29,6 +34,7 @@ from argus.core.metrics import (
     INFERENCE_STAGE_DURATION_SECONDS,
 )
 from argus.inference.publisher import (
+    BufferedTelemetryPublisher,
     HttpPublisher,
     NatsPublisher,
     ResilientPublisher,
@@ -236,15 +242,6 @@ class EventSubscriber(Protocol):
     async def publish(self, subject: str, payload: BaseModel) -> Any: ...
 
 
-@dataclass(slots=True, frozen=True)
-class _TrackingPersistenceRecord:
-    camera_id: UUID
-    ts: datetime
-    detections: list[Detection]
-    vocabulary_version: int | None
-    vocabulary_hash: str | None
-
-
 class BufferedTrackingStore:
     def __init__(
         self,
@@ -252,16 +249,24 @@ class BufferedTrackingStore:
         *,
         max_queue_size: int = 256,
         shutdown_timeout_seconds: float = 5.0,
+        max_batch_size: int = 16,
+        batch_flush_interval_seconds: float = 0.1,
     ) -> None:
         if max_queue_size < 1:
             raise ValueError("max_queue_size must be at least 1")
         if shutdown_timeout_seconds <= 0:
             raise ValueError("shutdown_timeout_seconds must be greater than 0")
+        if max_batch_size < 1:
+            raise ValueError("max_batch_size must be at least 1")
+        if batch_flush_interval_seconds <= 0:
+            raise ValueError("batch_flush_interval_seconds must be greater than 0")
         self.wrapped_store = wrapped_store
         self.max_queue_size = max_queue_size
         self.shutdown_timeout_seconds = shutdown_timeout_seconds
+        self.max_batch_size = max_batch_size
+        self.batch_flush_interval_seconds = batch_flush_interval_seconds
         self.dropped_records = 0
-        self._queue: asyncio.Queue[_TrackingPersistenceRecord | None] = asyncio.Queue(
+        self._queue: asyncio.Queue[TrackingEventBatchRecord | None] = asyncio.Queue(
             maxsize=max_queue_size
         )
         self._worker_task: asyncio.Task[None] | None = None
@@ -283,7 +288,7 @@ class BufferedTrackingStore:
         if not detections or self._closed:
             return
         self._ensure_worker()
-        record = _TrackingPersistenceRecord(
+        record = TrackingEventBatchRecord(
             camera_id=camera_id,
             ts=ts,
             detections=list(detections),
@@ -355,24 +360,64 @@ class BufferedTrackingStore:
     async def _drain(self) -> None:
         while True:
             record = await self._queue.get()
+            if record is None:
+                self._queue.task_done()
+                return
+
+            batch, should_stop = await self._collect_batch(record)
             try:
-                if record is None:
-                    return
-                await self.wrapped_store.record(
-                    record.camera_id,
-                    record.ts,
-                    record.detections,
-                    vocabulary_version=record.vocabulary_version,
-                    vocabulary_hash=record.vocabulary_hash,
-                )
+                await self._persist_batch(batch)
             except Exception:
                 logger.exception(
-                    "Failed to persist buffered tracking events for camera %s; "
+                    "Failed to persist buffered tracking event batch for camera %s; "
                     "continuing worker loop.",
-                    record.camera_id if record is not None else "<shutdown>",
+                    batch[0].camera_id if batch else "<empty>",
                 )
             finally:
+                for _ in batch:
+                    self._queue.task_done()
+
+            if should_stop:
+                return
+
+    async def _collect_batch(
+        self,
+        first_record: TrackingEventBatchRecord,
+    ) -> tuple[list[TrackingEventBatchRecord], bool]:
+        batch = [first_record]
+        should_stop = False
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.batch_flush_interval_seconds
+
+        while len(batch) < self.max_batch_size:
+            timeout = deadline - loop.time()
+            if timeout <= 0:
+                break
+            try:
+                next_record = await asyncio.wait_for(self._queue.get(), timeout=timeout)
+            except TimeoutError:
+                break
+            if next_record is None:
                 self._queue.task_done()
+                should_stop = True
+                break
+            batch.append(next_record)
+
+        return batch, should_stop
+
+    async def _persist_batch(self, batch: list[TrackingEventBatchRecord]) -> None:
+        record_many = getattr(self.wrapped_store, "record_many", None)
+        if record_many is not None:
+            await record_many(batch)
+            return
+        for record in batch:
+            await self.wrapped_store.record(
+                record.camera_id,
+                record.ts,
+                record.detections,
+                vocabulary_version=record.vocabulary_version,
+                vocabulary_hash=record.vocabulary_hash,
+            )
 
 
 class StreamClient(Protocol):
@@ -1216,6 +1261,11 @@ async def build_runtime_engine(
         )
     else:
         publisher = primary_publisher
+    publisher = BufferedTelemetryPublisher(
+        publisher,
+        max_queue_size=settings.telemetry_publish_queue_size,
+        shutdown_timeout_seconds=settings.telemetry_publish_shutdown_timeout_seconds,
+    )
 
     return InferenceEngine(
         config=config,
@@ -1227,6 +1277,10 @@ async def build_runtime_engine(
             tracking_store or _NoopTrackingStore(),
             max_queue_size=settings.tracking_persistence_queue_size,
             shutdown_timeout_seconds=settings.tracking_persistence_shutdown_timeout_seconds,
+            max_batch_size=settings.tracking_persistence_batch_size,
+            batch_flush_interval_seconds=(
+                settings.tracking_persistence_batch_flush_interval_seconds
+            ),
         ),
         count_event_store=count_event_store or _NoopCountEventStore(),
         rule_engine=rule_engine or _NoopRuleEngine(),

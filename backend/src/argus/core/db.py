@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -21,6 +22,15 @@ from argus.vision.types import Detection
 
 if TYPE_CHECKING:
     from argus.vision.count_events import CountEventRecord
+
+
+@dataclass(slots=True, frozen=True)
+class TrackingEventBatchRecord:
+    camera_id: UUID
+    ts: datetime
+    detections: list[Detection]
+    vocabulary_version: int | None = None
+    vocabulary_hash: str | None = None
 
 
 class DatabaseManager:
@@ -56,13 +66,27 @@ class TrackingEventStore:
         vocabulary_version: int | None = None,
         vocabulary_hash: str | None = None,
     ) -> None:
-        if not detections:
+        await self.record_many(
+            [
+                TrackingEventBatchRecord(
+                    camera_id=camera_id,
+                    ts=ts,
+                    detections=detections,
+                    vocabulary_version=vocabulary_version,
+                    vocabulary_hash=vocabulary_hash,
+                )
+            ]
+        )
+
+    async def record_many(self, records: list[TrackingEventBatchRecord]) -> None:
+        records_with_detections = [record for record in records if record.detections]
+        if not records_with_detections:
             return
 
         rows = [
             TrackingEvent(
-                ts=ts,
-                camera_id=camera_id,
+                ts=record.ts,
+                camera_id=record.camera_id,
                 class_name=detection.class_name,
                 track_id=int(detection.track_id or 0),
                 confidence=detection.confidence,
@@ -70,8 +94,8 @@ class TrackingEventStore:
                 direction_deg=detection.direction_deg,
                 zone_id=detection.zone_id,
                 attributes=dict(detection.attributes) if detection.attributes else None,
-                vocabulary_version=vocabulary_version,
-                vocabulary_hash=vocabulary_hash,
+                vocabulary_version=record.vocabulary_version,
+                vocabulary_hash=record.vocabulary_hash,
                 bbox={
                     "x1": detection.bbox[0],
                     "y1": detection.bbox[1],
@@ -79,7 +103,8 @@ class TrackingEventStore:
                     "y2": detection.bbox[3],
                 },
             )
-            for detection in detections
+            for record in records_with_detections
+            for detection in record.detections
         ]
 
         async with self.session_factory() as session:

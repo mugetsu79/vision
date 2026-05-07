@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -9,6 +10,7 @@ from httpx import AsyncClient, MockTransport, Request, Response
 from pydantic import BaseModel
 
 from argus.inference.publisher import (
+    BufferedTelemetryPublisher,
     HttpPublisher,
     NatsPublisher,
     ResilientPublisher,
@@ -31,11 +33,26 @@ class _RecordingNatsClient:
         self.messages.append((subject, payload))
 
 
-def _telemetry_frame() -> TelemetryFrame:
+class _BlockingPublisher:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.frames: list[TelemetryFrame] = []
+
+    async def publish(self, frame: TelemetryFrame) -> None:
+        self.started.set()
+        await self.release.wait()
+        self.frames.append(frame)
+
+    async def close(self) -> None:
+        return None
+
+
+def _telemetry_frame(track_id: int = 7) -> TelemetryFrame:
     camera_id = uuid4()
     return TelemetryFrame(
         camera_id=camera_id,
-        ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC),
+        ts=datetime(2026, 4, 18, 12, 0, track_id, tzinfo=UTC),
         profile=PublishProfile.CENTRAL_GPU,
         stream_mode=StreamMode.ANNOTATED_WHIP,
         counts={"car": 1},
@@ -44,7 +61,7 @@ def _telemetry_frame() -> TelemetryFrame:
                 class_name="car",
                 confidence=0.96,
                 bbox={"x1": 12.0, "y1": 24.0, "x2": 48.0, "y2": 66.0},
-                track_id=7,
+                track_id=track_id,
             )
         ],
     )
@@ -107,3 +124,50 @@ async def test_resilient_publisher_falls_back_to_http_when_nats_is_unreachable()
 
     assert len(batches) == 1
     assert len(batches[0]) == 1
+
+
+@pytest.mark.asyncio
+async def test_buffered_telemetry_publisher_returns_while_transport_is_blocked() -> None:
+    blocking = _BlockingPublisher()
+    publisher = BufferedTelemetryPublisher(
+        blocking,
+        max_queue_size=4,
+        shutdown_timeout_seconds=1.0,
+    )
+    frame = _telemetry_frame()
+
+    try:
+        await asyncio.wait_for(publisher.publish(frame), timeout=0.2)
+        await asyncio.wait_for(blocking.started.wait(), timeout=0.2)
+
+        assert blocking.frames == []
+    finally:
+        blocking.release.set()
+        await publisher.close()
+
+    assert blocking.frames == [frame]
+
+
+@pytest.mark.asyncio
+async def test_buffered_telemetry_publisher_drops_oldest_queued_live_frame() -> None:
+    blocking = _BlockingPublisher()
+    publisher = BufferedTelemetryPublisher(
+        blocking,
+        max_queue_size=1,
+        shutdown_timeout_seconds=1.0,
+    )
+    first = _telemetry_frame(1)
+    stale = _telemetry_frame(2)
+    latest = _telemetry_frame(3)
+
+    try:
+        await publisher.publish(first)
+        await asyncio.wait_for(blocking.started.wait(), timeout=0.2)
+        await publisher.publish(stale)
+        await publisher.publish(latest)
+    finally:
+        blocking.release.set()
+        await publisher.close()
+
+    assert blocking.frames == [first, latest]
+    assert publisher.dropped_frames == 1

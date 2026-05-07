@@ -85,9 +85,13 @@ def test_settings_accept_tracking_persistence_queue_size() -> None:
     settings = Settings(
         _env_file=None,
         tracking_persistence_queue_size=7,
+        tracking_persistence_batch_size=5,
+        telemetry_publish_queue_size=11,
     )
 
     assert settings.tracking_persistence_queue_size == 7
+    assert settings.tracking_persistence_batch_size == 5
+    assert settings.telemetry_publish_queue_size == 11
 
 
 def test_settings_reject_invalid_inference_provider_override() -> None:

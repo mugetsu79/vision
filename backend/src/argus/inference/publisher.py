@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -12,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from argus.streaming.mediamtx import PublishProfile, StreamMode
 
 MonotonicClock = Callable[[], float]
+logger = logging.getLogger(__name__)
 
 
 class TelemetryTrack(BaseModel):
@@ -67,6 +71,114 @@ class NatsPublisher:
 
     async def close(self) -> None:
         return None
+
+
+class BufferedTelemetryPublisher:
+    def __init__(
+        self,
+        wrapped_publisher: PublisherTransport,
+        *,
+        max_queue_size: int = 64,
+        shutdown_timeout_seconds: float = 2.0,
+    ) -> None:
+        if max_queue_size < 1:
+            raise ValueError("max_queue_size must be at least 1")
+        if shutdown_timeout_seconds <= 0:
+            raise ValueError("shutdown_timeout_seconds must be greater than 0")
+        self.wrapped_publisher = wrapped_publisher
+        self.max_queue_size = max_queue_size
+        self.shutdown_timeout_seconds = shutdown_timeout_seconds
+        self.dropped_frames = 0
+        self._queue: asyncio.Queue[TelemetryFrame | None] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
+        self._worker_task: asyncio.Task[None] | None = None
+        self._closed = False
+
+    async def publish(self, frame: TelemetryFrame) -> None:
+        if self._closed:
+            return
+        self._ensure_worker()
+        try:
+            self._queue.put_nowait(frame)
+        except asyncio.QueueFull:
+            self._drop_oldest_pending()
+            try:
+                self._queue.put_nowait(frame)
+            except asyncio.QueueFull:
+                self.dropped_frames += 1
+                logger.warning(
+                    "Dropped live telemetry frame for camera %s because the "
+                    "background queue remained full.",
+                    frame.camera_id,
+                )
+
+    async def close(self) -> None:
+        self._closed = True
+        worker_task = self._worker_task
+        try:
+            if worker_task is None:
+                return
+            if worker_task.done():
+                await worker_task
+                return
+            try:
+                await asyncio.wait_for(
+                    self._queue.put(None),
+                    timeout=self.shutdown_timeout_seconds,
+                )
+                await asyncio.wait_for(
+                    worker_task,
+                    timeout=self.shutdown_timeout_seconds,
+                )
+            except TimeoutError:
+                worker_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await worker_task
+                logger.warning(
+                    "Timed out while flushing live telemetry queue; dropped %s "
+                    "pending frames.",
+                    self._queue.qsize(),
+                )
+        finally:
+            await self.wrapped_publisher.close()
+
+    def _ensure_worker(self) -> None:
+        if self._worker_task is None or self._worker_task.done():
+            self._worker_task = asyncio.create_task(
+                self._drain(),
+                name="argus-live-telemetry-publisher",
+            )
+
+    def _drop_oldest_pending(self) -> None:
+        try:
+            dropped = self._queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return
+        self._queue.task_done()
+        if dropped is not None:
+            self.dropped_frames += 1
+            logger.warning(
+                "Dropped oldest live telemetry frame for camera %s because the "
+                "background queue is full.",
+                dropped.camera_id,
+            )
+
+    async def _drain(self) -> None:
+        while True:
+            frame = await self._queue.get()
+            try:
+                if frame is None:
+                    return
+                await self.wrapped_publisher.publish(frame)
+            except Exception:
+                logger.exception(
+                    "Failed to publish buffered live telemetry for camera %s; "
+                    "continuing worker loop.",
+                    frame.camera_id if frame is not None else "<shutdown>",
+                )
+            finally:
+                self._queue.task_done()
 
 
 class HttpPublisher:
