@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
+from argus.vision.types import Detection
 
 
 class _StaticDetector:
@@ -57,3 +58,36 @@ def test_privacy_filter_supports_gaussian_mode(vehicle_frame) -> None:
     privacy_filter.apply(frame)
 
     assert not np.array_equal(frame[64:70, 108:128], vehicle_frame[64:70, 108:128])
+
+
+def test_privacy_filter_blurs_person_head_regions_without_face_detector() -> None:
+    privacy_filter = PrivacyFilter(
+        config=PrivacyConfig(
+            blur_faces=True,
+            blur_plates=False,
+            method="gaussian",
+            strength=9,
+        ),
+    )
+    detections = [
+        Detection(
+            class_name="person",
+            confidence=0.95,
+            bbox=(40.0, 20.0, 88.0, 116.0),
+            class_id=0,
+        )
+    ]
+
+    y_index, x_index = np.indices((128, 128))
+    original = np.dstack(
+        (
+            (x_index * 3 + y_index * 5) % 256,
+            (x_index * 7 + y_index * 2) % 256,
+            (x_index * 11 + y_index * 13) % 256,
+        )
+    ).astype(np.uint8)
+    frame = original.copy()
+    privacy_filter.apply(frame, detections=detections)
+
+    assert not np.array_equal(frame[20:46, 48:80], original[20:46, 48:80])
+    assert np.array_equal(frame[80:104, 48:80], original[80:104, 48:80])

@@ -759,6 +759,63 @@ async def test_engine_draws_annotations_for_central_stream_frames() -> None:
 
 
 @pytest.mark.asyncio
+async def test_engine_applies_privacy_filter_to_person_head_regions() -> None:
+    camera_id = uuid4()
+    y_index, x_index = np.indices((128, 128))
+    original = np.dstack(
+        (
+            (x_index * 3 + y_index * 5) % 256,
+            (x_index * 7 + y_index * 2) % 256,
+            (x_index * 11 + y_index * 13) % 256,
+        )
+    ).astype(np.uint8)
+    stream_client = _FakeStreamClient()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "privacy": PrivacyPolicy(blur_faces=True, blur_plates=False),
+            "active_classes": ["person"],
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            ),
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([original.copy()]),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="person",
+                        confidence=0.95,
+                        bbox=(40.0, 20.0, 88.0, 116.0),
+                        class_id=0,
+                    )
+                ]
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    pushed_frame = stream_client.pushed_frames[0]
+    assert not np.array_equal(pushed_frame[20:46, 48:80], original[20:46, 48:80])
+    assert np.array_equal(pushed_frame[80:104, 48:80], original[80:104, 48:80])
+
+
+@pytest.mark.asyncio
 async def test_engine_publishes_clean_native_video_while_telemetry_tracks() -> None:
     camera_id = uuid4()
     stream_client = _FakeStreamClient()

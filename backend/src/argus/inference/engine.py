@@ -976,7 +976,7 @@ class InferenceEngine:
             return frame
         stream_frame = frame.copy()
         if self._state.privacy.requires_filtering:
-            stream_frame = self.privacy_filter.apply(stream_frame)
+            stream_frame = self.privacy_filter.apply(stream_frame, detections=detections)
         if (
             self._stream_registration.mode is StreamMode.ANNOTATED_WHIP
             and self.config.stream.profile_id != "native"

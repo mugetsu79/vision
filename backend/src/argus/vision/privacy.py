@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -8,6 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from argus.core.metrics import PRIVACY_FILTER_OPERATIONS_TOTAL
+from argus.vision.types import Detection
 
 
 class RegionDetector(Protocol):
@@ -33,19 +35,27 @@ class PrivacyFilter:
         self.config = config
         self.face_detector = face_detector
         self.plate_detector = plate_detector
-        self._applied_regions: dict[int, set[tuple[str, int, int, int, int]]] = {}
+        self._applied_regions: dict[
+            int,
+            tuple[weakref.ReferenceType[NDArray[np.uint8]], set[tuple[str, int, int, int, int]]],
+        ] = {}
 
-    def apply(self, frame: NDArray[np.uint8]) -> NDArray[np.uint8]:
+    def apply(
+        self,
+        frame: NDArray[np.uint8],
+        *,
+        detections: list[Detection] | None = None,
+    ) -> NDArray[np.uint8]:
         try:
-            frame_key = id(frame)
-            applied = self._applied_regions.setdefault(frame_key, set())
-            if len(self._applied_regions) > 64:
-                self._applied_regions.clear()
-                self._applied_regions[frame_key] = applied
+            applied = self._applied_regions_for(frame)
 
             if self.config.blur_faces and self.face_detector is not None:
                 for bbox in self.face_detector.detect(frame):
                     self._apply_region(frame, bbox, "face", applied)
+
+            if self.config.blur_faces and detections is not None:
+                for bbox in _person_head_bboxes(detections):
+                    self._apply_region(frame, bbox, "person_face", applied)
 
             if self.config.blur_plates and self.plate_detector is not None:
                 for bbox in self.plate_detector.detect(frame):
@@ -56,6 +66,28 @@ class PrivacyFilter:
         except Exception:
             PRIVACY_FILTER_OPERATIONS_TOTAL.labels(result="error").inc()
             raise
+
+    def _applied_regions_for(
+        self,
+        frame: NDArray[np.uint8],
+    ) -> set[tuple[str, int, int, int, int]]:
+        frame_key = id(frame)
+        entry = self._applied_regions.get(frame_key)
+        if entry is not None:
+            cached_frame_ref, cached_applied = entry
+            if cached_frame_ref() is frame:
+                return cached_applied
+
+        applied: set[tuple[str, int, int, int, int]] = set()
+
+        def remove_stale_entry(_: weakref.ReferenceType[NDArray[np.uint8]]) -> None:
+            current = self._applied_regions.get(frame_key)
+            if current is not None and current[0] is frame_ref:
+                self._applied_regions.pop(frame_key, None)
+
+        frame_ref = weakref.ref(frame, remove_stale_entry)
+        self._applied_regions[frame_key] = (frame_ref, applied)
+        return applied
 
     def _apply_region(
         self,
@@ -78,6 +110,32 @@ class PrivacyFilter:
         else:
             frame[y1:y2, x1:x2] = _gaussian_blur_roi(roi, self.config.strength)
         applied.add(signature)
+
+
+def _person_head_bboxes(
+    detections: list[Detection],
+) -> list[tuple[int, int, int, int]]:
+    bboxes: list[tuple[int, int, int, int]] = []
+    for detection in detections:
+        if detection.class_name.strip().lower() not in {"person", "pedestrian"}:
+            continue
+        x1, y1, x2, y2 = detection.bbox
+        width = x2 - x1
+        height = y2 - y1
+        if width <= 2 or height <= 4:
+            continue
+        head_height = max(2.0, height * 0.28)
+        head_width = max(2.0, width * 0.65)
+        center_x = x1 + width / 2.0
+        bboxes.append(
+            (
+                int(round(center_x - head_width / 2.0)),
+                int(round(y1)),
+                int(round(center_x + head_width / 2.0)),
+                int(round(y1 + head_height)),
+            )
+        )
+    return bboxes
 
 
 def _clip_bbox(
