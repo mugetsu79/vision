@@ -86,6 +86,8 @@ Frame = NDArray[np.uint8]
 
 logger = logging.getLogger(__name__)
 
+_FACE_PRIVACY_DETECTION_CLASSES = ("person", "pedestrian")
+
 
 class RuntimeVocabularySettings(BaseModel):
     terms: list[str] = Field(default_factory=list)
@@ -676,14 +678,16 @@ class InferenceEngine:
         stage_timer.record_stage("capture", ended_at=loop.time())
         processed = self.preprocessor(frame.copy())
         stage_timer.record_stage("preprocess", ended_at=loop.time())
+        visible_classes = self._visible_classes()
+        detector_classes = self._detector_classes(visible_classes)
         self._log_frame_diagnostic(
             "Worker frame detect starting",
             frame_attempt=frame_attempt,
             stage="detect",
-            active_classes=list(self._visible_classes()),
+            active_classes=list(visible_classes),
+            detector_classes=list(detector_classes),
         )
-        visible_classes = self._visible_classes()
-        detections = self.detector.detect(processed, visible_classes)
+        detections = self.detector.detect(processed, detector_classes)
         self._log_frame_diagnostic(
             "Worker frame detect completed",
             frame_attempt=frame_attempt,
@@ -722,7 +726,11 @@ class InferenceEngine:
                 incident_event,
                 )
         stage_timer.record_stage("rules", ended_at=loop.time())
-        stream_frame = self._build_stream_frame(frame, tracked)
+        stream_frame = self._build_stream_frame(
+            frame,
+            tracked,
+            privacy_detections=detections,
+        )
         stage_timer.record_stage("annotate", ended_at=loop.time())
         if (
             self._stream_registration is not None
@@ -905,6 +913,26 @@ class InferenceEngine:
             return self.runtime_vocabulary
         return self.active_classes
 
+    def _detector_classes(self, visible_classes: list[str]) -> list[str]:
+        detector_classes = list(visible_classes)
+        if self._state.privacy.blur_faces:
+            for class_name in self._face_privacy_classes():
+                if class_name not in detector_classes:
+                    detector_classes.append(class_name)
+        return detector_classes
+
+    def _face_privacy_classes(self) -> list[str]:
+        if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
+            return ["person"]
+        class_by_lower_name = {
+            class_name.strip().lower(): class_name for class_name in self.runtime_vocabulary
+        }
+        return [
+            class_by_lower_name[class_name]
+            for class_name in _FACE_PRIVACY_DETECTION_CLASSES
+            if class_name in class_by_lower_name
+        ]
+
     @staticmethod
     def _filter_visible_detections(
         detections: list[Detection],
@@ -968,7 +996,13 @@ class InferenceEngine:
     def _build_count_event_processor(self) -> CountEventProcessor:
         return CountEventProcessor(self._state.zones)
 
-    def _build_stream_frame(self, frame: Frame, detections: list[Detection]) -> Frame:
+    def _build_stream_frame(
+        self,
+        frame: Frame,
+        detections: list[Detection],
+        *,
+        privacy_detections: list[Detection] | None = None,
+    ) -> Frame:
         if (
             self._stream_registration is None
             or self._stream_registration.mode is StreamMode.PASSTHROUGH
@@ -976,7 +1010,10 @@ class InferenceEngine:
             return frame
         stream_frame = frame.copy()
         if self._state.privacy.requires_filtering:
-            stream_frame = self.privacy_filter.apply(stream_frame, detections=detections)
+            stream_frame = self.privacy_filter.apply(
+                stream_frame,
+                detections=privacy_detections if privacy_detections is not None else detections,
+            )
         if (
             self._stream_registration.mode is StreamMode.ANNOTATED_WHIP
             and self.config.stream.profile_id != "native"

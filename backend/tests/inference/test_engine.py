@@ -85,6 +85,17 @@ class _SequenceDetector:
         return list(next(self._detections))
 
 
+class _RecordingSequenceDetector:
+    def __init__(self, detections: list[list[Detection]]) -> None:
+        self._detections = iter(detections)
+        self.calls: list[list[str]] = []
+
+    def detect(self, frame: np.ndarray, allowed_classes: list[str]) -> list[Detection]:
+        del frame
+        self.calls.append(list(allowed_classes))
+        return list(next(self._detections))
+
+
 class _FakeOpenVocabDetector:
     capability = DetectorCapability.OPEN_VOCAB
 
@@ -813,6 +824,80 @@ async def test_engine_applies_privacy_filter_to_person_head_regions() -> None:
     pushed_frame = stream_client.pushed_frames[0]
     assert not np.array_equal(pushed_frame[20:46, 48:80], original[20:46, 48:80])
     assert np.array_equal(pushed_frame[80:104, 48:80], original[80:104, 48:80])
+
+
+@pytest.mark.asyncio
+async def test_engine_requests_person_detections_for_face_privacy_without_publishing_them() -> None:
+    camera_id = uuid4()
+    y_index, x_index = np.indices((128, 128))
+    original = np.dstack(
+        (
+            (x_index * 3 + y_index * 5) % 256,
+            (x_index * 7 + y_index * 2) % 256,
+            (x_index * 11 + y_index * 13) % 256,
+        )
+    ).astype(np.uint8)
+    detector = _RecordingSequenceDetector(
+        [
+            [
+                Detection(
+                    class_name="car",
+                    confidence=0.91,
+                    bbox=(8.0, 82.0, 52.0, 118.0),
+                    class_id=2,
+                ),
+                Detection(
+                    class_name="person",
+                    confidence=0.95,
+                    bbox=(40.0, 20.0, 88.0, 116.0),
+                    class_id=0,
+                ),
+            ]
+        ]
+    )
+    stream_client = _FakeStreamClient()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person", "car", "bus"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "privacy": PrivacyPolicy(blur_faces=True, blur_plates=False),
+            "active_classes": ["car"],
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            ),
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([original.copy()]),
+        detector=detector,
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    telemetry = await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    pushed_frame = stream_client.pushed_frames[0]
+    assert detector.calls == [["car", "person"]]
+    assert telemetry.counts == {"car": 1}
+    assert [track.class_name for track in telemetry.tracks] == ["car"]
+    assert not np.array_equal(pushed_frame[20:46, 48:80], original[20:46, 48:80])
+    assert np.array_equal(pushed_frame[96:120, 96:120], original[96:120, 96:120])
 
 
 @pytest.mark.asyncio
