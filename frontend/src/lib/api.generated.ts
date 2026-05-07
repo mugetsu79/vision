@@ -1796,6 +1796,17 @@ export interface components {
              * @default true
              */
             blur_plates: boolean;
+            /**
+             * Method
+             * @default gaussian
+             * @enum {string}
+             */
+            method: "gaussian" | "pixelate";
+            /**
+             * Strength
+             * @default 7
+             */
+            strength: number;
         };
         /** WorkerPublishSettings */
         WorkerPublishSettings: {

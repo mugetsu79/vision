@@ -8,12 +8,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from logging import getLogger
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from argus.compat import StrEnum
 
@@ -47,6 +47,8 @@ class PrivacyPolicy(BaseModel):
 
     blur_faces: bool = True
     blur_plates: bool = True
+    method: Literal["gaussian", "pixelate"] = "gaussian"
+    strength: int = Field(default=7, ge=1, le=100)
 
     @property
     def requires_filtering(self) -> bool:

@@ -2271,8 +2271,8 @@ async def test_update_camera_publishes_zone_command_to_running_worker(
         privacy={
             "blur_faces": True,
             "blur_plates": True,
-            "method": "gaussian",
-            "strength": 7,
+            "method": "pixelate",
+            "strength": 20,
         },
         browser_delivery=BrowserDeliverySettings().model_dump(mode="python"),
         frame_skip=1,
@@ -2354,6 +2354,12 @@ async def test_update_camera_publishes_zone_command_to_running_worker(
         }
     ]
     assert command_payload["active_classes"] == ["person"]
+    assert command_payload["privacy"] == {
+        "blur_faces": True,
+        "blur_plates": True,
+        "method": "pixelate",
+        "strength": 20,
+    }
 
 
 @pytest.mark.asyncio

@@ -1148,7 +1148,12 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
     assert payload["publish"]["http_fallback_url"] is None
     assert payload["tracker"]["tracker_type"] == "botsort"
     assert payload["tracker"]["frame_rate"] == 25
-    assert payload["privacy"] == {"blur_faces": True, "blur_plates": False}
+    assert payload["privacy"] == {
+        "blur_faces": True,
+        "blur_plates": False,
+        "method": "gaussian",
+        "strength": 7,
+    }
     assert payload["homography"] == {
         "src_points": [[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]],
         "dst_points": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]],

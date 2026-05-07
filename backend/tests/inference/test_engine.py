@@ -423,6 +423,34 @@ def _expected_vocabulary_hash(terms: list[str]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def test_engine_builds_privacy_filter_with_configured_method_and_strength() -> None:
+    camera_id = uuid4()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "privacy": PrivacyPolicy(
+                blur_faces=True,
+                blur_plates=False,
+                method="pixelate",
+                strength=20,
+            )
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    assert engine.privacy_filter.config.method == "pixelate"
+    assert engine.privacy_filter.config.strength == 20
+
+
 @pytest.mark.asyncio
 async def test_engine_applies_live_class_and_tracker_updates_without_restart() -> None:
     camera_id = uuid4()

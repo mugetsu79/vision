@@ -572,6 +572,8 @@ class InferenceEngine:
             config=PrivacyConfig(
                 blur_faces=config.privacy.blur_faces,
                 blur_plates=config.privacy.blur_plates,
+                method=config.privacy.method,
+                strength=config.privacy.strength,
             )
         )
         self._state = _EngineState(
@@ -871,6 +873,8 @@ class InferenceEngine:
                 config=PrivacyConfig(
                     blur_faces=command.privacy.blur_faces,
                     blur_plates=command.privacy.blur_plates,
+                    method=command.privacy.method,
+                    strength=command.privacy.strength,
                 )
             )
             should_register_stream = True

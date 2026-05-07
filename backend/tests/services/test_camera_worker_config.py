@@ -46,7 +46,7 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
             "dst": [[0, 0], [10, 0], [10, 10], [0, 10]],
             "ref_distance_m": 12.5,
         },
-        privacy={"blur_faces": True, "blur_plates": False, "method": "gaussian", "strength": 7},
+        privacy={"blur_faces": True, "blur_plates": False, "method": "pixelate", "strength": 20},
         browser_delivery={
             "default_profile": "720p10",
             "allow_native_on_demand": True,
@@ -118,6 +118,8 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
     assert config.tracker.frame_rate == 10
     assert config.privacy.blur_faces is True
     assert config.privacy.blur_plates is False
+    assert config.privacy.method == "pixelate"
+    assert config.privacy.strength == 20
     assert config.active_classes == ["bus", "truck"]
     assert config.attribute_rules == [{"kind": "ppe"}]
     assert [zone.model_dump(exclude_none=True, mode="python") for zone in config.zones] == [

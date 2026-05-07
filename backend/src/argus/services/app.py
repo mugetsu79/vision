@@ -965,10 +965,7 @@ class CameraService:
             runtime_vocabulary_source=runtime_vocabulary.source,
             runtime_vocabulary_version=runtime_vocabulary.version,
             tracker_type=camera.tracker_type,
-            privacy=WorkerPrivacySettings(
-                blur_faces=bool(camera.privacy.get("blur_faces", True)),
-                blur_plates=bool(camera.privacy.get("blur_plates", True)),
-            ),
+            privacy=_worker_privacy_settings(camera.privacy),
             stream=_resolve_worker_stream_settings(
                 browser_delivery=BrowserDeliverySettings.model_validate(
                     camera.browser_delivery
@@ -3065,6 +3062,22 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
     )
 
 
+def _worker_privacy_settings(
+    privacy_payload: PrivacySettings | dict[str, Any],
+) -> WorkerPrivacySettings:
+    privacy = (
+        privacy_payload
+        if isinstance(privacy_payload, PrivacySettings)
+        else PrivacySettings.model_validate(privacy_payload)
+    )
+    return WorkerPrivacySettings(
+        blur_faces=privacy.blur_faces,
+        blur_plates=privacy.blur_plates,
+        method=privacy.method,
+        strength=privacy.strength,
+    )
+
+
 def _camera_to_worker_config(
     *,
     camera: Camera,
@@ -3073,6 +3086,7 @@ def _camera_to_worker_config(
     settings: Settings,
     rtsp_url: str,
 ) -> WorkerConfigResponse:
+    privacy = PrivacySettings.model_validate(camera.privacy)
     requested_browser_delivery = BrowserDeliverySettings.model_validate(
         camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
     )
@@ -3084,7 +3098,7 @@ def _camera_to_worker_config(
     browser_delivery = _build_source_aware_browser_delivery(
         requested=requested_browser_delivery,
         source_capability=source_capability,
-        privacy=camera.privacy,
+        privacy=privacy.model_dump(mode="python"),
         processing_mode=camera.processing_mode,
         edge_node_id=camera.edge_node_id,
     )
@@ -3117,10 +3131,7 @@ def _camera_to_worker_config(
             tracker_type=camera.tracker_type,
             frame_rate=camera.fps_cap,
         ),
-        privacy=WorkerPrivacySettings(
-            blur_faces=bool(camera.privacy.get("blur_faces", True)),
-            blur_plates=bool(camera.privacy.get("blur_plates", True)),
-        ),
+        privacy=_worker_privacy_settings(privacy),
         active_classes=list(camera.active_classes),
         runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         runtime_capability=_worker_runtime_capability(primary_model),

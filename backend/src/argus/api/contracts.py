@@ -347,6 +347,8 @@ class WorkerTrackerSettings(BaseModel):
 class WorkerPrivacySettings(BaseModel):
     blur_faces: bool = True
     blur_plates: bool = True
+    method: Literal["gaussian", "pixelate"] = "gaussian"
+    strength: int = Field(default=7, ge=1, le=100)
 
 
 class WorkerZoneBase(BaseModel):
