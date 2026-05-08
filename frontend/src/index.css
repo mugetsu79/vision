@@ -170,6 +170,11 @@ select {
   isolation: isolate;
 }
 
+.omnisight-field__ring,
+.omnisight-field__orbital-map {
+  display: none;
+}
+
 .omnisight-field__ring {
   position: absolute;
   border-radius: 9999px;
@@ -387,11 +392,6 @@ select {
     drop-shadow(0 0 86px rgba(126, 83, 255, 0.28));
 }
 
-.signin-lens-stage .omnisight-field--stage .omnisight-field__ring,
-.signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
-  display: none;
-}
-
 .omnisight-field--dashboard .omnisight-field__mark-stack {
   width: clamp(10rem, 19vw, 19rem);
   right: clamp(-5.5rem, -6vw, -3rem);
@@ -582,10 +582,6 @@ select {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .omnisight-field__ring {
-    animation: omnisight-orbit 18s ease-in-out infinite alternate;
-  }
-
   .omnisight-field__mark-stack {
     animation: omnisight-mark-drift 16s ease-in-out infinite alternate;
   }
@@ -615,15 +611,6 @@ select {
     display: block;
     opacity: 0.82;
     filter: none;
-  }
-}
-
-@keyframes omnisight-orbit {
-  from {
-    transform: rotateX(64deg) rotateZ(-18deg) translate3d(0, 0, 0);
-  }
-  to {
-    transform: rotateX(64deg) rotateZ(12deg) translate3d(0.4rem, -0.2rem, 0);
   }
 }
 
