@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -16,6 +17,7 @@ import {
   useIncidents,
   useUpdateIncidentReview,
 } from "@/hooks/use-incidents";
+import { useReducedMotionSafe } from "@/lib/motion";
 
 type ReviewFilter = IncidentReviewStatus | "all";
 
@@ -43,6 +45,7 @@ export function IncidentsPage() {
   });
   const reviewMutation = useUpdateIncidentReview();
   const resetReviewMutation = reviewMutation.reset;
+  const evidenceSwapMotion = useReducedMotionSafe("evidenceSwap");
 
   const cameraNamesById = useMemo(
     () => new Map(cameras.map((camera) => [camera.id, camera.name])),
@@ -104,7 +107,7 @@ export function IncidentsPage() {
       />
 
       <section
-      data-testid="evidence-filter-bar"
+        data-testid="evidence-filter-bar"
         className="grid gap-4 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] px-5 py-5 lg:grid-cols-3"
       >
         <label className="space-y-2 text-sm text-[#d9e5f7]">
@@ -186,11 +189,20 @@ export function IncidentsPage() {
             cameraNamesById={cameraNamesById}
             onSelect={setSelectedIncidentId}
           />
-          <IncidentEvidenceHero
-            incident={selectedIncident}
-            cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
-            reviewMutation={reviewMutation}
-          />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={selectedIncident.id}
+              data-testid="evidence-media-swap"
+              {...evidenceSwapMotion}
+              className="min-w-0"
+            >
+              <IncidentEvidenceHero
+                incident={selectedIncident}
+                cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
+                reviewMutation={reviewMutation}
+              />
+            </motion.div>
+          </AnimatePresence>
           <IncidentFactsPanel
             incident={selectedIncident}
             cameraName={cameraNameFor(selectedIncident, cameraNamesById)}

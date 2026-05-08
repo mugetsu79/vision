@@ -230,6 +230,56 @@ describe("IncidentsPage", () => {
     ).toBeInTheDocument();
   });
 
+  test("wraps selected evidence in an animated swap region", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraPayload()]));
+      }
+
+      if (url.pathname === "/api/v1/incidents") {
+        return Promise.resolve(
+          jsonResponse([
+            incidentPayload(),
+            incidentPayload({
+              id: "88888888-8888-8888-8888-888888888888",
+              camera_name: "Loading Dock",
+              type: "zone-entry",
+              ts: "2026-04-18T10:25:00Z",
+            }),
+          ]),
+        );
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <IncidentsPage />
+      </QueryClientProvider>,
+    );
+
+    const swapRegion = await screen.findByTestId("evidence-media-swap");
+    expect(
+      within(swapRegion).getByRole("region", { name: /selected evidence/i }),
+    ).toHaveTextContent("Forklift Gate");
+
+    await user.click(screen.getByRole("button", { name: /loading dock/i }));
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getAllByTestId("evidence-media-swap")
+          .some((region) => region.textContent?.includes("Loading Dock")),
+      ).toBe(true);
+    });
+  });
+
   test("persists review state from the evidence hero", async () => {
     const user = userEvent.setup();
     const requests: Request[] = [];
