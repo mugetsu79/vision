@@ -6,6 +6,7 @@ import {
   MediaSurface,
   StatusToneBadge,
   WorkspaceBand,
+  WorkspaceHero,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
 
@@ -89,5 +90,46 @@ describe("workspace surfaces", () => {
     const heading = screen.getByRole("heading", { name: "Deployment Sites" });
     const band = heading.closest("section");
     expect(band?.className).toContain("py-4");
+  });
+
+  test("WorkspaceHero renders body and lens slot regions", () => {
+    render(
+      <WorkspaceHero
+        eyebrow="Hero"
+        title="Spatial cockpit"
+        description="OmniSight for every live environment."
+        lens={<div data-testid="lens-slot">lens</div>}
+        body={<button type="button">Sign in</button>}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /spatial cockpit/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("lens-slot")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /sign in/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-hero")).toHaveAttribute(
+      "data-tone",
+      "neutral",
+    );
+  });
+
+  test("WorkspaceHero accepts tone='violet' and exposes data-tone for styling", () => {
+    render(
+      <WorkspaceHero
+        eyebrow="Sign in"
+        title="OmniSight"
+        tone="violet"
+        lens={<span>lens</span>}
+        body={<span>body</span>}
+      />,
+    );
+
+    expect(screen.getByTestId("workspace-hero")).toHaveAttribute(
+      "data-tone",
+      "violet",
+    );
   });
 });

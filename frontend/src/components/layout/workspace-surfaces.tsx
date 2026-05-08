@@ -145,3 +145,64 @@ export function StatusToneBadge({
     />
   );
 }
+
+type WorkspaceHeroTone = "neutral" | "cerulean" | "violet";
+
+type WorkspaceHeroProps = {
+  eyebrow: string;
+  title: string;
+  description?: string;
+  tone?: WorkspaceHeroTone;
+  body?: ReactNode;
+  lens?: ReactNode;
+  className?: string;
+};
+
+const heroToneClasses: Record<WorkspaceHeroTone, string> = {
+  neutral: "shadow-[var(--vz-elev-1)]",
+  cerulean: "shadow-[var(--vz-elev-glow-cerulean)]",
+  violet: "shadow-[var(--vz-elev-glow-violet)]",
+};
+
+export function WorkspaceHero({
+  eyebrow,
+  title,
+  description,
+  tone = "neutral",
+  body,
+  lens,
+  className,
+}: WorkspaceHeroProps) {
+  return (
+    <section
+      data-testid="workspace-hero"
+      data-tone={tone}
+      className={cn(
+        "relative overflow-hidden rounded-[var(--vz-r-xl)] border border-[color:var(--vz-hair)] bg-[linear-gradient(135deg,var(--vz-canvas-graphite)_0%,var(--vz-canvas-obsidian)_100%)] px-6 py-7 sm:px-8 sm:py-8",
+        heroToneClasses[tone],
+        className,
+      )}
+      style={{ perspective: "var(--vz-perspective)" }}
+    >
+      <div className="grid items-center gap-8 lg:grid-cols-[7fr_5fr]">
+        <div className="min-w-0 space-y-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--vz-text-muted)]">
+            {eyebrow}
+          </p>
+          <h1 className="font-[family-name:var(--vz-font-display)] text-3xl font-semibold tracking-normal text-[var(--vz-text-primary)] sm:text-4xl lg:text-5xl">
+            {title}
+          </h1>
+          {description ? (
+            <p className="max-w-2xl text-base leading-7 text-[var(--vz-text-secondary)]">
+              {description}
+            </p>
+          ) : null}
+          {body ? <div className="pt-2">{body}</div> : null}
+        </div>
+        {lens ? (
+          <div className="relative grid place-items-center">{lens}</div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
