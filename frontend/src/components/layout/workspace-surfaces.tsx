@@ -18,14 +18,15 @@ type Tone = "healthy" | "attention" | "danger" | "muted" | "accent";
 
 const toneClasses: Record<Tone, string> = {
   healthy:
-    "border-[rgba(114,227,166,0.24)] bg-[rgba(10,35,24,0.72)] text-[var(--vezor-success)]",
+    "border-[rgba(111,224,163,0.28)] bg-[rgba(10,36,24,0.72)] text-[var(--vz-state-healthy)]",
   attention:
-    "border-[rgba(242,189,92,0.26)] bg-[rgba(42,31,10,0.72)] text-[var(--vezor-attention)]",
+    "border-[rgba(245,196,106,0.28)] bg-[rgba(42,31,10,0.72)] text-[var(--vz-state-attention)]",
   danger:
-    "border-[rgba(240,138,162,0.28)] bg-[rgba(45,14,24,0.72)] text-[var(--vezor-risk)]",
-  muted: "border-white/10 bg-white/[0.035] text-[#9db0cc]",
+    "border-[rgba(244,140,166,0.28)] bg-[rgba(45,14,24,0.72)] text-[var(--vz-state-risk)]",
+  muted:
+    "border-[color:var(--vz-hair)] bg-white/[0.035] text-[var(--vz-text-muted)]",
   accent:
-    "border-[rgba(118,224,255,0.26)] bg-[rgba(23,52,70,0.56)] text-[var(--vezor-lens-cerulean)]",
+    "border-[rgba(118,224,255,0.28)] bg-[rgba(23,52,70,0.56)] text-[var(--vz-lens-cerulean)]",
 };
 
 const accentClasses: Record<WorkspaceBandAccent, string> = {
@@ -90,7 +91,7 @@ export function WorkspaceSurface({
   return (
     <section
       className={cn(
-        "rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-neutral)]",
+        "rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)]",
         className,
       )}
       {...props}
@@ -105,7 +106,7 @@ export function MediaSurface({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-[0.9rem] border border-white/10 bg-[color:var(--vezor-media-black)]",
+        "overflow-hidden rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair-strong)] bg-[color:var(--vz-media-black)]",
         className,
       )}
       {...props}
@@ -120,7 +121,7 @@ export function InstrumentRail({
   return (
     <aside
       className={cn(
-        "rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)]",
+        "rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)]",
         className,
       )}
       {...props}

@@ -26,13 +26,13 @@ describe("workspace surfaces", () => {
       screen.getByRole("heading", { name: "Live Intelligence" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Surface")).toHaveClass(
-      "bg-[color:var(--vezor-surface-neutral)]",
+      "bg-[color:var(--vz-canvas-graphite)]",
     );
     expect(screen.getByLabelText("Media")).toHaveClass(
-      "bg-[color:var(--vezor-media-black)]",
+      "bg-[color:var(--vz-media-black)]",
     );
     expect(screen.getByLabelText("Rail")).toHaveClass(
-      "bg-[color:var(--vezor-surface-rail)]",
+      "bg-[color:var(--vz-canvas-graphite)]",
     );
   });
 
@@ -46,13 +46,17 @@ describe("workspace surfaces", () => {
       </>,
     );
 
-    expect(screen.getByText("Live")).toHaveClass("text-[var(--vezor-success)]");
-    expect(screen.getByText("Pending")).toHaveClass(
-      "text-[var(--vezor-attention)]",
+    expect(screen.getByText("Live")).toHaveClass(
+      "text-[var(--vz-state-healthy)]",
     );
-    expect(screen.getByText("Failed")).toHaveClass("text-[var(--vezor-risk)]");
+    expect(screen.getByText("Pending")).toHaveClass(
+      "text-[var(--vz-state-attention)]",
+    );
+    expect(screen.getByText("Failed")).toHaveClass(
+      "text-[var(--vz-state-risk)]",
+    );
     expect(screen.getByText("Selected")).toHaveClass(
-      "text-[var(--vezor-lens-cerulean)]",
+      "text-[var(--vz-lens-cerulean)]",
     );
   });
 
