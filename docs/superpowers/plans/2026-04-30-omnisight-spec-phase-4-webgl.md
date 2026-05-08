@@ -6,7 +6,7 @@
 
 **Architecture:** A thin `OmniSightLensGL` wrapper lazy-loads `@react-three/fiber` and `@react-three/drei` only when `import.meta.env.VITE_FEATURE_WEBGL_LENS === "true"`. The mark is rendered from a GLB authored offline (initially the existing PNG mapped onto a billboard plane — upgrade to a true GLB later). The component falls back to the Phase-2 CSS lens whenever WebGL fails, the flag is off, the user prefers reduced motion, or the user prefers reduced data. No bundle bloat for the default flag-off build.
 
-**Tech Stack:** React 19, Vite 6, Tailwind v4, Vitest 2, **@react-three/fiber 8**, **three 0.x**, **@react-three/drei 9**. Frontend root: `/Users/yann.moren/vision/frontend`. Branch: `codex/omnisight-ui-distinctiveness-followup`.
+**Tech Stack:** React 19, Vite 6, Tailwind v4, Vitest 2, **@react-three/fiber 8**, **three 0.x**, **@react-three/drei 9**. Frontend root: `/Users/yann.moren/vision/frontend`. Recommended branch: `codex/omnisight-ui-spec-implementation`.
 
 **Spec source:** `/Users/yann.moren/vision/docs/brand/omnisight-ui-spec-sheet.md` §3.4, §11 (Phase 4).
 

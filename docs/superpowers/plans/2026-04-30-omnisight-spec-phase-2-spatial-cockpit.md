@@ -6,7 +6,7 @@
 
 **Architecture:** Pure CSS + React. No new runtime dependency. Adds a new `OmniSightLens` component built from the existing `3d_logo_no_bg.png` and CSS `perspective`/`preserve-3d` plus a `useLensTilt` pointer hook. Adds a `WorkspaceHero` layout primitive consumed by `SignInPage` and `DashboardPage`. Reworks the live scene-portal CSS for elevation hover and CSS-only corner brackets. Drops the duplicate sites table.
 
-**Tech Stack:** React 19, Vite 6, Tailwind v4, Vitest 2 + `@testing-library/react`, ESLint 9, TypeScript 5.7. Frontend root: `/Users/yann.moren/vision/frontend`. Branch: `codex/omnisight-ui-distinctiveness-followup`.
+**Tech Stack:** React 19, Vite 6, Tailwind v4, Vitest 2 + `@testing-library/react`, ESLint 9, TypeScript 5.7. Frontend root: `/Users/yann.moren/vision/frontend`. Recommended branch: `codex/omnisight-ui-spec-implementation`.
 
 **Spec source:** `/Users/yann.moren/vision/docs/brand/omnisight-ui-spec-sheet.md` (sections 5.2, 6.6, 6.8, 7.1, 7.2, 7.3, 7.7).
 
@@ -19,7 +19,7 @@
 ```bash
 cd /Users/yann.moren/vision
 git status
-git rev-parse --abbrev-ref HEAD     # codex/omnisight-ui-distinctiveness-followup
+git rev-parse --abbrev-ref HEAD     # codex/omnisight-ui-spec-implementation
 grep -c -- "--vz-perspective" frontend/src/index.css
 # Expected: ≥ 1 (Phase 1 was merged)
 

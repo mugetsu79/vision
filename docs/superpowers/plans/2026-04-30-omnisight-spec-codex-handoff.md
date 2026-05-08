@@ -4,7 +4,7 @@
 **Mission:** Implement the OmniSight UI/UX spec across four phased plans.
 **Created:** 2026-04-30.
 **Repo:** `/Users/yann.moren/vision` (do not change working directory unless instructed).
-**Branch you operate on:** `codex/omnisight-ui-distinctiveness-followup`.
+**Branch you operate on:** create or use `codex/omnisight-ui-spec-implementation` from current `main`.
 
 ---
 
@@ -31,7 +31,7 @@ These rules override the plans where they conflict.
 
 ### 1.1 Working tree
 
-- Branch must be `codex/omnisight-ui-distinctiveness-followup` at session start. Confirm with `git rev-parse --abbrev-ref HEAD`.
+- Branch should be `codex/omnisight-ui-spec-implementation` at session start. Confirm with `git rev-parse --abbrev-ref HEAD`.
 - Stage only files explicitly named in the current task. Never `git add -A`.
 - Never amend commits. Always create new ones — one per task — with the message provided in the task.
 - Never `git push --force` and never run `git reset --hard` without explicit human authorization.
@@ -94,7 +94,7 @@ Then wait for human input.
 ```bash
 cd /Users/yann.moren/vision
 git rev-parse --abbrev-ref HEAD
-# Expected: codex/omnisight-ui-distinctiveness-followup
+# Expected: codex/omnisight-ui-spec-implementation
 
 git status --short
 # Expected: untracked .superpowers/brainstorm/* and similar; nothing else modified
@@ -295,7 +295,7 @@ Avoid speculation. Avoid asking permission for steps the plan already authorizes
 
 You are done when:
 
-1. Phase 1, 2, and 3 are all merged green to `codex/omnisight-ui-distinctiveness-followup`, OR
+1. Phase 1, 2, and 3 are all merged green to `codex/omnisight-ui-spec-implementation`, OR
 2. Phase 4 is also done **and** explicitly authorized.
 
 In both cases, the final report should include:

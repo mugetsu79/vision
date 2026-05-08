@@ -6,7 +6,7 @@
 
 **Architecture:** Pure CSS / TypeScript refactor scoped to `frontend/src/`. Adds a `--vz-*` token namespace alongside the existing `--vezor-*` / `--argus-*` namespaces (keep aliases — do not break consumers). Updates the `body`/`h1` font-family stack to brand fonts. Refactors `Button`, `WorkspaceBand`, `WorkspaceSurface`, `MediaSurface`, `InstrumentRail` to consume the new tokens. No new runtime dependencies.
 
-**Tech Stack:** React 19, Vite 6, Tailwind v4 (`@tailwindcss/vite`), Vitest 2 + `@testing-library/react`, ESLint 9, TypeScript 5.7. Frontend root: `/Users/yann.moren/vision/frontend`. Branch: `codex/omnisight-ui-distinctiveness-followup`.
+**Tech Stack:** React 19, Vite 6, Tailwind v4 (`@tailwindcss/vite`), Vitest 2 + `@testing-library/react`, ESLint 9, TypeScript 5.7. Frontend root: `/Users/yann.moren/vision/frontend`. Recommended branch: `codex/omnisight-ui-spec-implementation`.
 
 **Spec source:** `/Users/yann.moren/vision/docs/brand/omnisight-ui-spec-sheet.md`
 
@@ -19,7 +19,7 @@ Run from repo root unless otherwise stated:
 ```bash
 cd /Users/yann.moren/vision
 git status                          # confirm clean tree
-git rev-parse --abbrev-ref HEAD     # confirm: codex/omnisight-ui-distinctiveness-followup
+git rev-parse --abbrev-ref HEAD     # confirm: codex/omnisight-ui-spec-implementation
 pnpm --dir frontend install         # ensure deps installed
 pnpm --dir frontend test            # ensure baseline is green
 pnpm --dir frontend lint            # ensure baseline is clean

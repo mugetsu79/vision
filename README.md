@@ -12,7 +12,7 @@ Vezor separates **native ingest for analytics** from **browser delivery for oper
 
 The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, and edge bootstrap material. In local development, workers are still launched from copyable commands because there is no local supervisor process yet. In production, Start/Stop/Restart controls should go through a central or edge supervisor that reconciles desired state and reports actual runtime state back to the control plane.
 
-The current branch has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, and the Evidence Desk incident review queue. The main production gap is lifecycle automation: a production supervisor or edge agent still needs to own worker start/stop/restart/drain and report per-worker runtime truth.
+The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, and the Evidence Desk incident review queue. The main production gap is lifecycle automation: a production supervisor or edge agent still needs to own worker start/stop/restart/drain and report per-worker runtime truth.
 
 ## What’s In This Repo
 

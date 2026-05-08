@@ -8,7 +8,7 @@ For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Us
 
 ## Current Implementation Posture
 
-As of the current branch, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. The backend and worker contracts also include a recommended model catalog, fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, capability-aware query commands, Jetson-aware runtime profile selection, and an experimental Ultralytics-backed open-vocab `.pt` detector path.
+As of the current codebase, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. The backend and worker contracts also include a recommended model catalog, fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, capability-aware query commands, Jetson-aware runtime profile selection, and an experimental Ultralytics-backed open-vocab `.pt` detector path.
 
 The strongest production-ready paths are still:
 

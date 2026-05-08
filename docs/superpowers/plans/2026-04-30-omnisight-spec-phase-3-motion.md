@@ -6,7 +6,7 @@
 
 **Architecture:** Adds Framer Motion (`framer-motion`) as the single motion library. Introduces `MotionProvider` only if needed (most uses are component-local). All animations use `--vz-dur-*` and `--vz-ease-*` tokens already shipped in Phase 1. Reduced motion is the default fallback.
 
-**Tech Stack:** React 19, Vite 6, Tailwind v4, Vitest 2 + `@testing-library/react`, ESLint 9, TypeScript 5.7, **Framer Motion 11**. Frontend root: `/Users/yann.moren/vision/frontend`. Branch: `codex/omnisight-ui-distinctiveness-followup`.
+**Tech Stack:** React 19, Vite 6, Tailwind v4, Vitest 2 + `@testing-library/react`, ESLint 9, TypeScript 5.7, **Framer Motion 11**. Frontend root: `/Users/yann.moren/vision/frontend`. Recommended branch: `codex/omnisight-ui-spec-implementation`.
 
 **Spec source:** `/Users/yann.moren/vision/docs/brand/omnisight-ui-spec-sheet.md` (sections 4.1–4.4, 6.9, 6.11, 7.4, 7.5).
 

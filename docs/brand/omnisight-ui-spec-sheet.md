@@ -1,6 +1,6 @@
 # Vezor / OmniSight — UI / UX Spec Sheet
 
-Branch reviewed: `codex/omnisight-ui-distinctiveness-followup`
+Review basis: current Vezor product UI on `main`
 Date: 2026-04-30
 Purpose: best-in-class design recommendations for the Vezor product surface, in line with the OmniSight brand (premium, dark, vigilant, dimensional). Modern motion. 3D where the product earns it. No marketing-pastiche.
 
@@ -10,10 +10,10 @@ This sheet is prescriptive: every recommendation is paired with a token, a value
 
 ## 1. Executive Audit
 
-### What is already strong on this branch
+### What is already strong in the current product UI
 - Composition primitives exist: `WorkspaceBand`, `WorkspaceSurface`, `MediaSurface`, `InstrumentRail`, `StatusToneBadge` (`frontend/src/components/layout/workspace-surfaces.tsx`).
 - `OmniSightField` parallaxes the 3D logo with three z-stacked layers, orbital rings, and a conic radar mask — good structural bones for a real spatial cockpit.
-- Palette discipline (75/15/5/5) already specified in `docs/superpowers/specs/2026-04-30-omnisight-ui-distinctiveness-followup-design.md`.
+- Palette discipline (75/15/5/5) is already specified in the earlier OmniSight UI design spec.
 - `prefers-reduced-motion` is honored at the CSS level (`frontend/src/index.css`).
 - `/dashboard` is restored as a real overview, not a redirect.
 
@@ -615,7 +615,7 @@ Required changes:
 
 ### 7.7 Sites (`/sites`)
 
-Today: card grid + duplicate table. Both shipped on this branch; one of them has to lose.
+Today: card grid + duplicate table. Both shipped in the current UI; one of them has to lose.
 
 Required changes:
 - **Drop the table entirely** when there are ≥ 1 site cards. Cards are richer (scene count, time zone, description) and the table adds no information density.
