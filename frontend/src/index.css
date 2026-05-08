@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -42,7 +43,7 @@
       transparent 28%
     ),
     linear-gradient(180deg, #05070c 0%, #0a1018 48%, #121927 100%);
-  font-family: "Avenir Next", "Suisse Intl", "Poppins", "Segoe UI", sans-serif;
+  font-family: var(--vz-font-body);
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -121,6 +122,9 @@
   --vz-tilt-firm: 8deg;
   --vz-pop-z: 18px;
   --vz-rest-z: 0px;
+  --vz-font-display: "Space Grotesk", "Sora", system-ui, sans-serif;
+  --vz-font-body: "Inter", "Manrope", system-ui, sans-serif;
+  --vz-font-mono: "JetBrains Mono", ui-monospace, "Menlo", monospace;
 }
 
 * {
@@ -133,6 +137,13 @@ body {
   min-height: 100vh;
   background: var(--argus-canvas);
   color: var(--argus-text);
+}
+
+h1,
+h2,
+.vz-display {
+  font-family: var(--vz-font-display);
+  letter-spacing: 0;
 }
 
 button,
