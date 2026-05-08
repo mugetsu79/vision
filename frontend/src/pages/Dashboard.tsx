@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
 
-import { OmniSightField } from "@/components/brand/OmniSightField";
+import { OmniSightLens } from "@/components/brand/OmniSightLens";
+import { KpiTile } from "@/components/dashboard/KpiTile";
 import {
   InstrumentRail,
   StatusToneBadge,
+  WorkspaceHero,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
 import { useCameras } from "@/hooks/use-cameras";
@@ -27,42 +29,41 @@ export function DashboardPage() {
   const directUnavailable =
     fleet.data?.summary.native_unavailable_cameras ?? 0;
 
+  const evidenceCaption = `${incidents.length} pending evidence ${
+    incidents.length === 1 ? "record" : "records"
+  }`;
+
   return (
     <div
       data-testid="omnisight-overview"
       className="grid gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_340px]"
     >
-      <section className="relative min-h-[22rem] overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,rgba(9,14,23,0.98),rgba(7,10,16,0.96))] px-5 py-5">
-        <OmniSightField variant="dashboard" className="opacity-80" />
-        <div className="relative z-10 max-w-3xl">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8fa4c4]">
-            Dashboard
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-normal text-[#f4f8ff] sm:text-5xl">
-            OmniSight Overview
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-[#9eb0cb]">
-            A connected view of live scenes, evidence, patterns, deployment
-            context, and edge operations.
-          </p>
-        </div>
-        <div className="relative z-10 mt-8 grid gap-3 sm:grid-cols-3">
-          <OverviewMetric
-            label="Live scenes"
-            value={`${cameras.length} live scenes`}
-          />
-          <OverviewMetric
-            label="Evidence queue"
-            value={`${incidents.length} pending evidence ${
-              incidents.length === 1 ? "record" : "records"
-            }`}
-          />
-          <OverviewMetric
-            label="Edge workers"
-            value={`${runningWorkers}/${desiredWorkers} running`}
-          />
-        </div>
-      </section>
+      <WorkspaceHero
+        eyebrow="Dashboard"
+        title="OmniSight Overview"
+        description="A connected view of live scenes, evidence, patterns, deployment context, and edge operations."
+        tone="cerulean"
+        lens={<OmniSightLens variant="dashboard" />}
+        body={
+          <div className="grid gap-3 sm:grid-cols-3">
+            <KpiTile
+              eyebrow="Live scenes"
+              value={cameras.length}
+              caption={`${cameras.length === 1 ? "scene" : "scenes"} streaming`}
+            />
+            <KpiTile
+              eyebrow="Evidence queue"
+              value={incidents.length}
+              caption={evidenceCaption}
+            />
+            <KpiTile
+              eyebrow="Edge workers"
+              value={`${runningWorkers}/${desiredWorkers}`}
+              caption="running / desired"
+            />
+          </div>
+        }
+      />
 
       <InstrumentRail aria-label="Overview instruments" className="space-y-3 p-4">
         <StatusToneBadge tone={directUnavailable > 0 ? "attention" : "healthy"}>
@@ -70,7 +71,7 @@ export function DashboardPage() {
             ? `${directUnavailable} direct streams unavailable`
             : "Streams healthy"}
         </StatusToneBadge>
-        <p className="text-sm text-[#9eb0cb]">
+        <p className="text-sm text-[var(--vz-text-secondary)]">
           {sites.length} deployment {sites.length === 1 ? "site" : "sites"}{" "}
           configured.
         </p>
@@ -118,17 +119,6 @@ export function DashboardPage() {
   );
 }
 
-function OverviewMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[0.85rem] border border-white/10 bg-black/25 px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7f96b8]">
-        {label}
-      </p>
-      <p className="mt-2 text-lg font-semibold text-[#f4f8ff]">{value}</p>
-    </div>
-  );
-}
-
 function OverviewLink({
   title,
   copy,
@@ -141,12 +131,16 @@ function OverviewLink({
   action: string;
 }) {
   return (
-    <WorkspaceSurface className="p-4 transition duration-200 hover:border-[color:var(--vezor-border-focus)] hover:bg-[rgba(17,24,34,0.96)]">
-      <h2 className="text-lg font-semibold text-[#f4f8ff]">{title}</h2>
-      <p className="mt-2 min-h-12 text-sm leading-6 text-[#9eb0cb]">{copy}</p>
+    <WorkspaceSurface className="p-4 transition duration-200 hover:border-[color:var(--vz-hair-focus)] hover:shadow-[var(--vz-elev-2)]">
+      <h2 className="font-[family-name:var(--vz-font-display)] text-lg font-semibold text-[var(--vz-text-primary)]">
+        {title}
+      </h2>
+      <p className="mt-2 min-h-12 text-sm leading-6 text-[var(--vz-text-secondary)]">
+        {copy}
+      </p>
       <Link
         to={href}
-        className="mt-4 inline-flex text-sm font-semibold text-[var(--vezor-lens-cerulean)] transition hover:text-white"
+        className="mt-4 inline-flex text-sm font-semibold text-[var(--vz-lens-cerulean)] transition hover:text-[var(--vz-text-primary)]"
       >
         {action}
       </Link>

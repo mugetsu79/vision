@@ -57,14 +57,15 @@ describe("DashboardPage", () => {
     expect(
       screen.getByRole("heading", { name: "OmniSight Overview" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("2 live scenes")).toBeInTheDocument();
-    expect(screen.getByText("1 pending evidence record")).toBeInTheDocument();
+    expect(screen.getByTestId("omnisight-lens")).toBeInTheDocument();
+    expect(screen.getByText("Live scenes")).toBeInTheDocument();
+    expect(screen.getByText("Evidence queue")).toBeInTheDocument();
+    expect(screen.getByText("Edge workers")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Open Live Intelligence/i }),
     ).toHaveAttribute("href", "/live");
-    expect(screen.getByRole("link", { name: /Review Evidence/i })).toHaveAttribute(
-      "href",
-      "/incidents",
-    );
+    expect(
+      screen.getByRole("link", { name: /Review Evidence/i }),
+    ).toHaveAttribute("href", "/incidents");
   });
 });
