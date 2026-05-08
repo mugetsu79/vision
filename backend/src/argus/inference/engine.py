@@ -85,6 +85,7 @@ from argus.vision.zones import Zones
 Frame = NDArray[np.uint8]
 
 logger = logging.getLogger(__name__)
+_CAPTURE_WAIT_SPIKE_WARNING_THRESHOLD_S = 0.250
 
 _FACE_PRIVACY_DETECTION_CLASSES = ("person", "pedestrian")
 _TIMEOUT_ERRORS: tuple[type[BaseException], ...] = (TimeoutError,)
@@ -514,6 +515,7 @@ class _TimingSummaryWindow:
     frame_count: int = 0
     stage_totals: dict[str, float] = field(default_factory=dict)
     stage_maximums: dict[str, float] = field(default_factory=dict)
+    stage_values: dict[str, list[float]] = field(default_factory=dict)
 
     def add(self, stage_timings: dict[str, float]) -> None:
         self.frame_count += 1
@@ -523,11 +525,28 @@ class _TimingSummaryWindow:
                 self.stage_maximums.get(stage_name, 0.0),
                 duration,
             )
+            self.stage_values.setdefault(stage_name, []).append(duration)
+
+    def percentile(self, stage_name: str, percentile: float) -> float | None:
+        values = self.stage_values.get(stage_name)
+        if not values:
+            return None
+        ordered = sorted(values)
+        if len(ordered) == 1:
+            return ordered[0]
+        rank = (len(ordered) - 1) * (percentile / 100.0)
+        lower_index = int(rank)
+        upper_index = min(lower_index + 1, len(ordered) - 1)
+        fraction = rank - lower_index
+        lower = ordered[lower_index]
+        upper = ordered[upper_index]
+        return lower + ((upper - lower) * fraction)
 
     def reset(self) -> None:
         self.frame_count = 0
         self.stage_totals.clear()
         self.stage_maximums.clear()
+        self.stage_values.clear()
 
 
 def _format_stage_timings_ms(stage_timings: dict[str, float]) -> str:
@@ -535,6 +554,12 @@ def _format_stage_timings_ms(stage_timings: dict[str, float]) -> str:
         f"{stage_name}={duration_ms:.1f}"
         for stage_name, duration_ms in stage_timings.items()
     )
+
+
+def _duration_to_ms(duration: float | None) -> float | None:
+    if duration is None:
+        return None
+    return duration * 1000.0
 
 
 class InferenceEngine:
@@ -1109,20 +1134,63 @@ class InferenceEngine:
             stage_name: duration * 1000.0
             for stage_name, duration in sorted(self._timing_summary.stage_maximums.items())
         }
+        capture_wait_p95_ms = _duration_to_ms(
+            self._timing_summary.percentile("capture_wait", 95.0)
+        )
+        capture_wait_p99_ms = _duration_to_ms(
+            self._timing_summary.percentile("capture_wait", 99.0)
+        )
+        message_suffix = ""
+        if capture_wait_p95_ms is not None and capture_wait_p99_ms is not None:
+            message_suffix = (
+                f" capture_wait_p95_ms={capture_wait_p95_ms:.1f}"
+                f" capture_wait_p99_ms={capture_wait_p99_ms:.1f}"
+            )
+        extra = {
+            "camera_id": str(self.config.camera_id),
+            "frame_count": frame_count,
+            "stage_avg_ms": stage_avg_ms,
+            "stage_max_ms": stage_max_ms,
+            "capture_wait_p95_ms": capture_wait_p95_ms,
+            "capture_wait_p99_ms": capture_wait_p99_ms,
+        }
         logger.info(
             "Inference stage timing summary "
-            "camera_id=%s frame_count=%s stage_avg_ms={%s} stage_max_ms={%s}",
+            "camera_id=%s frame_count=%s stage_avg_ms={%s} stage_max_ms={%s}%s",
             str(self.config.camera_id),
             frame_count,
             _format_stage_timings_ms(stage_avg_ms),
             _format_stage_timings_ms(stage_max_ms),
-            extra={
-                "camera_id": str(self.config.camera_id),
-                "frame_count": frame_count,
-                "stage_avg_ms": stage_avg_ms,
-                "stage_max_ms": stage_max_ms,
-            },
+            message_suffix,
+            extra=extra,
         )
+        capture_wait_max_s = self._timing_summary.stage_maximums.get("capture_wait")
+        if (
+            capture_wait_max_s is not None
+            and capture_wait_max_s > _CAPTURE_WAIT_SPIKE_WARNING_THRESHOLD_S
+        ):
+            capture_wait_max_ms = capture_wait_max_s * 1000.0
+            capture_wait_threshold_ms = _CAPTURE_WAIT_SPIKE_WARNING_THRESHOLD_S * 1000.0
+            logger.warning(
+                "Capture wait spike observed "
+                "camera_id=%s frame_count=%s capture_wait_max_ms=%.1f "
+                "capture_wait_p95_ms=%.1f capture_wait_p99_ms=%.1f "
+                "threshold_ms=%.1f",
+                str(self.config.camera_id),
+                frame_count,
+                capture_wait_max_ms,
+                capture_wait_p95_ms or 0.0,
+                capture_wait_p99_ms or 0.0,
+                capture_wait_threshold_ms,
+                extra={
+                    "camera_id": str(self.config.camera_id),
+                    "frame_count": frame_count,
+                    "capture_wait_max_ms": capture_wait_max_ms,
+                    "capture_wait_p95_ms": capture_wait_p95_ms,
+                    "capture_wait_p99_ms": capture_wait_p99_ms,
+                    "capture_wait_threshold_ms": capture_wait_threshold_ms,
+                },
+            )
         self._timing_summary.reset()
 
     def _log_frame_diagnostic(

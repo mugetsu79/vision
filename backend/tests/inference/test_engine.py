@@ -75,6 +75,30 @@ class _TimedFrameSource(_FakeFrameSource):
         }
 
 
+class _CaptureWaitSequenceFrameSource(_FakeFrameSource):
+    def __init__(
+        self,
+        frames: list[np.ndarray],
+        capture_wait_seconds: list[float],
+    ) -> None:
+        super().__init__(frames)
+        self._capture_wait_seconds = iter(capture_wait_seconds)
+        self._last_wait = 0.0
+
+    def next_frame(self) -> np.ndarray:
+        self._last_wait = next(self._capture_wait_seconds)
+        return super().next_frame()
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return {
+            "throttle": 0.0,
+            "read": self._last_wait,
+            "wait": self._last_wait,
+            "decode_read": 0.01,
+            "reconnect": 0.0,
+        }
+
+
 class _FakeDetector:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
@@ -1629,6 +1653,63 @@ async def test_engine_logs_periodic_stage_timing_summary(caplog: pytest.LogCaptu
     assert record.frame_count == 2
     assert "detect" in record.stage_avg_ms
     assert "total" in record.stage_max_ms
+
+
+@pytest.mark.asyncio
+async def test_engine_logs_capture_wait_percentiles_and_spike_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_CaptureWaitSequenceFrameSource(
+            [
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+            ],
+            capture_wait_seconds=[0.02, 0.03, 0.04, 0.31],
+        ),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        attribute_classifier=_FakeAttributeClassifier(),
+        timing_summary_interval_frames=4,
+    )
+
+    await engine.start()
+    for offset in range(4):
+        await engine.run_once(ts=datetime(2026, 4, 21, 19, 42, offset, tzinfo=UTC))
+
+    summary_records = [
+        record
+        for record in caplog.records
+        if record.name == "argus.inference.engine"
+        and record.message.startswith("Inference stage timing summary")
+    ]
+    warning_records = [
+        record
+        for record in caplog.records
+        if record.name == "argus.inference.engine"
+        and record.message.startswith("Capture wait spike observed")
+    ]
+
+    assert len(summary_records) == 1
+    summary = summary_records[0]
+    assert "capture_wait_p95_ms=" in summary.message
+    assert summary.capture_wait_p95_ms == pytest.approx(269.5)
+    assert summary.capture_wait_p99_ms == pytest.approx(301.9)
+    assert len(warning_records) == 1
+    warning = warning_records[0]
+    assert warning.camera_id == str(camera_id)
+    assert warning.capture_wait_max_ms == pytest.approx(310.0)
+    assert warning.capture_wait_threshold_ms == pytest.approx(250.0)
 
 
 def test_worker_main_configures_logging_and_reuses_settings(

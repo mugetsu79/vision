@@ -124,6 +124,33 @@ def test_create_camera_source_builds_jetson_rtsp_pipeline() -> None:
     assert source.mode.value == "jetson-rtsp"
 
 
+def test_create_camera_source_applies_jetson_rtsp_tuning_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[_CaptureCall] = []
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
+        calls.append(_CaptureCall(source=source, backend=backend))
+        return _FakeCapture([frame])
+
+    monkeypatch.setenv("ARGUS_JETSON_RTSP_PROTOCOLS", "udp")
+    monkeypatch.setenv("ARGUS_JETSON_RTSP_LATENCY_MS", "50")
+    monkeypatch.setenv("ARGUS_JETSON_RTSP_DROP_ON_LATENCY", "false")
+
+    source = create_camera_source(
+        CameraSourceConfig(source_uri="rtsp://camera.internal/live"),
+        platform_info=PlatformInfo(machine="aarch64", jetson=True),
+        capture_factory=capture_factory,
+    )
+
+    np.testing.assert_array_equal(source.next_frame(), frame)
+    pipeline = str(calls[0].source)
+    assert "protocols=udp" in pipeline
+    assert "latency=50" in pipeline
+    assert "drop-on-latency=false" in pipeline
+
+
 def test_create_camera_source_builds_jetson_csi_pipeline() -> None:
     calls: list[_CaptureCall] = []
     frame = np.zeros((4, 4, 3), dtype=np.uint8)

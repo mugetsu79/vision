@@ -34,6 +34,14 @@ from argus.vision.capture_options import (
 
 LOGGER = getLogger(__name__)
 
+_JETSON_RTSP_PROTOCOLS_ENV = "ARGUS_JETSON_RTSP_PROTOCOLS"
+_JETSON_RTSP_LATENCY_MS_ENV = "ARGUS_JETSON_RTSP_LATENCY_MS"
+_JETSON_RTSP_DROP_ON_LATENCY_ENV = "ARGUS_JETSON_RTSP_DROP_ON_LATENCY"
+_JETSON_RTSP_DEFAULT_PROTOCOLS = "tcp"
+_JETSON_RTSP_DEFAULT_LATENCY_MS = 200
+_JETSON_RTSP_DEFAULT_DROP_ON_LATENCY = True
+_GST_FLAG_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_+,-]+$")
+
 Frame = NDArray[np.uint8]
 MonotonicClock = Callable[[], float]
 SleepFunction = Callable[[float], None]
@@ -184,6 +192,13 @@ class CameraSourceConfig:
     fps_cap: int = 25
     reconnect_backoff_base: float = 1.0
     reconnect_backoff_max: float = 60.0
+
+
+@dataclass(slots=True, frozen=True)
+class _JetsonRtspOptions:
+    protocols: str
+    latency_ms: int
+    drop_on_latency: bool
 
 
 class CameraSource:
@@ -360,8 +375,11 @@ def _resolve_capture_spec(
         return CameraSourceMode.JETSON_CSI, pipeline, cv2.CAP_GSTREAMER
 
     if platform_info.jetson:
+        options = _jetson_rtsp_options_from_environment()
+        drop_on_latency = "true" if options.drop_on_latency else "false"
         pipeline = (
-            f"rtspsrc location={source_uri} protocols=tcp latency=200 drop-on-latency=true ! "
+            f"rtspsrc location={source_uri} protocols={options.protocols} "
+            f"latency={options.latency_ms} drop-on-latency={drop_on_latency} ! "
             "rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! "
             "video/x-raw,format=BGRx ! videoconvert ! video/x-raw,format=BGR ! "
             "appsink drop=true max-buffers=1 sync=false"
@@ -369,6 +387,70 @@ def _resolve_capture_spec(
         return CameraSourceMode.JETSON_RTSP, pipeline, cv2.CAP_GSTREAMER
 
     return CameraSourceMode.X86_RTSP, source_uri, cv2.CAP_FFMPEG
+
+
+def _jetson_rtsp_options_from_environment() -> _JetsonRtspOptions:
+    return _JetsonRtspOptions(
+        protocols=_parse_jetson_rtsp_protocols(
+            os.environ.get(_JETSON_RTSP_PROTOCOLS_ENV),
+        ),
+        latency_ms=_parse_jetson_rtsp_latency_ms(
+            os.environ.get(_JETSON_RTSP_LATENCY_MS_ENV),
+        ),
+        drop_on_latency=_parse_jetson_rtsp_drop_on_latency(
+            os.environ.get(_JETSON_RTSP_DROP_ON_LATENCY_ENV),
+        ),
+    )
+
+
+def _parse_jetson_rtsp_protocols(raw_value: str | None) -> str:
+    if raw_value is None or raw_value.strip() == "":
+        return _JETSON_RTSP_DEFAULT_PROTOCOLS
+    value = raw_value.strip().lower()
+    if _GST_FLAG_VALUE_PATTERN.fullmatch(value):
+        return value
+    LOGGER.warning(
+        "Ignoring invalid %s value %r; using %s",
+        _JETSON_RTSP_PROTOCOLS_ENV,
+        raw_value,
+        _JETSON_RTSP_DEFAULT_PROTOCOLS,
+    )
+    return _JETSON_RTSP_DEFAULT_PROTOCOLS
+
+
+def _parse_jetson_rtsp_latency_ms(raw_value: str | None) -> int:
+    if raw_value is None or raw_value.strip() == "":
+        return _JETSON_RTSP_DEFAULT_LATENCY_MS
+    try:
+        value = int(raw_value)
+    except ValueError:
+        value = -1
+    if value >= 0:
+        return value
+    LOGGER.warning(
+        "Ignoring invalid %s value %r; using %s",
+        _JETSON_RTSP_LATENCY_MS_ENV,
+        raw_value,
+        _JETSON_RTSP_DEFAULT_LATENCY_MS,
+    )
+    return _JETSON_RTSP_DEFAULT_LATENCY_MS
+
+
+def _parse_jetson_rtsp_drop_on_latency(raw_value: str | None) -> bool:
+    if raw_value is None or raw_value.strip() == "":
+        return _JETSON_RTSP_DEFAULT_DROP_ON_LATENCY
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    LOGGER.warning(
+        "Ignoring invalid %s value %r; using %s",
+        _JETSON_RTSP_DROP_ON_LATENCY_ENV,
+        raw_value,
+        str(_JETSON_RTSP_DEFAULT_DROP_ON_LATENCY).lower(),
+    )
+    return _JETSON_RTSP_DEFAULT_DROP_ON_LATENCY
 
 
 def _default_capture_factory(source: str | int, backend: int | None) -> CaptureHandle:

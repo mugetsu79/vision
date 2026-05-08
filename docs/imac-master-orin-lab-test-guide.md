@@ -1617,6 +1617,55 @@ What the container check means:
 - if the NVDEC path receives no frames but the software path works, pull the latest code and rebuild the edge worker; the worker uses a native GStreamer raw-frame reader first, then `avdec_h264`, then FFmpeg rawvideo only as a last-resort fallback
 - if both container decode paths work but the worker still reconnects forever, capture the worker logs plus the GStreamer command results before changing model settings
 
+#### Jetson RTSP jitter tuning loop
+
+After the worker reaches TensorRT inference and the remaining issue is
+`capture_wait` jitter, keep detector/model settings unchanged and tune the RTSP
+receive path one variable at a time. Keep Jetson clocks enabled during each run:
+
+```bash
+sudo jetson_clocks
+```
+
+Start with TCP and compare the three latency settings:
+
+```bash
+cd "$HOME/vision"
+export ARGUS_JETSON_RTSP_PROTOCOLS=tcp
+export ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true
+
+for LATENCY in 50 100 200; do
+  export ARGUS_JETSON_RTSP_LATENCY_MS="$LATENCY"
+  docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
+  docker compose -f infra/docker-compose.edge.yml logs -f --tail=200 inference-worker
+done
+```
+
+For each run, wait for at least one `Inference stage timing summary` line and
+write down:
+
+- `capture_wait` average and max from `stage_avg_ms` / `stage_max_ms`
+- `capture_wait_p95_ms` and `capture_wait_p99_ms`
+- any `Capture wait spike observed` warning
+- any GStreamer parse/read error or `Camera capture lost, reconnecting`
+
+If TCP is stable but still has large wait spikes, try UDP only on a clean wired
+camera path:
+
+```bash
+cd "$HOME/vision"
+export ARGUS_JETSON_RTSP_PROTOCOLS=udp
+export ARGUS_JETSON_RTSP_LATENCY_MS=100
+export ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true
+docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
+docker compose -f infra/docker-compose.edge.yml logs -f --tail=200 inference-worker
+```
+
+Prefer the setting with the lowest sustained `capture_wait_p95_ms` that does not
+increase reconnects, parse errors, or visible video stutter. If `latency=50`
+reduces average wait but introduces reconnects, use `100` or `200`. If UDP shows
+packet loss or bursts, return to TCP.
+
 The ONNX Runtime line `CPUExecutionProvider` is a performance concern, not the reason for `Camera capture lost`; that message happens before detection.
 
 ### 4.6 If `docker compose` is missing on the Jetson
