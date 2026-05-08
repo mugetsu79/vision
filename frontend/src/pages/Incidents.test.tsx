@@ -14,10 +14,21 @@ vi.mock("@/lib/config", () => ({
 }));
 
 import { createQueryClient } from "@/app/query-client";
+import { ToastProvider } from "@/components/feedback/ToastProvider";
 import { IncidentsPage } from "@/pages/Incidents";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
+
+function renderIncidentsPage() {
+  return render(
+    <QueryClientProvider client={createQueryClient()}>
+      <ToastProvider>
+        <IncidentsPage />
+      </ToastProvider>
+    </QueryClientProvider>,
+  );
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -123,11 +134,7 @@ describe("IncidentsPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <IncidentsPage />
-      </QueryClientProvider>,
-    );
+    renderIncidentsPage();
 
     expect(
       await screen.findByRole("heading", { name: /evidence desk/i }),
@@ -219,11 +226,7 @@ describe("IncidentsPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <IncidentsPage />
-      </QueryClientProvider>,
-    );
+    renderIncidentsPage();
 
     expect(
       await screen.findByRole("img", { name: /evidence record/i }),
@@ -258,11 +261,7 @@ describe("IncidentsPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <IncidentsPage />
-      </QueryClientProvider>,
-    );
+    renderIncidentsPage();
 
     const swapRegion = await screen.findByTestId("evidence-media-swap");
     expect(
@@ -330,16 +329,14 @@ describe("IncidentsPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <IncidentsPage />
-      </QueryClientProvider>,
-    );
+    renderIncidentsPage();
 
     const hero = await screen.findByRole("region", {
       name: /selected evidence/i,
     });
     await user.click(within(hero).getByRole("button", { name: /^review$/i }));
+
+    expect(await screen.findByText("Review state saved.")).toBeInTheDocument();
 
     expect(
       await screen.findByText(/no evidence records match/i),
@@ -404,18 +401,17 @@ describe("IncidentsPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <IncidentsPage />
-      </QueryClientProvider>,
-    );
+    renderIncidentsPage();
 
     const hero = await screen.findByRole("region", {
       name: /selected evidence/i,
     });
     await user.click(within(hero).getByRole("button", { name: /^review$/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Failed to update review state.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
       "Operator access is required to change review state.",
     );
 
@@ -423,8 +419,6 @@ describe("IncidentsPage", () => {
       "reviewed",
     ]);
 
-    await waitFor(() => {
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

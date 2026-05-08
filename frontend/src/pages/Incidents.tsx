@@ -17,6 +17,7 @@ import {
   useIncidents,
   useUpdateIncidentReview,
 } from "@/hooks/use-incidents";
+import { useToast } from "@/hooks/use-toast";
 import { useReducedMotionSafe } from "@/lib/motion";
 
 type ReviewFilter = IncidentReviewStatus | "all";
@@ -45,6 +46,7 @@ export function IncidentsPage() {
   });
   const reviewMutation = useUpdateIncidentReview();
   const resetReviewMutation = reviewMutation.reset;
+  const toast = useToast();
   const evidenceSwapMotion = useReducedMotionSafe("evidenceSwap");
 
   const cameraNamesById = useMemo(
@@ -79,6 +81,27 @@ export function IncidentsPage() {
       setSelectedIncidentId(incidents[0].id);
     }
   }, [incidents, selectedIncidentId]);
+
+  useEffect(() => {
+    if (!reviewMutation.isSuccess) {
+      return;
+    }
+
+    toast.show({ tone: "healthy", message: "Review state saved." });
+    resetReviewMutation();
+  }, [resetReviewMutation, reviewMutation.isSuccess, toast]);
+
+  useEffect(() => {
+    if (!reviewMutation.isError) {
+      return;
+    }
+
+    toast.show({
+      tone: "danger",
+      message: "Failed to update review state.",
+      description: reviewMutationErrorMessage(reviewMutation.error),
+    });
+  }, [reviewMutation.error, reviewMutation.isError, toast]);
 
   useEffect(() => {
     resetReviewMutation();
@@ -284,9 +307,6 @@ function IncidentEvidenceHero({
     incident.review_status === "pending" ? "reviewed" : "pending";
   const actionLabel =
     incident.review_status === "pending" ? "Review" : "Reopen";
-  const mutationErrorMessage = reviewMutation.error
-    ? reviewMutationErrorMessage(reviewMutation.error)
-    : null;
 
   return (
     <section
@@ -364,16 +384,6 @@ function IncidentEvidenceHero({
         >
           {reviewMutation.isPending ? "Saving" : actionLabel}
         </Button>
-
-        {mutationErrorMessage ? (
-          <p
-            aria-live="polite"
-            role="alert"
-            className="basis-full text-sm text-[#f0b7c1]"
-          >
-            {mutationErrorMessage}
-          </p>
-        ) : null}
       </div>
     </section>
   );
