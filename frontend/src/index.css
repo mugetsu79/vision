@@ -664,3 +664,121 @@ select {
     transform: translate3d(0, 0, 0) scale(1);
   }
 }
+
+/* --------------------------------------------------------- */
+/* OmniSight Lens (Phase 2)                                  */
+/* --------------------------------------------------------- */
+
+.lens-stage {
+  position: relative;
+  perspective: var(--vz-perspective);
+  transform-style: preserve-3d;
+}
+
+.lens-mark {
+  position: relative;
+  display: block;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--lens-rx, 0deg)) rotateY(var(--lens-ry, 0deg))
+    translate3d(0, 0, 40px);
+  transition: transform 220ms var(--vz-ease-product);
+  filter: drop-shadow(0 0 30px rgba(110, 189, 255, 0.32))
+    drop-shadow(0 30px 80px rgba(63, 109, 255, 0.22));
+  user-select: none;
+}
+
+.lens-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    rgba(126, 83, 255, 0.35) 0%,
+    rgba(110, 189, 255, 0.18) 35%,
+    transparent 65%
+  );
+  filter: blur(28px);
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lens-mark {
+    animation: lens-breathe 9s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes lens-breathe {
+  from {
+    transform: rotateX(var(--lens-rx, 0deg)) rotateY(var(--lens-ry, 0deg))
+      translate3d(0, 0, 36px) scale(0.99);
+  }
+  to {
+    transform: rotateX(var(--lens-rx, 0deg)) rotateY(var(--lens-ry, 0deg))
+      translate3d(0, -8px, 48px) scale(1.01);
+  }
+}
+
+/* --------------------------------------------------------- */
+/* Scene portal media frame brackets (Phase 2 - Live tile)   */
+/* --------------------------------------------------------- */
+
+[data-scene-portal-media] {
+  position: relative;
+}
+
+[data-scene-portal-media]::before,
+[data-scene-portal-media]::after,
+[data-scene-portal-media] > [data-bracket]::before,
+[data-scene-portal-media] > [data-bracket]::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(110, 189, 255, 0.6);
+  pointer-events: none;
+  transition: border-color 200ms var(--vz-ease-product);
+}
+
+[data-scene-portal-media]::before {
+  top: 8px;
+  left: 8px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+[data-scene-portal-media]::after {
+  top: 8px;
+  right: 8px;
+  border-left: 0;
+  border-bottom: 0;
+}
+
+[data-scene-portal-media] > [data-bracket]::before {
+  bottom: 8px;
+  left: 8px;
+  border-right: 0;
+  border-top: 0;
+}
+
+[data-scene-portal-media] > [data-bracket]::after {
+  bottom: 8px;
+  right: 8px;
+  border-left: 0;
+  border-top: 0;
+}
+
+[data-scene-portal-tile]:hover [data-scene-portal-media]::before,
+[data-scene-portal-tile]:hover [data-scene-portal-media]::after,
+[data-scene-portal-tile]:hover [data-scene-portal-media] > [data-bracket]::before,
+[data-scene-portal-tile]:hover [data-scene-portal-media] > [data-bracket]::after,
+[data-scene-portal-tile]:focus-within [data-scene-portal-media]::before,
+[data-scene-portal-tile]:focus-within [data-scene-portal-media]::after,
+[data-scene-portal-tile]:focus-within
+  [data-scene-portal-media]
+  > [data-bracket]::before,
+[data-scene-portal-tile]:focus-within
+  [data-scene-portal-media]
+  > [data-bracket]::after {
+  border-color: rgba(118, 224, 255, 1);
+}
