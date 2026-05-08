@@ -50,6 +50,77 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color-scheme: dark;
+
+  /* --- Vezor v2 token namespace (keep legacy tokens as aliases) --- */
+  /* Canvas */
+  --vz-canvas-void: #03050a;
+  --vz-canvas-obsidian: #07090f;
+  --vz-canvas-graphite: #0e131c;
+  --vz-canvas-graphite-up: #131927;
+  --vz-media-black: #010306;
+
+  /* Lens */
+  --vz-lens-cerulean: #6ebdff;
+  --vz-lens-cerulean-deep: #2c8df0;
+  --vz-lens-aqua: #76e0ff;
+  --vz-lens-violet: #7e53ff;
+  --vz-lens-lilac: #c7b8ff;
+
+  /* Status */
+  --vz-state-healthy: #6fe0a3;
+  --vz-state-attention: #f5c46a;
+  --vz-state-risk: #f48ca6;
+  --vz-state-info: #79b8ff;
+
+  /* Text */
+  --vz-text-primary: #f4f7fb;
+  --vz-text-secondary: #b8c6dc;
+  --vz-text-muted: #8497b3;
+  --vz-text-subtle: #5e6e88;
+
+  /* Hairlines */
+  --vz-hair: rgba(206, 224, 255, 0.06);
+  --vz-hair-strong: rgba(206, 224, 255, 0.12);
+  --vz-hair-focus: rgba(118, 224, 255, 0.42);
+  --vz-hair-active: rgba(126, 83, 255, 0.42);
+
+  /* Radii */
+  --vz-r-pill: 999px;
+  --vz-r-sm: 8px;
+  --vz-r-md: 12px;
+  --vz-r-lg: 16px;
+  --vz-r-xl: 24px;
+
+  /* Elevation */
+  --vz-elev-0: 0 0 0 1px var(--vz-hair);
+  --vz-elev-1: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 32px -28px rgba(0, 0, 0, 0.9), 0 0 0 1px var(--vz-hair);
+  --vz-elev-2: 0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 60px -34px rgba(0, 0, 0, 0.95), 0 0 0 1px var(--vz-hair-strong);
+  --vz-elev-3: 0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+    0 32px 90px -42px rgba(0, 0, 0, 0.96), 0 0 0 1px var(--vz-hair-strong);
+  --vz-elev-glow-cerulean: 0 0 0 1px var(--vz-hair-focus),
+    0 28px 80px -38px rgba(110, 189, 255, 0.55);
+  --vz-elev-glow-violet: 0 0 0 1px var(--vz-hair-active),
+    0 28px 80px -38px rgba(126, 83, 255, 0.5);
+
+  /* Motion */
+  --vz-ease-product: cubic-bezier(0.22, 1, 0.36, 1);
+  --vz-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --vz-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --vz-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --vz-dur-instant: 90ms;
+  --vz-dur-quick: 180ms;
+  --vz-dur-base: 240ms;
+  --vz-dur-soft: 320ms;
+  --vz-dur-ambient: 14s;
+
+  /* Perspective / 3D */
+  --vz-perspective: 1400px;
+  --vz-tilt-soft: 4deg;
+  --vz-tilt-firm: 8deg;
+  --vz-pop-z: 18px;
+  --vz-rest-z: 0px;
 }
 
 * {
