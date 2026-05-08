@@ -387,6 +387,11 @@ select {
     drop-shadow(0 0 86px rgba(126, 83, 255, 0.28));
 }
 
+.signin-lens-stage .omnisight-field--stage .omnisight-field__ring,
+.signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
+  display: none;
+}
+
 .omnisight-field--dashboard .omnisight-field__mark-stack {
   width: clamp(10rem, 19vw, 19rem);
   right: clamp(-5.5rem, -6vw, -3rem);
@@ -592,18 +597,13 @@ select {
   .signin-animated-logo {
     animation: signin-logo-depth 8s var(--vz-ease-in-out) infinite alternate;
   }
-
-  .signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
-    animation: signin-orbital-scan 13s linear infinite;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .omnisight-field__ring,
   .omnisight-field__mark-stack,
   .signin-lens-glint,
-  .signin-animated-logo,
-  .signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
+  .signin-animated-logo {
     animation: none;
   }
 
@@ -646,15 +646,6 @@ select {
   to {
     opacity: 0.68;
     transform: translate3d(0.7rem, -0.3rem, 0) scale(1.08);
-  }
-}
-
-@keyframes signin-orbital-scan {
-  from {
-    transform: rotate(-4deg) scale(0.985);
-  }
-  to {
-    transform: rotate(356deg) scale(1.02);
   }
 }
 
