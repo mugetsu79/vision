@@ -7,9 +7,7 @@ import {
 } from "@/components/layout/workspace-surfaces";
 import { SiteDialog } from "@/components/sites/SiteDialog";
 import { Button } from "@/components/ui/button";
-import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
-import { omniEmptyStates } from "@/copy/omnisight";
 import { useCameras } from "@/hooks/use-cameras";
 import { useCreateSite, useSites } from "@/hooks/use-sites";
 
@@ -44,65 +42,64 @@ function SitesContent() {
         actions={<Button onClick={() => setDialogOpen(true)}>Add site</Button>}
       />
 
-      <section data-testid="site-context-grid" className="grid gap-4 lg:grid-cols-3">
-        {sites.map((site) => {
-          const sceneCount = sceneCountBySite.get(site.id) ?? 0;
-          return (
-            <WorkspaceSurface key={site.id} className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
-                Deployment location
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-[#f4f8ff]">
-                {site.name}
-              </h2>
-              <p className="mt-2 text-sm text-[#9eb0cb]">{site.tz}</p>
-              <p className="mt-3 text-sm font-medium text-[#dce6f7]">
-                {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
-              </p>
-              {site.description ? (
-                <p className="mt-2 text-sm text-[#8fa4c4]">
-                  {site.description}
+      {isLoading ? (
+        <p className="text-sm text-[var(--vz-text-secondary)]">
+          Loading sites...
+        </p>
+      ) : sites.length === 0 ? (
+        <section
+          data-testid="sites-empty-state"
+          className="rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] px-6 py-10 text-center shadow-[var(--vz-elev-1)]"
+        >
+          <p className="font-[family-name:var(--vz-font-display)] text-xl font-semibold text-[var(--vz-text-primary)]">
+            No deployment sites yet
+          </p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--vz-text-secondary)]">
+            Sites anchor scenes, time zones, and edge fleet planning across{" "}
+            {brandName}. Add your first deployment location to start.
+          </p>
+          <Button
+            variant="primary"
+            className="mt-5"
+            onClick={() => setDialogOpen(true)}
+          >
+            Add site
+          </Button>
+        </section>
+      ) : (
+        <section
+          data-testid="site-context-grid"
+          className="grid gap-4 lg:grid-cols-3"
+        >
+          {sites.map((site) => {
+            const sceneCount = sceneCountBySite.get(site.id) ?? 0;
+            return (
+              <WorkspaceSurface
+                key={site.id}
+                className="p-4 transition duration-200 hover:border-[color:var(--vz-hair-focus)] hover:shadow-[var(--vz-elev-2)]"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-normal text-[var(--vz-text-muted)]">
+                  Deployment location
                 </p>
-              ) : null}
-            </WorkspaceSurface>
-          );
-        })}
-      </section>
-
-      <section className="overflow-hidden rounded-[0.9rem] border border-white/8 bg-[#0b1320]">
-        <Table>
-          <THead>
-            <TR>
-              <TH>Name</TH>
-              <TH>Time zone</TH>
-              <TH>Description</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {isLoading ? (
-              <TR>
-                <TD colSpan={3} className="text-[#9eb2cf]">
-                  Loading sites...
-                </TD>
-              </TR>
-            ) : sites.length === 0 ? (
-              <TR>
-                <TD colSpan={3} className="text-[#9eb2cf]">
-                  {omniEmptyStates.noSites}
-                </TD>
-              </TR>
-            ) : (
-              sites.map((site) => (
-                <TR key={site.id}>
-                  <TD className="font-medium text-[#eef4ff]">{site.name}</TD>
-                  <TD>{site.tz}</TD>
-                  <TD>{site.description ?? "—"}</TD>
-                </TR>
-              ))
-            )}
-          </TBody>
-        </Table>
-      </section>
+                <h2 className="mt-2 font-[family-name:var(--vz-font-display)] text-xl font-semibold text-[var(--vz-text-primary)]">
+                  {site.name}
+                </h2>
+                <p className="mt-2 text-sm text-[var(--vz-text-secondary)]">
+                  {site.tz}
+                </p>
+                <p className="mt-3 text-sm font-medium text-[var(--vz-text-primary)]">
+                  {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
+                </p>
+                {site.description ? (
+                  <p className="mt-2 text-sm text-[var(--vz-text-muted)]">
+                    {site.description}
+                  </p>
+                ) : null}
+              </WorkspaceSurface>
+            );
+          })}
+        </section>
+      )}
 
       <SiteDialog
         open={dialogOpen}

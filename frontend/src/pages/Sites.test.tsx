@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -29,6 +29,87 @@ import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
 
+const hqSite = {
+  id: "11111111-1111-1111-1111-111111111111",
+  tenant_id: "22222222-2222-2222-2222-222222222222",
+  name: "HQ",
+  description: "Main site",
+  tz: "Europe/Zurich",
+  geo_point: null,
+  created_at: "2026-04-18T10:00:00Z",
+};
+
+const depotSite = {
+  id: "33333333-3333-3333-3333-333333333333",
+  tenant_id: "22222222-2222-2222-2222-222222222222",
+  name: "Depot",
+  description: null,
+  tz: "America/New_York",
+  geo_point: null,
+  created_at: "2026-04-18T10:00:00Z",
+};
+
+const dockScene = {
+  id: "camera-1",
+  name: "Dock Scene",
+  site_id: hqSite.id,
+};
+
+const yardScene = {
+  id: "camera-2",
+  name: "Yard Scene",
+  site_id: depotSite.id,
+};
+
+function jsonResponse(body: unknown, status = 200) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
+function mockSitesApi({
+  sites = [],
+  cameras = [],
+}: {
+  sites?: unknown[];
+  cameras?: unknown[];
+} = {}) {
+  let currentSites = sites;
+
+  return vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const request = input as Request;
+    const url = new URL(request.url);
+
+    if (url.pathname === "/api/v1/cameras") {
+      return jsonResponse(cameras);
+    }
+
+    if (url.pathname === "/api/v1/sites" && request.method === "POST") {
+      const payload = (await request.clone().json()) as Record<string, unknown>;
+      const createdSite = { ...hqSite, ...payload };
+      currentSites = [createdSite];
+      return jsonResponse(createdSite, 201);
+    }
+
+    if (url.pathname === "/api/v1/sites") {
+      return jsonResponse(currentSites);
+    }
+
+    return Promise.resolve(new Response("Not found", { status: 404 }));
+  });
+}
+
+function renderSitesPage() {
+  return render(
+    <QueryClientProvider client={createQueryClient()}>
+      <SitesPage />
+    </QueryClientProvider>,
+  );
+}
+
 describe("SitesPage", () => {
   beforeEach(() => {
     act(() => {
@@ -54,73 +135,65 @@ describe("SitesPage", () => {
     });
   });
 
-  test("loads sites and creates a new site through the dialog", async () => {
-    const user = userEvent.setup();
-    const createdSite = {
-      id: "11111111-1111-1111-1111-111111111111",
-      tenant_id: "22222222-2222-2222-2222-222222222222",
-      name: "HQ",
-      description: "Main site",
-      tz: "Europe/Zurich",
-      geo_point: null,
-      created_at: "2026-04-18T10:00:00Z",
-    };
-    let sites: unknown[] = [];
-    const fetchMock = vi.spyOn(global, "fetch").mockImplementation((input) => {
-      const request = input as Request;
-      const url = new URL(request.url);
-
-      if (url.pathname === "/api/v1/cameras") {
-        return Promise.resolve(new Response(
-          JSON.stringify([
-            {
-              id: "camera-1",
-              name: "Dock Scene",
-              site_id: "11111111-1111-1111-1111-111111111111",
-            },
-          ]),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ));
-      }
-
-      if (url.pathname === "/api/v1/sites" && request.method === "POST") {
-        sites = [createdSite];
-        return Promise.resolve(new Response(JSON.stringify(createdSite), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }));
-      }
-
-      if (url.pathname === "/api/v1/sites") {
-        return Promise.resolve(new Response(JSON.stringify(sites), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }));
-      }
-
-      return Promise.resolve(new Response("Not found", { status: 404 }));
+  test("renders one card per site without a duplicate table", async () => {
+    mockSitesApi({
+      sites: [hqSite, depotSite],
+      cameras: [dockScene, yardScene],
     });
 
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <SitesPage />
-      </QueryClientProvider>,
-    );
+    renderSitesPage();
+
+    expect(await screen.findByTestId("sites-workspace")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+
+    const grid = await screen.findByTestId("site-context-grid");
+    expect(within(grid).getAllByText(/deployment location/i)).toHaveLength(2);
+    expect(
+      within(grid).getByRole("heading", { name: "HQ" }),
+    ).toBeInTheDocument();
+    expect(
+      within(grid).getByRole("heading", { name: "Depot" }),
+    ).toBeInTheDocument();
+    expect(within(grid).getAllByText("1 scene")).toHaveLength(2);
+  });
+
+  test("shows empty state when there are no sites", async () => {
+    mockSitesApi();
+
+    renderSitesPage();
+
+    expect(
+      await screen.findByText(/no deployment sites yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /add site/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByTestId("site-context-grid")).toBeNull();
+  });
+
+  test("loads sites and creates a new site through the dialog", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockSitesApi({
+      cameras: [dockScene],
+    });
+
+    renderSitesPage();
 
     expect(await screen.findByTestId("sites-workspace")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Deployment Sites" }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("site-context-grid")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/no deployment sites yet/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/sites anchor deployment locations/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/camera placement/i)).not.toBeInTheDocument();
 
-    await user.click(await screen.findByRole("button", { name: /add site/i }));
+    const [addSiteButton] = await screen.findAllByRole("button", {
+      name: /add site/i,
+    });
+    await user.click(addSiteButton);
     await user.type(screen.getByLabelText(/site name/i), "HQ");
     await user.type(screen.getByLabelText(/description/i), "Main site");
     await user.clear(screen.getByLabelText(/time zone/i));
@@ -131,12 +204,14 @@ describe("SitesPage", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     await waitFor(() =>
-      expect(screen.getByRole("cell", { name: "HQ" })).toBeInTheDocument(),
+      expect(screen.getByRole("heading", { name: "HQ" })).toBeInTheDocument(),
     );
+    expect(screen.queryByRole("table")).toBeNull();
+    const grid = screen.getByTestId("site-context-grid");
     expect(
-      screen.getAllByText(/deployment location/i).length,
-    ).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("1 scene")).toBeInTheDocument();
+      within(grid).getAllByText(/deployment location/i).length,
+    ).toBe(1);
+    expect(within(grid).getByText("1 scene")).toBeInTheDocument();
 
     const siteCreateRequest = fetchMock.mock.calls
       .map((call) => call[0])
