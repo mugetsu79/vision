@@ -21,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "echarts": "^6.0.0",
+    "framer-motion": "^11.18.2",
     "hls.js": "^1.6.12",
     "lucide-react": "^0.511.0",
     "oidc-client-ts": "^3.2.1",
