@@ -9,7 +9,7 @@ export function WorkspaceTransition({ children }: PropsWithChildren) {
       key={location.pathname}
       data-route={location.pathname}
       data-testid="workspace-transition"
-      className="animate-[workspace-enter_220ms_ease-out] motion-reduce:animate-none"
+      className="animate-[workspace-enter_var(--vz-dur-base)_var(--vz-ease-product)_both] motion-reduce:animate-none"
     >
       {children}
     </div>
