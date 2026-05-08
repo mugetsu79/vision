@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { lazy, Suspense } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -90,20 +91,37 @@ export function HistoryTrendPanel({
           <Badge>{coverage.label}</Badge>
         </div>
       </div>
-      <Suspense
-        fallback={
-          <div className="px-6 py-16 text-sm text-[#93a7c5]">
-            Loading chart...
-          </div>
-        }
-      >
-        <HistoryTrendChart
-          className="px-2 py-4"
-          metric={metric}
-          series={series}
-          onBucketSelect={onBucketSelect}
-        />
-      </Suspense>
+      <div className="relative">
+        <Suspense
+          fallback={
+            <div className="px-6 py-16 text-sm text-[#93a7c5]">
+              Loading chart...
+            </div>
+          }
+        >
+          <HistoryTrendChart
+            className="px-2 py-4"
+            metric={metric}
+            series={series}
+            onBucketSelect={onBucketSelect}
+          />
+        </Suspense>
+        {series.selectedBucket ? (
+          <motion.div
+            key={series.selectedBucket}
+            aria-hidden="true"
+            data-testid="history-bucket-shaft"
+            layoutId="history-bucket-shaft"
+            className="pointer-events-none absolute top-0 bottom-0 w-[2.4%] bg-[rgba(110,189,255,0.18)]"
+            style={{
+              left: bucketLeftPercent(series.points, series.selectedBucket),
+            }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <span className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-[var(--vz-lens-cerulean)] opacity-70" />
+          </motion.div>
+        ) : null}
+      </div>
       {coverage.status !== "populated" ? (
         <div className="border-t border-white/8 px-4 py-3 text-sm text-[#dce6f7]">
           <span className="font-semibold">{coverage.label}</span>
@@ -133,4 +151,13 @@ function formatBucketOption(bucket: string): string {
     hour12: false,
     timeZone: "UTC",
   }).format(new Date(bucket));
+}
+
+function bucketLeftPercent(
+  points: ReadonlyArray<{ bucket: string }>,
+  selected: string,
+): string {
+  const idx = points.findIndex((point) => point.bucket === selected);
+  if (idx < 0 || points.length <= 1) return "0%";
+  return `${(idx / (points.length - 1)) * 100}%`;
 }
