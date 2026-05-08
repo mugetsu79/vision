@@ -2,10 +2,15 @@ import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+type WorkspaceBandDensity = "standard" | "compact";
+type WorkspaceBandAccent = "neutral" | "cerulean" | "violet";
+
 type WorkspaceBandProps = HTMLAttributes<HTMLElement> & {
   eyebrow: string;
   title: string;
   description?: string;
+  density?: WorkspaceBandDensity;
+  accent?: WorkspaceBandAccent;
   actions?: ReactNode;
 };
 
@@ -23,10 +28,23 @@ const toneClasses: Record<Tone, string> = {
     "border-[rgba(118,224,255,0.26)] bg-[rgba(23,52,70,0.56)] text-[var(--vezor-lens-cerulean)]",
 };
 
+const accentClasses: Record<WorkspaceBandAccent, string> = {
+  neutral: "",
+  cerulean: "border-t-2 border-t-[color:var(--vz-lens-cerulean)]",
+  violet: "border-t-2 border-t-[color:var(--vz-lens-violet)]",
+};
+
+const densityClasses: Record<WorkspaceBandDensity, string> = {
+  standard: "px-5 py-5",
+  compact: "px-5 py-4",
+};
+
 export function WorkspaceBand({
   eyebrow,
   title,
   description,
+  density = "standard",
+  accent = "neutral",
   actions,
   className,
   children,
@@ -35,21 +53,23 @@ export function WorkspaceBand({
   return (
     <section
       className={cn(
-        "rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-neutral)] px-5 py-5",
+        "rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[linear-gradient(180deg,var(--vz-canvas-graphite)_0%,var(--vz-canvas-graphite-up)_100%)] shadow-[var(--vz-elev-1)]",
+        densityClasses[density],
+        accentClasses[accent],
         className,
       )}
       {...props}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8fa4c4]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--vz-text-muted)]">
             {eyebrow}
           </p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-[#f4f8ff] sm:text-3xl">
+          <h1 className="mt-2 font-[family-name:var(--vz-font-display)] text-2xl font-semibold tracking-normal text-[var(--vz-text-primary)] sm:text-3xl">
             {title}
           </h1>
           {description ? (
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#9eb0cb]">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--vz-text-secondary)]">
               {description}
             </p>
           ) : null}

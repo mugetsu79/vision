@@ -55,4 +55,35 @@ describe("workspace surfaces", () => {
       "text-[var(--vezor-lens-cerulean)]",
     );
   });
+
+  test("WorkspaceBand applies cerulean rim when accent='cerulean'", () => {
+    render(
+      <WorkspaceBand
+        eyebrow="Live"
+        title="Live Intelligence"
+        accent="cerulean"
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { name: "Live Intelligence" });
+    const band = heading.closest("section");
+    expect(band).not.toBeNull();
+    expect(band?.className).toContain(
+      "border-t-[color:var(--vz-lens-cerulean)]",
+    );
+  });
+
+  test("WorkspaceBand compact density reduces vertical padding", () => {
+    render(
+      <WorkspaceBand
+        eyebrow="Sites"
+        title="Deployment Sites"
+        density="compact"
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { name: "Deployment Sites" });
+    const band = heading.closest("section");
+    expect(band?.className).toContain("py-4");
+  });
 });
