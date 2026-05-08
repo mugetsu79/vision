@@ -14,3 +14,12 @@
 - Adopted them on `/signin` and `/dashboard`.
 - Live scene tiles gained CSS-only corner brackets and Z-pop hover.
 - Dropped the duplicate Sites table; replaced with cards + dedicated empty state.
+
+## Unreleased — Phase 3 Motion Choreography
+
+- Added Framer Motion + `motionPresets` + `useReducedMotionSafe`.
+- Sliding cerulean focus indicator on the active nav route.
+- Evidence selection cross-fade on `/incidents`.
+- Animated bucket-selection shaft on `/history`.
+- Token-driven `Toast` primitive with `useToast` hook; wired to evidence review.
+- Tightened `WorkspaceTransition` keyframe.
