@@ -32,9 +32,9 @@ export function AppShell({ children }: PropsWithChildren) {
   return (
     <main
       data-testid="spatial-cockpit-shell"
-      className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_55%_36%,rgba(74,121,211,0.16),transparent_30%),linear-gradient(180deg,#05080d_0%,#08101a_48%,#03050a_100%)] text-[#eef4ff]"
+      className="relative min-h-screen overflow-hidden bg-[radial-gradient(60%_60%_at_70%_0%,rgba(110,189,255,0.10),transparent_60%),linear-gradient(180deg,var(--vz-canvas-void)_0%,var(--vz-canvas-obsidian)_60%,var(--vz-canvas-void)_100%)] text-[var(--vz-text-primary)]"
     >
-      <OmniSightField variant="shell" className="opacity-85" />
+      <OmniSightField variant="shell" className="opacity-50" />
       <div
         className={cn(
           "relative z-10 grid min-h-screen grid-cols-[4.75rem_minmax(0,1fr)]",
