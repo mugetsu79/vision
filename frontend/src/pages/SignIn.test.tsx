@@ -35,7 +35,6 @@ describe("SignInPage", () => {
   test("starts the OIDC login flow when the user clicks sign in", async () => {
     const user = userEvent.setup();
     const signIn = vi.fn().mockResolvedValue(undefined);
-
     useAuthStore.setState({ signIn });
 
     render(<SignInPage />);
@@ -44,41 +43,29 @@ describe("SignInPage", () => {
     expect(signIn).toHaveBeenCalledTimes(1);
   });
 
-  test("renders the shared product lockup and a single primary sign-in action", () => {
+  test("renders the lens hero and product lockup", () => {
     render(<SignInPage />);
 
     expect(
-      screen.getByRole("group", { name: new RegExp(`${productBrand.name} product lockup`, "i") }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /vezor 2d logo/i })).toHaveAttribute(
-      "src",
-      "/brand/2d_logo_no_ring.png",
-    );
-    expect(
-      screen.getByRole("heading", { name: /omnisight for every live environment/i }),
+      screen.getByRole("group", {
+        name: new RegExp(`${productBrand.name} product lockup`, "i"),
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/connects scenes, models, events, evidence, and edge operations/i),
+      screen.getByRole("heading", {
+        name: /omnisight for every live environment/i,
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("signin-lens-stage")).toBeInTheDocument();
-    const animatedLogo = screen.getByTestId("signin-animated-logo");
-    if (!(animatedLogo instanceof HTMLImageElement)) {
-      throw new Error("Expected the sign-in animated logo to render as an image");
-    }
-    expect(animatedLogo.tagName.toLowerCase()).toBe("img");
-    expect(animatedLogo).toHaveAttribute("src", productBrand.runtimeAssets.logo3d);
-    expect(animatedLogo).toHaveAttribute("alt", "");
-    expect(animatedLogo).not.toHaveAttribute("src", productBrand.runtimeAssets.logoAnimated);
-    expect(animatedLogo).not.toHaveAttribute("poster");
-    expect(animatedLogo).not.toHaveAttribute("autoplay");
+    expect(screen.getByTestId("omnisight-lens")).toBeInTheDocument();
     expect(screen.getByTestId("signin-auth-panel")).toBeInTheDocument();
-    expect(screen.queryByTestId("omnisight-empty-surface")).not.toBeInTheDocument();
-    expect(screen.getByTestId("omnisight-field")).toHaveClass("omnisight-field--stage");
-    expect(
-      screen.getByText(
-        new RegExp(`use your ${productBrand.name} identity provider account to continue\\.`, "i"),
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("signin-animated-logo")).toBeNull();
+  });
+
+  test("renders three proof signals", () => {
+    render(<SignInPage />);
+
+    expect(screen.getByText("Scenes")).toBeInTheDocument();
+    expect(screen.getByText("Evidence")).toBeInTheDocument();
+    expect(screen.getByText("Operations")).toBeInTheDocument();
   });
 });
