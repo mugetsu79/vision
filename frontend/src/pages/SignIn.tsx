@@ -78,7 +78,8 @@ export function SignInPage() {
               Use your {brandName} identity provider account to continue.
             </p>
             <Button
-              className="mt-6 w-full border-transparent bg-[linear-gradient(135deg,var(--vezor-lens-cerulean)_0%,#79a7ff_100%)] text-[#06111a] shadow-[0_18px_38px_-24px_rgba(53,184,255,0.55)] hover:border-transparent hover:brightness-110"
+              variant="primary"
+              className="mt-6 w-full"
               onClick={() => void signIn()}
             >
               Sign in
