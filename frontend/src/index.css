@@ -366,11 +366,14 @@ select {
   object-fit: contain;
   border-radius: 9999px;
   overflow: hidden;
+  background: transparent;
   opacity: 0.96;
   mix-blend-mode: normal;
   filter: drop-shadow(0 0 34px rgba(118, 224, 255, 0.28))
     drop-shadow(0 28px 72px rgba(63, 109, 255, 0.22));
   transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0);
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
 }
 
 .signin-lens-stage .omnisight-field--stage {
@@ -586,6 +589,10 @@ select {
     animation: signin-glint 4.8s ease-in-out infinite alternate;
   }
 
+  .signin-animated-logo {
+    animation: signin-logo-depth 8s var(--vz-ease-in-out) infinite alternate;
+  }
+
   .signin-lens-stage .omnisight-field--stage .omnisight-field__orbital-map {
     animation: signin-orbital-scan 13s linear infinite;
   }
@@ -648,6 +655,24 @@ select {
   }
   to {
     transform: rotate(356deg) scale(1.02);
+  }
+}
+
+@keyframes signin-logo-depth {
+  from {
+    opacity: 0.92;
+    transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0)
+      scale(0.96);
+  }
+  48% {
+    opacity: 0.98;
+    transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0)
+      scale(1.035);
+  }
+  to {
+    opacity: 0.95;
+    transform: translate3d(var(--signin-logo-x), var(--signin-logo-y), 0)
+      scale(1.015);
   }
 }
 

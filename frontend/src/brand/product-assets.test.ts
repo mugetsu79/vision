@@ -61,6 +61,8 @@ describe("Vezor visual system tokens", () => {
     expect(css).toContain(
       ".signin-lens-stage .omnisight-field--stage .omnisight-field__mark-stack",
     );
+    expect(css).toContain("animation: signin-logo-depth");
+    expect(css).toContain("@keyframes signin-logo-depth");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

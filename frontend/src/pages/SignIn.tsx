@@ -15,17 +15,12 @@ export function SignInPage() {
         data-testid="signin-lens-stage"
       >
         <OmniSightField variant="stage" className="opacity-95" />
-        <video
+        <img
+          alt=""
           aria-hidden="true"
-          autoPlay
           className="signin-animated-logo"
           data-testid="signin-animated-logo"
-          loop
-          muted
-          playsInline
-          poster={productBrand.runtimeAssets.logo3d}
-          preload="auto"
-          src={productBrand.runtimeAssets.logoAnimated}
+          src={productBrand.runtimeAssets.logo3d}
         />
         <div className="signin-lens-glint pointer-events-none absolute right-[18%] top-[38%] h-28 w-28 rounded-full" />
       </div>
