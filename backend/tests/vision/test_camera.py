@@ -497,6 +497,16 @@ def test_ffmpeg_rtsp_timeout_covers_worker_first_frame_wait() -> None:
     )
 
 
+def test_ffmpeg_rtsp_timeout_uses_rw_timeout_on_linux(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(camera_module.platform, "system", lambda: "Linux")
+
+    timeout_args = camera_module._ffmpeg_rtsp_timeout_args()
+
+    assert timeout_args == ["-rw_timeout", "20000000"]
+
+
 def test_latest_frame_capture_release_waits_for_pump_before_releasing() -> None:
     raw_capture = _BlockingReadCapture()
     capture = camera_module._LatestFrameCapture.create(
