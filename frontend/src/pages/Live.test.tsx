@@ -224,7 +224,7 @@ describe("LivePage", () => {
         ),
       );
 
-    render(
+    const { container } = render(
       <QueryClientProvider client={createQueryClient()}>
         <LivePage />
       </QueryClientProvider>,
@@ -246,7 +246,15 @@ describe("LivePage", () => {
     expect(screen.queryByText(/current command resolution/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/\d+ connected scenes/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
-    expect(screen.getAllByTestId("scene-portal")).toHaveLength(2);
+    const scenePortals = screen.getAllByTestId("scene-portal");
+    expect(scenePortals).toHaveLength(2);
+    expect(scenePortals[0]).toHaveAttribute("data-scene-portal-tile");
+    expect(scenePortals[0]).toHaveAttribute("tabindex", "0");
+    expect(scenePortals[0]).toHaveClass("hover:-translate-y-0.5");
+    expect(scenePortals[0]).toHaveClass("hover:shadow-[var(--vz-elev-glow-cerulean)]");
+    const mediaPlates = container.querySelectorAll("[data-scene-portal-media]");
+    expect(mediaPlates).toHaveLength(2);
+    expect(mediaPlates[0]?.querySelector("[data-bracket]")).toBeInTheDocument();
     expect(screen.getByText(/active scenes/i)).toBeInTheDocument();
     expect(screen.getByTestId("stream-North Gate")).toBeInTheDocument();
     expect(screen.getByTestId("stream-Depot Yard")).toBeInTheDocument();

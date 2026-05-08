@@ -158,7 +158,9 @@ function WorkspacePage() {
                   <article
                     key={camera.id}
                     data-testid="scene-portal"
-                    className="overflow-hidden rounded-[0.9rem] border border-white/10 bg-[color:var(--vezor-surface-neutral)] shadow-[0_20px_56px_-48px_rgba(0,0,0,0.92)] transition duration-200 hover:border-[color:var(--vezor-border-focus)]"
+                    data-scene-portal-tile
+                    tabIndex={0}
+                    className="group relative overflow-hidden rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)] outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--vz-elev-glow-cerulean)] focus-within:shadow-[var(--vz-elev-glow-cerulean)]"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
                       <div>
@@ -190,7 +192,11 @@ function WorkspacePage() {
                       </div>
                     </div>
 
-                    <div className="relative aspect-video bg-[color:var(--vezor-media-black)]">
+                    <div
+                      data-scene-portal-media
+                      className="relative aspect-video bg-[color:var(--vz-media-black)]"
+                    >
+                      <span data-bracket aria-hidden="true" />
                       <VideoStream
                         cameraId={camera.id}
                         cameraName={camera.name}
