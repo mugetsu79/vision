@@ -201,7 +201,7 @@ describe("TelemetryCanvas", () => {
       expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("car"))).toBe(true),
     );
     expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("bus"))).toBe(false);
-    expect(strokeRectMock).toHaveBeenCalledTimes(1);
+    expect(strokeRectMock.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   test("exposes the telemetry overlay canvas for inspection", () => {

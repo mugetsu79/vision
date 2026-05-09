@@ -20,9 +20,8 @@ export function TelemetryCanvas({
   const frameRef = useRef<TelemetryFrame | null | undefined>(frame);
   const activeClassesRef = useRef<string[] | null>(activeClasses);
   const tracksRef = useRef<SignalTrack[] | undefined>(tracks);
-  const animationFrameRef = useRef<number | null>(null);
+  const skippedInitialPropDrawRef = useRef(false);
   const drawFrameRef = useRef<() => void>(() => undefined);
-  const scheduleDrawRef = useRef<() => void>(() => undefined);
 
   frameRef.current = frame;
   activeClassesRef.current = activeClasses;
@@ -76,37 +75,28 @@ export function TelemetryCanvas({
       const y2 = getCoordinate(track.bbox, "y2") * scaleY;
       const label = [
         `${track.class_name} #${track.track_id}`,
-        signal.state === "held" ? `last seen ${formatAge(signal.ageMs)}` : null,
+        signal.state === "held" ? "last seen" : null,
         typeof track.speed_kph === "number" ? `${Math.round(track.speed_kph)} km/h` : null,
       ]
         .filter(Boolean)
         .join(" ");
+      const labelWidth = context.measureText(label).width;
+      const labelX = Math.max(4, Math.min(x1 + 4, width - labelWidth - 4));
+      const labelY = Math.min(height - 4, Math.max(14, y1 - 6));
 
       context.globalAlpha = signal.state === "held" ? 0.55 : 1;
       context.setLineDash?.(signal.state === "held" ? [6, 5] : []);
       context.strokeStyle = signal.color.stroke;
       context.fillStyle = signal.color.text;
       context.strokeRect(x1, y1, Math.max(4, x2 - x1), Math.max(4, y2 - y1));
-      context.fillText(label, x1 + 4, Math.max(14, y1 - 6));
+      context.fillText(label, labelX, labelY);
     }
 
     context.globalAlpha = 1;
     context.setLineDash?.([]);
   };
 
-  const scheduleDraw = () => {
-    if (animationFrameRef.current !== null) {
-      return;
-    }
-
-    animationFrameRef.current = requestAnimationFrame(() => {
-      animationFrameRef.current = null;
-      drawFrameRef.current();
-    });
-  };
-
   drawFrameRef.current = drawFrame;
-  scheduleDrawRef.current = scheduleDraw;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -130,7 +120,7 @@ export function TelemetryCanvas({
       sizeRef.current = { width, height };
       const context = canvas.getContext("2d");
       context?.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      scheduleDrawRef.current();
+      drawFrameRef.current();
     };
 
     updateSize();
@@ -157,13 +147,11 @@ export function TelemetryCanvas({
   }, []);
 
   useEffect(() => {
-    scheduleDrawRef.current();
-
-    return () => {
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
+    if (!skippedInitialPropDrawRef.current) {
+      skippedInitialPropDrawRef.current = true;
+      return;
+    }
+    drawFrameRef.current();
   }, [frame, activeClasses, tracks]);
 
   return (
@@ -173,14 +161,6 @@ export function TelemetryCanvas({
       className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );
-}
-
-function formatAge(ageMs: number): string {
-  if (ageMs < 1_000) {
-    return `${Math.max(0, Math.round(ageMs))}ms ago`;
-  }
-
-  return `${(ageMs / 1_000).toFixed(1)}s ago`;
 }
 
 function getCoordinate(
