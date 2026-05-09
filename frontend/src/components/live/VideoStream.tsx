@@ -56,7 +56,7 @@ export function VideoStream({
   const runtimeHints = useMemo(() => getStreamRuntimeHints(), []);
   const [transport, setTransport] = useState<StreamTransport>("connecting");
   const [webrtcFailed, setWebrtcFailed] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === "undefined");
   const [isPageVisible, setIsPageVisible] = useState(() => document.visibilityState !== "hidden");
   const [firstFrameMs, setFirstFrameMs] = useState<number | null>(null);
   const [hlsRetryToken, setHlsRetryToken] = useState(0);
@@ -138,7 +138,7 @@ export function VideoStream({
     [accessToken, cameraId, sessionToken, tenantId],
   );
 
-  const fallbackReady = isVisible && isPageVisible;
+  const streamReady = isVisible && isPageVisible;
 
   const emitFirstFrameMetric = useEffectEvent(
     (activeTransport: Extract<StreamTransport, "webrtc" | "hls" | "mjpeg">) => {
@@ -177,6 +177,7 @@ export function VideoStream({
   useEffect(() => {
     const element = containerRef.current;
     if (!element || typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
       return;
     }
 
@@ -206,17 +207,22 @@ export function VideoStream({
   }, []);
 
   useEffect(() => {
+    if (!accessToken) {
+      setTransport("error");
+      return;
+    }
+
+    if (!streamReady) {
+      setTransport("standby");
+      return;
+    }
+
     firstFrameSentRef.current = false;
     playbackStartedAtRef.current = performance.now();
     hlsRetryCountRef.current = 0;
     setFirstFrameMs(null);
     setWebrtcFailed(false);
     setHlsRetryToken(0);
-
-    if (!accessToken) {
-      setTransport("error");
-      return;
-    }
 
     let disposed = false;
     let stopWebRtc: (() => void) | null = null;
@@ -277,14 +283,14 @@ export function VideoStream({
       }
       stopWebRtc?.();
     };
-  }, [accessToken, cameraId, sessionToken, tenantId]);
+  }, [accessToken, cameraId, sessionToken, streamReady, tenantId]);
 
   useEffect(() => {
     if (!accessToken || !webrtcFailed) {
       return;
     }
 
-    if (!fallbackReady) {
+    if (!streamReady) {
       setTransport("standby");
       return;
     }
@@ -403,10 +409,10 @@ export function VideoStream({
   }, [
     accessToken,
     cameraName,
-    fallbackReady,
     hlsRetryToken,
     hlsUrl,
     runtimeHints.maxConcurrentHlsSessions,
+    streamReady,
     webrtcFailed,
   ]);
 

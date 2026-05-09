@@ -953,7 +953,7 @@ describe("VideoStream", () => {
 
     await waitFor(() => expect(FakeRTCPeerConnection.remoteDescriptionCallCount).toBe(1));
     const peerConnection = FakeRTCPeerConnection.instances[0];
-    const video = screen.getByLabelText(/detaching webrtc live video/i) as HTMLVideoElement;
+    const video = screen.getByLabelText<HTMLVideoElement>(/detaching webrtc live video/i);
     const stream = {} as MediaStream;
 
     act(() => {
@@ -968,7 +968,7 @@ describe("VideoStream", () => {
     expect(video.srcObject).toBeNull();
   });
 
-  test("waits to start HLS fallback until the live tile is visible", async () => {
+  test("waits to start the stream session until the live tile is visible", async () => {
     defaultIntersectionVisible = false;
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),
@@ -997,7 +997,7 @@ describe("VideoStream", () => {
       />,
     );
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    expect(global.fetch).not.toHaveBeenCalled();
     expect(loadSourceMock).not.toHaveBeenCalled();
     expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
 
@@ -1006,21 +1006,24 @@ describe("VideoStream", () => {
       throw new Error("Expected stream root.");
     }
 
-    observedElements.get(root)?.(
-      [
-        {
-          boundingClientRect: root.getBoundingClientRect(),
-          intersectionRatio: 1,
-          intersectionRect: root.getBoundingClientRect(),
-          isIntersecting: true,
-          rootBounds: null,
-          target: root,
-          time: 1,
-        },
-      ] as IntersectionObserverEntry[],
-      {} as IntersectionObserver,
-    );
+    act(() => {
+      observedElements.get(root)?.(
+        [
+          {
+            boundingClientRect: root.getBoundingClientRect(),
+            intersectionRatio: 1,
+            intersectionRect: root.getBoundingClientRect(),
+            isIntersecting: true,
+            rootBounds: null,
+            target: root,
+            time: 1,
+          },
+        ] as IntersectionObserverEntry[],
+        {} as IntersectionObserver,
+      );
+    });
 
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
     expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
   });
