@@ -31,8 +31,12 @@ vi.mock("@/components/live/TelemetryCanvas", () => ({
   TelemetryCanvas: () => <canvas aria-label="Telemetry overlay" />,
 }));
 
-vi.mock("@/components/live/LiveSparkline", () => ({
-  LiveSparkline: () => <div data-testid="live-sparkline-mock" />,
+vi.mock("@/components/live/TelemetryTerrain", () => ({
+  TelemetryTerrain: ({ cameraName }: { cameraName: string }) => (
+    <div data-testid={`terrain-${cameraName}`}>
+      Telemetry terrain for {cameraName}
+    </div>
+  ),
 }));
 
 vi.mock("@/hooks/use-operations", () => ({
@@ -302,6 +306,7 @@ describe("LivePage", () => {
     expect(mediaPlates[0]?.querySelector("[data-bracket]")).toBeInTheDocument();
     expect(screen.getByText(/active scenes/i)).toBeInTheDocument();
     expect(screen.getByTestId("stream-North Gate")).toBeInTheDocument();
+    expect(screen.getByTestId("terrain-North Gate")).toBeInTheDocument();
     expect(screen.getByTestId("stream-Depot Yard")).toBeInTheDocument();
     expect(screen.getAllByLabelText(/video stream/i).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByLabelText(/telemetry overlay/i).length).toBeGreaterThanOrEqual(2);
@@ -311,17 +316,17 @@ describe("LivePage", () => {
     const depotYardStatus = within(scenePortals[1]).getByRole("group", {
       name: /depot yard operational status/i,
     });
-    expect(within(northGateStatus).getByText(/^central$/i)).toBeInTheDocument();
+    expect(within(northGateStatus).getByText(/^central scene$/i)).toBeInTheDocument();
     expect(within(northGateStatus).getByText(/worker running/i)).toBeInTheDocument();
     expect(
-      within(northGateStatus).getByText(/native stream available/i),
+      within(northGateStatus).getByText(/processed stream live/i),
     ).toBeInTheDocument();
-    expect(within(depotYardStatus).getByText(/^hybrid$/i)).toBeInTheDocument();
+    expect(within(depotYardStatus).getByText(/^hybrid scene$/i)).toBeInTheDocument();
     expect(
-      within(depotYardStatus).getByText(/worker not reported/i),
+      within(depotYardStatus).getByText(/worker awaiting report/i),
     ).toBeInTheDocument();
     expect(
-      within(depotYardStatus).getByText(/delivery profile selected/i),
+      within(depotYardStatus).getByText(/processed stream live/i),
     ).toBeInTheDocument();
 
     expect(FakeWebSocket.instances[0]?.url).toContain("/ws/telemetry");
@@ -386,7 +391,8 @@ describe("LivePage", () => {
     expect(screen.getAllByText(/visible now/i).length).toBeGreaterThanOrEqual(2);
     const dynamicStats = screen.getByRole("heading", { name: /live signals in view/i }).closest("section");
     expect(dynamicStats).not.toBeNull();
-    expect(within(dynamicStats as HTMLElement).getByText("3")).toBeInTheDocument();
+    expect(within(dynamicStats as HTMLElement).getByText("2")).toBeInTheDocument();
+    expect(within(dynamicStats as HTMLElement).getByText("1")).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: /ask vezor/i }), "only show cars");
     await user.click(screen.getByRole("button", { name: /^apply$/i }));
@@ -395,6 +401,115 @@ describe("LivePage", () => {
       expect(screen.getAllByText(/query-rules-v1/i).length).toBeGreaterThanOrEqual(1),
     );
     await waitFor(() => expect(screen.queryByText("bus")).not.toBeInTheDocument());
+  });
+
+  test("holds the last signal briefly when a frame arrives without tracks", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["person", "car"],
+            attribute_rules: [],
+            zones: [],
+            homography: {
+              src: [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+              ],
+              dst: [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+              ],
+              ref_distance_m: 10,
+            },
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
+    );
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit({
+        camera_id: "11111111-1111-1111-1111-111111111111",
+        ts: new Date().toISOString(),
+        profile: "central-gpu",
+        stream_mode: "annotated-whip",
+        counts: { person: 1 },
+        tracks: [
+          {
+            class_name: "person",
+            confidence: 0.92,
+            bbox: { x1: 100, y1: 120, x2: 260, y2: 260 },
+            track_id: 12,
+            speed_kph: null,
+            direction_deg: null,
+            zone_id: null,
+            attributes: {},
+          },
+        ],
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText("1 visible now")).toBeInTheDocument(),
+    );
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit({
+        camera_id: "11111111-1111-1111-1111-111111111111",
+        ts: new Date().toISOString(),
+        profile: "central-gpu",
+        stream_mode: "annotated-whip",
+        counts: {},
+        tracks: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText("1 signal held")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("0 visible now")).not.toBeInTheDocument();
   });
 
   test("shows why native is unavailable for a camera", async () => {

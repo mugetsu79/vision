@@ -4,6 +4,7 @@
 - Added a Dashboard deployment posture strip for sites, scenes, central/edge/hybrid split, privacy-configured scenes, evidence awaiting review, and fleet health.
 - Added a Dashboard attention stack for pending evidence, missing workers, stale nodes, and unavailable direct streams.
 - Added an Operations scene intelligence matrix, Live scene status strip, and Scenes inventory readiness cue.
+- Added Live signal stabilization with class-colored overlays, calmer scene state labels, and a Telemetry Terrain surface for scene activity.
 - Kept WebGL off and left runtime metrics such as `capture_wait_*` for the backend-backed Phase 5B.
 
 ## Unreleased - Phase 1 Foundations

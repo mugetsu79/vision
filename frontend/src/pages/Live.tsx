@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { InspectorPanel } from "@/components/layout/InspectorPanel";
 import {
@@ -7,8 +7,8 @@ import {
 } from "@/components/layout/workspace-surfaces";
 import { AgentInput, type LiveQueryScope } from "@/components/live/AgentInput";
 import { DynamicStats } from "@/components/live/DynamicStats";
-import { LiveSparkline } from "@/components/live/LiveSparkline";
 import { TelemetryCanvas } from "@/components/live/TelemetryCanvas";
+import { TelemetryTerrain } from "@/components/live/TelemetryTerrain";
 import { VideoStream } from "@/components/live/VideoStream";
 import { SceneStatusStrip } from "@/components/operations/SceneStatusStrip";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +16,14 @@ import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras } from "@/hooks/use-cameras";
 import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
 import { useFleetOverview } from "@/hooks/use-operations";
+import { useStableSignalFrame } from "@/hooks/use-stable-signal-frame";
 import type { components } from "@/lib/api.generated";
 import { formatHeartbeat, getHeartbeatStatus } from "@/lib/live";
-import { deriveSceneReadinessRows } from "@/lib/operational-health";
+import type { SignalCountRow } from "@/lib/live-signal-stability";
+import {
+  deriveSceneReadinessRows,
+  type SceneHealthRow,
+} from "@/lib/operational-health";
 
 type QueryResponse = components["schemas"]["QueryResponse"];
 type CameraResponse = components["schemas"]["CameraResponse"];
@@ -38,6 +43,20 @@ function WorkspacePage() {
     response: QueryResponse;
     scope: LiveQueryScope;
   } | null>(null);
+  const [signalRowsByCamera, setSignalRowsByCamera] = useState(
+    () => new Map<string, SignalCountRow[]>(),
+  );
+
+  const handleSignalRowsChange = useCallback(
+    (cameraId: string, rows: SignalCountRow[]) => {
+      setSignalRowsByCamera((current) => {
+        const next = new Map(current);
+        next.set(cameraId, rows);
+        return next;
+      });
+    },
+    [],
+  );
 
   const classFiltersByCamera = useMemo(() => {
     const filters = new Map<string, string[] | null>();
@@ -60,22 +79,41 @@ function WorkspacePage() {
     return filters;
   }, [activeQuery, cameras]);
 
-  const counts = useMemo(() => {
-    const aggregated: Record<string, number> = {};
+  const signalRows = useMemo<SignalCountRow[]>(() => {
+    const rowsByClass = new Map<string, SignalCountRow>();
 
-    for (const camera of cameras) {
-      const frame = framesByCamera[camera.id];
-      const classFilter = classFiltersByCamera.get(camera.id) ?? null;
-      for (const [className, count] of Object.entries(frame?.counts ?? {})) {
-        if (classFilter && !classFilter.includes(className)) {
+    for (const rows of signalRowsByCamera.values()) {
+      for (const row of rows) {
+        if (row.totalCount <= 0) {
           continue;
         }
-        aggregated[className] = (aggregated[className] ?? 0) + count;
+
+        const aggregate: SignalCountRow =
+          rowsByClass.get(row.className) ??
+          {
+            className: row.className,
+            color: row.color,
+            liveCount: 0,
+            heldCount: 0,
+            totalCount: 0,
+            state: "held",
+          };
+
+        aggregate.liveCount += row.liveCount;
+        aggregate.heldCount += row.heldCount;
+        aggregate.totalCount += row.totalCount;
+        aggregate.state = aggregate.liveCount > 0 ? "live" : "held";
+        rowsByClass.set(row.className, aggregate);
       }
     }
 
-    return aggregated;
-  }, [cameras, classFiltersByCamera, framesByCamera]);
+    return Array.from(rowsByClass.values()).sort(
+      (left, right) =>
+        right.liveCount - left.liveCount ||
+        right.totalCount - left.totalCount ||
+        left.className.localeCompare(right.className),
+    );
+  }, [signalRowsByCamera]);
 
   const sceneHealthRows = useMemo(
     () =>
@@ -160,103 +198,17 @@ function WorkspacePage() {
               {cameras.map((camera) => {
                 const frame = framesByCamera[camera.id];
                 const classFilter = classFiltersByCamera.get(camera.id) ?? null;
-                const heartbeatStatus = getHeartbeatStatus(frame);
-                const deliveryProfileLabel = formatDeliveryProfile(camera);
                 const sceneHealth = sceneHealthByCamera.get(camera.id);
-                const visibleNow = Object.entries(frame?.counts ?? {}).reduce(
-                  (total, [className, count]) => {
-                    if (classFilter && !classFilter.includes(className)) {
-                      return total;
-                    }
-                    return total + count;
-                  },
-                  0,
-                );
 
                 return (
-                  <article
+                  <ScenePortalCard
                     key={camera.id}
-                    data-testid="scene-portal"
-                    data-scene-portal-tile
-                    tabIndex={0}
-                    className="group relative overflow-hidden rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)] outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--vz-elev-glow-cerulean)] focus-within:shadow-[var(--vz-elev-glow-cerulean)]"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
-                      <div>
-                        <h3 className="text-xl font-semibold text-[#f3f7ff]">
-                          {camera.name}
-                        </h3>
-                        <p className="mt-2 text-sm text-[#88a2c7]">
-                          {camera.processing_mode} processing ·{" "}
-                          {deliveryProfileLabel}
-                        </p>
-                        {camera.browser_delivery?.native_status?.available ===
-                        false ? (
-                          <p className="mt-2 text-xs text-[#ffd28a]">
-                            Direct stream unavailable:{" "}
-                            {formatNativeAvailabilityReason(
-                              camera.browser_delivery.native_status.reason,
-                            )}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Badge className={heartbeatBadgeClass(heartbeatStatus)}>
-                          {heartbeatBadgeLabel(heartbeatStatus)}
-                        </Badge>
-                        <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-                          {camera.tracker_type}
-                        </Badge>
-                      </div>
-                      {sceneHealth ? (
-                        <div className="basis-full pt-1">
-                          <SceneStatusStrip row={sceneHealth} />
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div
-                      data-scene-portal-media
-                      className="relative aspect-video bg-[color:var(--vz-media-black)]"
-                    >
-                      <span data-bracket aria-hidden="true" />
-                      <VideoStream
-                        cameraId={camera.id}
-                        cameraName={camera.name}
-                        defaultProfile={
-                          camera.browser_delivery?.default_profile ?? "720p10"
-                        }
-                        heartbeatTs={frame?.ts ?? null}
-                      />
-                      <TelemetryCanvas
-                        frame={frame}
-                        activeClasses={classFilter}
-                      />
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#8ea8cf]">
-                            {formatHeartbeat(frame)}
-                          </p>
-                          <p className="mt-1 text-sm text-[#dce6f7]">
-                            {visibleNow} visible now
-                          </p>
-                        </div>
-                        {frame ? (
-                          <p className="text-xs text-[#9db3d3]">
-                            {formatStreamMode(frame)}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 border-t border-white/8 px-5 py-4">
-                      <LiveSparkline
-                        cameraId={camera.id}
-                        activeClasses={camera.active_classes ?? []}
-                      />
-                    </div>
-                  </article>
+                    camera={camera}
+                    frame={frame}
+                    classFilter={classFilter}
+                    sceneHealth={sceneHealth}
+                    onSignalRowsChange={handleSignalRowsChange}
+                  />
                 );
               })}
             </div>
@@ -265,7 +217,7 @@ function WorkspacePage() {
       </section>
 
       <aside data-testid="spatial-instrument-rail" className="space-y-4">
-        <DynamicStats counts={counts} />
+        <DynamicStats signalRows={signalRows} />
 
         <InspectorPanel
           title={omniLabels.resolvedIntentTitle}
@@ -299,6 +251,120 @@ function WorkspacePage() {
         </InspectorPanel>
       </aside>
     </div>
+  );
+}
+
+function ScenePortalCard({
+  camera,
+  frame,
+  classFilter,
+  sceneHealth,
+  onSignalRowsChange,
+}: {
+  camera: CameraResponse;
+  frame: TelemetryFrame | undefined;
+  classFilter: string[] | null;
+  sceneHealth: SceneHealthRow | undefined;
+  onSignalRowsChange: (cameraId: string, rows: SignalCountRow[]) => void;
+}) {
+  const stableSignal = useStableSignalFrame(frame, classFilter);
+  const visibleCopy =
+    stableSignal.counts.liveTotal > 0
+      ? `${stableSignal.counts.liveTotal} visible now`
+      : stableSignal.counts.heldTotal > 0
+        ? `${stableSignal.counts.heldTotal} signal held`
+        : "0 visible now";
+  const heartbeatStatus = getHeartbeatStatus(frame);
+  const deliveryProfileLabel = formatDeliveryProfile(camera);
+
+  useEffect(() => {
+    onSignalRowsChange(camera.id, stableSignal.counts.rows);
+  }, [camera.id, onSignalRowsChange, stableSignal.counts.rows]);
+
+  useEffect(() => {
+    return () => {
+      onSignalRowsChange(camera.id, []);
+    };
+  }, [camera.id, onSignalRowsChange]);
+
+  return (
+    <article
+      data-testid="scene-portal"
+      data-scene-portal-tile
+      tabIndex={0}
+      className="group relative overflow-hidden rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)] outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--vz-elev-glow-cerulean)] focus-within:shadow-[var(--vz-elev-glow-cerulean)]"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
+        <div>
+          <h3 className="text-xl font-semibold text-[#f3f7ff]">
+            {camera.name}
+          </h3>
+          <p className="mt-2 text-sm text-[#88a2c7]">
+            {camera.processing_mode} processing · {deliveryProfileLabel}
+          </p>
+          {camera.browser_delivery?.native_status?.available === false ? (
+            <p className="mt-2 text-xs text-[#ffd28a]">
+              Direct stream unavailable:{" "}
+              {formatNativeAvailabilityReason(
+                camera.browser_delivery.native_status.reason,
+              )}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Badge className={heartbeatBadgeClass(heartbeatStatus)}>
+            {heartbeatBadgeLabel(heartbeatStatus)}
+          </Badge>
+          <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+            {camera.tracker_type}
+          </Badge>
+        </div>
+        {sceneHealth ? (
+          <div className="basis-full pt-1">
+            <SceneStatusStrip row={sceneHealth} />
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        data-scene-portal-media
+        className="relative aspect-video bg-[color:var(--vz-media-black)]"
+      >
+        <span data-bracket aria-hidden="true" />
+        <VideoStream
+          cameraId={camera.id}
+          cameraName={camera.name}
+          defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
+          heartbeatTs={frame?.ts ?? null}
+        />
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={classFilter}
+          tracks={stableSignal.tracks}
+        />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#8ea8cf]">
+              {formatHeartbeat(frame)}
+            </p>
+            <p className="mt-1 text-sm text-[#dce6f7]">{visibleCopy}</p>
+          </div>
+          {frame ? (
+            <p className="text-xs text-[#9db3d3]">{formatStreamMode(frame)}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="space-y-3 border-t border-white/8 px-5 py-4">
+        <TelemetryTerrain
+          cameraId={camera.id}
+          cameraName={camera.name}
+          activeClasses={camera.active_classes ?? []}
+          signalRows={stableSignal.counts.rows}
+        />
+      </div>
+    </article>
   );
 }
 
