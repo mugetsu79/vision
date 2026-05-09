@@ -4,6 +4,7 @@ type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 type TelemetryTrack = components["schemas"]["TelemetryTrack"];
 
 export const DEFAULT_SIGNAL_HOLD_MS = 1_200;
+const DEFAULT_SIGNAL_LIVE_GRACE_MS = 500;
 
 export type SignalState = "live" | "held";
 export type SignalColorFamily = "human" | "vehicle" | "safety" | "alert" | "other";
@@ -80,14 +81,17 @@ export function updateSignalTracks({
   activeClasses,
   nowMs,
   holdMs = DEFAULT_SIGNAL_HOLD_MS,
+  liveGraceMs = DEFAULT_SIGNAL_LIVE_GRACE_MS,
 }: {
   previous: SignalTrack[];
   frame: TelemetryFrame | null | undefined;
   activeClasses: string[] | null;
   nowMs: number;
   holdMs?: number;
+  liveGraceMs?: number;
 }): SignalTrack[] {
   const allowed = activeClasses && activeClasses.length > 0 ? new Set(activeClasses) : null;
+  const hasFrame = frame !== null && frame !== undefined;
   const nextByKey = new Map<string, SignalTrack>();
   const previousByKey = new Map(previous.map((item) => [item.key, item]));
 
@@ -118,6 +122,15 @@ export function updateSignalTracks({
     }
 
     const ageMs = nowMs - item.lastSeenMs;
+    if (!hasFrame && item.state === "live" && ageMs <= liveGraceMs) {
+      nextByKey.set(item.key, {
+        ...item,
+        state: "live",
+        ageMs,
+      });
+      continue;
+    }
+
     if (ageMs <= holdMs) {
       nextByKey.set(item.key, {
         ...item,

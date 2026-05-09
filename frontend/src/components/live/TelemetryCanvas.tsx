@@ -5,27 +5,43 @@ import type { components } from "@/lib/api.generated";
 import { colorForClass, type SignalTrack } from "@/lib/live-signal-stability";
 
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
+type SourceSize = { width: number; height: number };
+type ResolvedSourceSize = SourceSize & { explicit: boolean };
+type CoordinateTransform = {
+  scaleX: number;
+  scaleY: number;
+  offsetX: number;
+  offsetY: number;
+};
 
 export function TelemetryCanvas({
   frame,
   activeClasses,
   tracks,
+  sourceSize,
+  disabled = false,
 }: {
   frame: TelemetryFrame | null | undefined;
   activeClasses: string[] | null;
   tracks?: SignalTrack[];
+  sourceSize?: SourceSize | null;
+  disabled?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const frameRef = useRef<TelemetryFrame | null | undefined>(frame);
   const activeClassesRef = useRef<string[] | null>(activeClasses);
   const tracksRef = useRef<SignalTrack[] | undefined>(tracks);
+  const sourceSizeRef = useRef<SourceSize | null | undefined>(sourceSize);
+  const disabledRef = useRef(disabled);
   const skippedInitialPropDrawRef = useRef(false);
   const drawFrameRef = useRef<() => void>(() => undefined);
 
   frameRef.current = frame;
   activeClassesRef.current = activeClasses;
   tracksRef.current = tracks;
+  sourceSizeRef.current = sourceSize;
+  disabledRef.current = disabled;
 
   const drawFrame = () => {
     const canvas = canvasRef.current;
@@ -36,6 +52,10 @@ export function TelemetryCanvas({
 
     const { width, height } = sizeRef.current;
     context.clearRect(0, 0, width, height);
+
+    if (disabledRef.current) {
+      return;
+    }
 
     const visibleSignals =
       tracksRef.current ??
@@ -53,28 +73,39 @@ export function TelemetryCanvas({
       return;
     }
 
-    const sourceWidth = Math.max(
-      ...visibleSignals.map((signal) => getCoordinate(signal.track.bbox, "x2")),
-      1,
+    const source = resolveSourceSize(
+      visibleSignals,
+      sourceSizeRef.current,
     );
-    const sourceHeight = Math.max(
-      ...visibleSignals.map((signal) => getCoordinate(signal.track.bbox, "y2")),
-      1,
-    );
-    const scaleX = width / sourceWidth;
-    const scaleY = height / sourceHeight;
+    const transform = resolveCoordinateTransform(width, height, source);
 
     context.lineWidth = 2;
     context.font = "12px ui-sans-serif, system-ui, sans-serif";
 
     for (const signal of visibleSignals) {
       const { track } = signal;
-      const x1 = getCoordinate(track.bbox, "x1") * scaleX;
-      const y1 = getCoordinate(track.bbox, "y1") * scaleY;
-      const x2 = getCoordinate(track.bbox, "x2") * scaleX;
-      const y2 = getCoordinate(track.bbox, "y2") * scaleY;
+      const x1 = projectCoordinate(
+        getCoordinate(track.bbox, "x1"),
+        transform.scaleX,
+        transform.offsetX,
+      );
+      const y1 = projectCoordinate(
+        getCoordinate(track.bbox, "y1"),
+        transform.scaleY,
+        transform.offsetY,
+      );
+      const x2 = projectCoordinate(
+        getCoordinate(track.bbox, "x2"),
+        transform.scaleX,
+        transform.offsetX,
+      );
+      const y2 = projectCoordinate(
+        getCoordinate(track.bbox, "y2"),
+        transform.scaleY,
+        transform.offsetY,
+      );
       const label = [
-        `${track.class_name} #${track.track_id}`,
+        track.class_name,
         signal.state === "held" ? "last seen" : null,
         typeof track.speed_kph === "number" ? `${Math.round(track.speed_kph)} km/h` : null,
       ]
@@ -152,7 +183,7 @@ export function TelemetryCanvas({
       return;
     }
     drawFrameRef.current();
-  }, [frame, activeClasses, tracks]);
+  }, [frame, activeClasses, tracks, sourceSize, disabled]);
 
   return (
     <canvas
@@ -161,6 +192,67 @@ export function TelemetryCanvas({
       className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );
+}
+
+function resolveSourceSize(
+  visibleSignals: SignalTrack[],
+  sourceSize: SourceSize | null | undefined,
+): ResolvedSourceSize {
+  if (
+    sourceSize &&
+    Number.isFinite(sourceSize.width) &&
+    sourceSize.width > 0 &&
+    Number.isFinite(sourceSize.height) &&
+    sourceSize.height > 0
+  ) {
+    return {
+      width: sourceSize.width,
+      height: sourceSize.height,
+      explicit: true,
+    };
+  }
+
+  return {
+    width: Math.max(
+      ...visibleSignals.map((signal) => getCoordinate(signal.track.bbox, "x2")),
+      1,
+    ),
+    height: Math.max(
+      ...visibleSignals.map((signal) => getCoordinate(signal.track.bbox, "y2")),
+      1,
+    ),
+    explicit: false,
+  };
+}
+
+function resolveCoordinateTransform(
+  canvasWidth: number,
+  canvasHeight: number,
+  source: ResolvedSourceSize,
+): CoordinateTransform {
+  if (!source.explicit) {
+    return {
+      scaleX: canvasWidth / source.width,
+      scaleY: canvasHeight / source.height,
+      offsetX: 0,
+      offsetY: 0,
+    };
+  }
+
+  const scale = Math.max(canvasWidth / source.width, canvasHeight / source.height);
+  const renderedWidth = source.width * scale;
+  const renderedHeight = source.height * scale;
+
+  return {
+    scaleX: scale,
+    scaleY: scale,
+    offsetX: (canvasWidth - renderedWidth) / 2,
+    offsetY: (canvasHeight - renderedHeight) / 2,
+  };
+}
+
+function projectCoordinate(value: number, scale: number, offset: number): number {
+  return value * scale + offset;
 }
 
 function getCoordinate(

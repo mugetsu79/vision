@@ -204,6 +204,141 @@ describe("TelemetryCanvas", () => {
     expect(strokeRectMock.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
+  test("does not draw a frontend overlay when disabled", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "annotated-whip",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 640, y1: 240, x2: 960, y2: 620 },
+          track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas frame={frame} activeClasses={null} disabled />
+      </div>,
+    );
+
+    await waitFor(() => expect(clearRectMock).toHaveBeenCalled());
+    expect(strokeRectMock).not.toHaveBeenCalled();
+    expect(fillTextMock).not.toHaveBeenCalled();
+  });
+
+  test("scales telemetry boxes from the real source size when provided", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 640, y1: 240, x2: 960, y2: 620 },
+          track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          sourceSize={{ width: 1280, height: 720 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(strokeRectMock).toHaveBeenCalled());
+    expect(strokeRectMock).toHaveBeenCalledWith(320, 120, 160, 190);
+  });
+
+  test("matches object-cover crop offsets for non-widescreen sources", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 640, y1: 240, x2: 960, y2: 620 },
+          track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          sourceSize={{ width: 1280, height: 960 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(strokeRectMock).toHaveBeenCalled());
+    expect(strokeRectMock).toHaveBeenCalledWith(320, 60, 160, 190);
+  });
+
+  test("does not expose raw tracker ids in user-facing labels", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 100, y1: 100, x2: 240, y2: 320 },
+          track_id: 12,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas frame={frame} activeClasses={null} />
+      </div>,
+    );
+
+    await waitFor(() =>
+      expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("person"))).toBe(true),
+    );
+    expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("#12"))).toBe(false);
+  });
+
   test("exposes the telemetry overlay canvas for inspection", () => {
     render(<TelemetryCanvas frame={null} activeClasses={null} />);
 

@@ -16,11 +16,11 @@ from argus.vision.types import Detection
 class TrackerConfig:
     tracker_type: TrackerType
     frame_rate: int = 30
-    track_high_thresh: float = 0.5
+    track_high_thresh: float = 0.25
     track_low_thresh: float = 0.1
-    new_track_thresh: float = 0.6
+    new_track_thresh: float = 0.35
     match_thresh: float = 0.8
-    track_buffer: int = 30
+    track_buffer: int = 90
     fuse_score: bool = True
     with_reid: bool = False
     model: str = "auto"

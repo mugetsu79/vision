@@ -68,4 +68,19 @@ describe("useStableSignalFrame", () => {
 
     expect(view.result.current.counts.total).toBe(0);
   });
+
+  test("expires live tracks when telemetry stops without a replacement frame", () => {
+    const view = renderHook(({ latest }) => useStableSignalFrame(latest, null), {
+      initialProps: { latest: frame([person]) },
+    });
+
+    expect(view.result.current.counts.liveTotal).toBe(1);
+
+    act(() => {
+      vi.setSystemTime(2_300);
+      vi.advanceTimersByTime(1_300);
+    });
+
+    expect(view.result.current.counts.total).toBe(0);
+  });
 });

@@ -11,7 +11,7 @@ import {
 
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 
-const HELD_REFRESH_MS = 200;
+const SIGNAL_REFRESH_MS = 200;
 
 export type StableSignalSnapshot = {
   tracks: SignalTrack[];
@@ -38,10 +38,10 @@ export function useStableSignalFrame(
     );
   }, [activeClasses, frame, holdMs]);
 
-  const hasHeldTracks = tracks.some((track) => track.state === "held");
+  const hasTracks = tracks.length > 0;
 
   useEffect(() => {
-    if (!hasHeldTracks) {
+    if (!hasTracks) {
       return undefined;
     }
 
@@ -55,12 +55,12 @@ export function useStableSignalFrame(
           holdMs,
         }),
       );
-    }, HELD_REFRESH_MS);
+    }, SIGNAL_REFRESH_MS);
 
     return () => {
       window.clearInterval(interval);
     };
-  }, [activeClasses, hasHeldTracks, holdMs]);
+  }, [activeClasses, hasTracks, holdMs]);
 
   const counts = useMemo(() => deriveSignalCounts(tracks), [tracks]);
 

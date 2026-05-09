@@ -93,6 +93,26 @@ def test_botsort_default_disables_global_motion_compensation_for_fixed_cameras()
     assert tracker.backend.gmc.method is None
 
 
+def test_tracker_defaults_are_tolerant_for_low_fps_live_telemetry() -> None:
+    captured: dict[str, TrackerConfig] = {}
+
+    def backend_factory(tracker_name: str, tracker_config: TrackerConfig) -> _FakeTrackerBackend:
+        captured["config"] = tracker_config
+        return _FakeTrackerBackend(tracker_name)
+
+    create_tracker(
+        TrackerConfig(tracker_type=TrackerType.BOTSORT, frame_rate=10),
+        backend_factory=backend_factory,
+    )
+
+    namespace = captured["config"].to_namespace()
+
+    assert namespace.track_high_thresh == 0.25
+    assert namespace.new_track_thresh == 0.35
+    assert namespace.track_buffer == 90
+    assert namespace.gmc_method == "none"
+
+
 def test_real_tracker_ages_state_on_empty_detection_frames() -> None:
     tracker = create_tracker(TrackerConfig(tracker_type=TrackerType.BYTETRACK, frame_rate=30))
 

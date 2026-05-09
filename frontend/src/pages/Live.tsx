@@ -268,6 +268,11 @@ function ScenePortalCard({
   onSignalRowsChange: (cameraId: string, rows: SignalCountRow[]) => void;
 }) {
   const stableSignal = useStableSignalFrame(frame, classFilter);
+  const sourceSize = useMemo(
+    () => getCameraSourceSize(camera),
+    [camera.source_capability?.height, camera.source_capability?.width],
+  );
+  const disableTelemetryOverlay = hasServerRenderedTelemetryOverlay(frame);
   const visibleCopy =
     stableSignal.counts.liveTotal > 0
       ? `${stableSignal.counts.liveTotal} visible now`
@@ -342,6 +347,8 @@ function ScenePortalCard({
           frame={frame}
           activeClasses={classFilter}
           tracks={stableSignal.tracks}
+          sourceSize={sourceSize}
+          disabled={disableTelemetryOverlay}
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
           <div>
@@ -438,6 +445,19 @@ function formatDeliveryProfile(camera: CameraResponse): string {
 
 function formatStreamMode(frame: TelemetryFrame): string {
   return frame.stream_mode;
+}
+
+function hasServerRenderedTelemetryOverlay(frame: TelemetryFrame | undefined): boolean {
+  return frame?.stream_mode === "annotated-whip";
+}
+
+function getCameraSourceSize(camera: CameraResponse): { width: number; height: number } | null {
+  const source = camera.source_capability;
+  if (!source || source.width <= 0 || source.height <= 0) {
+    return null;
+  }
+
+  return { width: source.width, height: source.height };
 }
 
 function formatNativeAvailabilityReason(
