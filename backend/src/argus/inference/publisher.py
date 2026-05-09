@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 import httpx
@@ -33,6 +33,10 @@ class TelemetryTrack(BaseModel):
     confidence: float
     bbox: dict[str, float]
     track_id: int
+    stable_track_id: int | None = None
+    track_state: Literal["active", "coasting"] | None = None
+    last_seen_age_ms: int | None = None
+    source_track_id: int | None = None
     speed_kph: float | None = None
     direction_deg: float | None = None
     zone_id: str | None = None

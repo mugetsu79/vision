@@ -81,6 +81,21 @@ def _telemetry_frame(track_id: int = 7) -> TelemetryFrame:
     )
 
 
+def test_telemetry_track_lifecycle_fields_are_optional_for_legacy_frames() -> None:
+    track = TelemetryTrack(
+        class_name="person",
+        confidence=0.96,
+        bbox={"x1": 12.0, "y1": 24.0, "x2": 48.0, "y2": 66.0},
+        track_id=7,
+    )
+
+    assert track.stable_track_id is None
+    assert track.source_track_id is None
+    assert track.track_state is None
+    assert track.last_seen_age_ms is None
+    assert track.model_dump()["track_state"] is None
+
+
 @pytest.mark.asyncio
 async def test_nats_publisher_routes_frame_to_camera_subject() -> None:
     client = _RecordingNatsClient()

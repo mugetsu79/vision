@@ -1649,6 +1649,14 @@ export interface components {
             };
             /** Track Id */
             track_id: number;
+            /** Stable Track Id */
+            stable_track_id?: number | null;
+            /** Track State */
+            track_state?: ("active" | "coasting") | null;
+            /** Last Seen Age Ms */
+            last_seen_age_ms?: number | null;
+            /** Source Track Id */
+            source_track_id?: number | null;
             /** Speed Kph */
             speed_kph?: number | null;
             /** Direction Deg */
