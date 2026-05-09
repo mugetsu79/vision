@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 
 import { RequireRole } from "@/components/auth/RequireRole";
 import { CameraWizard, type ModelOption } from "@/components/cameras/CameraWizard";
-import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
+import {
+  StatusToneBadge,
+  WorkspaceBand,
+} from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
@@ -18,7 +21,12 @@ import {
 } from "@/hooks/use-cameras";
 import { useModelCatalog, type ModelCatalogEntry } from "@/hooks/use-model-catalog";
 import { useModels, type Model } from "@/hooks/use-models";
+import { useFleetOverview } from "@/hooks/use-operations";
 import { useSites } from "@/hooks/use-sites";
+import {
+  deriveSceneReadinessRows,
+  healthToTone,
+} from "@/lib/operational-health";
 
 export function CamerasPage() {
   return (
@@ -44,10 +52,19 @@ function CamerasContent() {
   const createCamera = useCreateCamera();
   const updateCamera = useUpdateCamera();
   const deleteCamera = useDeleteCamera();
+  const fleet = useFleetOverview();
 
   const siteNameById = useMemo(
     () => new Map(sites.map((site) => [site.id, site.name])),
     [sites],
+  );
+  const sceneHealthRows = useMemo(
+    () => deriveSceneReadinessRows({ cameras, fleet: fleet.data }),
+    [cameras, fleet.data],
+  );
+  const sceneHealthByCamera = useMemo(
+    () => new Map(sceneHealthRows.map((row) => [row.cameraId, row])),
+    [sceneHealthRows],
   );
   const modelQueryEmpty = models.length === 0;
   const wizardModels = useMemo(
@@ -130,60 +147,78 @@ function CamerasContent() {
               <TH>Mode</TH>
               <TH>Stream</TH>
               <TH>Tracker</TH>
+              <TH>Readiness</TH>
               <TH>Actions</TH>
             </TR>
           </THead>
           <TBody>
             {camerasLoading ? (
               <TR>
-                <TD colSpan={6} className="text-[#9eb2cf]">
+                <TD colSpan={7} className="text-[#9eb2cf]">
                   Loading scenes...
                 </TD>
               </TR>
             ) : cameras.length === 0 ? (
               <TR>
-                <TD colSpan={6} className="text-[#9eb2cf]">
+                <TD colSpan={7} className="text-[#9eb2cf]">
                   {omniEmptyStates.noScenes}
                 </TD>
               </TR>
             ) : (
-              cameras.map((camera) => (
-                <TR key={camera.id}>
-                  <TD className="font-medium text-[#eef4ff]">{camera.name}</TD>
-                  <TD>{siteNameById.get(camera.site_id) ?? "Unknown site"}</TD>
-                  <TD>{camera.processing_mode}</TD>
-                  <TD>
-                    <div className="font-medium text-[#eef4ff]">
-                      {camera.browser_delivery?.default_profile ?? "720p10"}
-                    </div>
-                    {camera.source_capability ? (
-                      <div className="mt-1 text-xs text-[#93a7c5]">
-                        source{" "}
-                        {`${camera.source_capability.width}×${camera.source_capability.height}`}
+              cameras.map((camera) => {
+                const sceneHealth = sceneHealthByCamera.get(camera.id);
+
+                return (
+                  <TR key={camera.id}>
+                    <TD className="font-medium text-[#eef4ff]">{camera.name}</TD>
+                    <TD>{siteNameById.get(camera.site_id) ?? "Unknown site"}</TD>
+                    <TD>{camera.processing_mode}</TD>
+                    <TD>
+                      <div className="font-medium text-[#eef4ff]">
+                        {camera.browser_delivery?.default_profile ?? "720p10"}
                       </div>
-                    ) : null}
-                  </TD>
-                  <TD>{camera.tracker_type}</TD>
-                  <TD>
-                    <div className="flex gap-2">
-                      <button
-                        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
-                        type="button"
-                        onClick={() => openEditWizard(camera)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722]"
-                        type="button"
-                        onClick={() => void handleDeleteCamera(camera)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </TD>
-                </TR>
-              ))
+                      {camera.source_capability ? (
+                        <div className="mt-1 text-xs text-[#93a7c5]">
+                          source{" "}
+                          {`${camera.source_capability.width}×${camera.source_capability.height}`}
+                        </div>
+                      ) : null}
+                    </TD>
+                    <TD>{camera.tracker_type}</TD>
+                    <TD>
+                      {sceneHealth ? (
+                        <StatusToneBadge
+                          tone={healthToTone(sceneHealth.readiness.health)}
+                        >
+                          {sceneHealth.readiness.label}
+                        </StatusToneBadge>
+                      ) : (
+                        <StatusToneBadge tone="muted">
+                          Readiness pending
+                        </StatusToneBadge>
+                      )}
+                    </TD>
+                    <TD>
+                      <div className="flex gap-2">
+                        <button
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                          type="button"
+                          onClick={() => openEditWizard(camera)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722]"
+                          type="button"
+                          onClick={() => void handleDeleteCamera(camera)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </TD>
+                  </TR>
+                );
+              })
             )}
           </TBody>
         </Table>

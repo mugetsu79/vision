@@ -23,6 +23,51 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
+vi.mock("@/hooks/use-operations", () => ({
+  useFleetOverview: () => ({
+    data: {
+      mode: "manual_dev",
+      generated_at: "2026-05-09T08:00:00Z",
+      summary: {
+        desired_workers: 1,
+        running_workers: 1,
+        stale_nodes: 0,
+        offline_nodes: 0,
+        native_unavailable_cameras: 1,
+      },
+      nodes: [],
+      camera_workers: [
+        {
+          camera_id: "camera-1",
+          camera_name: "Dock Camera",
+          site_id: "site-1",
+          node_id: null,
+          node_hostname: null,
+          processing_mode: "central",
+          desired_state: "manual",
+          runtime_status: "running",
+          lifecycle_owner: "manual_dev",
+          dev_run_command: null,
+          detail: null,
+        },
+      ],
+      delivery_diagnostics: [
+        {
+          camera_id: "camera-1",
+          camera_name: "Dock Camera",
+          processing_mode: "central",
+          assigned_node_id: null,
+          source_capability: { width: 1920, height: 1080, fps: 15 },
+          default_profile: "native",
+          available_profiles: [],
+          native_status: { available: false, reason: "source_unavailable" },
+          selected_stream_mode: "passthrough",
+        },
+      ],
+    },
+  }),
+}));
+
 import { createQueryClient } from "@/app/query-client";
 import { CamerasPage } from "@/pages/Cameras";
 import { useAuthStore } from "@/stores/auth-store";
@@ -677,8 +722,12 @@ describe("CamerasPage", () => {
     renderPage();
 
     expect(await screen.findByText("Dock Camera")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: /readiness/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText("720p10")).toBeInTheDocument();
     expect(screen.getByText(/source 1280×720/i)).toBeInTheDocument();
+    expect(screen.getByText(/needs setup/i)).toBeInTheDocument();
   });
 
   test("creates a camera with active classes after refetching class-bearing models", async () => {
