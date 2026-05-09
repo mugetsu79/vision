@@ -35,6 +35,51 @@ vi.mock("@/components/live/LiveSparkline", () => ({
   LiveSparkline: () => <div data-testid="live-sparkline-mock" />,
 }));
 
+vi.mock("@/hooks/use-operations", () => ({
+  useFleetOverview: () => ({
+    data: {
+      mode: "manual_dev",
+      generated_at: "2026-05-09T08:00:00Z",
+      summary: {
+        desired_workers: 2,
+        running_workers: 2,
+        stale_nodes: 0,
+        offline_nodes: 0,
+        native_unavailable_cameras: 0,
+      },
+      nodes: [],
+      camera_workers: [
+        {
+          camera_id: "11111111-1111-1111-1111-111111111111",
+          camera_name: "North Gate",
+          site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          node_id: null,
+          node_hostname: null,
+          processing_mode: "central",
+          desired_state: "manual",
+          runtime_status: "running",
+          lifecycle_owner: "manual_dev",
+          dev_run_command: null,
+          detail: null,
+        },
+      ],
+      delivery_diagnostics: [
+        {
+          camera_id: "11111111-1111-1111-1111-111111111111",
+          camera_name: "North Gate",
+          processing_mode: "central",
+          assigned_node_id: null,
+          source_capability: { width: 1920, height: 1080, fps: 15 },
+          default_profile: "native",
+          available_profiles: [],
+          native_status: { available: true, reason: null },
+          selected_stream_mode: "passthrough",
+        },
+      ],
+    },
+  }),
+}));
+
 import { createQueryClient } from "@/app/query-client";
 import { LivePage } from "@/pages/Live";
 import { useAuthStore } from "@/stores/auth-store";
@@ -260,6 +305,24 @@ describe("LivePage", () => {
     expect(screen.getByTestId("stream-Depot Yard")).toBeInTheDocument();
     expect(screen.getAllByLabelText(/video stream/i).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByLabelText(/telemetry overlay/i).length).toBeGreaterThanOrEqual(2);
+    const northGateStatus = within(scenePortals[0]).getByRole("group", {
+      name: /north gate operational status/i,
+    });
+    const depotYardStatus = within(scenePortals[1]).getByRole("group", {
+      name: /depot yard operational status/i,
+    });
+    expect(within(northGateStatus).getByText(/^central$/i)).toBeInTheDocument();
+    expect(within(northGateStatus).getByText(/worker running/i)).toBeInTheDocument();
+    expect(
+      within(northGateStatus).getByText(/native stream available/i),
+    ).toBeInTheDocument();
+    expect(within(depotYardStatus).getByText(/^hybrid$/i)).toBeInTheDocument();
+    expect(
+      within(depotYardStatus).getByText(/worker not reported/i),
+    ).toBeInTheDocument();
+    expect(
+      within(depotYardStatus).getByText(/delivery profile selected/i),
+    ).toBeInTheDocument();
 
     expect(FakeWebSocket.instances[0]?.url).toContain("/ws/telemetry");
     expect(FakeWebSocket.instances[0]?.url).toContain("access_token=dashboard-token");
@@ -586,7 +649,9 @@ describe("LivePage", () => {
       });
     });
 
-    expect(await screen.findByText(/telemetry stale/i)).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/telemetry stale/i)).length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/annotated-whip/i)).toBeInTheDocument();
     expect(screen.queryByText(/native clean/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^offline$/i)).not.toBeInTheDocument();

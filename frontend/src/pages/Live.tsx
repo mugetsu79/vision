@@ -10,12 +10,15 @@ import { DynamicStats } from "@/components/live/DynamicStats";
 import { LiveSparkline } from "@/components/live/LiveSparkline";
 import { TelemetryCanvas } from "@/components/live/TelemetryCanvas";
 import { VideoStream } from "@/components/live/VideoStream";
+import { SceneStatusStrip } from "@/components/operations/SceneStatusStrip";
 import { Badge } from "@/components/ui/badge";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras } from "@/hooks/use-cameras";
-import { formatHeartbeat, getHeartbeatStatus } from "@/lib/live";
-import type { components } from "@/lib/api.generated";
 import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
+import { useFleetOverview } from "@/hooks/use-operations";
+import type { components } from "@/lib/api.generated";
+import { formatHeartbeat, getHeartbeatStatus } from "@/lib/live";
+import { deriveSceneReadinessRows } from "@/lib/operational-health";
 
 type QueryResponse = components["schemas"]["QueryResponse"];
 type CameraResponse = components["schemas"]["CameraResponse"];
@@ -27,6 +30,7 @@ export function LivePage() {
 
 function WorkspacePage() {
   const { data: cameras = [], isLoading } = useCameras();
+  const fleet = useFleetOverview();
   const { connectionState, framesByCamera } = useLiveTelemetry(
     cameras.map((camera) => camera.id),
   );
@@ -72,6 +76,20 @@ function WorkspacePage() {
 
     return aggregated;
   }, [cameras, classFiltersByCamera, framesByCamera]);
+
+  const sceneHealthRows = useMemo(
+    () =>
+      deriveSceneReadinessRows({
+        cameras,
+        fleet: fleet.data,
+        framesByCamera,
+      }),
+    [cameras, fleet.data, framesByCamera],
+  );
+  const sceneHealthByCamera = useMemo(
+    () => new Map(sceneHealthRows.map((row) => [row.cameraId, row])),
+    [sceneHealthRows],
+  );
 
   return (
     <div
@@ -144,6 +162,7 @@ function WorkspacePage() {
                 const classFilter = classFiltersByCamera.get(camera.id) ?? null;
                 const heartbeatStatus = getHeartbeatStatus(frame);
                 const deliveryProfileLabel = formatDeliveryProfile(camera);
+                const sceneHealth = sceneHealthByCamera.get(camera.id);
                 const visibleNow = Object.entries(frame?.counts ?? {}).reduce(
                   (total, [className, count]) => {
                     if (classFilter && !classFilter.includes(className)) {
@@ -190,6 +209,11 @@ function WorkspacePage() {
                           {camera.tracker_type}
                         </Badge>
                       </div>
+                      {sceneHealth ? (
+                        <div className="basis-full pt-1">
+                          <SceneStatusStrip row={sceneHealth} />
+                        </div>
+                      ) : null}
                     </div>
 
                     <div
