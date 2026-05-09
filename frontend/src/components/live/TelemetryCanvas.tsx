@@ -2,7 +2,13 @@ import { useEffect, useRef } from "react";
 
 import { filterTracks } from "@/lib/live";
 import type { components } from "@/lib/api.generated";
-import { colorForClass, type SignalTrack } from "@/lib/live-signal-stability";
+import {
+  colorForClass,
+  signalAgeMsForTelemetryTrack,
+  signalStateForTelemetryTrack,
+  trackKey,
+  type SignalTrack,
+} from "@/lib/live-signal-stability";
 
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 type SourceSize = { width: number; height: number };
@@ -57,17 +63,11 @@ export function TelemetryCanvas({
       return;
     }
 
-    const visibleSignals =
-      tracksRef.current ??
-      filterTracks(frameRef.current, activeClassesRef.current).map((track): SignalTrack => ({
-        key: `${track.class_name}:${track.track_id}`,
-        track,
-        color: colorForClass(track.class_name),
-        state: "live",
-        firstSeenMs: 0,
-        lastSeenMs: 0,
-        ageMs: 0,
-      }));
+    const visibleSignals = resolveVisibleSignals(
+      tracksRef.current,
+      frameRef.current,
+      activeClassesRef.current,
+    );
 
     if (visibleSignals.length === 0) {
       return;
@@ -192,6 +192,30 @@ export function TelemetryCanvas({
       className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );
+}
+
+function resolveVisibleSignals(
+  tracks: SignalTrack[] | undefined,
+  frame: TelemetryFrame | null | undefined,
+  activeClasses: string[] | null,
+): SignalTrack[] {
+  if (tracks !== undefined) {
+    return tracks;
+  }
+
+  if (frame?.stream_mode === "annotated-whip") {
+    return [];
+  }
+
+  return filterTracks(frame, activeClasses).map((track): SignalTrack => ({
+    key: trackKey(track),
+    track,
+    color: colorForClass(track.class_name),
+    state: signalStateForTelemetryTrack(track),
+    firstSeenMs: 0,
+    lastSeenMs: 0,
+    ageMs: signalAgeMsForTelemetryTrack(track),
+  }));
 }
 
 function resolveSourceSize(

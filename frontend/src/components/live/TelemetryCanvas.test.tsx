@@ -97,7 +97,7 @@ describe("TelemetryCanvas", () => {
     setLineDashMock.mockReset();
   });
 
-  test("redraws overlays from stable tracks with held-state styling", async () => {
+  test("redraws overlays from explicit stable tracks with held-state styling", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
       ts: "2026-04-19T09:15:00Z",
@@ -130,7 +130,11 @@ describe("TelemetryCanvas", () => {
 
     const view = render(
       <div style={{ width: 640, height: 360 }}>
-        <TelemetryCanvas frame={frame} activeClasses={null} />
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          tracks={[signalTrack(frame.tracks[0]), signalTrack(frame.tracks[1])]}
+        />
       </div>,
     );
 
@@ -165,7 +169,7 @@ describe("TelemetryCanvas", () => {
       camera_id: "11111111-1111-1111-1111-111111111111",
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
-      stream_mode: "annotated-whip",
+      stream_mode: "filtered-preview",
       counts: { bus: 1, car: 1 },
       tracks: [
         {
@@ -204,6 +208,38 @@ describe("TelemetryCanvas", () => {
     expect(strokeRectMock.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
+  test("does not fall back to raw frame overlays on annotated streams", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "annotated-whip",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 640, y1: 240, x2: 960, y2: 620 },
+          track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas frame={frame} activeClasses={null} />
+      </div>,
+    );
+
+    await waitFor(() => expect(clearRectMock).toHaveBeenCalled());
+    expect(strokeRectMock).not.toHaveBeenCalled();
+    expect(fillTextMock).not.toHaveBeenCalled();
+  });
+
   test("does not draw a frontend overlay when disabled", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
@@ -217,6 +253,10 @@ describe("TelemetryCanvas", () => {
           confidence: 0.93,
           bbox: { x1: 640, y1: 240, x2: 960, y2: 620 },
           track_id: 3,
+          track_state: "active",
+          stable_track_id: 3,
+          source_track_id: 44,
+          last_seen_age_ms: 0,
           speed_kph: 0,
           direction_deg: null,
           zone_id: null,

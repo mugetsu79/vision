@@ -53,8 +53,10 @@ const FALLBACK_COLORS: SignalColor[] = [
   { family: "other", stroke: "#f7c56b", fill: "rgba(247, 197, 107, 0.12)", text: "#fff1ca" },
 ];
 
-export function trackKey(track: Pick<TelemetryTrack, "class_name" | "track_id">): string {
-  return `${track.class_name}:${track.track_id}`;
+export function trackKey(
+  track: Pick<TelemetryTrack, "class_name" | "track_id" | "stable_track_id">,
+): string {
+  return `${track.class_name}:${track.stable_track_id ?? track.track_id}`;
 }
 
 export function colorForClass(className: string): SignalColor {
@@ -102,14 +104,16 @@ export function updateSignalTracks({
 
     const key = trackKey(track);
     const existing = previousByKey.get(key);
+    const state = signalStateForTelemetryTrack(track);
+    const ageMs = signalAgeMsForTelemetryTrack(track);
     nextByKey.set(key, {
       key,
       track,
       color: colorForClass(track.class_name),
-      state: "live",
+      state,
       firstSeenMs: existing?.firstSeenMs ?? nowMs,
       lastSeenMs: nowMs,
-      ageMs: 0,
+      ageMs,
     });
   }
 
@@ -190,10 +194,22 @@ export function selectDrawableSignalTracks(
   streamMode: TelemetryFrame["stream_mode"] | null | undefined,
 ): SignalTrack[] {
   if (streamMode === "annotated-whip") {
-    return tracks.filter((track) => track.state === "held");
+    return [];
   }
 
   return tracks;
+}
+
+export function signalStateForTelemetryTrack(track: TelemetryTrack): SignalState {
+  return track.track_state === "coasting" ? "held" : "live";
+}
+
+export function signalAgeMsForTelemetryTrack(track: TelemetryTrack): number {
+  if (track.track_state !== "coasting") {
+    return 0;
+  }
+
+  return Math.max(0, track.last_seen_age_ms ?? 0);
 }
 
 function compareSignalTracks(left: SignalTrack, right: SignalTrack): number {

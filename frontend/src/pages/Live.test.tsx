@@ -3,6 +3,10 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+const { telemetryCanvasMock } = vi.hoisted(() => ({
+  telemetryCanvasMock: vi.fn(),
+}));
+
 vi.mock("@/lib/config", () => ({
   frontendConfig: {
     apiBaseUrl: "http://127.0.0.1:8000",
@@ -28,7 +32,10 @@ vi.mock("@/components/live/VideoStream", () => ({
 }));
 
 vi.mock("@/components/live/TelemetryCanvas", () => ({
-  TelemetryCanvas: () => <canvas aria-label="Telemetry overlay" />,
+  TelemetryCanvas: (props: unknown) => {
+    telemetryCanvasMock(props);
+    return <canvas aria-label="Telemetry overlay" />;
+  },
 }));
 
 vi.mock("@/components/live/TelemetryTerrain", () => ({
@@ -121,6 +128,7 @@ class FakeWebSocket {
 
 describe("LivePage", () => {
   beforeEach(() => {
+    telemetryCanvasMock.mockClear();
     act(() => {
       useAuthStore.setState({
         status: "authenticated",
@@ -335,7 +343,7 @@ describe("LivePage", () => {
     act(() => {
       FakeWebSocket.instances[0]?.emit({
         camera_id: "11111111-1111-1111-1111-111111111111",
-        ts: new Date().toISOString(),
+        ts: "2026-05-09T08:00:00.000Z",
         profile: "central-gpu",
         stream_mode: "annotated-whip",
         counts: { bus: 1, car: 2 },
@@ -403,7 +411,7 @@ describe("LivePage", () => {
     await waitFor(() => expect(screen.queryByText("bus")).not.toBeInTheDocument());
   });
 
-  test("holds the last signal briefly when a frame arrives without tracks", async () => {
+  test("keeps visible copy stable when a frame arrives without tracks", async () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
         JSON.stringify([
@@ -472,7 +480,7 @@ describe("LivePage", () => {
     act(() => {
       FakeWebSocket.instances[0]?.emit({
         camera_id: "11111111-1111-1111-1111-111111111111",
-        ts: new Date().toISOString(),
+        ts: "2026-05-09T08:00:00.000Z",
         profile: "central-gpu",
         stream_mode: "annotated-whip",
         counts: { person: 1 },
@@ -498,7 +506,7 @@ describe("LivePage", () => {
     act(() => {
       FakeWebSocket.instances[0]?.emit({
         camera_id: "11111111-1111-1111-1111-111111111111",
-        ts: new Date().toISOString(),
+        ts: "2026-05-09T08:00:01.000Z",
         profile: "central-gpu",
         stream_mode: "annotated-whip",
         counts: {},
@@ -506,9 +514,14 @@ describe("LivePage", () => {
       });
     });
 
-    await waitFor(() =>
-      expect(screen.getByText("1 signal held")).toBeInTheDocument(),
-    );
+    await waitFor(() => {
+      const lastCanvasProps = telemetryCanvasMock.mock.calls.at(-1)?.[0] as
+        | { frame?: { ts?: string }; tracks?: unknown[] }
+        | undefined;
+      expect(lastCanvasProps?.frame?.ts).toBe("2026-05-09T08:00:01.000Z");
+      expect(lastCanvasProps?.tracks).toEqual([]);
+    });
+    expect(screen.getByText("1 visible now")).toBeInTheDocument();
     expect(screen.queryByText("0 visible now")).not.toBeInTheDocument();
   });
 

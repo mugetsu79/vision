@@ -271,20 +271,15 @@ function ScenePortalCard({
   onSignalRowsChange: (cameraId: string, rows: SignalCountRow[]) => void;
 }) {
   const stableSignal = useStableSignalFrame(frame, classFilter);
-  const sourceSize = useMemo(
-    () => getCameraSourceSize(camera),
-    [camera.source_capability?.height, camera.source_capability?.width],
-  );
+  const sourceSize = getCameraSourceSize(camera);
   const overlayTracks = useMemo(
     () => selectDrawableSignalTracks(stableSignal.tracks, frame?.stream_mode),
     [frame?.stream_mode, stableSignal.tracks],
   );
   const visibleCopy =
-    stableSignal.counts.liveTotal > 0
-      ? `${stableSignal.counts.liveTotal} visible now`
-      : stableSignal.counts.heldTotal > 0
-        ? `${stableSignal.counts.heldTotal} signal held`
-        : "0 visible now";
+    stableSignal.counts.total > 0
+      ? `${stableSignal.counts.total} visible now`
+      : "0 visible now";
   const heartbeatStatus = getHeartbeatStatus(frame);
   const deliveryProfileLabel = formatDeliveryProfile(camera);
 

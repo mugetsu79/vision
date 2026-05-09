@@ -18,12 +18,19 @@ function track(
   className: string,
   trackId: number,
   bbox: TelemetryTrack["bbox"] = { x1: 10, y1: 20, x2: 100, y2: 180 },
+  lifecycle: Partial<
+    Pick<
+      TelemetryTrack,
+      "stable_track_id" | "track_state" | "last_seen_age_ms" | "source_track_id"
+    >
+  > = {},
 ): TelemetryTrack {
   return {
     class_name: className,
     confidence: 0.91,
     bbox,
     track_id: trackId,
+    ...lifecycle,
     speed_kph: null,
     direction_deg: null,
     zone_id: null,
@@ -80,6 +87,29 @@ describe("live signal stability", () => {
     });
   });
 
+  test("maps backend coasting lifecycle tracks to held display state", () => {
+    const snapshot = updateSignalTracks({
+      previous: [],
+      frame: frame([
+        track("person", 12, undefined, {
+          stable_track_id: 12,
+          source_track_id: 4,
+          track_state: "coasting",
+          last_seen_age_ms: 900,
+        }),
+      ]),
+      activeClasses: null,
+      nowMs: 2_000,
+    });
+
+    expect(snapshot).toHaveLength(1);
+    expect(snapshot[0]).toMatchObject({
+      key: "person:12",
+      state: "held",
+      ageMs: 900,
+    });
+  });
+
   test("expires held tracks after the hold window", () => {
     const first = updateSignalTracks({
       previous: [],
@@ -133,11 +163,11 @@ describe("live signal stability", () => {
     ]);
   });
 
-  test("only draws held frontend overlays on server annotated streams", () => {
+  test("draws no frontend overlays on server annotated streams", () => {
     const live = signalTrack("person", 12, "live");
     const held = signalTrack("person", 13, "held");
 
-    expect(selectDrawableSignalTracks([live, held], "annotated-whip")).toEqual([held]);
+    expect(selectDrawableSignalTracks([live, held], "annotated-whip")).toEqual([]);
   });
 
   test("draws all frontend overlays on unannotated streams", () => {
