@@ -19,7 +19,10 @@ import { useFleetOverview } from "@/hooks/use-operations";
 import { useStableSignalFrame } from "@/hooks/use-stable-signal-frame";
 import type { components } from "@/lib/api.generated";
 import { formatHeartbeat, getHeartbeatStatus } from "@/lib/live";
-import type { SignalCountRow } from "@/lib/live-signal-stability";
+import {
+  selectDrawableSignalTracks,
+  type SignalCountRow,
+} from "@/lib/live-signal-stability";
 import {
   deriveSceneReadinessRows,
   type SceneHealthRow,
@@ -272,7 +275,10 @@ function ScenePortalCard({
     () => getCameraSourceSize(camera),
     [camera.source_capability?.height, camera.source_capability?.width],
   );
-  const disableTelemetryOverlay = hasServerRenderedTelemetryOverlay(frame);
+  const overlayTracks = useMemo(
+    () => selectDrawableSignalTracks(stableSignal.tracks, frame?.stream_mode),
+    [frame?.stream_mode, stableSignal.tracks],
+  );
   const visibleCopy =
     stableSignal.counts.liveTotal > 0
       ? `${stableSignal.counts.liveTotal} visible now`
@@ -346,9 +352,8 @@ function ScenePortalCard({
         <TelemetryCanvas
           frame={frame}
           activeClasses={classFilter}
-          tracks={stableSignal.tracks}
+          tracks={overlayTracks}
           sourceSize={sourceSize}
-          disabled={disableTelemetryOverlay}
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
           <div>
@@ -445,10 +450,6 @@ function formatDeliveryProfile(camera: CameraResponse): string {
 
 function formatStreamMode(frame: TelemetryFrame): string {
   return frame.stream_mode;
-}
-
-function hasServerRenderedTelemetryOverlay(frame: TelemetryFrame | undefined): boolean {
-  return frame?.stream_mode === "annotated-whip";
 }
 
 function getCameraSourceSize(camera: CameraResponse): { width: number; height: number } | null {

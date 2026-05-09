@@ -185,6 +185,17 @@ export function deriveSignalCounts(tracks: SignalTrack[]): SignalCounts {
   };
 }
 
+export function selectDrawableSignalTracks(
+  tracks: SignalTrack[],
+  streamMode: TelemetryFrame["stream_mode"] | null | undefined,
+): SignalTrack[] {
+  if (streamMode === "annotated-whip") {
+    return tracks.filter((track) => track.state === "held");
+  }
+
+  return tracks;
+}
+
 function compareSignalTracks(left: SignalTrack, right: SignalTrack): number {
   if (left.state !== right.state) {
     return left.state === "live" ? -1 : 1;

@@ -4,8 +4,10 @@ import {
   DEFAULT_SIGNAL_HOLD_MS,
   colorForClass,
   deriveSignalCounts,
+  selectDrawableSignalTracks,
   trackKey,
   updateSignalTracks,
+  type SignalTrack,
 } from "@/lib/live-signal-stability";
 import type { components } from "@/lib/api.generated";
 
@@ -130,4 +132,35 @@ describe("live signal stability", () => {
       ["person", 0, 1],
     ]);
   });
+
+  test("only draws held frontend overlays on server annotated streams", () => {
+    const live = signalTrack("person", 12, "live");
+    const held = signalTrack("person", 13, "held");
+
+    expect(selectDrawableSignalTracks([live, held], "annotated-whip")).toEqual([held]);
+  });
+
+  test("draws all frontend overlays on unannotated streams", () => {
+    const live = signalTrack("person", 12, "live");
+    const held = signalTrack("person", 13, "held");
+
+    expect(selectDrawableSignalTracks([live, held], "filtered-preview")).toEqual([live, held]);
+  });
 });
+
+function signalTrack(
+  className: string,
+  trackId: number,
+  state: SignalTrack["state"],
+): SignalTrack {
+  const item = track(className, trackId);
+  return {
+    key: `${className}:${trackId}`,
+    track: item,
+    color: colorForClass(className),
+    state,
+    firstSeenMs: 1_000,
+    lastSeenMs: 1_000,
+    ageMs: state === "held" ? 500 : 0,
+  };
+}

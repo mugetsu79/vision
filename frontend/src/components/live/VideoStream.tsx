@@ -22,6 +22,8 @@ const HEARTBEAT_STALE_AFTER_MS = 15_000;
 const HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS = 3_000;
 const WEBRTC_DISCONNECT_GRACE_MS = 2_000;
 
+let streamSessionCounter = 0;
+
 class StreamNotReadyError extends Error {
   constructor() {
     super("WebRTC stream is not ready yet.");
@@ -58,7 +60,7 @@ export function VideoStream({
   const [isPageVisible, setIsPageVisible] = useState(() => document.visibilityState !== "hidden");
   const [firstFrameMs, setFirstFrameMs] = useState<number | null>(null);
   const [hlsRetryToken, setHlsRetryToken] = useState(0);
-  const [sessionToken, setSessionToken] = useState(0);
+  const [sessionToken, setSessionToken] = useState(() => nextStreamSessionToken());
 
   const clearReconnectTimer = useEffectEvent(() => {
     if (reconnectTimerRef.current !== null) {
@@ -76,7 +78,7 @@ export function VideoStream({
     setWebrtcFailed(false);
     setHlsRetryToken(0);
     setTransport("connecting");
-    setSessionToken((current) => current + 1);
+    setSessionToken(nextStreamSessionToken());
   });
 
   const requestSessionRestart = useEffectEvent(
@@ -231,6 +233,7 @@ export function VideoStream({
               requestSessionRestart();
             }
           },
+          sessionToken,
           tenantId,
           videoElement: videoRef.current,
         });
@@ -533,12 +536,14 @@ async function startWebRtc({
   accessToken,
   cameraId,
   onConnectionLost,
+  sessionToken,
   tenantId,
   videoElement,
 }: {
   accessToken: string;
   cameraId: string;
   onConnectionLost: () => void;
+  sessionToken: number;
   tenantId: string | null;
   videoElement: HTMLVideoElement | null;
 }) {
@@ -569,6 +574,9 @@ async function startWebRtc({
 
   const stop = () => {
     clearDisconnectTimer();
+    if (videoElement?.srcObject) {
+      videoElement.srcObject = null;
+    }
     peerConnection.close();
   };
 
@@ -605,15 +613,20 @@ async function startWebRtc({
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
 
-    const response = await fetch(buildApiUrl(`/api/v1/streams/${cameraId}/offer`), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
+    const response = await fetch(
+      buildApiUrl(`/api/v1/streams/${cameraId}/offer`, {
+        session_token: String(sessionToken),
+      }),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
+        },
+        body: JSON.stringify({ sdp_offer: offer.sdp ?? "" }),
       },
-      body: JSON.stringify({ sdp_offer: offer.sdp ?? "" }),
-    });
+    );
 
     if (response.status === 404) {
       throw new StreamNotReadyError();
@@ -779,6 +792,11 @@ async function startNativeHls({
     cleanup();
     videoElement.removeAttribute("src");
   };
+}
+
+function nextStreamSessionToken(): number {
+  streamSessionCounter += 1;
+  return streamSessionCounter;
 }
 
 function transportLabel(transport: StreamTransport): string {
