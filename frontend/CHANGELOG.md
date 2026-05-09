@@ -1,3 +1,11 @@
+## Phase 5A - Operational Readiness UI
+
+- Added a frontend-only operational readiness model that derives fleet health, deployment posture, privacy posture, scene readiness, delivery, telemetry, and evidence attention from existing APIs.
+- Added a Dashboard deployment posture strip for sites, scenes, central/edge/hybrid split, privacy-configured scenes, evidence awaiting review, and fleet health.
+- Added a Dashboard attention stack for pending evidence, missing workers, stale nodes, and unavailable direct streams.
+- Added an Operations scene intelligence matrix, Live scene status strip, and Scenes inventory readiness cue.
+- Kept WebGL off and left runtime metrics such as `capture_wait_*` for the backend-backed Phase 5B.
+
 ## Unreleased - Phase 1 Foundations
 
 - Added `--vz-*` token namespace (palette, elevation, radius, motion, perspective).
