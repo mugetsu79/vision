@@ -77,6 +77,7 @@ from argus.vision.runtime import (
     import_onnxruntime,
     resolve_execution_policy,
 )
+from argus.vision.track_lifecycle import LifecycleTrack, TrackLifecycleManager
 from argus.vision.tracker import TrackerConfig, create_tracker
 from argus.vision.types import Detection
 from argus.vision.vocabulary import hash_vocabulary
@@ -88,6 +89,25 @@ logger = logging.getLogger(__name__)
 _CAPTURE_WAIT_SPIKE_WARNING_THRESHOLD_S = 0.250
 
 _FACE_PRIVACY_DETECTION_CLASSES = ("person", "pedestrian")
+_ACTIVE_ANNOTATION_COLORS_BGR: dict[str, tuple[int, int, int]] = {
+    "person": (80, 255, 170),
+    "pedestrian": (80, 255, 170),
+    "car": (255, 145, 72),
+    "bus": (255, 145, 72),
+    "truck": (255, 145, 72),
+    "bicycle": (255, 145, 72),
+    "motorcycle": (255, 145, 72),
+    "hardhat": (80, 210, 255),
+    "helmet": (80, 210, 255),
+    "vest": (80, 210, 255),
+}
+_DEFAULT_ACTIVE_ANNOTATION_COLOR_BGR = (255, 196, 64)
+_COASTING_ANNOTATION_COLORS_BGR: dict[str, tuple[int, int, int]] = {
+    "person": (72, 184, 128),
+    "pedestrian": (72, 184, 128),
+}
+_DEFAULT_COASTING_ANNOTATION_COLOR_BGR = (140, 154, 178)
+_DASHED_BOX_SEGMENT_PX = 8
 _TIMEOUT_ERRORS: tuple[type[BaseException], ...] = (TimeoutError,)
 _asyncio_timeout_error = getattr(asyncio, "TimeoutError", None)
 if (
@@ -623,6 +643,7 @@ class InferenceEngine:
             zones=list(config.zones),
         )
         self._tracker = self._tracker_factory(self._state.tracker_type)
+        self._track_lifecycle = TrackLifecycleManager()
         self._count_event_processor = self._build_count_event_processor()
         self._zones = (
             Zones(_polygon_zone_definitions(self._state.zones))
@@ -743,6 +764,11 @@ class InferenceEngine:
         tracked = self._apply_attributes(processed, tracked)
         stage_timer.record_stage("attributes", ended_at=loop.time())
         tracked = self._apply_zones(tracked)
+        stable_tracks = self._track_lifecycle.update(
+            detections=tracked,
+            ts=current_ts,
+            frame_shape=processed.shape,
+        )
         stage_timer.record_stage("zones", ended_at=loop.time())
         count_events = self._count_event_processor.process(ts=current_ts, detections=tracked)
         rule_events = await self.rule_engine.evaluate(
@@ -768,8 +794,11 @@ class InferenceEngine:
         stage_timer.record_stage("rules", ended_at=loop.time())
         stream_frame = self._build_stream_frame(
             frame,
-            tracked,
-            privacy_detections=detections,
+            stable_tracks,
+            privacy_detections=_privacy_detections_for_stream(
+                raw_detections=detections,
+                stable_tracks=stable_tracks,
+            ),
         )
         stage_timer.record_stage("annotate", ended_at=loop.time())
         if (
@@ -816,8 +845,8 @@ class InferenceEngine:
                 if self._stream_registration
                 else StreamMode.PASSTHROUGH
             ),
-            counts=_counts_by_class(tracked),
-            tracks=[_telemetry_track_from_detection(detection) for detection in tracked],
+            counts=_counts_by_lifecycle_tracks(stable_tracks),
+            tracks=[_telemetry_track_from_lifecycle_track(track) for track in stable_tracks],
         )
         try:
             await self.publisher.publish(telemetry)
@@ -876,6 +905,7 @@ class InferenceEngine:
 
     async def apply_command(self, command: CameraCommand) -> None:
         should_register_stream = False
+        visible_classes_before = self._visible_class_key()
         if command.active_classes is not None:
             self._state.active_classes = list(command.active_classes)
         if command.runtime_vocabulary is not None:
@@ -901,7 +931,10 @@ class InferenceEngine:
         if command.tracker_type is not None and command.tracker_type != self._state.tracker_type:
             self._state.tracker_type = command.tracker_type
             self._tracker = self._tracker_factory(command.tracker_type)
+            self._track_lifecycle.reset()
             self._count_event_processor = self._build_count_event_processor()
+        elif visible_classes_before != self._visible_class_key():
+            self._track_lifecycle.reset()
         if command.stream is not None and command.stream != self.config.stream:
             self.config.stream = command.stream
             should_register_stream = True
@@ -962,6 +995,9 @@ class InferenceEngine:
                 if class_name not in detector_classes:
                     detector_classes.append(class_name)
         return detector_classes
+
+    def _visible_class_key(self) -> tuple[str, ...]:
+        return tuple(self._visible_classes())
 
     def _record_detector_substage_timings(self, stage_timer: _FrameStageTimer) -> None:
         last_stage_timings = getattr(self.detector, "last_stage_timings", None)
@@ -1057,7 +1093,7 @@ class InferenceEngine:
     def _build_stream_frame(
         self,
         frame: Frame,
-        detections: list[Detection],
+        tracks: list[LifecycleTrack],
         *,
         privacy_detections: list[Detection] | None = None,
     ) -> Frame:
@@ -1070,21 +1106,35 @@ class InferenceEngine:
         if self._state.privacy.requires_filtering:
             stream_frame = self.privacy_filter.apply(
                 stream_frame,
-                detections=privacy_detections if privacy_detections is not None else detections,
+                detections=(
+                    privacy_detections
+                    if privacy_detections is not None
+                    else [track.detection for track in tracks]
+                ),
             )
         if (
             self._stream_registration.mode is StreamMode.ANNOTATED_WHIP
             and self.config.stream.profile_id != "native"
         ):
-            self._draw_annotations(stream_frame, detections)
+            self._draw_annotations(stream_frame, tracks)
         return stream_frame
 
-    def _draw_annotations(self, frame: Frame, detections: list[Detection]) -> None:
-        for detection in detections:
+    def _draw_annotations(self, frame: Frame, tracks: list[LifecycleTrack]) -> None:
+        for track in tracks:
+            detection = track.detection
             x1, y1, x2, y2 = (int(value) for value in detection.bbox)
-            color = (255, 196, 64)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            label = detection.class_name
+            color = _annotation_color_for_track(track)
+            if track.state == "coasting":
+                _draw_dashed_rectangle(
+                    frame,
+                    top_left=(x1, y1),
+                    bottom_right=(x2, y2),
+                    color=color,
+                    thickness=1,
+                )
+            else:
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            label = _annotation_label_for_track(track)
             cv2.putText(
                 frame,
                 label,
@@ -1486,14 +1536,98 @@ def _build_homography(config: dict[str, Any] | None) -> Homography | None:
     )
 
 
-def _counts_by_class(detections: list[Detection]) -> dict[str, int]:
+def _annotation_color_for_track(track: LifecycleTrack) -> tuple[int, int, int]:
+    class_name = track.detection.class_name.strip().lower()
+    if track.state == "coasting":
+        return _COASTING_ANNOTATION_COLORS_BGR.get(
+            class_name,
+            _DEFAULT_COASTING_ANNOTATION_COLOR_BGR,
+        )
+    return _ACTIVE_ANNOTATION_COLORS_BGR.get(
+        class_name,
+        _DEFAULT_ACTIVE_ANNOTATION_COLOR_BGR,
+    )
+
+
+def _annotation_label_for_track(track: LifecycleTrack) -> str:
+    class_name = track.detection.class_name
+    if track.state != "coasting":
+        return class_name
+    age_seconds = max(0.0, track.last_seen_age_ms / 1000.0)
+    return f"{class_name} held {age_seconds:.1f}s"
+
+
+def _draw_dashed_rectangle(
+    frame: Frame,
+    *,
+    top_left: tuple[int, int],
+    bottom_right: tuple[int, int],
+    color: tuple[int, int, int],
+    thickness: int,
+) -> None:
+    x1, y1 = top_left
+    x2, y2 = bottom_right
+    _draw_dashed_line(frame, (x1, y1), (x2, y1), color=color, thickness=thickness)
+    _draw_dashed_line(frame, (x2, y1), (x2, y2), color=color, thickness=thickness)
+    _draw_dashed_line(frame, (x2, y2), (x1, y2), color=color, thickness=thickness)
+    _draw_dashed_line(frame, (x1, y2), (x1, y1), color=color, thickness=thickness)
+
+
+def _draw_dashed_line(
+    frame: Frame,
+    start: tuple[int, int],
+    end: tuple[int, int],
+    *,
+    color: tuple[int, int, int],
+    thickness: int,
+) -> None:
+    x1, y1 = start
+    x2, y2 = end
+    dx = x2 - x1
+    dy = y2 - y1
+    length = max(abs(dx), abs(dy))
+    if length <= 0:
+        return
+    for offset in range(0, length, _DASHED_BOX_SEGMENT_PX * 2):
+        segment_end = min(offset + _DASHED_BOX_SEGMENT_PX, length)
+        start_ratio = offset / length
+        end_ratio = segment_end / length
+        segment_start = (
+            round(x1 + dx * start_ratio),
+            round(y1 + dy * start_ratio),
+        )
+        segment_stop = (
+            round(x1 + dx * end_ratio),
+            round(y1 + dy * end_ratio),
+        )
+        cv2.line(
+            frame,
+            segment_start,
+            segment_stop,
+            color,
+            thickness,
+            cv2.LINE_AA,
+        )
+
+
+def _counts_by_lifecycle_tracks(tracks: list[LifecycleTrack]) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for detection in detections:
-        counts[detection.class_name] = counts.get(detection.class_name, 0) + 1
+    for track in tracks:
+        class_name = track.detection.class_name
+        counts[class_name] = counts.get(class_name, 0) + 1
     return counts
 
 
-def _telemetry_track_from_detection(detection: Detection) -> TelemetryTrack:
+def _privacy_detections_for_stream(
+    *,
+    raw_detections: list[Detection],
+    stable_tracks: list[LifecycleTrack],
+) -> list[Detection]:
+    return [*raw_detections, *(track.detection for track in stable_tracks)]
+
+
+def _telemetry_track_from_lifecycle_track(track: LifecycleTrack) -> TelemetryTrack:
+    detection = track.detection
     x1, y1, x2, y2 = detection.bbox
     return TelemetryTrack(
         class_name=detection.class_name,
@@ -1504,7 +1638,11 @@ def _telemetry_track_from_detection(detection: Detection) -> TelemetryTrack:
             "x2": x2,
             "y2": y2,
         },
-        track_id=detection.track_id or 0,
+        track_id=track.stable_track_id,
+        stable_track_id=track.stable_track_id,
+        track_state=track.state,
+        last_seen_age_ms=track.last_seen_age_ms,
+        source_track_id=track.source_track_id,
         speed_kph=detection.speed_kph,
         direction_deg=detection.direction_deg,
         zone_id=detection.zone_id,

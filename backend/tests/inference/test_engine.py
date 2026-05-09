@@ -50,6 +50,7 @@ from argus.vision.runtime import (
     HostClassification,
     RuntimeExecutionPolicy,
 )
+from argus.vision.track_lifecycle import LifecycleTrack
 from argus.vision.types import Detection
 
 
@@ -325,6 +326,22 @@ class _FakeRuleEngine:
         return []
 
 
+class _RecordingRuleEngine:
+    def __init__(self) -> None:
+        self.detection_calls: list[list[Detection]] = []
+
+    async def evaluate(
+        self,
+        *,
+        camera_id: UUID,
+        detections: list[Detection],
+        ts: datetime,
+    ) -> list[object]:
+        del camera_id, ts
+        self.detection_calls.append(list(detections))
+        return []
+
+
 class _FakeEventClient:
     def __init__(self) -> None:
         self.handlers: dict[str, object] = {}
@@ -534,6 +551,40 @@ async def test_engine_applies_live_class_and_tracker_updates_without_restart() -
 
     assert detector.calls == [["car"], ["bus"]]
     assert tracker_creations == [TrackerType.BOTSORT, TrackerType.BYTETRACK]
+    assert [frame.counts for frame in publisher.frames] == [{"car": 1}, {"bus": 1}]
+
+
+@pytest.mark.asyncio
+async def test_engine_resets_lifecycle_when_visible_classes_change_without_tracker_change() -> None:
+    camera_id = uuid4()
+    publisher = _FakePublisher()
+    tracker_creations: list[TrackerType] = []
+
+    def tracker_factory(tracker_type: TrackerType) -> _FakeTracker:
+        tracker_creations.append(tracker_type)
+        return _FakeTracker(tracker_type=tracker_type)
+
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource(
+            [np.zeros((64, 64, 3), dtype=np.uint8), np.zeros((64, 64, 3), dtype=np.uint8)]
+        ),
+        detector=_FakeDetector(),
+        tracker_factory=tracker_factory,
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    await engine.apply_command(CameraCommand(active_classes=["bus"]))
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert tracker_creations == [TrackerType.BOTSORT]
     assert [frame.counts for frame in publisher.frames] == [{"car": 1}, {"bus": 1}]
 
 
@@ -900,6 +951,65 @@ async def test_engine_applies_privacy_filter_to_person_head_regions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_engine_applies_privacy_filter_to_coasting_person_head_regions() -> None:
+    camera_id = uuid4()
+    y_index, x_index = np.indices((128, 128))
+    original = np.dstack(
+        (
+            (x_index * 3 + y_index * 5) % 256,
+            (x_index * 7 + y_index * 2) % 256,
+            (x_index * 11 + y_index * 13) % 256,
+        )
+    ).astype(np.uint8)
+    stream_client = _FakeStreamClient()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "privacy": PrivacyPolicy(blur_faces=True, blur_plates=False),
+            "active_classes": ["person"],
+            "stream": StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            ),
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([original.copy(), original.copy()]),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="person",
+                        confidence=0.95,
+                        bbox=(40.0, 20.0, 88.0, 116.0),
+                        class_id=0,
+                    )
+                ],
+                [],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    pushed_frame = stream_client.pushed_frames[1]
+    assert not np.array_equal(pushed_frame[30:50, 50:78], original[30:50, 50:78])
+    assert np.array_equal(pushed_frame[80:104, 48:80], original[80:104, 48:80])
+
+
+@pytest.mark.asyncio
 async def test_engine_requests_person_detections_for_face_privacy_without_publishing_them() -> None:
     camera_id = uuid4()
     y_index, x_index = np.indices((128, 128))
@@ -1010,6 +1120,124 @@ async def test_engine_publishes_clean_native_video_while_telemetry_tracks() -> N
     assert publisher.frames[0].stream_mode is StreamMode.ANNOTATED_WHIP
     assert len(publisher.frames[0].tracks) == 1
     assert publisher.frames[0].tracks[0].class_name == "car"
+
+
+@pytest.mark.asyncio
+async def test_engine_publishes_stable_count_and_coasting_track_after_missed_detection() -> None:
+    camera_id = uuid4()
+    publisher = _FakePublisher()
+    tracking_store = _FakeTrackingStore()
+    rule_engine = _RecordingRuleEngine()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((96, 96, 3), dtype=np.uint8), np.zeros((96, 96, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="person",
+                        confidence=0.96,
+                        bbox=(20.0, 10.0, 60.0, 90.0),
+                        class_id=0,
+                    )
+                ],
+                [],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=tracking_store,
+        rule_engine=rule_engine,
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert [frame.counts for frame in publisher.frames] == [{"person": 1}, {"person": 1}]
+    first_track = publisher.frames[0].tracks[0]
+    second_track = publisher.frames[1].tracks[0]
+    assert first_track.track_id == 1
+    assert first_track.stable_track_id == 1
+    assert first_track.source_track_id == 1
+    assert first_track.track_state == "active"
+    assert first_track.last_seen_age_ms == 0
+    assert second_track.track_id == 1
+    assert second_track.stable_track_id == 1
+    assert second_track.source_track_id == 1
+    assert second_track.track_state == "coasting"
+    assert second_track.last_seen_age_ms == 1000
+    assert len(tracking_store.records[0][1]) == 1
+    assert tracking_store.records[1][1] == []
+    assert [len(call) for call in rule_engine.detection_calls] == [1, 0]
+
+
+@pytest.mark.asyncio
+async def test_engine_resets_lifecycle_when_tracker_type_changes() -> None:
+    camera_id = uuid4()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((96, 96, 3), dtype=np.uint8) for _ in range(3)]),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="person",
+                        confidence=0.96,
+                        bbox=(20.0, 10.0, 60.0, 90.0),
+                        class_id=0,
+                    )
+                ],
+                [],
+                [],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 1, tzinfo=UTC))
+    await engine.apply_command(CameraCommand(tracker_type=TrackerType.BYTETRACK))
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 2, tzinfo=UTC))
+    await engine.close()
+
+    assert [frame.counts for frame in publisher.frames] == [
+        {"person": 1},
+        {"person": 1},
+        {},
+    ]
 
 
 @pytest.mark.asyncio
@@ -2764,10 +2992,94 @@ def test_draw_annotations_omits_tracker_ids_from_overlay_labels(
 
     engine._draw_annotations(
         np.zeros((32, 32, 3), dtype=np.uint8),
-        [Detection(class_name="person", confidence=0.95, bbox=(1.0, 1.0, 10.0, 10.0), track_id=12)],
+        [
+            LifecycleTrack(
+                stable_track_id=12,
+                source_track_id=42,
+                state="active",
+                last_seen_age_ms=0,
+                detection=Detection(
+                    class_name="person",
+                    confidence=0.95,
+                    bbox=(1.0, 1.0, 10.0, 10.0),
+                    track_id=12,
+                ),
+            )
+        ],
     )
 
     assert captured_labels == ["person"]
+
+
+def test_draw_annotations_uses_dashed_subdued_box_for_coasting_tracks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    rectangle_calls: list[tuple[tuple[int, int, int], int]] = []
+    line_calls: list[tuple[tuple[int, int, int], int]] = []
+    captured_labels: list[str] = []
+
+    def fake_rectangle(*args, **kwargs):  # noqa: ANN001
+        rectangle_calls.append((args[3], args[4]))
+        return None
+
+    def fake_line(*args, **kwargs):  # noqa: ANN001
+        line_calls.append((args[3], args[4]))
+        return None
+
+    monkeypatch.setattr(engine_module.cv2, "rectangle", fake_rectangle)
+    monkeypatch.setattr(engine_module.cv2, "line", fake_line)
+    monkeypatch.setattr(
+        engine_module.cv2,
+        "putText",
+        lambda *args, **kwargs: captured_labels.append(args[1]),
+    )
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    engine._draw_annotations(
+        np.zeros((64, 64, 3), dtype=np.uint8),
+        [
+            LifecycleTrack(
+                stable_track_id=1,
+                source_track_id=1,
+                state="active",
+                last_seen_age_ms=0,
+                detection=Detection(
+                    class_name="person",
+                    confidence=0.95,
+                    bbox=(4.0, 4.0, 20.0, 40.0),
+                    track_id=1,
+                ),
+            ),
+            LifecycleTrack(
+                stable_track_id=1,
+                source_track_id=1,
+                state="coasting",
+                last_seen_age_ms=800,
+                detection=Detection(
+                    class_name="person",
+                    confidence=0.95,
+                    bbox=(28.0, 4.0, 48.0, 40.0),
+                    track_id=1,
+                ),
+            ),
+        ],
+    )
+
+    assert rectangle_calls == [((80, 255, 170), 2)]
+    assert line_calls
+    assert all(color == (72, 184, 128) and thickness == 1 for color, thickness in line_calls)
+    assert captured_labels == ["person", "person held 0.8s"]
 
 
 def test_engine_entrypoint_guard_is_after_runtime_helpers() -> None:
