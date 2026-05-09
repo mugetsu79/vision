@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,10 +11,13 @@ from numpy.typing import NDArray
 from argus.models.enums import TrackerType
 from argus.vision.types import Detection
 
+TrackerSceneProfile = Literal["efficient", "difficult"]
+
 
 @dataclass(slots=True)
 class TrackerConfig:
     tracker_type: TrackerType
+    scene_profile: TrackerSceneProfile = "efficient"
     frame_rate: int = 30
     track_high_thresh: float = 0.25
     track_low_thresh: float = 0.1
@@ -28,6 +31,36 @@ class TrackerConfig:
     appearance_thresh: float = 0.25
     # Traffic cameras are fixed; frame-to-frame GMC feature matching is costly and noisy.
     gmc_method: str = "none"
+
+    @classmethod
+    def for_scene_profile(
+        cls,
+        scene_profile: TrackerSceneProfile = "efficient",
+        *,
+        tracker_type: TrackerType | None = None,
+        frame_rate: int = 30,
+    ) -> TrackerConfig:
+        if scene_profile == "efficient":
+            return cls(
+                tracker_type=tracker_type or TrackerType.BOTSORT,
+                scene_profile=scene_profile,
+                frame_rate=frame_rate,
+            )
+
+        if tracker_type is not None and tracker_type is not TrackerType.BOTSORT:
+            raise ValueError("difficult scene profile requires botsort tracker")
+
+        return cls(
+            tracker_type=TrackerType.BOTSORT,
+            scene_profile=scene_profile,
+            frame_rate=frame_rate,
+            match_thresh=0.85,
+            track_buffer=150,
+            with_reid=False,
+            proximity_thresh=0.5,
+            appearance_thresh=0.8,
+            model="auto",
+        )
 
     def to_namespace(self) -> SimpleNamespace:
         return SimpleNamespace(
