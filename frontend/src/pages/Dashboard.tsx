@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { OmniSightLens } from "@/components/brand/OmniSightLens";
@@ -8,10 +9,17 @@ import {
   WorkspaceHero,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
+import { AttentionStack } from "@/components/operations/AttentionStack";
+import { DeploymentPostureStrip } from "@/components/operations/DeploymentPostureStrip";
 import { useCameras } from "@/hooks/use-cameras";
 import { useIncidents } from "@/hooks/use-incidents";
 import { useFleetOverview } from "@/hooks/use-operations";
 import { useSites } from "@/hooks/use-sites";
+import {
+  deriveAttentionItems,
+  deriveDeploymentPosture,
+  deriveFleetHealth,
+} from "@/lib/operational-health";
 
 export function DashboardPage() {
   const { data: cameras = [] } = useCameras();
@@ -23,6 +31,27 @@ export function DashboardPage() {
     limit: 12,
   });
   const fleet = useFleetOverview();
+
+  const fleetHealth = deriveFleetHealth(fleet.data);
+  const deploymentPosture = useMemo(
+    () =>
+      deriveDeploymentPosture({
+        sites,
+        cameras,
+        fleet: fleet.data,
+        pendingIncidents: incidents,
+      }),
+    [cameras, fleet.data, incidents, sites],
+  );
+  const attentionItems = useMemo(
+    () =>
+      deriveAttentionItems({
+        fleet: fleet.data,
+        cameras,
+        pendingIncidents: incidents,
+      }),
+    [cameras, fleet.data, incidents],
+  );
 
   const runningWorkers = fleet.data?.summary.running_workers ?? 0;
   const desiredWorkers = fleet.data?.summary.desired_workers ?? 0;
@@ -44,6 +73,7 @@ export function DashboardPage() {
         description="A connected view of live scenes, evidence, patterns, deployment context, and edge operations."
         tone="cerulean"
         lens={<OmniSightLens variant="dashboard" />}
+        className="xl:col-span-2"
         body={
           <div className="grid gap-3 sm:grid-cols-3">
             <KpiTile
@@ -65,7 +95,15 @@ export function DashboardPage() {
         }
       />
 
-      <InstrumentRail aria-label="Overview instruments" className="space-y-3 p-4">
+      <div className="xl:col-span-2">
+        <DeploymentPostureStrip posture={deploymentPosture} />
+      </div>
+
+      <div className="xl:col-span-2">
+        <AttentionStack items={attentionItems} fleetHealth={fleetHealth} />
+      </div>
+
+      <InstrumentRail aria-label="Overview instruments" className="space-y-3 p-4 xl:col-span-2">
         <StatusToneBadge tone={directUnavailable > 0 ? "attention" : "healthy"}>
           {directUnavailable > 0
             ? `${directUnavailable} direct streams unavailable`
