@@ -2,26 +2,31 @@ import { useEffect, useRef } from "react";
 
 import { filterTracks } from "@/lib/live";
 import type { components } from "@/lib/api.generated";
+import { colorForClass, type SignalTrack } from "@/lib/live-signal-stability";
 
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 
 export function TelemetryCanvas({
   frame,
   activeClasses,
+  tracks,
 }: {
   frame: TelemetryFrame | null | undefined;
   activeClasses: string[] | null;
+  tracks?: SignalTrack[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const frameRef = useRef<TelemetryFrame | null | undefined>(frame);
   const activeClassesRef = useRef<string[] | null>(activeClasses);
+  const tracksRef = useRef<SignalTrack[] | undefined>(tracks);
   const animationFrameRef = useRef<number | null>(null);
   const drawFrameRef = useRef<() => void>(() => undefined);
   const scheduleDrawRef = useRef<() => void>(() => undefined);
 
   frameRef.current = frame;
   activeClassesRef.current = activeClasses;
+  tracksRef.current = tracks;
 
   const drawFrame = () => {
     const canvas = canvasRef.current;
@@ -33,42 +38,60 @@ export function TelemetryCanvas({
     const { width, height } = sizeRef.current;
     context.clearRect(0, 0, width, height);
 
-    const visibleTracks = filterTracks(frameRef.current, activeClassesRef.current);
-    if (visibleTracks.length === 0) {
+    const visibleSignals =
+      tracksRef.current ??
+      filterTracks(frameRef.current, activeClassesRef.current).map((track): SignalTrack => ({
+        key: `${track.class_name}:${track.track_id}`,
+        track,
+        color: colorForClass(track.class_name),
+        state: "live",
+        firstSeenMs: 0,
+        lastSeenMs: 0,
+        ageMs: 0,
+      }));
+
+    if (visibleSignals.length === 0) {
       return;
     }
 
     const sourceWidth = Math.max(
-      ...visibleTracks.map((track) => getCoordinate(track.bbox, "x2")),
+      ...visibleSignals.map((signal) => getCoordinate(signal.track.bbox, "x2")),
       1,
     );
     const sourceHeight = Math.max(
-      ...visibleTracks.map((track) => getCoordinate(track.bbox, "y2")),
+      ...visibleSignals.map((signal) => getCoordinate(signal.track.bbox, "y2")),
       1,
     );
     const scaleX = width / sourceWidth;
     const scaleY = height / sourceHeight;
 
     context.lineWidth = 2;
-    context.strokeStyle = "#6cb0ff";
-    context.fillStyle = "#eef5ff";
     context.font = "12px ui-sans-serif, system-ui, sans-serif";
 
-    for (const track of visibleTracks) {
+    for (const signal of visibleSignals) {
+      const { track } = signal;
       const x1 = getCoordinate(track.bbox, "x1") * scaleX;
       const y1 = getCoordinate(track.bbox, "y1") * scaleY;
       const x2 = getCoordinate(track.bbox, "x2") * scaleX;
       const y2 = getCoordinate(track.bbox, "y2") * scaleY;
       const label = [
         `${track.class_name} #${track.track_id}`,
-        track.speed_kph ? `${Math.round(track.speed_kph)} km/h` : null,
+        signal.state === "held" ? `last seen ${formatAge(signal.ageMs)}` : null,
+        typeof track.speed_kph === "number" ? `${Math.round(track.speed_kph)} km/h` : null,
       ]
         .filter(Boolean)
         .join(" ");
 
+      context.globalAlpha = signal.state === "held" ? 0.55 : 1;
+      context.setLineDash?.(signal.state === "held" ? [6, 5] : []);
+      context.strokeStyle = signal.color.stroke;
+      context.fillStyle = signal.color.text;
       context.strokeRect(x1, y1, Math.max(4, x2 - x1), Math.max(4, y2 - y1));
       context.fillText(label, x1 + 4, Math.max(14, y1 - 6));
     }
+
+    context.globalAlpha = 1;
+    context.setLineDash?.([]);
   };
 
   const scheduleDraw = () => {
@@ -141,7 +164,7 @@ export function TelemetryCanvas({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [frame, activeClasses]);
+  }, [frame, activeClasses, tracks]);
 
   return (
     <canvas
@@ -150,6 +173,14 @@ export function TelemetryCanvas({
       className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );
+}
+
+function formatAge(ageMs: number): string {
+  if (ageMs < 1_000) {
+    return `${Math.max(0, Math.round(ageMs))}ms ago`;
+  }
+
+  return `${(ageMs / 1_000).toFixed(1)}s ago`;
 }
 
 function getCoordinate(

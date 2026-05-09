@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { TelemetryCanvas } from "@/components/live/TelemetryCanvas";
 import type { components } from "@/lib/api.generated";
+import { colorForClass, type SignalTrack } from "@/lib/live-signal-stability";
 
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 
@@ -14,6 +15,8 @@ const setTransformMock = vi.fn();
 const beginPathMock = vi.fn();
 const roundRectMock = vi.fn();
 const fillMock = vi.fn();
+const strokeMock = vi.fn();
+const setLineDashMock = vi.fn();
 
 describe("TelemetryCanvas", () => {
   beforeEach(() => {
@@ -25,8 +28,10 @@ describe("TelemetryCanvas", () => {
       beginPath: beginPathMock,
       roundRect: roundRectMock,
       fill: fillMock,
+      stroke: strokeMock,
       fillText: fillTextMock,
       strokeRect: strokeRectMock,
+      setLineDash: setLineDashMock,
       measureText: () => ({ width: 60 }),
       font: "",
       lineWidth: 1,
@@ -88,9 +93,11 @@ describe("TelemetryCanvas", () => {
     beginPathMock.mockReset();
     roundRectMock.mockReset();
     fillMock.mockReset();
+    strokeMock.mockReset();
+    setLineDashMock.mockReset();
   });
 
-  test("redraws overlays and filters tracks when the resolved classes change", async () => {
+  test("redraws overlays from stable tracks with held-state styling", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
       ts: "2026-04-19T09:15:00Z",
@@ -133,8 +140,58 @@ describe("TelemetryCanvas", () => {
 
     fillTextMock.mockClear();
     strokeRectMock.mockClear();
+    setLineDashMock.mockClear();
 
     view.rerender(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={["car"]}
+          tracks={[signalTrack(frame.tracks[0]), signalTrack(frame.tracks[1], "held")]}
+        />
+      </div>,
+    );
+
+    await waitFor(() =>
+      expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("car"))).toBe(true),
+    );
+    expect(strokeRectMock).toHaveBeenCalledTimes(2);
+    expect(setLineDashMock).toHaveBeenCalledWith([6, 5]);
+    expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("last seen"))).toBe(true);
+  });
+
+  test("filters raw frame tracks when stable tracks are omitted", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "annotated-whip",
+      counts: { bus: 1, car: 1 },
+      tracks: [
+        {
+          class_name: "car",
+          confidence: 0.93,
+          bbox: { x1: 100, y1: 120, x2: 340, y2: 260 },
+          track_id: 7,
+          speed_kph: 42,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+        {
+          class_name: "bus",
+          confidence: 0.88,
+          bbox: { x1: 480, y1: 110, x2: 760, y2: 310 },
+          track_id: 12,
+          speed_kph: null,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
       <div style={{ width: 640, height: 360 }}>
         <TelemetryCanvas frame={frame} activeClasses={["car"]} />
       </div>,
@@ -153,3 +210,18 @@ describe("TelemetryCanvas", () => {
     expect(screen.getByLabelText(/telemetry overlay/i)).toBeInTheDocument();
   });
 });
+
+function signalTrack(
+  track: TelemetryFrame["tracks"][number],
+  state: "live" | "held" = "live",
+): SignalTrack {
+  return {
+    key: `${track.class_name}:${track.track_id}`,
+    track,
+    color: colorForClass(track.class_name),
+    state,
+    firstSeenMs: 1_000,
+    lastSeenMs: 1_000,
+    ageMs: state === "held" ? 800 : 0,
+  };
+}
