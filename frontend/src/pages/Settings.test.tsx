@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test, vi } from "vitest";
 
 const fleetOverview = {
@@ -109,6 +110,67 @@ vi.mock("@/hooks/use-operations", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-cameras", () => ({
+  useCameras: () => ({
+    data: [
+      {
+        id: "00000000-0000-0000-0000-000000000101",
+        site_id: "00000000-0000-0000-0000-000000000301",
+        edge_node_id: null,
+        name: "Lobby",
+        rtsp_url_masked: "rtsp://redacted@camera.local/live",
+        processing_mode: "central",
+        primary_model_id: "00000000-0000-0000-0000-000000000001",
+        secondary_model_id: null,
+        tracker_type: "bytetrack",
+        active_classes: ["person"],
+        attribute_rules: [],
+        zones: [{ id: "entry-line", type: "line", points: [[0, 0], [1, 1]] }],
+        homography: { src: [], dst: [], ref_distance_m: 1 },
+        privacy: {
+          blur_faces: true,
+          blur_plates: true,
+          method: "gaussian",
+          strength: 7,
+        },
+        browser_delivery: {
+          default_profile: "720p10",
+          allow_native_on_demand: true,
+          profiles: [],
+          unsupported_profiles: [],
+          native_status: {
+            available: false,
+            reason: "privacy_filtering_required",
+          },
+        },
+        source_capability: { width: 1280, height: 720, fps: 10, codec: "h264" },
+        frame_skip: 1,
+        fps_cap: 25,
+        created_at: "2026-05-09T07:00:00Z",
+        updated_at: "2026-05-09T07:00:00Z",
+      },
+    ],
+    isLoading: false,
+  }),
+}));
+
+vi.mock("@/hooks/use-sites", () => ({
+  useSites: () => ({
+    data: [
+      {
+        id: "00000000-0000-0000-0000-000000000301",
+        tenant_id: "tenant-1",
+        name: "Zurich Lab",
+        description: null,
+        tz: "Europe/Zurich",
+        geo_point: null,
+        created_at: "2026-05-09T07:00:00Z",
+      },
+    ],
+    isLoading: false,
+  }),
+}));
+
 import { SettingsPage } from "@/pages/Settings";
 
 function renderPage() {
@@ -117,7 +179,9 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SettingsPage />
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -130,6 +194,11 @@ describe("SettingsPage operations workbench", () => {
       screen.getByRole("heading", { name: /operations/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("operations-workspace")).toBeInTheDocument();
+    const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
+    expect(sceneMatrix).toBeInTheDocument();
+    expect(
+      within(sceneMatrix).getByText(/scene intelligence matrix/i),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("edge-fleet-grid")).toBeInTheDocument();
     expect(screen.getByTestId("worker-rail")).toBeInTheDocument();
     expect(screen.getByTestId("stream-diagnostics-rail")).toBeInTheDocument();
@@ -145,6 +214,14 @@ describe("SettingsPage operations workbench", () => {
     expect(screen.getByText(/manual dev mode/i)).toBeInTheDocument();
     expect(screen.getAllByText(/planned workers/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/direct streams unavailable/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/direct stream unavailable/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      within(sceneMatrix).getByRole("link", {
+        name: /inspect delivery for lobby/i,
+      }),
+    ).toHaveAttribute("href", "/settings");
     expect(
       screen.queryByText(/prompt 7 uses this route/i),
     ).not.toBeInTheDocument();
@@ -153,14 +230,21 @@ describe("SettingsPage operations workbench", () => {
   test("shows worker lifecycle and delivery diagnostics", () => {
     renderPage();
 
-    expect(screen.getByText("Lobby")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText("Lobby"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/argus.inference.engine --camera-id/i),
     ).toBeInTheDocument();
     expect(screen.getByText("jetson-1")).toBeInTheDocument();
-    expect(screen.getByText(/direct stream unavailable:/i)).toBeInTheDocument();
-    expect(screen.getByText(/privacy filtering required/i)).toBeInTheDocument();
-    expect(screen.getByText(/1280 x 720/i)).toBeInTheDocument();
+    const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
+    expect(
+      within(diagnosticsRail).getByText(/direct stream unavailable:/i),
+    ).toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).getByText(/privacy filtering required/i),
+    ).toBeInTheDocument();
+    expect(within(diagnosticsRail).getByText(/1280 x 720/i)).toBeInTheDocument();
   });
 
   test("generates bootstrap material with one-time warning", async () => {

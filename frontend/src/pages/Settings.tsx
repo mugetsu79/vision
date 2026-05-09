@@ -13,15 +13,19 @@ import {
   WorkspaceBand,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
+import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
+import { useCameras } from "@/hooks/use-cameras";
 import {
   type FleetBootstrapResponse,
   type FleetOverview,
   useCreateBootstrapMaterial,
   useFleetOverview,
 } from "@/hooks/use-operations";
+import { useSites } from "@/hooks/use-sites";
+import { deriveSceneReadinessRows } from "@/lib/operational-health";
 
 type FleetSourceCapability = NonNullable<
   FleetOverview["delivery_diagnostics"][number]["source_capability"]
@@ -29,6 +33,8 @@ type FleetSourceCapability = NonNullable<
 
 export function SettingsPage() {
   const fleet = useFleetOverview();
+  const { data: cameras = [] } = useCameras();
+  const { data: sites = [] } = useSites();
   const bootstrap = useCreateBootstrapMaterial();
   const [hostname, setHostname] = useState("");
   const [version, setVersion] = useState("0.1.0");
@@ -78,6 +84,12 @@ export function SettingsPage() {
     );
   }
 
+  const sceneHealthRows = deriveSceneReadinessRows({
+    cameras,
+    sites,
+    fleet: fleet.data,
+  });
+
   return (
     <div data-testid="operations-workspace" className="space-y-5 p-4 sm:p-6">
       <WorkspaceBand
@@ -91,6 +103,8 @@ export function SettingsPage() {
           </Button>
         }
       />
+
+      <SceneIntelligenceMatrix rows={sceneHealthRows} />
 
       <section
         data-testid="edge-fleet-grid"
