@@ -1,14 +1,26 @@
-# Next Chat Handoff: Jetson Capture Tuning Next, UI Work After
+# Next Chat Handoff: Live Signal Terrain Implementation
 
-Date: 2026-05-08
+Date: 2026-05-09
 
 Purpose: paste this document into a fresh chat to continue from current `main`.
-The next chat should keep optimizing the Jetson edge worker first, then move to
-the OmniSight UI/UX work once the live pipeline is stable enough.
+The next chat should start the Live signal terrain and stabilization implementation
+from the written plan. Jetson capture tuning can resume in a future pass if new
+same-room or wired-network logs show the remaining capture jitter is still in
+software.
 
 ## Repository State
 
-Start from `main` on both the iMac and Jetson:
+`main` has the OmniSight UI work merged and pushed.
+
+Base commit that contains the merged OmniSight UI/spec work:
+
+```text
+c7060043 docs(evidence): plan desk timeline polish
+```
+
+This handoff document update may appear as the latest commit above that base.
+
+Start from `main`:
 
 ```bash
 cd "$HOME/vision"
@@ -19,69 +31,253 @@ git status -sb
 git log --oneline -8
 ```
 
-Expected:
-
-- the performance and edge-runtime code is already merged through
-  `93c93c99 fix(camera): use current ffmpeg rtsp timeout option`
-- later docs-only commits may be above that optimization commit
-- untracked local scratch files may exist; do not stage them unless the user
-  explicitly asks
-
-Last full verification before the docs cleanup:
-
-- backend: `python3 -m uv run pytest -q` passed with 365 tests
-- frontend unit: `corepack pnpm --dir frontend test` passed with 161 tests
-- frontend build: `corepack pnpm --dir frontend build` passed
-- known test noise: React `act(...)` warnings from `VideoStream.test.tsx`
-
-## What Is Now Closed
-
-These are not the next bottlenecks:
-
-- model catalog and fixed/open-vocabulary runtime implementation
-- iMac native-stream and processed-stream contracts
-- edge MediaMTX relay from Jetson to iMac, including the missing `JETSON_IP`
-  configuration issue that caused browser video to be unavailable
-- Jetson edge image on Python 3.10 for cp310 ONNX Runtime GPU wheels
-- Jetson provider selection with `TensorrtExecutionProvider`
-- Orin Nano processed stream publishing through FFmpeg/libx264 instead of NVENC
-- live profile switching between direct/native/annotated/reduced profiles
-- tracking persistence buffering and bounded live telemetry publishing
-- macOS FFmpeg 8.1 RTSP timeout option compatibility
-
-Do not re-open these unless fresh evidence contradicts the current logs.
-
-## Current Lab Shape
-
-iMac master:
-
-- dev backend, frontend, Keycloak, Postgres, NATS, MinIO, and MediaMTX
-- central worker can run locally for iMac/CoreML tests
-- backend must be recreated after setting the Jetson relay map:
+If continuing implementation on the existing local branch:
 
 ```bash
-cd "$HOME/vision"
-JETSON_IP="PUT_THE_JETSON_IP_HERE"
-export ARGUS_EDGE_MEDIAMTX_RTSP_BASE_URLS="{\"*\":\"rtsp://$JETSON_IP:8554\"}"
-docker compose -f infra/docker-compose.dev.yml up -d --force-recreate backend
-curl -fsS http://127.0.0.1:8000/healthz
+git switch codex/omnisight-ui-spec-implementation
+git merge --ff-only main
 ```
 
-Jetson Orin Nano edge:
+If the branch does not exist in a fresh clone, create a new implementation
+branch from `main` instead of relying on `origin/codex/omnisight-ui-spec-implementation`,
+which may lag behind `origin/main`:
 
-- camera id used in recent tests:
-  `d1588564-f5c8-4d6b-8584-45697bca2dba`
-- edge model: `YOLO26n COCO Edge` at `/models/yolo26n.onnx`
-- provider evidence:
+```bash
+git switch -c codex/omnisight-ui-spec-implementation
+```
+
+Known local state:
+
+- unrelated untracked scratch files may exist locally
+- do not use `git add -A`
+- stage only files needed for the current task
+
+Latest verification before merging to `main`:
+
+- `corepack pnpm --dir frontend test` passed: 53 files, 203 tests
+- `corepack pnpm --dir frontend lint` passed with 0 errors and 12 warnings
+- `corepack pnpm --dir frontend build` passed
+- known frontend test noise: React `act(...)` warnings from
+  `VideoStream.test.tsx` and React Router future-flag warnings
+
+Earlier backend verification from the edge/capture work:
+
+- `python3 -m uv run pytest -q` passed with 365 tests
+
+## What Was Completed In This Chat
+
+### Jetson / Capture
+
+Jetson TensorRT inference is healthy and should not be the default target for
+more optimization.
+
+Evidence already observed:
 
 ```text
-Resolved inference runtime policy profile=linux-aarch64-nvidia-jetson ...
+Resolved inference runtime policy profile=linux-aarch64-nvidia-jetson
 detection_provider=TensorrtExecutionProvider
 available_providers=['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
 Loaded detection model YOLO26n COCO Edge with provider TensorrtExecutionProvider
 ```
 
-Recommended Jetson pull/rebuild/restart:
+Recent Jetson timing shape:
+
+```text
+detect_session ~= 9-10 ms
+detect ~= 17-23 ms
+capture_wait avg ~= 32-46 ms
+capture_wait p95 ~= 48-146 ms depending on RTSP settings
+capture_wait p99/max ~= 500-570 ms during spikes
+```
+
+Interpretation:
+
+- detector runtime is not the bottleneck
+- tracking, stream relay, persistence buffering, and bounded telemetry drops are
+  not the current bottlenecks
+- remaining spikes line up with `capture_wait`, so treat them as
+  RTSP/GStreamer/camera/network delivery jitter first
+
+RTSP/GStreamer tests tried:
+
+- `ARGUS_JETSON_RTSP_LATENCY_MS=50`
+  - native GStreamer active
+  - p95 often lower, but p99/max stayed near 500 ms
+- `ARGUS_JETSON_RTSP_LATENCY_MS=100`
+  - native GStreamer active
+  - p95 often 70-90 ms, but p99/max stayed near 500 ms
+- `ARGUS_JETSON_RTSP_LATENCY_MS=200`
+  - produced GStreamer RTSP parse/read errors and no first frame within 20s
+  - fallback path started, so 200 ms was not useful in that lab state
+- `ARGUS_JETSON_RTSP_PROTOCOLS=udp`
+  and `ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true`
+  - p95 improved in some windows
+  - p99/max still showed 500 ms class waits
+
+Camera ping from Jetson showed network jitter and packet loss:
+
+```text
+63 packets transmitted, 62 received, 1.5873% packet loss
+rtt min/avg/max/mdev = 1.914/11.109/65.223/15.678 ms
+```
+
+The user planned to move the Jetson closer to the camera. Until fresh logs after
+that move contradict it, treat connectivity/RTSP source stability as the reason
+capture tuning was paused.
+
+### OmniSight UI / UX
+
+The OmniSight UI work through Phase 5A was merged to `main` and pushed.
+
+Highlights:
+
+- v2 `--vz-*` design tokens, Space Grotesk + Inter, updated workspace surfaces
+- sign-in CSS 3D OmniSight lens replacing the large MP4 hero
+- sign-in logo white-background flash fixed
+- orbital/elliptic guide lines removed and hidden globally
+- dashboard spatial cockpit with deployment posture and attention stack
+- motion presets, workspace transition, nav focus shaft, evidence swap motion
+- operations scene intelligence matrix
+- Live scene operational status strip
+- Sites inventory readiness cue
+- frontend operational readiness derivation
+- WebGL remains off/deferred
+
+### Specs And Plans Added
+
+Live signal terrain and anti-flap work:
+
+- `docs/superpowers/specs/2026-05-09-live-signal-terrain-and-stability-design.md`
+- `docs/superpowers/plans/2026-05-09-live-signal-terrain-and-stability-implementation-plan.md`
+
+Evidence Desk polish work:
+
+- `docs/superpowers/specs/2026-05-09-evidence-desk-timeline-and-case-context-design.md`
+- `docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md`
+
+Operational readiness UI work:
+
+- `docs/superpowers/specs/2026-05-09-operational-readiness-ui-design.md`
+- `docs/superpowers/plans/2026-05-09-operational-readiness-ui-phase-5a.md`
+
+## Current Product Issue To Fix Next
+
+The Live page is visually close to the desired direction, but the current
+telemetry presentation flaps because it renders raw latest-frame detections.
+
+Observed in the user's live capture:
+
+- person box appears and disappears even while the person is plainly visible
+- `0 visible now` can appear while a person is visible
+- right-side live signal rows flap with the latest frame
+- the line chart under the video looks weak and too graph-like
+- top legends/chips above the video are too diagnostic and not as readable as
+  the positioning report suggests
+
+Chosen direction:
+
+- stabilize object boxes and counts with a short held-signal window
+- show held tracks as subdued/dashed rather than claiming they are live
+- color tracking boxes by object class/family
+- replace the line list under the video with the approved Telemetry Terrain
+  gradient surface
+- make the top legend/state area calmer and more product-readable
+
+## Next Implementation: Live Signal Terrain
+
+Use this plan:
+
+```text
+docs/superpowers/plans/2026-05-09-live-signal-terrain-and-stability-implementation-plan.md
+```
+
+User preference:
+
+- execute one task at a time
+- commit after each completed task
+- report the result
+- wait for the next `go`
+- use subagents only if the user explicitly asks for subagent execution in the
+  new chat
+
+Start with Task 1 from the plan:
+
+```text
+Task 1: Shared Live Signal Stability Model
+```
+
+Task 1 creates:
+
+- `frontend/src/lib/live-signal-stability.ts`
+- `frontend/src/lib/live-signal-stability.test.ts`
+
+Expected utility responsibilities:
+
+- `DEFAULT_SIGNAL_HOLD_MS = 1200`
+- stable `class_name + track_id` keys
+- deterministic class/family colors
+- live versus held track state
+- held-track expiry after the hold window
+- stable live/held counts by class
+
+After Task 1, continue in order:
+
+1. `useStableSignalFrame` hook
+2. class-colored `TelemetryCanvas` overlay with held-state treatment
+3. new `TelemetryTerrain` component
+4. calmer `SceneStatusStrip` and stable `DynamicStats`
+5. `Live.tsx` integration
+6. final frontend verification and browser visual QA
+
+Recommended pre-flight before Task 1:
+
+```bash
+cd "$HOME/vision"
+git status -sb
+corepack pnpm --dir frontend test
+corepack pnpm --dir frontend lint
+corepack pnpm --dir frontend build
+```
+
+Task-level test command:
+
+```bash
+corepack pnpm --dir frontend exec vitest run src/lib/live-signal-stability.test.ts
+```
+
+## After Live Signal Terrain
+
+Once the Live page is stable and visually reviewed, move to the Evidence Desk
+polish plan:
+
+```text
+docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md
+```
+
+Evidence Desk Task 1 will create:
+
+- `frontend/src/lib/evidence-signals.ts`
+- `frontend/src/lib/evidence-signals.test.ts`
+
+The Evidence work should add:
+
+- Evidence Timeline density strip
+- Case Context Strip
+- type-colored review queue
+- cleaner raw payload disclosure
+
+Do not start Evidence Desk implementation until Live signal terrain has landed,
+unless the user explicitly redirects.
+
+## Jetson Lab Commands If Needed Later
+
+Lab guide:
+
+```text
+docs/imac-master-orin-lab-test-guide.md
+```
+
+Jetson rebuild/restart:
 
 ```bash
 cd "$HOME/vision"
@@ -92,184 +288,47 @@ docker compose -f infra/docker-compose.edge.yml up -d --build inference-worker
 docker compose -f infra/docker-compose.edge.yml logs -f inference-worker
 ```
 
-Provider sanity check:
+Useful Jetson RTSP env combinations:
 
 ```bash
-docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
-  --entrypoint /app/.venv/bin/python inference-worker \
-  -c "import sys, onnxruntime as ort; print(sys.version); print(ort.__version__); print(ort.get_available_providers())"
+export ARGUS_JETSON_RTSP_PROTOCOLS=tcp
+export ARGUS_JETSON_RTSP_LATENCY_MS=100
+export ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true
+docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
+docker compose -f infra/docker-compose.edge.yml logs -f --tail=50 inference-worker
 ```
 
-## Latest Performance Baseline
+UDP trial, only after camera path is stable:
 
-Jetson, annotated mode, no FPS cap, TensorRT:
+```bash
+export ARGUS_JETSON_RTSP_PROTOCOLS=udp
+export ARGUS_JETSON_RTSP_LATENCY_MS=100
+export ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true
+docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
+docker compose -f infra/docker-compose.edge.yml logs -f --tail=50 inference-worker
+```
+
+Good evidence to collect if Jetson work resumes:
 
 ```text
-stage_avg_ms={
-  capture=44.0-44.9,
-  capture_wait=40.5-41.8,
-  capture_decode_read=64.4-67.6,
-  capture_throttle=2.3-3.1,
-  detect=17.4-19.8,
-  detect_prepare=7.5-9.6,
-  detect_session=9.3-9.7,
-  publish_stream=4.2-6.7,
-  total=67.4-72.9,
-  track=0.4
-}
-stage_max_ms={
-  capture=516-549,
-  capture_wait=501-533,
-  total=535-569
-}
+capture_wait avg / p95 / p99 / max
+capture_read avg / max
+capture_reconnect avg / max
+detect_session avg / max
+publish_stream avg / max
+total avg / max
+GStreamer parse/read errors
+camera ping packet loss and jitter after moving Jetson
 ```
 
-Interpretation:
+## Guardrails
 
-- TensorRT inference is healthy; `detect_session` is about 10 ms
-- `detect_prepare` is improved but still costs roughly 7.5 to 9.6 ms
-- the main live bottleneck is capture wait/jitter, not tracking or persistence
-- the 500 ms spikes line up with `capture_wait`, so the next work should focus
-  on RTSP/GStreamer/camera delivery stability
-- `capture_decode_read` is a background pump diagnostic and should not be added
-  directly to the frame `total`
-
-iMac, annotated mode, CoreML:
-
-```text
-stage_avg_ms={
-  capture=39-88,
-  capture_wait=38-87,
-  detect=91-103,
-  detect_prepare=3.0-3.5,
-  detect_session=87-99,
-  publish_stream=7.5-11.5,
-  total=146-205
-}
-```
-
-Interpretation:
-
-- the iMac is acceptable for lab/central validation, but it is an old Intel
-  machine and should not be the main optimization target
-- if live telemetry publishing times out, stale frames are dropped instead of
-  blocking the worker
-
-## Next Jetson Tuning Work
-
-Work in this order:
-
-1. Keep `jetson_clocks` enabled while testing.
-2. Tune capture, not detector/tracker, unless new logs show otherwise.
-3. Compare GStreamer RTSP settings:
-   - `protocols=tcp` with `latency=50`, `100`, and `200`
-   - UDP only if the camera/network path is clean enough
-   - `drop-on-latency=true`
-4. Compare direct camera RTSP versus any MediaMTX-relayed source.
-5. Inspect camera settings:
-   - CBR versus VBR
-   - GOP/keyframe interval
-   - substream resolution/FPS
-   - Ethernet path and switch stability
-6. If capture spikes persist, add percentile logging for `capture_wait` and log
-   a compact warning when a single frame wait exceeds 250 ms.
-
-Good next evidence to collect from Jetson logs:
-
-```text
-capture_wait avg and max
-capture_read avg and max
-capture_reconnect avg and max
-detect_session avg and max
-publish_stream avg and max
-total avg and max
-any GStreamer "Parse error" / "Could not read from resource" reconnect event
-```
-
-The recent GStreamer reconnect error looked like this:
-
-```text
-GStreamer rawvideo capture failed (no frame produced within 20s)
-Could not receive message. (Parse error)
-Camera capture lost, reconnecting
-```
-
-Treat that as a capture-source or RTSP-session stability problem first.
-
-## Commands Worth Keeping Handy
-
-iMac central worker test:
-
-```bash
-cd "$HOME/vision/backend"
-ARGUS_API_BASE_URL="http://127.0.0.1:8000" \
-ARGUS_API_BEARER_TOKEN="$TOKEN" \
-python3 -m uv run python -m argus.inference.engine \
-  --camera-id "c48cd041-0e7b-49ce-8058-4af896deecbd"
-```
-
-Jetson logs:
-
-```bash
-cd "$HOME/vision"
-docker compose -f infra/docker-compose.edge.yml logs -f inference-worker
-```
-
-Jetson metrics:
-
-```bash
-curl -s http://127.0.0.1:9108/metrics | head
-```
-
-Restart only the Jetson worker after a code/image update:
-
-```bash
-cd "$HOME/vision"
-docker compose -f infra/docker-compose.edge.yml up -d --build inference-worker
-docker compose -f infra/docker-compose.edge.yml logs -f inference-worker
-```
-
-## Later UI Work
-
-After Jetson capture tuning is stable, continue OmniSight UI/UX distinctiveness.
-
-Primary docs:
-
-- `docs/brand/omnisight-ui-spec-sheet.md`
-- `docs/superpowers/plans/2026-04-30-omnisight-spec-codex-handoff.md`
-- `docs/superpowers/plans/2026-04-30-omnisight-spec-phase-1-foundations.md`
-- `docs/superpowers/plans/2026-04-30-omnisight-spec-phase-2-spatial-cockpit.md`
-- `docs/superpowers/plans/2026-04-30-omnisight-spec-phase-3-motion.md`
-- `docs/superpowers/plans/2026-04-30-omnisight-spec-phase-4-webgl.md`
-
-Recommended branch:
-
-```bash
-git switch -c codex/omnisight-ui-spec-implementation
-```
-
-Pre-flight before UI edits:
-
-```bash
-cd "$HOME/vision"
-corepack pnpm --dir frontend install
-corepack pnpm --dir frontend test
-corepack pnpm --dir frontend build
-```
-
-UI guardrails:
-
-- preserve working video, camera setup, and profile switching flows
-- keep product screens operational, not landing-page-like
-- make OmniSight feel less generic through tokens, typography, surfaces, motion,
-  and optional WebGL in phases
-- do not start Phase 4 unless explicitly choosing the heavier WebGL path
-
-## Cautions
-
-- Do not use `git add -A`; unrelated scratch files commonly exist locally.
-- Do not mark raw TensorRT `.engine` detector runtime as ready.
+- Work from current `main`.
+- Keep TensorRT, stream relay, persistence buffering, and telemetry drops treated
+  as solved unless fresh logs contradict that.
+- Do not optimize detector/tracker for the Live UI flapping issue; the planned
+  fix is frontend stabilization of latest-frame presentation.
 - Do not reintroduce double RTSP reads for native/no-privacy delivery.
-- Do not optimize the old Intel iMac far beyond lab usefulness.
-- Do not treat bounded telemetry frame drops as fatal unless UI telemetry becomes
-  stale or the queue never recovers.
+- Do not start WebGL work; it is intentionally deferred.
+- Preserve working video, camera setup, profile switching, and review flows.
+- Do not stage unrelated untracked scratch files.
