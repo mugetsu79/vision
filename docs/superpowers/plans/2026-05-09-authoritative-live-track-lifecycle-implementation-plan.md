@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop live telemetry and annotated stream overlays from flapping between visible and invisible during short detector/tracker misses.
+**Goal:** Stop live telemetry and annotated stream overlays from flapping between visible and invisible during short detector/tracker misses, while shaping the tracker path for crowded and obstructed scenes.
 
-**Architecture:** Add a backend track lifecycle manager after tracker association. Use its active/coasting stable tracks for live telemetry and annotated overlays, while keeping raw associated tracks for rules, count events, privacy, and persistence.
+**Architecture:** Add a backend track lifecycle manager after tracker association. Use its active/coasting stable tracks for live telemetry and annotated overlays, while keeping raw associated tracks for rules, count events, privacy, and persistence. Keep the lifecycle contract profile-neutral so efficient ByteTrack/BoT-SORT and future appearance-aware profiles publish the same telemetry shape.
 
 **Tech Stack:** Python 3.12, Pydantic, OpenCV, Ultralytics BoT-SORT/ByteTrack adapter, FastAPI OpenAPI generation, TypeScript, Vitest.
 
@@ -28,6 +28,8 @@ Keep WebGL off. Do not reopen Jetson/TensorRT/RTSP work.
 | `backend/src/argus/inference/publisher.py` | Modify | Add optional lifecycle fields to telemetry tracks |
 | `backend/src/argus/inference/engine.py` | Modify | Use stable tracks for live telemetry and annotations |
 | `backend/tests/inference/test_engine.py` | Modify | Engine coverage for stable counts, coasting metadata, raw rules |
+| `backend/src/argus/vision/tracker.py` | Modify | Preserve efficient defaults and document difficult-scene profile hooks |
+| `backend/tests/vision/test_tracker.py` | Modify | Profile/default regression tests |
 | `frontend/src/lib/api.generated.ts` | Regenerate | Include lifecycle fields from OpenAPI |
 | `frontend/src/lib/live-signal-stability.ts` | Modify | Map backend active/coasting state into display state |
 | `frontend/src/lib/live-signal-stability.test.ts` | Modify | Cover backend lifecycle fields |
@@ -52,6 +54,7 @@ Create tests for these behaviors:
 - `test_coasting_track_expires_after_ttl`
 - `test_tracker_id_switch_reuses_stable_id_by_overlap`
 - `test_duplicate_same_class_track_is_suppressed`
+- `test_overlapping_crossing_tracks_keep_one_stable_identity_for_one_object`
 - `test_single_low_confidence_candidate_stays_tentative`
 
 Use `Detection` instances from `argus.vision.types` and timestamps spaced by
@@ -95,6 +98,7 @@ Implement:
 - duplicate suppression helpers
 - IoU and center-distance helpers
 - damped bbox prediction with frame clamping
+- lifecycle thresholds as config values, not constants buried in update logic
 
 Keep the module pure: no OpenCV, no network, no engine imports.
 
@@ -297,7 +301,69 @@ git push origin codex/omnisight-ui-spec-implementation
 
 ---
 
-## Task 5: Verification And Live Smoke
+## Task 5: Difficult-Scene Profile Hook
+
+**Files:**
+- Modify: `backend/src/argus/vision/tracker.py`
+- Modify: `backend/tests/vision/test_tracker.py`
+
+- [ ] **Step 1: Add tracker profile regression tests**
+
+Add tests that document the intended profile shape:
+
+- efficient profile keeps current low-score association and long buffer defaults
+- difficult-scene profile can set BoT-SORT ReID knobs without changing telemetry
+- ReID is not silently enabled in the efficient profile
+
+Suggested test names:
+
+```python
+def test_tracker_efficient_profile_preserves_low_score_association_defaults() -> None: ...
+def test_tracker_difficult_scene_profile_enables_appearance_ready_knobs() -> None: ...
+def test_tracker_efficient_profile_does_not_enable_reid_by_default() -> None: ...
+```
+
+- [ ] **Step 2: Run failing profile tests**
+
+```bash
+python3 -m uv run pytest backend/tests/vision/test_tracker.py -q
+```
+
+Expected: new profile tests fail until profile support exists.
+
+- [ ] **Step 3: Implement profile hooks without making ReID the default**
+
+Add a small profile abstraction in `backend/src/argus/vision/tracker.py`:
+
+- `TrackerSceneProfile = Literal["efficient", "difficult"]`
+- default `TrackerConfig.scene_profile = "efficient"`
+- `TrackerConfig.for_scene_profile(...)` as the constructor helper
+- difficult profile keeps `tracker_type=BOTSORT`, raises tracker retention and
+  matching tolerance, and sets appearance-ready fields (`with_reid=True`,
+  `appearance_thresh=0.8`, `proximity_thresh=0.5`, `model="auto"`) only when
+  explicitly requested
+
+Do not download models or require a new runtime dependency in this task.
+
+- [ ] **Step 4: Verify profile tests**
+
+```bash
+python3 -m uv run pytest backend/tests/vision/test_tracker.py backend/tests/vision/test_track_lifecycle.py -q
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add backend/src/argus/vision/tracker.py backend/tests/vision/test_tracker.py
+git commit -m "feat(live): prepare difficult scene tracking profile"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+---
+
+## Task 6: Verification And Live Smoke
 
 **Files:**
 - Modify only if verification exposes a focused bug.
@@ -353,3 +419,5 @@ The work is complete when the user can run the same iMac live feed and observe:
 - no second duplicate person box for the same body
 - no immediate `1 visible now -> 0 visible now -> 1 visible now` flicker
 - video and telemetry recover after route navigation without duplicate overlays
+- the code has an explicit difficult-scene tracker profile path for crowded,
+  obstructed scenes without forcing ReID cost onto the efficient default

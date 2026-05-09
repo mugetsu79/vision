@@ -8,6 +8,11 @@ Make live video overlays and telemetry counts stable enough for real operational
 use. A plainly visible object must not cause the Live page to alternate between
 `1 visible now` and `0 visible now` because a single detector frame missed it.
 
+The home lab/iMac feed is the fast validation case, not the design ceiling. The
+system must be shaped for crowded and visually difficult scenes: partial
+occlusion, people crossing, similar-looking objects, vegetation, poles/fences,
+glare, and short detector dropouts.
+
 This replaces the current frontend-only anti-flap behavior with an authoritative
 backend track lifecycle that drives both:
 
@@ -44,6 +49,8 @@ For Live:
   reaches telemetry or the annotated overlay.
 - Coasting state must be visible in metadata so the UI can show uncertainty
   without claiming a fresh detector hit.
+- The lifecycle model must support both simple lab scenes and difficult
+  production scenes without changing the telemetry contract.
 
 For analytics:
 
@@ -51,6 +58,22 @@ For analytics:
   use detector-associated tracks by default.
 - Coasting tracks are for live operator continuity unless a future analytics
   feature explicitly opts into them.
+
+## Scene Difficulty Targets
+
+This implementation should make the first two tiers work immediately and leave a
+clean profile path for the third:
+
+| Tier | Scene | Expected behavior |
+|---|---|---|
+| Lab / simple | One or a few objects, slow movement, fixed camera | No count flicker or box blinking during short misses. |
+| Crowded / obstructed | People crossing, short partial occlusion, poles/furniture/vegetation | Stable IDs survive short occlusions, duplicate boxes are suppressed, coasting is visible but bounded. |
+| Severe / long occlusion | Dense crowds, long full occlusion, similar clothing, heavy vegetation | Requires an appearance-aware profile such as BoT-SORT ReID, DeepSORT/NvDCF-style visual tracking, or a future DeepStream lane on capable hardware. |
+
+The patch should not pretend lifecycle prediction can solve long full occlusion
+alone. The design goal is to make the efficient baseline robust now and expose
+the right extension points for appearance-aware tracking where the scene demands
+it.
 
 ## Best-Practice Basis
 
@@ -182,10 +205,14 @@ Efficient default:
 Difficult-scene profile:
 
 - retain BoT-SORT as the default selectable tracker for crowded scenes
-- leave ReID off by default for this patch to avoid surprise latency
-- structure config so a later camera/runtime profile can enable ReID or a
-  heavier Jetson/DeepStream-style tracker for heavy occlusion, vegetation, and
-  dense crowds
+- keep ReID optional rather than always-on, because it adds model/runtime cost
+- expose the lifecycle manager and tracker configuration so a camera/runtime can
+  choose an efficient profile or a difficult-scene profile
+- make the difficult-scene path explicit: BoT-SORT with ReID where model support
+  is available, or a future DeepStream/NvDCF-style visual tracker on capable
+  edge hardware
+- keep the telemetry contract identical across profiles so the frontend does not
+  care whether continuity came from ByteTrack, BoT-SORT, ReID, or visual tracking
 
 This gives immediate stability without reopening Jetson/TensorRT/RTSP work.
 
@@ -198,6 +225,8 @@ Backend unit tests:
 - new duplicate overlapping same-class track is suppressed
 - raw tracker id switch reuses the stable lifecycle id
 - tentative low-confidence single-frame false positive is not published
+- crossing/overlapping same-class detections do not create two published tracks
+  for the same object
 
 Engine tests:
 
