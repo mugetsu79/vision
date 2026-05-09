@@ -21,18 +21,40 @@ const row: SceneHealthRow = {
 };
 
 describe("SceneStatusStrip", () => {
-  test("renders worker stream and telemetry signals", () => {
+  test("renders calmer worker stream and telemetry groups", () => {
     render(<SceneStatusStrip row={row} />);
 
     expect(
       screen.getByRole("group", { name: /north gate operational status/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/central/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/face\/plate filtering configured/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/worker running/i)).toBeInTheDocument();
-    expect(screen.getByText(/native stream available/i)).toBeInTheDocument();
     expect(screen.getByText(/telemetry stale/i)).toBeInTheDocument();
+    expect(screen.getByText(/central scene/i)).toBeInTheDocument();
+    expect(screen.getByText(/worker running/i)).toBeInTheDocument();
+    expect(screen.getByText(/processed stream live/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/direct stream unavailable/i),
+    ).not.toBeInTheDocument();
+  });
+
+  test("renders gated copy for unavailable direct delivery", () => {
+    render(
+      <SceneStatusStrip
+        row={{
+          ...row,
+          delivery: {
+            health: "attention",
+            label: "Direct stream unavailable",
+            detail: "privacy filtering required",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText(/native passthrough gated/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.queryByText(/direct stream unavailable/i),
+    ).not.toBeInTheDocument();
   });
 });

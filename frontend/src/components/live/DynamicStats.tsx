@@ -1,10 +1,34 @@
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
+import {
+  colorForClass,
+  type SignalCountRow,
+} from "@/lib/live-signal-stability";
 
-export function DynamicStats({ counts }: { counts: Record<string, number> }) {
-  const entries = Object.entries(counts)
-    .filter(([, count]) => count > 0)
+type DynamicStatsProps = {
+  counts?: Record<string, number>;
+  signalRows?: SignalCountRow[];
+};
+
+export function DynamicStats({ counts, signalRows }: DynamicStatsProps) {
+  const entries = (
+    signalRows ??
+    Object.entries(counts ?? {})
+      .filter(([, count]) => count > 0)
+      .map(([className, count]) => ({
+        className,
+        color: colorForClass(className),
+        liveCount: count,
+        heldCount: 0,
+        totalCount: count,
+        state: "live" as const,
+      }))
+  )
+    .filter((row) => row.totalCount > 0)
     .sort(
-      (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+      (left, right) =>
+        right.liveCount - left.liveCount ||
+        right.totalCount - left.totalCount ||
+        left.className.localeCompare(right.className),
     );
 
   return (
@@ -20,19 +44,35 @@ export function DynamicStats({ counts }: { counts: Record<string, number> }) {
 
       <div className="grid gap-3 px-5 py-5">
         {entries.length === 0 ? (
-          <p className="text-sm text-[#8ca2c5]">{omniEmptyStates.noSignals}</p>
+          <p className="text-sm text-[#8ca2c5]">
+            No live signals. {omniEmptyStates.noSignals}
+          </p>
         ) : (
-          entries.map(([className, count]) => (
+          entries.map((row) => (
             <div
-              key={className}
+              key={row.className}
               className="rounded-[0.85rem] border border-white/8 bg-black/25 px-4 py-3"
+              style={{
+                backgroundColor: row.color.fill,
+                borderColor: row.color.stroke,
+              }}
             >
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#88a3cc]">
-                {className}
+                {row.className}
               </p>
-              <p className="mt-2 text-2xl font-semibold text-[#f3f7ff]">
-                {count}
-              </p>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <p
+                  className="text-2xl font-semibold"
+                  style={{ color: row.color.text }}
+                >
+                  {row.totalCount}
+                </p>
+                {row.heldCount > 0 || row.state === "held" ? (
+                  <p className="pb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#8ca2c5]">
+                    Held
+                  </p>
+                ) : null}
+              </div>
             </div>
           ))
         )}
