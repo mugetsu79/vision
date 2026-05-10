@@ -730,6 +730,166 @@ describe("CamerasPage", () => {
     expect(screen.getByText(/needs setup/i)).toBeInTheDocument();
   });
 
+  test("shows selected vision accuracy and speed state in the scene list", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "camera-1",
+              site_id: "site-1",
+              edge_node_id: null,
+              name: "Dock Camera",
+              rtsp_url_masked: "rtsp://***",
+              processing_mode: "central",
+              primary_model_id: "model-1",
+              secondary_model_id: null,
+              tracker_type: "botsort",
+              active_classes: ["person"],
+              attribute_rules: [],
+              zones: [],
+              vision_profile: {
+                compute_tier: "edge_standard",
+                accuracy_mode: "balanced",
+                scene_difficulty: "cluttered",
+                object_domain: "mixed",
+                motion_metrics: { speed_enabled: false },
+              },
+              privacy: {
+                blur_faces: false,
+                blur_plates: false,
+                method: "gaussian",
+                strength: 7,
+              },
+              browser_delivery: {
+                default_profile: "720p10",
+                allow_native_on_demand: true,
+                profiles: [],
+                unsupported_profiles: [],
+                native_status: { available: true, reason: null },
+              },
+              frame_skip: 1,
+              fps_cap: 25,
+              created_at: "2026-04-20T10:00:00Z",
+              updated_at: "2026-04-20T10:00:00Z",
+            },
+            {
+              id: "camera-2",
+              site_id: "site-1",
+              edge_node_id: null,
+              name: "Gate Camera",
+              rtsp_url_masked: "rtsp://***",
+              processing_mode: "edge",
+              primary_model_id: "model-1",
+              secondary_model_id: null,
+              tracker_type: "bytetrack",
+              active_classes: ["car"],
+              attribute_rules: [],
+              zones: [],
+              vision_profile: {
+                compute_tier: "edge_advanced_jetson",
+                accuracy_mode: "maximum_accuracy",
+                scene_difficulty: "traffic",
+                object_domain: "vehicles",
+                motion_metrics: { speed_enabled: true },
+              },
+              privacy: {
+                blur_faces: true,
+                blur_plates: true,
+                method: "gaussian",
+                strength: 7,
+              },
+              browser_delivery: {
+                default_profile: "720p10",
+                allow_native_on_demand: true,
+                profiles: [],
+                unsupported_profiles: [],
+                native_status: { available: true, reason: null },
+              },
+              homography: {
+                src: [
+                  [0, 0],
+                  [100, 0],
+                  [100, 100],
+                  [0, 100],
+                ],
+                dst: [
+                  [0, 0],
+                  [10, 0],
+                  [10, 10],
+                  [0, 10],
+                ],
+                ref_distance_m: 12.5,
+              },
+              frame_skip: 1,
+              fps_cap: 25,
+              created_at: "2026-04-20T10:00:00Z",
+              updated_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "HQ",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    const dockRow = (await screen.findByText("Dock Camera")).closest("tr");
+    const gateRow = (await screen.findByText("Gate Camera")).closest("tr");
+
+    expect(
+      screen.getByRole("columnheader", { name: /vision/i }),
+    ).toBeInTheDocument();
+    expect(dockRow).not.toBeNull();
+    expect(gateRow).not.toBeNull();
+    expect(within(dockRow as HTMLElement).getByText("Balanced")).toBeInTheDocument();
+    expect(within(dockRow as HTMLElement).getByText("Standard edge")).toBeInTheDocument();
+    expect(within(dockRow as HTMLElement).getByText("Speed off")).toBeInTheDocument();
+    expect(within(gateRow as HTMLElement).getByText("Max accuracy")).toBeInTheDocument();
+    expect(within(gateRow as HTMLElement).getByText("Advanced edge")).toBeInTheDocument();
+    expect(within(gateRow as HTMLElement).getByText("Speed on")).toBeInTheDocument();
+  });
+
   test("creates a camera with active classes after refetching class-bearing models", async () => {
     const user = userEvent.setup();
     let modelRequests = 0;
@@ -831,7 +991,6 @@ describe("CamerasPage", () => {
       "model-1",
     );
     await user.click(screen.getByLabelText("person"));
-    await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
 

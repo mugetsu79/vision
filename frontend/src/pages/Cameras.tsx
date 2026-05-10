@@ -145,6 +145,7 @@ function CamerasContent() {
               <TH>Scene</TH>
               <TH>Site</TH>
               <TH>Mode</TH>
+              <TH>Vision</TH>
               <TH>Stream</TH>
               <TH>Tracker</TH>
               <TH>Readiness</TH>
@@ -154,25 +155,45 @@ function CamerasContent() {
           <TBody>
             {camerasLoading ? (
               <TR>
-                <TD colSpan={7} className="text-[#9eb2cf]">
+                <TD colSpan={8} className="text-[#9eb2cf]">
                   Loading scenes...
                 </TD>
               </TR>
             ) : cameras.length === 0 ? (
               <TR>
-                <TD colSpan={7} className="text-[#9eb2cf]">
+                <TD colSpan={8} className="text-[#9eb2cf]">
                   {omniEmptyStates.noScenes}
                 </TD>
               </TR>
             ) : (
               cameras.map((camera) => {
                 const sceneHealth = sceneHealthByCamera.get(camera.id);
+                const visionSummary = getCameraVisionSummary(camera);
 
                 return (
                   <TR key={camera.id}>
                     <TD className="font-medium text-[#eef4ff]">{camera.name}</TD>
                     <TD>{siteNameById.get(camera.site_id) ?? "Unknown site"}</TD>
                     <TD>{camera.processing_mode}</TD>
+                    <TD>
+                      <div className="min-w-[8rem] leading-tight">
+                        <div className="font-medium text-[#eef4ff]">
+                          {visionSummary.accuracy}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#93a7c5]">
+                          <span>{visionSummary.compute}</span>
+                          <span
+                            className={
+                              visionSummary.speedEnabled
+                                ? "text-[#a9dfc0]"
+                                : "text-[#93a7c5]"
+                            }
+                          >
+                            {visionSummary.speed}
+                          </span>
+                        </div>
+                      </div>
+                    </TD>
                     <TD>
                       <div className="font-medium text-[#eef4ff]">
                         {camera.browser_delivery?.default_profile ?? "720p10"}
@@ -312,6 +333,36 @@ function modelOptionKey(model: ModelOption) {
     model.capability_config?.runtime_backend ?? "onnxruntime",
     model.capability_config?.readiness ?? "ready",
   ].join("\u0000");
+}
+
+type CameraVisionProfile = NonNullable<Camera["vision_profile"]>;
+
+const accuracyModeLabels: Record<CameraVisionProfile["accuracy_mode"], string> = {
+  fast: "Fast",
+  balanced: "Balanced",
+  maximum_accuracy: "Max accuracy",
+  open_vocabulary: "Open vocab",
+};
+
+const computeTierLabels: Record<CameraVisionProfile["compute_tier"], string> = {
+  cpu_low: "Low CPU",
+  edge_standard: "Standard edge",
+  edge_advanced_jetson: "Advanced edge",
+  central_gpu: "Central GPU",
+};
+
+function getCameraVisionSummary(camera: Camera) {
+  const accuracyMode = camera.vision_profile?.accuracy_mode ?? "balanced";
+  const computeTier = camera.vision_profile?.compute_tier ?? "edge_standard";
+  const speedEnabled =
+    camera.vision_profile?.motion_metrics?.speed_enabled ?? false;
+
+  return {
+    accuracy: accuracyModeLabels[accuracyMode],
+    compute: computeTierLabels[computeTier],
+    speed: speedEnabled ? "Speed on" : "Speed off",
+    speedEnabled,
+  };
 }
 
 function ModelCatalogHints({ modelInventoryCount }: { modelInventoryCount: number }) {
