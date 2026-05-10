@@ -113,8 +113,9 @@ the backend resolves the concrete tracking and candidate quality policy.
 | Central GPU | `central_gpu` | master gateway GPU, multi-stage verification, heavier models |
 
 The Jetson Orin Nano Super belongs in `edge_advanced_jetson`, not `cpu_low`.
-The current implementation only stores and resolves this tier; it does not
-reopen TensorRT, DeepStream, or RTSP runtime work.
+The current implementation stores and resolves this tier, and the next runtime
+implementation plan maps it to validated TensorRT runtime artifacts and compiled
+open-vocabulary scene artifacts. DeepStream/NvDCF remains a later runtime lane.
 
 #### Speed Metrics Toggle
 
@@ -874,7 +875,15 @@ Current implementation does not yet include:
   `verifier_profile`
 - ReID execution
 - verifier model execution
-- TensorRT/DeepStream runtime mapping for `edge_advanced_jetson`
+- validated TensorRT runtime artifact selection for `edge_advanced_jetson`
+- compiled per-scene open-vocabulary runtime artifacts
+- DeepStream/NvDCF runtime mapping for `edge_advanced_jetson`
 
 Those fields are intentionally part of the API now so advanced runtime work can
 arrive without another camera contract redesign.
+
+The immediate next runtime plan is:
+
+```text
+docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md
+```

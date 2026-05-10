@@ -18,6 +18,8 @@ The current product includes the operator workflows needed for a serious pilot:
 - model catalog presets and registration helper
 - fixed-vocab and open-vocab detector capability contracts
 - experimental Ultralytics-backed open-vocab `.pt` runtime path
+- stabilized Live track lifecycle, class-colored overlays, and Telemetry Terrain
+- scene vision profiles with explicit speed enablement, optional speed-off homography, detection include/exclusion regions, and candidate quality gating
 - Jetson edge compose stack and preflight tooling
 
 The production-critical layer still missing is supervisor-backed lifecycle control. Today, local development uses copyable commands and edge development uses Compose. Production should replace both with a central or edge supervisor that starts, stops, restarts, drains, monitors, and reports camera workers.
@@ -242,7 +244,7 @@ By default, the worker now chooses an execution-provider policy from host capabi
 - AMD Linux `amd64`: CPU in this first pass
 - Intel macOS: CoreML when available, then CPU
 
-This provider policy applies to ONNX Runtime models. Raw TensorRT `.engine` files are not selectable production models yet; use ONNX rows as the portable source model and treat standalone engine artifacts as the follow-up runtime-artifact design.
+This provider policy applies to ONNX Runtime models. Raw TensorRT `.engine` files are not selectable production models yet; use ONNX rows as the portable source model. The next implementation stream attaches validated TensorRT engines as target-specific runtime artifacts and adds compiled per-scene open-vocab artifacts for stable vocabularies.
 
 For controlled benchmarking or mitigation, these environment variables can override the automatic choice:
 

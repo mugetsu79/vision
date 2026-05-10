@@ -227,7 +227,7 @@ The repo already includes:
 - multi-tenant auth and RBAC
 - site and camera management
 - model registration
-- unified live workspace at `/live` with NL query-driven filtering, per-camera video tiles, and 30-minute occupancy sparklines (`/dashboard` now redirects)
+- unified live workspace at `/live` with NL query-driven filtering, per-camera video tiles, stabilized backend track lifecycle state, class-colored telemetry overlays, and Telemetry Terrain occupancy surfaces (`/dashboard` now redirects)
 - shared telemetry WebSocket state that survives route changes and keeps the live wall warm across short navigation hops
 - metric-aware history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, CSV/Parquet export, and a clear split between `occupancy`, `count_events`, and raw `observations`
 - Evidence Desk incident review at `/incidents`, including pending/reviewed state, review/reopen actions, signed clip access, clip-only evidence handling, and review audit entries
@@ -235,6 +235,7 @@ The repo already includes:
 - Fleet and Operations workbench at `/settings`, including node summaries, camera worker lifecycle state, delivery diagnostics, edge bootstrap material, and copy/paste-safe local worker commands
 - edge worker support and a production-oriented supervisor lifecycle model
 - model catalog presets, fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, capability-aware query commands, and an experimental Ultralytics-backed open-vocab `.pt` runtime path
+- scene vision profiles with explicit speed enablement, optional homography for speed-off scenes, include/exclusion detection regions, and candidate quality gating before tracking
 - hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions
 - Docker Compose and Helm assets
 - CI-oriented full validation flow
@@ -247,7 +248,7 @@ Still missing for production hardening:
 - per-worker runtime heartbeat and last-error reporting from central and edge supervisors
 - persistent worker assignment/reassignment workflows
 - production edge credential rotation automation
-- validated raw TensorRT `.engine` runtime artifacts; TensorRT remains an ONNX Runtime provider path today, while standalone `.engine` files are documented as planned follow-up work
+- validated Jetson TensorRT runtime artifacts and compiled per-scene open-vocab artifacts; TensorRT remains an ONNX Runtime provider path today, while standalone `.engine` files are the next planned implementation as target-specific runtime artifacts rather than primary camera models
 - incident still snapshot generation, if still previews become required evidence rather than optional convenience
 
 ## Model And Camera Scope

@@ -80,9 +80,9 @@ Open-vocab lab models are experimental:
 1. `YOLOE-26N Open Vocab` from `models/yoloe-26n-seg.pt`.
 2. `YOLOv8s-Worldv2 Open Vocab` from `models/yolov8s-worldv2.pt`.
 
-Use ONNX files for fixed-vocab COCO testing. Files such as `yolo26n.pt` and `yolo12n.pt` are not the standard fixed-vocab runtime path in this guide; use their exported `.onnx` files instead. For open-vocab testing, use the `.pt` catalog presets. `yoloe-26n-seg.onnx` is not the active open-vocab path until an ONNX open-vocab adapter exists.
+Use ONNX files for fixed-vocab COCO testing. Files such as `yolo26n.pt` and `yolo12n.pt` are not the standard fixed-vocab runtime path in this guide; use their exported `.onnx` files instead. For open-vocab testing today, use the `.pt` catalog presets. Compiled per-scene open-vocab ONNX/TensorRT artifacts are planned as runtime artifacts in the Jetson optimized runtime plan; until that lands, `yoloe-26n-seg.onnx` is not the standard active open-vocab camera model path.
 
-Do not register raw `.engine` files as ready camera models until the TensorRT engine detector adapter lands. ONNX models can still use TensorRT or CUDA through ONNX Runtime providers when those providers are installed.
+Do not register raw `.engine` files as ready camera models. ONNX models can still use TensorRT or CUDA through ONNX Runtime providers when those providers are installed. The next runtime-hardening implementation will attach validated `.engine` files as target-specific runtime artifacts instead of exposing them as normal camera model rows.
 
 Treat fixed-vocab ONNX files as standard COCO-style self-describing models unless you are intentionally following the advanced reduced-class path later in this guide.
 
@@ -563,7 +563,7 @@ The model catalog shown in the UI is a recommendation list. It does not download
 
 For iMac testing, register every local artifact that you want to compare, then choose the best registered model in the camera wizard. Start with `YOLO26n COCO`; keep `YOLO12n COCO` only as the older baseline.
 
-If you pulled recent changes onto an existing dev database, run migrations before registering models. This is required for `.pt` open-vocab presets and harmless for ONNX presets:
+If you pulled recent changes onto an existing dev database, run migrations before registering models or opening Operations/Cameras. This is required for `.pt` open-vocab presets, scene vision profiles, detection regions, and future runtime artifact tables; it is harmless for ONNX presets:
 
 ```bash
 cd "$HOME/vision"
@@ -629,7 +629,7 @@ python3 -m uv run python scripts/register_model_preset.py \
   --bearer-token "$TOKEN"
 ```
 
-Only use the `.pt` open-vocab catalog presets for open-vocab testing. Do not register `yolo26n.pt`, `yolo12n.pt`, or `yoloe-26n-seg.onnx` as the standard camera model path for this guide.
+Only use the `.pt` open-vocab catalog presets for open-vocab testing today. Do not register `yolo26n.pt`, `yolo12n.pt`, or `yoloe-26n-seg.onnx` as the standard camera model path for this guide. When the optimized runtime artifact plan lands, compiled open-vocab exports will be scene-scoped runtime artifacts tied to a vocabulary hash, not replacement primary camera models.
 
 Verify what the backend registered:
 

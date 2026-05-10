@@ -8,7 +8,7 @@ For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Us
 
 ## Current Implementation Posture
 
-As of the current codebase, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. The backend and worker contracts also include a recommended model catalog, fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, capability-aware query commands, Jetson-aware runtime profile selection, and an experimental Ultralytics-backed open-vocab `.pt` detector path.
+As of the current codebase, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. Live telemetry is now stabilized by backend track lifecycle state and rendered with class-colored overlays plus Telemetry Terrain. The backend and worker contracts also include a recommended model catalog, fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, capability-aware query commands, scene vision profiles, detection include/exclusion regions, candidate quality gating, Jetson-aware runtime profile selection, and an experimental Ultralytics-backed open-vocab `.pt` detector path.
 
 The strongest production-ready paths are still:
 
@@ -17,7 +17,7 @@ The strongest production-ready paths are still:
 
 The main missing production layer is worker lifecycle automation. Operations can show desired worker state, node state, delivery diagnostics, and bootstrap material, but production Start/Stop/Restart/Drain still needs a central or edge supervisor contract that reconciles desired state to real processes and reports per-worker runtime truth.
 
-Raw TensorRT `.engine` files remain a planned accelerator path, not a normal camera model choice. Fixed-vocab production testing should register portable ONNX model rows first; future TensorRT engines should attach as validated runtime artifacts to those ONNX rows.
+Raw TensorRT `.engine` files remain a planned accelerator path, not a normal camera model choice. Fixed-vocab production testing should register portable ONNX model rows first. The next runtime-hardening plan is to attach validated TensorRT engines as target-specific runtime artifacts to ONNX models and to add compiled per-scene open-vocab artifacts for stable vocabularies.
 
 ## Core Terms
 

@@ -1,49 +1,49 @@
-# Next Chat Handoff: Live Signal Terrain Implementation
+# Next Chat Handoff: Jetson Optimized Runtime Artifacts And Open-Vocab
 
-Date: 2026-05-09
+Date: 2026-05-10
 
-Purpose: paste this document into a fresh chat to continue from current `main`.
-The next chat should start the Live signal terrain and stabilization implementation
-from the written plan. Jetson capture tuning can resume in a future pass if new
-same-room or wired-network logs show the remaining capture jitter is still in
-software.
+Purpose: paste this document into a fresh chat to continue from the current
+`codex/omnisight-ui-spec-implementation` branch. The next implementation step is
+the Jetson Optimized Runtime Artifacts And Open-Vocab plan.
 
 ## Repository State
 
-`main` has the OmniSight UI work merged and pushed.
-
-Base commit that contains the merged OmniSight UI/spec work:
+Continue from the pushed branch:
 
 ```text
-c7060043 docs(evidence): plan desk timeline polish
+codex/omnisight-ui-spec-implementation
 ```
 
-This handoff document update may appear as the latest commit above that base.
+Latest pushed checkpoint at the time of this handoff:
 
-Start from `main`:
+```text
+f8c595d6 docs(runtime): plan jetson optimized artifacts
+```
+
+Recent implementation checkpoints on the branch:
+
+```text
+fb7ef76e docs(scene): add scene vision configuration guide
+feb0975d feat(scene): show vision profile in cameras
+5eb93d96 feat(scene): add vision profile setup controls
+59eb3e14 chore(frontend): refresh scene vision API types
+cb4077d4 feat(scene): add candidate quality metrics
+eb13dcb2 feat(scene): make speed metrics explicit
+09aff9dd feat(scene): add candidate quality gate
+cd37bb1e feat(scene): gate detections by scene regions
+f5934650 feat(scene): resolve vision profiles for workers
+aee574ac feat(scene): add vision profile camera contracts
+```
+
+Start a fresh continuation like this:
 
 ```bash
 cd "$HOME/vision"
 git fetch origin
-git switch main
-git pull --ff-only origin main
-git status -sb
-git log --oneline -8
-```
-
-If continuing implementation on the existing local branch:
-
-```bash
 git switch codex/omnisight-ui-spec-implementation
-git merge --ff-only main
-```
-
-If the branch does not exist in a fresh clone, create a new implementation
-branch from `main` instead of relying on `origin/codex/omnisight-ui-spec-implementation`,
-which may lag behind `origin/main`:
-
-```bash
-git switch -c codex/omnisight-ui-spec-implementation
+git pull --ff-only origin codex/omnisight-ui-spec-implementation
+git status -sb
+git log --oneline -12
 ```
 
 Known local state:
@@ -52,203 +52,160 @@ Known local state:
 - do not use `git add -A`
 - stage only files needed for the current task
 
-Latest verification before merging to `main`:
+## Required Dev DB Migration
 
-- `corepack pnpm --dir frontend test` passed: 53 files, 203 tests
-- `corepack pnpm --dir frontend lint` passed with 0 errors and 12 warnings
-- `corepack pnpm --dir frontend build` passed
-- known frontend test noise: React `act(...)` warnings from
-  `VideoStream.test.tsx` and React Router future-flag warnings
+The scene vision profile implementation added camera columns in migration
+`0009_scene_vision_profiles`.
 
-Earlier backend verification from the edge/capture work:
-
-- `python3 -m uv run pytest -q` passed with 365 tests
-
-## What Was Completed In This Chat
-
-### Jetson / Capture
-
-Jetson TensorRT inference is healthy and should not be the default target for
-more optimization.
-
-Evidence already observed:
+If the dev UI shows 500s with either of these errors:
 
 ```text
-Resolved inference runtime policy profile=linux-aarch64-nvidia-jetson
-detection_provider=TensorrtExecutionProvider
-available_providers=['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
-Loaded detection model YOLO26n COCO Edge with provider TensorrtExecutionProvider
+column cameras.vision_profile does not exist
+column cameras.detection_regions does not exist
 ```
 
-Recent Jetson timing shape:
+run:
 
-```text
-detect_session ~= 9-10 ms
-detect ~= 17-23 ms
-capture_wait avg ~= 32-46 ms
-capture_wait p95 ~= 48-146 ms depending on RTSP settings
-capture_wait p99/max ~= 500-570 ms during spikes
+```bash
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
 ```
 
-Interpretation:
+Then restart backend if needed:
 
-- detector runtime is not the bottleneck
-- tracking, stream relay, persistence buffering, and bounded telemetry drops are
-  not the current bottlenecks
-- remaining spikes line up with `capture_wait`, so treat them as
-  RTSP/GStreamer/camera/network delivery jitter first
-
-RTSP/GStreamer tests tried:
-
-- `ARGUS_JETSON_RTSP_LATENCY_MS=50`
-  - native GStreamer active
-  - p95 often lower, but p99/max stayed near 500 ms
-- `ARGUS_JETSON_RTSP_LATENCY_MS=100`
-  - native GStreamer active
-  - p95 often 70-90 ms, but p99/max stayed near 500 ms
-- `ARGUS_JETSON_RTSP_LATENCY_MS=200`
-  - produced GStreamer RTSP parse/read errors and no first frame within 20s
-  - fallback path started, so 200 ms was not useful in that lab state
-- `ARGUS_JETSON_RTSP_PROTOCOLS=udp`
-  and `ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true`
-  - p95 improved in some windows
-  - p99/max still showed 500 ms class waits
-
-Camera ping from Jetson showed network jitter and packet loss:
-
-```text
-63 packets transmitted, 62 received, 1.5873% packet loss
-rtt min/avg/max/mdev = 1.914/11.109/65.223/15.678 ms
+```bash
+docker compose -f infra/docker-compose.dev.yml restart backend
 ```
 
-The user planned to move the Jetson closer to the camera. Until fresh logs after
-that move contradict it, treat connectivity/RTSP source stability as the reason
-capture tuning was paused.
+This is a schema migration issue, not a token/API rebuild issue.
 
-### OmniSight UI / UX
+## What Is Now Implemented
 
-The OmniSight UI work through Phase 5A was merged to `main` and pushed.
+### Live Signal Terrain And Stabilized Live Telemetry
 
-Highlights:
+The original next-chat target in this handoff was Live signal terrain. That work
+has now landed on this branch.
 
-- v2 `--vz-*` design tokens, Space Grotesk + Inter, updated workspace surfaces
-- sign-in CSS 3D OmniSight lens replacing the large MP4 hero
-- sign-in logo white-background flash fixed
-- orbital/elliptic guide lines removed and hidden globally
-- dashboard spatial cockpit with deployment posture and attention stack
-- motion presets, workspace transition, nav focus shaft, evidence swap motion
-- operations scene intelligence matrix
-- Live scene operational status strip
-- Sites inventory readiness cue
-- frontend operational readiness derivation
-- WebGL remains off/deferred
+Implemented highlights:
 
-### Specs And Plans Added
+- shared stable signal model and hook
+- class-colored telemetry boxes
+- Telemetry Terrain surface
+- calmer Live status presentation
+- stable lifecycle telemetry from the backend
+- active/coasting/lost track lifecycle support
+- annotated overlay and WebSocket telemetry use the same stabilized backend
+  track state
+- stream-session visibility gating to recover when navigating away and back
+- terrain occupancy rendering fixed to step style
 
-Live signal terrain and anti-flap work:
+Relevant plans/specs:
 
 - `docs/superpowers/specs/2026-05-09-live-signal-terrain-and-stability-design.md`
 - `docs/superpowers/plans/2026-05-09-live-signal-terrain-and-stability-implementation-plan.md`
+- `docs/superpowers/specs/2026-05-09-authoritative-live-track-lifecycle-design.md`
+- `docs/superpowers/plans/2026-05-09-authoritative-live-track-lifecycle-implementation-plan.md`
 
-Evidence Desk polish work:
+### Scene Vision Profiles And Candidate Quality Gate
 
-- `docs/superpowers/specs/2026-05-09-evidence-desk-timeline-and-case-context-design.md`
-- `docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md`
+The scene profile and false-positive/split-track mitigation work has also
+landed on this branch.
 
-Operational readiness UI work:
+Implemented highlights:
 
-- `docs/superpowers/specs/2026-05-09-operational-readiness-ui-design.md`
-- `docs/superpowers/plans/2026-05-09-operational-readiness-ui-phase-5a.md`
+- persisted `vision_profile` and `detection_regions` camera fields
+- optional homography unless speed metrics are enabled
+- explicit speed metrics toggle
+- worker profile resolver
+- include/exclusion detection region gating
+- candidate quality gate before tracking
+- candidate and region metrics
+- frontend wizard controls for profile, compute tier, speed metrics, and regions
+- camera list vision profile summary
+- scene configuration guide
 
-## Current Product Issue To Fix Next
+Relevant docs:
 
-The Live page is visually close to the desired direction, but the current
-telemetry presentation flaps because it renders raw latest-frame detections.
+- `docs/superpowers/specs/2026-05-10-scene-vision-profiles-and-candidate-quality-design.md`
+- `docs/superpowers/plans/2026-05-10-scene-vision-profiles-and-candidate-quality-implementation-plan.md`
+- `docs/scene-vision-profile-configuration-guide.md`
 
-Observed in the user's live capture:
+### Open-Vocab Runtime Baseline
 
-- person box appears and disappears even while the person is plainly visible
-- `0 visible now` can appear while a person is visible
-- right-side live signal rows flap with the latest frame
-- the line chart under the video looks weak and too graph-like
-- top legends/chips above the video are too diagnostic and not as readable as
-  the positioning report suggests
+Already implemented before this handoff update:
 
-Chosen direction:
+- model catalog open-vocab presets
+- dynamic Ultralytics `.pt` open-vocab detector path
+- runtime vocabulary persistence
+- hot runtime vocabulary updates for open-vocab workers
+- capability-aware query commands
 
-- stabilize object boxes and counts with a short held-signal window
-- show held tracks as subdued/dashed rather than claiming they are live
-- color tracking boxes by object class/family
-- replace the line list under the video with the approved Telemetry Terrain
-  gradient surface
-- make the top legend/state area calmer and more product-readable
+Current limitation:
 
-## Next Implementation: Live Signal Terrain
+- dynamic `.pt` open vocab is real but still experimental for production Jetson
+  use
+- compiled per-scene open-vocab artifacts are planned next, not implemented yet
+
+## Next Implementation: Jetson Optimized Runtime Artifacts And Open-Vocab
+
+Use this spec:
+
+```text
+docs/superpowers/specs/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-design.md
+```
 
 Use this plan:
 
 ```text
-docs/superpowers/plans/2026-05-09-live-signal-terrain-and-stability-implementation-plan.md
+docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md
 ```
 
-User preference:
+Implement A and B first:
 
-- execute one task at a time
-- commit after each completed task
-- report the result
-- wait for the next `go`
-- use subagents only if the user explicitly asks for subagent execution in the
-  new chat
+1. **Track A: Fixed-vocab Jetson optimization**
+   - keep ONNX as canonical model
+   - add model-scoped validated runtime artifacts
+   - allow Jetson TensorRT `.engine` artifacts to be selected only when valid
+   - fallback visibly to ONNX Runtime
+2. **Track B: Optimized open vocab**
+   - keep dynamic `.pt` open vocab for discovery and live vocabulary changes
+   - add scene-scoped compiled artifacts for saved runtime vocabularies
+   - select compiled artifacts only when vocabulary hash and target profile match
+   - fall back to dynamic `.pt` when vocabulary changes
 
-Start with Task 1 from the plan:
+Do not implement Track C yet:
+
+- DeepStream/NvDCF/NvDeepSORT remains a later runtime lane after A/B pass soak
+  validation.
+
+Start with Task 1 from the new plan:
 
 ```text
-Task 1: Shared Live Signal Stability Model
+Task 1: Runtime Artifact Data Contract
 ```
 
-Task 1 creates:
+Task 1 creates or modifies:
 
-- `frontend/src/lib/live-signal-stability.ts`
-- `frontend/src/lib/live-signal-stability.test.ts`
+- `backend/src/argus/models/enums.py`
+- `backend/src/argus/models/tables.py`
+- `backend/src/argus/migrations/versions/0010_model_runtime_artifacts.py`
+- `backend/src/argus/api/contracts.py`
+- `backend/tests/services/test_runtime_artifacts.py`
 
-Expected utility responsibilities:
-
-- `DEFAULT_SIGNAL_HOLD_MS = 1200`
-- stable `class_name + track_id` keys
-- deterministic class/family colors
-- live versus held track state
-- held-track expiry after the hold window
-- stable live/held counts by class
-
-After Task 1, continue in order:
-
-1. `useStableSignalFrame` hook
-2. class-colored `TelemetryCanvas` overlay with held-state treatment
-3. new `TelemetryTerrain` component
-4. calmer `SceneStatusStrip` and stable `DynamicStats`
-5. `Live.tsx` integration
-6. final frontend verification and browser visual QA
-
-Recommended pre-flight before Task 1:
+Task 1 expected verification:
 
 ```bash
-cd "$HOME/vision"
-git status -sb
-corepack pnpm --dir frontend test
-corepack pnpm --dir frontend lint
-corepack pnpm --dir frontend build
+cd "$HOME/vision/backend"
+python3 -m uv run pytest tests/services/test_runtime_artifacts.py tests/core/test_db.py -q
 ```
 
-Task-level test command:
+## Remaining Earlier Work Still Pending
 
-```bash
-corepack pnpm --dir frontend exec vitest run src/lib/live-signal-stability.test.ts
-```
+The old handoff also queued Evidence Desk polish. That work has not been
+implemented yet and still needs to be executed after the optimized runtime A/B
+path, unless the user redirects.
 
-## After Live Signal Terrain
-
-Once the Live page is stable and visually reviewed, move to the Evidence Desk
-polish plan:
+Evidence Desk plan:
 
 ```text
 docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md
@@ -259,15 +216,64 @@ Evidence Desk Task 1 will create:
 - `frontend/src/lib/evidence-signals.ts`
 - `frontend/src/lib/evidence-signals.test.ts`
 
-The Evidence work should add:
+Expected Evidence work:
 
 - Evidence Timeline density strip
 - Case Context Strip
 - type-colored review queue
 - cleaner raw payload disclosure
 
-Do not start Evidence Desk implementation until Live signal terrain has landed,
-unless the user explicitly redirects.
+Other production hardening still pending outside this immediate next step:
+
+- supervisor-backed Start/Stop/Restart/Drain actions
+- persistent worker assignment/reassignment workflows
+- production edge credential rotation
+- DeepStream/NvDCF/NvDeepSORT runtime lane for Track C
+
+## Working Rules For The Next Chat
+
+- Continue from `codex/omnisight-ui-spec-implementation`.
+- Pull latest branch state first.
+- Execute one task at a time.
+- Commit after each completed task.
+- Push to origin after commits so the user can test.
+- Do not stage unrelated untracked scratch files.
+- Keep WebGL off.
+- Do not reopen RTSP/TensorRT debugging unless fresh logs prove it is needed.
+- For optimized runtime work, treat current fixed-vocab ONNX Runtime TensorRT
+  provider selection as the baseline; the new work is validated runtime
+  artifacts and compiled open-vocab scene artifacts.
+
+## Useful Validation Commands
+
+Frontend:
+
+```bash
+corepack pnpm --dir frontend test
+corepack pnpm --dir frontend lint
+corepack pnpm --dir frontend build
+```
+
+Backend focused scene/live checks:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run pytest \
+  tests/vision/test_track_lifecycle.py \
+  tests/vision/test_tracker.py \
+  tests/vision/test_candidate_quality.py \
+  tests/vision/test_detection_regions.py \
+  tests/inference/test_engine.py \
+  tests/services/test_camera_worker_config.py \
+  -q
+```
+
+Dev migrations:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
+```
 
 ## Jetson Lab Commands If Needed Later
 
@@ -281,54 +287,35 @@ Jetson rebuild/restart:
 
 ```bash
 cd "$HOME/vision"
-git switch main
-git pull --ff-only origin main
 export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 docker compose -f infra/docker-compose.edge.yml up -d --build inference-worker
 docker compose -f infra/docker-compose.edge.yml logs -f inference-worker
 ```
 
-Useful Jetson RTSP env combinations:
-
-```bash
-export ARGUS_JETSON_RTSP_PROTOCOLS=tcp
-export ARGUS_JETSON_RTSP_LATENCY_MS=100
-export ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true
-docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
-docker compose -f infra/docker-compose.edge.yml logs -f --tail=50 inference-worker
-```
-
-UDP trial, only after camera path is stable:
-
-```bash
-export ARGUS_JETSON_RTSP_PROTOCOLS=udp
-export ARGUS_JETSON_RTSP_LATENCY_MS=100
-export ARGUS_JETSON_RTSP_DROP_ON_LATENCY=true
-docker compose -f infra/docker-compose.edge.yml up -d --force-recreate inference-worker
-docker compose -f infra/docker-compose.edge.yml logs -f --tail=50 inference-worker
-```
-
-Good evidence to collect if Jetson work resumes:
+Good evidence to collect if Jetson runtime artifact work starts:
 
 ```text
-capture_wait avg / p95 / p99 / max
-capture_read avg / max
-capture_reconnect avg / max
+selected_backend
+artifact_id
+target_profile
+fallback
+fallback_reason
 detect_session avg / max
-publish_stream avg / max
+detect avg / max
 total avg / max
-GStreamer parse/read errors
-camera ping packet loss and jitter after moving Jetson
+CPU/GPU/memory usage
+artifact build duration
+artifact validation duration
 ```
 
 ## Guardrails
 
-- Work from current `main`.
-- Keep TensorRT, stream relay, persistence buffering, and telemetry drops treated
-  as solved unless fresh logs contradict that.
-- Do not optimize detector/tracker for the Live UI flapping issue; the planned
-  fix is frontend stabilization of latest-frame presentation.
-- Do not reintroduce double RTSP reads for native/no-privacy delivery.
-- Do not start WebGL work; it is intentionally deferred.
-- Preserve working video, camera setup, profile switching, and review flows.
-- Do not stage unrelated untracked scratch files.
+- Keep camera setup, profile switching, video, telemetry, History, and Evidence
+  Desk flows working.
+- Keep backend as track truth; frontend should display track state, not invent
+  identity or occupancy.
+- Do not turn raw `.engine` files into primary camera model rows. The new design
+  attaches validated target-specific artifacts to canonical models/scenes.
+- Do not silently use stale open-vocab compiled artifacts after vocabulary
+  changes.
+- Preserve dynamic `.pt` open vocab as the fallback/discovery mode.

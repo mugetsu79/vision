@@ -208,9 +208,20 @@ This Compose path is appropriate for lab and pilot bring-up. In the current iMac
 
 Fixed-vocab ONNX models use ONNX Runtime. Provider selection can choose TensorRT, CUDA, OpenVINO, CoreML, or CPU depending on host support.
 
-Open-vocab models use the Ultralytics adapter and are marked experimental until validated on the target central GPU and Jetson runtime. The supported first-pass formats are `.pt` model files for YOLOE and YOLO-World.
+Open-vocab models use the Ultralytics adapter and are marked experimental until validated on the target central GPU and Jetson runtime. The supported first-pass formats are `.pt` model files for YOLOE and YOLO-World. Dynamic `.pt` open vocab remains the discovery and fallback mode for changing vocabularies.
 
-Raw TensorRT `.engine` files are cataloged as planned only. They require a dedicated TensorRT engine detector adapter before they can be marked ready. The planned design is in `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md`: keep ONNX as the canonical model row and attach target-specific validated engines as runtime artifacts later.
+Raw TensorRT `.engine` files are cataloged as planned only and must not be registered as primary camera models. The current continuation plan is `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`: keep ONNX as the canonical fixed-vocab model row, attach target-specific validated TensorRT engines as runtime artifacts, and add scene-scoped compiled open-vocab artifacts that are selected only when the saved vocabulary hash matches.
+
+### Scene Vision Profiles
+
+Cameras now carry a persisted `vision_profile` and optional `detection_regions`. These fields control profile posture, compute tier, explicit speed metric enablement, and detection include/exclusion gating before tracking. If an existing dev database errors with `column cameras.vision_profile does not exist` or `column cameras.detection_regions does not exist`, run:
+
+```bash
+docker compose -f /Users/yann.moren/vision/infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
+```
+
+See `docs/scene-vision-profile-configuration-guide.md` for operator guidance.
 
 ## Authentication Alternative
 

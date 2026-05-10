@@ -21,7 +21,7 @@ The implemented baseline is:
 - Worker config includes persisted runtime vocabulary and vocabulary snapshot attribution.
 - Linux `aarch64` NVIDIA Jetson hosts are classified as `linux-aarch64-nvidia-jetson`.
 
-The only intentionally unimplemented item is raw TensorRT `.engine` runtime support. TensorRT remains available as an ONNX Runtime provider path where installed, but standalone `.engine` files must stay planned until the runtime-artifact design in `docs/superpowers/specs/2026-05-02-tensorrt-engine-artifact-runtime-design.md` is implemented.
+The only intentionally unimplemented item is raw TensorRT `.engine` runtime support. TensorRT remains available as an ONNX Runtime provider path where installed, but standalone `.engine` files must stay planned until validated runtime artifacts are implemented. The active follow-up plan is `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`, which also adds compiled per-scene open-vocab artifacts.
 
 The sections below document the design that was implemented.
 

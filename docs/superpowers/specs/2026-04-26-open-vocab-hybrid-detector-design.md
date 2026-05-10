@@ -32,7 +32,7 @@ Remaining validation work is operational, not a missing product contract:
 - soak the experimental `.pt` path on the production central GPU profile.
 - soak the experimental `.pt` path on Jetson when model size, memory, and provider support are acceptable.
 - implement supervisor-backed lifecycle reporting before treating open-vocab as fleet-safe production behavior.
-- keep raw TensorRT `.engine` support planned until the runtime-artifact design is implemented.
+- keep raw TensorRT `.engine` support planned until validated runtime artifacts are implemented. The active follow-up is `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`, which adds both fixed-vocab Jetson artifacts and compiled per-scene open-vocab artifacts.
 
 Production dependency:
 

@@ -1,8 +1,15 @@
 # TensorRT Engine Artifact Runtime Design
 
 **Date:** 2026-05-02
-**Status:** Proposed follow-up after the model catalog/open-vocab stream
+**Status:** Superseded as the active implementation handoff by
+`docs/superpowers/specs/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-design.md`
+and
+`docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`
 **Scope:** Add validated TensorRT `.engine` artifacts as optional target-specific accelerators beside canonical ONNX model records.
+
+This document remains useful background for the fixed-vocab TensorRT artifact
+part of Track A. The active plan expands it with compiled per-scene open-vocab
+artifacts and reserves a later DeepStream/NvDCF runtime lane.
 
 ## 0. Current Checkpoint
 
