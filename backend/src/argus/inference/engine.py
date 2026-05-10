@@ -69,6 +69,7 @@ from argus.vision.anpr import LineCrossingAnprProcessor
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
 from argus.vision.count_events import CountEventProcessor, CountEventRecord
+from argus.vision.detection_regions import DetectionRegionPolicy
 from argus.vision.detector import YoloDetector
 from argus.vision.detector_factory import build_detector as _build_detector
 from argus.vision.homography import Homography
@@ -662,6 +663,7 @@ class InferenceEngine:
             if self._state.zones
             else None
         )
+        self._detection_region_policy = DetectionRegionPolicy(self._state.detection_regions)
         self._stream_registration: StreamRegistration | None = None
         self._track_history: dict[int, list[tuple[datetime, tuple[float, float]]]] = defaultdict(
             list
@@ -769,6 +771,7 @@ class InferenceEngine:
         stage_timer.record_stage("detect", ended_at=loop.time())
         self._record_detector_substage_timings(stage_timer)
         filtered = self._filter_visible_detections(detections, visible_classes)
+        filtered, _region_decisions = self._detection_region_policy.filter_detections(filtered)
         tracked = self._tracker.update(filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
         tracked = self._apply_speed(tracked, ts=current_ts)
@@ -986,6 +989,8 @@ class InferenceEngine:
         if command.detection_regions is not None:
             self._state.detection_regions = list(command.detection_regions)
             self.config.detection_regions = list(command.detection_regions)
+            self._detection_region_policy = DetectionRegionPolicy(self._state.detection_regions)
+            self._track_lifecycle.reset()
         if "homography" in command.model_fields_set:
             self.config.homography = (
                 dict(command.homography) if command.homography is not None else None

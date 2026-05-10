@@ -192,6 +192,22 @@ class _FakeTracker:
         ]
 
 
+class _RecordingTracker:
+    def __init__(self) -> None:
+        self.calls: list[list[Detection]] = []
+
+    def update(
+        self,
+        detections: list[Detection],
+        frame: np.ndarray | None = None,
+    ) -> list[Detection]:
+        self.calls.append(list(detections))
+        return [
+            detection.with_updates(track_id=index + 1)
+            for index, detection in enumerate(detections)
+        ]
+
+
 class _FakePublisher:
     def __init__(self) -> None:
         self.frames: list[TelemetryFrame] = []
@@ -749,6 +765,88 @@ async def test_engine_preserves_normalized_detection_shape_for_open_vocab() -> N
     await engine.close()
 
     assert telemetry.counts == {"forklift": 1}
+
+
+@pytest.mark.asyncio
+async def test_engine_filters_detection_regions_before_tracker_and_telemetry() -> None:
+    camera_id = uuid4()
+    tracker = _RecordingTracker()
+    publisher = _FakePublisher()
+    tracking_store = _FakeTrackingStore()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "detection_regions": [
+                {
+                    "id": "driveway",
+                    "mode": "include",
+                    "polygon": [[0, 0], [40, 0], [40, 40], [0, 40]],
+                }
+            ]
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((96, 96, 3), dtype=np.uint8)]),
+        detector=_SequenceDetector(
+            [[Detection(class_name="car", confidence=0.95, bbox=(60.0, 60.0, 80.0, 80.0))]]
+        ),
+        tracker_factory=lambda tracker_type: tracker,
+        publisher=publisher,
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    telemetry = await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    assert tracker.calls == [[]]
+    assert telemetry.counts == {}
+    assert telemetry.tracks == []
+    assert tracking_store.records[0][1] == []
+
+
+@pytest.mark.asyncio
+async def test_engine_region_command_clears_lifecycle_before_coasting_tracks_publish() -> None:
+    camera_id = uuid4()
+    tracker = _RecordingTracker()
+    publisher = _FakePublisher()
+    detection = Detection(class_name="car", confidence=0.95, bbox=(60.0, 60.0, 80.0, 80.0))
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource(
+            [np.zeros((96, 96, 3), dtype=np.uint8), np.zeros((96, 96, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector([[detection], [detection]]),
+        tracker_factory=lambda tracker_type: tracker,
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    first_telemetry = await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, tzinfo=UTC))
+    await engine.apply_command(
+        CameraCommand(
+            detection_regions=[
+                {
+                    "id": "driveway",
+                    "mode": "include",
+                    "polygon": [[0, 0], [40, 0], [40, 40], [0, 40]],
+                }
+            ]
+        )
+    )
+    second_telemetry = await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert first_telemetry.counts == {"car": 1}
+    assert len(first_telemetry.tracks) == 1
+    assert [len(call) for call in tracker.calls] == [1, 0]
+    assert second_telemetry.counts == {}
+    assert second_telemetry.tracks == []
 
 
 @pytest.mark.asyncio
