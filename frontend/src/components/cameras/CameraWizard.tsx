@@ -24,10 +24,17 @@ import { denormalizePointList, normalizePointList } from "@/components/cameras/b
 
 type Point = [number, number];
 type SerializedZone = NonNullable<CreateCameraInput["zones"]>[number];
+type SerializedDetectionRegion = NonNullable<CreateCameraInput["detection_regions"]>[number];
 type DetectorCapability = components["schemas"]["DetectorCapability"];
 type ModelCapabilityConfig = components["schemas"]["ModelCapabilityConfig"];
+type SceneVisionProfile = components["schemas"]["SceneVisionProfile"];
+type VisionComputeTier = SceneVisionProfile["compute_tier"];
+type VisionAccuracyMode = SceneVisionProfile["accuracy_mode"];
+type SceneDifficulty = SceneVisionProfile["scene_difficulty"];
+type ObjectDomain = SceneVisionProfile["object_domain"];
 type BrowserDeliveryProfile = "native" | "annotated" | "1080p15" | "720p10" | "540p5";
 type BoundaryType = "line" | "polygon";
+type DetectionRegionMode = SerializedDetectionRegion["mode"];
 type BrowserDeliveryProfilePayload = {
   id: BrowserDeliveryProfile;
   kind: "passthrough" | "transcode";
@@ -67,6 +74,25 @@ type BoundaryDraft = {
   classNames: string;
   points: Point[];
   frameSize: FrameSize | null;
+};
+
+type DetectionRegionDraft = {
+  id: string;
+  mode: DetectionRegionMode;
+  classNames: string;
+  points: Point[];
+  frameSize: FrameSize | null;
+};
+
+type VisionProfileDraft = {
+  computeTier: VisionComputeTier;
+  accuracyMode: VisionAccuracyMode;
+  sceneDifficulty: SceneDifficulty;
+  objectDomain: ObjectDomain;
+  speedEnabled: boolean;
+  candidateQuality: SceneVisionProfile["candidate_quality"];
+  trackerProfile: SceneVisionProfile["tracker_profile"];
+  verifierProfile: SceneVisionProfile["verifier_profile"];
 };
 
 const DEFAULT_ANALYTICS_FRAME_SIZE: FrameSize = {
@@ -119,7 +145,9 @@ export type CameraWizardData = {
     dst: Point[];
     refDistanceM: number;
   };
+  visionProfile: VisionProfileDraft;
   zones: BoundaryDraft[];
+  detectionRegions: DetectionRegionDraft[];
 };
 
 const steps = [
@@ -247,11 +275,13 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
       initialCamera?.browser_delivery?.native_status ?? { available: true, reason: null },
     sourceCapability: initialCamera?.source_capability ?? null,
     homography: {
-      src: toPointTupleArray(initialCamera?.homography.src),
-      dst: toPointTupleArray(initialCamera?.homography.dst),
-      refDistanceM: initialCamera?.homography.ref_distance_m ?? 0,
+      src: toPointTupleArray(initialCamera?.homography?.src),
+      dst: toPointTupleArray(initialCamera?.homography?.dst),
+      refDistanceM: initialCamera?.homography?.ref_distance_m ?? 0,
     },
+    visionProfile: visionProfileFromCamera(initialCamera?.vision_profile),
     zones: boundaryDraftsFromZones(initialCamera?.zones),
+    detectionRegions: detectionRegionDraftsFromRegions(initialCamera?.detection_regions),
   };
 }
 
@@ -265,10 +295,53 @@ function buildBrowserDelivery(data: CameraWizardData) {
   };
 }
 
+function visionProfileFromCamera(
+  visionProfile: Camera["vision_profile"] | undefined,
+): VisionProfileDraft {
+  return {
+    computeTier: visionProfile?.compute_tier ?? "edge_standard",
+    accuracyMode: visionProfile?.accuracy_mode ?? "balanced",
+    sceneDifficulty: visionProfile?.scene_difficulty ?? "cluttered",
+    objectDomain: visionProfile?.object_domain ?? "mixed",
+    speedEnabled: visionProfile?.motion_metrics?.speed_enabled ?? false,
+    candidateQuality: visionProfile?.candidate_quality ?? {},
+    trackerProfile: visionProfile?.tracker_profile ?? {},
+    verifierProfile: visionProfile?.verifier_profile ?? {},
+  };
+}
+
+function buildVisionProfile(data: CameraWizardData): SceneVisionProfile {
+  return {
+    compute_tier: data.visionProfile.computeTier,
+    accuracy_mode: data.visionProfile.accuracyMode,
+    scene_difficulty: data.visionProfile.sceneDifficulty,
+    object_domain: data.visionProfile.objectDomain,
+    motion_metrics: {
+      speed_enabled: data.visionProfile.speedEnabled,
+    },
+    candidate_quality: data.visionProfile.candidateQuality ?? {},
+    tracker_profile: data.visionProfile.trackerProfile ?? {},
+    verifier_profile: data.visionProfile.verifierProfile ?? {},
+  };
+}
+
 function createLineBoundaryDraft(): BoundaryDraft {
   return {
     id: "",
     type: "line",
+    classNames: "",
+    points: [],
+    frameSize: null,
+  };
+}
+
+function createDetectionRegionDraft(
+  mode: DetectionRegionMode,
+  ordinal = 1,
+): DetectionRegionDraft {
+  return {
+    id: `${mode}-region-${ordinal}`,
+    mode,
     classNames: "",
     points: [],
     frameSize: null,
@@ -346,6 +419,43 @@ function boundaryDraftsFromZones(
   }, []);
 }
 
+function detectionRegionDraftsFromRegions(
+  regions: SerializedDetectionRegion[] | undefined,
+  fallbackFrameSize: FrameSize = DEFAULT_ANALYTICS_FRAME_SIZE,
+): DetectionRegionDraft[] {
+  if (!regions) {
+    return [];
+  }
+
+  return regions.reduce<DetectionRegionDraft[]>((drafts, region) => {
+    const frameSize = parseFrameSize(region.frame_size) ?? fallbackFrameSize;
+    const normalizedGeometry = parseNormalizedPoints(region.points_normalized);
+    const parsedPolygon = toPointTupleArray(region.polygon);
+    const points =
+      normalizedGeometry.length >= 3
+        ? denormalizePointList(normalizedGeometry, frameSize)
+        : parsedPolygon;
+
+    if (points.length < 3) {
+      return drafts;
+    }
+
+    drafts.push({
+      id: region.id,
+      mode: region.mode,
+      classNames: Array.isArray(region.class_names)
+        ? region.class_names
+            .filter((value): value is string => typeof value === "string")
+            .join(",")
+        : "",
+      points,
+      frameSize,
+    });
+
+    return drafts;
+  }, []);
+}
+
 function parseBoundaryClassNames(value: string): string[] {
   return value
     .split(",")
@@ -401,6 +511,31 @@ function boundaryPointsForFrame(boundary: BoundaryDraft, frameSize: FrameSize): 
   return denormalizePointList(normalizedPoints, frameSize);
 }
 
+function detectionRegionPointsForFrame(
+  region: DetectionRegionDraft,
+  frameSize: FrameSize,
+): Point[] {
+  const sourceFrameSize = region.frameSize ?? frameSize;
+  const normalizedPoints = normalizePointList(region.points, sourceFrameSize);
+  return denormalizePointList(normalizedPoints, frameSize);
+}
+
+function isHomographyComplete(data: CameraWizardData["homography"]) {
+  return data.src.length === 4 && data.dst.length === 4 && data.refDistanceM > 0;
+}
+
+function serializeHomography(data: CameraWizardData["homography"]) {
+  if (!isHomographyComplete(data)) {
+    return null;
+  }
+
+  return {
+    src: data.src,
+    dst: data.dst,
+    ref_distance_m: data.refDistanceM,
+  };
+}
+
 function serializeZones(
   boundaries: BoundaryDraft[],
   setupFrameSize: FrameSize,
@@ -438,6 +573,30 @@ function serializeZones(
   });
 }
 
+function serializeDetectionRegions(
+  regions: DetectionRegionDraft[],
+  setupFrameSize: FrameSize,
+): SerializedDetectionRegion[] {
+  return regions.map((region, index) => {
+    const regionId = region.id.trim();
+    if (!regionId) {
+      throw new Error(`Detection region ${index + 1} requires an id.`);
+    }
+
+    if (region.points.length < 3) {
+      throw new Error(`Detection region ${index + 1} requires at least three polygon points.`);
+    }
+
+    return {
+      id: regionId,
+      mode: region.mode,
+      polygon: detectionRegionPointsForFrame(region, setupFrameSize),
+      class_names: parseBoundaryClassNames(region.classNames),
+      frame_size: setupFrameSize,
+    };
+  });
+}
+
 function validateZoneBoundaries(boundaries: BoundaryDraft[]): string | null {
   for (const [index, boundary] of boundaries.entries()) {
     if (!boundary.id.trim()) {
@@ -451,6 +610,18 @@ function validateZoneBoundaries(boundaries: BoundaryDraft[]): string | null {
     }
     if (boundary.points.length < 3) {
       return `Boundary ${index + 1} requires at least three polygon points in x,y format.`;
+    }
+  }
+  return null;
+}
+
+function validateDetectionRegions(regions: DetectionRegionDraft[]): string | null {
+  for (const [index, region] of regions.entries()) {
+    if (!region.id.trim()) {
+      return `Detection region ${index + 1} requires an id.`;
+    }
+    if (region.points.length < 3) {
+      return `Detection region ${index + 1} requires at least three polygon points.`;
     }
   }
   return null;
@@ -535,11 +706,9 @@ function toCreatePayload(
     active_classes: data.activeClasses,
     attribute_rules: [],
     zones: serializeZones(data.zones, setupFrameSize),
-    homography: {
-      src: data.homography.src,
-      dst: data.homography.dst,
-      ref_distance_m: data.homography.refDistanceM,
-    },
+    vision_profile: buildVisionProfile(data),
+    detection_regions: serializeDetectionRegions(data.detectionRegions, setupFrameSize),
+    homography: serializeHomography(data.homography),
     privacy: {
       blur_faces: data.blurFaces,
       blur_plates: data.blurPlates,
@@ -572,11 +741,9 @@ function toUpdatePayload(
     tracker_type: data.trackerType,
     active_classes: data.activeClasses,
     zones: serializeZones(data.zones, setupFrameSize),
-    homography: {
-      src: data.homography.src,
-      dst: data.homography.dst,
-      ref_distance_m: data.homography.refDistanceM,
-    },
+    vision_profile: buildVisionProfile(data),
+    detection_regions: serializeDetectionRegions(data.detectionRegions, setupFrameSize),
+    homography: serializeHomography(data.homography),
     privacy: {
       blur_faces: data.blurFaces,
       blur_plates: data.blurPlates,
@@ -807,10 +974,11 @@ export function CameraWizard({
   const fallbackSetupFrameSize = useMemo(
     () =>
       data.zones.find((boundary) => boundary.frameSize)?.frameSize ??
+      data.detectionRegions.find((region) => region.frameSize)?.frameSize ??
       (data.sourceCapability
         ? { width: data.sourceCapability.width, height: data.sourceCapability.height }
         : DEFAULT_ANALYTICS_FRAME_SIZE),
-    [data.sourceCapability, data.zones],
+    [data.detectionRegions, data.sourceCapability, data.zones],
   );
   const setupFrameSize = setupPreviewQuery.data?.frame_size ?? fallbackSetupFrameSize;
   const setupPreviewSrc = setupPreviewQuery.data?.preview_src ?? null;
@@ -918,6 +1086,16 @@ export function CameraWizard({
     setData((current) => ({ ...current, [key]: value }));
   }
 
+  function updateVisionProfile(patch: Partial<VisionProfileDraft>) {
+    setData((current) => ({
+      ...current,
+      visionProfile: {
+        ...current.visionProfile,
+        ...patch,
+      },
+    }));
+  }
+
   function updateNumericField<Key extends "strength" | "frameSkip" | "fpsCap">(
     key: Key,
     value: string,
@@ -978,18 +1156,24 @@ export function CameraWizard({
     }
 
     if (stepTitle === "Calibration") {
-      if (data.homography.src.length !== 4) {
-        return "4 source points are required.";
-      }
-      if (data.homography.dst.length !== 4) {
-        return "4 destination points are required.";
-      }
-      if (data.homography.refDistanceM <= 0) {
-        return "Reference distance is required.";
+      if (data.visionProfile.speedEnabled) {
+        if (data.homography.src.length !== 4) {
+          return "4 source points are required.";
+        }
+        if (data.homography.dst.length !== 4) {
+          return "4 destination points are required.";
+        }
+        if (data.homography.refDistanceM <= 0) {
+          return "Reference distance is required.";
+        }
       }
       const boundaryError = validateZoneBoundaries(data.zones);
       if (boundaryError) {
         return boundaryError;
+      }
+      const detectionRegionError = validateDetectionRegions(data.detectionRegions);
+      if (detectionRegionError) {
+        return detectionRegionError;
       }
     }
 
@@ -1043,6 +1227,50 @@ export function CameraWizard({
     pointsNormalized: ReadonlyArray<readonly [number, number]>,
   ) {
     updateBoundary(index, {
+      points: denormalizePointList(pointsNormalized, setupFrameSize),
+      frameSize: setupFrameSize,
+    });
+  }
+
+  function addDetectionRegion(mode: DetectionRegionMode) {
+    setData((current) => {
+      const ordinal =
+        current.detectionRegions.filter((region) => region.mode === mode).length + 1;
+      return {
+        ...current,
+        detectionRegions: [
+          ...current.detectionRegions,
+          createDetectionRegionDraft(mode, ordinal),
+        ],
+      };
+    });
+  }
+
+  function updateDetectionRegion(index: number, patch: Partial<DetectionRegionDraft>) {
+    setData((current) => ({
+      ...current,
+      detectionRegions: current.detectionRegions.map((region, regionIndex) =>
+        regionIndex === index ? { ...region, ...patch } : region,
+      ),
+    }));
+  }
+
+  function removeDetectionRegion(index: number) {
+    setData((current) => ({
+      ...current,
+      detectionRegions: current.detectionRegions.filter((_, regionIndex) => regionIndex !== index),
+    }));
+  }
+
+  function clearDetectionRegionPoints(index: number) {
+    updateDetectionRegion(index, { points: [] });
+  }
+
+  function updateDetectionRegionFromCanvas(
+    index: number,
+    pointsNormalized: ReadonlyArray<readonly [number, number]>,
+  ) {
+    updateDetectionRegion(index, {
       points: denormalizePointList(pointsNormalized, setupFrameSize),
       frameSize: setupFrameSize,
     });
@@ -1411,6 +1639,62 @@ export function CameraWizard({
                   />
                 </label>
               </div>
+              <section className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-4">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Vision profile</span>
+                    <Select
+                      aria-label="Vision profile"
+                      value={data.visionProfile.accuracyMode}
+                      onChange={(event) => {
+                        const accuracyMode = event.target.value as VisionAccuracyMode;
+                        updateVisionProfile({
+                          accuracyMode,
+                          objectDomain:
+                            accuracyMode === "open_vocabulary"
+                              ? "open_vocab"
+                              : data.visionProfile.objectDomain === "open_vocab"
+                                ? "mixed"
+                                : data.visionProfile.objectDomain,
+                        });
+                      }}
+                    >
+                      <option value="fast">Fast</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="maximum_accuracy">Maximum Accuracy</option>
+                      <option value="open_vocabulary">Open Vocabulary</option>
+                    </Select>
+                  </label>
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Compute target</span>
+                    <Select
+                      aria-label="Compute target"
+                      value={data.visionProfile.computeTier}
+                      onChange={(event) =>
+                        updateVisionProfile({
+                          computeTier: event.target.value as VisionComputeTier,
+                        })
+                      }
+                    >
+                      <option value="cpu_low">Low CPU</option>
+                      <option value="edge_standard">Standard Edge</option>
+                      <option value="edge_advanced_jetson">Advanced Edge</option>
+                      <option value="central_gpu">Central GPU</option>
+                    </Select>
+                  </label>
+                  <label className="flex items-center gap-3 rounded-[0.95rem] border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-[#d8e2f2]">
+                    <input
+                      aria-label="Speed metrics"
+                      checked={data.visionProfile.speedEnabled}
+                      type="checkbox"
+                      onChange={(event) =>
+                        updateVisionProfile({ speedEnabled: event.target.checked })
+                      }
+                    />
+                    <span>Speed metrics</span>
+                  </label>
+                </div>
+              </section>
               <label className="grid gap-2 text-sm text-[#d8e2f2]">
                 <span>Browser delivery profile</span>
                 <Select
@@ -1683,6 +1967,135 @@ export function CameraWizard({
                             </label>
                           )
                         ) : null}
+                      </section>
+                    ))}
+                  </div>
+                )}
+              </section>
+              <section className="rounded-[1.5rem] border border-[#243853] bg-[#09121c] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+                      Detection regions
+                    </p>
+                    <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
+                      Include and exclusion polygons
+                    </h3>
+                    <p className="mt-2 max-w-2xl text-sm text-[#9eb2cf]">
+                      Limit detector attention with include polygons or mask operational dead zones
+                      with exclusion polygons. Event boundaries above still publish count events.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+                      type="button"
+                      onClick={() => addDetectionRegion("include")}
+                    >
+                      Add include region
+                    </Button>
+                    <Button
+                      className="bg-white/[0.06] text-[#eef4ff] shadow-none hover:bg-white/[0.1]"
+                      type="button"
+                      onClick={() => addDetectionRegion("exclude")}
+                    >
+                      Add exclusion region
+                    </Button>
+                  </div>
+                </div>
+
+                {data.detectionRegions.length === 0 ? (
+                  <p className="mt-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                    No detection regions configured.
+                  </p>
+                ) : (
+                  <div className="mt-5 space-y-4">
+                    {data.detectionRegions.map((region, index) => (
+                      <section
+                        key={`${region.mode}-${index}`}
+                        className="rounded-[1.2rem] border border-white/8 bg-white/[0.03] p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8ea4c7]">
+                              Detection region {index + 1}
+                            </p>
+                            <p className="mt-2 text-sm text-[#d8e2f2]">
+                              {region.mode === "include" ? "Include polygon" : "Exclusion polygon"}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              aria-label={`Clear detection region ${index + 1} shape`}
+                              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                              type="button"
+                              onClick={() => clearDetectionRegionPoints(index)}
+                            >
+                              Clear shape
+                            </button>
+                            <button
+                              aria-label={`Remove detection region ${index + 1}`}
+                              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                              type="button"
+                              onClick={() => removeDetectionRegion(index)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                          <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                            <span>Detection region {index + 1} ID</span>
+                            <Input
+                              aria-label={`Detection region ${index + 1} ID`}
+                              value={region.id}
+                              onChange={(event) =>
+                                updateDetectionRegion(index, { id: event.target.value })
+                              }
+                            />
+                          </label>
+                          <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                            <span>Detection region {index + 1} classes</span>
+                            <Input
+                              aria-label={`Detection region ${index + 1} classes`}
+                              placeholder={omniPlaceExamples.eventClasses}
+                              value={region.classNames}
+                              onChange={(event) =>
+                                updateDetectionRegion(index, {
+                                  classNames: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mt-4">
+                          <BoundaryAuthoringCanvas
+                            ariaLabel={`Detection region ${index + 1} canvas`}
+                            backgroundContent={
+                              <p className="max-w-sm text-sm text-[#bcefe3]">
+                                Click to place polygon vertices, then drag handles to refine the detection region.
+                              </p>
+                            }
+                            frameSize={setupFrameSize}
+                            helperText={
+                              region.mode === "include"
+                                ? "Only detections inside include regions stay eligible when at least one include region exists."
+                                : "Detections inside exclusion regions are ignored before event boundaries are evaluated."
+                            }
+                            mode="polygon"
+                            pointLabelPrefix={`Detection region ${index + 1}`}
+                            previewSrc={setupPreviewSrc}
+                            value={normalizePointList(
+                              detectionRegionPointsForFrame(region, setupFrameSize),
+                              setupFrameSize,
+                            )}
+                            onChange={(pointsNormalized) =>
+                              updateDetectionRegionFromCanvas(index, pointsNormalized)
+                            }
+                          />
+                        </div>
                       </section>
                     ))}
                   </div>

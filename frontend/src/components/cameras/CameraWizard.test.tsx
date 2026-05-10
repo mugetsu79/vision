@@ -49,6 +49,22 @@ function stubRect(element: HTMLElement, width: number, height: number) {
   });
 }
 
+async function completeRequiredCreateSteps(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+  await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+  await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+  await user.click(screen.getByRole("button", { name: /next/i }));
+  await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+  await user.click(screen.getByRole("button", { name: /next/i }));
+}
+
+async function submitCreateWithoutCalibration(user: ReturnType<typeof userEvent.setup>) {
+  await completeRequiredCreateSteps(user);
+  await user.click(screen.getByRole("button", { name: /next/i }));
+  await user.click(screen.getByRole("button", { name: /next/i }));
+  await user.click(screen.getByRole("button", { name: /create camera/i }));
+}
+
 describe("CameraWizard", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -532,23 +548,149 @@ describe("CameraWizard", () => {
     ).toBeInTheDocument();
   });
 
-  test("requires four source points, four destination points, and a reference distance before save", async () => {
+  test("default create payload sends balanced profile, speed disabled, and no homography when calibration is untouched", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     renderWizard({ onSubmit });
 
-    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
-    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
-    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
-    await user.click(screen.getByRole("button", { name: /next/i }));
-    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
-    await user.click(screen.getByRole("button", { name: /next/i }));
+    await submitCreateWithoutCalibration(user);
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload).toBeDefined();
+    expect(submittedPayload?.vision_profile).toMatchObject({
+      compute_tier: "edge_standard",
+      accuracy_mode: "balanced",
+      scene_difficulty: "cluttered",
+      object_domain: "mixed",
+      motion_metrics: { speed_enabled: false },
+    });
+    expect(submittedPayload?.homography).toBeNull();
+  });
+
+  test("enabling speed requires four source points, four destination points, and a reference distance before save", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    await user.click(screen.getByLabelText(/speed metrics/i));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(screen.getByText(/4 source points are required/i)).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
+
+    for (let count = 0; count < 4; count += 1) {
+      await user.click(screen.getByRole("button", { name: /add source point/i }));
+    }
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(screen.getByText(/4 destination points are required/i)).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    for (let count = 0; count < 4; count += 1) {
+      await user.click(
+        screen.getByRole("button", { name: /add destination point/i }),
+      );
+    }
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(screen.getByText(/reference distance is required/i)).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  test("selecting Maximum Accuracy and Advanced Edge submits the edge advanced Jetson compute tier", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    await user.selectOptions(screen.getByLabelText(/vision profile/i), "maximum_accuracy");
+    await user.selectOptions(screen.getByLabelText(/compute target/i), "edge_advanced_jetson");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.vision_profile?.accuracy_mode).toBe("maximum_accuracy");
+    expect(submittedPayload?.vision_profile?.compute_tier).toBe("edge_advanced_jetson");
+  });
+
+  test("adding an include detection region submits it separately from event boundaries", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /add include region/i }));
+    const regionCanvas = screen.getByLabelText(/detection region 1 canvas/i);
+    stubRect(regionCanvas, 640, 360);
+    fireEvent.click(regionCanvas, { clientX: 0, clientY: 0 });
+    fireEvent.click(regionCanvas, { clientX: 50, clientY: 0 });
+    fireEvent.click(regionCanvas, { clientX: 50, clientY: 50 });
+    fireEvent.click(regionCanvas, { clientX: 0, clientY: 50 });
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.zones).toEqual([]);
+    expect(submittedPayload?.detection_regions?.[0]?.mode).toBe("include");
+  });
+
+  test("adding an exclusion detection region submits it separately from event boundaries", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /add exclusion region/i }));
+    const regionCanvas = screen.getByLabelText(/detection region 1 canvas/i);
+    stubRect(regionCanvas, 640, 360);
+    fireEvent.click(regionCanvas, { clientX: 0, clientY: 0 });
+    fireEvent.click(regionCanvas, { clientX: 50, clientY: 0 });
+    fireEvent.click(regionCanvas, { clientX: 50, clientY: 50 });
+    fireEvent.click(regionCanvas, { clientX: 0, clientY: 50 });
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.zones).toEqual([]);
+    expect(submittedPayload?.detection_regions?.[0]?.mode).toBe("exclude");
+  });
+
+  test("event boundaries still submit to zones instead of detection regions", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /add line boundary/i }));
+    await user.type(screen.getByLabelText(/boundary 1 id/i), "door-line");
+    const lineCanvas = screen.getByLabelText(/boundary 1 canvas/i);
+    stubRect(lineCanvas, 640, 360);
+    fireEvent.click(lineCanvas, { clientX: 5, clientY: 10 });
+    fireEvent.click(lineCanvas, { clientX: 55, clientY: 110 });
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.zones).toHaveLength(1);
+    expect(submittedPayload?.zones?.[0]?.id).toBe("door-line");
+    expect(submittedPayload?.detection_regions).toEqual([]);
   });
 
   test("submits the completed create payload with homography and browser delivery settings", async () => {
@@ -612,14 +754,15 @@ describe("CameraWizard", () => {
     expect(submittedPayload?.rtsp_url).toBe("rtsp://camera.local/live");
     expect(submittedPayload?.browser_delivery?.default_profile).toBe("540p5");
     expect(submittedPayload?.active_classes).toEqual(["person", "car"]);
-    expect(submittedPayload?.homography.ref_distance_m).toBe(12.5);
-    expect(submittedPayload?.homography.src).toEqual([
+    expect(submittedPayload?.homography).not.toBeNull();
+    expect(submittedPayload?.homography?.ref_distance_m).toBe(12.5);
+    expect(submittedPayload?.homography?.src).toEqual([
       [0, 0],
       [10, 10],
       [20, 20],
       [30, 30],
     ]);
-    expect(submittedPayload?.homography.dst).toEqual([
+    expect(submittedPayload?.homography?.dst).toEqual([
       [0, 0],
       [5, 5],
       [10, 10],
@@ -736,6 +879,16 @@ describe("CameraWizard", () => {
           ],
           ref_distance_m: 12.5,
         },
+        vision_profile: {
+          compute_tier: "central_gpu",
+          accuracy_mode: "maximum_accuracy",
+          scene_difficulty: "occluded",
+          object_domain: "people",
+          motion_metrics: { speed_enabled: false },
+          candidate_quality: { new_track_min_confidence: { person: 0.6 } },
+          tracker_profile: { track_buffer_seconds: 2.5 },
+          verifier_profile: { enabled: true },
+        },
         privacy: {
           blur_faces: true,
           blur_plates: true,
@@ -794,6 +947,16 @@ describe("CameraWizard", () => {
         frame_size: { width: 1280, height: 720 },
       },
     ]);
+    expect(submittedPayload?.vision_profile).toMatchObject({
+      compute_tier: "central_gpu",
+      accuracy_mode: "maximum_accuracy",
+      scene_difficulty: "occluded",
+      object_domain: "people",
+      motion_metrics: { speed_enabled: false },
+      candidate_quality: { new_track_min_confidence: { person: 0.6 } },
+      tracker_profile: { track_buffer_seconds: 2.5 },
+      verifier_profile: { enabled: true },
+    });
   });
 
   test("surfaces a step-level calibration error when the analytics still cannot be captured", async () => {
