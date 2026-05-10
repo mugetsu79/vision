@@ -638,7 +638,10 @@ export interface components {
             }[];
             /** Zones */
             zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[];
-            homography: components["schemas"]["HomographyPayload"];
+            vision_profile?: components["schemas"]["SceneVisionProfile"];
+            /** Detection Regions */
+            detection_regions?: components["schemas"]["DetectionRegion"][];
+            homography?: components["schemas"]["HomographyPayload"] | null;
             privacy?: components["schemas"]["PrivacySettings"];
             browser_delivery?: components["schemas"]["BrowserDeliverySettings"];
             /**
@@ -688,7 +691,10 @@ export interface components {
             }[];
             /** Zones */
             zones: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"] | components["schemas"]["LegacyZone"])[];
-            homography: components["schemas"]["HomographyPayload"];
+            vision_profile?: components["schemas"]["SceneVisionProfile"];
+            /** Detection Regions */
+            detection_regions?: components["schemas"]["DetectionRegion"][];
+            homography?: components["schemas"]["HomographyPayload"] | null;
             privacy: components["schemas"]["PrivacySettings"];
             browser_delivery: components["schemas"]["BrowserDeliverySettings"];
             source_capability?: components["schemas"]["SourceCapability"] | null;
@@ -764,6 +770,9 @@ export interface components {
             }[] | null;
             /** Zones */
             zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[] | null;
+            vision_profile?: components["schemas"]["SceneVisionProfile"] | null;
+            /** Detection Regions */
+            detection_regions?: components["schemas"]["DetectionRegion"][] | null;
             homography?: components["schemas"]["HomographyPayload"] | null;
             privacy?: components["schemas"]["PrivacySettings"] | null;
             browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
@@ -784,6 +793,23 @@ export interface components {
          * @enum {string}
          */
         CountEventType: "line_cross" | "zone_enter" | "zone_exit";
+        /** DetectionRegion */
+        DetectionRegion: {
+            /** Id */
+            id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "include" | "exclude";
+            /** Polygon */
+            polygon: number[][];
+            /** Class Names */
+            class_names?: string[];
+            frame_size?: components["schemas"]["FrameSize"] | null;
+            /** Points Normalized */
+            points_normalized?: number[][] | null;
+        };
         /**
          * DetectorCapability
          * @enum {string}
@@ -1413,6 +1439,14 @@ export interface components {
             /** License */
             license?: string | null;
         };
+        /** MotionMetricsSettings */
+        MotionMetricsSettings: {
+            /**
+             * Speed Enabled
+             * @default false
+             */
+            speed_enabled: boolean;
+        };
         /** NativeAvailability */
         NativeAvailability: {
             /**
@@ -1520,6 +1554,46 @@ export interface components {
             version: number;
             /** Updated At */
             updated_at?: string | null;
+        };
+        /** SceneVisionProfile */
+        SceneVisionProfile: {
+            /**
+             * Compute Tier
+             * @default edge_standard
+             * @enum {string}
+             */
+            compute_tier: "cpu_low" | "edge_standard" | "edge_advanced_jetson" | "central_gpu";
+            /**
+             * Accuracy Mode
+             * @default balanced
+             * @enum {string}
+             */
+            accuracy_mode: "fast" | "balanced" | "maximum_accuracy" | "open_vocabulary";
+            /**
+             * Scene Difficulty
+             * @default cluttered
+             * @enum {string}
+             */
+            scene_difficulty: "open" | "cluttered" | "occluded" | "crowded" | "traffic" | "custom";
+            /**
+             * Object Domain
+             * @default mixed
+             * @enum {string}
+             */
+            object_domain: "people" | "vehicles" | "mixed" | "open_vocab";
+            motion_metrics?: components["schemas"]["MotionMetricsSettings"];
+            /** Candidate Quality */
+            candidate_quality?: {
+                [key: string]: unknown;
+            };
+            /** Tracker Profile */
+            tracker_profile?: {
+                [key: string]: unknown;
+            };
+            /** Verifier Profile */
+            verifier_profile?: {
+                [key: string]: unknown;
+            };
         };
         /** SiteCreate */
         SiteCreate: {
@@ -1726,6 +1800,9 @@ export interface components {
             }[];
             /** Zones */
             zones?: (components["schemas"]["WorkerLineZone"] | components["schemas"]["WorkerPolygonZone"] | components["schemas"]["LegacyZone"])[];
+            vision_profile?: components["schemas"]["SceneVisionProfile"];
+            /** Detection Regions */
+            detection_regions?: components["schemas"]["DetectionRegion"][];
             /** Homography */
             homography?: {
                 [key: string]: unknown;
