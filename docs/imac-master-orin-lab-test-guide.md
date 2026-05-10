@@ -80,9 +80,9 @@ Open-vocab lab models are experimental:
 1. `YOLOE-26N Open Vocab` from `models/yoloe-26n-seg.pt`.
 2. `YOLOv8s-Worldv2 Open Vocab` from `models/yolov8s-worldv2.pt`.
 
-Use ONNX files for fixed-vocab COCO testing. Files such as `yolo26n.pt` and `yolo12n.pt` are not the standard fixed-vocab runtime path in this guide; use their exported `.onnx` files instead. For open-vocab testing today, use the `.pt` catalog presets. Compiled per-scene open-vocab ONNX/TensorRT artifacts are planned as runtime artifacts in the Jetson optimized runtime plan; until that lands, `yoloe-26n-seg.onnx` is not the standard active open-vocab camera model path.
+Use ONNX files for fixed-vocab COCO testing. Files such as `yolo26n.pt` and `yolo12n.pt` are not the standard fixed-vocab runtime path in this guide; use their exported `.onnx` files instead. For open-vocab exploration, use the `.pt` catalog presets. For saved production scenes, compile per-scene open-vocab ONNX/TensorRT artifacts as runtime artifacts tied to the camera vocabulary hash; `yoloe-26n-seg.onnx` is not the standard primary camera model path.
 
-Do not register raw `.engine` files as ready camera models. ONNX models can still use TensorRT or CUDA through ONNX Runtime providers when those providers are installed. The next runtime-hardening implementation will attach validated `.engine` files as target-specific runtime artifacts instead of exposing them as normal camera model rows.
+Do not register raw `.engine` files as ready camera models. ONNX models can still use TensorRT or CUDA through ONNX Runtime providers when those providers are installed. Attach validated `.engine` files as target-specific runtime artifacts instead of exposing them as normal camera model rows.
 
 Treat fixed-vocab ONNX files as standard COCO-style self-describing models unless you are intentionally following the advanced reduced-class path later in this guide.
 
@@ -629,7 +629,7 @@ python3 -m uv run python scripts/register_model_preset.py \
   --bearer-token "$TOKEN"
 ```
 
-Only use the `.pt` open-vocab catalog presets for open-vocab testing today. Do not register `yolo26n.pt`, `yolo12n.pt`, or `yoloe-26n-seg.onnx` as the standard camera model path for this guide. When the optimized runtime artifact plan lands, compiled open-vocab exports will be scene-scoped runtime artifacts tied to a vocabulary hash, not replacement primary camera models.
+Use the `.pt` open-vocab catalog presets for open-vocab exploration and vocabulary tuning. Do not register `yolo26n.pt`, `yolo12n.pt`, or `yoloe-26n-seg.onnx` as the standard camera model path for this guide. Compiled open-vocab exports are scene-scoped runtime artifacts tied to a vocabulary hash, not replacement primary camera models.
 
 Verify what the backend registered:
 
@@ -1501,7 +1501,60 @@ Use a steady scene and the same `fps_cap` when comparing. The useful numbers are
 frame duration, stage duration, and sustained frames processed; do not treat one
 short sample or a cold start as a performance conclusion.
 
-### 3.12 Test B is a pass only if all of these are true
+### 3.12 Optional: validate compiled open-vocab scene artifacts
+
+Dynamic `.pt` open-vocab is the right mode while you are discovering and editing
+terms. Compiled ONNX and TensorRT artifacts are for saved production scenes
+where the camera runtime vocabulary is stable. Build time is hardware- and
+scene-specific; use the `build_duration_seconds` recorded in artifact metadata
+instead of assuming a fixed compile duration.
+
+For a saved open-vocab camera, compile and register scene artifacts on the
+target host:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run python -m argus.scripts.build_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$ARGUS_API_BEARER_TOKEN" \
+  --model-id "$OPEN_VOCAB_MODEL_ID" \
+  --camera-id "$EDGE_CAMERA_ID" \
+  --open-vocab-source-pt "$HOME/vision/models/yoloe-26n-seg.pt" \
+  --runtime-vocabulary person,forklift,pallet-jack \
+  --vocabulary-version "$RUNTIME_VOCAB_VERSION" \
+  --export-format onnx \
+  --export-format engine \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --input-width 640 --input-height 640
+```
+
+Validate each returned artifact on the same Jetson before selecting it in a
+worker. What good looks like:
+
+- matching vocabulary + validated TensorRT logs `selected_backend=tensorrt_engine`
+- matching vocabulary + validated ONNX logs `selected_backend=onnxruntime`
+- changed vocabulary logs `fallback_reason=vocabulary_changed` after a hot
+  vocabulary command, then continues with the dynamic `.pt` runtime
+- mismatched saved vocabulary hash logs `artifact_vocabulary_mismatch` and
+  continues with the dynamic `.pt` runtime
+
+### 3.13 A/B runtime validation checklist
+
+Run these comparisons with the same camera, scene, `fps_cap`, delivery profile,
+and metrics window:
+
+- fixed-vocab ONNX baseline
+- fixed-vocab TensorRT runtime artifact
+- open-vocab dynamic `.pt`
+- open-vocab compiled ONNX scene artifact
+- open-vocab compiled TensorRT scene artifact
+- open-vocab vocabulary-change fallback back to dynamic `.pt`
+
+Treat a runtime as validated only when the worker log shows the expected
+selected backend or fallback reason, Live continues rendering, and metrics stay
+stable long enough to compare steady-state frame and stage duration.
+
+### 3.14 Test B is a pass only if all of these are true
 
 - the iMac control plane stays healthy
 - camera 1 still works in `central` mode
@@ -1511,7 +1564,7 @@ short sample or a cold start as a performance conclusion.
 - History and Evidence Desk still work
 - Operations shows the central/edge split and does not invent unknown worker state
 
-### 3.13 Production readiness gap
+### 3.15 Production readiness gap
 
 This lab is clean only when the product workflow works. Production readiness still needs:
 

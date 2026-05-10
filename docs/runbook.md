@@ -248,9 +248,11 @@ The first-pass builder intentionally supports prebuilt engines only. Do not let 
 ### Open-Vocab Scene Runtime Artifact Compilation
 
 Dynamic `.pt` open-vocab remains the exploration path while operators tune a
-camera vocabulary. Once the scene vocabulary is saved, compile scene-scoped
-YOLOE artifacts from the canonical `.pt` model and register the exported files
-against the camera:
+camera vocabulary. Once the scene vocabulary is saved for a production scene,
+compile scene-scoped YOLOE artifacts from the canonical `.pt` model and register
+the exported files against the camera. Compilation is a background/operator
+operation, not something the request path should block on. Real build time is
+captured per artifact in `build_duration_seconds`.
 
 ```bash
 cd /Users/yann.moren/vision/backend
@@ -272,7 +274,9 @@ The script normalizes the comma-separated vocabulary, calls
 `YOLOE.set_classes(...)` before export, records the resulting vocabulary hash on
 both scene artifacts, and records per-export build duration. Validate each
 exported artifact on the host that will run it before expecting worker runtime
-selection to choose it.
+selection to choose it. If the camera runtime vocabulary changes, workers must
+fall back to the dynamic `.pt` model until a new scene artifact with the new
+vocabulary hash is built and validated.
 
 When the worker starts, verify the runtime selection log before comparing
 performance:
@@ -295,6 +299,25 @@ curl -s http://127.0.0.1:9108/metrics |
 
 Compare steady-state frame duration, stage duration, and sustained processed
 frames with the same camera, scene, `fps_cap`, and delivery profile.
+
+### A/B Runtime Artifact Validation Checklist
+
+Use the same camera, scene, `fps_cap`, browser delivery profile, and metrics
+window for every row:
+
+| Lane | Expected selection evidence |
+|---|---|
+| Fixed-vocab ONNX baseline | canonical `onnxruntime` selection, no valid artifact |
+| Fixed-vocab TensorRT artifact | `selected_backend=tensorrt_engine`, `fallback=False` |
+| Open-vocab dynamic `.pt` | canonical `ultralytics_yoloe` selection |
+| Open-vocab compiled ONNX | `selected_backend=onnxruntime`, artifact id present |
+| Open-vocab compiled TensorRT | `selected_backend=tensorrt_engine`, artifact id present |
+| Vocabulary change fallback | `fallback_reason=vocabulary_changed`, dynamic `.pt` continues |
+
+Operations shows model runtime artifact counts and the best valid target. The
+Cameras setup flow shows whether the selected model has a compiled artifact,
+whether it is stale for the current vocabulary, or whether the worker will use
+the dynamic/fallback runtime.
 
 ### Scene Vision Profiles
 

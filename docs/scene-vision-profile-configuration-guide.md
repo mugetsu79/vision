@@ -75,6 +75,12 @@ For open-vocabulary models, active classes are cleared and runtime vocabulary is
 used instead. Runtime vocabulary terms should be short, concrete labels such as
 `forklift`, `pallet jack`, or `delivery van`.
 
+The model summary also shows runtime artifact posture. A scene can run on the
+dynamic `.pt` model, a compiled ONNX artifact, or a TensorRT artifact. If the
+runtime vocabulary changes after a scene artifact was built, the compiled
+artifact is treated as stale for that scene until it is rebuilt with the new
+vocabulary hash.
+
 Tracker type remains available as a field, but the current scene vision resolver
 normalizes resolved profile tracking to BoT-SORT-ready behavior. Future runtime
 work can map advanced edge and central GPU profiles to ReID or DeepStream/NvDCF
@@ -113,9 +119,10 @@ the backend resolves the concrete tracking and candidate quality policy.
 | Central GPU | `central_gpu` | master gateway GPU, multi-stage verification, heavier models |
 
 The Jetson Orin Nano Super belongs in `edge_advanced_jetson`, not `cpu_low`.
-The current implementation stores and resolves this tier, and the next runtime
-implementation plan maps it to validated TensorRT runtime artifacts and compiled
-open-vocabulary scene artifacts. DeepStream/NvDCF remains a later runtime lane.
+The current implementation stores and resolves this tier, selects validated
+TensorRT runtime artifacts when available, and can select compiled
+open-vocabulary scene artifacts when the saved vocabulary hash matches.
+DeepStream/NvDCF remains a later runtime lane.
 
 #### Speed Metrics Toggle
 
@@ -867,6 +874,8 @@ Current implementation includes:
 - include/exclusion detection regions
 - compact scene-list vision summary
 - metrics for candidate and region behavior
+- validated TensorRT runtime artifact selection for `edge_advanced_jetson`
+- compiled per-scene open-vocabulary runtime artifacts tied to vocabulary hash
 
 Current implementation does not yet include:
 
@@ -875,8 +884,6 @@ Current implementation does not yet include:
   `verifier_profile`
 - ReID execution
 - verifier model execution
-- validated TensorRT runtime artifact selection for `edge_advanced_jetson`
-- compiled per-scene open-vocabulary runtime artifacts
 - DeepStream/NvDCF runtime mapping for `edge_advanced_jetson`
 
 Those fields are intentionally part of the API now so advanced runtime work can
