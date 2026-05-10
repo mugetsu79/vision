@@ -245,6 +245,28 @@ python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
 
 The first-pass builder intentionally supports prebuilt engines only. Do not let the control plane guess TensorRT builder flags silently; record the artifact after the target-specific build is already produced.
 
+When the worker starts, verify the runtime selection log before comparing
+performance:
+
+- `selected_backend=tensorrt_engine` and `fallback=False` means the validated
+  engine was selected.
+- `fallback=True` means the worker continued with the canonical model runtime.
+  Common reasons are `no_runtime_artifacts`, `artifact_target_mismatch`, and
+  `artifact_vocabulary_mismatch`.
+- A stale artifact should not be treated as valid after the source ONNX model
+  changes; rebuild or re-register the artifact from the new source model.
+
+For fixed-vocab Jetson comparisons, collect the same metrics window before and
+after artifact selection:
+
+```bash
+curl -s http://127.0.0.1:9108/metrics |
+  grep -E 'argus_inference_frame_duration_seconds|argus_inference_stage_duration_seconds|argus_inference_frames_processed_total'
+```
+
+Compare steady-state frame duration, stage duration, and sustained processed
+frames with the same camera, scene, `fps_cap`, and delivery profile.
+
 ### Scene Vision Profiles
 
 Cameras now carry a persisted `vision_profile` and optional `detection_regions`. These fields control profile posture, compute tier, explicit speed metric enablement, and detection include/exclusion gating before tracking. If an existing dev database errors with `column cameras.vision_profile does not exist` or `column cameras.detection_regions does not exist`, run:

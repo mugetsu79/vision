@@ -1442,7 +1442,66 @@ unset during the image build, CPU-only providers are expected. If you exported a
 compatible Jetson cp310 accelerated wheel before the build, expect
 `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`.
 
-### 3.11 Test B is a pass only if all of these are true
+### 3.11 Optional: validate a fixed-vocab Jetson runtime artifact
+
+This step is only for a prebuilt TensorRT `.engine` that matches the registered
+ONNX model. Keep the camera model set to the ONNX row, such as
+`YOLO26n COCO Edge`; the `.engine` is attached as a runtime artifact and is
+selected only when it is valid for the Jetson target profile.
+
+On the Jetson, register the prebuilt engine:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv run python -m argus.scripts.build_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$ARGUS_API_BEARER_TOKEN" \
+  --model-id "$EDGE_MODEL_ID" \
+  --source-model "$HOME/vision/models/yolo26n.onnx" \
+  --prebuilt-engine "$HOME/vision/models/yolo26n.jetson.fp16.engine" \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --class person --class car --class bus --class truck \
+  --input-width 640 --input-height 640
+```
+
+Copy the returned artifact id and sha256, then validate it on the same Jetson:
+
+```bash
+python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$ARGUS_API_BEARER_TOKEN" \
+  --model-id "$EDGE_MODEL_ID" \
+  --artifact-id "$ARTIFACT_ID" \
+  --artifact-path "$HOME/vision/models/yolo26n.jetson.fp16.engine" \
+  --expected-sha256 "$ARTIFACT_SHA256" \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --host-profile linux-aarch64-nvidia-jetson
+```
+
+Restart the Jetson worker after validation. What good looks like in worker logs:
+
+- `Selected inference runtime ... selected_backend=tensorrt_engine ... fallback=False`
+- `artifact_id=<the artifact id returned by the API>`
+- `host_profile=linux-aarch64-nvidia-jetson`
+
+Fallback is also valid and should be visible. If the artifact is missing,
+invalid, stale, or built for another target, the worker should log
+`fallback=True` with a reason such as `no_runtime_artifacts`,
+`artifact_target_mismatch`, or `artifact_vocabulary_mismatch`, then continue
+from the canonical ONNX model runtime instead of crashing.
+
+Compare the same camera before and after artifact selection with:
+
+```bash
+curl -s http://127.0.0.1:9108/metrics |
+  grep -E 'argus_inference_frame_duration_seconds|argus_inference_stage_duration_seconds|argus_inference_frames_processed_total'
+```
+
+Use a steady scene and the same `fps_cap` when comparing. The useful numbers are
+frame duration, stage duration, and sustained frames processed; do not treat one
+short sample or a cold start as a performance conclusion.
+
+### 3.12 Test B is a pass only if all of these are true
 
 - the iMac control plane stays healthy
 - camera 1 still works in `central` mode
@@ -1452,7 +1511,7 @@ compatible Jetson cp310 accelerated wheel before the build, expect
 - History and Evidence Desk still work
 - Operations shows the central/edge split and does not invent unknown worker state
 
-### 3.12 Production readiness gap
+### 3.13 Production readiness gap
 
 This lab is clean only when the product workflow works. Production readiness still needs:
 
