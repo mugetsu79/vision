@@ -245,6 +245,35 @@ python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
 
 The first-pass builder intentionally supports prebuilt engines only. Do not let the control plane guess TensorRT builder flags silently; record the artifact after the target-specific build is already produced.
 
+### Open-Vocab Scene Runtime Artifact Compilation
+
+Dynamic `.pt` open-vocab remains the exploration path while operators tune a
+camera vocabulary. Once the scene vocabulary is saved, compile scene-scoped
+YOLOE artifacts from the canonical `.pt` model and register the exported files
+against the camera:
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run python -m argus.scripts.build_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$ARGUS_API_BEARER_TOKEN" \
+  --model-id "$OPEN_VOCAB_MODEL_ID" \
+  --camera-id "$CAMERA_ID" \
+  --open-vocab-source-pt /Users/yann.moren/vision/models/yoloe-26n-seg.pt \
+  --runtime-vocabulary person,chair,backpack \
+  --vocabulary-version "$RUNTIME_VOCAB_VERSION" \
+  --export-format onnx \
+  --export-format engine \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --input-width 640 --input-height 640
+```
+
+The script normalizes the comma-separated vocabulary, calls
+`YOLOE.set_classes(...)` before export, records the resulting vocabulary hash on
+both scene artifacts, and records per-export build duration. Validate each
+exported artifact on the host that will run it before expecting worker runtime
+selection to choose it.
+
 When the worker starts, verify the runtime selection log before comparing
 performance:
 

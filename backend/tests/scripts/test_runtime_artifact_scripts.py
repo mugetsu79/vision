@@ -4,10 +4,12 @@ import hashlib
 
 from argus.scripts.build_runtime_artifact import (
     build_fixed_vocab_artifact_payload,
+    build_open_vocab_scene_artifact_payloads,
     post_json,
     sha256_file,
 )
 from argus.scripts.validate_runtime_artifact import build_validation_patch, patch_json
+from argus.vision.vocabulary import hash_vocabulary
 
 
 class _FakeResponse:
@@ -66,6 +68,59 @@ def test_fixed_vocab_build_payload_computes_hash_and_posts_artifact(tmp_path) ->
     assert payload["size_bytes"] == 6
     assert response["id"] == "artifact-1"
     assert client.calls[0]["method"] == "POST"
+
+
+def test_open_vocab_build_payload_exports_scene_artifacts_with_vocabulary_hash(tmp_path) -> None:
+    source = tmp_path / "yoloe-26n-seg.pt"
+    source.write_bytes(b"open-vocab-source")
+    events: list[tuple[str, object]] = []
+
+    class _FakeYOLOE:
+        def __init__(self, path: str) -> None:
+            events.append(("load", path))
+
+        def set_classes(self, classes: list[str]) -> None:
+            events.append(("set_classes", list(classes)))
+
+        def export(self, *, format: str) -> str:  # noqa: A002
+            events.append(("export", format))
+            exported = tmp_path / f"scene.{format if format == 'onnx' else 'engine'}"
+            exported.write_bytes(format.encode())
+            return str(exported)
+
+    payloads = build_open_vocab_scene_artifact_payloads(
+        source_model_path=source,
+        camera_id="22222222-2222-4222-8222-222222222222",
+        runtime_vocabulary=[" person ", "chair", ""],
+        export_formats=["onnx", "engine"],
+        input_shape={"width": 640, "height": 640},
+        target_profile="linux-aarch64-nvidia-jetson",
+        vocabulary_version=9,
+        yoloe_loader=_FakeYOLOE,
+    )
+
+    vocabulary_hash = hash_vocabulary(["person", "chair"])
+
+    assert events == [
+        ("load", str(source)),
+        ("set_classes", ["person", "chair"]),
+        ("export", "onnx"),
+        ("export", "engine"),
+    ]
+    assert [payload["kind"] for payload in payloads] == ["onnx_export", "tensorrt_engine"]
+    assert [payload["runtime_backend"] for payload in payloads] == [
+        "onnxruntime",
+        "tensorrt_engine",
+    ]
+    assert {payload["scope"] for payload in payloads} == {"scene"}
+    assert {payload["capability"] for payload in payloads} == {"open_vocab"}
+    assert {payload["camera_id"] for payload in payloads} == {
+        "22222222-2222-4222-8222-222222222222"
+    }
+    assert {payload["vocabulary_hash"] for payload in payloads} == {vocabulary_hash}
+    assert {payload["vocabulary_version"] for payload in payloads} == {9}
+    assert {tuple(payload["classes"]) for payload in payloads} == {("person", "chair")}
+    assert all(payload["build_duration_seconds"] is not None for payload in payloads)
 
 
 def test_validate_runtime_artifact_patches_valid_when_file_hash_matches(tmp_path) -> None:
