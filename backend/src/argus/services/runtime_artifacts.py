@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from pathlib import Path
+from typing import cast
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -13,6 +14,7 @@ from argus.api.contracts import (
     RuntimeArtifactCreate,
     RuntimeArtifactResponse,
     RuntimeArtifactUpdate,
+    RuntimeBackend,
 )
 from argus.models.enums import (
     DetectorCapability,
@@ -208,7 +210,7 @@ def _artifact_to_response(
         scope=artifact.scope,
         kind=artifact.kind,
         capability=artifact.capability,
-        runtime_backend=artifact.runtime_backend,
+        runtime_backend=cast(RuntimeBackend, artifact.runtime_backend),
         path=artifact.path,
         target_profile=artifact.target_profile,
         precision=artifact.precision,

@@ -153,7 +153,7 @@ def build_open_vocab_scene_artifact_payloads(
 
 
 def _load_yoloe(source_model_path: str) -> Any:
-    from ultralytics import YOLOE
+    from ultralytics import YOLOE  # type: ignore[attr-defined]
 
     return YOLOE(source_model_path)
 
