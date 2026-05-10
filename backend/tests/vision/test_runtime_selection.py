@@ -117,6 +117,30 @@ def test_select_runtime_artifact_open_vocab_mismatch_falls_back_to_dynamic() -> 
     assert selection.fallback_reason == "artifact_vocabulary_mismatch"
 
 
+def test_select_runtime_artifact_prefers_open_vocab_tensorrt_when_hash_matches() -> None:
+    expected_hash = hash_vocabulary(["forklift"])
+    artifact = _artifact(
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=expected_hash,
+    )
+
+    selection = select_runtime_artifact(
+        model=_model(
+            capability=DetectorCapability.OPEN_VOCAB,
+            backend="ultralytics_yoloe",
+            runtime_vocabulary=["forklift"],
+        ),
+        host_profile="linux-aarch64-nvidia-jetson",
+        artifacts=[artifact],
+        runtime_vocabulary_hash=expected_hash,
+    )
+
+    assert selection.selected_backend == "tensorrt_engine"
+    assert selection.artifact == artifact
+    assert selection.fallback is False
+    assert selection.fallback_reason is None
+
+
 def test_select_runtime_artifact_onnx_export_wins_when_open_vocab_hash_matches() -> None:
     expected_hash = hash_vocabulary(["forklift"])
     artifact = _artifact(

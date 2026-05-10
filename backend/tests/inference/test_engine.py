@@ -3087,6 +3087,95 @@ async def test_open_vocab_vocabulary_change_marks_compiled_artifact_fallback(
 
 
 @pytest.mark.asyncio
+async def test_open_vocab_vocabulary_change_rebuilds_detector_from_canonical_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    artifact = _runtime_artifact_settings(
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=_expected_vocabulary_hash(["forklift"]),
+    )
+    original_detector = _FakeOpenVocabDetector(runtime_vocabulary=["forklift"])
+    rebuilt_detector = _FakeOpenVocabDetector()
+    fake_runtime = object()
+    runtime_policy = _runtime_policy_for_tests()
+    build_calls: dict[str, object] = {}
+
+    def fake_build_detector(
+        *,
+        model: object,
+        runtime: object,
+        runtime_policy: object,
+        runtime_selection: RuntimeSelection,
+    ) -> object:
+        build_calls["model"] = model
+        build_calls["runtime"] = runtime
+        build_calls["runtime_policy"] = runtime_policy
+        build_calls["runtime_selection"] = runtime_selection
+        return rebuilt_detector
+
+    monkeypatch.setattr(engine_module, "build_detector", fake_build_detector, raising=False)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="YOLOE",
+                path="/models/yoloe.pt",
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={
+                    "runtime_backend": "ultralytics_yoloe",
+                    "supports_runtime_vocabulary_updates": True,
+                },
+                classes=[],
+                runtime_vocabulary={"terms": ["forklift"], "version": 1},
+                input_shape={"width": 96, "height": 96},
+            ),
+            "runtime_artifacts": [artifact],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([]),
+        detector=original_detector,
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        runtime=fake_runtime,
+        runtime_policy=runtime_policy,
+    )
+    engine.runtime_selection = RuntimeSelection(
+        selected_backend="tensorrt_engine",
+        artifact=artifact,
+        fallback=False,
+        fallback_reason=None,
+    )
+
+    await engine.apply_command(
+        CameraCommand(
+            runtime_vocabulary=["forklift", "pallet jack"],
+            runtime_vocabulary_source=RuntimeVocabularySource.MANUAL,
+            runtime_vocabulary_version=2,
+        )
+    )
+
+    selection = build_calls["runtime_selection"]
+    model = build_calls["model"]
+    assert engine.detector is rebuilt_detector
+    assert build_calls["runtime"] is fake_runtime
+    assert build_calls["runtime_policy"] is runtime_policy
+    assert selection.selected_backend == "ultralytics_yoloe"
+    assert selection.artifact is None
+    assert selection.fallback is True
+    assert selection.fallback_reason == "vocabulary_changed"
+    assert model.runtime_vocabulary.terms == ["forklift", "pallet jack"]
+    assert model.runtime_vocabulary.version == 2
+    assert rebuilt_detector.runtime_vocabulary_updates[-1] == ["forklift", "pallet jack"]
+    assert original_detector.runtime_vocabulary_updates == []
+
+
+@pytest.mark.asyncio
 async def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_to_models(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

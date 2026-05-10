@@ -675,6 +675,8 @@ class InferenceEngine:
         homography: Homography | None = None,
         privacy_filter: PrivacyFilter | None = None,
         preprocessor: Preprocessor | None = None,
+        runtime: Any | None = None,
+        runtime_policy: RuntimeExecutionPolicy | None = None,
         diagnostics_enabled: bool = False,
         timing_summary_interval_frames: int = 120,
     ) -> None:
@@ -694,6 +696,8 @@ class InferenceEngine:
         self.incident_capture = incident_capture
         self.homography = homography or _build_homography(config.homography)
         self.preprocessor = preprocessor or _identity_preprocessor
+        self._runtime = runtime
+        self._runtime_policy = runtime_policy
         self._diagnostics_enabled = diagnostics_enabled
         self._timing_summary_interval_frames = max(0, timing_summary_interval_frames)
         self.privacy_filter = privacy_filter or PrivacyFilter(
@@ -1020,6 +1024,16 @@ class InferenceEngine:
                 self._state.runtime_vocabulary_source = command.runtime_vocabulary_source
             if command.runtime_vocabulary_version is not None:
                 self._state.runtime_vocabulary_version = command.runtime_vocabulary_version
+            if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
+                self.config.model.runtime_vocabulary = (
+                    self.config.model.runtime_vocabulary.model_copy(
+                        update={
+                            "terms": list(self._state.runtime_vocabulary),
+                            "source": self._state.runtime_vocabulary_source,
+                            "version": self._state.runtime_vocabulary_version,
+                        }
+                    )
+                )
             if (
                 self.config.model.capability is DetectorCapability.OPEN_VOCAB
                 and self.runtime_selection.artifact is not None
@@ -1030,6 +1044,13 @@ class InferenceEngine:
                     fallback=True,
                     fallback_reason="vocabulary_changed",
                 )
+                if self._runtime is not None and self._runtime_policy is not None:
+                    self.detector = _build_detector_with_selection(
+                        model=self.config.model,
+                        runtime=self._runtime,
+                        runtime_policy=self._runtime_policy,
+                        runtime_selection=self.runtime_selection,
+                    )
             self.detector.update_runtime_vocabulary(self._state.runtime_vocabulary)
             if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
                 runtime_state: dict[str, object] = {}
@@ -1723,6 +1744,8 @@ async def build_runtime_engine(
         anpr_processor=anpr_processor,
         incident_capture=incident_capture,
         diagnostics_enabled=settings.worker_diagnostics_enabled,
+        runtime=runtime,
+        runtime_policy=runtime_policy,
     )
     engine.runtime_selection = runtime_selection
     return engine
