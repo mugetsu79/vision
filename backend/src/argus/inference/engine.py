@@ -789,7 +789,13 @@ class InferenceEngine:
         del candidate_decisions
         tracked = self._tracker.update(quality_filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
-        tracked = self._apply_speed(tracked, ts=current_ts)
+        if (
+            self._state.vision_profile.motion_metrics.speed_enabled
+            and self.homography is not None
+        ):
+            tracked = self._apply_speed(tracked, ts=current_ts)
+        else:
+            tracked = [detection.with_updates(speed_kph=None) for detection in tracked]
         stage_timer.record_stage("speed", ended_at=loop.time())
         tracked = self._apply_attributes(processed, tracked)
         stage_timer.record_stage("attributes", ended_at=loop.time())
@@ -1008,6 +1014,7 @@ class InferenceEngine:
                 dict(command.homography) if command.homography is not None else None
             )
             self.homography = _build_homography(self.config.homography)
+            self._track_history.clear()
         if command.vision_profile is not None:
             self._state.vision_profile = command.vision_profile
             self.config.vision_profile = command.vision_profile
@@ -1135,7 +1142,11 @@ class InferenceEngine:
             history.append((ts, bottom_center))
             if len(history) > 16:
                 del history[:-16]
-            speed_kph = self.homography.speed_kph_for_timed_points(history)
+            speed_kph = (
+                self.homography.speed_kph_for_timed_points(history)
+                if len(history) >= 2
+                else None
+            )
             enriched.append(detection.with_updates(speed_kph=speed_kph))
         return enriched
 

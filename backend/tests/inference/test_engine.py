@@ -1915,6 +1915,150 @@ async def test_engine_does_not_emit_speed_when_profile_disables_speed_with_homog
 
 
 @pytest.mark.asyncio
+async def test_engine_skips_speed_application_when_profile_disables_speed_with_homography(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "homography": {
+                "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "ref_distance_m": 10.0,
+            },
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="car",
+                        confidence=0.95,
+                        bbox=(0.0, 0.0, 2.0, 2.0),
+                        class_id=0,
+                    )
+                ]
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    def fail_apply_speed(
+        detections: list[Detection],
+        *,
+        ts: datetime,
+    ) -> list[Detection]:
+        del detections, ts
+        pytest.fail("_apply_speed should only run when speed metrics are enabled")
+
+    monkeypatch.setattr(engine, "_apply_speed", fail_apply_speed)
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+
+
+@pytest.mark.asyncio
+async def test_engine_emits_no_speed_when_live_command_clears_homography() -> None:
+    camera_id = uuid4()
+    tracking_store = _FakeTrackingStore()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "homography": {
+                "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "ref_distance_m": 10.0,
+            },
+            "vision_profile": {
+                "motion_metrics": {"speed_enabled": True},
+            },
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((32, 32, 3), dtype=np.uint8), np.zeros((32, 32, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [Detection(class_name="car", confidence=0.95, bbox=(0.0, 0.0, 2.0, 2.0))],
+                [Detection(class_name="car", confidence=0.95, bbox=(1.0, 0.0, 3.0, 2.0))],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.apply_command(CameraCommand(homography=None))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 5, tzinfo=UTC))
+
+    assert tracking_store.records[0][1][0].speed_kph is None
+    assert tracking_store.records[1][1][0].speed_kph is None
+
+
+@pytest.mark.asyncio
+async def test_engine_clears_speed_history_when_live_homography_changes() -> None:
+    camera_id = uuid4()
+    tracking_store = _FakeTrackingStore()
+    homography_payload = {
+        "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "ref_distance_m": 10.0,
+    }
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "homography": homography_payload,
+            "vision_profile": {
+                "motion_metrics": {"speed_enabled": True},
+            },
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+            ]
+        ),
+        detector=_SequenceDetector(
+            [
+                [Detection(class_name="car", confidence=0.95, bbox=(0.0, 0.0, 2.0, 2.0))],
+                [Detection(class_name="car", confidence=0.95, bbox=(1.0, 0.0, 3.0, 2.0))],
+                [Detection(class_name="car", confidence=0.95, bbox=(2.0, 0.0, 4.0, 2.0))],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 5, tzinfo=UTC))
+    await engine.apply_command(CameraCommand(homography=None))
+    await engine.apply_command(CameraCommand(homography=homography_payload))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 10, tzinfo=UTC))
+
+    assert tracking_store.records[1][1][0].speed_kph is not None
+    assert tracking_store.records[2][1][0].speed_kph is None
+
+
+@pytest.mark.asyncio
 async def test_engine_exposes_last_stage_timings_for_processed_frame() -> None:
     camera_id = uuid4()
     config = _engine_config(camera_id).model_copy(
