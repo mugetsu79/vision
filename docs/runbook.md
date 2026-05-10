@@ -212,6 +212,39 @@ Open-vocab models use the Ultralytics adapter and are marked experimental until 
 
 Raw TensorRT `.engine` files are cataloged as planned only and must not be registered as primary camera models. The current continuation plan is `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`: keep ONNX as the canonical fixed-vocab model row, attach target-specific validated TensorRT engines as runtime artifacts, and add scene-scoped compiled open-vocab artifacts that are selected only when the saved vocabulary hash matches.
 
+### Fixed-Vocab Runtime Artifact Registration
+
+Keep the registered fixed-vocab model row pointed at the canonical ONNX file. When a Jetson TensorRT engine has already been built and copied into place, register it as a runtime artifact instead of registering the `.engine` as a model:
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run python -m argus.scripts.build_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$ARGUS_API_BEARER_TOKEN" \
+  --model-id "$MODEL_ID" \
+  --source-model /Users/yann.moren/vision/models/yolo26n.onnx \
+  --prebuilt-engine /Users/yann.moren/vision/models/yolo26n.jetson.fp16.engine \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --class person --class car --class bus --class truck \
+  --input-width 640 --input-height 640
+```
+
+Validate the artifact on the target host before expecting workers to select it:
+
+```bash
+python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$ARGUS_API_BEARER_TOKEN" \
+  --model-id "$MODEL_ID" \
+  --artifact-id "$ARTIFACT_ID" \
+  --artifact-path /Users/yann.moren/vision/models/yolo26n.jetson.fp16.engine \
+  --expected-sha256 "$ARTIFACT_SHA256" \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --host-profile linux-aarch64-nvidia-jetson
+```
+
+The first-pass builder intentionally supports prebuilt engines only. Do not let the control plane guess TensorRT builder flags silently; record the artifact after the target-specific build is already produced.
+
 ### Scene Vision Profiles
 
 Cameras now carry a persisted `vision_profile` and optional `detection_regions`. These fields control profile posture, compute tier, explicit speed metric enablement, and detection include/exclusion gating before tracking. If an existing dev database errors with `column cameras.vision_profile does not exist` or `column cameras.detection_regions does not exist`, run:
