@@ -808,6 +808,177 @@ async def test_engine_filters_detection_regions_before_tracker_and_telemetry() -
 
 
 @pytest.mark.asyncio
+async def test_engine_rejects_low_confidence_new_person_before_tracker() -> None:
+    camera_id = uuid4()
+    tracker = _RecordingTracker()
+    tracking_store = _FakeTrackingStore()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((96, 96, 3), dtype=np.uint8)]),
+        detector=_SequenceDetector(
+            [[Detection(class_name="person", confidence=0.22, bbox=(8.0, 8.0, 28.0, 70.0))]]
+        ),
+        tracker_factory=lambda tracker_type: tracker,
+        publisher=_FakePublisher(),
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    telemetry = await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    assert tracker.calls == [[]]
+    assert telemetry.counts == {}
+    assert telemetry.tracks == []
+    assert tracking_store.records[0][1] == []
+
+
+@pytest.mark.asyncio
+async def test_engine_keeps_low_confidence_same_class_detection_for_association() -> None:
+    camera_id = uuid4()
+    tracker = _RecordingTracker()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((96, 96, 3), dtype=np.uint8), np.zeros((96, 96, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [Detection(class_name="person", confidence=0.96, bbox=(20.0, 10.0, 60.0, 90.0))],
+                [Detection(class_name="person", confidence=0.21, bbox=(22.0, 12.0, 62.0, 92.0))],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: tracker,
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert [len(call) for call in tracker.calls] == [1, 1]
+    assert tracker.calls[1][0].confidence == 0.21
+
+
+@pytest.mark.asyncio
+async def test_engine_keeps_low_confidence_detection_near_tentative_lifecycle_track() -> None:
+    camera_id = uuid4()
+    tracker = _RecordingTracker()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((96, 96, 3), dtype=np.uint8), np.zeros((96, 96, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [Detection(class_name="person", confidence=0.50, bbox=(20.0, 10.0, 60.0, 90.0))],
+                [Detection(class_name="person", confidence=0.21, bbox=(22.0, 12.0, 62.0, 92.0))],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: tracker,
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert [len(call) for call in tracker.calls] == [1, 1]
+    assert tracker.calls[1][0].confidence == 0.21
+    assert [len(frame.tracks) for frame in publisher.frames] == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_engine_rejects_split_body_fragment_near_existing_person() -> None:
+    camera_id = uuid4()
+    tracker = _RecordingTracker()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((96, 96, 3), dtype=np.uint8), np.zeros((96, 96, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [Detection(class_name="person", confidence=0.96, bbox=(20.0, 10.0, 60.0, 90.0))],
+                [
+                    Detection(class_name="person", confidence=0.94, bbox=(21.0, 10.0, 61.0, 90.0)),
+                    Detection(class_name="person", confidence=0.82, bbox=(28.0, 30.0, 54.0, 88.0)),
+                ],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: tracker,
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert [len(call) for call in tracker.calls] == [1, 1]
+    assert [len(frame.tracks) for frame in publisher.frames] == [1, 1]
+
+
+@pytest.mark.asyncio
 async def test_engine_region_command_clears_lifecycle_before_coasting_tracks_publish() -> None:
     camera_id = uuid4()
     tracker = _RecordingTracker()

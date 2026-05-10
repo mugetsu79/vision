@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal, Mapping
+from typing import Literal
 
 from argus.api.contracts import SceneVisionProfile
 from argus.models.enums import TrackerType
@@ -71,21 +72,23 @@ def resolve_scene_vision_profile(
         duplicate_suppression_enabled = False
         memory_frames = 8
         new_track_min_hits = 1
-        new_track_min_confidence.update({"person": 0.35, "vehicle": 0.35})
+        new_track_min_confidence.update(_vehicle_thresholds(0.35) | {"person": 0.35})
     elif accuracy_mode == "maximum_accuracy" and compute_tier == "edge_advanced_jetson":
         appearance_ready = True
         memory_frames = 36
         new_track_min_hits = 3
-        new_track_min_confidence.update({"person": 0.45, "vehicle": 0.45})
+        new_track_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.45})
     elif accuracy_mode == "maximum_accuracy" and compute_tier == "central_gpu":
         verifier_mode = "suspicious_only"
         appearance_ready = True
         memory_frames = 36
         new_track_min_hits = 3
-        new_track_min_confidence.update({"person": 0.45, "vehicle": 0.45})
+        new_track_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.45})
     elif accuracy_mode == "open_vocabulary":
         speed_enabled = requested.motion_metrics.speed_enabled
-        new_track_min_confidence.update({"person": 0.5, "vehicle": 0.5, "default": 0.5})
+        new_track_min_confidence.update(
+            _vehicle_thresholds(0.5) | {"person": 0.5, "default": 0.5}
+        )
 
     quality_overrides = requested.candidate_quality
     if isinstance(quality_overrides.get("new_track_min_confidence"), dict):
@@ -134,4 +137,14 @@ def _base_new_track_confidence(object_domain: str) -> dict[str, float]:
         return {"person": 0.4, "default": 0.4}
     if object_domain == "vehicles":
         return {"vehicle": 0.4, "car": 0.4, "truck": 0.4, "bus": 0.4, "default": 0.4}
-    return {"person": 0.4, "vehicle": 0.4, "default": 0.4}
+    return _vehicle_thresholds(0.4) | {"person": 0.4, "default": 0.4}
+
+
+def _vehicle_thresholds(value: float) -> dict[str, float]:
+    return {
+        "vehicle": value,
+        "car": value,
+        "truck": value,
+        "bus": value,
+        "forklift": value,
+    }

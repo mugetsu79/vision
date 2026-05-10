@@ -68,12 +68,14 @@ from argus.streaming.webrtc import MediaMTXTokenIssuer
 from argus.vision.anpr import LineCrossingAnprProcessor
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
+from argus.vision.candidate_quality import CandidateQualityGate
 from argus.vision.count_events import CountEventProcessor, CountEventRecord
 from argus.vision.detection_regions import DetectionRegionPolicy
 from argus.vision.detector import YoloDetector
 from argus.vision.detector_factory import build_detector as _build_detector
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
+from argus.vision.profiles import resolve_scene_vision_profile
 from argus.vision.runtime import (
     RuntimeExecutionPolicy,
     import_onnxruntime,
@@ -643,6 +645,10 @@ class InferenceEngine:
         )
         vision_profile = SceneVisionProfile.model_validate(config.vision_profile)
         self.config.vision_profile = vision_profile
+        self._resolved_vision_profile = resolve_scene_vision_profile(
+            vision_profile.model_dump(mode="python"),
+            has_homography=self.homography is not None,
+        )
         self._state = _EngineState(
             active_classes=list(config.active_classes),
             runtime_vocabulary=list(config.model.runtime_vocabulary.terms),
@@ -657,6 +663,9 @@ class InferenceEngine:
         )
         self._tracker = self._tracker_factory(self._state.tracker_type)
         self._track_lifecycle = TrackLifecycleManager()
+        self._candidate_quality_gate = CandidateQualityGate.from_profile_candidate_quality(
+            self._resolved_vision_profile.candidate_quality,
+        )
         self._count_event_processor = self._build_count_event_processor()
         self._zones = (
             Zones(_polygon_zone_definitions(self._state.zones))
@@ -772,7 +781,13 @@ class InferenceEngine:
         self._record_detector_substage_timings(stage_timer)
         filtered = self._filter_visible_detections(detections, visible_classes)
         filtered, _region_decisions = self._detection_region_policy.filter_detections(filtered)
-        tracked = self._tracker.update(filtered, frame=processed)
+        quality_filtered, candidate_decisions = self._candidate_quality_gate.filter_detections(
+            filtered,
+            existing_tracks=self._track_lifecycle.candidate_context_tracks(),
+            frame_shape=processed.shape,
+        )
+        del candidate_decisions
+        tracked = self._tracker.update(quality_filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
         tracked = self._apply_speed(tracked, ts=current_ts)
         stage_timer.record_stage("speed", ended_at=loop.time())
@@ -983,9 +998,6 @@ class InferenceEngine:
             self._zones = (
                 Zones(_polygon_zone_definitions(self._state.zones)) if self._state.zones else None
             )
-        if command.vision_profile is not None:
-            self._state.vision_profile = command.vision_profile
-            self.config.vision_profile = command.vision_profile
         if command.detection_regions is not None:
             self._state.detection_regions = list(command.detection_regions)
             self.config.detection_regions = list(command.detection_regions)
@@ -996,6 +1008,16 @@ class InferenceEngine:
                 dict(command.homography) if command.homography is not None else None
             )
             self.homography = _build_homography(self.config.homography)
+        if command.vision_profile is not None:
+            self._state.vision_profile = command.vision_profile
+            self.config.vision_profile = command.vision_profile
+            self._resolved_vision_profile = resolve_scene_vision_profile(
+                command.vision_profile.model_dump(mode="python"),
+                has_homography=self.homography is not None,
+            )
+            self._candidate_quality_gate = CandidateQualityGate.from_profile_candidate_quality(
+                self._resolved_vision_profile.candidate_quality,
+            )
 
     @property
     def active_classes(self) -> list[str]:

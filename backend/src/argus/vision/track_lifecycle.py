@@ -9,6 +9,7 @@ from argus.vision.types import BoundingBox, Detection
 
 TrackLifecycleState = Literal["tentative", "active", "coasting", "lost"]
 PublishedTrackState = Literal["active", "coasting"]
+CandidateContextTrackState = Literal["tentative", "active", "coasting"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +29,7 @@ class TrackLifecycleConfig:
 class LifecycleTrack:
     stable_track_id: int
     source_track_id: int | None
-    state: PublishedTrackState
+    state: CandidateContextTrackState
     last_seen_age_ms: int
     detection: Detection
 
@@ -54,11 +55,21 @@ class TrackLifecycleManager:
         self._next_stable_track_id = 1
         self._tracks: dict[int, _TrackMemory] = {}
         self._stable_id_by_source: dict[int, int] = {}
+        self._last_visible_tracks: list[LifecycleTrack] = []
+        self._last_candidate_context_tracks: list[LifecycleTrack] = []
 
     def reset(self) -> None:
         self._next_stable_track_id = 1
         self._tracks.clear()
         self._stable_id_by_source.clear()
+        self._last_visible_tracks.clear()
+        self._last_candidate_context_tracks.clear()
+
+    def visible_tracks(self) -> list[LifecycleTrack]:
+        return [_copy_lifecycle_track(track) for track in self._last_visible_tracks]
+
+    def candidate_context_tracks(self) -> list[LifecycleTrack]:
+        return [_copy_lifecycle_track(track) for track in self._last_candidate_context_tracks]
 
     def update(
         self,
@@ -103,7 +114,9 @@ class TrackLifecycleManager:
                     continue
             self._forget_track(stable_id)
 
-        return sorted(visible, key=lambda track: track.stable_track_id)
+        self._last_visible_tracks = sorted(visible, key=lambda track: track.stable_track_id)
+        self._last_candidate_context_tracks = self._candidate_context_snapshot(ts)
+        return self.visible_tracks()
 
     def _detection_sort_key(self, detection: Detection) -> tuple[int, float]:
         source_track_id = detection.track_id
@@ -227,7 +240,9 @@ class TrackLifecycleManager:
             or detection.confidence >= self.config.instant_activation_confidence
             else "tentative"
         )
-        memory.detection = detection.with_updates(track_id=stable_id, bbox=bbox)
+        memory.detection = _copy_detection(
+            detection.with_updates(track_id=stable_id, bbox=bbox)
+        )
         memory.last_seen_ts = ts
         memory.updated_ts = ts
         memory.missing_updates = 0
@@ -323,8 +338,10 @@ class TrackLifecycleManager:
         selected.source_track_id = duplicate.source_track_id
         if duplicate.source_track_id is not None:
             self._stable_id_by_source[duplicate.source_track_id] = selected.stable_track_id
-        selected.detection = duplicate.detection.with_updates(
-            track_id=selected.stable_track_id,
+        selected.detection = _copy_detection(
+            duplicate.detection.with_updates(
+                track_id=selected.stable_track_id,
+            )
         )
         selected.velocity = duplicate.velocity
         selected.last_seen_ts = duplicate.last_seen_ts
@@ -346,9 +363,11 @@ class TrackLifecycleManager:
             memory.detection.bbox[index] + memory.velocity[index] * damping
             for index in range(4)
         ))
-        memory.detection = memory.detection.with_updates(
-            track_id=memory.stable_track_id,
-            bbox=_clamp_bbox(predicted_bbox, frame_shape),
+        memory.detection = _copy_detection(
+            memory.detection.with_updates(
+                track_id=memory.stable_track_id,
+                bbox=_clamp_bbox(predicted_bbox, frame_shape),
+            )
         )
 
     def _to_lifecycle_track(
@@ -363,8 +382,29 @@ class TrackLifecycleManager:
             source_track_id=memory.source_track_id,
             state=state,
             last_seen_age_ms=last_seen_age_ms,
-            detection=memory.detection.with_updates(track_id=memory.stable_track_id),
+            detection=_copy_detection(
+                memory.detection.with_updates(track_id=memory.stable_track_id)
+            ),
         )
+
+    def _candidate_context_snapshot(self, ts: datetime) -> list[LifecycleTrack]:
+        tracks: list[LifecycleTrack] = []
+        for memory in self._tracks.values():
+            if memory.state not in {"tentative", "active", "coasting"}:
+                continue
+            state: CandidateContextTrackState = cast(CandidateContextTrackState, memory.state)
+            tracks.append(
+                LifecycleTrack(
+                    stable_track_id=memory.stable_track_id,
+                    source_track_id=memory.source_track_id,
+                    state=state,
+                    last_seen_age_ms=_elapsed_ms(memory.last_seen_ts, ts),
+                    detection=_copy_detection(
+                        memory.detection.with_updates(track_id=memory.stable_track_id)
+                    ),
+                )
+            )
+        return sorted(tracks, key=lambda track: track.stable_track_id)
 
     def _forget_track(self, stable_id: int) -> None:
         memory = self._tracks.pop(stable_id, None)
@@ -426,3 +466,17 @@ def _clamp_bbox(
     if y2 < y1:
         y1, y2 = y2, y1
     return (x1, y1, x2, y2)
+
+
+def _copy_detection(detection: Detection) -> Detection:
+    return detection.with_updates(attributes=dict(detection.attributes))
+
+
+def _copy_lifecycle_track(track: LifecycleTrack) -> LifecycleTrack:
+    return LifecycleTrack(
+        stable_track_id=track.stable_track_id,
+        source_track_id=track.source_track_id,
+        state=track.state,
+        last_seen_age_ms=track.last_seen_age_ms,
+        detection=_copy_detection(track.detection),
+    )

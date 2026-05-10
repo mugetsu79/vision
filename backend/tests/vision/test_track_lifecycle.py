@@ -50,6 +50,45 @@ def test_missing_track_coasts_until_ttl() -> None:
     assert coasting[0].last_seen_age_ms == 2_499
 
 
+def test_visible_tracks_snapshot_defensively_copies_detection_attributes() -> None:
+    manager = TrackLifecycleManager()
+    attributes = {"color": "blue"}
+
+    visible = manager.update(
+        detections=[
+            _person(
+                track_id=4,
+                confidence=0.91,
+            ).with_updates(attributes=attributes)
+        ],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    visible[0].detection.attributes["color"] = "red"
+    attributes["color"] = "green"
+
+    snapshot = manager.visible_tracks()
+
+    assert snapshot[0].detection.attributes == {"color": "blue"}
+
+
+def test_candidate_context_tracks_include_tentative_tracks() -> None:
+    manager = TrackLifecycleManager(TrackLifecycleConfig(tentative_hits=2))
+
+    visible = manager.update(
+        detections=[_person(track_id=4, confidence=0.50)],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert visible == []
+    assert [(track.stable_track_id, track.state) for track in manager.visible_tracks()] == []
+    assert [
+        (track.stable_track_id, track.state)
+        for track in manager.candidate_context_tracks()
+    ] == [(1, "tentative")]
+
+
 def test_coasting_track_expires_after_ttl() -> None:
     manager = TrackLifecycleManager(TrackLifecycleConfig(coast_ttl_ms=2_500))
 
