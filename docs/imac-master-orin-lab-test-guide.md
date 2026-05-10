@@ -20,6 +20,7 @@ The goal is not to prove final production performance. The goal is to prove that
 Related documents:
 
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
+- [model-loading-and-configuration-guide.md](/Users/yann.moren/vision/docs/model-loading-and-configuration-guide.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
 

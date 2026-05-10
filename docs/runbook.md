@@ -200,6 +200,10 @@ This Compose path is appropriate for lab and pilot bring-up. In the current iMac
 
 ## Model Metadata And Scope
 
+For a step-by-step checklist that covers every supported catalog model, primary
+model registration, scene configuration, and runtime artifact loading, see
+`docs/model-loading-and-configuration-guide.md`.
+
 `/Users/yann.moren/vision/models/` is only where local model files live; it does not define semantic class scope by itself. In local Docker development, the backend bind-mounts this checkout's `models/` path so registration-time ONNX validation can read the same absolute host path that host-side workers use later. When an ONNX model exposes embedded class metadata, treat that as the source of truth for registration and runtime inventory. Use `Camera.active_classes` only to narrow the operational scope. Custom reduced-class models remain an advanced optional path.
 
 ### Model Catalog And Open-Vocab Runtime
