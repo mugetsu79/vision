@@ -20,6 +20,7 @@ from argus.models.enums import (
     RuntimeArtifactValidationStatus,
 )
 from argus.models.tables import Camera, Model, ModelRuntimeArtifact
+from argus.vision.vocabulary import hash_vocabulary
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
@@ -149,6 +150,12 @@ class RuntimeArtifactService:
                 continue
             if artifact.scope is RuntimeArtifactScope.SCENE and artifact.camera_id != camera.id:
                 continue
+            if (
+                artifact.capability is DetectorCapability.OPEN_VOCAB
+                and artifact.scope is RuntimeArtifactScope.SCENE
+                and not artifact_matches_camera_vocabulary(artifact=artifact, camera=camera)
+            ):
+                continue
             responses.append(_artifact_to_response(artifact, model=model))
         return responses
 
@@ -257,6 +264,15 @@ def _validate_camera_uses_model(camera: Camera, model_id: UUID) -> None:
 
 def _artifact_is_stale(model: Model, artifact: ModelRuntimeArtifact) -> bool:
     return artifact.source_model_sha256 != model.sha256
+
+
+def artifact_matches_camera_vocabulary(
+    *,
+    artifact: ModelRuntimeArtifact,
+    camera: Camera,
+) -> bool:
+    expected_hash = hash_vocabulary(getattr(camera, "runtime_vocabulary", None) or [])
+    return artifact.vocabulary_hash == expected_hash
 
 
 def _model_capability(model: Model) -> DetectorCapability:

@@ -452,6 +452,48 @@ async def test_worker_config_includes_matching_open_vocab_scene_artifact_only() 
     assert config.runtime_artifacts[0].vocabulary_version == 7
 
 
+@pytest.mark.asyncio
+async def test_worker_config_excludes_open_vocab_scene_artifact_after_vocabulary_changes() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    model.capability = DetectorCapability.OPEN_VOCAB
+    model.capability_config = {
+        "supports_runtime_vocabulary_updates": True,
+        "max_runtime_terms": 32,
+        "runtime_backend": "ultralytics_yoloe",
+    }
+    model.classes = []
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=[],
+        runtime_vocabulary=["person", "chair", "backpack"],
+        runtime_vocabulary_source=RuntimeVocabularySource.MANUAL,
+        runtime_vocabulary_version=8,
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    artifact = _runtime_artifact(
+        model_id=model.id,
+        camera_id=camera.id,
+        scope=RuntimeArtifactScope.SCENE,
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=hash_vocabulary(["person", "chair"]),
+        vocabulary_version=7,
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[artifact],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert config.runtime_artifacts == []
+
+
 def test_camera_worker_config_returns_denormalized_detection_regions() -> None:
     camera = _camera(
         detection_regions=[

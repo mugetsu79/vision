@@ -117,7 +117,10 @@ from argus.models.tables import (
     TrackingEvent,
 )
 from argus.services.model_catalog import resolve_catalog_status
-from argus.services.runtime_artifacts import RuntimeArtifactService
+from argus.services.runtime_artifacts import (
+    RuntimeArtifactService,
+    artifact_matches_camera_vocabulary,
+)
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
@@ -2930,10 +2933,11 @@ def _runtime_artifact_matches_worker(
             runtime_vocabulary_hash,
         )
     if artifact.scope is RuntimeArtifactScope.SCENE:
-        return artifact.camera_id == camera.id and _artifact_vocabulary_matches(
-            artifact,
-            runtime_vocabulary_hash,
-        )
+        if artifact.camera_id != camera.id:
+            return False
+        if artifact.capability is DetectorCapability.OPEN_VOCAB:
+            return artifact_matches_camera_vocabulary(artifact=artifact, camera=camera)
+        return _artifact_vocabulary_matches(artifact, runtime_vocabulary_hash)
     return False
 
 

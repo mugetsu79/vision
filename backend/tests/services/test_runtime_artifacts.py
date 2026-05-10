@@ -24,7 +24,11 @@ from argus.models.enums import (
     TrackerType,
 )
 from argus.models.tables import Camera, Model, ModelRuntimeArtifact
-from argus.services.runtime_artifacts import RuntimeArtifactService
+from argus.services.runtime_artifacts import (
+    RuntimeArtifactService,
+    artifact_matches_camera_vocabulary,
+)
+from argus.vision.vocabulary import hash_vocabulary
 
 
 def test_runtime_artifact_create_supports_fixed_vocab_model_scope() -> None:
@@ -69,6 +73,31 @@ def test_runtime_artifact_create_requires_camera_for_scene_scope() -> None:
         assert "camera_id is required for scene-scoped artifacts" in str(exc)
     else:
         raise AssertionError("scene-scoped artifact without camera_id should fail")
+
+
+def test_runtime_artifact_create_requires_vocabulary_hash_for_open_vocab_scene() -> None:
+    camera_id = uuid4()
+
+    try:
+        RuntimeArtifactCreate(
+            camera_id=camera_id,
+            scope=RuntimeArtifactScope.SCENE,
+            kind=RuntimeArtifactKind.ONNX_EXPORT,
+            capability=DetectorCapability.OPEN_VOCAB,
+            runtime_backend="onnxruntime",
+            path="/models/camera-a/person-chair.onnx",
+            target_profile="linux-aarch64-nvidia-jetson",
+            precision=RuntimeArtifactPrecision.FP16,
+            input_shape={"width": 640, "height": 640},
+            classes=["person", "chair"],
+            source_model_sha256="a" * 64,
+            sha256="b" * 64,
+            size_bytes=1234,
+        )
+    except ValueError as exc:
+        assert "vocabulary_hash is required for open-vocab artifacts" in str(exc)
+    else:
+        raise AssertionError("open-vocab artifact without vocabulary_hash should fail")
 
 
 def test_runtime_artifact_response_round_trips_scene_vocab_hash() -> None:
@@ -225,8 +254,11 @@ def _artifact(
     model_id,
     camera_id=None,
     scope: RuntimeArtifactScope = RuntimeArtifactScope.MODEL,
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB,
     source_model_sha256: str = "a" * 64,
     validation_status: RuntimeArtifactValidationStatus = RuntimeArtifactValidationStatus.VALID,
+    vocabulary_hash: str | None = None,
+    vocabulary_version: int | None = None,
 ) -> ModelRuntimeArtifact:
     return ModelRuntimeArtifact(
         id=uuid4(),
@@ -234,15 +266,15 @@ def _artifact(
         camera_id=camera_id,
         scope=scope,
         kind=RuntimeArtifactKind.TENSORRT_ENGINE,
-        capability=DetectorCapability.FIXED_VOCAB,
+        capability=capability,
         runtime_backend="tensorrt_engine",
         path="/models/yolo26n.engine",
         target_profile="linux-aarch64-nvidia-jetson",
         precision=RuntimeArtifactPrecision.FP16,
         input_shape={"width": 640, "height": 640},
         classes=["person", "car"],
-        vocabulary_hash=None,
-        vocabulary_version=None,
+        vocabulary_hash=vocabulary_hash,
+        vocabulary_version=vocabulary_version,
         source_model_sha256=source_model_sha256,
         sha256="b" * 64,
         size_bytes=4321,
@@ -359,3 +391,23 @@ async def test_runtime_artifact_service_marks_stale_when_model_hash_changes() ->
     response = await service.list_for_model(model.id)
 
     assert response[0].validation_status is RuntimeArtifactValidationStatus.STALE
+
+
+def test_artifact_matches_camera_vocabulary_uses_runtime_vocabulary_hash() -> None:
+    model = _model(capability=DetectorCapability.OPEN_VOCAB)
+    camera = _camera(model_id=model.id)
+    camera.runtime_vocabulary = ["person", "chair"]
+    artifact = _artifact(
+        model_id=model.id,
+        camera_id=camera.id,
+        scope=RuntimeArtifactScope.SCENE,
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=hash_vocabulary(["person", "chair"]),
+        vocabulary_version=1,
+    )
+
+    assert artifact_matches_camera_vocabulary(artifact=artifact, camera=camera) is True
+
+    artifact.vocabulary_hash = hash_vocabulary(["forklift"])
+
+    assert artifact_matches_camera_vocabulary(artifact=artifact, camera=camera) is False
