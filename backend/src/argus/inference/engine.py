@@ -51,6 +51,9 @@ from argus.models.enums import (
     DetectorCapability,
     ProcessingMode,
     RuleAction,
+    RuntimeArtifactKind,
+    RuntimeArtifactPrecision,
+    RuntimeArtifactScope,
     RuntimeVocabularySource,
     TrackerType,
 )
@@ -148,6 +151,24 @@ class ModelSettings(BaseModel):
     iou_threshold: float = 0.45
 
 
+class RuntimeArtifactSettings(BaseModel):
+    id: UUID
+    scope: RuntimeArtifactScope
+    kind: RuntimeArtifactKind
+    capability: DetectorCapability
+    runtime_backend: str
+    path: str
+    target_profile: str
+    precision: RuntimeArtifactPrecision
+    input_shape: dict[str, int]
+    classes: list[str] = Field(default_factory=list)
+    vocabulary_hash: str | None = None
+    vocabulary_version: int | None = None
+    source_model_sha256: str
+    sha256: str
+    size_bytes: int
+
+
 class CameraSettings(BaseModel):
     rtsp_url: str
     frame_skip: int = 1
@@ -186,6 +207,7 @@ class EngineConfig(BaseModel):
     tracker: TrackerSettings
     privacy: PrivacyPolicy = Field(default_factory=PrivacyPolicy)
     active_classes: list[str] = Field(default_factory=list)
+    runtime_artifacts: list[RuntimeArtifactSettings] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[dict[str, Any]] = Field(default_factory=list)
     vision_profile: SceneVisionProfile = Field(default_factory=SceneVisionProfile)
