@@ -12,6 +12,7 @@ from argus.api.v1 import (
     models,
     operations,
     query,
+    runtime_artifacts,
     sites,
     streams,
     system,
@@ -23,6 +24,7 @@ router.include_router(system.router)
 router.include_router(sites.router)
 router.include_router(cameras.router)
 router.include_router(models.router)
+router.include_router(runtime_artifacts.router)
 router.include_router(model_catalog.router)
 router.include_router(edge.router)
 router.include_router(operations.router)

@@ -113,6 +113,7 @@ from argus.models.tables import (
     TrackingEvent,
 )
 from argus.services.model_catalog import resolve_catalog_status
+from argus.services.runtime_artifacts import RuntimeArtifactService
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
@@ -171,6 +172,7 @@ class AppServices:
     sites: SiteService
     cameras: CameraService
     models: ModelService
+    runtime_artifacts: RuntimeArtifactService
     edge: EdgeService
     operations: OperationsService
     history: HistoryService
@@ -2626,6 +2628,7 @@ def build_app_services(
         sites=SiteService(db.session_factory, audit_logger),
         cameras=CameraService(db.session_factory, settings, audit_logger, events),
         models=ModelService(db.session_factory, audit_logger),
+        runtime_artifacts=RuntimeArtifactService(db.session_factory),
         edge=edge_service,
         operations=OperationsService(
             db.session_factory,
