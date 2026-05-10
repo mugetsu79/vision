@@ -504,6 +504,24 @@ class WorkerModelSettings(BaseModel):
     iou_threshold: float = 0.45
 
 
+class WorkerRuntimeArtifact(BaseModel):
+    id: UUID
+    scope: RuntimeArtifactScope
+    kind: RuntimeArtifactKind
+    capability: DetectorCapability
+    runtime_backend: RuntimeBackend
+    path: str
+    target_profile: str
+    precision: RuntimeArtifactPrecision
+    input_shape: dict[str, int]
+    classes: list[str] = Field(default_factory=list)
+    vocabulary_hash: str | None = None
+    vocabulary_version: int | None = None
+    source_model_sha256: str
+    sha256: str
+    size_bytes: int
+
+
 class WorkerTrackerSettings(BaseModel):
     tracker_type: TrackerType
     frame_rate: int = Field(default=25, ge=1)
@@ -591,6 +609,7 @@ class WorkerConfigResponse(BaseModel):
     active_classes: list[str] = Field(default_factory=list)
     runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     runtime_capability: WorkerRuntimeCapability = Field(default_factory=WorkerRuntimeCapability)
+    runtime_artifacts: list[WorkerRuntimeArtifact] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[WorkerZone] = Field(default_factory=list)
     vision_profile: SceneVisionProfile = Field(default_factory=SceneVisionProfile)

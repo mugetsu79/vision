@@ -7,9 +7,22 @@ from fastapi import HTTPException
 
 from argus.api.contracts import SourceCapability
 from argus.core.config import Settings
-from argus.models.enums import ModelFormat, ModelTask, ProcessingMode, TrackerType
-from argus.models.tables import Camera, Model
-from argus.services.app import _camera_to_worker_config, derive_browser_profiles
+from argus.core.security import encrypt_rtsp_url
+from argus.models.enums import (
+    DetectorCapability,
+    ModelFormat,
+    ModelTask,
+    ProcessingMode,
+    RuntimeArtifactKind,
+    RuntimeArtifactPrecision,
+    RuntimeArtifactScope,
+    RuntimeArtifactValidationStatus,
+    RuntimeVocabularySource,
+    TrackerType,
+)
+from argus.models.tables import Camera, Model, ModelRuntimeArtifact
+from argus.services.app import CameraService, _camera_to_worker_config, derive_browser_profiles
+from argus.vision.vocabulary import hash_vocabulary
 
 
 def _settings() -> Settings:
@@ -28,6 +41,8 @@ def _model(model_id):
         task=ModelTask.DETECT,
         path="/models/yolo12n.onnx",
         format=ModelFormat.ONNX,
+        capability=DetectorCapability.FIXED_VOCAB,
+        capability_config={},
         classes=["person", "car", "bus", "truck"],
         input_shape={"width": 640, "height": 640},
         sha256="a" * 64,
@@ -48,6 +63,10 @@ def _camera(**overrides):
         "secondary_model_id": None,
         "tracker_type": TrackerType.BOTSORT,
         "active_classes": [],
+        "runtime_vocabulary": [],
+        "runtime_vocabulary_source": RuntimeVocabularySource.DEFAULT,
+        "runtime_vocabulary_version": 0,
+        "runtime_vocabulary_updated_at": None,
         "attribute_rules": [],
         "zones": [],
         "vision_profile": {},
@@ -69,6 +88,128 @@ def _camera(**overrides):
     }
     values.update(overrides)
     return Camera(**values)
+
+
+class _Result:
+    def __init__(self, values: list[object]) -> None:
+        self.values = values
+
+    def scalar_one_or_none(self) -> object | None:
+        return self.values[0] if self.values else None
+
+    def scalars(self) -> _Result:
+        return self
+
+    def all(self) -> list[object]:
+        return self.values
+
+
+class _WorkerConfigSession:
+    def __init__(self, state: dict[str, object]) -> None:
+        self.state = state
+
+    async def __aenter__(self) -> _WorkerConfigSession:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+        return None
+
+    async def get(self, model_cls, model_id):  # noqa: ANN001
+        models = self.state["models"]
+        assert isinstance(models, dict)
+        if model_cls is Model:
+            return models.get(model_id)
+        return None
+
+    async def execute(self, statement):  # noqa: ANN001
+        if "model_runtime_artifacts" in str(statement):
+            artifacts = self.state["artifacts"]
+            assert isinstance(artifacts, list)
+            return _Result(artifacts)
+        camera = self.state["camera"]
+        return _Result([camera])
+
+
+class _WorkerConfigSessionFactory:
+    def __init__(
+        self,
+        *,
+        camera: Camera,
+        models: dict[object, Model],
+        artifacts: list[ModelRuntimeArtifact],
+    ) -> None:
+        self.state: dict[str, object] = {
+            "camera": camera,
+            "models": models,
+            "artifacts": artifacts,
+        }
+
+    def __call__(self) -> _WorkerConfigSession:
+        return _WorkerConfigSession(self.state)
+
+
+class _FakeAuditLogger:
+    async def record(self, **kwargs: object) -> None:
+        return None
+
+
+def _tenant_context():
+    from argus.api.contracts import TenantContext
+    from argus.core.security import AuthenticatedUser
+    from argus.models.enums import RoleEnum
+
+    tenant_id = uuid4()
+    user = AuthenticatedUser(
+        subject="worker-test",
+        email="worker@argus.local",
+        role=RoleEnum.ADMIN,
+        issuer="http://localhost:8080/realms/argus-dev",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=str(tenant_id),
+        claims={},
+    )
+    return TenantContext(tenant_id=tenant_id, tenant_slug="argus-dev", user=user)
+
+
+def _encrypted_rtsp_url(settings: Settings) -> str:
+    return encrypt_rtsp_url("rtsp://lab-camera.local/live", settings)
+
+
+def _runtime_artifact(
+    *,
+    model_id,
+    camera_id=None,
+    scope: RuntimeArtifactScope = RuntimeArtifactScope.MODEL,
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB,
+    source_model_sha256: str = "a" * 64,
+    validation_status: RuntimeArtifactValidationStatus = RuntimeArtifactValidationStatus.VALID,
+    vocabulary_hash: str | None = None,
+    vocabulary_version: int | None = None,
+) -> ModelRuntimeArtifact:
+    return ModelRuntimeArtifact(
+        id=uuid4(),
+        model_id=model_id,
+        camera_id=camera_id,
+        scope=scope,
+        kind=RuntimeArtifactKind.TENSORRT_ENGINE,
+        capability=capability,
+        runtime_backend="tensorrt_engine",
+        path="/models/yolo12n.engine",
+        target_profile="linux-aarch64-nvidia-jetson",
+        precision=RuntimeArtifactPrecision.FP16,
+        input_shape={"width": 640, "height": 640},
+        classes=["person", "car", "bus", "truck"],
+        vocabulary_hash=vocabulary_hash,
+        vocabulary_version=vocabulary_version,
+        source_model_sha256=source_model_sha256,
+        sha256="b" * 64,
+        size_bytes=1234,
+        builder={},
+        runtime_versions={},
+        validation_status=validation_status,
+        validation_error=None,
+    )
 
 
 def test_source_capability_hides_1080p_above_720p_source() -> None:
@@ -192,6 +333,123 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
         "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
         "ref_distance_m": 12.5,
     }
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_valid_fixed_vocab_runtime_artifact() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    artifact = _runtime_artifact(model_id=model.id)
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[artifact],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert [candidate.id for candidate in config.runtime_artifacts] == [artifact.id]
+    assert config.runtime_artifacts[0].runtime_backend == "tensorrt_engine"
+
+
+@pytest.mark.asyncio
+async def test_worker_config_excludes_invalid_and_stale_runtime_artifacts() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    invalid = _runtime_artifact(
+        model_id=model.id,
+        validation_status=RuntimeArtifactValidationStatus.INVALID,
+    )
+    stale = _runtime_artifact(model_id=model.id, source_model_sha256="f" * 64)
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[invalid, stale],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert config.runtime_artifacts == []
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_matching_open_vocab_scene_artifact_only() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    model.capability = DetectorCapability.OPEN_VOCAB
+    model.capability_config = {
+        "supports_runtime_vocabulary_updates": True,
+        "max_runtime_terms": 32,
+        "runtime_backend": "ultralytics_yoloe",
+    }
+    model.classes = []
+    terms = ["person", "chair"]
+    expected_hash = hash_vocabulary(terms)
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=[],
+        runtime_vocabulary=terms,
+        runtime_vocabulary_source=RuntimeVocabularySource.MANUAL,
+        runtime_vocabulary_version=7,
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    matching = _runtime_artifact(
+        model_id=model.id,
+        camera_id=camera.id,
+        scope=RuntimeArtifactScope.SCENE,
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=expected_hash,
+        vocabulary_version=7,
+    )
+    wrong_camera = _runtime_artifact(
+        model_id=model.id,
+        camera_id=uuid4(),
+        scope=RuntimeArtifactScope.SCENE,
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=expected_hash,
+        vocabulary_version=7,
+    )
+    wrong_vocab = _runtime_artifact(
+        model_id=model.id,
+        camera_id=camera.id,
+        scope=RuntimeArtifactScope.SCENE,
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=hash_vocabulary(["forklift"]),
+        vocabulary_version=6,
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[matching, wrong_camera, wrong_vocab],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert [candidate.id for candidate in config.runtime_artifacts] == [matching.id]
+    assert config.runtime_artifacts[0].vocabulary_hash == expected_hash
+    assert config.runtime_artifacts[0].vocabulary_version == 7
 
 
 def test_camera_worker_config_returns_denormalized_detection_regions() -> None:

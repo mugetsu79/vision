@@ -78,6 +78,7 @@ from argus.api.contracts import (
     WorkerModelSettings,
     WorkerPrivacySettings,
     WorkerPublishSettings,
+    WorkerRuntimeArtifact,
     WorkerRuntimeCapability,
     WorkerRuntimeStatus,
     WorkerStreamSettings,
@@ -98,6 +99,8 @@ from argus.models.enums import (
     ModelFormat,
     ModelTask,
     ProcessingMode,
+    RuntimeArtifactScope,
+    RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
 )
 from argus.models.tables import (
@@ -108,6 +111,7 @@ from argus.models.tables import (
     EdgeNode,
     Incident,
     Model,
+    ModelRuntimeArtifact,
     Site,
     Tenant,
     TrackingEvent,
@@ -548,6 +552,11 @@ class CameraService:
             secondary_model = None
             if camera.secondary_model_id is not None:
                 secondary_model = await _load_model(session, camera.secondary_model_id)
+            runtime_artifacts = await _load_worker_runtime_artifacts(
+                session=session,
+                camera=camera,
+                model=primary_model,
+            )
 
         rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
         return _camera_to_worker_config(
@@ -556,6 +565,7 @@ class CameraService:
             secondary_model=secondary_model,
             settings=self.settings,
             rtsp_url=rtsp_url,
+            runtime_artifacts=runtime_artifacts,
         )
 
     async def probe_camera_source(
@@ -2817,6 +2827,31 @@ async def _load_camera(session: AsyncSession, tenant_id: UUID, camera_id: UUID) 
     return camera
 
 
+async def _load_worker_runtime_artifacts(
+    *,
+    session: AsyncSession,
+    camera: Camera,
+    model: Model,
+) -> list[ModelRuntimeArtifact]:
+    statement = select(ModelRuntimeArtifact).where(ModelRuntimeArtifact.model_id == model.id)
+    artifacts = (await session.execute(statement)).scalars().all()
+    runtime_vocabulary_hash = (
+        hash_vocabulary(getattr(camera, "runtime_vocabulary", None) or [])
+        if _model_capability(model) is DetectorCapability.OPEN_VOCAB
+        else None
+    )
+    return [
+        artifact
+        for artifact in artifacts
+        if _runtime_artifact_matches_worker(
+            artifact=artifact,
+            camera=camera,
+            model=model,
+            runtime_vocabulary_hash=runtime_vocabulary_hash,
+        )
+    ]
+
+
 async def _get_site(
     *,
     session_factory: async_sessionmaker[AsyncSession],
@@ -2874,6 +2909,41 @@ def _model_capability(model: Model) -> DetectorCapability:
 
 def _model_capability_config(model: Model) -> dict[str, object]:
     return dict(getattr(model, "capability_config", None) or {})
+
+
+def _runtime_artifact_matches_worker(
+    *,
+    artifact: ModelRuntimeArtifact,
+    camera: Camera,
+    model: Model,
+    runtime_vocabulary_hash: str | None,
+) -> bool:
+    if artifact.validation_status is not RuntimeArtifactValidationStatus.VALID:
+        return False
+    if artifact.source_model_sha256 != model.sha256:
+        return False
+    if artifact.capability is not _model_capability(model):
+        return False
+    if artifact.scope is RuntimeArtifactScope.MODEL:
+        return artifact.camera_id is None and _artifact_vocabulary_matches(
+            artifact,
+            runtime_vocabulary_hash,
+        )
+    if artifact.scope is RuntimeArtifactScope.SCENE:
+        return artifact.camera_id == camera.id and _artifact_vocabulary_matches(
+            artifact,
+            runtime_vocabulary_hash,
+        )
+    return False
+
+
+def _artifact_vocabulary_matches(
+    artifact: ModelRuntimeArtifact,
+    runtime_vocabulary_hash: str | None,
+) -> bool:
+    if artifact.capability is not DetectorCapability.OPEN_VOCAB:
+        return True
+    return bool(artifact.vocabulary_hash) and artifact.vocabulary_hash == runtime_vocabulary_hash
 
 
 def _validate_model_runtime_backend(
@@ -3111,6 +3181,7 @@ def _camera_to_worker_config(
     secondary_model: Model | None,
     settings: Settings,
     rtsp_url: str,
+    runtime_artifacts: list[ModelRuntimeArtifact] | None = None,
 ) -> WorkerConfigResponse:
     privacy = PrivacySettings.model_validate(camera.privacy)
     requested_browser_delivery = BrowserDeliverySettings.model_validate(
@@ -3171,11 +3242,35 @@ def _camera_to_worker_config(
         active_classes=list(camera.active_classes),
         runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         runtime_capability=_worker_runtime_capability(primary_model),
+        runtime_artifacts=[
+            _runtime_artifact_to_worker_payload(artifact)
+            for artifact in (runtime_artifacts or [])
+        ],
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
         vision_profile=vision_profile,
         detection_regions=detection_regions,
         homography=_homography_to_worker_payload(camera.homography),
+    )
+
+
+def _runtime_artifact_to_worker_payload(artifact: ModelRuntimeArtifact) -> WorkerRuntimeArtifact:
+    return WorkerRuntimeArtifact(
+        id=artifact.id,
+        scope=artifact.scope,
+        kind=artifact.kind,
+        capability=artifact.capability,
+        runtime_backend=artifact.runtime_backend,
+        path=artifact.path,
+        target_profile=artifact.target_profile,
+        precision=artifact.precision,
+        input_shape=dict(artifact.input_shape),
+        classes=list(artifact.classes),
+        vocabulary_hash=artifact.vocabulary_hash,
+        vocabulary_version=artifact.vocabulary_version,
+        source_model_sha256=artifact.source_model_sha256,
+        sha256=artifact.sha256,
+        size_bytes=artifact.size_bytes,
     )
 
 
