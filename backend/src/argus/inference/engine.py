@@ -89,6 +89,7 @@ from argus.vision.runtime import (
     import_onnxruntime,
     resolve_execution_policy,
 )
+from argus.vision.runtime_selection import RuntimeSelection, select_runtime_artifact
 from argus.vision.track_lifecycle import LifecycleTrack, TrackLifecycleManager
 from argus.vision.tracker import TrackerConfig, create_tracker
 from argus.vision.types import Detection
@@ -515,13 +516,39 @@ def build_detector(
     model: ModelSettings,
     runtime: Any,
     runtime_policy: RuntimeExecutionPolicy,
+    runtime_selection: RuntimeSelection | None = None,
 ) -> Detector:
     return _build_detector(
         model=model,
         runtime=runtime,
         runtime_policy=runtime_policy,
+        runtime_selection=runtime_selection,
         yolo_detector_cls=YoloDetector,
     )
+
+
+def _build_detector_with_selection(
+    *,
+    model: ModelSettings,
+    runtime: Any,
+    runtime_policy: RuntimeExecutionPolicy,
+    runtime_selection: RuntimeSelection,
+) -> Detector:
+    try:
+        return build_detector(
+            model=model,
+            runtime=runtime,
+            runtime_policy=runtime_policy,
+            runtime_selection=runtime_selection,
+        )
+    except TypeError as exc:
+        if "runtime_selection" not in str(exc):
+            raise
+        return build_detector(
+            model=model,
+            runtime=runtime,
+            runtime_policy=runtime_policy,
+        )
 
 
 @dataclass(slots=True)
@@ -620,6 +647,13 @@ def _duration_to_ms(duration: float | None) -> float | None:
     return duration * 1000.0
 
 
+def _canonical_model_backend(model: ModelSettings) -> str:
+    backend = model.capability_config.get("runtime_backend")
+    if backend is not None:
+        return str(backend)
+    return "onnxruntime"
+
+
 class InferenceEngine:
     def __init__(
         self,
@@ -707,6 +741,12 @@ class InferenceEngine:
         self._frame_attempt_index = 0
         self._last_stage_timings: dict[str, float] = {}
         self._timing_summary = _TimingSummaryWindow()
+        self.runtime_selection = RuntimeSelection(
+            selected_backend=_canonical_model_backend(config.model),
+            artifact=None,
+            fallback=True,
+            fallback_reason="not_selected",
+        )
         self._started = False
 
     async def start(self) -> None:
@@ -980,6 +1020,16 @@ class InferenceEngine:
                 self._state.runtime_vocabulary_source = command.runtime_vocabulary_source
             if command.runtime_vocabulary_version is not None:
                 self._state.runtime_vocabulary_version = command.runtime_vocabulary_version
+            if (
+                self.config.model.capability is DetectorCapability.OPEN_VOCAB
+                and self.runtime_selection.artifact is not None
+            ):
+                self.runtime_selection = RuntimeSelection(
+                    selected_backend=_canonical_model_backend(self.config.model),
+                    artifact=None,
+                    fallback=True,
+                    fallback_reason="vocabulary_changed",
+                )
             self.detector.update_runtime_vocabulary(self._state.runtime_vocabulary)
             if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
                 runtime_state: dict[str, object] = {}
@@ -994,6 +1044,13 @@ class InferenceEngine:
                     len(self._state.runtime_vocabulary),
                     self._state.runtime_vocabulary_version,
                 )
+                if self.runtime_selection.fallback_reason == "vocabulary_changed":
+                    logger.info(
+                        "Open-vocab compiled artifact fallback for camera %s "
+                        "selected_backend=%s fallback_reason=vocabulary_changed",
+                        self.config.camera_id,
+                        self.runtime_selection.selected_backend,
+                    )
         if command.tracker_type is not None and command.tracker_type != self._state.tracker_type:
             self._state.tracker_type = command.tracker_type
             self._tracker = self._tracker_factory(command.tracker_type)
@@ -1563,10 +1620,32 @@ async def build_runtime_engine(
         runtime_policy.profile_overridden,
         list(runtime_policy.available_providers),
     )
-    detector = build_detector(
+    runtime_selection = select_runtime_artifact(
+        model=config.model,
+        host_profile=runtime_policy.profile.value,
+        artifacts=config.runtime_artifacts,
+        runtime_vocabulary_hash=(
+            hash_vocabulary(config.model.runtime_vocabulary.terms)
+            if config.model.capability is DetectorCapability.OPEN_VOCAB
+            else None
+        ),
+    )
+    logger.info(
+        "Selected inference runtime camera_id=%s model=%s selected_backend=%s "
+        "artifact_id=%s host_profile=%s fallback=%s fallback_reason=%s",
+        config.camera_id,
+        config.model.name,
+        runtime_selection.selected_backend,
+        runtime_selection.artifact.id if runtime_selection.artifact is not None else None,
+        runtime_policy.profile.value,
+        runtime_selection.fallback,
+        runtime_selection.fallback_reason,
+    )
+    detector = _build_detector_with_selection(
         model=config.model,
         runtime=runtime,
         runtime_policy=runtime_policy,
+        runtime_selection=runtime_selection,
     )
 
     def tracker_factory(tracker_type: TrackerType) -> Tracker:
@@ -1620,7 +1699,7 @@ async def build_runtime_engine(
         shutdown_timeout_seconds=settings.telemetry_publish_shutdown_timeout_seconds,
     )
 
-    return InferenceEngine(
+    engine = InferenceEngine(
         config=config,
         frame_source=frame_source,
         detector=detector,
@@ -1645,6 +1724,8 @@ async def build_runtime_engine(
         incident_capture=incident_capture,
         diagnostics_enabled=settings.worker_diagnostics_enabled,
     )
+    engine.runtime_selection = runtime_selection
+    return engine
 
 
 async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = None) -> None:

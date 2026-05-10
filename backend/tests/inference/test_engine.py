@@ -22,6 +22,7 @@ from argus.inference.engine import (
     InferenceEngine,
     ModelSettings,
     PublishSettings,
+    RuntimeArtifactSettings,
     StreamSettings,
     TrackerSettings,
 )
@@ -31,6 +32,9 @@ from argus.models.enums import (
     DetectorCapability,
     ProcessingMode,
     RuleAction,
+    RuntimeArtifactKind,
+    RuntimeArtifactPrecision,
+    RuntimeArtifactScope,
     RuntimeVocabularySource,
     TrackerType,
 )
@@ -50,6 +54,7 @@ from argus.vision.runtime import (
     HostClassification,
     RuntimeExecutionPolicy,
 )
+from argus.vision.runtime_selection import RuntimeSelection
 from argus.vision.track_lifecycle import LifecycleTrack
 from argus.vision.types import Detection
 
@@ -485,6 +490,31 @@ def _engine_config(camera_id: UUID) -> EngineConfig:
         active_classes=["car"],
         attribute_rules=[],
         zones=[],
+    )
+
+
+def _runtime_artifact_settings(
+    *,
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB,
+    target_profile: str = ExecutionProfile.MACOS_X86_64_INTEL.value,
+    vocabulary_hash: str | None = None,
+) -> RuntimeArtifactSettings:
+    return RuntimeArtifactSettings(
+        id=uuid4(),
+        scope=RuntimeArtifactScope.MODEL,
+        kind=RuntimeArtifactKind.TENSORRT_ENGINE,
+        capability=capability,
+        runtime_backend="tensorrt_engine",
+        path="/models/vehicles.engine",
+        target_profile=target_profile,
+        precision=RuntimeArtifactPrecision.FP16,
+        input_shape={"width": 96, "height": 96},
+        classes=[] if capability is DetectorCapability.OPEN_VOCAB else ["car", "bus"],
+        vocabulary_hash=vocabulary_hash,
+        vocabulary_version=2 if vocabulary_hash is not None else None,
+        source_model_sha256="a" * 64,
+        sha256="b" * 64,
+        size_bytes=1234,
     )
 
 
@@ -2912,6 +2942,148 @@ async def test_build_runtime_engine_passes_runtime_vocabulary_to_detector_factor
     assert model.capability == DetectorCapability.OPEN_VOCAB
     assert model.runtime_vocabulary.terms == ["forklift", "pallet jack"]
     assert model.runtime_vocabulary.version == 1
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_passes_selected_tensorrt_artifact_to_detector_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    artifact = _runtime_artifact_settings()
+    detector_calls: dict[str, object] = {}
+
+    def fake_build_detector(
+        *,
+        model: object,
+        runtime: object,
+        runtime_policy: object,
+        runtime_selection: object,
+    ) -> object:
+        detector_calls["model"] = model
+        detector_calls["runtime_selection"] = runtime_selection
+        return object()
+
+    _patch_runtime_engine_build_dependencies(monkeypatch, build_detector=fake_build_detector)
+    config = _engine_config(camera_id).model_copy(update={"runtime_artifacts": [artifact]})
+
+    await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    selection = detector_calls["runtime_selection"]
+    assert selection.selected_backend == "tensorrt_engine"
+    assert selection.artifact == artifact
+    assert selection.fallback is False
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_falls_back_to_onnx_when_artifact_target_mismatches(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    detector_calls: dict[str, object] = {}
+
+    def fake_build_detector(
+        *,
+        model: object,
+        runtime: object,
+        runtime_policy: object,
+        runtime_selection: object,
+    ) -> object:
+        detector_calls["runtime_selection"] = runtime_selection
+        return object()
+
+    _patch_runtime_engine_build_dependencies(monkeypatch, build_detector=fake_build_detector)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "runtime_artifacts": [
+                _runtime_artifact_settings(target_profile=ExecutionProfile.NVIDIA_LINUX_X86_64.value)
+            ]
+        }
+    )
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+
+    await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    selection = detector_calls["runtime_selection"]
+    assert selection.selected_backend == "onnxruntime"
+    assert selection.artifact is None
+    assert selection.fallback_reason == "artifact_target_mismatch"
+    assert any(
+        "Selected inference runtime" in record.message
+        and "fallback=True" in record.message
+        and "artifact_target_mismatch" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_open_vocab_vocabulary_change_marks_compiled_artifact_fallback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    artifact = _runtime_artifact_settings(
+        capability=DetectorCapability.OPEN_VOCAB,
+        vocabulary_hash=_expected_vocabulary_hash(["forklift"]),
+    )
+    detector = _FakeOpenVocabDetector(runtime_vocabulary=["forklift"])
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="YOLOE",
+                path="/models/yoloe.pt",
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={
+                    "runtime_backend": "ultralytics_yoloe",
+                    "supports_runtime_vocabulary_updates": True,
+                },
+                classes=[],
+                runtime_vocabulary={"terms": ["forklift"], "version": 1},
+                input_shape={"width": 96, "height": 96},
+            ),
+            "runtime_artifacts": [artifact],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([]),
+        detector=detector,
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+    engine.runtime_selection = RuntimeSelection(
+        selected_backend="tensorrt_engine",
+        artifact=artifact,
+        fallback=False,
+        fallback_reason=None,
+    )
+    caplog.set_level(logging.INFO, logger="argus.inference.engine")
+
+    await engine.apply_command(
+        CameraCommand(
+            runtime_vocabulary=["forklift", "pallet jack"],
+            runtime_vocabulary_source=RuntimeVocabularySource.MANUAL,
+            runtime_vocabulary_version=2,
+        )
+    )
+
+    assert engine.runtime_selection.selected_backend == "ultralytics_yoloe"
+    assert engine.runtime_selection.artifact is None
+    assert engine.runtime_selection.fallback is True
+    assert engine.runtime_selection.fallback_reason == "vocabulary_changed"
+    assert detector.runtime_vocabulary_updates[-1] == ["forklift", "pallet jack"]
+    assert any("fallback_reason=vocabulary_changed" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio

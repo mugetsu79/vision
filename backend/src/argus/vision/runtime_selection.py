@@ -2,24 +2,39 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any, Protocol
+from uuid import UUID
 
-from argus.inference.engine import ModelSettings, RuntimeArtifactSettings
 from argus.models.enums import DetectorCapability, RuntimeArtifactKind
+
+
+class RuntimeArtifactCandidate(Protocol):
+    id: UUID
+    kind: RuntimeArtifactKind
+    capability: DetectorCapability
+    runtime_backend: str
+    target_profile: str
+    vocabulary_hash: str | None
+
+
+class RuntimeModelCandidate(Protocol):
+    capability: DetectorCapability
+    capability_config: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
 class RuntimeSelection:
     selected_backend: str
-    artifact: RuntimeArtifactSettings | None
+    artifact: RuntimeArtifactCandidate | None
     fallback: bool
     fallback_reason: str | None
 
 
 def select_runtime_artifact(
     *,
-    model: ModelSettings,
+    model: RuntimeModelCandidate,
     host_profile: str,
-    artifacts: Iterable[RuntimeArtifactSettings],
+    artifacts: Iterable[RuntimeArtifactCandidate],
     runtime_vocabulary_hash: str | None,
 ) -> RuntimeSelection:
     candidates = list(artifacts)
@@ -88,8 +103,8 @@ def select_runtime_artifact(
 
 def _artifact_matches_vocabulary(
     *,
-    model: ModelSettings,
-    artifact: RuntimeArtifactSettings,
+    model: RuntimeModelCandidate,
+    artifact: RuntimeArtifactCandidate,
     runtime_vocabulary_hash: str | None,
 ) -> bool:
     if model.capability is not DetectorCapability.OPEN_VOCAB:
@@ -98,13 +113,13 @@ def _artifact_matches_vocabulary(
 
 
 def _first_kind(
-    artifacts: list[RuntimeArtifactSettings],
+    artifacts: list[RuntimeArtifactCandidate],
     kind: RuntimeArtifactKind,
-) -> RuntimeArtifactSettings | None:
+) -> RuntimeArtifactCandidate | None:
     return next((artifact for artifact in artifacts if artifact.kind is kind), None)
 
 
-def _canonical_model_backend(model: ModelSettings) -> str:
+def _canonical_model_backend(model: RuntimeModelCandidate) -> str:
     backend = model.capability_config.get("runtime_backend")
     if backend is not None:
         return str(backend)
