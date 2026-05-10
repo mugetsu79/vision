@@ -2731,6 +2731,28 @@ async def test_update_camera_publishes_zone_command_to_running_worker(
         active_classes=["person"],
         attribute_rules=[],
         zones=[],
+        vision_profile={
+            "accuracy_mode": "maximum_accuracy",
+            "compute_tier": "edge_advanced_jetson",
+            "scene_difficulty": "crowded",
+            "object_domain": "people",
+            "motion_metrics": {"speed_enabled": False},
+        },
+        detection_regions=[
+            {
+                "id": "lab-floor",
+                "mode": "include",
+                "polygon": [[100, 100], [1100, 100], [1100, 700], [100, 700]],
+                "class_names": ["person"],
+                "frame_size": {"width": 1280, "height": 720},
+                "points_normalized": [
+                    [0.078125, 0.138889],
+                    [0.859375, 0.138889],
+                    [0.859375, 0.972222],
+                    [0.078125, 0.972222],
+                ],
+            }
+        ],
         homography={
             "src": [[0, 0], [10, 0], [10, 10], [0, 10]],
             "dst": [[0, 0], [5, 0], [5, 5], [0, 5]],
@@ -2827,6 +2849,19 @@ async def test_update_camera_publishes_zone_command_to_running_worker(
         "blur_plates": True,
         "method": "pixelate",
         "strength": 20,
+    }
+    assert command_payload["vision_profile"]["compute_tier"] == "edge_advanced_jetson"
+    assert command_payload["detection_regions"][0]["id"] == "lab-floor"
+    assert command_payload["detection_regions"][0]["polygon"] == [
+        [100.0, 100.0],
+        [1100.0, 100.0],
+        [1100.0, 700.0],
+        [100.0, 700.0],
+    ]
+    assert command_payload["homography"] == {
+        "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "dst_points": [[0, 0], [5, 0], [5, 5], [0, 5]],
+        "ref_distance_m": 5.0,
     }
 
 

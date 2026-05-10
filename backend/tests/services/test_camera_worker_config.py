@@ -2,11 +2,73 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
+
 from argus.api.contracts import SourceCapability
 from argus.core.config import Settings
 from argus.models.enums import ModelFormat, ModelTask, ProcessingMode, TrackerType
 from argus.models.tables import Camera, Model
 from argus.services.app import _camera_to_worker_config, derive_browser_profiles
+
+
+def _settings() -> Settings:
+    return Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+
+
+def _model(model_id):
+    return Model(
+        id=model_id,
+        name="YOLO12n",
+        version="lab-1",
+        task=ModelTask.DETECT,
+        path="/models/yolo12n.onnx",
+        format=ModelFormat.ONNX,
+        classes=["person", "car", "bus", "truck"],
+        input_shape={"width": 640, "height": 640},
+        sha256="a" * 64,
+        size_bytes=123,
+        license="lab",
+    )
+
+
+def _camera(**overrides):
+    values = {
+        "id": uuid4(),
+        "site_id": uuid4(),
+        "edge_node_id": None,
+        "name": "Dock Camera",
+        "rtsp_url_encrypted": "encrypted",
+        "processing_mode": ProcessingMode.CENTRAL,
+        "primary_model_id": uuid4(),
+        "secondary_model_id": None,
+        "tracker_type": TrackerType.BOTSORT,
+        "active_classes": [],
+        "attribute_rules": [],
+        "zones": [],
+        "vision_profile": {},
+        "detection_regions": [],
+        "homography": None,
+        "privacy": {
+            "blur_faces": False,
+            "blur_plates": False,
+            "method": "gaussian",
+            "strength": 7,
+        },
+        "browser_delivery": {
+            "default_profile": "native",
+            "allow_native_on_demand": True,
+            "profiles": [],
+        },
+        "frame_skip": 1,
+        "fps_cap": 17,
+    }
+    values.update(overrides)
+    return Camera(**values)
 
 
 def test_source_capability_hides_1080p_above_720p_source() -> None:
@@ -130,6 +192,145 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
         "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
         "ref_distance_m": 12.5,
     }
+
+
+def test_camera_worker_config_returns_denormalized_detection_regions() -> None:
+    camera = _camera(
+        detection_regions=[
+            {
+                "id": "lab-floor",
+                "mode": "include",
+                "polygon": [[100, 100], [1100, 100], [1100, 700], [100, 700]],
+                "class_names": ["person"],
+                "frame_size": {"width": 1280, "height": 720},
+                "points_normalized": [
+                    [0.078125, 0.138889],
+                    [0.859375, 0.138889],
+                    [0.859375, 0.972222],
+                    [0.078125, 0.972222],
+                ],
+            }
+        ],
+    )
+    primary_model = _model(camera.primary_model_id)
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=primary_model,
+        secondary_model=None,
+        settings=_settings(),
+        rtsp_url="rtsp://lab-camera.local/live",
+    )
+
+    assert len(config.detection_regions) == 1
+    region = config.detection_regions[0]
+    assert region.polygon == [[100.0, 100.0], [1100.0, 100.0], [1100.0, 700.0], [100.0, 700.0]]
+    assert region.points_normalized == [
+        [0.078125, 0.138889],
+        [0.859375, 0.138889],
+        [0.859375, 0.972222],
+        [0.078125, 0.972222],
+    ]
+
+
+def test_camera_worker_config_speed_enabled_profile_includes_homography() -> None:
+    camera = _camera(
+        vision_profile={
+            "accuracy_mode": "balanced",
+            "compute_tier": "edge_standard",
+            "motion_metrics": {"speed_enabled": True},
+        },
+        homography={
+            "src": [[0, 0], [100, 0], [100, 100], [0, 100]],
+            "dst": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "ref_distance_m": 12.5,
+        },
+    )
+    primary_model = _model(camera.primary_model_id)
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=primary_model,
+        secondary_model=None,
+        settings=_settings(),
+        rtsp_url="rtsp://lab-camera.local/live",
+    )
+
+    assert config.vision_profile.motion_metrics.speed_enabled is True
+    assert config.homography == {
+        "src_points": [[0, 0], [100, 0], [100, 100], [0, 100]],
+        "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "ref_distance_m": 12.5,
+    }
+
+
+def test_camera_worker_config_speed_disabled_profile_can_return_no_homography() -> None:
+    camera = _camera(
+        vision_profile={
+            "accuracy_mode": "fast",
+            "compute_tier": "cpu_low",
+            "motion_metrics": {"speed_enabled": False},
+        },
+        homography=None,
+    )
+    primary_model = _model(camera.primary_model_id)
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=primary_model,
+        secondary_model=None,
+        settings=_settings(),
+        rtsp_url="rtsp://lab-camera.local/live",
+    )
+
+    assert config.vision_profile.motion_metrics.speed_enabled is False
+    assert config.homography is None
+
+
+def test_camera_worker_config_rejects_speed_enabled_without_homography() -> None:
+    camera = _camera(
+        vision_profile={
+            "accuracy_mode": "balanced",
+            "compute_tier": "edge_standard",
+            "motion_metrics": {"speed_enabled": True},
+        },
+        homography=None,
+    )
+    primary_model = _model(camera.primary_model_id)
+
+    with pytest.raises(HTTPException) as exc_info:
+        _camera_to_worker_config(
+            camera=camera,
+            primary_model=primary_model,
+            secondary_model=None,
+            settings=_settings(),
+            rtsp_url="rtsp://lab-camera.local/live",
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Homography is required when speed metrics are enabled."
+
+
+def test_camera_worker_config_preserves_jetson_tier() -> None:
+    camera = _camera(
+        vision_profile={
+            "accuracy_mode": "maximum_accuracy",
+            "compute_tier": "edge_advanced_jetson",
+            "scene_difficulty": "crowded",
+            "object_domain": "people",
+        },
+    )
+    primary_model = _model(camera.primary_model_id)
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=primary_model,
+        secondary_model=None,
+        settings=_settings(),
+        rtsp_url="rtsp://lab-camera.local/live",
+    )
+
+    assert config.vision_profile.compute_tier == "edge_advanced_jetson"
 
 
 def test_edge_native_browser_delivery_keeps_passthrough_stream() -> None:

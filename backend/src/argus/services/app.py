@@ -32,6 +32,7 @@ from argus.api.contracts import (
     CameraSourceProbeResponse,
     CameraUpdate,
     DerivedBrowserProfiles,
+    DetectionRegion,
     EdgeHeartbeatRequest,
     EdgeHeartbeatResponse,
     EdgeRegisterRequest,
@@ -987,6 +988,12 @@ class CameraService:
             ),
             attribute_rules=list(camera.attribute_rules),
             zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
+            vision_profile=SceneVisionProfile.model_validate(camera.vision_profile or {}),
+            detection_regions=[
+                DetectionRegion.model_validate(_worker_detection_region_payload(region))
+                for region in (camera.detection_regions or [])
+            ],
+            homography=_homography_to_worker_payload(camera.homography),
         )
         try:
             await self.events.publish(f"cmd.camera.{camera.id}", command)
@@ -3118,6 +3125,16 @@ def _camera_to_worker_config(
         processing_mode=camera.processing_mode,
         edge_node_id=camera.edge_node_id,
     )
+    vision_profile = SceneVisionProfile.model_validate(camera.vision_profile or {})
+    if vision_profile.motion_metrics.speed_enabled and camera.homography is None:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="Homography is required when speed metrics are enabled.",
+        )
+    detection_regions = [
+        DetectionRegion.model_validate(_worker_detection_region_payload(region))
+        for region in (camera.detection_regions or [])
+    ]
     return WorkerConfigResponse(
         camera_id=camera.id,
         mode=camera.processing_mode,
@@ -3153,6 +3170,8 @@ def _camera_to_worker_config(
         runtime_capability=_worker_runtime_capability(primary_model),
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
+        vision_profile=vision_profile,
+        detection_regions=detection_regions,
         homography=_homography_to_worker_payload(camera.homography),
     )
 
@@ -3511,6 +3530,19 @@ def _worker_zone_payload(zone: dict[str, object]) -> dict[str, object]:
     frame_size = FrameSize.model_validate(frame_size_payload)
     geometry_key = "points" if payload.get("type") == "line" else "polygon"
     payload[geometry_key] = _denormalize_points(points_normalized, frame_size)
+    return payload
+
+
+def _worker_detection_region_payload(region: dict[str, object]) -> dict[str, object]:
+    payload = {key: value for key, value in region.items() if value is not None}
+    frame_size_payload = payload.get("frame_size")
+    points_normalized = payload.get("points_normalized")
+    if frame_size_payload is None or not isinstance(points_normalized, list):
+        return payload
+
+    frame_size = FrameSize.model_validate(frame_size_payload)
+    payload["frame_size"] = frame_size.model_dump(mode="python")
+    payload["polygon"] = _denormalize_points(points_normalized, frame_size)
     return payload
 
 

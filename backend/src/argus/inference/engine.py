@@ -18,6 +18,7 @@ from numpy.typing import NDArray
 from prometheus_client import start_http_server
 from pydantic import BaseModel, ConfigDict, Field
 
+from argus.api.contracts import DetectionRegion, SceneVisionProfile
 from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.db import (
@@ -179,6 +180,8 @@ class EngineConfig(BaseModel):
     active_classes: list[str] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[dict[str, Any]] = Field(default_factory=list)
+    vision_profile: SceneVisionProfile = Field(default_factory=SceneVisionProfile)
+    detection_regions: list[DetectionRegion] = Field(default_factory=list)
     homography: dict[str, Any] | None = None
 
 
@@ -192,6 +195,9 @@ class CameraCommand(BaseModel):
     stream: StreamSettings | None = None
     attribute_rules: list[dict[str, Any]] | None = None
     zones: list[dict[str, Any]] | None = None
+    vision_profile: SceneVisionProfile | None = None
+    detection_regions: list[DetectionRegion] | None = None
+    homography: dict[str, Any] | None = None
 
 
 class FrameSource(Protocol):
@@ -498,6 +504,8 @@ class _EngineState:
     privacy: PrivacyPolicy
     attribute_rules: list[dict[str, Any]]
     zones: list[dict[str, Any]]
+    vision_profile: SceneVisionProfile
+    detection_regions: list[DetectionRegion]
 
 
 @dataclass(slots=True)
@@ -632,6 +640,8 @@ class InferenceEngine:
                 strength=config.privacy.strength,
             )
         )
+        vision_profile = SceneVisionProfile.model_validate(config.vision_profile)
+        self.config.vision_profile = vision_profile
         self._state = _EngineState(
             active_classes=list(config.active_classes),
             runtime_vocabulary=list(config.model.runtime_vocabulary.terms),
@@ -641,6 +651,8 @@ class InferenceEngine:
             privacy=config.privacy,
             attribute_rules=list(config.attribute_rules),
             zones=list(config.zones),
+            vision_profile=vision_profile,
+            detection_regions=list(config.detection_regions),
         )
         self._tracker = self._tracker_factory(self._state.tracker_type)
         self._track_lifecycle = TrackLifecycleManager()
@@ -968,6 +980,17 @@ class InferenceEngine:
             self._zones = (
                 Zones(_polygon_zone_definitions(self._state.zones)) if self._state.zones else None
             )
+        if command.vision_profile is not None:
+            self._state.vision_profile = command.vision_profile
+            self.config.vision_profile = command.vision_profile
+        if command.detection_regions is not None:
+            self._state.detection_regions = list(command.detection_regions)
+            self.config.detection_regions = list(command.detection_regions)
+        if "homography" in command.model_fields_set:
+            self.config.homography = (
+                dict(command.homography) if command.homography is not None else None
+            )
+            self.homography = _build_homography(self.config.homography)
 
     @property
     def active_classes(self) -> list[str]:
@@ -1070,8 +1093,10 @@ class InferenceEngine:
         return enriched
 
     def _apply_speed(self, detections: list[Detection], *, ts: datetime) -> list[Detection]:
+        if not self._state.vision_profile.motion_metrics.speed_enabled:
+            return [detection.with_updates(speed_kph=None) for detection in detections]
         if self.homography is None:
-            return detections
+            return [detection.with_updates(speed_kph=None) for detection in detections]
         enriched: list[Detection] = []
         for detection in detections:
             if detection.track_id is None:

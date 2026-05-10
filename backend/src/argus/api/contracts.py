@@ -494,6 +494,9 @@ class CameraCommandPayload(BaseModel):
     stream: WorkerStreamSettings | None = None
     attribute_rules: list[dict[str, Any]] | None = None
     zones: list[WorkerZone] | None = None
+    vision_profile: SceneVisionProfile | None = None
+    detection_regions: list[DetectionRegion] | None = None
+    homography: dict[str, Any] | None = None
 
 
 class WorkerRuntimeCapability(BaseModel):
@@ -518,6 +521,8 @@ class WorkerConfigResponse(BaseModel):
     runtime_capability: WorkerRuntimeCapability = Field(default_factory=WorkerRuntimeCapability)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[WorkerZone] = Field(default_factory=list)
+    vision_profile: SceneVisionProfile = Field(default_factory=SceneVisionProfile)
+    detection_regions: list[DetectionRegion] = Field(default_factory=list)
     homography: dict[str, Any] | None = None
 
 

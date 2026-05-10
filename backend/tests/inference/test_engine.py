@@ -589,6 +589,70 @@ async def test_engine_resets_lifecycle_when_visible_classes_change_without_track
 
 
 @pytest.mark.asyncio
+async def test_engine_applies_profile_and_detection_regions_command() -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.apply_command(
+        CameraCommand(
+            vision_profile={
+                "accuracy_mode": "maximum_accuracy",
+                "compute_tier": "edge_advanced_jetson",
+                "scene_difficulty": "crowded",
+                "object_domain": "people",
+                "motion_metrics": {"speed_enabled": True},
+            },
+            detection_regions=[
+                {
+                    "id": "lab-floor",
+                    "mode": "include",
+                    "polygon": [[100, 100], [1100, 100], [1100, 700], [100, 700]],
+                    "class_names": ["person"],
+                    "frame_size": {"width": 1280, "height": 720},
+                    "points_normalized": [
+                        [0.078125, 0.138889],
+                        [0.859375, 0.138889],
+                        [0.859375, 0.972222],
+                        [0.078125, 0.972222],
+                    ],
+                }
+            ],
+            homography={
+                "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "dst_points": [[0, 0], [5, 0], [5, 5], [0, 5]],
+                "ref_distance_m": 5.0,
+            },
+        )
+    )
+
+    assert engine.config.vision_profile.compute_tier == "edge_advanced_jetson"
+    assert engine.config.vision_profile.motion_metrics.speed_enabled is True
+    assert len(engine.config.detection_regions) == 1
+    assert engine.config.detection_regions[0].id == "lab-floor"
+    assert engine.config.homography == {
+        "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "dst_points": [[0, 0], [5, 0], [5, 5], [0, 5]],
+        "ref_distance_m": 5.0,
+    }
+    assert engine.homography is not None
+
+    await engine.apply_command(CameraCommand(homography=None))
+
+    assert engine.config.homography is None
+    assert engine.homography is None
+
+
+@pytest.mark.asyncio
 async def test_engine_applies_runtime_vocabulary_command_without_restart(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -1483,6 +1547,9 @@ async def test_engine_uses_elapsed_time_for_calibrated_speed_after_frame_gap() -
                 "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
                 "ref_distance_m": 10.0,
             },
+            "vision_profile": {
+                "motion_metrics": {"speed_enabled": True},
+            },
         }
     )
     engine = InferenceEngine(
@@ -1523,6 +1590,59 @@ async def test_engine_uses_elapsed_time_for_calibrated_speed_after_frame_gap() -
 
     second_detection = tracking_store.records[1][1][0]
     assert second_detection.speed_kph == pytest.approx(0.72)
+
+
+@pytest.mark.asyncio
+async def test_engine_does_not_emit_speed_when_profile_disables_speed_with_homography() -> None:
+    camera_id = uuid4()
+    tracking_store = _FakeTrackingStore()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "homography": {
+                "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                "ref_distance_m": 10.0,
+            },
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((32, 32, 3), dtype=np.uint8), np.zeros((32, 32, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="car",
+                        confidence=0.95,
+                        bbox=(0.0, 0.0, 2.0, 2.0),
+                        class_id=0,
+                    )
+                ],
+                [
+                    Detection(
+                        class_name="car",
+                        confidence=0.95,
+                        bbox=(1.0, 0.0, 3.0, 2.0),
+                        class_id=0,
+                    )
+                ],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 5, tzinfo=UTC))
+
+    assert tracking_store.records[0][1][0].speed_kph is None
+    assert tracking_store.records[1][1][0].speed_kph is None
 
 
 @pytest.mark.asyncio
