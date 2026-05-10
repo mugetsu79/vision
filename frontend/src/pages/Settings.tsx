@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Copy,
+  Cpu,
   RefreshCw,
   Server,
   ShieldAlert,
@@ -19,6 +20,11 @@ import { Input } from "@/components/ui/input";
 import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
 import { useCameras } from "@/hooks/use-cameras";
 import {
+  useModels,
+  useRuntimeArtifactsByModelId,
+  type RuntimeArtifact,
+} from "@/hooks/use-models";
+import {
   type FleetBootstrapResponse,
   type FleetOverview,
   useCreateBootstrapMaterial,
@@ -35,6 +41,8 @@ export function SettingsPage() {
   const fleet = useFleetOverview();
   const { data: cameras = [] } = useCameras();
   const { data: sites = [] } = useSites();
+  const { data: models = [] } = useModels();
+  const runtimeArtifacts = useRuntimeArtifactsByModelId(models.map((model) => model.id));
   const bootstrap = useCreateBootstrapMaterial();
   const [hostname, setHostname] = useState("");
   const [version, setVersion] = useState("0.1.0");
@@ -131,6 +139,48 @@ export function SettingsPage() {
           value={fleet.data.summary.native_unavailable_cameras}
         />
       </section>
+
+      <Panel
+        title="Model runtimes"
+        icon={<Cpu className="size-4" />}
+        testId="runtime-artifact-rail"
+      >
+        <div className="flex flex-col gap-3">
+          {models.length === 0 ? (
+            <p className="text-sm text-[#93a7c5]">
+              No registered models are available for runtime artifact checks.
+            </p>
+          ) : (
+            models.map((model) => {
+              const artifacts = runtimeArtifacts.data?.[model.id] ?? [];
+              const summary = summarizeModelRuntimeArtifacts(artifacts);
+
+              return (
+                <div
+                  key={model.id}
+                  className="rounded-[1rem] border border-white/10 p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-[#f4f8ff]">{model.name}</p>
+                      <p className="mt-1 text-xs text-[#93a7c5]">
+                        {model.version} - {model.capability ?? "fixed_vocab"}
+                      </p>
+                    </div>
+                    <StatusToneBadge tone={summary.tone}>
+                      {summary.label}
+                    </StatusToneBadge>
+                  </div>
+                  <p className="mt-2 text-sm text-[#93a7c5]">
+                    {artifacts.length} {artifacts.length === 1 ? "artifact" : "artifacts"}
+                    {summary.detail ? ` - ${summary.detail}` : ""}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </Panel>
 
       <WorkspaceSurface className="px-5 py-4">
         <div className="flex items-center gap-3">
@@ -376,4 +426,57 @@ function statusTone(
     return "accent";
   }
   return "muted";
+}
+
+function summarizeModelRuntimeArtifacts(
+  artifacts: RuntimeArtifact[],
+): {
+  label: string;
+  detail: string;
+  tone: "healthy" | "attention" | "danger" | "muted" | "accent";
+} {
+  const validArtifacts = artifacts.filter(
+    (artifact) => artifact.validation_status === "valid",
+  );
+  const bestArtifact =
+    validArtifacts.find((artifact) => artifact.kind === "tensorrt_engine") ??
+    validArtifacts.find((artifact) => artifact.kind === "onnx_export");
+
+  if (bestArtifact?.kind === "tensorrt_engine") {
+    return {
+      label: "TensorRT artifact: valid",
+      detail: `${bestArtifact.target_profile} - ${bestArtifact.precision}`,
+      tone: "healthy",
+    };
+  }
+
+  if (bestArtifact?.kind === "onnx_export") {
+    return {
+      label: "ONNX artifact: valid",
+      detail: `${bestArtifact.target_profile} - ${bestArtifact.precision}`,
+      tone: "accent",
+    };
+  }
+
+  if (artifacts.some((artifact) => artifact.validation_status === "stale")) {
+    return {
+      label: "Compiled stale",
+      detail: "Rebuild before production selection.",
+      tone: "attention",
+    };
+  }
+
+  if (artifacts.some((artifact) => artifact.validation_status === "invalid")) {
+    return {
+      label: "Artifact invalid",
+      detail: "Validation failed on the target host.",
+      tone: "danger",
+    };
+  }
+
+  return {
+    label: "Dynamic/fallback runtime",
+    detail: "No valid compiled artifact is ready.",
+    tone: "muted",
+  };
 }

@@ -219,6 +219,84 @@ describe("CameraWizard", () => {
     expect(screen.queryByText(/active class scope/i)).not.toBeInTheDocument();
   });
 
+  test("summarizes dynamic fallback when no compiled artifact is available", async () => {
+    const user = userEvent.setup();
+
+    renderWizard();
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+
+    expect(screen.getByText(/Dynamic\/fallback runtime/i)).toBeInTheDocument();
+    expect(screen.getByText(/No compiled artifact registered/i)).toBeInTheDocument();
+  });
+
+  test("marks compiled open-vocab artifacts stale when the vocabulary version differs", async () => {
+    const user = userEvent.setup();
+
+    renderWizard({
+      models: [
+        {
+          id: "open-model",
+          name: "YOLOE-26N",
+          version: "2026.1",
+          classes: [],
+          capability: "open_vocab",
+          capability_config: {
+            supports_runtime_vocabulary_updates: true,
+            max_runtime_terms: 32,
+            runtime_backend: "ultralytics_yoloe",
+            readiness: "experimental",
+            requires_gpu: true,
+            supports_masks: true,
+          },
+          runtime_artifacts: [
+            {
+              id: "artifact-1",
+              model_id: "open-model",
+              camera_id: "camera-1",
+              scope: "scene",
+              kind: "tensorrt_engine",
+              capability: "open_vocab",
+              runtime_backend: "tensorrt_engine",
+              path: "/models/camera-1/yoloe.engine",
+              target_profile: "linux-aarch64-nvidia-jetson",
+              precision: "fp16",
+              input_shape: { width: 640, height: 640 },
+              classes: ["forklift"],
+              vocabulary_hash: "b".repeat(64),
+              vocabulary_version: 4,
+              source_model_sha256: "a".repeat(64),
+              sha256: "c".repeat(64),
+              size_bytes: 2048,
+              builder: {},
+              runtime_versions: {},
+              validation_status: "valid",
+              validation_error: null,
+              build_duration_seconds: 3.2,
+              validation_duration_seconds: null,
+              validated_at: "2026-05-10T08:00:00Z",
+              created_at: "2026-05-10T08:00:00Z",
+              updated_at: "2026-05-10T08:00:00Z",
+            },
+          ],
+        },
+      ],
+    });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "open-model");
+
+    expect(screen.getByText(/Compiled stale/i)).toBeInTheDocument();
+    expect(screen.getByText(/vocabulary changed/i)).toBeInTheDocument();
+  });
+
   test("labels model options with capability and backend", async () => {
     const user = userEvent.setup();
 

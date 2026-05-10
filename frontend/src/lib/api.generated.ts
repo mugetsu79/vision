@@ -266,6 +266,58 @@ export interface paths {
         patch: operations["update_model_api_v1_models__model_id__patch"];
         trace?: never;
     };
+    "/api/v1/models/{model_id}/runtime-artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runtime Artifacts */
+        get: operations["list_runtime_artifacts_api_v1_models__model_id__runtime_artifacts_get"];
+        put?: never;
+        /** Create Runtime Artifact */
+        post: operations["create_runtime_artifact_api_v1_models__model_id__runtime_artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/{model_id}/runtime-artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Runtime Artifact */
+        patch: operations["update_runtime_artifact_api_v1_models__model_id__runtime_artifacts__artifact_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/models/{model_id}/runtime-artifacts/{artifact_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Runtime Artifact */
+        post: operations["validate_runtime_artifact_api_v1_models__model_id__runtime_artifacts__artifact_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/model-catalog": {
         parameters: {
             query?: never;
@@ -1536,6 +1588,168 @@ export interface components {
             /** Camera Ids */
             camera_ids: string[];
         };
+        /** RuntimeArtifactCreate */
+        RuntimeArtifactCreate: {
+            /** Camera Id */
+            camera_id?: string | null;
+            scope: components["schemas"]["RuntimeArtifactScope"];
+            kind: components["schemas"]["RuntimeArtifactKind"];
+            capability: components["schemas"]["DetectorCapability"];
+            /**
+             * Runtime Backend
+             * @enum {string}
+             */
+            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
+            /** Path */
+            path: string;
+            /** Target Profile */
+            target_profile: string;
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            /** Classes */
+            classes?: string[];
+            /** Vocabulary Hash */
+            vocabulary_hash?: string | null;
+            /** Vocabulary Version */
+            vocabulary_version?: number | null;
+            /** Source Model Sha256 */
+            source_model_sha256: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Builder */
+            builder?: {
+                [key: string]: unknown;
+            };
+            /** Runtime Versions */
+            runtime_versions?: {
+                [key: string]: unknown;
+            };
+            /** @default unvalidated */
+            validation_status: components["schemas"]["RuntimeArtifactValidationStatus"];
+            /** Validation Error */
+            validation_error?: string | null;
+            /** Build Duration Seconds */
+            build_duration_seconds?: number | null;
+            /** Validation Duration Seconds */
+            validation_duration_seconds?: number | null;
+            /** Validated At */
+            validated_at?: string | null;
+        };
+        /**
+         * RuntimeArtifactKind
+         * @enum {string}
+         */
+        RuntimeArtifactKind: "onnx_export" | "tensorrt_engine";
+        /**
+         * RuntimeArtifactPrecision
+         * @enum {string}
+         */
+        RuntimeArtifactPrecision: "fp32" | "fp16" | "int8";
+        /** RuntimeArtifactResponse */
+        RuntimeArtifactResponse: {
+            /** Camera Id */
+            camera_id?: string | null;
+            scope: components["schemas"]["RuntimeArtifactScope"];
+            kind: components["schemas"]["RuntimeArtifactKind"];
+            capability: components["schemas"]["DetectorCapability"];
+            /**
+             * Runtime Backend
+             * @enum {string}
+             */
+            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
+            /** Path */
+            path: string;
+            /** Target Profile */
+            target_profile: string;
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            /** Classes */
+            classes?: string[];
+            /** Vocabulary Hash */
+            vocabulary_hash?: string | null;
+            /** Vocabulary Version */
+            vocabulary_version?: number | null;
+            /** Source Model Sha256 */
+            source_model_sha256: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Builder */
+            builder?: {
+                [key: string]: unknown;
+            };
+            /** Runtime Versions */
+            runtime_versions?: {
+                [key: string]: unknown;
+            };
+            /** @default unvalidated */
+            validation_status: components["schemas"]["RuntimeArtifactValidationStatus"];
+            /** Validation Error */
+            validation_error?: string | null;
+            /** Build Duration Seconds */
+            build_duration_seconds?: number | null;
+            /** Validation Duration Seconds */
+            validation_duration_seconds?: number | null;
+            /** Validated At */
+            validated_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Model Id
+             * Format: uuid
+             */
+            model_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * RuntimeArtifactScope
+         * @enum {string}
+         */
+        RuntimeArtifactScope: "model" | "scene";
+        /** RuntimeArtifactUpdate */
+        RuntimeArtifactUpdate: {
+            validation_status?: components["schemas"]["RuntimeArtifactValidationStatus"] | null;
+            /** Validation Error */
+            validation_error?: string | null;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Builder */
+            builder?: {
+                [key: string]: unknown;
+            } | null;
+            /** Runtime Versions */
+            runtime_versions?: {
+                [key: string]: unknown;
+            } | null;
+            /** Build Duration Seconds */
+            build_duration_seconds?: number | null;
+            /** Validation Duration Seconds */
+            validation_duration_seconds?: number | null;
+            /** Validated At */
+            validated_at?: string | null;
+        };
+        /**
+         * RuntimeArtifactValidationStatus
+         * @enum {string}
+         */
+        RuntimeArtifactValidationStatus: "unvalidated" | "valid" | "invalid" | "stale" | "missing_artifact" | "target_mismatch";
         /**
          * RuntimeVocabularySource
          * @enum {string}
@@ -1794,6 +2008,8 @@ export interface components {
             active_classes?: string[];
             runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             runtime_capability?: components["schemas"]["WorkerRuntimeCapability"];
+            /** Runtime Artifacts */
+            runtime_artifacts?: components["schemas"]["WorkerRuntimeArtifact"][];
             /** Attribute Rules */
             attribute_rules?: {
                 [key: string]: unknown;
@@ -1902,6 +2118,43 @@ export interface components {
             subject_prefix: string;
             /** Http Fallback Url */
             http_fallback_url?: string | null;
+        };
+        /** WorkerRuntimeArtifact */
+        WorkerRuntimeArtifact: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            scope: components["schemas"]["RuntimeArtifactScope"];
+            kind: components["schemas"]["RuntimeArtifactKind"];
+            capability: components["schemas"]["DetectorCapability"];
+            /**
+             * Runtime Backend
+             * @enum {string}
+             */
+            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
+            /** Path */
+            path: string;
+            /** Target Profile */
+            target_profile: string;
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            /** Classes */
+            classes?: string[];
+            /** Vocabulary Hash */
+            vocabulary_hash?: string | null;
+            /** Vocabulary Version */
+            vocabulary_version?: number | null;
+            /** Source Model Sha256 */
+            source_model_sha256: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
         };
         /** WorkerRuntimeCapability */
         WorkerRuntimeCapability: {
@@ -2619,6 +2872,140 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runtime_artifacts_api_v1_models__model_id__runtime_artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_runtime_artifact_api_v1_models__model_id__runtime_artifacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeArtifactCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_runtime_artifact_api_v1_models__model_id__runtime_artifacts__artifact_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeArtifactUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_runtime_artifact_api_v1_models__model_id__runtime_artifacts__artifact_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactResponse"];
                 };
             };
             /** @description Validation Error */

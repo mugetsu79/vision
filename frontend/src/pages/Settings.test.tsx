@@ -171,6 +171,64 @@ vi.mock("@/hooks/use-sites", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-models", () => ({
+  useModels: () => ({
+    data: [
+      {
+        id: "00000000-0000-0000-0000-000000000001",
+        name: "YOLO26n",
+        version: "2026.1",
+        task: "detect",
+        path: "/models/yolo26n.onnx",
+        format: "onnx",
+        capability: "fixed_vocab",
+        capability_config: { runtime_backend: "onnxruntime" },
+        classes: ["person", "car"],
+        input_shape: { width: 640, height: 640 },
+        sha256: "a".repeat(64),
+        size_bytes: 1024,
+        license: "AGPL-3.0",
+      },
+    ],
+    isLoading: false,
+  }),
+  useRuntimeArtifactsByModelId: () => ({
+    data: {
+      "00000000-0000-0000-0000-000000000001": [
+        {
+          id: "00000000-0000-0000-0000-000000000401",
+          model_id: "00000000-0000-0000-0000-000000000001",
+          camera_id: null,
+          scope: "model",
+          kind: "tensorrt_engine",
+          capability: "fixed_vocab",
+          runtime_backend: "tensorrt_engine",
+          path: "/models/yolo26n.jetson.fp16.engine",
+          target_profile: "linux-aarch64-nvidia-jetson",
+          precision: "fp16",
+          input_shape: { width: 640, height: 640 },
+          classes: ["person", "car"],
+          vocabulary_hash: null,
+          vocabulary_version: null,
+          source_model_sha256: "a".repeat(64),
+          sha256: "b".repeat(64),
+          size_bytes: 2048,
+          builder: {},
+          runtime_versions: {},
+          validation_status: "valid",
+          validation_error: null,
+          build_duration_seconds: 2.5,
+          validation_duration_seconds: null,
+          validated_at: "2026-05-10T08:00:00Z",
+          created_at: "2026-05-10T08:00:00Z",
+          updated_at: "2026-05-10T08:00:00Z",
+        },
+      ],
+    },
+    isLoading: false,
+  }),
+}));
+
 import { SettingsPage } from "@/pages/Settings";
 
 function renderPage() {
@@ -245,6 +303,19 @@ describe("SettingsPage operations workbench", () => {
       within(diagnosticsRail).getByText(/privacy filtering required/i),
     ).toBeInTheDocument();
     expect(within(diagnosticsRail).getByText(/1280 x 720/i)).toBeInTheDocument();
+  });
+
+  test("shows model runtime artifact status", () => {
+    renderPage();
+
+    const artifactRail = screen.getByTestId("runtime-artifact-rail");
+    expect(within(artifactRail).getByText("YOLO26n")).toBeInTheDocument();
+    expect(
+      within(artifactRail).getByText(/TensorRT artifact: valid/i),
+    ).toBeInTheDocument();
+    expect(
+      within(artifactRail).getByText(/linux-aarch64-nvidia-jetson/i),
+    ).toBeInTheDocument();
   });
 
   test("generates bootstrap material with one-time warning", async () => {

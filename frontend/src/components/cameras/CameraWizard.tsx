@@ -27,6 +27,7 @@ type SerializedZone = NonNullable<CreateCameraInput["zones"]>[number];
 type SerializedDetectionRegion = NonNullable<CreateCameraInput["detection_regions"]>[number];
 type DetectorCapability = components["schemas"]["DetectorCapability"];
 type ModelCapabilityConfig = components["schemas"]["ModelCapabilityConfig"];
+type RuntimeArtifact = components["schemas"]["RuntimeArtifactResponse"];
 type SceneVisionProfile = components["schemas"]["SceneVisionProfile"];
 type VisionComputeTier = SceneVisionProfile["compute_tier"];
 type VisionAccuracyMode = SceneVisionProfile["accuracy_mode"];
@@ -116,6 +117,7 @@ export type ModelOption = {
   classes: string[];
   capability?: DetectorCapability;
   capability_config?: ModelCapabilityConfig;
+  runtime_artifacts?: RuntimeArtifact[];
 };
 
 export type CameraWizardData = {
@@ -690,6 +692,78 @@ function formatModelOptionLabel(model: ModelOption) {
   }`;
 }
 
+function summarizeSelectedModelRuntime(
+  model: ModelOption,
+  runtimeVocabularyVersion: number,
+) {
+  const artifacts = model.runtime_artifacts ?? [];
+  if (artifacts.length === 0) {
+    return {
+      label: "Dynamic/fallback runtime",
+      detail: "No compiled artifact registered; worker will use the canonical model runtime.",
+      tone: "muted" as const,
+    };
+  }
+
+  if (artifacts.some((artifact) => artifact.validation_status === "stale")) {
+    return {
+      label: "Compiled stale",
+      detail: "Rebuild the compiled artifact before production selection.",
+      tone: "attention" as const,
+    };
+  }
+
+  const validArtifacts = artifacts.filter(
+    (artifact) => artifact.validation_status === "valid",
+  );
+  const matchingVocabularyArtifacts =
+    model.capability === "open_vocab"
+      ? validArtifacts.filter(
+          (artifact) =>
+            artifact.vocabulary_version == null ||
+            artifact.vocabulary_version === runtimeVocabularyVersion,
+        )
+      : validArtifacts;
+
+  if (
+    model.capability === "open_vocab" &&
+    validArtifacts.length > 0 &&
+    matchingVocabularyArtifacts.length === 0
+  ) {
+    return {
+      label: "Compiled stale",
+      detail: "The runtime vocabulary changed since this artifact build.",
+      tone: "attention" as const,
+    };
+  }
+
+  const bestArtifact =
+    matchingVocabularyArtifacts.find((artifact) => artifact.kind === "tensorrt_engine") ??
+    matchingVocabularyArtifacts.find((artifact) => artifact.kind === "onnx_export");
+
+  if (bestArtifact?.kind === "tensorrt_engine") {
+    return {
+      label: "TensorRT artifact: valid",
+      detail: `${bestArtifact.target_profile} - ${bestArtifact.precision}`,
+      tone: "healthy" as const,
+    };
+  }
+
+  if (bestArtifact?.kind === "onnx_export") {
+    return {
+      label: "ONNX artifact: valid",
+      detail: `${bestArtifact.target_profile} - ${bestArtifact.precision}`,
+      tone: "accent" as const,
+    };
+  }
+
+  return {
+    label: "Dynamic/fallback runtime",
+    detail: "No valid compiled artifact is ready; worker will use the canonical model runtime.",
+    tone: "muted" as const,
+  };
+}
+
 function toCreatePayload(
   data: CameraWizardData,
   setupFrameSize: FrameSize,
@@ -866,6 +940,16 @@ export function CameraWizard({
     [selectedPrimaryModel],
   );
   const selectedPrimaryModelClassesKey = selectedPrimaryModelClasses.join("\u0000");
+  const selectedRuntimeSummary = useMemo(
+    () =>
+      selectedPrimaryModel
+        ? summarizeSelectedModelRuntime(
+            selectedPrimaryModel,
+            data.runtimeVocabularyVersion,
+          )
+        : null,
+    [data.runtimeVocabularyVersion, selectedPrimaryModel],
+  );
 
   useEffect(() => {
     setData(createDefaultData(initialCamera));
@@ -1470,6 +1554,28 @@ export function CameraWizard({
                   ))}
                 </Select>
               </label>
+              {selectedRuntimeSummary ? (
+                <div
+                  data-testid="model-runtime-summary"
+                  className={`rounded-[1.15rem] border px-4 py-3 text-sm ${
+                    selectedRuntimeSummary.tone === "healthy"
+                      ? "border-emerald-300/30 bg-emerald-950/20 text-emerald-100"
+                      : selectedRuntimeSummary.tone === "attention"
+                        ? "border-amber-300/30 bg-amber-950/20 text-amber-100"
+                        : selectedRuntimeSummary.tone === "accent"
+                          ? "border-sky-300/30 bg-sky-950/20 text-sky-100"
+                          : "border-[#284066] bg-[#0c1522] text-[#9eb2cf]"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-medium text-[#eef4ff]">Runtime</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                      {selectedRuntimeSummary.label}
+                    </p>
+                  </div>
+                  <p className="mt-2">{selectedRuntimeSummary.detail}</p>
+                </div>
+              ) : null}
               {selectedPrimaryModel ? (
                 showsRuntimeVocabulary ? (
                   <label className="grid gap-2 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-4 text-sm text-[#d8e2f2]">
