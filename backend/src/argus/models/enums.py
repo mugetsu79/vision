@@ -27,6 +27,31 @@ class DetectorCapability(StrEnum):
     OPEN_VOCAB = "open_vocab"
 
 
+class RuntimeArtifactScope(StrEnum):
+    MODEL = "model"
+    SCENE = "scene"
+
+
+class RuntimeArtifactKind(StrEnum):
+    ONNX_EXPORT = "onnx_export"
+    TENSORRT_ENGINE = "tensorrt_engine"
+
+
+class RuntimeArtifactPrecision(StrEnum):
+    FP32 = "fp32"
+    FP16 = "fp16"
+    INT8 = "int8"
+
+
+class RuntimeArtifactValidationStatus(StrEnum):
+    UNVALIDATED = "unvalidated"
+    VALID = "valid"
+    INVALID = "invalid"
+    STALE = "stale"
+    MISSING_ARTIFACT = "missing_artifact"
+    TARGET_MISMATCH = "target_mismatch"
+
+
 class RuntimeVocabularySource(StrEnum):
     DEFAULT = "default"
     QUERY = "query"

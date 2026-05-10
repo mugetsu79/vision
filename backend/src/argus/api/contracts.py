@@ -20,6 +20,10 @@ from argus.models.enums import (
     ModelTask,
     ProcessingMode,
     QueryResolutionMode,
+    RuntimeArtifactKind,
+    RuntimeArtifactPrecision,
+    RuntimeArtifactScope,
+    RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
     TrackerType,
 )
@@ -117,6 +121,74 @@ class ModelResponse(BaseModel):
     sha256: str
     size_bytes: int
     license: str | None = None
+
+
+RuntimeBackend = Literal[
+    "onnxruntime",
+    "ultralytics_yolo_world",
+    "ultralytics_yoloe",
+    "tensorrt_engine",
+]
+
+
+class RuntimeArtifactBase(BaseModel):
+    camera_id: UUID | None = None
+    scope: RuntimeArtifactScope
+    kind: RuntimeArtifactKind
+    capability: DetectorCapability
+    runtime_backend: RuntimeBackend
+    path: str = Field(min_length=1)
+    target_profile: str = Field(min_length=1)
+    precision: RuntimeArtifactPrecision
+    input_shape: dict[str, int]
+    classes: list[str] = Field(default_factory=list)
+    vocabulary_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    vocabulary_version: int | None = None
+    source_model_sha256: str = Field(min_length=64, max_length=64)
+    sha256: str = Field(min_length=64, max_length=64)
+    size_bytes: int = Field(gt=0)
+    builder: dict[str, Any] = Field(default_factory=dict)
+    runtime_versions: dict[str, Any] = Field(default_factory=dict)
+    validation_status: RuntimeArtifactValidationStatus = (
+        RuntimeArtifactValidationStatus.UNVALIDATED
+    )
+    validation_error: str | None = None
+    build_duration_seconds: float | None = None
+    validation_duration_seconds: float | None = None
+    validated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> RuntimeArtifactBase:
+        if self.scope is RuntimeArtifactScope.SCENE and self.camera_id is None:
+            raise ValueError("camera_id is required for scene-scoped artifacts.")
+        if self.scope is RuntimeArtifactScope.MODEL and self.camera_id is not None:
+            raise ValueError("camera_id must be null for model-scoped artifacts.")
+        if self.capability is DetectorCapability.OPEN_VOCAB and not self.vocabulary_hash:
+            raise ValueError("vocabulary_hash is required for open-vocab artifacts.")
+        return self
+
+
+class RuntimeArtifactCreate(RuntimeArtifactBase):
+    pass
+
+
+class RuntimeArtifactUpdate(BaseModel):
+    validation_status: RuntimeArtifactValidationStatus | None = None
+    validation_error: str | None = None
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    size_bytes: int | None = Field(default=None, gt=0)
+    builder: dict[str, Any] | None = None
+    runtime_versions: dict[str, Any] | None = None
+    build_duration_seconds: float | None = None
+    validation_duration_seconds: float | None = None
+    validated_at: datetime | None = None
+
+
+class RuntimeArtifactResponse(RuntimeArtifactBase):
+    id: UUID
+    model_id: UUID
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class ModelCatalogRegistrationState(StrEnum):

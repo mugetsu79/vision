@@ -18,6 +18,10 @@ from argus.models.enums import (
     ProcessingMode,
     RoleEnum,
     RuleAction,
+    RuntimeArtifactKind,
+    RuntimeArtifactPrecision,
+    RuntimeArtifactScope,
+    RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
     TrackerType,
 )
@@ -130,6 +134,65 @@ class Model(UUIDPrimaryKeyMixin, Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     license: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class ModelRuntimeArtifact(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "model_runtime_artifacts"
+
+    model_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    scope: Mapped[RuntimeArtifactScope] = mapped_column(
+        enum_column(RuntimeArtifactScope, "runtime_artifact_scope_enum"),
+        nullable=False,
+    )
+    kind: Mapped[RuntimeArtifactKind] = mapped_column(
+        enum_column(RuntimeArtifactKind, "runtime_artifact_kind_enum"),
+        nullable=False,
+    )
+    capability: Mapped[DetectorCapability] = mapped_column(
+        enum_column(DetectorCapability, "runtime_artifact_detector_capability_enum"),
+        nullable=False,
+    )
+    runtime_backend: Mapped[str] = mapped_column(String(64), nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    target_profile: Mapped[str] = mapped_column(String(128), nullable=False)
+    precision: Mapped[RuntimeArtifactPrecision] = mapped_column(
+        enum_column(RuntimeArtifactPrecision, "runtime_artifact_precision_enum"),
+        nullable=False,
+    )
+    input_shape: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    classes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    vocabulary_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vocabulary_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_model_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    builder: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    runtime_versions: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    validation_status: Mapped[RuntimeArtifactValidationStatus] = mapped_column(
+        enum_column(
+            RuntimeArtifactValidationStatus,
+            "runtime_artifact_validation_status_enum",
+        ),
+        nullable=False,
+        default=RuntimeArtifactValidationStatus.UNVALIDATED,
+    )
+    validation_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    build_duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    validation_duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Camera(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
