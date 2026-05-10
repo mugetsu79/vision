@@ -181,6 +181,16 @@ class Camera(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
         JSONB, nullable=False, default=list
     )
     zones: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False, default=list)
+    vision_profile: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    detection_regions: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
     homography: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     privacy: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     browser_delivery: Mapped[dict[str, object]] = mapped_column(

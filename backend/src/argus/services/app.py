@@ -62,6 +62,7 @@ from argus.api.contracts import (
     NativeAvailability,
     PrivacySettings,
     RuntimeVocabularyState,
+    SceneVisionProfile,
     SiteCreate,
     SiteResponse,
     SiteUpdate,
@@ -795,7 +796,13 @@ class CameraService:
                 zones=_normalize_zones_payload(
                     [zone.model_dump(mode="python") for zone in payload.zones]
                 ),
-                homography=payload.homography.model_dump(mode="python"),
+                vision_profile=payload.vision_profile.model_dump(mode="python"),
+                detection_regions=_camera_detection_regions_payload(payload.detection_regions),
+                homography=(
+                    payload.homography.model_dump(mode="python")
+                    if payload.homography is not None
+                    else None
+                ),
                 privacy=privacy,
                 browser_delivery=browser_delivery.model_dump(mode="python"),
                 source_capability=(
@@ -920,6 +927,11 @@ class CameraService:
                 update_data["homography"] = dict(update_data["homography"])
             if "zones" in update_data and update_data["zones"] is not None:
                 update_data["zones"] = _normalize_zones_payload(update_data["zones"])
+            if "detection_regions" in update_data and update_data["detection_regions"] is not None:
+                update_data["detection_regions"] = _camera_detection_regions_payload(
+                    payload.detection_regions or []
+                )
+            _validate_effective_camera_motion_metrics(camera, update_data)
 
             for field_name, value in update_data.items():
                 setattr(camera, field_name, value)
@@ -3020,8 +3032,6 @@ def _resolve_camera_detector_state(
 
 
 def _camera_to_response(camera: Camera) -> CameraResponse:
-    if camera.homography is None:
-        raise ValueError("Camera homography must be set.")
     privacy = PrivacySettings.model_validate(camera.privacy)
     source_capability = (
         SourceCapability.model_validate(camera.source_capability)
@@ -3051,7 +3061,13 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, list(camera.zones)),
-        homography=HomographyPayload.model_validate(camera.homography),
+        vision_profile=camera.vision_profile or {},
+        detection_regions=cast(Any, list(camera.detection_regions or [])),
+        homography=(
+            HomographyPayload.model_validate(camera.homography)
+            if camera.homography is not None
+            else None
+        ),
         privacy=privacy,
         browser_delivery=browser_delivery,
         source_capability=source_capability,
@@ -3460,6 +3476,25 @@ def _normalize_zone_payload(zone: dict[str, object]) -> dict[str, object]:
 
 def _normalize_zones_payload(zones: list[dict[str, object]]) -> list[dict[str, object]]:
     return [_normalize_zone_payload(zone) for zone in zones]
+
+
+def _camera_detection_regions_payload(regions: list[Any]) -> list[dict[str, object]]:
+    return [region.model_dump(exclude_none=True, mode="python") for region in regions]
+
+
+def _validate_effective_camera_motion_metrics(
+    camera: Camera,
+    update_data: dict[str, Any],
+) -> None:
+    vision_profile = SceneVisionProfile.model_validate(
+        update_data.get("vision_profile", camera.vision_profile or {})
+    )
+    homography = update_data["homography"] if "homography" in update_data else camera.homography
+    if vision_profile.motion_metrics.speed_enabled and homography is None:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="Homography is required when speed metrics are enabled.",
+        )
 
 
 def _worker_zone_payload(zone: dict[str, object]) -> dict[str, object]:

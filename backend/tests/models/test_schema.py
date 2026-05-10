@@ -35,6 +35,13 @@ def test_cameras_table_has_prompt_one_columns() -> None:
     assert "privacy" in camera_columns
 
 
+def test_cameras_table_has_scene_vision_profile_columns() -> None:
+    camera_columns = Base.metadata.tables["cameras"].columns.keys()
+
+    assert "vision_profile" in camera_columns
+    assert "detection_regions" in camera_columns
+
+
 def test_tracking_events_support_class_aggregations() -> None:
     tracking_columns = Base.metadata.tables["tracking_events"].columns.keys()
     rule_event_columns = Base.metadata.tables["rule_events"].columns.keys()

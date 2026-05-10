@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from argus.compat import StrEnum
 from argus.core.security import AuthenticatedUser
@@ -235,6 +235,99 @@ CameraZone = LineZone | PolygonZone
 StoredCameraZone = LineZone | PolygonZone | LegacyZone
 
 
+class MotionMetricsSettings(BaseModel):
+    speed_enabled: bool = False
+
+
+class SceneVisionProfile(BaseModel):
+    compute_tier: Literal[
+        "cpu_low",
+        "edge_standard",
+        "edge_advanced_jetson",
+        "central_gpu",
+    ] = "edge_standard"
+    accuracy_mode: Literal[
+        "fast",
+        "balanced",
+        "maximum_accuracy",
+        "open_vocabulary",
+    ] = "balanced"
+    scene_difficulty: Literal[
+        "open",
+        "cluttered",
+        "occluded",
+        "crowded",
+        "traffic",
+        "custom",
+    ] = "cluttered"
+    object_domain: Literal["people", "vehicles", "mixed", "open_vocab"] = "mixed"
+    motion_metrics: MotionMetricsSettings = Field(default_factory=MotionMetricsSettings)
+    candidate_quality: dict[str, Any] = Field(default_factory=dict)
+    tracker_profile: dict[str, Any] = Field(default_factory=dict)
+    verifier_profile: dict[str, Any] = Field(default_factory=dict)
+
+
+class DetectionRegion(BaseModel):
+    id: str
+    mode: Literal["include", "exclude"]
+    polygon: list[Coordinate]
+    class_names: list[str] = Field(default_factory=list)
+    frame_size: FrameSize | None = None
+    points_normalized: list[Coordinate] | None = None
+
+    @field_validator("polygon")
+    @classmethod
+    def validate_polygon(cls, value: list[Coordinate]) -> list[Coordinate]:
+        if len(value) < 3:
+            raise ValueError("Detection regions must contain at least three vertices.")
+        for point in value:
+            if len(point) != 2:
+                raise ValueError(
+                    "Each detection region point must contain exactly two coordinates."
+                )
+        return value
+
+    @field_validator("points_normalized")
+    @classmethod
+    def validate_points_normalized(
+        cls,
+        value: list[Coordinate] | None,
+    ) -> list[Coordinate] | None:
+        if value is None:
+            return value
+        for point in value:
+            if len(point) != 2:
+                raise ValueError(
+                    "Each normalized detection region point must contain exactly two coordinates."
+                )
+            if point[0] < 0 or point[0] > 1 or point[1] < 0 or point[1] > 1:
+                raise ValueError(
+                    "Normalized detection region coordinates must be between 0 and 1."
+                )
+        return value
+
+    @model_validator(mode="after")
+    def normalize_polygon_coordinates(self) -> DetectionRegion:
+        if self.frame_size is None:
+            return self
+        normalized: list[Coordinate] = []
+        for point in self.polygon:
+            x = float(point[0])
+            y = float(point[1])
+            if x < 0 or x > self.frame_size.width or y < 0 or y > self.frame_size.height:
+                raise ValueError(
+                    "Detection region coordinates must fall within the declared frame_size."
+                )
+            normalized.append(
+                [
+                    round(x / self.frame_size.width, 6),
+                    round(y / self.frame_size.height, 6),
+                ]
+            )
+        self.points_normalized = normalized
+        return self
+
+
 class PrivacySettings(BaseModel):
     blur_faces: bool = True
     blur_plates: bool = True
@@ -440,11 +533,19 @@ class CameraCreate(BaseModel):
     runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[CameraZone] = Field(default_factory=list)
-    homography: HomographyPayload
+    vision_profile: SceneVisionProfile = Field(default_factory=SceneVisionProfile)
+    detection_regions: list[DetectionRegion] = Field(default_factory=list)
+    homography: HomographyPayload | None = None
     privacy: PrivacySettings = Field(default_factory=PrivacySettings)
     browser_delivery: BrowserDeliverySettings = Field(default_factory=BrowserDeliverySettings)
     frame_skip: int = Field(default=1, ge=1)
     fps_cap: int = Field(default=25, ge=1)
+
+    @model_validator(mode="after")
+    def require_homography_for_speed_metrics(self) -> CameraCreate:
+        if self.vision_profile.motion_metrics.speed_enabled and self.homography is None:
+            raise ValueError("Homography is required when speed metrics are enabled.")
+        return self
 
 
 class CameraUpdate(BaseModel):
@@ -459,11 +560,28 @@ class CameraUpdate(BaseModel):
     runtime_vocabulary: RuntimeVocabularyState | None = None
     attribute_rules: list[dict[str, Any]] | None = None
     zones: list[CameraZone] | None = None
+    vision_profile: SceneVisionProfile | None = None
+    detection_regions: list[DetectionRegion] | None = None
     homography: HomographyPayload | None = None
     privacy: PrivacySettings | None = None
     browser_delivery: BrowserDeliverySettings | None = None
     frame_skip: int | None = Field(default=None, ge=1)
     fps_cap: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def reject_enabling_speed_while_clearing_homography(self) -> CameraUpdate:
+        if "vision_profile" in self.model_fields_set and self.vision_profile is None:
+            raise ValueError("vision_profile cannot be null.")
+        if "detection_regions" in self.model_fields_set and self.detection_regions is None:
+            raise ValueError("detection_regions cannot be null.")
+        if (
+            self.vision_profile is not None
+            and self.vision_profile.motion_metrics.speed_enabled
+            and "homography" in self.model_fields_set
+            and self.homography is None
+        ):
+            raise ValueError("Homography is required when speed metrics are enabled.")
+        return self
 
 
 class CameraResponse(BaseModel):
@@ -480,7 +598,9 @@ class CameraResponse(BaseModel):
     runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     attribute_rules: list[dict[str, Any]]
     zones: list[StoredCameraZone]
-    homography: HomographyPayload
+    vision_profile: SceneVisionProfile = Field(default_factory=SceneVisionProfile)
+    detection_regions: list[DetectionRegion] = Field(default_factory=list)
+    homography: HomographyPayload | None = None
     privacy: PrivacySettings
     browser_delivery: BrowserDeliverySettings
     source_capability: SourceCapability | None = None
