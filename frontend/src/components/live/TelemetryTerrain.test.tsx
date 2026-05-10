@@ -50,4 +50,33 @@ describe("TelemetryTerrain", () => {
     expect(within(terrain).getByText(/car held/i)).toBeInTheDocument();
     expect(within(terrain).getByLabelText(/person signal terrain/i)).toBeInTheDocument();
   });
+
+  test("renders occupancy buckets as a stepped terrain instead of diagonal spikes", () => {
+    const rows: SignalCountRow[] = [
+      {
+        className: "person",
+        color: colorForClass("person"),
+        liveCount: 3,
+        heldCount: 0,
+        totalCount: 3,
+        state: "live",
+      },
+    ];
+
+    render(
+      <TelemetryTerrain
+        cameraId="camera-1"
+        cameraName="North Gate"
+        activeClasses={["person"]}
+        signalRows={rows}
+      />,
+    );
+
+    const svg = screen.getByLabelText(/person signal terrain/i);
+    const line = svg.querySelector('path[fill="none"]');
+
+    expect(line?.getAttribute("d")).toContain(" H ");
+    expect(line?.getAttribute("d")).toContain(" V ");
+    expect(line?.getAttribute("d")).not.toMatch(/\sL\s\d/);
+  });
 });

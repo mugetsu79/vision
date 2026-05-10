@@ -112,18 +112,28 @@ export function TelemetryTerrain({
 
 function buildLinePath(series: number[]): string {
   const points = normalizeSeries(series);
-  return points
-    .map(({ x, y }, index) => `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`)
-    .join(" ");
+  return buildStepPath(points);
 }
 
 function buildAreaPath(series: number[]): string {
   const points = normalizeSeries(series);
-  const line = points
-    .map(({ x, y }, index) => `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`)
-    .join(" ");
+  const line = buildStepPath(points);
 
   return `${line} L 100.00 46.00 L 0.00 46.00 Z`;
+}
+
+function buildStepPath(points: Array<{ x: number; y: number }>): string {
+  const [first, ...rest] = points;
+  if (!first) {
+    return "";
+  }
+
+  const segments = [`M ${first.x.toFixed(2)} ${first.y.toFixed(2)}`];
+  for (const point of rest) {
+    segments.push(`H ${point.x.toFixed(2)}`, `V ${point.y.toFixed(2)}`);
+  }
+
+  return segments.join(" ");
 }
 
 function normalizeSeries(series: number[]): Array<{ x: number; y: number }> {
