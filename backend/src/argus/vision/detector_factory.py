@@ -12,8 +12,18 @@ def build_detector(
     model: Any,
     runtime: Any,
     runtime_policy: RuntimeExecutionPolicy,
+    runtime_selection: Any | None = None,
     yolo_detector_cls: type[YoloDetector] = YoloDetector,
 ) -> RuntimeDetector:
+    if (
+        runtime_selection is not None
+        and getattr(runtime_selection, "selected_backend", None) == "tensorrt_engine"
+        and getattr(runtime_selection, "artifact", None) is not None
+    ):
+        from argus.vision.ultralytics_engine_detector import UltralyticsEngineDetector
+
+        return UltralyticsEngineDetector(runtime_selection.artifact)
+
     capability = _coerce_detector_capability(getattr(model, "capability", None))
     if capability is DetectorCapability.FIXED_VOCAB:
         return yolo_detector_cls(
