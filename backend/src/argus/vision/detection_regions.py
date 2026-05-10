@@ -26,6 +26,7 @@ class DetectionRegionDecision:
     allowed: bool
     anchor: tuple[float, float]
     reason: str
+    mode: str
     include_region_ids: list[str]
     exclude_region_ids: list[str]
 
@@ -76,6 +77,7 @@ class DetectionRegionPolicy:
                 allowed=False,
                 anchor=anchor,
                 reason="outside_include_region",
+                mode="include",
                 include_region_ids=[],
                 exclude_region_ids=[],
             )
@@ -91,6 +93,7 @@ class DetectionRegionPolicy:
                 allowed=False,
                 anchor=anchor,
                 reason="inside_exclusion_region",
+                mode="exclude",
                 include_region_ids=include_region_ids,
                 exclude_region_ids=exclude_region_ids,
             )
@@ -100,6 +103,7 @@ class DetectionRegionPolicy:
             allowed=True,
             anchor=anchor,
             reason="allowed",
+            mode="none",
             include_region_ids=include_region_ids,
             exclude_region_ids=[],
         )

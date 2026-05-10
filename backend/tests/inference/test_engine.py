@@ -768,6 +768,82 @@ async def test_engine_preserves_normalized_detection_shape_for_open_vocab() -> N
 
 
 @pytest.mark.asyncio
+async def test_engine_bounds_open_vocab_candidate_metric_class_label() -> None:
+    camera_id = uuid4()
+    labels = {
+        "camera_id": str(camera_id),
+        "class_name": "open_vocab",
+        "reason": "new_track_high_confidence",
+    }
+    raw_labels = {
+        "camera_id": str(camera_id),
+        "class_name": "forklift",
+        "reason": "new_track_high_confidence",
+    }
+    before = _metric_sample_value(
+        core_metrics.CANDIDATE_PASSED_TOTAL,
+        "argus_candidate_passed_total",
+        labels,
+    )
+    raw_before = _metric_sample_value(
+        core_metrics.CANDIDATE_PASSED_TOTAL,
+        "argus_candidate_passed_total",
+        raw_labels,
+    )
+    detector = _FakeOpenVocabDetector(
+        detections=[
+            Detection(class_name="forklift", confidence=0.9, bbox=(0.0, 0.0, 10.0, 10.0))
+        ],
+        runtime_vocabulary=["forklift"],
+    )
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="YOLO World",
+                path="/models/yolo-world.onnx",
+                capability=DetectorCapability.OPEN_VOCAB,
+                capability_config={"supports_runtime_vocabulary_updates": True},
+                classes=[],
+                runtime_vocabulary={
+                    "terms": ["forklift"],
+                    "source": RuntimeVocabularySource.MANUAL,
+                    "version": 1,
+                },
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": [],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=detector,
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    after = _metric_sample_value(
+        core_metrics.CANDIDATE_PASSED_TOTAL,
+        "argus_candidate_passed_total",
+        labels,
+    )
+    raw_after = _metric_sample_value(
+        core_metrics.CANDIDATE_PASSED_TOTAL,
+        "argus_candidate_passed_total",
+        raw_labels,
+    )
+    assert after - before == 1.0
+    assert raw_after - raw_before == 0.0
+
+
+@pytest.mark.asyncio
 async def test_engine_filters_detection_regions_before_tracker_and_telemetry() -> None:
     camera_id = uuid4()
     tracker = _RecordingTracker()
@@ -808,10 +884,70 @@ async def test_engine_filters_detection_regions_before_tracker_and_telemetry() -
 
 
 @pytest.mark.asyncio
+async def test_engine_records_exclude_region_filtered_detection_metric() -> None:
+    camera_id = uuid4()
+    labels = {
+        "camera_id": str(camera_id),
+        "class_name": "car",
+        "reason": "inside_exclusion_region",
+        "mode": "exclude",
+    }
+    before = _metric_sample_value(
+        core_metrics.DETECTION_REGION_FILTERED_TOTAL,
+        "argus_detection_region_filtered_total",
+        labels,
+    )
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "detection_regions": [
+                {
+                    "id": "loading-bay",
+                    "mode": "exclude",
+                    "polygon": [[50, 50], [90, 50], [90, 90], [50, 90]],
+                }
+            ]
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((96, 96, 3), dtype=np.uint8)]),
+        detector=_SequenceDetector(
+            [[Detection(class_name="car", confidence=0.95, bbox=(60.0, 60.0, 80.0, 80.0))]]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 10, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    after = _metric_sample_value(
+        core_metrics.DETECTION_REGION_FILTERED_TOTAL,
+        "argus_detection_region_filtered_total",
+        labels,
+    )
+    assert after - before == 1.0
+
+
+@pytest.mark.asyncio
 async def test_engine_rejects_low_confidence_new_person_before_tracker() -> None:
     camera_id = uuid4()
     tracker = _RecordingTracker()
     tracking_store = _FakeTrackingStore()
+    labels = {
+        "camera_id": str(camera_id),
+        "class_name": "person",
+        "reason": "new_track_low_confidence",
+    }
+    before = _metric_sample_value(
+        core_metrics.CANDIDATE_REJECTED_TOTAL,
+        "argus_candidate_rejected_total",
+        labels,
+    )
     config = _engine_config(camera_id).model_copy(
         update={
             "model": ModelSettings(
@@ -844,6 +980,12 @@ async def test_engine_rejects_low_confidence_new_person_before_tracker() -> None
     assert telemetry.counts == {}
     assert telemetry.tracks == []
     assert tracking_store.records[0][1] == []
+    after = _metric_sample_value(
+        core_metrics.CANDIDATE_REJECTED_TOTAL,
+        "argus_candidate_rejected_total",
+        labels,
+    )
+    assert after - before == 1.0
 
 
 @pytest.mark.asyncio
@@ -937,6 +1079,16 @@ async def test_engine_rejects_split_body_fragment_near_existing_person() -> None
     camera_id = uuid4()
     tracker = _RecordingTracker()
     publisher = _FakePublisher()
+    labels = {
+        "camera_id": str(camera_id),
+        "class_name": "person",
+        "reason": "duplicate_fragment",
+    }
+    before = _metric_sample_value(
+        core_metrics.CANDIDATE_REJECTED_TOTAL,
+        "argus_candidate_rejected_total",
+        labels,
+    )
     config = _engine_config(camera_id).model_copy(
         update={
             "model": ModelSettings(
@@ -976,6 +1128,12 @@ async def test_engine_rejects_split_body_fragment_near_existing_person() -> None
 
     assert [len(call) for call in tracker.calls] == [1, 1]
     assert [len(frame.tracks) for frame in publisher.frames] == [1, 1]
+    after = _metric_sample_value(
+        core_metrics.CANDIDATE_REJECTED_TOTAL,
+        "argus_candidate_rejected_total",
+        labels,
+    )
+    assert after - before == 1.0
 
 
 @pytest.mark.asyncio
@@ -1809,6 +1967,15 @@ async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> 
 async def test_engine_uses_elapsed_time_for_calibrated_speed_after_frame_gap() -> None:
     camera_id = uuid4()
     tracking_store = _FakeTrackingStore()
+    labels = {
+        "camera_id": str(camera_id),
+        "class_name": "car",
+    }
+    before = _metric_sample_value(
+        core_metrics.MOTION_SPEED_SAMPLES_TOTAL,
+        "argus_motion_speed_samples_total",
+        labels,
+    )
     config = _engine_config(camera_id).model_copy(
         update={
             "homography": {
@@ -1859,12 +2026,28 @@ async def test_engine_uses_elapsed_time_for_calibrated_speed_after_frame_gap() -
 
     second_detection = tracking_store.records[1][1][0]
     assert second_detection.speed_kph == pytest.approx(0.72)
+    after = _metric_sample_value(
+        core_metrics.MOTION_SPEED_SAMPLES_TOTAL,
+        "argus_motion_speed_samples_total",
+        labels,
+    )
+    assert after - before == 1.0
 
 
 @pytest.mark.asyncio
 async def test_engine_does_not_emit_speed_when_profile_disables_speed_with_homography() -> None:
     camera_id = uuid4()
     tracking_store = _FakeTrackingStore()
+    labels = {
+        "camera_id": str(camera_id),
+        "mode": "central",
+        "reason": "profile_disabled",
+    }
+    before = _metric_sample_value(
+        core_metrics.MOTION_SPEED_DISABLED_TOTAL,
+        "argus_motion_speed_disabled_total",
+        labels,
+    )
     config = _engine_config(camera_id).model_copy(
         update={
             "homography": {
@@ -1912,6 +2095,12 @@ async def test_engine_does_not_emit_speed_when_profile_disables_speed_with_homog
 
     assert tracking_store.records[0][1][0].speed_kph is None
     assert tracking_store.records[1][1][0].speed_kph is None
+    after = _metric_sample_value(
+        core_metrics.MOTION_SPEED_DISABLED_TOTAL,
+        "argus_motion_speed_disabled_total",
+        labels,
+    )
+    assert after - before == 2.0
 
 
 @pytest.mark.asyncio

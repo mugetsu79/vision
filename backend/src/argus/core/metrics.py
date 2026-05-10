@@ -42,6 +42,31 @@ INFERENCE_STAGE_DURATION_SECONDS = Histogram(
     "Per-stage inference duration.",
     ["camera_id", "stage"],
 )
+CANDIDATE_REJECTED_TOTAL = Counter(
+    "argus_candidate_rejected_total",
+    "Candidate detections rejected by the quality gate.",
+    ["camera_id", "class_name", "reason"],
+)
+CANDIDATE_PASSED_TOTAL = Counter(
+    "argus_candidate_passed_total",
+    "Candidate detections accepted by the quality gate.",
+    ["camera_id", "class_name", "reason"],
+)
+DETECTION_REGION_FILTERED_TOTAL = Counter(
+    "argus_detection_region_filtered_total",
+    "Detections removed by detection-region policy filtering.",
+    ["camera_id", "class_name", "reason", "mode"],
+)
+MOTION_SPEED_SAMPLES_TOTAL = Counter(
+    "argus_motion_speed_samples_total",
+    "Motion speed samples produced by calibrated inference.",
+    ["camera_id", "class_name"],
+)
+MOTION_SPEED_DISABLED_TOTAL = Counter(
+    "argus_motion_speed_disabled_total",
+    "Frames where motion speed metrics were disabled or unavailable.",
+    ["camera_id", "mode", "reason"],
+)
 PRIVACY_FILTER_OPERATIONS_TOTAL = Counter(
     "argus_privacy_filter_operations_total",
     "Privacy filter operations by result.",

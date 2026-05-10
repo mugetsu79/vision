@@ -30,9 +30,14 @@ from argus.core.db import (
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.logging import configure_logging, redact_url_secrets
 from argus.core.metrics import (
+    CANDIDATE_PASSED_TOTAL,
+    CANDIDATE_REJECTED_TOTAL,
+    DETECTION_REGION_FILTERED_TOTAL,
     INFERENCE_FRAME_DURATION_SECONDS,
     INFERENCE_FRAMES_PROCESSED_TOTAL,
     INFERENCE_STAGE_DURATION_SECONDS,
+    MOTION_SPEED_DISABLED_TOTAL,
+    MOTION_SPEED_SAMPLES_TOTAL,
 )
 from argus.inference.publisher import (
     BufferedTelemetryPublisher,
@@ -68,9 +73,9 @@ from argus.streaming.webrtc import MediaMTXTokenIssuer
 from argus.vision.anpr import LineCrossingAnprProcessor
 from argus.vision.attributes import AttributeClassifier, AttributeModelConfig
 from argus.vision.camera import CameraSourceConfig, create_camera_source
-from argus.vision.candidate_quality import CandidateQualityGate
+from argus.vision.candidate_quality import CandidateDecision, CandidateQualityGate
 from argus.vision.count_events import CountEventProcessor, CountEventRecord
-from argus.vision.detection_regions import DetectionRegionPolicy
+from argus.vision.detection_regions import DetectionRegionDecision, DetectionRegionPolicy
 from argus.vision.detector import YoloDetector
 from argus.vision.detector_factory import build_detector as _build_detector
 from argus.vision.homography import Homography
@@ -780,13 +785,14 @@ class InferenceEngine:
         stage_timer.record_stage("detect", ended_at=loop.time())
         self._record_detector_substage_timings(stage_timer)
         filtered = self._filter_visible_detections(detections, visible_classes)
-        filtered, _region_decisions = self._detection_region_policy.filter_detections(filtered)
+        filtered, region_decisions = self._detection_region_policy.filter_detections(filtered)
+        self._record_detection_region_decisions(region_decisions)
         quality_filtered, candidate_decisions = self._candidate_quality_gate.filter_detections(
             filtered,
             existing_tracks=self._track_lifecycle.candidate_context_tracks(),
             frame_shape=processed.shape,
         )
-        del candidate_decisions
+        self._record_candidate_decisions(candidate_decisions)
         tracked = self._tracker.update(quality_filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
         if (
@@ -794,7 +800,9 @@ class InferenceEngine:
             and self.homography is not None
         ):
             tracked = self._apply_speed(tracked, ts=current_ts)
+            self._record_motion_speed_samples(tracked)
         else:
+            self._record_motion_speed_disabled()
             tracked = [detection.with_updates(speed_kph=None) for detection in tracked]
         stage_timer.record_stage("speed", ended_at=loop.time())
         tracked = self._apply_attributes(processed, tracked)
@@ -1091,6 +1099,78 @@ class InferenceEngine:
     ) -> list[Detection]:
         allowed = set(visible_classes)
         return [detection for detection in detections if detection.class_name in allowed]
+
+    def _record_detection_region_decisions(
+        self,
+        decisions: list[DetectionRegionDecision],
+    ) -> None:
+        camera_id = str(self.config.camera_id)
+        for decision in decisions:
+            if decision.allowed:
+                continue
+            DETECTION_REGION_FILTERED_TOTAL.labels(
+                camera_id=camera_id,
+                class_name=self._metric_class_name(decision.detection.class_name),
+                reason=decision.reason,
+                mode=decision.mode,
+            ).inc()
+
+    def _record_candidate_decisions(self, decisions: list[CandidateDecision]) -> None:
+        camera_id = str(self.config.camera_id)
+        for decision in decisions:
+            metric = (
+                CANDIDATE_PASSED_TOTAL
+                if decision.accepted
+                else CANDIDATE_REJECTED_TOTAL
+            )
+            metric.labels(
+                camera_id=camera_id,
+                class_name=self._metric_class_name(decision.detection.class_name),
+                reason=decision.reason,
+            ).inc()
+
+    def _record_motion_speed_samples(self, detections: list[Detection]) -> None:
+        camera_id = str(self.config.camera_id)
+        for detection in detections:
+            if detection.speed_kph is None:
+                continue
+            MOTION_SPEED_SAMPLES_TOTAL.labels(
+                camera_id=camera_id,
+                class_name=self._metric_class_name(detection.class_name),
+            ).inc()
+
+    def _metric_class_name(self, class_name: str) -> str:
+        if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
+            return "open_vocab"
+
+        normalized = class_name.strip().lower()
+        if not normalized:
+            return "other"
+
+        model_classes = {
+            configured_class.strip().lower()
+            for configured_class in self.config.model.classes
+            if configured_class.strip()
+        }
+        if self.config.secondary_model is not None:
+            model_classes.update(
+                configured_class.strip().lower()
+                for configured_class in self.config.secondary_model.classes
+                if configured_class.strip()
+            )
+        return normalized if normalized in model_classes else "other"
+
+    def _record_motion_speed_disabled(self) -> None:
+        reason = (
+            "profile_disabled"
+            if not self._state.vision_profile.motion_metrics.speed_enabled
+            else "missing_homography"
+        )
+        MOTION_SPEED_DISABLED_TOTAL.labels(
+            camera_id=str(self.config.camera_id),
+            mode=self.config.mode.value,
+            reason=reason,
+        ).inc()
 
     async def _handle_command_message(self, message: Any) -> None:
         if isinstance(message, CameraCommand):
