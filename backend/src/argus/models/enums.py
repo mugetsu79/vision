@@ -16,6 +16,12 @@ class ProcessingMode(StrEnum):
     HYBRID = "hybrid"
 
 
+class CameraSourceKind(StrEnum):
+    RTSP = "rtsp"
+    USB = "usb"
+    JETSON_CSI = "jetson_csi"
+
+
 class TrackerType(StrEnum):
     BOTSORT = "botsort"
     BYTETRACK = "bytetrack"
@@ -89,6 +95,47 @@ class HistoryCoverageStatus(StrEnum):
 class IncidentReviewStatus(StrEnum):
     PENDING = "pending"
     REVIEWED = "reviewed"
+
+
+class EvidenceArtifactKind(StrEnum):
+    EVENT_CLIP = "event_clip"
+    SNAPSHOT = "snapshot"
+    MANIFEST_EXPORT = "manifest_export"
+    CASE_EXPORT = "case_export"
+
+
+class EvidenceArtifactStatus(StrEnum):
+    AVAILABLE = "available"
+    LOCAL_ONLY = "local_only"
+    REMOTE_AVAILABLE = "remote_available"
+    UPLOAD_PENDING = "upload_pending"
+    QUOTA_EXCEEDED = "quota_exceeded"
+    CAPTURE_FAILED = "capture_failed"
+    EXPIRED = "expired"
+
+
+class EvidenceStorageProvider(StrEnum):
+    LOCAL_FILESYSTEM = "local_filesystem"
+    MINIO = "minio"
+    S3_COMPATIBLE = "s3_compatible"
+
+
+class EvidenceStorageScope(StrEnum):
+    EDGE = "edge"
+    CENTRAL = "central"
+    CLOUD = "cloud"
+
+
+class EvidenceLedgerAction(StrEnum):
+    INCIDENT_TRIGGERED = "incident.triggered"
+    SCENE_CONTRACT_ATTACHED = "scene_contract.attached"
+    PRIVACY_MANIFEST_ATTACHED = "privacy_manifest.attached"
+    CLIP_CAPTURE_STARTED = "evidence.clip.capture_started"
+    CLIP_AVAILABLE = "evidence.clip.available"
+    CLIP_QUOTA_EXCEEDED = "evidence.clip.quota_exceeded"
+    CLIP_CAPTURE_FAILED = "evidence.clip.capture_failed"
+    INCIDENT_REVIEWED = "incident.reviewed"
+    INCIDENT_REOPENED = "incident.reopened"
 
 
 class CountEventType(StrEnum):

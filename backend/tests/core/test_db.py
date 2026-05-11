@@ -225,3 +225,22 @@ def test_count_events_migration_exists() -> None:
     assert "create_hypertable('count_events'" in migration_text
     assert "count_events_1m" in migration_text
     assert "count_events_1h" in migration_text
+
+
+def test_accountable_scene_evidence_migration_keeps_source_kind_string_backed() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = (
+        repo_root
+        / "src/argus/migrations/versions/0011_accountable_scene_evidence.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    assert 'revision = "0011_accountable_scene_evidence"' in migration_text
+    assert 'down_revision = "0010_model_runtime_artifacts"' in migration_text
+    assert '"scene_contract_snapshots"' in migration_text
+    assert '"privacy_manifest_snapshots"' in migration_text
+    assert '"evidence_artifacts"' in migration_text
+    assert '"evidence_ledger_entries"' in migration_text
+    assert 'sa.Column("source_kind", sa.String(length=32), nullable=True)' in migration_text
+    assert "camera_source_kind_enum" not in migration_text

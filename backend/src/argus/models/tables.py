@@ -12,6 +12,11 @@ from argus.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryK
 from argus.models.enums import (
     CountEventType,
     DetectorCapability,
+    EvidenceArtifactKind,
+    EvidenceArtifactStatus,
+    EvidenceLedgerAction,
+    EvidenceStorageProvider,
+    EvidenceStorageScope,
     IncidentReviewStatus,
     ModelFormat,
     ModelTask,
@@ -210,6 +215,12 @@ class Camera(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     rtsp_url_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_config: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    evidence_recording_policy: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
     processing_mode: Mapped[ProcessingMode] = mapped_column(
         enum_column(ProcessingMode, "processing_mode_enum"),
         nullable=False,
@@ -267,6 +278,42 @@ class Camera(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     )
     frame_skip: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     fps_cap: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
+
+
+class SceneContractSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "scene_contract_snapshots"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    contract_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    contract: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
+class PrivacyManifestSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "privacy_manifest_snapshots"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    manifest: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
 
 
 class DetectionRule(UUIDPrimaryKeyMixin, Base):
@@ -385,6 +432,19 @@ class Incident(UUIDPrimaryKeyMixin, Base):
     snapshot_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     clip_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     storage_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    scene_contract_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("scene_contract_snapshots.id"),
+        nullable=True,
+    )
+    scene_contract_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    privacy_manifest_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("privacy_manifest_snapshots.id"),
+        nullable=True,
+    )
+    privacy_manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    recording_policy: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     review_status: Mapped[IncidentReviewStatus] = mapped_column(
         enum_column(IncidentReviewStatus, "incident_review_status_enum"),
         nullable=False,
@@ -392,6 +452,86 @@ class Incident(UUIDPrimaryKeyMixin, Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class EvidenceArtifact(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "evidence_artifacts"
+
+    incident_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    kind: Mapped[EvidenceArtifactKind] = mapped_column(
+        enum_column(EvidenceArtifactKind, "evidence_artifact_kind_enum"),
+        nullable=False,
+    )
+    status: Mapped[EvidenceArtifactStatus] = mapped_column(
+        enum_column(EvidenceArtifactStatus, "evidence_artifact_status_enum"),
+        nullable=False,
+    )
+    storage_provider: Mapped[EvidenceStorageProvider] = mapped_column(
+        enum_column(EvidenceStorageProvider, "evidence_storage_provider_enum"),
+        nullable=False,
+    )
+    storage_scope: Mapped[EvidenceStorageScope] = mapped_column(
+        enum_column(EvidenceStorageScope, "evidence_storage_scope_enum"),
+        nullable=False,
+    )
+    bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    clip_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    clip_ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scene_contract_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    privacy_manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class EvidenceLedgerEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "evidence_ledger_entries"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    incident_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[EvidenceLedgerAction] = mapped_column(
+        enum_column(EvidenceLedgerAction, "evidence_ledger_action_enum"),
+        nullable=False,
+    )
+    actor_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    previous_entry_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class AuditLog(UUIDPrimaryKeyMixin, Base):

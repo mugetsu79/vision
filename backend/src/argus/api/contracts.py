@@ -11,8 +11,14 @@ from argus.compat import StrEnum
 from argus.core.security import AuthenticatedUser
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
+    CameraSourceKind,
     CountEventType,
     DetectorCapability,
+    EvidenceArtifactKind,
+    EvidenceArtifactStatus,
+    EvidenceLedgerAction,
+    EvidenceStorageProvider,
+    EvidenceStorageScope,
     HistoryCoverageStatus,
     HistoryMetric,
     IncidentReviewStatus,
@@ -426,6 +432,43 @@ class SourceCapability(BaseModel):
     fps: int | None = Field(default=None, ge=1)
     codec: str | None = None
     aspect_ratio: str | None = None
+
+
+EvidenceStorageProfile = Literal["edge_local", "central", "cloud", "local_first"]
+
+
+class CameraSourceSettings(BaseModel):
+    kind: CameraSourceKind = CameraSourceKind.RTSP
+    uri: str = Field(min_length=1)
+    label: str | None = None
+
+    @model_validator(mode="after")
+    def validate_source_uri(self) -> CameraSourceSettings:
+        if self.kind is CameraSourceKind.RTSP and not self.uri.startswith(
+            ("rtsp://", "rtsps://")
+        ):
+            raise ValueError("RTSP sources must use rtsp:// or rtsps://.")
+        if self.kind is CameraSourceKind.USB and not self.uri.startswith("usb://"):
+            raise ValueError("USB sources must use usb:///dev/videoN.")
+        if self.kind is CameraSourceKind.JETSON_CSI and not self.uri.startswith("csi://"):
+            raise ValueError("Jetson CSI sources must use csi://N.")
+        return self
+
+
+class EvidenceRecordingPolicy(BaseModel):
+    enabled: bool = True
+    mode: Literal["event_clip"] = "event_clip"
+    pre_seconds: int = Field(default=4, ge=0, le=30)
+    post_seconds: int = Field(default=8, ge=1, le=60)
+    fps: int = Field(default=10, ge=1, le=30)
+    max_duration_seconds: int = Field(default=15, ge=1, le=90)
+    storage_profile: EvidenceStorageProfile = "central"
+
+    @model_validator(mode="after")
+    def validate_window(self) -> EvidenceRecordingPolicy:
+        if self.pre_seconds + self.post_seconds > self.max_duration_seconds:
+            raise ValueError("pre_seconds plus post_seconds must fit max_duration_seconds.")
+        return self
 
 
 class BrowserDeliveryProfile(BaseModel):
@@ -910,6 +953,67 @@ class HistoryClassesResponse(BaseModel):
     classes: list[HistoryClassEntry]
 
 
+class EvidenceArtifactResponse(BaseModel):
+    id: UUID
+    incident_id: UUID
+    camera_id: UUID
+    kind: EvidenceArtifactKind
+    status: EvidenceArtifactStatus
+    storage_provider: EvidenceStorageProvider
+    storage_scope: EvidenceStorageScope
+    bucket: str | None = None
+    object_key: str
+    content_type: str
+    sha256: str = Field(min_length=64, max_length=64)
+    size_bytes: int = Field(ge=0)
+    clip_started_at: datetime | None = None
+    triggered_at: datetime | None = None
+    clip_ended_at: datetime | None = None
+    duration_seconds: float | None = None
+    fps: int | None = None
+    scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    review_url: str | None = None
+
+
+class EvidenceLedgerSummary(BaseModel):
+    entry_count: int = 0
+    latest_action: EvidenceLedgerAction | None = None
+    latest_at: datetime | None = None
+
+
+class EvidenceLedgerEntryResponse(BaseModel):
+    id: UUID
+    incident_id: UUID
+    camera_id: UUID
+    sequence: int
+    action: EvidenceLedgerAction
+    actor_type: str
+    actor_subject: str | None = None
+    occurred_at: datetime
+    payload: dict[str, Any] = Field(default_factory=dict)
+    previous_entry_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    entry_hash: str = Field(min_length=64, max_length=64)
+
+
+class SceneContractSnapshotResponse(BaseModel):
+    id: UUID
+    camera_id: UUID
+    schema_version: int
+    contract_hash: str = Field(min_length=64, max_length=64)
+    contract: dict[str, Any]
+    created_at: datetime | None = None
+
+
+class PrivacyManifestSnapshotResponse(BaseModel):
+    id: UUID
+    camera_id: UUID
+    schema_version: int
+    manifest_hash: str = Field(min_length=64, max_length=64)
+    manifest: dict[str, Any]
+    created_at: datetime | None = None
+
+
 class IncidentResponse(BaseModel):
     id: UUID
     camera_id: UUID
@@ -923,6 +1027,13 @@ class IncidentResponse(BaseModel):
     review_status: IncidentReviewStatus = IncidentReviewStatus.PENDING
     reviewed_at: datetime | None = None
     reviewed_by_subject: str | None = None
+    scene_contract_hash: str | None = None
+    scene_contract_id: UUID | None = None
+    privacy_manifest_hash: str | None = None
+    privacy_manifest_id: UUID | None = None
+    recording_policy: EvidenceRecordingPolicy | None = None
+    evidence_artifacts: list[EvidenceArtifactResponse] = Field(default_factory=list)
+    ledger_summary: EvidenceLedgerSummary | None = None
 
 
 class IncidentReviewUpdate(BaseModel):
