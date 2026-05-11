@@ -15,6 +15,7 @@ vi.mock("@/lib/config", () => ({
 
 import { createQueryClient } from "@/app/query-client";
 import { ToastProvider } from "@/components/feedback/ToastProvider";
+import { incidentTypeAccent } from "@/components/evidence/evidence-signals";
 import { IncidentsPage } from "@/pages/Incidents";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -141,6 +142,9 @@ describe("IncidentsPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("evidence-desk-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("evidence-filter-bar")).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: /evidence timeline/i }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("review-queue")).toBeInTheDocument();
     expect(screen.getByTestId("evidence-media")).toBeInTheDocument();
     expect(screen.getByTestId("evidence-media")).toHaveClass(
@@ -150,6 +154,11 @@ describe("IncidentsPage", () => {
     expect(
       screen.getByRole("heading", { name: /review queue/i }),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("review-queue")).getByRole("button", {
+        name: /forklift gate/i,
+      }),
+    ).toHaveStyle({ borderLeftColor: incidentTypeAccent("ppe-missing") });
     expect(screen.getByRole("heading", { name: /facts/i })).toBeInTheDocument();
     expect(
       screen.getByRole("complementary", { name: /^facts$/i }),
@@ -162,6 +171,13 @@ describe("IncidentsPage", () => {
     ).toBeInTheDocument();
 
     const hero = screen.getByRole("region", { name: /selected evidence/i });
+    const caseContext = within(hero).getByTestId("case-context-strip");
+    expect(within(caseContext).getByText(/clip only/i)).toBeInTheDocument();
+    const rawPayloadButton = within(caseContext).getByRole("button", {
+      name: /show raw payload/i,
+    });
+    expect(rawPayloadButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/hard_hat/i)).not.toBeInTheDocument();
     expect(within(hero).getByText(/clip-only evidence/i)).toBeInTheDocument();
     expect(
       within(hero).getByRole("link", { name: /open clip/i }),
@@ -174,6 +190,10 @@ describe("IncidentsPage", () => {
     ).toBeInTheDocument();
 
     expect(screen.getAllByText("2.0 MB secured").length).toBeGreaterThan(0);
+
+    await user.click(rawPayloadButton);
+    expect(rawPayloadButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/hard_hat/i)).toBeInTheDocument();
 
     expect(screen.queryByLabelText(/camera filter/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/incident type/i)).not.toBeInTheDocument();

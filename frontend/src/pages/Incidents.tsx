@@ -1,11 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
+import { CaseContextStrip } from "@/components/evidence/CaseContextStrip";
+import { EvidenceTimeline } from "@/components/evidence/EvidenceTimeline";
 import {
-  AccountabilityStrip,
   evidenceClipHref,
 } from "@/components/evidence/AccountabilityStrip";
+import {
+  describeEvidenceState,
+  incidentTypeAccent,
+} from "@/components/evidence/evidence-signals";
 import {
   InstrumentRail,
   StatusToneBadge,
@@ -218,32 +223,39 @@ export function IncidentsPage() {
       ) : incidents.length === 0 ? (
         <StatusMessage>{omniEmptyStates.noEvidence}</StatusMessage>
       ) : selectedIncident ? (
-        <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
-          <IncidentQueue
+        <>
+          <EvidenceTimeline
             incidents={incidents}
             selectedIncidentId={selectedIncident.id}
-            cameraNamesById={cameraNamesById}
             onSelect={setSelectedIncidentId}
           />
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={selectedIncident.id}
-              data-testid="evidence-media-swap"
-              {...evidenceSwapMotion}
-              className="min-w-0"
-            >
-              <IncidentEvidenceHero
-                incident={selectedIncident}
-                cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
-                reviewMutation={reviewMutation}
-              />
-            </motion.div>
-          </AnimatePresence>
-          <IncidentFactsPanel
-            incident={selectedIncident}
-            cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
-          />
-        </div>
+          <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+            <IncidentQueue
+              incidents={incidents}
+              selectedIncidentId={selectedIncident.id}
+              cameraNamesById={cameraNamesById}
+              onSelect={setSelectedIncidentId}
+            />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={selectedIncident.id}
+                data-testid="evidence-media-swap"
+                {...evidenceSwapMotion}
+                className="min-w-0"
+              >
+                <IncidentEvidenceHero
+                  incident={selectedIncident}
+                  cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
+                  reviewMutation={reviewMutation}
+                />
+              </motion.div>
+            </AnimatePresence>
+            <IncidentFactsPanel
+              incident={selectedIncident}
+              cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
+            />
+          </div>
+        </>
       ) : null}
     </div>
   );
@@ -283,7 +295,12 @@ function IncidentQueue({
               type="button"
               aria-pressed={selected}
               onClick={() => onSelect(incident.id)}
-              className={`block w-full px-4 py-3 text-left transition ${
+              style={
+                {
+                  borderLeftColor: incidentTypeAccent(incident.type),
+                } as CSSProperties
+              }
+              className={`block w-full border-l-4 px-4 py-3 text-left transition ${
                 selected
                   ? "bg-[linear-gradient(135deg,rgba(110,189,255,0.16),rgba(126,83,255,0.14))] text-white shadow-[inset_3px_0_0_rgba(118,224,255,0.72)]"
                   : "text-[#c5d3ea] hover:bg-white/[0.04]"
@@ -321,6 +338,7 @@ function IncidentEvidenceHero({
   const actionLabel =
     incident.review_status === "pending" ? "Review" : "Reopen";
   const clipHref = evidenceClipHref(incident);
+  const evidenceState = describeEvidenceState(incident);
 
   return (
     <section
@@ -346,7 +364,7 @@ function IncidentEvidenceHero({
         </div>
       </div>
 
-      <AccountabilityStrip incident={incident} />
+      <CaseContextStrip incident={incident} />
 
       <div className="bg-black">
         {incident.snapshot_url ? (
@@ -358,10 +376,10 @@ function IncidentEvidenceHero({
         ) : (
           <div className="flex aspect-video flex-col items-center justify-center gap-2 px-6 text-center">
             <p className="text-base font-semibold text-[#eef4ff]">
-              Clip-only evidence
+              {evidenceHeroTitle(evidenceState.kind)}
             </p>
             <p className="max-w-md text-sm text-[#8799b8]">
-              This record has current clip evidence but no still snapshot.
+              {evidenceState.detail}
             </p>
           </div>
         )}
@@ -526,16 +544,6 @@ function IncidentFactsPanel({
         </div>
       </div>
 
-      <div className="border-t border-white/8 px-4 py-3">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
-          Payload
-        </h4>
-        <dl className="mt-3 grid gap-3">
-          {Object.entries(incident.payload).map(([key, value]) => (
-            <FactRow key={key} label={key} value={String(value)} compact />
-          ))}
-        </dl>
-      </div>
     </InstrumentRail>
   );
 }
@@ -673,6 +681,19 @@ export function formatIncidentTime(timestamp: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function evidenceHeroTitle(kind: ReturnType<typeof describeEvidenceState>["kind"]) {
+  if (kind === "clip_only") {
+    return "Clip-only evidence";
+  }
+  if (kind === "metadata_only") {
+    return "Metadata-only evidence";
+  }
+  if (kind === "snapshot_only") {
+    return "Snapshot-only evidence";
+  }
+  return "Clip and snapshot evidence";
 }
 
 function reviewMutationErrorMessage(error: unknown) {
