@@ -294,13 +294,17 @@ async def _seed_manifest_foreign_keys(
     model_id = uuid4()
     site_id = uuid4()
     async with session_factory() as session:
+        session.add(
+            Tenant(
+                id=tenant_id,
+                name="Test Tenant",
+                slug="test-tenant",
+            )
+        )
+        await session.flush()
+
         session.add_all(
             [
-                Tenant(
-                    id=tenant_id,
-                    name="Test Tenant",
-                    slug="test-tenant",
-                ),
                 Site(
                     id=site_id,
                     tenant_id=tenant_id,
@@ -320,27 +324,31 @@ async def _seed_manifest_foreign_keys(
                     sha256="a" * 64,
                     size_bytes=1,
                 ),
-                Camera(
-                    id=camera_id,
-                    site_id=site_id,
-                    name="Dock Camera",
-                    rtsp_url_encrypted="encrypted",
-                    processing_mode=ProcessingMode.EDGE,
-                    primary_model_id=model_id,
-                    secondary_model_id=None,
-                    tracker_type=TrackerType.BOTSORT,
-                    active_classes=[],
-                    runtime_vocabulary=[],
-                    runtime_vocabulary_version=0,
-                    attribute_rules=[],
-                    zones=[],
-                    vision_profile={},
-                    detection_regions=[],
-                    privacy={},
-                    browser_delivery={},
-                    frame_skip=1,
-                    fps_cap=25,
-                ),
             ]
+        )
+        await session.flush()
+
+        session.add(
+            Camera(
+                id=camera_id,
+                site_id=site_id,
+                name="Dock Camera",
+                rtsp_url_encrypted="encrypted",
+                processing_mode=ProcessingMode.EDGE,
+                primary_model_id=model_id,
+                secondary_model_id=None,
+                tracker_type=TrackerType.BOTSORT,
+                active_classes=[],
+                runtime_vocabulary=[],
+                runtime_vocabulary_version=0,
+                attribute_rules=[],
+                zones=[],
+                vision_profile={},
+                detection_regions=[],
+                privacy={},
+                browser_delivery={},
+                frame_skip=1,
+                fps_cap=25,
+            )
         )
         await session.commit()
