@@ -160,14 +160,14 @@ def upgrade() -> None:
         sa.Column("recording_policy", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     )
     op.create_foreign_key(
-        "fk_incidents_scene_contract_snapshot_id_scene_contract_snapshots",
+        "fk_incidents_scene_contract_snapshot",
         "incidents",
         "scene_contract_snapshots",
         ["scene_contract_snapshot_id"],
         ["id"],
     )
     op.create_foreign_key(
-        "fk_incidents_privacy_manifest_snapshot_id_privacy_manifest_snapshots",
+        "fk_incidents_privacy_manifest_snapshot",
         "incidents",
         "privacy_manifest_snapshots",
         ["privacy_manifest_snapshot_id"],
@@ -288,12 +288,12 @@ def downgrade() -> None:
     op.drop_table("evidence_artifacts")
 
     op.drop_constraint(
-        "fk_incidents_privacy_manifest_snapshot_id_privacy_manifest_snapshots",
+        "fk_incidents_privacy_manifest_snapshot",
         "incidents",
         type_="foreignkey",
     )
     op.drop_constraint(
-        "fk_incidents_scene_contract_snapshot_id_scene_contract_snapshots",
+        "fk_incidents_scene_contract_snapshot",
         "incidents",
         type_="foreignkey",
     )

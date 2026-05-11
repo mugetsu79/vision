@@ -244,3 +244,29 @@ def test_accountable_scene_evidence_migration_keeps_source_kind_string_backed() 
     assert '"evidence_ledger_entries"' in migration_text
     assert 'sa.Column("source_kind", sa.String(length=32), nullable=True)' in migration_text
     assert "camera_source_kind_enum" not in migration_text
+
+
+def test_accountable_scene_evidence_migration_constraint_names_fit_postgres() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = (
+        repo_root
+        / "src/argus/migrations/versions/0011_accountable_scene_evidence.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    legacy_constraint_names = [
+        "fk_incidents_scene_contract_snapshot_id_scene_contract_snapshots",
+        "fk_incidents_privacy_manifest_snapshot_id_privacy_manifest_snapshots",
+    ]
+    constraint_names = [
+        "fk_incidents_scene_contract_snapshot",
+        "fk_incidents_privacy_manifest_snapshot",
+    ]
+
+    for constraint_name in legacy_constraint_names:
+        assert constraint_name not in migration_text
+        assert len(constraint_name) > 63
+
+    for constraint_name in constraint_names:
+        assert constraint_name in migration_text
+        assert len(constraint_name) <= 63
