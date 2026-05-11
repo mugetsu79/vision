@@ -242,6 +242,57 @@ vi.mock("@/hooks/use-models", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-configuration", () => ({
+  useConfigurationCatalog: () => ({
+    data: {
+      kinds: [
+        { kind: "evidence_storage", label: "Evidence storage" },
+        { kind: "stream_delivery", label: "Streams" },
+        { kind: "runtime_selection", label: "Runtime" },
+        { kind: "privacy_policy", label: "Privacy and retention" },
+        { kind: "llm_provider", label: "LLM and policy" },
+        { kind: "operations_mode", label: "Operations" },
+      ],
+    },
+    isLoading: false,
+  }),
+  useConfigurationProfiles: () => ({
+    data: [
+      {
+        id: "profile-minio",
+        tenant_id: "tenant-1",
+        kind: "evidence_storage",
+        scope: "tenant",
+        name: "Central MinIO",
+        slug: "central-minio",
+        enabled: true,
+        is_default: true,
+        config: {
+          provider: "minio",
+          storage_scope: "central",
+          endpoint: "localhost:9000",
+          bucket: "incidents",
+          secure: false,
+        },
+        secret_state: { secret_key: "present" },
+        validation_status: "unvalidated",
+        validation_message: null,
+        validated_at: null,
+        config_hash: "a".repeat(64),
+        created_at: "2026-05-11T10:00:00Z",
+        updated_at: "2026-05-11T10:00:00Z",
+      },
+    ],
+    isLoading: false,
+  }),
+  useCreateConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useTestConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpsertConfigurationBinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useResolvedConfiguration: () => ({ data: null, isLoading: false }),
+}));
+
 import { SettingsPage } from "@/pages/Settings";
 
 function renderPage() {
@@ -265,6 +316,13 @@ describe("SettingsPage operations workbench", () => {
       screen.getByRole("heading", { name: /operations/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("operations-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("configuration-workspace")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("configuration-workspace")
+        .compareDocumentPosition(screen.getByTestId("worker-rail")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
     expect(sceneMatrix).toBeInTheDocument();
     expect(

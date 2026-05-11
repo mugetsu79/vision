@@ -231,6 +231,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/configuration/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Configuration Catalog */
+        get: operations["list_configuration_catalog_api_v1_configuration_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuration/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Configuration Profiles */
+        get: operations["list_configuration_profiles_api_v1_configuration_profiles_get"];
+        put?: never;
+        /** Create Configuration Profile */
+        post: operations["create_configuration_profile_api_v1_configuration_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuration/profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Configuration Profile */
+        delete: operations["delete_configuration_profile_api_v1_configuration_profiles__profile_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Configuration Profile */
+        patch: operations["update_configuration_profile_api_v1_configuration_profiles__profile_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/configuration/profiles/{profile_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Configuration Profile */
+        post: operations["test_configuration_profile_api_v1_configuration_profiles__profile_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuration/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upsert Configuration Binding */
+        post: operations["upsert_configuration_binding_api_v1_configuration_bindings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuration/resolved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve Configuration */
+        get: operations["resolve_configuration_api_v1_configuration_resolved_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/models": {
         parameters: {
             query?: never;
@@ -1776,6 +1880,202 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** OperatorConfigBindingRequest */
+        OperatorConfigBindingRequest: {
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            scope: components["schemas"]["OperatorConfigScope"];
+            /** Scope Key */
+            scope_key: string;
+            /**
+             * Profile Id
+             * Format: uuid
+             */
+            profile_id: string;
+        };
+        /** OperatorConfigBindingResponse */
+        OperatorConfigBindingResponse: {
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            scope: components["schemas"]["OperatorConfigScope"];
+            /** Scope Key */
+            scope_key: string;
+            /**
+             * Profile Id
+             * Format: uuid
+             */
+            profile_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** OperatorConfigProfileCreate */
+        OperatorConfigProfileCreate: {
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /** @default tenant */
+            scope: components["schemas"]["OperatorConfigScope"];
+            /** Site Id */
+            site_id?: string | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Secrets */
+            secrets?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * OperatorConfigProfileKind
+         * @enum {string}
+         */
+        OperatorConfigProfileKind: "evidence_storage" | "stream_delivery" | "runtime_selection" | "privacy_policy" | "llm_provider" | "operations_mode";
+        /** OperatorConfigProfileResponse */
+        OperatorConfigProfileResponse: {
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /** @default tenant */
+            scope: components["schemas"]["OperatorConfigScope"];
+            /** Site Id */
+            site_id?: string | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Secret State */
+            secret_state?: {
+                [key: string]: "missing" | "present";
+            };
+            /** @default unvalidated */
+            validation_status: components["schemas"]["OperatorConfigValidationStatus"];
+            /** Validation Message */
+            validation_message?: string | null;
+            /** Validated At */
+            validated_at?: string | null;
+            /** Config Hash */
+            config_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** OperatorConfigProfileUpdate */
+        OperatorConfigProfileUpdate: {
+            /** Site Id */
+            site_id?: string | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            } | null;
+            /** Secrets */
+            secrets?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * OperatorConfigScope
+         * @enum {string}
+         */
+        OperatorConfigScope: "tenant" | "site" | "edge_node" | "camera";
+        /** OperatorConfigTestResponse */
+        OperatorConfigTestResponse: {
+            /**
+             * Profile Id
+             * Format: uuid
+             */
+            profile_id: string;
+            status: components["schemas"]["OperatorConfigValidationStatus"];
+            /** Message */
+            message?: string | null;
+            /**
+             * Tested At
+             * Format: date-time
+             */
+            tested_at: string;
+        };
+        /**
+         * OperatorConfigValidationStatus
+         * @enum {string}
+         */
+        OperatorConfigValidationStatus: "unvalidated" | "valid" | "invalid";
         /** PolygonZone */
         PolygonZone: {
             /** Id */
@@ -1877,6 +2177,13 @@ export interface components {
             latency_ms: number;
             /** Camera Ids */
             camera_ids: string[];
+        };
+        /** ResolvedOperatorConfigResponse */
+        ResolvedOperatorConfigResponse: {
+            /** Profiles */
+            profiles?: {
+                [key: string]: components["schemas"]["OperatorConfigProfileResponse"];
+            };
         };
         /** RuntimeArtifactCreate */
         RuntimeArtifactCreate: {
@@ -3105,6 +3412,265 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_catalog_api_v1_configuration_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_configuration_profiles_api_v1_configuration_profiles_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["OperatorConfigProfileKind"] | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigProfileResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_configuration_profile_api_v1_configuration_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorConfigProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_profile_api_v1_configuration_profiles__profile_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_configuration_profile_api_v1_configuration_profiles__profile_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorConfigProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_configuration_profile_api_v1_configuration_profiles__profile_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_configuration_binding_api_v1_configuration_bindings_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorConfigBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigBindingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_configuration_api_v1_configuration_resolved_get: {
+        parameters: {
+            query?: {
+                camera_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedOperatorConfigResponse"];
                 };
             };
             /** @description Validation Error */

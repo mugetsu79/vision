@@ -15,6 +15,7 @@ import {
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
+import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
@@ -101,6 +102,12 @@ export function SettingsPage() {
     sites,
     fleet: fleet.data,
   });
+  const edgeNodes = fleet.data.nodes
+    .filter((node) => node.id !== null)
+    .map((node) => ({
+      id: node.id as string,
+      hostname: node.hostname,
+    }));
 
   return (
     <div data-testid="operations-workspace" className="space-y-5 p-4 sm:p-6">
@@ -117,6 +124,12 @@ export function SettingsPage() {
       />
 
       <SceneIntelligenceMatrix rows={sceneHealthRows} />
+
+      <ConfigurationWorkspace
+        cameras={cameras}
+        sites={sites}
+        edgeNodes={edgeNodes}
+      />
 
       <section
         data-testid="edge-fleet-grid"
