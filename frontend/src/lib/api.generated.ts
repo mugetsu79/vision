@@ -505,6 +505,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents/{incident_id}/scene-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Scene Contract */
+        get: operations["get_incident_scene_contract_api_v1_incidents__incident_id__scene_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/privacy-manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Privacy Manifest */
+        get: operations["get_incident_privacy_manifest_api_v1_incidents__incident_id__privacy_manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Incident Ledger */
+        get: operations["list_incident_ledger_api_v1_incidents__incident_id__ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Artifact Content */
+        get: operations["get_incident_artifact_content_api_v1_incidents__incident_id__artifacts__artifact_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/incidents/{incident_id}/review": {
         parameters: {
             query?: never;
@@ -668,10 +736,13 @@ export interface components {
              * Format: uuid
              */
             site_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
             /** Name */
             name: string;
             /** Rtsp Url */
-            rtsp_url: string;
+            rtsp_url?: string | null;
+            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
             processing_mode: components["schemas"]["ProcessingMode"];
             /**
              * Primary Model Id
@@ -725,6 +796,7 @@ export interface components {
             name: string;
             /** Rtsp Url Masked */
             rtsp_url_masked: string;
+            camera_source?: components["schemas"]["CameraSourceSettings"];
             processing_mode: components["schemas"]["ProcessingMode"];
             /**
              * Primary Model Id
@@ -781,12 +853,18 @@ export interface components {
              */
             captured_at: string;
         };
+        /**
+         * CameraSourceKind
+         * @enum {string}
+         */
+        CameraSourceKind: "rtsp" | "usb" | "jetson_csi";
         /** CameraSourceProbeRequest */
         CameraSourceProbeRequest: {
             /** Camera Id */
             camera_id?: string | null;
             /** Rtsp Url */
             rtsp_url?: string | null;
+            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
             /** @default central */
             processing_mode: components["schemas"]["ProcessingMode"];
             /** Edge Node Id */
@@ -799,14 +877,26 @@ export interface components {
             source_capability?: components["schemas"]["SourceCapability"] | null;
             browser_delivery: components["schemas"]["BrowserDeliverySettings"];
         };
+        /** CameraSourceSettings */
+        CameraSourceSettings: {
+            /** @default rtsp */
+            kind: components["schemas"]["CameraSourceKind"];
+            /** Uri */
+            uri: string;
+            /** Label */
+            label?: string | null;
+        };
         /** CameraUpdate */
         CameraUpdate: {
             /** Site Id */
             site_id?: string | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
             /** Name */
             name?: string | null;
             /** Rtsp Url */
             rtsp_url?: string | null;
+            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
             processing_mode?: components["schemas"]["ProcessingMode"] | null;
             /** Primary Model Id */
             primary_model_id?: string | null;
@@ -925,6 +1015,168 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * EvidenceArtifactKind
+         * @enum {string}
+         */
+        EvidenceArtifactKind: "event_clip" | "snapshot" | "manifest_export" | "case_export";
+        /** EvidenceArtifactResponse */
+        EvidenceArtifactResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Incident Id
+             * Format: uuid
+             */
+            incident_id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            kind: components["schemas"]["EvidenceArtifactKind"];
+            status: components["schemas"]["EvidenceArtifactStatus"];
+            storage_provider: components["schemas"]["EvidenceStorageProvider"];
+            storage_scope: components["schemas"]["EvidenceStorageScope"];
+            /** Bucket */
+            bucket?: string | null;
+            /** Object Key */
+            object_key: string;
+            /** Content Type */
+            content_type: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Clip Started At */
+            clip_started_at?: string | null;
+            /** Triggered At */
+            triggered_at?: string | null;
+            /** Clip Ended At */
+            clip_ended_at?: string | null;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Fps */
+            fps?: number | null;
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+            /** Privacy Manifest Hash */
+            privacy_manifest_hash?: string | null;
+            /** Review Url */
+            review_url?: string | null;
+        };
+        /**
+         * EvidenceArtifactStatus
+         * @enum {string}
+         */
+        EvidenceArtifactStatus: "available" | "local_only" | "remote_available" | "upload_pending" | "quota_exceeded" | "capture_failed" | "expired";
+        /**
+         * EvidenceLedgerAction
+         * @enum {string}
+         */
+        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "incident.reviewed" | "incident.reopened";
+        /** EvidenceLedgerEntryResponse */
+        EvidenceLedgerEntryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Incident Id
+             * Format: uuid
+             */
+            incident_id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Sequence */
+            sequence: number;
+            action: components["schemas"]["EvidenceLedgerAction"];
+            /** Actor Type */
+            actor_type: string;
+            /** Actor Subject */
+            actor_subject?: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Previous Entry Hash */
+            previous_entry_hash?: string | null;
+            /** Entry Hash */
+            entry_hash: string;
+        };
+        /** EvidenceLedgerSummary */
+        EvidenceLedgerSummary: {
+            /**
+             * Entry Count
+             * @default 0
+             */
+            entry_count: number;
+            latest_action?: components["schemas"]["EvidenceLedgerAction"] | null;
+            /** Latest At */
+            latest_at?: string | null;
+        };
+        /** EvidenceRecordingPolicy */
+        EvidenceRecordingPolicy: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Mode
+             * @default event_clip
+             * @constant
+             */
+            mode: "event_clip";
+            /**
+             * Pre Seconds
+             * @default 4
+             */
+            pre_seconds: number;
+            /**
+             * Post Seconds
+             * @default 8
+             */
+            post_seconds: number;
+            /**
+             * Fps
+             * @default 10
+             */
+            fps: number;
+            /**
+             * Max Duration Seconds
+             * @default 15
+             */
+            max_duration_seconds: number;
+            /**
+             * Storage Profile
+             * @default central
+             * @enum {string}
+             */
+            storage_profile: "edge_local" | "central" | "cloud" | "local_first";
+        };
+        /**
+         * EvidenceStorageProvider
+         * @enum {string}
+         */
+        EvidenceStorageProvider: "local_filesystem" | "minio" | "s3_compatible";
+        /**
+         * EvidenceStorageScope
+         * @enum {string}
+         */
+        EvidenceStorageScope: "edge" | "central" | "cloud";
         /** FleetBootstrapRequest */
         FleetBootstrapRequest: {
             /**
@@ -1280,6 +1532,18 @@ export interface components {
             reviewed_at?: string | null;
             /** Reviewed By Subject */
             reviewed_by_subject?: string | null;
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+            /** Scene Contract Id */
+            scene_contract_id?: string | null;
+            /** Privacy Manifest Hash */
+            privacy_manifest_hash?: string | null;
+            /** Privacy Manifest Id */
+            privacy_manifest_id?: string | null;
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"] | null;
+            /** Evidence Artifacts */
+            evidence_artifacts?: components["schemas"]["EvidenceArtifactResponse"][];
+            ledger_summary?: components["schemas"]["EvidenceLedgerSummary"] | null;
         };
         /**
          * IncidentReviewStatus
@@ -1525,6 +1789,29 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** PrivacyManifestSnapshotResponse */
+        PrivacyManifestSnapshotResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Manifest Hash */
+            manifest_hash: string;
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at?: string | null;
+        };
         /** PrivacySettings */
         PrivacySettings: {
             /**
@@ -1769,6 +2056,29 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /** SceneContractSnapshotResponse */
+        SceneContractSnapshotResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Contract Hash */
+            contract_hash: string;
+            /** Contract */
+            contract: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at?: string | null;
+        };
         /** SceneVisionProfile */
         SceneVisionProfile: {
             /**
@@ -1977,7 +2287,10 @@ export interface components {
         /** WorkerCameraSettings */
         WorkerCameraSettings: {
             /** Rtsp Url */
-            rtsp_url: string;
+            rtsp_url?: string | null;
+            /** Source Uri */
+            source_uri?: string | null;
+            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
             /**
              * Frame Skip
              * @default 1
@@ -1997,6 +2310,11 @@ export interface components {
              */
             camera_id: string;
             mode: components["schemas"]["ProcessingMode"];
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+            /** Privacy Manifest Hash */
+            privacy_manifest_hash?: string | null;
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
             camera: components["schemas"]["WorkerCameraSettings"];
             publish?: components["schemas"]["WorkerPublishSettings"];
             stream?: components["schemas"]["WorkerStreamSettings"];
@@ -3388,6 +3706,139 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_scene_contract_api_v1_incidents__incident_id__scene_contract_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneContractSnapshotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_privacy_manifest_api_v1_incidents__incident_id__privacy_manifest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivacyManifestSnapshotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_incident_ledger_api_v1_incidents__incident_id__ledger_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceLedgerEntryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_artifact_content_api_v1_incidents__incident_id__artifacts__artifact_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -9,6 +9,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal, cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
@@ -39,6 +40,9 @@ from argus.api.contracts import (
     EdgeHeartbeatResponse,
     EdgeRegisterRequest,
     EdgeRegisterResponse,
+    EvidenceArtifactResponse,
+    EvidenceLedgerEntryResponse,
+    EvidenceLedgerSummary,
     EvidenceRecordingPolicy,
     ExportArtifact,
     FleetBootstrapRequest,
@@ -64,9 +68,11 @@ from argus.api.contracts import (
     ModelResponse,
     ModelUpdate,
     NativeAvailability,
+    PrivacyManifestSnapshotResponse,
     PrivacySettings,
     RuntimeBackend,
     RuntimeVocabularyState,
+    SceneContractSnapshotResponse,
     SceneVisionProfile,
     SiteCreate,
     SiteResponse,
@@ -100,6 +106,7 @@ from argus.models.enums import (
     CountEventType,
     DetectorCapability,
     EvidenceLedgerAction,
+    EvidenceStorageProvider,
     HistoryCoverageStatus,
     HistoryMetric,
     IncidentReviewStatus,
@@ -116,9 +123,13 @@ from argus.models.tables import (
     Camera,
     CameraVocabularySnapshot,
     EdgeNode,
+    EvidenceArtifact,
+    EvidenceLedgerEntry,
     Incident,
     Model,
     ModelRuntimeArtifact,
+    PrivacyManifestSnapshot,
+    SceneContractSnapshot,
     Site,
     Tenant,
     TrackingEvent,
@@ -186,6 +197,13 @@ class _SetupPreviewCacheEntry:
     snapshot: _SetupPreviewSnapshot
     camera_updated_at: datetime
     expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentArtifactContent:
+    content_type: str
+    file_path: Path | None = None
+    redirect_url: str | None = None
 
 
 @dataclass(slots=True)
@@ -2377,10 +2395,12 @@ class IncidentService:
         session_factory: async_sessionmaker[AsyncSession],
         audit_logger: DatabaseAuditLogger | None = None,
         evidence_ledger: EvidenceLedgerService | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.audit_logger = audit_logger
         self.evidence_ledger = evidence_ledger
+        self.settings = settings
 
     async def list_incidents(
         self,
@@ -2408,9 +2428,23 @@ class IncidentService:
                 statement = statement.where(Incident.type == incident_type)
             if review_status is not None:
                 statement = statement.where(Incident.review_status == review_status)
-            incidents = (await session.execute(statement)).all()
+            incidents = list((await session.execute(statement)).all())
+            incident_ids = [incident.id for incident, _camera_name in incidents]
+            artifacts_by_incident = await _load_artifacts_by_incident_ids(
+                session,
+                incident_ids,
+            )
+            ledger_summary_by_incident = await _load_ledger_summaries_by_incident_ids(
+                session,
+                incident_ids,
+            )
         return [
-            _incident_response(incident, camera_name)
+            _incident_response(
+                incident,
+                camera_name,
+                evidence_artifacts=artifacts_by_incident.get(incident.id, []),
+                ledger_summary=ledger_summary_by_incident.get(incident.id),
+            )
             for incident, camera_name in incidents
         ]
 
@@ -2472,6 +2506,123 @@ class IncidentService:
 
             return _incident_response(incident, camera_name)
 
+    async def get_scene_contract(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> SceneContractSnapshotResponse:
+        async with self.session_factory() as session:
+            statement = (
+                select(SceneContractSnapshot)
+                .join(
+                    Incident,
+                    Incident.scene_contract_snapshot_id == SceneContractSnapshot.id,
+                )
+                .join(Camera, Camera.id == Incident.camera_id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Incident.id == incident_id)
+            )
+            snapshot = (await session.execute(statement)).scalar_one_or_none()
+        if snapshot is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Scene contract not found.",
+            )
+        return _scene_contract_snapshot_response(snapshot)
+
+    async def get_privacy_manifest(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> PrivacyManifestSnapshotResponse:
+        async with self.session_factory() as session:
+            statement = (
+                select(PrivacyManifestSnapshot)
+                .join(
+                    Incident,
+                    Incident.privacy_manifest_snapshot_id == PrivacyManifestSnapshot.id,
+                )
+                .join(Camera, Camera.id == Incident.camera_id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Incident.id == incident_id)
+            )
+            snapshot = (await session.execute(statement)).scalar_one_or_none()
+        if snapshot is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Privacy manifest not found.",
+            )
+        return _privacy_manifest_snapshot_response(snapshot)
+
+    async def list_ledger_entries(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> list[EvidenceLedgerEntryResponse]:
+        async with self.session_factory() as session:
+            await _ensure_incident_in_tenant(
+                session,
+                tenant_id=tenant_context.tenant_id,
+                incident_id=incident_id,
+            )
+            statement = (
+                select(EvidenceLedgerEntry)
+                .where(EvidenceLedgerEntry.incident_id == incident_id)
+                .order_by(EvidenceLedgerEntry.sequence.asc())
+            )
+            entries = list((await session.execute(statement)).scalars().all())
+        return [_ledger_entry_response(entry) for entry in entries]
+
+    async def get_artifact_content(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID,
+        artifact_id: UUID,
+    ) -> IncidentArtifactContent:
+        async with self.session_factory() as session:
+            statement = (
+                select(EvidenceArtifact, Incident.clip_url)
+                .join(Incident, Incident.id == EvidenceArtifact.incident_id)
+                .join(Camera, Camera.id == Incident.camera_id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Incident.id == incident_id)
+                .where(EvidenceArtifact.id == artifact_id)
+            )
+            row = (await session.execute(statement)).one_or_none()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evidence artifact not found.",
+            )
+        artifact, clip_url = row
+        if artifact.storage_provider is EvidenceStorageProvider.LOCAL_FILESYSTEM:
+            file_path = _resolve_local_artifact_path(self.settings, artifact.object_key)
+            if not file_path.is_file():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Evidence artifact content not found.",
+                )
+            return IncidentArtifactContent(
+                content_type=artifact.content_type,
+                file_path=file_path,
+            )
+        if clip_url:
+            return IncidentArtifactContent(
+                content_type=artifact.content_type,
+                redirect_url=clip_url,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence artifact content not available.",
+        )
+
     async def _append_review_ledger_entry(
         self,
         *,
@@ -2509,7 +2660,13 @@ class IncidentService:
         )
 
 
-def _incident_response(incident: Incident, camera_name: str | None) -> IncidentResponse:
+def _incident_response(
+    incident: Incident,
+    camera_name: str | None,
+    *,
+    evidence_artifacts: list[EvidenceArtifact] | None = None,
+    ledger_summary: EvidenceLedgerSummary | None = None,
+) -> IncidentResponse:
     return IncidentResponse(
         id=incident.id,
         camera_id=incident.camera_id,
@@ -2523,7 +2680,186 @@ def _incident_response(incident: Incident, camera_name: str | None) -> IncidentR
         review_status=incident.review_status,
         reviewed_at=incident.reviewed_at,
         reviewed_by_subject=incident.reviewed_by_subject,
+        scene_contract_hash=incident.scene_contract_hash,
+        scene_contract_id=incident.scene_contract_snapshot_id,
+        privacy_manifest_hash=incident.privacy_manifest_hash,
+        privacy_manifest_id=incident.privacy_manifest_snapshot_id,
+        recording_policy=(
+            EvidenceRecordingPolicy.model_validate(incident.recording_policy)
+            if incident.recording_policy is not None
+            else None
+        ),
+        evidence_artifacts=[
+            _artifact_response(artifact, review_url=incident.clip_url)
+            for artifact in evidence_artifacts or []
+        ],
+        ledger_summary=ledger_summary,
     )
+
+
+async def _load_artifacts_by_incident_ids(
+    session: AsyncSession,
+    incident_ids: list[UUID],
+) -> dict[UUID, list[EvidenceArtifact]]:
+    if not incident_ids:
+        return {}
+    statement = (
+        select(EvidenceArtifact)
+        .where(EvidenceArtifact.incident_id.in_(incident_ids))
+        .order_by(EvidenceArtifact.incident_id.asc(), EvidenceArtifact.created_at.asc())
+    )
+    artifacts = list((await session.execute(statement)).scalars().all())
+    by_incident: dict[UUID, list[EvidenceArtifact]] = {
+        incident_id: [] for incident_id in incident_ids
+    }
+    for artifact in artifacts:
+        by_incident.setdefault(artifact.incident_id, []).append(artifact)
+    return by_incident
+
+
+async def _load_ledger_summaries_by_incident_ids(
+    session: AsyncSession,
+    incident_ids: list[UUID],
+) -> dict[UUID, EvidenceLedgerSummary]:
+    if not incident_ids:
+        return {}
+    statement = (
+        select(EvidenceLedgerEntry)
+        .where(EvidenceLedgerEntry.incident_id.in_(incident_ids))
+        .order_by(EvidenceLedgerEntry.incident_id.asc(), EvidenceLedgerEntry.sequence.asc())
+    )
+    entries = list((await session.execute(statement)).scalars().all())
+    counts: dict[UUID, int] = {}
+    latest_by_incident: dict[UUID, EvidenceLedgerEntry] = {}
+    for entry in entries:
+        counts[entry.incident_id] = counts.get(entry.incident_id, 0) + 1
+        latest_by_incident[entry.incident_id] = entry
+    return {
+        incident_id: EvidenceLedgerSummary(
+            entry_count=counts[incident_id],
+            latest_action=entry.action,
+            latest_at=entry.occurred_at,
+        )
+        for incident_id, entry in latest_by_incident.items()
+    }
+
+
+async def _ensure_incident_in_tenant(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    incident_id: UUID,
+) -> None:
+    statement = (
+        select(Incident.id)
+        .join(Camera, Camera.id == Incident.camera_id)
+        .join(Site, Site.id == Camera.site_id)
+        .where(Site.tenant_id == tenant_id)
+        .where(Incident.id == incident_id)
+    )
+    if (await session.execute(statement)).scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found.",
+        )
+
+
+def _scene_contract_snapshot_response(
+    snapshot: SceneContractSnapshot,
+) -> SceneContractSnapshotResponse:
+    return SceneContractSnapshotResponse(
+        id=snapshot.id,
+        camera_id=snapshot.camera_id,
+        schema_version=snapshot.schema_version,
+        contract_hash=snapshot.contract_hash,
+        contract=snapshot.contract,
+        created_at=snapshot.created_at,
+    )
+
+
+def _privacy_manifest_snapshot_response(
+    snapshot: PrivacyManifestSnapshot,
+) -> PrivacyManifestSnapshotResponse:
+    return PrivacyManifestSnapshotResponse(
+        id=snapshot.id,
+        camera_id=snapshot.camera_id,
+        schema_version=snapshot.schema_version,
+        manifest_hash=snapshot.manifest_hash,
+        manifest=snapshot.manifest,
+        created_at=snapshot.created_at,
+    )
+
+
+def _artifact_response(
+    artifact: EvidenceArtifact,
+    *,
+    review_url: str | None,
+) -> EvidenceArtifactResponse:
+    return EvidenceArtifactResponse(
+        id=artifact.id,
+        incident_id=artifact.incident_id,
+        camera_id=artifact.camera_id,
+        kind=artifact.kind,
+        status=artifact.status,
+        storage_provider=artifact.storage_provider,
+        storage_scope=artifact.storage_scope,
+        bucket=artifact.bucket,
+        object_key=artifact.object_key,
+        content_type=artifact.content_type,
+        sha256=artifact.sha256,
+        size_bytes=artifact.size_bytes,
+        clip_started_at=artifact.clip_started_at,
+        triggered_at=artifact.triggered_at,
+        clip_ended_at=artifact.clip_ended_at,
+        duration_seconds=artifact.duration_seconds,
+        fps=artifact.fps,
+        scene_contract_hash=artifact.scene_contract_hash,
+        privacy_manifest_hash=artifact.privacy_manifest_hash,
+        review_url=review_url,
+    )
+
+
+def _ledger_entry_response(entry: EvidenceLedgerEntry) -> EvidenceLedgerEntryResponse:
+    return EvidenceLedgerEntryResponse(
+        id=entry.id,
+        incident_id=entry.incident_id,
+        camera_id=entry.camera_id,
+        sequence=entry.sequence,
+        action=entry.action,
+        actor_type=entry.actor_type,
+        actor_subject=entry.actor_subject,
+        occurred_at=entry.occurred_at,
+        payload=entry.payload,
+        previous_entry_hash=entry.previous_entry_hash,
+        entry_hash=entry.entry_hash,
+    )
+
+
+def _resolve_local_artifact_path(
+    settings: Settings | None,
+    object_key: str,
+) -> Path:
+    if settings is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Local evidence storage is not configured.",
+        )
+    object_path = PurePosixPath(object_key)
+    if object_path.is_absolute() or any(
+        part in {"", ".", ".."} for part in object_path.parts
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence artifact content not found.",
+        )
+    root = Path(settings.incident_local_storage_root).expanduser().resolve()
+    candidate = root.joinpath(*object_path.parts).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence artifact content not found.",
+        )
+    return candidate
 
 
 class StreamService:
@@ -2812,6 +3148,7 @@ def build_app_services(
             db.session_factory,
             audit_logger,
             EvidenceLedgerService(db.session_factory),
+            settings,
         ),
         streams=StreamService(db.session_factory, mediamtx, settings),
         query=query_service,

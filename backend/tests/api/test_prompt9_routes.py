@@ -8,15 +8,29 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
+    EvidenceArtifactResponse,
+    EvidenceLedgerEntryResponse,
+    EvidenceLedgerSummary,
+    EvidenceRecordingPolicy,
     ExportArtifact,
     HistoryPoint,
     IncidentResponse,
+    PrivacyManifestSnapshotResponse,
+    SceneContractSnapshotResponse,
     TenantContext,
 )
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, get_current_user
 from argus.main import create_app
-from argus.models.enums import IncidentReviewStatus, RoleEnum
+from argus.models.enums import (
+    EvidenceArtifactKind,
+    EvidenceArtifactStatus,
+    EvidenceLedgerAction,
+    EvidenceStorageProvider,
+    EvidenceStorageScope,
+    IncidentReviewStatus,
+    RoleEnum,
+)
 
 
 def _sample_user(role: RoleEnum = RoleEnum.VIEWER) -> AuthenticatedUser:
@@ -159,6 +173,14 @@ class RecordingIncidentService:
     def __init__(self) -> None:
         self.last_query: dict[str, object] | None = None
         self.review_calls: list[dict[str, object]] = []
+        self.scene_contract_calls: list[dict[str, object]] = []
+        self.privacy_manifest_calls: list[dict[str, object]] = []
+        self.ledger_calls: list[dict[str, object]] = []
+        self.artifact_content_calls: list[dict[str, object]] = []
+        self.scene_contract_id = uuid4()
+        self.privacy_manifest_id = uuid4()
+        self.artifact_id = uuid4()
+        self.incident_id = uuid4()
 
     async def list_incidents(
         self,
@@ -178,7 +200,7 @@ class RecordingIncidentService:
         }
         return [
             IncidentResponse(
-                id=uuid4(),
+                id=self.incident_id,
                 camera_id=camera_id or uuid4(),
                 ts=datetime.now(tz=UTC),
                 type=incident_type or "ppe-missing",
@@ -187,6 +209,33 @@ class RecordingIncidentService:
                 clip_url="https://minio.local/signed/incidents/1.mjpeg",
                 storage_bytes=2_097_152,
                 review_status=review_status or IncidentReviewStatus.PENDING,
+                scene_contract_hash="a" * 64,
+                scene_contract_id=self.scene_contract_id,
+                privacy_manifest_hash="b" * 64,
+                privacy_manifest_id=self.privacy_manifest_id,
+                recording_policy=EvidenceRecordingPolicy(storage_profile="edge_local"),
+                evidence_artifacts=[
+                    EvidenceArtifactResponse(
+                        id=self.artifact_id,
+                        incident_id=self.incident_id,
+                        camera_id=camera_id or uuid4(),
+                        kind=EvidenceArtifactKind.EVENT_CLIP,
+                        status=EvidenceArtifactStatus.REMOTE_AVAILABLE,
+                        storage_provider=EvidenceStorageProvider.S3_COMPATIBLE,
+                        storage_scope=EvidenceStorageScope.CLOUD,
+                        bucket="incidents",
+                        object_key="tenant/camera/clip.mjpeg",
+                        content_type="video/x-motion-jpeg",
+                        sha256="c" * 64,
+                        size_bytes=2_097_152,
+                        review_url="https://minio.local/signed/incidents/1.mjpeg",
+                    )
+                ],
+                ledger_summary=EvidenceLedgerSummary(
+                    entry_count=2,
+                    latest_action=EvidenceLedgerAction.CLIP_AVAILABLE,
+                    latest_at=datetime(2026, 5, 11, 10, 1, tzinfo=UTC),
+                ),
             )
         ]
 
@@ -223,6 +272,85 @@ class RecordingIncidentService:
             review_status=review_status,
             reviewed_at=reviewed_at,
             reviewed_by_subject=reviewed_by_subject,
+        )
+
+    async def get_scene_contract(
+        self,
+        context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> SceneContractSnapshotResponse:
+        self.scene_contract_calls.append(
+            {"tenant_id": context.tenant_id, "incident_id": incident_id}
+        )
+        return SceneContractSnapshotResponse(
+            id=self.scene_contract_id,
+            camera_id=uuid4(),
+            schema_version=1,
+            contract_hash="a" * 64,
+            contract={"camera": {"name": "Dock Camera"}},
+            created_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
+        )
+
+    async def get_privacy_manifest(
+        self,
+        context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> PrivacyManifestSnapshotResponse:
+        self.privacy_manifest_calls.append(
+            {"tenant_id": context.tenant_id, "incident_id": incident_id}
+        )
+        return PrivacyManifestSnapshotResponse(
+            id=self.privacy_manifest_id,
+            camera_id=uuid4(),
+            schema_version=1,
+            manifest_hash="b" * 64,
+            manifest={"identity": {"face_identification": "disabled"}},
+            created_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
+        )
+
+    async def list_ledger_entries(
+        self,
+        context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> list[EvidenceLedgerEntryResponse]:
+        self.ledger_calls.append({"tenant_id": context.tenant_id, "incident_id": incident_id})
+        return [
+            EvidenceLedgerEntryResponse(
+                id=uuid4(),
+                incident_id=incident_id,
+                camera_id=uuid4(),
+                sequence=1,
+                action=EvidenceLedgerAction.INCIDENT_TRIGGERED,
+                actor_type="system",
+                actor_subject=None,
+                occurred_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
+                payload={"type": "ppe-missing"},
+                previous_entry_hash=None,
+                entry_hash="d" * 64,
+            )
+        ]
+
+    async def get_artifact_content(
+        self,
+        context: TenantContext,
+        *,
+        incident_id: UUID,
+        artifact_id: UUID,
+    ) -> SimpleNamespace:
+        self.artifact_content_calls.append(
+            {
+                "tenant_id": context.tenant_id,
+                "incident_id": incident_id,
+                "artifact_id": artifact_id,
+            }
+        )
+        return SimpleNamespace(
+            content_type="video/x-motion-jpeg",
+            file_path=None,
+            redirect_url="https://minio.local/signed/incidents/1.mjpeg",
         )
 
 
@@ -415,6 +543,36 @@ async def test_incidents_route_passes_camera_type_limit_and_review_status_filter
     assert response.json()[0]["clip_url"] == "https://minio.local/signed/incidents/1.mjpeg"
     assert response.json()[0]["storage_bytes"] == 2_097_152
     assert response.json()[0]["review_status"] == "pending"
+    assert response.json()[0]["scene_contract_hash"] == "a" * 64
+    assert response.json()[0]["privacy_manifest_hash"] == "b" * 64
+    assert response.json()[0]["recording_policy"]["storage_profile"] == "edge_local"
+    assert response.json()[0]["evidence_artifacts"][0] == {
+        "id": str(incidents.artifact_id),
+        "incident_id": str(incidents.incident_id),
+        "camera_id": response.json()[0]["evidence_artifacts"][0]["camera_id"],
+        "kind": "event_clip",
+        "status": "remote_available",
+        "storage_provider": "s3_compatible",
+        "storage_scope": "cloud",
+        "bucket": "incidents",
+        "object_key": "tenant/camera/clip.mjpeg",
+        "content_type": "video/x-motion-jpeg",
+        "sha256": "c" * 64,
+        "size_bytes": 2_097_152,
+        "clip_started_at": None,
+        "triggered_at": None,
+        "clip_ended_at": None,
+        "duration_seconds": None,
+        "fps": None,
+        "scene_contract_hash": None,
+        "privacy_manifest_hash": None,
+        "review_url": "https://minio.local/signed/incidents/1.mjpeg",
+    }
+    assert response.json()[0]["ledger_summary"] == {
+        "entry_count": 2,
+        "latest_action": "evidence.clip.available",
+        "latest_at": "2026-05-11T10:01:00Z",
+    }
     assert incidents.last_query == {
         "tenant_id": UUID(str(user.tenant_context)),
         "camera_id": camera_id,
@@ -422,6 +580,56 @@ async def test_incidents_route_passes_camera_type_limit_and_review_status_filter
         "review_status": IncidentReviewStatus.PENDING,
         "limit": 25,
     }
+
+
+@pytest.mark.asyncio
+async def test_incident_accountability_detail_routes_call_service() -> None:
+    user = _sample_user()
+    incidents = RecordingIncidentService()
+    app = _create_test_app(user=user, history=RecordingHistoryService(), incidents=incidents)
+    incident_id = uuid4()
+    artifact_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        follow_redirects=False,
+    ) as client:
+        scene_response = await client.get(f"/api/v1/incidents/{incident_id}/scene-contract")
+        privacy_response = await client.get(
+            f"/api/v1/incidents/{incident_id}/privacy-manifest"
+        )
+        ledger_response = await client.get(f"/api/v1/incidents/{incident_id}/ledger")
+        content_response = await client.get(
+            f"/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content"
+        )
+
+    assert scene_response.status_code == 200
+    assert scene_response.json()["contract_hash"] == "a" * 64
+    assert privacy_response.status_code == 200
+    assert privacy_response.json()["manifest_hash"] == "b" * 64
+    assert ledger_response.status_code == 200
+    assert ledger_response.json()[0]["action"] == "incident.triggered"
+    assert content_response.status_code == 307
+    assert content_response.headers["location"] == (
+        "https://minio.local/signed/incidents/1.mjpeg"
+    )
+    assert incidents.scene_contract_calls == [
+        {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
+    ]
+    assert incidents.privacy_manifest_calls == [
+        {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
+    ]
+    assert incidents.ledger_calls == [
+        {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
+    ]
+    assert incidents.artifact_content_calls == [
+        {
+            "tenant_id": UUID(str(user.tenant_context)),
+            "incident_id": incident_id,
+            "artifact_id": artifact_id,
+        }
+    ]
 
 
 @pytest.mark.asyncio
