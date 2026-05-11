@@ -58,7 +58,8 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/models/enums.py` | modify | evidence artifact, storage, and ledger enum values |
 | `backend/src/argus/models/tables.py` | modify | scene contract, privacy manifest, artifact, ledger tables and incident/camera columns |
 | `backend/src/argus/migrations/versions/0011_accountable_scene_evidence.py` | create | schema migration |
-| `backend/src/argus/api/contracts.py` | modify | recording, contract, manifest, artifact, ledger API contracts |
+| `backend/src/argus/api/contracts.py` | modify | camera source, recording, contract, manifest, artifact, ledger API contracts |
+| `backend/src/argus/services/camera_sources.py` | create | source normalization, redaction, validation, and probe dispatch |
 | `backend/src/argus/services/scene_contracts.py` | create | deterministic scene contract compiler and snapshot service |
 | `backend/src/argus/services/privacy_manifests.py` | create | deterministic privacy manifest builder and snapshot service |
 | `backend/src/argus/services/evidence_ledger.py` | create | append-only ledger writer and reader |
@@ -67,15 +68,19 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/services/object_store.py` | modify | compatibility wrapper or S3-compatible implementation reuse |
 | `backend/src/argus/services/app.py` | modify | worker config, incident responses, review ledger, new services |
 | `backend/src/argus/api/v1/incidents.py` | modify | contract, manifest, ledger, artifact content routes |
-| `backend/src/argus/inference/engine.py` | modify | carry recording policy and scene contract context into capture |
+| `backend/src/argus/vision/camera.py` | modify | resolve USB/UVC source URIs to edge V4L2/OpenCV capture |
+| `backend/src/argus/vision/source_probe.py` | modify | probe USB/UVC source capability without treating it as RTSP |
+| `backend/src/argus/inference/engine.py` | modify | carry camera source, recording policy, and scene contract context into capture |
 | `frontend/src/lib/api.generated.ts` | regenerate | OpenAPI types |
 | `frontend/src/hooks/use-incidents.ts` | modify | incident response type usage for accountability fields |
 | `frontend/src/pages/Incidents.tsx` | modify | display contract, manifest, artifact, and ledger status |
 | `frontend/src/pages/Incidents.test.tsx` | modify | UI coverage |
 | `frontend/src/components/evidence/AccountabilityStrip.tsx` | create | compact contract, privacy, artifact, and ledger strip |
 | `frontend/src/components/evidence/AccountabilityStrip.test.tsx` | create | accountability strip rendering tests |
+| `frontend/src/components/cameras/CameraWizard.tsx` | modify | RTSP/USB source selection and recording policy controls |
+| `frontend/src/components/cameras/CameraWizard.test.tsx` | modify | camera source and recording policy tests |
 | `docs/runbook.md` | modify | storage and recording configuration |
-| `docs/operator-deployment-playbook.md` | modify | edge local and remote/cloud evidence guidance |
+| `docs/operator-deployment-playbook.md` | modify | edge USB camera, local evidence, and remote/cloud evidence guidance |
 
 ## Task 1: Data Contract And Migration
 
@@ -97,7 +102,15 @@ the new contracts and verify defaults:
 ```python
 from __future__ import annotations
 
-from argus.api.contracts import EvidenceRecordingPolicy
+from argus.api.contracts import CameraSourceSettings, EvidenceRecordingPolicy
+
+
+def test_camera_source_settings_support_usb_edge_source() -> None:
+    source = CameraSourceSettings(kind="usb", uri="usb:///dev/video0", label="Dock Door USB")
+
+    assert source.kind == "usb"
+    assert source.uri == "usb:///dev/video0"
+    assert source.label == "Dock Door USB"
 
 
 def test_evidence_recording_policy_defaults_to_short_event_clip() -> None:
@@ -118,6 +131,7 @@ Create `backend/tests/services/test_evidence_ledger.py` with enum import tests:
 from __future__ import annotations
 
 from argus.models.enums import (
+    CameraSourceKind,
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
     EvidenceLedgerAction,
@@ -127,6 +141,7 @@ from argus.models.enums import (
 
 
 def test_evidence_enums_expose_accountability_values() -> None:
+    assert CameraSourceKind.USB.value == "usb"
     assert EvidenceArtifactKind.EVENT_CLIP.value == "event_clip"
     assert EvidenceArtifactStatus.LOCAL_ONLY.value == "local_only"
     assert EvidenceStorageProvider.LOCAL_FILESYSTEM.value == "local_filesystem"
@@ -191,12 +206,39 @@ class EvidenceLedgerAction(StrEnum):
     INCIDENT_REOPENED = "incident.reopened"
 ```
 
+Also add:
+
+```python
+class CameraSourceKind(StrEnum):
+    RTSP = "rtsp"
+    USB = "usb"
+    JETSON_CSI = "jetson_csi"
+```
+
 - [ ] **Step 4: Add API contracts**
 
 In `backend/src/argus/api/contracts.py`, import the enums and add:
 
 ```python
 EvidenceStorageProfile = Literal["edge_local", "central", "cloud", "local_first"]
+
+
+class CameraSourceSettings(BaseModel):
+    kind: CameraSourceKind = CameraSourceKind.RTSP
+    uri: str = Field(min_length=1)
+    label: str | None = None
+
+    @model_validator(mode="after")
+    def validate_source_uri(self) -> CameraSourceSettings:
+        if self.kind is CameraSourceKind.RTSP and not self.uri.startswith(
+            ("rtsp://", "rtsps://")
+        ):
+            raise ValueError("RTSP sources must use rtsp:// or rtsps://.")
+        if self.kind is CameraSourceKind.USB and not self.uri.startswith("usb://"):
+            raise ValueError("USB sources must use usb:///dev/videoN.")
+        if self.kind is CameraSourceKind.JETSON_CSI and not self.uri.startswith("csi://"):
+            raise ValueError("Jetson CSI sources must use csi://N.")
+        return self
 
 
 class EvidenceRecordingPolicy(BaseModel):
@@ -295,6 +337,17 @@ columns from the spec. Use JSONB for `contract`, `manifest`, `payload`, and
 `recording_policy`. Use the existing `UUIDPrimaryKeyMixin`, `TimestampMixin`,
 and `UpdatedAtMixin` patterns.
 
+Also add camera source columns:
+
+```python
+source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+source_config: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+evidence_recording_policy: Mapped[dict[str, object] | None] = mapped_column(
+    JSONB,
+    nullable=True,
+)
+```
+
 - [ ] **Step 6: Add migration**
 
 Create `backend/src/argus/migrations/versions/0011_accountable_scene_evidence.py`
@@ -306,8 +359,17 @@ with:
 - `evidence_artifacts`
 - `evidence_ledger_entries`
 - incident columns for contract, manifest, and recording policy
-- camera column `evidence_recording_policy`
+- camera columns `source_kind`, `source_config`, and `evidence_recording_policy`
 - indexes listed in the spec
+
+Backfill existing cameras:
+
+```python
+op.execute(
+    "UPDATE cameras SET source_kind = 'rtsp', source_config = '{\"kind\":\"rtsp\"}'::jsonb "
+    "WHERE source_kind IS NULL"
+)
+```
 
 - [ ] **Step 7: Run focused tests**
 
@@ -482,6 +544,7 @@ def test_scene_contract_hash_changes_when_runtime_vocabulary_changes() -> None:
         site_id="site-a",
         camera_id="camera-a",
         camera_name="Gate A",
+        camera_source={"kind": "usb", "uri": "usb:///dev/video0", "redacted_uri": "usb://***"},
         deployment_mode="edge",
         model={"id": "model-a", "format": "onnx", "capability": "fixed_vocab"},
         runtime_vocabulary={"terms": ["person"], "version": 1, "hash": "a" * 64},
@@ -497,6 +560,7 @@ def test_scene_contract_hash_changes_when_runtime_vocabulary_changes() -> None:
         site_id="site-a",
         camera_id="camera-a",
         camera_name="Gate A",
+        camera_source={"kind": "usb", "uri": "usb:///dev/video0", "redacted_uri": "usb://***"},
         deployment_mode="edge",
         model={"id": "model-a", "format": "onnx", "capability": "fixed_vocab"},
         runtime_vocabulary={"terms": ["person", "forklift"], "version": 2, "hash": "c" * 64},
@@ -531,7 +595,7 @@ Create `backend/src/argus/services/scene_contracts.py` with:
 
 The contract must include `schema_version=1`, model, runtime vocabulary,
 runtime selection, vision profile, detection regions, candidate quality,
-recording policy, and privacy manifest hash.
+recording policy, camera source, and privacy manifest hash.
 
 - [ ] **Step 4: Attach contract to worker config**
 
@@ -580,7 +644,271 @@ git commit -m "feat(evidence): compile scene contracts"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 4: Evidence Storage Providers
+## Task 4: Edge USB Camera Source Support
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Create: `backend/src/argus/services/camera_sources.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/vision/camera.py`
+- Modify: `backend/src/argus/vision/source_probe.py`
+- Modify: `backend/src/argus/inference/engine.py`
+- Create: `backend/tests/services/test_camera_sources.py`
+- Create: `backend/tests/vision/test_camera_source.py`
+- Test: `backend/tests/services/test_camera_worker_config.py`
+- Create: `backend/tests/api/test_camera_setup_routes.py`
+
+- [ ] **Step 1: Add failing source contract tests**
+
+Create `backend/tests/services/test_camera_sources.py`:
+
+```python
+from __future__ import annotations
+
+from uuid import uuid4
+
+import pytest
+from fastapi import HTTPException
+
+from argus.api.contracts import CameraSourceSettings
+from argus.models.enums import CameraSourceKind, ProcessingMode
+from argus.services.camera_sources import (
+    normalize_camera_source,
+    redact_camera_source_uri,
+    validate_camera_source_assignment,
+)
+
+
+def test_normalizes_usb_source_to_edge_device_path() -> None:
+    source = normalize_camera_source(
+        CameraSourceSettings(kind=CameraSourceKind.USB, uri="usb:///dev/video0")
+    )
+
+    assert source.kind is CameraSourceKind.USB
+    assert source.uri == "usb:///dev/video0"
+    assert source.capture_uri == "/dev/video0"
+    assert redact_camera_source_uri(source) == "usb://***"
+
+
+def test_usb_source_requires_edge_processing_and_edge_node() -> None:
+    with pytest.raises(HTTPException) as exc:
+        validate_camera_source_assignment(
+            source=CameraSourceSettings(kind=CameraSourceKind.USB, uri="usb:///dev/video0"),
+            processing_mode=ProcessingMode.CENTRAL,
+            edge_node_id=None,
+        )
+
+    assert exc.value.status_code == 422
+    assert "USB sources require edge processing and an edge node" in str(exc.value.detail)
+
+
+def test_usb_source_accepts_edge_processing_with_edge_node() -> None:
+    validate_camera_source_assignment(
+        source=CameraSourceSettings(kind=CameraSourceKind.USB, uri="usb:///dev/video0"),
+        processing_mode=ProcessingMode.EDGE,
+        edge_node_id=uuid4(),
+    )
+```
+
+- [ ] **Step 2: Add failing capture resolution tests**
+
+Create `backend/tests/vision/test_camera_source.py`:
+
+```python
+from __future__ import annotations
+
+import cv2
+
+from argus.vision.camera import CameraSourceMode, PlatformInfo, _resolve_capture_spec
+
+
+def test_resolves_usb_uri_to_v4l2_device_path() -> None:
+    mode, source, backend = _resolve_capture_spec(
+        "usb:///dev/video0",
+        PlatformInfo(machine="aarch64", jetson=True),
+    )
+
+    assert mode is CameraSourceMode.LINUX_USB
+    assert source == "/dev/video0"
+    assert backend == cv2.CAP_V4L2
+```
+
+- [ ] **Step 3: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_camera_sources.py tests/vision/test_camera_source.py -q
+```
+
+Expected: fail because camera source service and USB capture mode do not exist.
+
+- [ ] **Step 4: Implement camera source service**
+
+Create `backend/src/argus/services/camera_sources.py`:
+
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from uuid import UUID
+
+from fastapi import HTTPException, status
+
+from argus.api.contracts import CameraSourceSettings
+from argus.models.enums import CameraSourceKind, ProcessingMode
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedCameraSource:
+    kind: CameraSourceKind
+    uri: str
+    capture_uri: str
+    redacted_uri: str
+    label: str | None = None
+
+
+def normalize_camera_source(source: CameraSourceSettings) -> NormalizedCameraSource:
+    if source.kind is CameraSourceKind.USB:
+        path = source.uri.removeprefix("usb://")
+        if not path.startswith("/dev/video"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="USB sources must use usb:///dev/videoN.",
+            )
+        return NormalizedCameraSource(
+            kind=source.kind,
+            uri=source.uri,
+            capture_uri=path,
+            redacted_uri="usb://***",
+            label=source.label,
+        )
+    if source.kind is CameraSourceKind.JETSON_CSI:
+        return NormalizedCameraSource(
+            kind=source.kind,
+            uri=source.uri,
+            capture_uri=source.uri,
+            redacted_uri="csi://***",
+            label=source.label,
+        )
+    return NormalizedCameraSource(
+        kind=source.kind,
+        uri=source.uri,
+        capture_uri=source.uri,
+        redacted_uri="rtsp://***",
+        label=source.label,
+    )
+
+
+def redact_camera_source_uri(source: NormalizedCameraSource | CameraSourceSettings) -> str:
+    normalized = source if isinstance(source, NormalizedCameraSource) else normalize_camera_source(source)
+    return normalized.redacted_uri
+
+
+def validate_camera_source_assignment(
+    *,
+    source: CameraSourceSettings,
+    processing_mode: ProcessingMode,
+    edge_node_id: UUID | None,
+) -> None:
+    if source.kind is CameraSourceKind.USB and (
+        processing_mode is not ProcessingMode.EDGE or edge_node_id is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="USB sources require edge processing and an edge node.",
+        )
+```
+
+- [ ] **Step 5: Add USB capture mode**
+
+In `backend/src/argus/vision/camera.py`:
+
+- add `LINUX_USB = "linux-usb"` to `CameraSourceMode`
+- update `_resolve_capture_spec` so `usb:///dev/video0` returns
+  `(CameraSourceMode.LINUX_USB, "/dev/video0", cv2.CAP_V4L2)`
+- keep existing RTSP and CSI behavior unchanged
+
+- [ ] **Step 6: Update API and app service contracts**
+
+In `backend/src/argus/api/contracts.py`:
+
+- add `CameraSourceSettings`
+- add `camera_source: CameraSourceSettings | None = None` to create/update
+- add `edge_node_id: UUID | None = None` to `CameraCreate` and `CameraUpdate`
+- make `rtsp_url` optional for create when `camera_source` is provided
+- add `camera_source` to `CameraResponse`, `CameraSourceProbeRequest`,
+  `WorkerCameraSettings`, and `WorkerConfigResponse`
+
+In `backend/src/argus/services/app.py`:
+
+- resolve `payload.camera_source` or legacy `payload.rtsp_url`
+- validate USB source assignment
+- persist `camera.source_kind` and `camera.source_config`
+- keep encrypting `rtsp_url_encrypted` only for RTSP
+- return `rtsp_url_masked` for compatibility and `camera_source` for the new UI
+- disable native passthrough browser delivery for USB
+- worker config should send `camera.source_uri` equal to `/dev/videoN` for USB
+  and `rtsp://...` for RTSP
+
+- [ ] **Step 7: Update source probing**
+
+In `backend/src/argus/vision/source_probe.py`, add a USB probe path that opens
+the local device through OpenCV/V4L2 and returns `SourceCapability`.
+
+In the source probe API:
+
+- RTSP continues to probe centrally as today
+- USB probe only succeeds from an edge-reachable worker context or a fake test
+  capture
+- if USB is not reachable, return a clear source probe error rather than trying
+  RTSP fallback
+
+- [ ] **Step 8: Update worker runtime engine**
+
+In `backend/src/argus/inference/engine.py`:
+
+- replace RTSP-only camera setting usage with source-aware settings
+- pass USB `source_uri` into `CameraSourceConfig`
+- register MediaMTX browser delivery as worker-published processed stream for
+  USB
+- keep RTSP passthrough/transcode behavior unchanged
+
+- [ ] **Step 9: Run focused tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_camera_sources.py \
+  tests/vision/test_camera_source.py \
+  tests/services/test_camera_worker_config.py \
+  tests/api/test_camera_setup_routes.py \
+  tests/inference/test_engine.py \
+  -q
+```
+
+Expected: pass.
+
+- [ ] **Step 10: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/services/camera_sources.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/vision/camera.py \
+  backend/src/argus/vision/source_probe.py \
+  backend/src/argus/inference/engine.py \
+  backend/tests/services/test_camera_sources.py \
+  backend/tests/vision/test_camera_source.py \
+  backend/tests/services/test_camera_worker_config.py \
+  backend/tests/api/test_camera_setup_routes.py
+git commit -m "feat(cameras): support edge usb camera sources"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 5: Evidence Storage Providers
 
 **Files:**
 
@@ -668,7 +996,7 @@ git commit -m "feat(evidence): support local and remote artifact storage"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 5: Artifact-Aware Incident Clip Capture
+## Task 6: Artifact-Aware Incident Clip Capture
 
 **Files:**
 
@@ -758,7 +1086,7 @@ git commit -m "feat(evidence): record accountable incident clips"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 6: Evidence Ledger Service And Review Integration
+## Task 7: Evidence Ledger Service And Review Integration
 
 **Files:**
 
@@ -835,7 +1163,7 @@ git commit -m "feat(evidence): append incident evidence ledger"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 7: Incident API And Artifact Content Routes
+## Task 8: Incident API And Artifact Content Routes
 
 **Files:**
 
@@ -924,7 +1252,7 @@ git commit -m "feat(api): expose accountable evidence details"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 8: Evidence Desk Accountability UI
+## Task 9: Evidence Desk Accountability UI
 
 **Files:**
 
@@ -999,7 +1327,7 @@ git commit -m "feat(ui): show accountable evidence context"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 9: Camera Recording Policy UI
+## Task 10: Camera Source And Recording Policy UI
 
 **Files:**
 
@@ -1011,6 +1339,10 @@ git push origin codex/omnisight-ui-spec-implementation
 
 Add tests that verify camera setup can display and submit:
 
+- source type: RTSP
+- source type: USB edge camera
+- USB device URI such as `usb:///dev/video0`
+- edge-only validation text for USB sources
 - event clip recording enabled
 - pre seconds
 - post seconds
@@ -1024,17 +1356,23 @@ cd /Users/yann.moren/vision
 corepack pnpm --dir frontend exec vitest run src/components/cameras/CameraWizard.test.tsx
 ```
 
-Expected: fail because camera wizard does not expose recording policy.
+Expected: fail because camera wizard does not expose USB camera sources or
+recording policy.
 
 - [ ] **Step 3: Implement controls**
 
 Add restrained controls:
 
+- segmented control or select for source type: RTSP or USB edge camera
+- RTSP URL field only for RTSP sources
+- USB device field only for USB sources, with placeholder `usb:///dev/video0`
+- edge processing and edge node requirement copy for USB
 - toggle for event clip recording
 - numeric fields or steppers for pre/post/fps
 - select for storage profile
 
-Do not imply continuous recording. Use `Event clip` language.
+Do not imply continuous recording. Use `Event clip` language. Do not present USB
+as a central-processing source.
 
 - [ ] **Step 4: Run tests**
 
@@ -1051,11 +1389,11 @@ Expected: pass.
 git add frontend/src/components/cameras/CameraWizard.tsx \
   frontend/src/components/cameras/CameraWizard.test.tsx \
   frontend/src/pages/Settings.tsx
-git commit -m "feat(ui): configure event clip recording policy"
+git commit -m "feat(ui): configure camera source and recording policy"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 10: Documentation
+## Task 11: Documentation
 
 **Files:**
 
@@ -1067,6 +1405,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 Add sections for:
 
+- edge USB/UVC camera source setup
 - scene contracts
 - privacy manifests
 - evidence ledger
@@ -1080,6 +1419,8 @@ Add sections for:
 
 Add deployment guidance:
 
+- when to choose USB/UVC edge cameras
+- how to map stable device references such as `/dev/video0`
 - when to choose edge local storage
 - when to choose central MinIO
 - when to choose cloud/S3-compatible storage
@@ -1110,7 +1451,7 @@ git commit -m "docs(evidence): explain accountable scene recording"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 11: Focused Verification Sweep
+## Task 12: Focused Verification Sweep
 
 **Files:**
 
@@ -1125,9 +1466,12 @@ python3 -m uv run pytest \
   tests/services/test_privacy_manifests.py \
   tests/services/test_evidence_ledger.py \
   tests/services/test_evidence_storage.py \
+  tests/services/test_camera_sources.py \
   tests/services/test_incident_capture.py \
   tests/services/test_incident_service.py \
   tests/services/test_camera_worker_config.py \
+  tests/vision/test_camera_source.py \
+  tests/api/test_camera_setup_routes.py \
   tests/api/test_prompt9_routes.py \
   tests/inference/test_engine.py \
   tests/core/test_db.py \

@@ -86,6 +86,9 @@ Current gaps:
 - No prompt-to-policy compiler in this slice.
 - No cross-camera identity graph in this slice.
 - No cloud-only requirement.
+- No developer-laptop webcam acceptance target in this slice. Laptop OpenCV
+  device index support may work opportunistically, but the product target is
+  edge Linux/Jetson USB/UVC support.
 
 ## Core Concepts
 
@@ -97,7 +100,7 @@ worker for one camera.
 The contract includes:
 
 - tenant and site identity
-- camera identity and capture mode
+- camera identity, source kind, source device reference, and capture mode
 - primary model id, capability, format, class list, and source hash
 - runtime vocabulary terms, version, source, and hash
 - selected runtime artifact id, path hash, target profile, precision, backend,
@@ -130,9 +133,9 @@ The manifest includes:
 - human-review requirement
 
 The initial manifest is derived from existing tenant policy, camera settings,
-deployment mode, and recording/storage configuration. It is not a legal advice
-engine. It is a product-visible description of what the system was configured to
-do.
+deployment mode, source kind, and recording/storage configuration. It is not a
+legal advice engine. It is a product-visible description of what the system was
+configured to do.
 
 ### Evidence Ledger
 
@@ -270,6 +273,40 @@ For remote object storage the endpoint can redirect to a short-lived signed URL.
 For local filesystem storage it streams the file. This keeps the UI stable
 across local, central, and cloud storage modes.
 
+## Edge USB/UVC Camera Source Requirement
+
+Vezor should support USB camera connections as an edge-first production feature.
+The initial target is Linux/Jetson UVC devices exposed as `/dev/video*`, attached
+to the edge node that runs the worker.
+
+USB support must be modeled as a camera source type, not as a fake RTSP URL.
+
+Supported source kinds:
+
+| Source kind | Example | First-slice target |
+|---|---|---|
+| `rtsp` | `rtsp://camera.local/live` | existing network camera path |
+| `usb` | `usb:///dev/video0` | production edge UVC path |
+| `jetson_csi` | `csi://0` | existing Jetson CSI path normalized into the same contract |
+
+USB behavior:
+
+- USB devices are local to an edge node. A central worker must not try to open
+  an edge USB device path.
+- USB analytics ingest opens the local V4L2/OpenCV source on the edge worker.
+- Browser delivery for USB must use a worker-published stream. Native RTSP
+  passthrough is unavailable because MediaMTX cannot pull a local USB device
+  from the central control plane.
+- Source probing should report width, height, and fps from the device when the
+  worker can access it.
+- The scene contract records `source.kind="usb"`, the redacted device reference,
+  source capability, and capture backend.
+- Evidence clips work exactly like RTSP clips because incident recording reads
+  frames after source ingest.
+- Device references are deployment-local configuration, not global camera
+  identities. Moving a USB camera to another edge node requires updating the
+  camera source configuration.
+
 ## Functional Requirements
 
 ### 1. Scene Contract Compiler
@@ -340,7 +377,26 @@ Requirements:
 - MinIO/S3-compatible storage remains supported
 - edge-mode local clips are reviewable through the API endpoint
 
-### 5. Evidence Desk Visibility
+### 5. Camera Source Contract And Edge USB Support
+
+Add a typed camera source contract and make USB/UVC a production edge source.
+
+Requirements:
+
+- camera create/update supports `camera_source`
+- existing RTSP cameras are backfilled as `camera_source.kind="rtsp"`
+- `rtsp_url` remains accepted as a compatibility field during migration
+- USB cameras require `processing_mode="edge"` and an `edge_node_id`
+- USB source references use `usb:///dev/videoN`
+- worker config carries source kind and source URI
+- worker capture resolves USB to V4L2/OpenCV on the edge node
+- native RTSP passthrough browser delivery is disabled for USB
+- source capability probe supports USB when the device is reachable from the
+  worker host
+- scene contracts include source kind and redacted device reference
+- setup UI presents RTSP and USB as separate source options
+
+### 6. Evidence Desk Visibility
 
 Evidence Desk should surface accountability without becoming a wall of metadata.
 
@@ -382,6 +438,12 @@ GET /api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content
 Add or extend camera contracts with:
 
 ```python
+class CameraSourceSettings(BaseModel):
+    kind: Literal["rtsp", "usb", "jetson_csi"] = "rtsp"
+    uri: str = Field(min_length=1)
+    label: str | None = None
+
+
 class EvidenceRecordingPolicy(BaseModel):
     enabled: bool = True
     mode: Literal["event_clip"] = "event_clip"
@@ -488,7 +550,16 @@ Indexes:
 
 ### `cameras` additions
 
+- `source_kind String nullable`
+- `source_config JSONB nullable`
 - `evidence_recording_policy JSONB nullable`
+
+Backfill existing rows with:
+
+- `source_kind="rtsp"`
+- `source_config={"kind": "rtsp"}`
+
+Keep `rtsp_url_encrypted` for compatibility until a later cleanup migration.
 
 ## Architecture
 
@@ -523,6 +594,11 @@ flowchart LR
   `capture_failed` and include the storage error in ledger payload.
 - If remote upload fails after local-first capture, keep the local artifact and
   mark remote state `upload_pending`.
+- If a USB device cannot be opened on its assigned edge node, worker config
+  remains valid but the worker reports capture failure/reconnect state; setup
+  probe should return a clear source-unavailable error.
+- If a USB camera is configured without an edge node, camera create/update
+  returns `422` with `USB sources require edge processing and an edge node`.
 - If a user lacks incident access, contract, manifest, ledger, and artifact
   content routes return `404` rather than leaking cross-tenant existence.
 
@@ -539,12 +615,16 @@ Backend:
 - incident API route tests
 - review/reopen ledger tests
 - worker config recording policy tests
+- camera source contract tests for RTSP, USB, and Jetson CSI
+- USB capture resolution tests that do not require real hardware
+- source probe route tests for USB unavailable and USB reachable fake captures
 
 Frontend:
 
 - Evidence Desk renders contract, manifest, clip, and ledger status
 - artifact-aware clip link works
 - local-only and remote/cloud states are readable
+- USB camera setup displays edge-only requirements
 - ledger details are keyboard accessible
 - privacy labels do not rely on color only
 - responsive layout at 375px, 768px, 1024px, and 1440px
@@ -610,6 +690,8 @@ visible.
 
 - Every new incident can reference a scene contract hash and privacy manifest
   hash.
+- Edge USB/UVC cameras can be configured as `usb:///dev/videoN` sources and run
+  through worker-published browser delivery.
 - Every captured incident clip has an evidence artifact row.
 - Edge-mode local clip storage can produce a reviewable clip through an
   authenticated API endpoint.
