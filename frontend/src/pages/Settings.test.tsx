@@ -119,6 +119,10 @@ vi.mock("@/hooks/use-cameras", () => ({
         edge_node_id: null,
         name: "Lobby",
         rtsp_url_masked: "rtsp://redacted@camera.local/live",
+        camera_source: {
+          kind: "rtsp",
+          uri: "rtsp://redacted@camera.local/live",
+        },
         processing_mode: "central",
         primary_model_id: "00000000-0000-0000-0000-000000000001",
         secondary_model_id: null,
@@ -144,6 +148,15 @@ vi.mock("@/hooks/use-cameras", () => ({
           },
         },
         source_capability: { width: 1280, height: 720, fps: 10, codec: "h264" },
+        recording_policy: {
+          enabled: true,
+          mode: "event_clip",
+          pre_seconds: 6,
+          post_seconds: 10,
+          fps: 12,
+          max_duration_seconds: 16,
+          storage_profile: "cloud",
+        },
         frame_skip: 1,
         fps_cap: 25,
         created_at: "2026-05-09T07:00:00Z",
@@ -295,6 +308,14 @@ describe("SettingsPage operations workbench", () => {
       screen.getByText(/argus.inference.engine --camera-id/i),
     ).toBeInTheDocument();
     expect(screen.getByText("jetson-1")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(/rtsp source/i),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(
+        /event clips: cloud storage/i,
+      ),
+    ).toBeInTheDocument();
     const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
     expect(
       within(diagnosticsRail).getByText(/direct stream unavailable:/i),

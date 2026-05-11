@@ -34,6 +34,9 @@ type VisionAccuracyMode = SceneVisionProfile["accuracy_mode"];
 type SceneDifficulty = SceneVisionProfile["scene_difficulty"];
 type ObjectDomain = SceneVisionProfile["object_domain"];
 type BrowserDeliveryProfile = "native" | "annotated" | "1080p15" | "720p10" | "540p5";
+type CameraSourceKind = components["schemas"]["CameraSourceKind"];
+type EvidenceRecordingPolicy = components["schemas"]["EvidenceRecordingPolicy"];
+type EvidenceStorageProfile = EvidenceRecordingPolicy["storage_profile"];
 type BoundaryType = "line" | "polygon";
 type DetectionRegionMode = SerializedDetectionRegion["mode"];
 type BrowserDeliveryProfilePayload = {
@@ -123,8 +126,11 @@ export type ModelOption = {
 export type CameraWizardData = {
   name: string;
   siteId: string;
+  edgeNodeId: string;
+  sourceKind: Extract<CameraSourceKind, "rtsp" | "usb">;
   processingMode: "central" | "edge" | "hybrid";
   rtspUrl: string;
+  usbUri: string;
   primaryModelId: string;
   secondaryModelId: string;
   activeClasses: string[];
@@ -142,6 +148,12 @@ export type CameraWizardData = {
   unsupportedBrowserDeliveryProfiles: BrowserDeliveryProfilePayload[];
   browserDeliveryNativeStatus: NativeDeliveryStatus;
   sourceCapability: SourceCapability | null;
+  recordingEnabled: boolean;
+  recordingPreSeconds: number;
+  recordingPostSeconds: number;
+  recordingFps: number;
+  recordingMaxDurationSeconds: number;
+  recordingStorageProfile: EvidenceStorageProfile;
   homography: {
     src: Point[];
     dst: Point[];
@@ -250,12 +262,19 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     initialCamera?.browser_delivery?.default_profile ?? "720p10",
     browserDeliveryProfiles,
   );
+  const cameraSource = initialCamera?.camera_source;
+  const sourceKind = cameraSource?.kind === "usb" ? "usb" : "rtsp";
+  const recordingPolicy = initialCamera?.recording_policy;
 
   return {
     name: initialCamera?.name ?? "",
     siteId: initialCamera?.site_id ?? "",
-    processingMode: initialCamera?.processing_mode ?? "central",
+    edgeNodeId: initialCamera?.edge_node_id ?? "",
+    sourceKind,
+    processingMode:
+      sourceKind === "usb" ? "edge" : initialCamera?.processing_mode ?? "central",
     rtspUrl: "",
+    usbUri: sourceKind === "usb" ? cameraSource?.uri ?? "usb:///dev/video0" : "usb:///dev/video0",
     primaryModelId: initialCamera?.primary_model_id ?? "",
     secondaryModelId: initialCamera?.secondary_model_id ?? "",
     activeClasses: initialCamera?.active_classes ? [...initialCamera.active_classes] : [],
@@ -276,6 +295,12 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     browserDeliveryNativeStatus:
       initialCamera?.browser_delivery?.native_status ?? { available: true, reason: null },
     sourceCapability: initialCamera?.source_capability ?? null,
+    recordingEnabled: recordingPolicy?.enabled ?? true,
+    recordingPreSeconds: recordingPolicy?.pre_seconds ?? 4,
+    recordingPostSeconds: recordingPolicy?.post_seconds ?? 8,
+    recordingFps: recordingPolicy?.fps ?? 10,
+    recordingMaxDurationSeconds: recordingPolicy?.max_duration_seconds ?? 15,
+    recordingStorageProfile: recordingPolicy?.storage_profile ?? "central",
     homography: {
       src: toPointTupleArray(initialCamera?.homography?.src),
       dst: toPointTupleArray(initialCamera?.homography?.dst),
@@ -294,6 +319,35 @@ function buildBrowserDelivery(data: CameraWizardData) {
     profiles: data.browserDeliveryProfiles,
     unsupported_profiles: data.unsupportedBrowserDeliveryProfiles,
     native_status: data.browserDeliveryNativeStatus,
+  };
+}
+
+function buildCameraSource(data: CameraWizardData) {
+  if (data.sourceKind === "usb") {
+    return {
+      kind: "usb" as const,
+      uri: data.usbUri.trim(),
+    };
+  }
+
+  return {
+    kind: "rtsp" as const,
+    uri: data.rtspUrl.trim(),
+  };
+}
+
+function buildRecordingPolicy(data: CameraWizardData): EvidenceRecordingPolicy {
+  return {
+    enabled: data.recordingEnabled,
+    mode: "event_clip",
+    pre_seconds: data.recordingPreSeconds,
+    post_seconds: data.recordingPostSeconds,
+    fps: data.recordingFps,
+    max_duration_seconds: Math.max(
+      data.recordingMaxDurationSeconds,
+      data.recordingPreSeconds + data.recordingPostSeconds,
+    ),
+    storage_profile: data.recordingStorageProfile,
   };
 }
 
@@ -771,8 +825,10 @@ function toCreatePayload(
 ): CreateCameraInput {
   const payload: CreateCameraInput = {
     site_id: data.siteId,
+    edge_node_id: data.edgeNodeId.trim() || null,
     name: data.name.trim(),
-    rtsp_url: data.rtspUrl.trim(),
+    rtsp_url: data.sourceKind === "rtsp" ? data.rtspUrl.trim() : null,
+    camera_source: buildCameraSource(data),
     processing_mode: data.processingMode,
     primary_model_id: data.primaryModelId,
     secondary_model_id: data.secondaryModelId || null,
@@ -792,6 +848,7 @@ function toCreatePayload(
     browser_delivery: buildBrowserDelivery(data),
     frame_skip: data.frameSkip,
     fps_cap: data.fpsCap,
+    recording_policy: buildRecordingPolicy(data),
   };
 
   if (primaryModelCapability === "open_vocab") {
@@ -808,6 +865,7 @@ function toUpdatePayload(
 ): UpdateCameraInput {
   const payload: UpdateCameraInput = {
     site_id: data.siteId,
+    edge_node_id: data.edgeNodeId.trim() || null,
     name: data.name.trim(),
     processing_mode: data.processingMode,
     primary_model_id: data.primaryModelId,
@@ -827,10 +885,15 @@ function toUpdatePayload(
     browser_delivery: buildBrowserDelivery(data),
     frame_skip: data.frameSkip,
     fps_cap: data.fpsCap,
+    recording_policy: buildRecordingPolicy(data),
   };
 
-  if (data.rtspUrl.trim()) {
+  if (data.sourceKind === "rtsp" && data.rtspUrl.trim()) {
     payload.rtsp_url = data.rtspUrl.trim();
+    payload.camera_source = buildCameraSource(data);
+  } else if (data.sourceKind === "usb") {
+    payload.rtsp_url = null;
+    payload.camera_source = buildCameraSource(data);
   }
 
   if (primaryModelCapability === "open_vocab") {
@@ -871,6 +934,8 @@ export function CameraWizard({
   const maskedRtspPlaceholder = rtspUrlPlaceholder ?? initialCamera?.rtsp_url_masked ?? "";
   const stepTitle = steps[stepIndex];
   const trimmedRtspUrl = data.rtspUrl.trim();
+  const trimmedUsbUri = data.usbUri.trim();
+  const activeSourceUri = data.sourceKind === "usb" ? trimmedUsbUri : trimmedRtspUrl;
   const sourceSizeLabel = formatSourceSize(data.sourceCapability);
   const setupPreviewQuery = useCameraSetupPreview(
     initialCamera?.id,
@@ -879,11 +944,17 @@ export function CameraWizard({
   const sourceProbeQuery = useQuery<CameraSourceProbeResponse>({
     enabled:
       stepTitle === "Privacy, Processing & Delivery" &&
-      (isEditMode ? Boolean(initialCamera?.id) : trimmedRtspUrl.length > 0),
+      (data.sourceKind === "usb"
+        ? trimmedUsbUri.length > 0 && data.edgeNodeId.trim().length > 0
+        : isEditMode
+          ? Boolean(initialCamera?.id)
+          : trimmedRtspUrl.length > 0),
     queryKey: [
       "camera-source-probe",
       initialCamera?.id ?? "new",
-      isEditMode && trimmedRtspUrl.length === 0 ? "stored" : trimmedRtspUrl,
+      data.sourceKind,
+      isEditMode && activeSourceUri.length === 0 ? "stored" : activeSourceUri,
+      data.edgeNodeId,
       data.processingMode,
       data.blurFaces,
       data.blurPlates,
@@ -902,8 +973,18 @@ export function CameraWizard({
         headers,
         body: JSON.stringify({
           camera_id: initialCamera?.id ?? null,
-          rtsp_url: isEditMode ? trimmedRtspUrl || null : trimmedRtspUrl,
+          rtsp_url:
+            data.sourceKind === "rtsp"
+              ? isEditMode
+                ? trimmedRtspUrl || null
+                : trimmedRtspUrl
+              : null,
+          camera_source:
+            data.sourceKind === "usb" || trimmedRtspUrl
+              ? buildCameraSource(data)
+              : null,
           processing_mode: data.processingMode,
+          edge_node_id: data.edgeNodeId.trim() || null,
           browser_delivery: buildBrowserDelivery(data),
           privacy: {
             blur_faces: data.blurFaces,
@@ -1180,7 +1261,15 @@ export function CameraWizard({
     }));
   }
 
-  function updateNumericField<Key extends "strength" | "frameSkip" | "fpsCap">(
+  function updateNumericField<
+    Key extends
+      | "strength"
+      | "frameSkip"
+      | "fpsCap"
+      | "recordingPreSeconds"
+      | "recordingPostSeconds"
+      | "recordingFps",
+  >(
     key: Key,
     value: string,
   ) {
@@ -1196,9 +1285,16 @@ export function CameraWizard({
       if (!data.siteId) {
         return "Site is required.";
       }
-      if (!isEditMode || !maskedRtspPlaceholder) {
-        if (!data.rtspUrl.trim()) {
+      if (data.sourceKind === "rtsp") {
+        if ((!isEditMode || !maskedRtspPlaceholder) && !data.rtspUrl.trim()) {
           return "RTSP URL is required.";
+        }
+      } else {
+        if (!data.usbUri.trim()) {
+          return "USB device URI is required.";
+        }
+        if (!data.edgeNodeId.trim()) {
+          return "Edge node ID is required for USB sources.";
         }
       }
     }
@@ -1236,6 +1332,15 @@ export function CameraWizard({
       }
       if (data.fpsCap < 1) {
         return "FPS cap must be at least 1.";
+      }
+      if (data.recordingPreSeconds < 0) {
+        return "Pre seconds must be at least 0.";
+      }
+      if (data.recordingPostSeconds < 1) {
+        return "Post seconds must be at least 1.";
+      }
+      if (data.recordingFps < 1) {
+        return "Recording FPS must be at least 1.";
       }
     }
 
@@ -1453,6 +1558,7 @@ export function CameraWizard({
                 <span>Processing mode</span>
                 <Select
                   aria-label="Processing mode"
+                  disabled={data.sourceKind === "usb"}
                   value={data.processingMode}
                   onChange={(event) =>
                     updateData(
@@ -1467,15 +1573,62 @@ export function CameraWizard({
                 </Select>
               </label>
               <label className="grid gap-2 text-sm text-[#d8e2f2]">
-                <span>RTSP URL</span>
-                <Input
-                  aria-label="RTSP URL"
-                  placeholder={maskedRtspPlaceholder || "rtsp://camera.local/live"}
-                  value={data.rtspUrl}
-                  onChange={(event) => updateData("rtspUrl", event.target.value)}
-                />
+                <span>Source type</span>
+                <Select
+                  aria-label="Source type"
+                  value={data.sourceKind}
+                  onChange={(event) => {
+                    const sourceKind = event.target.value as CameraWizardData["sourceKind"];
+                    setData((current) => ({
+                      ...current,
+                      sourceKind,
+                      processingMode:
+                        sourceKind === "usb" ? "edge" : current.processingMode,
+                    }));
+                  }}
+                >
+                  <option value="rtsp">RTSP</option>
+                  <option value="usb">USB edge camera</option>
+                </Select>
               </label>
-              {isEditMode ? (
+              {data.sourceKind === "usb" ? (
+                <>
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>USB device URI</span>
+                    <Input
+                      aria-label="USB device URI"
+                      placeholder="usb:///dev/video0"
+                      value={data.usbUri}
+                      onChange={(event) => updateData("usbUri", event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Edge node ID</span>
+                    <Input
+                      aria-label="Edge node ID"
+                      placeholder="22222222-2222-2222-2222-222222222222"
+                      value={data.edgeNodeId}
+                      onChange={(event) => updateData("edgeNodeId", event.target.value)}
+                    />
+                  </label>
+                  <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
+                    USB sources run on an assigned edge node. Central processing is not
+                    available for USB/UVC capture.
+                  </p>
+                </>
+              ) : null}
+              {data.sourceKind === "rtsp" ? (
+                <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                  <span>RTSP URL</span>
+                  <Input
+                    aria-label="RTSP URL"
+                    placeholder={maskedRtspPlaceholder || "rtsp://camera.local/live"}
+                    value={data.rtspUrl}
+                    onChange={(event) => updateData("rtspUrl", event.target.value)}
+                  />
+                </label>
+              ) : null}
+              {isEditMode && data.sourceKind === "rtsp" ? (
                 <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
                   {brandName} keeps the stored RTSP address masked. Leave this field empty to
                   retain the current stream, or enter a new URL to replace it.
@@ -1798,6 +1951,86 @@ export function CameraWizard({
                       }
                     />
                     <span>Speed metrics</span>
+                  </label>
+                </div>
+              </section>
+              <section className="rounded-[1.3rem] border border-[#284066] bg-[#0c1522] px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-[#eef4ff]">
+                      Event clip recording
+                    </p>
+                    <p className="mt-1 text-sm text-[#9eb2cf]">
+                      Capture short clips around incidents. This does not enable continuous
+                      recording.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-[#d8e2f2]">
+                    <input
+                      aria-label="Event clip recording"
+                      checked={data.recordingEnabled}
+                      type="checkbox"
+                      onChange={(event) =>
+                        updateData("recordingEnabled", event.target.checked)
+                      }
+                    />
+                    <span>Enabled</span>
+                  </label>
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-4">
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Pre seconds</span>
+                    <Input
+                      aria-label="Pre seconds"
+                      min={0}
+                      type="number"
+                      value={data.recordingPreSeconds}
+                      onChange={(event) =>
+                        updateNumericField("recordingPreSeconds", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Post seconds</span>
+                    <Input
+                      aria-label="Post seconds"
+                      min={1}
+                      type="number"
+                      value={data.recordingPostSeconds}
+                      onChange={(event) =>
+                        updateNumericField("recordingPostSeconds", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Recording FPS</span>
+                    <Input
+                      aria-label="Recording FPS"
+                      min={1}
+                      type="number"
+                      value={data.recordingFps}
+                      onChange={(event) =>
+                        updateNumericField("recordingFps", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Storage profile</span>
+                    <Select
+                      aria-label="Storage profile"
+                      value={data.recordingStorageProfile}
+                      onChange={(event) =>
+                        updateData(
+                          "recordingStorageProfile",
+                          event.target.value as EvidenceStorageProfile,
+                        )
+                      }
+                    >
+                      <option value="edge_local">Edge local</option>
+                      <option value="central">Central</option>
+                      <option value="cloud">Cloud</option>
+                      <option value="local_first">Local first</option>
+                    </Select>
                   </label>
                 </div>
               </section>
@@ -2223,6 +2456,17 @@ export function CameraWizard({
                 browserDeliveryProfile: data.browserDeliveryProfile,
                 frameSkip: data.frameSkip,
                 fpsCap: data.fpsCap,
+                sourceLabel:
+                  data.sourceKind === "usb"
+                    ? `USB ${data.usbUri.trim() || "not set"}`
+                    : `RTSP ${
+                        data.rtspUrl.trim()
+                          ? "replacement configured"
+                          : maskedRtspPlaceholder || "not set"
+                      }`,
+                recordingLabel: data.recordingEnabled
+                  ? `${data.recordingPreSeconds}s pre, ${data.recordingPostSeconds}s post, ${data.recordingFps} FPS, ${data.recordingStorageProfile}`
+                  : "Disabled",
                 boundarySummary: summarizeBoundaries(data.zones),
                 rtspUrlMasked: data.rtspUrl.trim()
                   ? "rtsp://replacement configured"

@@ -777,6 +777,7 @@ export interface components {
              * @default 25
              */
             fps_cap: number;
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
         };
         /** CameraResponse */
         CameraResponse: {
@@ -826,6 +827,7 @@ export interface components {
             frame_skip: number;
             /** Fps Cap */
             fps_cap: number;
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
             /**
              * Created At
              * Format: date-time
@@ -922,6 +924,7 @@ export interface components {
             frame_skip?: number | null;
             /** Fps Cap */
             fps_cap?: number | null;
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"] | null;
         };
         /** CountEventBoundarySummary */
         CountEventBoundarySummary: {

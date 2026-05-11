@@ -708,6 +708,7 @@ class CameraCreate(BaseModel):
     browser_delivery: BrowserDeliverySettings = Field(default_factory=BrowserDeliverySettings)
     frame_skip: int = Field(default=1, ge=1)
     fps_cap: int = Field(default=25, ge=1)
+    recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
 
     @model_validator(mode="after")
     def validate_camera_create(self) -> CameraCreate:
@@ -741,6 +742,7 @@ class CameraUpdate(BaseModel):
     browser_delivery: BrowserDeliverySettings | None = None
     frame_skip: int | None = Field(default=None, ge=1)
     fps_cap: int | None = Field(default=None, ge=1)
+    recording_policy: EvidenceRecordingPolicy | None = None
 
     @model_validator(mode="after")
     def reject_enabling_speed_while_clearing_homography(self) -> CameraUpdate:
@@ -786,6 +788,7 @@ class CameraResponse(BaseModel):
     source_capability: SourceCapability | None = None
     frame_skip: int
     fps_cap: int
+    recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
     created_at: datetime
     updated_at: datetime
 

@@ -949,6 +949,9 @@ class CameraService:
                     if source_capability is not None
                     else None
                 ),
+                evidence_recording_policy=payload.recording_policy.model_dump(
+                    mode="python"
+                ),
                 frame_skip=payload.frame_skip,
                 fps_cap=payload.fps_cap,
             )
@@ -1078,6 +1081,14 @@ class CameraService:
                 update_data["detection_regions"] = _camera_detection_regions_payload(
                     payload.detection_regions or []
                 )
+            if "recording_policy" in update_data:
+                recording_policy = update_data.pop("recording_policy")
+                if recording_policy is not None:
+                    update_data["evidence_recording_policy"] = (
+                        EvidenceRecordingPolicy.model_validate(
+                            recording_policy
+                        ).model_dump(mode="python")
+                    )
             _validate_effective_camera_motion_metrics(camera, update_data)
 
             for field_name, value in update_data.items():
@@ -3659,6 +3670,7 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         source_capability=source_capability,
         frame_skip=camera.frame_skip,
         fps_cap=camera.fps_cap,
+        recording_policy=_recording_policy_from_camera(camera),
         created_at=camera.created_at,
         updated_at=camera.updated_at,
     )

@@ -647,6 +647,95 @@ describe("CameraWizard", () => {
     expect(submittedPayload?.homography).toBeNull();
   });
 
+  test("submits RTSP source settings and event clip recording policy", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/source type/i), "rtsp");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(screen.getByLabelText(/event clip recording/i)).toBeChecked();
+    await user.clear(screen.getByLabelText(/pre seconds/i));
+    await user.type(screen.getByLabelText(/pre seconds/i), "6");
+    await user.clear(screen.getByLabelText(/post seconds/i));
+    await user.type(screen.getByLabelText(/post seconds/i), "10");
+    await user.clear(screen.getByLabelText(/^recording fps$/i));
+    await user.type(screen.getByLabelText(/^recording fps$/i), "12");
+    await user.selectOptions(screen.getByLabelText(/storage profile/i), "cloud");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.rtsp_url).toBe("rtsp://camera.local/live");
+    expect(submittedPayload?.camera_source).toEqual({
+      kind: "rtsp",
+      uri: "rtsp://camera.local/live",
+    });
+    expect(submittedPayload?.recording_policy).toMatchObject({
+      enabled: true,
+      mode: "event_clip",
+      pre_seconds: 6,
+      post_seconds: 10,
+      fps: 12,
+      storage_profile: "cloud",
+    });
+  });
+
+  test("submits USB edge source settings with edge-only guidance", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/source type/i), "usb");
+    expect(screen.queryByLabelText(/rtsp url/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/usb sources run on an assigned edge node/i),
+    ).toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/usb device uri/i));
+    await user.type(screen.getByLabelText(/usb device uri/i), "usb:///dev/video0");
+    await user.type(
+      screen.getByLabelText(/edge node id/i),
+      "22222222-2222-2222-2222-222222222222",
+    );
+    expect(screen.getByLabelText(/processing mode/i)).toHaveValue("edge");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/storage profile/i), "edge_local");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.processing_mode).toBe("edge");
+    expect(submittedPayload?.edge_node_id).toBe(
+      "22222222-2222-2222-2222-222222222222",
+    );
+    expect(submittedPayload?.rtsp_url).toBeNull();
+    expect(submittedPayload?.camera_source).toEqual({
+      kind: "usb",
+      uri: "usb:///dev/video0",
+    });
+    expect(submittedPayload?.recording_policy).toMatchObject({
+      enabled: true,
+      mode: "event_clip",
+      storage_profile: "edge_local",
+    });
+  });
+
   test("enabling speed requires four source points, four destination points, and a reference distance before save", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);

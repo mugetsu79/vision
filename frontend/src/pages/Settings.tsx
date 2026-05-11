@@ -18,7 +18,7 @@ import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
-import { useCameras } from "@/hooks/use-cameras";
+import { useCameras, type Camera } from "@/hooks/use-cameras";
 import {
   useModels,
   useRuntimeArtifactsByModelId,
@@ -49,6 +49,10 @@ export function SettingsPage() {
   const [bootstrapResult, setBootstrapResult] =
     useState<FleetBootstrapResponse | null>(null);
   const firstSiteId = fleet.data?.camera_workers[0]?.site_id;
+  const camerasById = useMemo(
+    () => new Map(cameras.map((camera) => [camera.id, camera])),
+    [cameras],
+  );
 
   const modeCopy = useMemo(() => {
     if (fleet.data?.mode === "supervised") {
@@ -271,37 +275,51 @@ export function SettingsPage() {
         testId="worker-rail"
       >
         <div className="flex flex-col gap-3">
-          {fleet.data.camera_workers.map((worker) => (
-            <div
-              key={worker.camera_id}
-              className="rounded-[1rem] border border-white/10 p-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium text-[#f4f8ff]">
-                    {worker.camera_name}
+          {fleet.data.camera_workers.map((worker) => {
+            const camera = camerasById.get(worker.camera_id);
+
+            return (
+              <div
+                key={worker.camera_id}
+                className="rounded-[1rem] border border-white/10 p-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-[#f4f8ff]">
+                      {worker.camera_name}
+                    </p>
+                    <p className="mt-1 text-xs text-[#93a7c5]">
+                      {worker.processing_mode} - {worker.lifecycle_owner}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusToneBadge tone={statusTone(worker.desired_state)}>
+                      {worker.desired_state}
+                    </StatusToneBadge>
+                    <StatusToneBadge tone={statusTone(worker.runtime_status)}>
+                      {worker.runtime_status}
+                    </StatusToneBadge>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#93a7c5]">
+                  <p>
+                    <span className="font-semibold text-[#d8e2f2]">Source</span>{" "}
+                    {formatCameraSource(camera)}
                   </p>
-                  <p className="mt-1 text-xs text-[#93a7c5]">
-                    {worker.processing_mode} - {worker.lifecycle_owner}
+                  <p>
+                    <span className="font-semibold text-[#d8e2f2]">Recording</span>{" "}
+                    {formatRecordingPolicy(camera)}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <StatusToneBadge tone={statusTone(worker.desired_state)}>
-                    {worker.desired_state}
-                  </StatusToneBadge>
-                  <StatusToneBadge tone={statusTone(worker.runtime_status)}>
-                    {worker.runtime_status}
-                  </StatusToneBadge>
-                </div>
+                {worker.detail ? (
+                  <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
+                ) : null}
+                {worker.dev_run_command ? (
+                  <CommandBlock text={worker.dev_run_command} />
+                ) : null}
               </div>
-              {worker.detail ? (
-                <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
-              ) : null}
-              {worker.dev_run_command ? (
-                <CommandBlock text={worker.dev_run_command} />
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Panel>
 
@@ -393,6 +411,37 @@ function formatSource(source: FleetSourceCapability | null | undefined) {
     return "source not reported";
   }
   return `${source.width} x ${source.height}${source.fps ? ` at ${source.fps} fps` : ""}`;
+}
+
+function formatCameraSource(camera: Camera | undefined) {
+  const source = camera?.camera_source;
+  if (source?.kind === "usb") {
+    return `USB source ${source.uri}`;
+  }
+  if (source?.kind === "jetson_csi") {
+    return `Jetson CSI source ${source.uri}`;
+  }
+  if (source?.kind === "rtsp" || camera?.rtsp_url_masked) {
+    return "RTSP source";
+  }
+  return "source not configured";
+}
+
+function formatRecordingPolicy(camera: Camera | undefined) {
+  const policy = camera?.recording_policy;
+  if (!policy) {
+    return "Event clips not configured";
+  }
+  if (!policy.enabled) {
+    return "Event clips disabled";
+  }
+  return `Event clips: ${formatStorageProfile(policy.storage_profile)} storage`;
+}
+
+function formatStorageProfile(
+  profile: NonNullable<Camera["recording_policy"]>["storage_profile"],
+) {
+  return profile.replaceAll("_", " ");
 }
 
 function formatReason(reason: string | null | undefined) {

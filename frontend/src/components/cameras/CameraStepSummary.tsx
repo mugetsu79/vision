@@ -13,6 +13,8 @@ export function CameraStepSummary({
     frameSkip: number;
     fpsCap: number;
     rtspUrlMasked: string;
+    sourceLabel?: string;
+    recordingLabel?: string;
     boundarySummary: string;
   };
 }) {
@@ -32,12 +34,13 @@ export function CameraStepSummary({
         { label: "Tracker", value: data.trackerType },
         { label: "Browser delivery", value: data.browserDeliveryProfile },
         { label: "Frame cadence", value: `skip ${data.frameSkip}, cap ${data.fpsCap} FPS` },
+        { label: "Source", value: data.sourceLabel ?? data.rtspUrlMasked },
+        { label: "Event clip", value: data.recordingLabel ?? "Enabled" },
         { label: "Event boundaries", value: data.boundarySummary },
         {
           label: "Privacy",
           value: `faces ${String(data.blurFaces)}, plates ${String(data.blurPlates)}`,
         },
-        { label: "RTSP", value: data.rtspUrlMasked },
       ].map((item) => (
         <div
           key={item.label}
