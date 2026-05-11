@@ -234,7 +234,7 @@ The repo already includes:
 - incident clip storage; snapshot fields exist but current capture primarily stores clips
 - Fleet and Operations workbench at `/settings`, including node summaries, camera worker lifecycle state, delivery diagnostics, edge bootstrap material, and copy/paste-safe local worker commands
 - edge worker support and a production-oriented supervisor lifecycle model
-- model catalog presets, fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, capability-aware query commands, and an experimental Ultralytics-backed open-vocab `.pt` runtime path
+- model catalog presets, fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, capability-aware query commands, an experimental Ultralytics-backed open-vocab `.pt` runtime path, validated runtime artifact records, TensorRT `.engine` artifact selection, and compiled per-scene open-vocab artifact registration/selection
 - scene vision profiles with explicit speed enablement, optional homography for speed-off scenes, include/exclusion detection regions, and candidate quality gating before tracking
 - hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions
 - Docker Compose and Helm assets
@@ -248,7 +248,8 @@ Still missing for production hardening:
 - per-worker runtime heartbeat and last-error reporting from central and edge supervisors
 - persistent worker assignment/reassignment workflows
 - production edge credential rotation automation
-- validated Jetson TensorRT runtime artifacts and compiled per-scene open-vocab artifacts; TensorRT remains an ONNX Runtime provider path today, while standalone `.engine` files are the next planned implementation as target-specific runtime artifacts rather than primary camera models
+- first-site Jetson soak validation for registered TensorRT `.engine` artifacts and compiled scene open-vocab artifacts
+- accountable scene intelligence implementation: scene contract snapshots, privacy manifests, evidence ledger, artifact-aware short incident recording, edge local/cloud storage choices, and edge USB/UVC camera source support
 - incident still snapshot generation, if still previews become required evidence rather than optional convenience
 
 ## Model And Camera Scope

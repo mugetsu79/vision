@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status:** Track A, Track B, UI visibility, docs, and artifact validation
+> hardening are implemented on `codex/omnisight-ui-spec-implementation`.
+> This plan is now historical scaffolding for that completed runtime stage.
+> Do not start Track C/DeepStream from this file unless the user explicitly
+> reopens that lane after Jetson soak validation.
+
 **Goal:** Make fixed-vocab Jetson TensorRT artifacts and compiled per-scene open-vocab artifacts real runtime options, while keeping the later DeepStream tracking lane planned but separate.
 
 **Architecture:** Keep `Model` rows as canonical camera choices. Add runtime artifacts as validated, target-specific acceleration records selected by the worker at startup. Dynamic open vocab remains the fallback/exploration path; compiled open vocab is scene-scoped and selected only when the vocabulary hash matches.

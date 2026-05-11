@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** Completed on 2026-05-02 on branch `model-catalog-open-vocab-runtime`. This file is now historical implementation scaffolding; unchecked boxes below reflect the original plan format, not remaining Stream 1 work. The active follow-up for validated Jetson TensorRT artifacts and compiled per-scene open-vocab artifacts is `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`.
+> **Status:** Completed on 2026-05-02 on branch `model-catalog-open-vocab-runtime`. This file is now historical implementation scaffolding; unchecked boxes below reflect the original plan format, not remaining Stream 1 work. The validated Jetson TensorRT artifact and compiled scene open-vocab follow-up has also landed in `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`.
 
 **Goal:** Add recommended model catalog options, Jetson-aware runtime selection, and a true Ultralytics-backed open-vocabulary detector path while preserving the current fixed-vocab video pipeline.
 

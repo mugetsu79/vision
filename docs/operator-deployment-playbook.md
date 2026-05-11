@@ -244,7 +244,7 @@ By default, the worker now chooses an execution-provider policy from host capabi
 - AMD Linux `amd64`: CPU in this first pass
 - Intel macOS: CoreML when available, then CPU
 
-This provider policy applies to ONNX Runtime models. Raw TensorRT `.engine` files are not selectable production models yet; use ONNX rows as the portable source model. The next implementation stream attaches validated TensorRT engines as target-specific runtime artifacts and adds compiled per-scene open-vocab artifacts for stable vocabularies.
+This provider policy applies to ONNX Runtime models. Raw TensorRT `.engine` files are not selectable production models; use ONNX rows as the portable source model and attach `.engine` files as validated target-specific runtime artifacts. Stable open-vocab scenes can also use compiled scene artifacts when the camera vocabulary hash and target profile match. If no valid artifact matches, the worker falls back to the canonical ONNX or dynamic `.pt` path and Operations should show the selected backend or fallback state honestly.
 
 For controlled benchmarking or mitigation, these environment variables can override the automatic choice:
 

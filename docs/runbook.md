@@ -214,7 +214,7 @@ Fixed-vocab ONNX models use ONNX Runtime. Provider selection can choose TensorRT
 
 Open-vocab models use the Ultralytics adapter and are marked experimental until validated on the target central GPU and Jetson runtime. The supported first-pass formats are `.pt` model files for YOLOE and YOLO-World. Dynamic `.pt` open vocab remains the discovery and fallback mode for changing vocabularies.
 
-Raw TensorRT `.engine` files are cataloged as planned only and must not be registered as primary camera models. The current continuation plan is `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`: keep ONNX as the canonical fixed-vocab model row, attach target-specific validated TensorRT engines as runtime artifacts, and add scene-scoped compiled open-vocab artifacts that are selected only when the saved vocabulary hash matches.
+Raw TensorRT `.engine` files must not be registered as primary camera models. Keep ONNX as the canonical fixed-vocab model row, attach target-specific validated TensorRT engines as runtime artifacts, and use scene-scoped compiled open-vocab artifacts only when the saved vocabulary hash matches. The runtime artifact lane is implemented; the next active implementation stage is accountable scene intelligence and evidence recording.
 
 ### Fixed-Vocab Runtime Artifact Registration
 

@@ -564,7 +564,7 @@ The model catalog shown in the UI is a recommendation list. It does not download
 
 For iMac testing, register every local artifact that you want to compare, then choose the best registered model in the camera wizard. Start with `YOLO26n COCO`; keep `YOLO12n COCO` only as the older baseline.
 
-If you pulled recent changes onto an existing dev database, run migrations before registering models or opening Operations/Cameras. This is required for `.pt` open-vocab presets, scene vision profiles, detection regions, and future runtime artifact tables; it is harmless for ONNX presets:
+If you pulled recent changes onto an existing dev database, run migrations before registering models or opening Operations/Cameras. This is required for `.pt` open-vocab presets, scene vision profiles, detection regions, and runtime artifact tables; it is harmless for ONNX presets:
 
 ```bash
 cd "$HOME/vision"

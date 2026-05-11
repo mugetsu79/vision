@@ -4,8 +4,14 @@ Date: 2026-05-10
 
 ## Status
 
-Proposed follow-up to the model catalog, open-vocab runtime, live track
-lifecycle, and scene vision profile work.
+Track A and Track B were implemented on
+`codex/omnisight-ui-spec-implementation` through the runtime artifact service,
+worker runtime selection, TensorRT `.engine` detector path, compiled scene
+open-vocab artifact build/selection, UI runtime artifact status, hardened
+artifact validation, and model loading/configuration docs.
+
+Track C remains future work. Do not implement DeepStream/NvDCF/NvDeepSORT until
+the A/B runtime artifact lane has passed real Jetson soak validation.
 
 This spec covers three tracks:
 
@@ -17,9 +23,9 @@ This spec covers three tracks:
 - **C. Advanced Jetson tracking**: define the later DeepStream/NvDCF/NvDeepSORT
   lane for crowded and occluded scenes.
 
-Implementation should land **A and B first**. Track C is specified now so the
-schema, runtime selection model, and Operations vocabulary do not paint us into
-a corner.
+Implementation landed **A and B first**. Track C is specified so the schema,
+runtime selection model, and Operations vocabulary do not paint us into a
+corner, but it is not part of the current next implementation stage.
 
 ## Short Answer On Per-Scene Compile Cost
 
@@ -51,29 +57,30 @@ The product rule is:
 
 ## Current State
 
-Fixed-vocab detection currently uses portable ONNX models through
-`YoloDetector`. Runtime provider selection can classify a Linux ARM64 NVIDIA
-host as `linux-aarch64-nvidia-jetson` and prefer:
+Fixed-vocab detection still uses portable ONNX model rows as canonical camera
+choices. Runtime provider selection can classify a Linux ARM64 NVIDIA host as
+`linux-aarch64-nvidia-jetson` and prefer:
 
 1. `TensorrtExecutionProvider`
 2. `CUDAExecutionProvider`
 3. `CPUExecutionProvider`
 
 The Jetson handoff already recorded healthy ONNX Runtime TensorRT-provider
-inference with `detect_session` around 9-10 ms. That is good acceleration, but
-not the final optimization model because:
+inference with `detect_session` around 9-10 ms. Track A/B then added the
+target-specific runtime artifact lane:
 
-- standalone TensorRT `.engine` artifacts are still planned, not selectable
-- there is no persistent runtime artifact table
-- the worker cannot choose a validated target-specific engine
-- Operators cannot see the selected artifact or fallback reason
-- open-vocab `.pt` models are real but experimental and not compiled for Jetson
+- persistent `model_runtime_artifacts`
+- model-scoped fixed-vocab TensorRT `.engine` artifacts
+- scene-scoped compiled open-vocab artifacts keyed by camera and vocabulary hash
+- worker runtime artifact selection and fallback to canonical ONNX or dynamic `.pt`
+- Operations/camera setup visibility for valid, stale, and fallback states
+- CLI support for registering fixed-vocab artifacts and building/registering
+  YOLOE scene artifacts
 
-Open-vocab detection currently uses an Ultralytics-backed `OpenVocabDetector`
-with `.pt` YOLOE / YOLO-World models. It loads the model once, applies
-`set_classes(...)`, supports runtime vocabulary updates, and emits normalized
-`Detection` objects. This is correct for the first open-vocab lane, but it is
-not optimized for stable Jetson deployment.
+Open-vocab detection still uses an Ultralytics-backed `.pt` path for discovery
+and live vocabulary changes. Stable scene vocabularies can now be compiled and
+selected as scene-scoped artifacts when the vocabulary hash and target profile
+match.
 
 ## Product Goals
 
