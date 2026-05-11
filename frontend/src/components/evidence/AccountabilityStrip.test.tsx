@@ -108,4 +108,37 @@ describe("AccountabilityStrip", () => {
     expect(clipCell).not.toBeNull();
     expect(within(clipCell as HTMLElement).getByText("Cloud evidence")).toBeInTheDocument();
   });
+
+  test("labels local-first clips that are waiting for remote upload", () => {
+    const baseArtifact = accountableIncident().evidence_artifacts?.[0];
+    expect(baseArtifact).toBeDefined();
+
+    render(
+      <AccountabilityStrip
+        incident={accountableIncident({
+          recording_policy: {
+            enabled: true,
+            mode: "event_clip",
+            pre_seconds: 4,
+            post_seconds: 8,
+            fps: 10,
+            max_duration_seconds: 15,
+            storage_profile: "local_first",
+          },
+          evidence_artifacts: [
+            {
+              ...baseArtifact!,
+              status: "upload_pending",
+              storage_provider: "local_filesystem",
+              storage_scope: "edge",
+            },
+          ],
+        })}
+      />,
+    );
+
+    const clipCell = screen.getByText("Evidence clip").closest("div");
+    expect(clipCell).not.toBeNull();
+    expect(within(clipCell as HTMLElement).getByText("Upload pending")).toBeInTheDocument();
+  });
 });

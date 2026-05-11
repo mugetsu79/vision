@@ -5,12 +5,19 @@ from io import BytesIO
 
 import pytest
 
+from argus.api.contracts import EvidenceRecordingPolicy, WorkerEvidenceStorageSettings
 from argus.core.config import Settings
-from argus.models.enums import EvidenceStorageProvider, EvidenceStorageScope
+from argus.models.enums import (
+    EvidenceArtifactStatus,
+    EvidenceStorageProvider,
+    EvidenceStorageScope,
+)
 from argus.services.evidence_storage import (
+    EvidenceStorageRoute,
     LocalFilesystemEvidenceStore,
     S3CompatibleEvidenceStore,
     build_evidence_store,
+    resolve_evidence_storage_route,
 )
 from argus.services.object_store import MinioObjectStore
 
@@ -98,6 +105,125 @@ def test_build_evidence_store_uses_configured_provider(tmp_path) -> None:
 
     assert isinstance(local, LocalFilesystemEvidenceStore)
     assert isinstance(remote, S3CompatibleEvidenceStore)
+
+
+def test_resolve_evidence_storage_route_maps_ui_managed_profiles(tmp_path) -> None:
+    settings = Settings(_env_file=None, incident_local_storage_root=str(tmp_path))
+    edge_profile_id = "11111111-1111-1111-1111-111111111111"
+    central_profile_id = "22222222-2222-2222-2222-222222222222"
+    cloud_profile_id = "33333333-3333-3333-3333-333333333333"
+    local_first_profile_id = "44444444-4444-4444-4444-444444444444"
+
+    edge_route = resolve_evidence_storage_route(
+        settings,
+        recording_policy=EvidenceRecordingPolicy(
+            storage_profile="edge_local",
+            storage_profile_id=edge_profile_id,
+        ),
+        profile=WorkerEvidenceStorageSettings(
+            profile_id=edge_profile_id,
+            profile_name="Edge local evidence",
+            profile_hash="a" * 64,
+            provider="local_filesystem",
+            storage_scope=EvidenceStorageScope.EDGE,
+            config={"local_root": str(tmp_path / "edge")},
+        ),
+    )
+    central_route = resolve_evidence_storage_route(
+        settings,
+        recording_policy=EvidenceRecordingPolicy(
+            storage_profile="central",
+            storage_profile_id=central_profile_id,
+        ),
+        profile=WorkerEvidenceStorageSettings(
+            profile_id=central_profile_id,
+            profile_name="Central MinIO",
+            profile_hash="b" * 64,
+            provider="minio",
+            storage_scope=EvidenceStorageScope.CENTRAL,
+            config={
+                "endpoint": "minio.local:9000",
+                "bucket": "incidents",
+                "secure": False,
+            },
+            secrets={"access_key": "argus", "secret_key": "argus-secret"},
+        ),
+    )
+    cloud_route = resolve_evidence_storage_route(
+        settings,
+        recording_policy=EvidenceRecordingPolicy(
+            storage_profile="cloud",
+            storage_profile_id=cloud_profile_id,
+        ),
+        profile=WorkerEvidenceStorageSettings(
+            profile_id=cloud_profile_id,
+            profile_name="Cloud S3",
+            profile_hash="c" * 64,
+            provider="s3_compatible",
+            storage_scope=EvidenceStorageScope.CLOUD,
+            config={
+                "endpoint": "s3.example.com",
+                "region": "eu-central-1",
+                "bucket": "omnisight-evidence",
+                "secure": True,
+                "path_prefix": "prod/incidents",
+            },
+            secrets={"access_key": "cloud-key", "secret_key": "cloud-secret"},
+        ),
+    )
+    local_first_route = resolve_evidence_storage_route(
+        settings,
+        recording_policy=EvidenceRecordingPolicy(
+            storage_profile="local_first",
+            storage_profile_id=local_first_profile_id,
+        ),
+        profile=WorkerEvidenceStorageSettings(
+            profile_id=local_first_profile_id,
+            profile_name="Local first",
+            profile_hash="d" * 64,
+            provider="local_first",
+            storage_scope=EvidenceStorageScope.EDGE,
+            config={"local_root": str(tmp_path / "pending")},
+        ),
+    )
+
+    assert isinstance(edge_route, EvidenceStorageRoute)
+    assert isinstance(edge_route.store, LocalFilesystemEvidenceStore)
+    assert edge_route.provider is EvidenceStorageProvider.LOCAL_FILESYSTEM
+    assert edge_route.scope is EvidenceStorageScope.EDGE
+    assert edge_route.status_override is None
+    assert isinstance(central_route.store, S3CompatibleEvidenceStore)
+    assert central_route.provider is EvidenceStorageProvider.MINIO
+    assert central_route.scope is EvidenceStorageScope.CENTRAL
+    assert isinstance(cloud_route.store, S3CompatibleEvidenceStore)
+    assert cloud_route.provider is EvidenceStorageProvider.S3_COMPATIBLE
+    assert cloud_route.scope is EvidenceStorageScope.CLOUD
+    assert isinstance(local_first_route.store, LocalFilesystemEvidenceStore)
+    assert local_first_route.provider is EvidenceStorageProvider.LOCAL_FILESYSTEM
+    assert local_first_route.scope is EvidenceStorageScope.EDGE
+    assert local_first_route.status_override is EvidenceArtifactStatus.UPLOAD_PENDING
+
+
+def test_resolve_evidence_storage_route_rejects_profile_residency_mismatch(tmp_path) -> None:
+    settings = Settings(_env_file=None, incident_local_storage_root=str(tmp_path))
+
+    with pytest.raises(ValueError, match="storage_profile.*does not match"):
+        resolve_evidence_storage_route(
+            settings,
+            recording_policy=EvidenceRecordingPolicy(
+                storage_profile="cloud",
+                storage_profile_id="22222222-2222-2222-2222-222222222222",
+            ),
+            profile=WorkerEvidenceStorageSettings(
+                profile_id="22222222-2222-2222-2222-222222222222",
+                profile_name="Central MinIO",
+                profile_hash="b" * 64,
+                provider="minio",
+                storage_scope=EvidenceStorageScope.CENTRAL,
+                config={"endpoint": "minio.local:9000", "bucket": "incidents"},
+                secrets={"access_key": "argus", "secret_key": "argus-secret"},
+            ),
+        )
 
 
 class _FakeMinioClient:

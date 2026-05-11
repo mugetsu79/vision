@@ -7,6 +7,34 @@ import { createQueryClient } from "@/app/query-client";
 import { CameraWizard } from "@/components/cameras/CameraWizard";
 import type { CreateCameraInput, UpdateCameraInput } from "@/hooks/use-cameras";
 
+const evidenceStorageProfiles = vi.hoisted(() => [
+  {
+    id: "11111111-1111-1111-1111-111111111111",
+    kind: "evidence_storage",
+    name: "Edge local evidence",
+    slug: "edge-local-evidence",
+    enabled: true,
+    is_default: false,
+    config: { provider: "local_filesystem", storage_scope: "edge" },
+  },
+  {
+    id: "33333333-3333-3333-3333-333333333333",
+    kind: "evidence_storage",
+    name: "Cloud Archive",
+    slug: "cloud-archive",
+    enabled: true,
+    is_default: true,
+    config: { provider: "s3_compatible", storage_scope: "cloud" },
+  },
+]);
+
+vi.mock("@/hooks/use-configuration", () => ({
+  useConfigurationProfiles: () => ({
+    data: evidenceStorageProfiles,
+    isLoading: false,
+  }),
+}));
+
 function renderWizard(props?: Partial<Parameters<typeof CameraWizard>[0]>) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
@@ -668,7 +696,11 @@ describe("CameraWizard", () => {
     await user.type(screen.getByLabelText(/post seconds/i), "10");
     await user.clear(screen.getByLabelText(/^recording fps$/i));
     await user.type(screen.getByLabelText(/^recording fps$/i), "12");
-    await user.selectOptions(screen.getByLabelText(/storage profile/i), "cloud");
+    const storageProfile = screen.getByLabelText(/storage profile/i);
+    expect(
+      within(storageProfile).getByRole("option", { name: /cloud archive/i }),
+    ).toBeInTheDocument();
+    await user.selectOptions(storageProfile, "33333333-3333-3333-3333-333333333333");
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /create camera/i }));
@@ -687,6 +719,7 @@ describe("CameraWizard", () => {
       post_seconds: 10,
       fps: 12,
       storage_profile: "cloud",
+      storage_profile_id: "33333333-3333-3333-3333-333333333333",
     });
   });
 
@@ -713,7 +746,10 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
     await user.click(screen.getByRole("button", { name: /next/i }));
-    await user.selectOptions(screen.getByLabelText(/storage profile/i), "edge_local");
+    await user.selectOptions(
+      screen.getByLabelText(/storage profile/i),
+      "11111111-1111-1111-1111-111111111111",
+    );
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /create camera/i }));
@@ -733,6 +769,7 @@ describe("CameraWizard", () => {
       enabled: true,
       mode: "event_clip",
       storage_profile: "edge_local",
+      storage_profile_id: "11111111-1111-1111-1111-111111111111",
     });
   });
 

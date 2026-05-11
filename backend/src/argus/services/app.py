@@ -85,6 +85,7 @@ from argus.api.contracts import (
     WorkerCameraSettings,
     WorkerConfigResponse,
     WorkerDesiredState,
+    WorkerEvidenceStorageSettings,
     WorkerModelSettings,
     WorkerPrivacySettings,
     WorkerPublishSettings,
@@ -551,11 +552,13 @@ class CameraService:
         settings: Settings,
         audit_logger: DatabaseAuditLogger,
         events: NatsJetStreamClient | None = None,
+        configuration_service: OperatorConfigurationService | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
         self.audit_logger = audit_logger
         self.events = events
+        self.configuration_service = configuration_service
         self._setup_preview_cache: dict[UUID, _SetupPreviewCacheEntry] = {}
         self._setup_preview_lock = asyncio.Lock()
 
@@ -600,6 +603,13 @@ class CameraService:
 
         rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
         recording_policy = _recording_policy_from_camera(camera)
+        evidence_storage = None
+        if self.configuration_service is not None:
+            evidence_storage = await self.configuration_service.resolve_worker_evidence_storage(
+                tenant_context,
+                camera_id=camera.id,
+                profile_id=recording_policy.storage_profile_id,
+            )
         base_config = _camera_to_worker_config(
             camera=camera,
             primary_model=primary_model,
@@ -608,6 +618,7 @@ class CameraService:
             rtsp_url=rtsp_url,
             runtime_artifacts=runtime_artifacts,
             recording_policy=recording_policy,
+            evidence_storage=evidence_storage,
         )
         privacy_manifest = build_privacy_manifest(
             tenant_id=tenant_context.tenant_id,
@@ -3141,15 +3152,22 @@ def build_app_services(
         ),
     )
     edge_service = EdgeService(db.session_factory, settings, events, audit_logger)
+    configuration_service = OperatorConfigurationService(db.session_factory, settings, audit_logger)
     return AppServices(
         tenancy=TenancyService(db.session_factory, settings),
         sites=SiteService(db.session_factory, audit_logger),
-        cameras=CameraService(db.session_factory, settings, audit_logger, events),
+        cameras=CameraService(
+            db.session_factory,
+            settings,
+            audit_logger,
+            events,
+            configuration_service=configuration_service,
+        ),
         models=ModelService(db.session_factory, audit_logger),
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
         scene_contracts=SceneContractService(db.session_factory),
-        configuration=OperatorConfigurationService(db.session_factory, settings, audit_logger),
+        configuration=configuration_service,
         edge=edge_service,
         operations=OperationsService(
             db.session_factory,
@@ -3703,6 +3721,7 @@ def _camera_to_worker_config(
     rtsp_url: str,
     runtime_artifacts: list[ModelRuntimeArtifact] | None = None,
     recording_policy: EvidenceRecordingPolicy | None = None,
+    evidence_storage: WorkerEvidenceStorageSettings | None = None,
     scene_contract_hash: str | None = None,
     privacy_manifest_hash: str | None = None,
 ) -> WorkerConfigResponse:
@@ -3744,6 +3763,7 @@ def _camera_to_worker_config(
         scene_contract_hash=scene_contract_hash,
         privacy_manifest_hash=privacy_manifest_hash,
         recording_policy=resolved_recording_policy,
+        evidence_storage=evidence_storage,
         camera=WorkerCameraSettings(
             rtsp_url=worker_rtsp_url,
             source_uri=source_uri,

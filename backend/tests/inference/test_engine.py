@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
+from argus.api.contracts import WorkerEvidenceStorageSettings
 from argus.core import metrics as core_metrics
 from argus.inference import engine as engine_module
 from argus.inference.engine import (
@@ -2731,6 +2732,28 @@ def test_worker_main_configures_logging_and_reuses_settings(
     assert captured["camera_id"] == camera_id
     assert captured["worker_settings"] is fake_settings
     assert captured["awaitable"].__class__.__name__ == "_Awaitable"
+
+
+def test_engine_config_accepts_worker_evidence_storage_settings() -> None:
+    camera_id = uuid4()
+    profile_id = uuid4()
+    payload = _engine_config(camera_id).model_dump(mode="json")
+    payload["evidence_storage"] = WorkerEvidenceStorageSettings(
+        profile_id=profile_id,
+        profile_name="Cloud Archive",
+        profile_hash="e" * 64,
+        provider="s3_compatible",
+        storage_scope="cloud",
+        config={"endpoint": "s3.example.com", "bucket": "omnisight-evidence"},
+        secrets={"access_key": "cloud-key", "secret_key": "cloud-secret"},
+    ).model_dump(mode="json")
+
+    config = EngineConfig.model_validate(payload)
+
+    assert config.evidence_storage is not None
+    assert config.evidence_storage.profile_id == profile_id
+    assert config.evidence_storage.provider == "s3_compatible"
+    assert config.evidence_storage.secrets["secret_key"] == "cloud-secret"
 
 
 def _runtime_policy_for_tests() -> RuntimeExecutionPolicy:

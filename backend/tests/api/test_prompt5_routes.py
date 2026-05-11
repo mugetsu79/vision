@@ -1160,6 +1160,17 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
         "ref_distance_m": 12.5,
     }
 
+    viewer = _sample_user(role=RoleEnum.VIEWER, tenant_id=context.tenant_id)
+    app.dependency_overrides[get_current_user] = lambda: viewer
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        viewer_response = await client.get(f"/api/v1/cameras/{camera.id}/worker-config")
+
+    assert viewer_response.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_edge_routes_history_export_incidents_and_stream_offer_contract() -> None:

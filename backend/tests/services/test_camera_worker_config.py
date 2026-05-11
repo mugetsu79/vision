@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from argus.api.contracts import SourceCapability
+from argus.api.contracts import SourceCapability, WorkerEvidenceStorageSettings
 from argus.core.config import Settings
 from argus.core.security import encrypt_rtsp_url
 from argus.models.enums import (
@@ -211,6 +211,22 @@ class _WorkerConfigSessionFactory:
 class _FakeAuditLogger:
     async def record(self, **kwargs: object) -> None:
         return None
+
+
+class _FakeOperatorConfigurationService:
+    def __init__(self, evidence_storage: WorkerEvidenceStorageSettings) -> None:
+        self.evidence_storage = evidence_storage
+        self.calls: list[tuple[object, object, object | None]] = []
+
+    async def resolve_worker_evidence_storage(
+        self,
+        tenant_context: object,
+        *,
+        camera_id: object,
+        profile_id: object | None = None,
+    ) -> WorkerEvidenceStorageSettings:
+        self.calls.append((tenant_context, camera_id, profile_id))
+        return self.evidence_storage
 
 
 def _tenant_context(tenant_id=None):  # noqa: ANN001
@@ -472,6 +488,70 @@ async def test_worker_config_includes_accountable_scene_hashes_and_recording_pol
     assert len(config.scene_contract_hash) == 64
     assert config.privacy_manifest_hash is not None
     assert len(config.privacy_manifest_hash) == 64
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_decrypted_evidence_storage_profile() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    profile_id = uuid4()
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+        evidence_recording_policy={
+            "enabled": True,
+            "mode": "event_clip",
+            "pre_seconds": 4,
+            "post_seconds": 8,
+            "fps": 10,
+            "max_duration_seconds": 15,
+            "storage_profile": "cloud",
+            "storage_profile_id": str(profile_id),
+        },
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        WorkerEvidenceStorageSettings(
+            profile_id=profile_id,
+            profile_name="Cloud S3",
+            profile_hash="d" * 64,
+            provider="s3_compatible",
+            storage_scope="cloud",
+            config={
+                "endpoint": "s3.example.com",
+                "region": "eu-central-1",
+                "bucket": "omnisight-evidence",
+                "secure": True,
+            },
+            secrets={"access_key": "cloud-key", "secret_key": "cloud-secret"},
+        )
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+    tenant_context = _tenant_context()
+
+    config = await service.get_worker_config(tenant_context, camera.id)
+
+    assert configuration_service.calls == [(tenant_context, camera.id, profile_id)]
+    assert config.recording_policy.storage_profile == "cloud"
+    assert config.recording_policy.storage_profile_id == profile_id
+    assert config.evidence_storage is not None
+    assert config.evidence_storage.profile_id == profile_id
+    assert config.evidence_storage.provider == "s3_compatible"
+    assert config.evidence_storage.storage_scope == "cloud"
+    assert config.evidence_storage.config["bucket"] == "omnisight-evidence"
+    assert config.evidence_storage.secrets == {
+        "access_key": "cloud-key",
+        "secret_key": "cloud-secret",
+    }
 
 
 def test_worker_config_sends_usb_capture_uri_to_edge_runtime() -> None:

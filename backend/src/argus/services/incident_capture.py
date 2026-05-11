@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -22,7 +23,7 @@ from argus.models.enums import (
     EvidenceStorageScope,
 )
 from argus.models.tables import Camera, EvidenceArtifact, Incident, Site, Tenant
-from argus.services.evidence_storage import StoredEvidenceObject
+from argus.services.evidence_storage import EvidenceStorageRoute, StoredEvidenceObject
 
 Frame = NDArray[np.uint8]
 
@@ -62,6 +63,15 @@ class ObjectStore(Protocol):
         data: bytes,
         content_type: str,
     ) -> StoredEvidenceObject: ...
+
+
+class EvidenceStorageResolver(Protocol):
+    async def resolve(
+        self,
+        *,
+        camera_id: UUID,
+        recording_policy: EvidenceRecordingPolicy,
+    ) -> EvidenceStorageRoute: ...
 
 
 class IncidentRepository(Protocol):
@@ -117,6 +127,7 @@ class IncidentClipCaptureService:
         self,
         *,
         object_store: ObjectStore,
+        storage_resolver: EvidenceStorageResolver | None = None,
         repository: IncidentRepository,
         clip_encoder: ClipEncoder | None = None,
         pre_seconds: int = 10,
@@ -125,6 +136,7 @@ class IncidentClipCaptureService:
         recording_policy: EvidenceRecordingPolicy | None = None,
     ) -> None:
         self.object_store = object_store
+        self.storage_resolver = storage_resolver
         self.repository = repository
         self.clip_encoder = clip_encoder or OpenCvMjpegClipEncoder()
         self.recording_policy = recording_policy
@@ -242,21 +254,45 @@ class IncidentClipCaptureService:
                 f"incidents/{pending.event.camera_id}/"
                 f"{pending.event.ts.strftime('%Y%m%dT%H%M%S.%fZ')}.mjpeg"
             )
-            stored_object = await self.object_store.put_object(
-                key=key,
-                data=clip_bytes,
-                content_type="video/x-motion-jpeg",
-            )
-            clip_url = stored_object.review_url
-            storage_bytes = stored_object.size_bytes
-            policy.current_storage_bytes += clip_size
-            artifact_payload = _event_clip_artifact_payload(
-                stored_object=stored_object,
-                event=pending.event,
-                clip_started_at=pending.event.ts - timedelta(seconds=self.pre_seconds),
-                clip_ended_at=pending.event.ts + timedelta(seconds=self.post_seconds),
-                fps=self.fps,
-            )
+            storage_route: EvidenceStorageRoute | None = None
+            try:
+                storage_route = await self._resolve_storage_route(
+                    camera_id=pending.event.camera_id,
+                    recording_policy=recording_policy,
+                )
+                stored_object = await storage_route.store.put_object(
+                    key=key,
+                    data=clip_bytes,
+                    content_type="video/x-motion-jpeg",
+                )
+            except Exception as exc:  # noqa: BLE001
+                if storage_route is None:
+                    storage_route = _fallback_storage_route_for_policy(
+                        object_store=self.object_store,
+                        recording_policy=recording_policy,
+                    )
+                payload["evidence_storage_error"] = f"{type(exc).__name__}: {exc}"
+                artifact_payload = _failed_event_clip_artifact_payload(
+                    key=key,
+                    clip_bytes=clip_bytes,
+                    route=storage_route,
+                    event=pending.event,
+                    clip_started_at=pending.event.ts - timedelta(seconds=self.pre_seconds),
+                    clip_ended_at=pending.event.ts + timedelta(seconds=self.post_seconds),
+                    fps=self.fps,
+                )
+            else:
+                clip_url = stored_object.review_url
+                storage_bytes = stored_object.size_bytes
+                policy.current_storage_bytes += clip_size
+                artifact_payload = _event_clip_artifact_payload(
+                    stored_object=stored_object,
+                    event=pending.event,
+                    clip_started_at=pending.event.ts - timedelta(seconds=self.pre_seconds),
+                    clip_ended_at=pending.event.ts + timedelta(seconds=self.post_seconds),
+                    fps=self.fps,
+                    status_override=storage_route.status_override,
+                )
         else:
             payload["storage_quota_exceeded"] = True
 
@@ -273,6 +309,23 @@ class IncidentClipCaptureService:
             privacy_manifest_hash=pending.event.privacy_manifest_hash,
             recording_policy=recording_policy_payload,
             artifact_payload=artifact_payload,
+        )
+
+    async def _resolve_storage_route(
+        self,
+        *,
+        camera_id: UUID,
+        recording_policy: EvidenceRecordingPolicy | None,
+    ) -> EvidenceStorageRoute:
+        if self.storage_resolver is not None and recording_policy is not None:
+            return await self.storage_resolver.resolve(
+                camera_id=camera_id,
+                recording_policy=recording_policy,
+            )
+        return EvidenceStorageRoute(
+            store=self.object_store,
+            provider=EvidenceStorageProvider.MINIO,
+            scope=EvidenceStorageScope.CENTRAL,
         )
 
 
@@ -361,10 +414,12 @@ def _event_clip_artifact_payload(
     clip_started_at: datetime,
     clip_ended_at: datetime,
     fps: int,
+    status_override: EvidenceArtifactStatus | None = None,
 ) -> dict[str, object]:
     return {
         "kind": EvidenceArtifactKind.EVENT_CLIP,
-        "status": _artifact_status_for_storage(
+        "status": status_override
+        or _artifact_status_for_storage(
             provider=stored_object.provider,
             scope=stored_object.scope,
         ),
@@ -385,6 +440,36 @@ def _event_clip_artifact_payload(
     }
 
 
+def _failed_event_clip_artifact_payload(
+    *,
+    key: str,
+    clip_bytes: bytes,
+    route: EvidenceStorageRoute,
+    event: IncidentTriggeredEvent,
+    clip_started_at: datetime,
+    clip_ended_at: datetime,
+    fps: int,
+) -> dict[str, object]:
+    return {
+        "kind": EvidenceArtifactKind.EVENT_CLIP,
+        "status": EvidenceArtifactStatus.CAPTURE_FAILED,
+        "storage_provider": route.provider,
+        "storage_scope": route.scope,
+        "bucket": None,
+        "object_key": key,
+        "content_type": "video/x-motion-jpeg",
+        "sha256": hashlib.sha256(clip_bytes).hexdigest(),
+        "size_bytes": len(clip_bytes),
+        "clip_started_at": clip_started_at,
+        "triggered_at": event.ts,
+        "clip_ended_at": clip_ended_at,
+        "duration_seconds": max(0.0, (clip_ended_at - clip_started_at).total_seconds()),
+        "fps": fps,
+        "scene_contract_hash": event.scene_contract_hash,
+        "privacy_manifest_hash": event.privacy_manifest_hash,
+    }
+
+
 def _artifact_status_for_storage(
     *,
     provider: EvidenceStorageProvider,
@@ -393,3 +478,38 @@ def _artifact_status_for_storage(
     if provider is EvidenceStorageProvider.LOCAL_FILESYSTEM and scope is EvidenceStorageScope.EDGE:
         return EvidenceArtifactStatus.LOCAL_ONLY
     return EvidenceArtifactStatus.REMOTE_AVAILABLE
+
+
+def _fallback_storage_route_for_policy(
+    *,
+    object_store: ObjectStore,
+    recording_policy: EvidenceRecordingPolicy | None,
+) -> EvidenceStorageRoute:
+    if recording_policy is None:
+        return EvidenceStorageRoute(
+            store=object_store,
+            provider=EvidenceStorageProvider.MINIO,
+            scope=EvidenceStorageScope.CENTRAL,
+        )
+    if recording_policy.storage_profile == "cloud":
+        return EvidenceStorageRoute(
+            store=object_store,
+            provider=EvidenceStorageProvider.S3_COMPATIBLE,
+            scope=EvidenceStorageScope.CLOUD,
+        )
+    if recording_policy.storage_profile in {"edge_local", "local_first"}:
+        return EvidenceStorageRoute(
+            store=object_store,
+            provider=EvidenceStorageProvider.LOCAL_FILESYSTEM,
+            scope=EvidenceStorageScope.EDGE,
+            status_override=(
+                EvidenceArtifactStatus.UPLOAD_PENDING
+                if recording_policy.storage_profile == "local_first"
+                else None
+            ),
+        )
+    return EvidenceStorageRoute(
+        store=object_store,
+        provider=EvidenceStorageProvider.MINIO,
+        scope=EvidenceStorageScope.CENTRAL,
+    )

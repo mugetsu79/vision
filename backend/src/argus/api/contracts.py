@@ -140,8 +140,11 @@ RuntimeBackend = Literal[
 ]
 
 
+EvidenceStorageConfigProvider = EvidenceStorageProvider | Literal["local_first"]
+
+
 class EvidenceStorageProfileConfig(BaseModel):
-    provider: EvidenceStorageProvider = EvidenceStorageProvider.MINIO
+    provider: EvidenceStorageConfigProvider = EvidenceStorageProvider.MINIO
     storage_scope: EvidenceStorageScope = EvidenceStorageScope.CENTRAL
     endpoint: str | None = Field(default=None, min_length=1)
     region: str | None = Field(default=None, min_length=1)
@@ -608,6 +611,7 @@ class EvidenceRecordingPolicy(BaseModel):
     fps: int = Field(default=10, ge=1, le=30)
     max_duration_seconds: int = Field(default=15, ge=1, le=90)
     storage_profile: EvidenceStorageProfile = "central"
+    storage_profile_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_window(self) -> EvidenceRecordingPolicy:
@@ -702,6 +706,16 @@ class WorkerStreamSettings(BaseModel):
     width: int | None = Field(default=None, gt=0)
     height: int | None = Field(default=None, gt=0)
     fps: int = Field(default=25, ge=1)
+
+
+class WorkerEvidenceStorageSettings(BaseModel):
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_hash: str | None = None
+    provider: EvidenceStorageConfigProvider
+    storage_scope: EvidenceStorageScope
+    config: dict[str, object] = Field(default_factory=dict)
+    secrets: dict[str, str] = Field(default_factory=dict)
 
 
 class WorkerModelSettings(BaseModel):
@@ -814,6 +828,7 @@ class WorkerConfigResponse(BaseModel):
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
+    evidence_storage: WorkerEvidenceStorageSettings | None = None
     camera: WorkerCameraSettings
     publish: WorkerPublishSettings = Field(default_factory=WorkerPublishSettings)
     stream: WorkerStreamSettings = Field(default_factory=WorkerStreamSettings)

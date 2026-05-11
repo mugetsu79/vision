@@ -1273,6 +1273,8 @@ export interface components {
              * @enum {string}
              */
             storage_profile: "edge_local" | "central" | "cloud" | "local_first";
+            /** Storage Profile Id */
+            storage_profile_id?: string | null;
         };
         /**
          * EvidenceStorageProvider
@@ -2625,6 +2627,7 @@ export interface components {
             /** Privacy Manifest Hash */
             privacy_manifest_hash?: string | null;
             recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
+            evidence_storage?: components["schemas"]["WorkerEvidenceStorageSettings"] | null;
             camera: components["schemas"]["WorkerCameraSettings"];
             publish?: components["schemas"]["WorkerPublishSettings"];
             stream?: components["schemas"]["WorkerStreamSettings"];
@@ -2657,6 +2660,26 @@ export interface components {
          * @enum {string}
          */
         WorkerDesiredState: "desired" | "not_desired" | "manual" | "supervised";
+        /** WorkerEvidenceStorageSettings */
+        WorkerEvidenceStorageSettings: {
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /** Provider */
+            provider: components["schemas"]["EvidenceStorageProvider"] | "local_first";
+            storage_scope: components["schemas"]["EvidenceStorageScope"];
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Secrets */
+            secrets?: {
+                [key: string]: string;
+            };
+        };
         /** WorkerLineZone */
         WorkerLineZone: {
             /** Id */

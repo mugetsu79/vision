@@ -27,6 +27,7 @@ from argus.api.contracts import (
     RuntimeSelectionProfileConfig,
     StreamDeliveryProfileConfig,
     TenantContext,
+    WorkerEvidenceStorageSettings,
     _normalize_operator_config,
 )
 from argus.compat import UTC
@@ -446,6 +447,67 @@ class OperatorConfigurationService:
                     raise
         return ResolvedOperatorConfigResponse(profiles=profiles)
 
+    async def resolve_worker_evidence_storage(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID,
+        profile_id: UUID | None = None,
+    ) -> WorkerEvidenceStorageSettings:
+        async with self.session_factory() as session:
+            if profile_id is not None:
+                profile = await self._get_profile(session, tenant_context.tenant_id, profile_id)
+                if (
+                    profile.kind != OperatorConfigProfileKind.EVIDENCE_STORAGE
+                    or not profile.enabled
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Evidence storage profile not found.",
+                    )
+            else:
+                site_id, edge_node_id = await self._camera_scope(
+                    session,
+                    tenant_context.tenant_id,
+                    camera_id,
+                )
+                profile = await self._resolve_profile_row(
+                    session,
+                    tenant_context.tenant_id,
+                    OperatorConfigProfileKind.EVIDENCE_STORAGE,
+                    camera_id=camera_id,
+                    site_id=site_id,
+                    edge_node_id=edge_node_id,
+                )
+                if profile is None:
+                    await self.seed_bootstrap_defaults(tenant_context, session=session)
+                    profile = await self._resolve_profile_row(
+                        session,
+                        tenant_context.tenant_id,
+                        OperatorConfigProfileKind.EVIDENCE_STORAGE,
+                        camera_id=camera_id,
+                        site_id=site_id,
+                        edge_node_id=edge_node_id,
+                    )
+                if profile is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Evidence storage profile could not be resolved.",
+                    )
+            secrets = await self._load_decrypted_secrets(session, profile.id)
+        config = dict(profile.config)
+        return WorkerEvidenceStorageSettings(
+            profile_id=profile.id,
+            profile_name=profile.name,
+            profile_hash=profile.config_hash,
+            provider=str(config.get("provider", EvidenceStorageProvider.MINIO.value)),
+            storage_scope=EvidenceStorageScope(
+                config.get("storage_scope", EvidenceStorageScope.CENTRAL.value)
+            ),
+            config=config,
+            secrets=secrets,
+        )
+
     async def seed_bootstrap_defaults(
         self,
         tenant_context: TenantContext,
@@ -685,8 +747,8 @@ class OperatorConfigurationService:
         config: dict[str, Any],
         secrets: dict[str, str],
     ) -> tuple[OperatorConfigValidationStatus, str | None]:
-        provider = EvidenceStorageProvider(config.get("provider", EvidenceStorageProvider.MINIO))
-        if provider == EvidenceStorageProvider.LOCAL_FILESYSTEM:
+        provider = str(config.get("provider", EvidenceStorageProvider.MINIO.value))
+        if provider in {EvidenceStorageProvider.LOCAL_FILESYSTEM.value, "local_first"}:
             return self._validate_local_storage(config)
         missing = [
             key

@@ -87,4 +87,49 @@ describe("CaseContextStrip", () => {
     expect(rawPayloadButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText(/hard_hat/i)).toBeInTheDocument();
   });
+
+  test("labels local-first evidence waiting for upload", () => {
+    render(
+      <CaseContextStrip
+        incident={incident({
+          recording_policy: {
+            enabled: true,
+            mode: "event_clip",
+            pre_seconds: 4,
+            post_seconds: 8,
+            fps: 10,
+            max_duration_seconds: 15,
+            storage_profile: "local_first",
+          },
+          evidence_artifacts: [
+            {
+              id: "artifact-1",
+              incident_id: "incident-1",
+              camera_id: "camera-1",
+              kind: "event_clip",
+              status: "upload_pending",
+              storage_provider: "local_filesystem",
+              storage_scope: "edge",
+              bucket: null,
+              object_key: "edge/clip.mjpeg",
+              content_type: "video/x-motion-jpeg",
+              sha256: "c".repeat(64),
+              size_bytes: 1024,
+              clip_started_at: null,
+              triggered_at: null,
+              clip_ended_at: null,
+              duration_seconds: 8,
+              fps: 10,
+              scene_contract_hash: "a".repeat(64),
+              privacy_manifest_hash: "b".repeat(64),
+              review_url: null,
+            },
+          ],
+        })}
+      />,
+    );
+
+    const strip = screen.getByTestId("case-context-strip");
+    expect(within(strip).getByText(/upload pending/i)).toBeInTheDocument();
+  });
 });

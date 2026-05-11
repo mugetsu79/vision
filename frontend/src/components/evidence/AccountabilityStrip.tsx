@@ -118,5 +118,8 @@ function artifactStatusLabel(artifact: EvidenceArtifact): string {
   if (artifact.status === "available") {
     return "Available";
   }
+  if (artifact.status === "upload_pending") {
+    return "Upload pending";
+  }
   return "Expired";
 }

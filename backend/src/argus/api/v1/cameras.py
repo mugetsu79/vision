@@ -62,7 +62,7 @@ async def get_camera(
 @router.get("/{camera_id}/worker-config", response_model=WorkerConfigResponse)
 async def get_camera_worker_config(
     camera_id: UUID,
-    current_user: ViewerUser,
+    current_user: AdminUser,
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> WorkerConfigResponse:

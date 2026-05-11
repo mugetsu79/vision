@@ -16,6 +16,10 @@ import type {
   CreateCameraInput,
   UpdateCameraInput,
 } from "@/hooks/use-cameras";
+import {
+  useConfigurationProfiles,
+  type OperatorConfigProfile,
+} from "@/hooks/use-configuration";
 import type { components } from "@/lib/api.generated";
 import { resolveAccessToken, toApiError } from "@/lib/api";
 import { frontendConfig } from "@/lib/config";
@@ -154,6 +158,7 @@ export type CameraWizardData = {
   recordingFps: number;
   recordingMaxDurationSeconds: number;
   recordingStorageProfile: EvidenceStorageProfile;
+  recordingStorageProfileId: string;
   homography: {
     src: Point[];
     dst: Point[];
@@ -301,6 +306,7 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     recordingFps: recordingPolicy?.fps ?? 10,
     recordingMaxDurationSeconds: recordingPolicy?.max_duration_seconds ?? 15,
     recordingStorageProfile: recordingPolicy?.storage_profile ?? "central",
+    recordingStorageProfileId: recordingPolicy?.storage_profile_id ?? "",
     homography: {
       src: toPointTupleArray(initialCamera?.homography?.src),
       dst: toPointTupleArray(initialCamera?.homography?.dst),
@@ -348,7 +354,84 @@ function buildRecordingPolicy(data: CameraWizardData): EvidenceRecordingPolicy {
       data.recordingPreSeconds + data.recordingPostSeconds,
     ),
     storage_profile: data.recordingStorageProfile,
+    storage_profile_id: data.recordingStorageProfileId || null,
   };
+}
+
+type EvidenceStorageProfileOption = {
+  id: string;
+  label: string;
+  storageProfile: EvidenceStorageProfile;
+  profileId: string | null;
+};
+
+const LEGACY_STORAGE_PROFILE_OPTIONS: EvidenceStorageProfileOption[] = [
+  {
+    id: "edge_local",
+    label: "Edge local",
+    storageProfile: "edge_local",
+    profileId: null,
+  },
+  { id: "central", label: "Central", storageProfile: "central", profileId: null },
+  { id: "cloud", label: "Cloud", storageProfile: "cloud", profileId: null },
+  {
+    id: "local_first",
+    label: "Local first",
+    storageProfile: "local_first",
+    profileId: null,
+  },
+];
+
+function evidenceStorageProfileOptions(
+  profiles: OperatorConfigProfile[] | undefined,
+): EvidenceStorageProfileOption[] {
+  const options: EvidenceStorageProfileOption[] = [];
+  for (const profile of profiles ?? []) {
+    if (!profile.enabled) {
+      continue;
+    }
+    const storageProfile = storageProfileForEvidenceConfig(profile.config ?? {});
+    if (storageProfile === null) {
+      continue;
+    }
+    options.push({
+      id: profile.id,
+      label: `${profile.name} (${formatEvidenceStorageProfile(storageProfile)})`,
+      storageProfile,
+      profileId: profile.id,
+    });
+  }
+  return options.length > 0 ? options : LEGACY_STORAGE_PROFILE_OPTIONS;
+}
+
+function storageProfileForEvidenceConfig(
+  config: NonNullable<OperatorConfigProfile["config"]>,
+): EvidenceStorageProfile | null {
+  const provider = typeof config.provider === "string" ? config.provider : "";
+  const scope = typeof config.storage_scope === "string" ? config.storage_scope : "";
+  if (provider === "local_first") {
+    return "local_first";
+  }
+  if (provider === "local_filesystem" && scope === "edge") {
+    return "edge_local";
+  }
+  if (provider === "minio" && scope === "central") {
+    return "central";
+  }
+  if (provider === "s3_compatible" && scope === "cloud") {
+    return "cloud";
+  }
+  return null;
+}
+
+function formatEvidenceStorageProfile(profile: EvidenceStorageProfile): string {
+  if (profile === "edge_local") {
+    return "Edge local";
+  }
+  if (profile === "local_first") {
+    return "Local first";
+  }
+  return profile[0].toUpperCase() + profile.slice(1);
 }
 
 function visionProfileFromCamera(
@@ -941,6 +1024,7 @@ export function CameraWizard({
     initialCamera?.id,
     isEditMode && stepTitle === "Calibration",
   );
+  const evidenceStorageProfilesQuery = useConfigurationProfiles("evidence_storage");
   const sourceProbeQuery = useQuery<CameraSourceProbeResponse>({
     enabled:
       stepTitle === "Privacy, Processing & Delivery" &&
@@ -1031,6 +1115,18 @@ export function CameraWizard({
         : null,
     [data.runtimeVocabularyVersion, selectedPrimaryModel],
   );
+  const storageProfileOptions = useMemo(
+    () => evidenceStorageProfileOptions(evidenceStorageProfilesQuery.data),
+    [evidenceStorageProfilesQuery.data],
+  );
+  const storageProfileSelectValue =
+    data.recordingStorageProfileId ||
+    (storageProfileOptions.some((option) => option.id === data.recordingStorageProfile)
+      ? data.recordingStorageProfile
+      : "");
+  const selectedStorageProfileLabel =
+    storageProfileOptions.find((option) => option.id === storageProfileSelectValue)?.label ??
+    formatEvidenceStorageProfile(data.recordingStorageProfile);
 
   useEffect(() => {
     setData(createDefaultData(initialCamera));
@@ -1249,6 +1345,18 @@ export function CameraWizard({
     value: CameraWizardData[Key],
   ) {
     setData((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateRecordingStorageProfile(optionId: string) {
+    const option = storageProfileOptions.find((candidate) => candidate.id === optionId);
+    if (!option) {
+      return;
+    }
+    setData((current) => ({
+      ...current,
+      recordingStorageProfile: option.storageProfile,
+      recordingStorageProfileId: option.profileId ?? "",
+    }));
   }
 
   function updateVisionProfile(patch: Partial<VisionProfileDraft>) {
@@ -1977,7 +2085,7 @@ export function CameraWizard({
                     <span>Enabled</span>
                   </label>
                 </div>
-                <div className="mt-4 grid gap-4 sm:grid-cols-4">
+                <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                   <label className="grid gap-2 text-sm text-[#d8e2f2]">
                     <span>Pre seconds</span>
                     <Input
@@ -2018,18 +2126,19 @@ export function CameraWizard({
                     <span>Storage profile</span>
                     <Select
                       aria-label="Storage profile"
-                      value={data.recordingStorageProfile}
+                      value={storageProfileSelectValue}
                       onChange={(event) =>
-                        updateData(
-                          "recordingStorageProfile",
-                          event.target.value as EvidenceStorageProfile,
-                        )
+                        updateRecordingStorageProfile(event.target.value)
                       }
                     >
-                      <option value="edge_local">Edge local</option>
-                      <option value="central">Central</option>
-                      <option value="cloud">Cloud</option>
-                      <option value="local_first">Local first</option>
+                      {storageProfileSelectValue ? null : (
+                        <option value="">Choose profile</option>
+                      )}
+                      {storageProfileOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
                     </Select>
                   </label>
                 </div>
@@ -2465,7 +2574,7 @@ export function CameraWizard({
                           : maskedRtspPlaceholder || "not set"
                       }`,
                 recordingLabel: data.recordingEnabled
-                  ? `${data.recordingPreSeconds}s pre, ${data.recordingPostSeconds}s post, ${data.recordingFps} FPS, ${data.recordingStorageProfile}`
+                  ? `${data.recordingPreSeconds}s pre, ${data.recordingPostSeconds}s post, ${data.recordingFps} FPS, ${selectedStorageProfileLabel}`
                   : "Disabled",
                 boundarySummary: summarizeBoundaries(data.zones),
                 rtspUrlMasked: data.rtspUrl.trim()

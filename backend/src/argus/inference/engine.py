@@ -23,6 +23,7 @@ from argus.api.contracts import (
     DetectionRegion,
     EvidenceRecordingPolicy,
     SceneVisionProfile,
+    WorkerEvidenceStorageSettings,
 )
 from argus.compat import UTC
 from argus.core.config import Settings
@@ -63,7 +64,7 @@ from argus.models.enums import (
     RuntimeVocabularySource,
     TrackerType,
 )
-from argus.services.evidence_storage import build_evidence_store
+from argus.services.evidence_storage import ResolvedEvidenceStorageResolver, build_evidence_store
 from argus.services.incident_capture import (
     IncidentClipCaptureService,
     IncidentTriggeredEvent,
@@ -247,6 +248,7 @@ class EngineConfig(BaseModel):
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
+    evidence_storage: WorkerEvidenceStorageSettings | None = None
     profile: PublishProfile | None = None
     camera: CameraSettings
     publish: PublishSettings = Field(default_factory=PublishSettings)
@@ -1843,6 +1845,10 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         count_event_store=CountEventStore(db_manager.session_factory),
         incident_capture=IncidentClipCaptureService(
             object_store=build_evidence_store(resolved_settings),
+            storage_resolver=ResolvedEvidenceStorageResolver(
+                settings=resolved_settings,
+                evidence_storage=config.evidence_storage,
+            ),
             repository=SQLIncidentRepository(db_manager.session_factory),
             recording_policy=config.recording_policy,
         ),
