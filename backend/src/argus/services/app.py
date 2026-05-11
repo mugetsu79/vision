@@ -118,6 +118,7 @@ from argus.models.tables import (
     TrackingEvent,
 )
 from argus.services.model_catalog import resolve_catalog_status
+from argus.services.privacy_manifests import PrivacyManifestService
 from argus.services.runtime_artifacts import (
     RuntimeArtifactService,
     artifact_matches_camera_vocabulary,
@@ -181,6 +182,7 @@ class AppServices:
     cameras: CameraService
     models: ModelService
     runtime_artifacts: RuntimeArtifactService
+    privacy_manifests: PrivacyManifestService
     edge: EdgeService
     operations: OperationsService
     history: HistoryService
@@ -2643,6 +2645,7 @@ def build_app_services(
         cameras=CameraService(db.session_factory, settings, audit_logger, events),
         models=ModelService(db.session_factory, audit_logger),
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
+        privacy_manifests=PrivacyManifestService(db.session_factory),
         edge=edge_service,
         operations=OperationsService(
             db.session_factory,
