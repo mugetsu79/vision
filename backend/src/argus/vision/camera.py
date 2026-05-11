@@ -176,6 +176,7 @@ class CameraSourceMode(StrEnum):
     X86_RTSP = "x86-rtsp"
     JETSON_RTSP = "jetson-rtsp"
     JETSON_CSI = "jetson-csi"
+    LINUX_USB = "linux-usb"
 
 
 @dataclass(slots=True, frozen=True)
@@ -365,6 +366,10 @@ def _resolve_capture_spec(
     source_uri: str,
     platform_info: PlatformInfo,
 ) -> tuple[CameraSourceMode, str | int, int | None]:
+    if source_uri.startswith("usb://"):
+        device_path = source_uri.removeprefix("usb://")
+        return CameraSourceMode.LINUX_USB, device_path, cv2.CAP_V4L2
+
     if platform_info.jetson and source_uri.startswith("csi://"):
         sensor_id = source_uri.removeprefix("csi://") or "0"
         pipeline = (

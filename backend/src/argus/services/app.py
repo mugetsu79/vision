@@ -31,6 +31,7 @@ from argus.api.contracts import (
     CameraSetupPreviewResponse,
     CameraSourceProbeRequest,
     CameraSourceProbeResponse,
+    CameraSourceSettings,
     CameraUpdate,
     DerivedBrowserProfiles,
     DetectionRegion,
@@ -95,6 +96,7 @@ from argus.core.logging import redact_url_secrets
 from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
+    CameraSourceKind,
     CountEventType,
     DetectorCapability,
     HistoryCoverageStatus,
@@ -120,6 +122,11 @@ from argus.models.tables import (
     Tenant,
     TrackingEvent,
 )
+from argus.services.camera_sources import (
+    NormalizedCameraSource,
+    normalize_camera_source,
+    validate_camera_source_assignment,
+)
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.runtime_artifacts import (
@@ -138,7 +145,7 @@ from argus.streaming.webrtc import (
     resolve_stream_access,
 )
 from argus.vision.model_metadata import resolve_model_classes
-from argus.vision.source_probe import probe_rtsp_source
+from argus.vision.source_probe import probe_rtsp_source, probe_usb_source
 from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
@@ -638,9 +645,10 @@ class CameraService:
         tenant_context: TenantContext,
         payload: CameraSourceProbeRequest,
     ) -> CameraSourceProbeResponse:
-        rtsp_url = payload.rtsp_url.strip() if payload.rtsp_url is not None else None
-        if rtsp_url == "":
-            rtsp_url = None
+        source_settings = _source_settings_from_payload(
+            rtsp_url=payload.rtsp_url,
+            camera_source=payload.camera_source,
+        )
 
         requested_delivery = payload.browser_delivery or BrowserDeliverySettings()
         requested_privacy = (
@@ -659,7 +667,7 @@ class CameraService:
                 camera = await _load_camera(session, tenant_context.tenant_id, payload.camera_id)
                 processing_mode = camera.processing_mode
                 edge_node_id = camera.edge_node_id
-                supplied_rtsp_url = rtsp_url is not None
+                supplied_source = source_settings is not None
                 if payload.browser_delivery is None:
                     stored_browser_delivery = (
                         camera.browser_delivery
@@ -675,30 +683,42 @@ class CameraService:
                         camera.source_capability
                     )
 
-                if not supplied_rtsp_url and existing_source_capability is not None:
+                if not supplied_source and existing_source_capability is not None:
                     source_capability = existing_source_capability
                 else:
-                    if rtsp_url is None:
-                        rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
+                    if source_settings is None:
+                        source_settings = _camera_source_settings_from_camera(
+                            camera,
+                            rtsp_url=decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings),
+                            for_worker=True,
+                        )
                         should_persist_probe = True
-                    source_capability = (
-                        await _probe_source_capability(rtsp_url, settings=self.settings)
-                        if rtsp_url is not None
-                        else None
+                    normalized_source = normalize_camera_source(source_settings)
+                    source_capability = await _probe_camera_source_capability(
+                        normalized_source,
+                        settings=self.settings,
                     )
                     if source_capability is None:
                         source_capability = existing_source_capability
-                    elif should_persist_probe and not supplied_rtsp_url:
+                    elif should_persist_probe and not supplied_source:
                         camera.source_capability = source_capability.model_dump(mode="python")
                         await session.commit()
                         await session.refresh(camera)
         else:
-            if rtsp_url is None:
+            if source_settings is None:
                 raise HTTPException(
                     status_code=HTTP_422_UNPROCESSABLE,
-                    detail="rtsp_url is required when camera_id is not provided.",
+                    detail="rtsp_url or camera_source is required when camera_id is not provided.",
                 )
-            source_capability = await _probe_source_capability(rtsp_url, settings=self.settings)
+            validate_camera_source_assignment(
+                source=source_settings,
+                processing_mode=processing_mode,
+                edge_node_id=edge_node_id,
+            )
+            source_capability = await _probe_camera_source_capability(
+                normalize_camera_source(source_settings),
+                settings=self.settings,
+            )
 
         privacy = _apply_tenant_privacy_policy(
             settings=self.settings,
@@ -713,6 +733,9 @@ class CameraService:
                 privacy=privacy,
                 processing_mode=processing_mode,
                 edge_node_id=edge_node_id,
+                source_kind=(
+                    source_settings.kind if source_settings is not None else CameraSourceKind.RTSP
+                ),
             ),
         )
 
@@ -840,13 +863,28 @@ class CameraService:
                         status_code=HTTP_422_UNPROCESSABLE,
                         detail="Secondary model must be classify or attribute.",
                     )
+            source_settings = _source_settings_from_payload(
+                rtsp_url=payload.rtsp_url,
+                camera_source=payload.camera_source,
+            )
+            if source_settings is None:
+                raise HTTPException(
+                    status_code=HTTP_422_UNPROCESSABLE,
+                    detail="Either rtsp_url or camera_source is required.",
+                )
+            validate_camera_source_assignment(
+                source=source_settings,
+                processing_mode=payload.processing_mode,
+                edge_node_id=payload.edge_node_id,
+            )
+            normalized_source = normalize_camera_source(source_settings)
             privacy = _apply_tenant_privacy_policy(
                 settings=self.settings,
                 tenant_context=tenant_context,
                 privacy=payload.privacy.model_dump(mode="python"),
             )
-            source_capability = await _probe_source_capability(
-                payload.rtsp_url,
+            source_capability = await _probe_camera_source_capability(
+                normalized_source,
                 settings=self.settings,
             )
             browser_delivery = _build_source_aware_browser_delivery(
@@ -854,13 +892,16 @@ class CameraService:
                 source_capability=source_capability,
                 privacy=privacy,
                 processing_mode=payload.processing_mode,
-                edge_node_id=None,
+                edge_node_id=payload.edge_node_id,
+                source_kind=normalized_source.kind,
             )
             camera = Camera(
                 site_id=payload.site_id,
-                edge_node_id=None,
+                edge_node_id=payload.edge_node_id,
                 name=payload.name,
-                rtsp_url_encrypted=encrypt_rtsp_url(payload.rtsp_url, self.settings),
+                rtsp_url_encrypted=encrypt_rtsp_url(normalized_source.uri, self.settings),
+                source_kind=normalized_source.kind.value,
+                source_config=_source_config_payload(normalized_source),
                 processing_mode=payload.processing_mode,
                 primary_model_id=payload.primary_model_id,
                 secondary_model_id=payload.secondary_model_id,
@@ -952,14 +993,21 @@ class CameraService:
             if "site_id" in update_data:
                 await _load_site(session, tenant_context.tenant_id, update_data["site_id"])
             source_capability_changed = False
-            if "rtsp_url" in update_data:
-                rtsp_url = str(update_data.pop("rtsp_url"))
-                camera.rtsp_url_encrypted = encrypt_rtsp_url(
-                    rtsp_url,
-                    self.settings,
+            source_settings = _source_settings_from_update(camera, update_data)
+            if source_settings is not None:
+                update_data.pop("rtsp_url", None)
+                update_data.pop("camera_source", None)
+                normalized_source = normalize_camera_source(source_settings)
+                validate_camera_source_assignment(
+                    source=source_settings,
+                    processing_mode=update_data.get("processing_mode", camera.processing_mode),
+                    edge_node_id=update_data.get("edge_node_id", camera.edge_node_id),
                 )
-                source_capability = await _probe_source_capability(
-                    rtsp_url,
+                camera.rtsp_url_encrypted = encrypt_rtsp_url(normalized_source.uri, self.settings)
+                update_data["source_kind"] = normalized_source.kind.value
+                update_data["source_config"] = _source_config_payload(normalized_source)
+                source_capability = await _probe_camera_source_capability(
+                    normalized_source,
                     settings=self.settings,
                 )
                 update_data["source_capability"] = (
@@ -999,7 +1047,8 @@ class CameraService:
                         "processing_mode",
                         camera.processing_mode,
                     ),
-                    edge_node_id=camera.edge_node_id,
+                    edge_node_id=update_data.get("edge_node_id", camera.edge_node_id),
+                    source_kind=_source_kind_from_update(camera, update_data),
                 ).model_dump(mode="python")
             if "homography" in update_data and update_data["homography"] is not None:
                 update_data["homography"] = dict(update_data["homography"])
@@ -3194,13 +3243,15 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         privacy=privacy.model_dump(mode="python"),
         processing_mode=camera.processing_mode,
         edge_node_id=camera.edge_node_id,
+        source_kind=_source_kind_from_camera(camera),
     )
     return CameraResponse(
         id=camera.id,
         site_id=camera.site_id,
         edge_node_id=camera.edge_node_id,
         name=camera.name,
-        rtsp_url_masked=_mask_rtsp_url(camera.rtsp_url_encrypted),
+        rtsp_url_masked=_mask_camera_source_url(camera),
+        camera_source=_camera_source_settings_from_camera(camera),
         processing_mode=camera.processing_mode,
         primary_model_id=camera.primary_model_id,
         secondary_model_id=camera.secondary_model_id,
@@ -3270,6 +3321,11 @@ def _camera_to_worker_config(
         privacy=privacy.model_dump(mode="python"),
         processing_mode=camera.processing_mode,
         edge_node_id=camera.edge_node_id,
+        source_kind=_source_kind_from_camera(camera),
+    )
+    source_uri, camera_source, worker_rtsp_url = _worker_camera_source_payload(
+        camera,
+        rtsp_url=rtsp_url,
     )
     vision_profile = SceneVisionProfile.model_validate(camera.vision_profile or {})
     if vision_profile.motion_metrics.speed_enabled and camera.homography is None:
@@ -3288,7 +3344,9 @@ def _camera_to_worker_config(
         privacy_manifest_hash=privacy_manifest_hash,
         recording_policy=resolved_recording_policy,
         camera=WorkerCameraSettings(
-            rtsp_url=rtsp_url,
+            rtsp_url=worker_rtsp_url,
+            source_uri=source_uri,
+            camera_source=camera_source,
             frame_skip=camera.frame_skip,
             fps_cap=camera.fps_cap,
         ),
@@ -3333,13 +3391,143 @@ def _recording_policy_from_camera(camera: Camera) -> EvidenceRecordingPolicy:
     return EvidenceRecordingPolicy.model_validate(camera.evidence_recording_policy or {})
 
 
-def _camera_source_contract_payload(camera: Camera, rtsp_url: str) -> dict[str, object]:
-    source_kind = camera.source_kind or "rtsp"
+def _source_settings_from_payload(
+    *,
+    rtsp_url: str | None,
+    camera_source: CameraSourceSettings | None,
+) -> CameraSourceSettings | None:
+    if camera_source is not None:
+        return camera_source
+    if rtsp_url is None or rtsp_url.strip() == "":
+        return None
+    return CameraSourceSettings(kind=CameraSourceKind.RTSP, uri=rtsp_url.strip())
+
+
+def _source_settings_from_update(
+    camera: Camera,
+    update_data: dict[str, Any],
+) -> CameraSourceSettings | None:
+    camera_source = update_data.get("camera_source")
+    if camera_source is not None:
+        return (
+            camera_source
+            if isinstance(camera_source, CameraSourceSettings)
+            else CameraSourceSettings.model_validate(camera_source)
+        )
+    if "rtsp_url" in update_data and update_data["rtsp_url"] is not None:
+        return CameraSourceSettings(
+            kind=CameraSourceKind.RTSP,
+            uri=str(update_data["rtsp_url"]).strip(),
+        )
+    del camera
+    return None
+
+
+def _source_kind_from_camera(camera: Camera) -> CameraSourceKind:
+    try:
+        return CameraSourceKind(camera.source_kind or CameraSourceKind.RTSP.value)
+    except ValueError:
+        return CameraSourceKind.RTSP
+
+
+def _source_kind_from_update(camera: Camera, update_data: dict[str, Any]) -> CameraSourceKind:
+    source_kind = update_data.get("source_kind")
+    if source_kind is None:
+        return _source_kind_from_camera(camera)
+    try:
+        return CameraSourceKind(str(source_kind))
+    except ValueError:
+        return CameraSourceKind.RTSP
+
+
+def _source_config_payload(source: NormalizedCameraSource) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "kind": source.kind.value,
+        "redacted_uri": source.redacted_uri,
+        "capture_uri": source.capture_uri,
+    }
+    if source.label is not None:
+        payload["label"] = source.label
+    if source.kind is not CameraSourceKind.RTSP:
+        payload["uri"] = source.uri
+    return payload
+
+
+def _camera_source_settings_from_camera(
+    camera: Camera,
+    *,
+    rtsp_url: str | None = None,
+    for_worker: bool = False,
+) -> CameraSourceSettings:
+    source_kind = _source_kind_from_camera(camera)
     source_config = dict(camera.source_config or {})
-    source_uri = str(source_config.get("uri") or rtsp_url)
-    redacted_uri = _redact_scene_contract_source_uri(source_uri)
+    label = source_config.get("label")
+    if not isinstance(label, str):
+        label = None
+
+    if source_kind is CameraSourceKind.RTSP:
+        uri = rtsp_url if for_worker and rtsp_url is not None else None
+        uri = uri or _rtsp_response_uri_from_source_config(source_config)
+        return CameraSourceSettings(kind=CameraSourceKind.RTSP, uri=uri, label=label)
+
+    uri = source_config.get("uri")
+    if isinstance(uri, str) and uri:
+        return CameraSourceSettings(kind=source_kind, uri=uri, label=label)
+    capture_uri = source_config.get("capture_uri")
+    if source_kind is CameraSourceKind.USB and isinstance(capture_uri, str):
+        return CameraSourceSettings(kind=source_kind, uri=f"usb://{capture_uri}", label=label)
+    if source_kind is CameraSourceKind.JETSON_CSI and isinstance(capture_uri, str):
+        return CameraSourceSettings(kind=source_kind, uri=capture_uri, label=label)
+    return CameraSourceSettings(kind=CameraSourceKind.RTSP, uri=rtsp_url or "rtsp://***")
+
+
+def _rtsp_response_uri_from_source_config(source_config: dict[str, object]) -> str:
+    redacted_uri = source_config.get("redacted_uri")
+    if isinstance(redacted_uri, str) and redacted_uri.startswith(("rtsp://", "rtsps://")):
+        return redacted_uri
+    uri = source_config.get("uri")
+    if isinstance(uri, str) and uri.startswith(("rtsp://", "rtsps://")):
+        return redact_url_secrets(uri)
+    return "rtsp://***"
+
+
+def _worker_camera_source_payload(
+    camera: Camera,
+    *,
+    rtsp_url: str,
+) -> tuple[str, CameraSourceSettings, str | None]:
+    source_kind = _source_kind_from_camera(camera)
+    if source_kind is CameraSourceKind.RTSP:
+        camera_source = CameraSourceSettings(kind=CameraSourceKind.RTSP, uri=rtsp_url)
+        return rtsp_url, camera_source, rtsp_url
+
+    camera_source = _camera_source_settings_from_camera(camera, rtsp_url=rtsp_url, for_worker=True)
+    normalized = normalize_camera_source(camera_source)
+    return normalized.capture_uri, camera_source, None
+
+
+def _mask_camera_source_url(camera: Camera) -> str:
+    if _source_kind_from_camera(camera) is not CameraSourceKind.RTSP:
+        redacted_uri = dict(camera.source_config or {}).get("redacted_uri")
+        return redacted_uri if isinstance(redacted_uri, str) and redacted_uri else "usb://***"
+    return _mask_rtsp_url(camera.rtsp_url_encrypted)
+
+
+def _camera_source_contract_payload(camera: Camera, rtsp_url: str) -> dict[str, object]:
+    source_kind = _source_kind_from_camera(camera)
+    source_config = dict(camera.source_config or {})
+    source_uri = str(
+        source_config.get("redacted_uri")
+        or source_config.get("uri")
+        or rtsp_url
+    )
+    redacted_uri = (
+        source_uri
+        if source_uri in {"usb://***", "csi://***"}
+        else _redact_scene_contract_source_uri(source_uri)
+    )
     return {
-        "kind": source_kind,
+        "kind": source_kind.value,
         "uri": redacted_uri,
         "redacted_uri": redacted_uri,
         "capture_mode": camera.processing_mode.value,
@@ -3566,12 +3754,14 @@ def _build_source_aware_browser_delivery(
     privacy: dict[str, object],
     processing_mode: ProcessingMode,
     edge_node_id: UUID | None,
+    source_kind: CameraSourceKind = CameraSourceKind.RTSP,
 ) -> BrowserDeliverySettings:
     derived_profiles = derive_browser_profiles(source_capability)
     native_available = (
         requested.allow_native_on_demand
         and not bool(privacy.get("blur_faces", True))
         and not bool(privacy.get("blur_plates", True))
+        and source_kind is CameraSourceKind.RTSP
     )
     blocked_profile_ids: set[BrowserDeliveryProfileId] = set()
     native_reason = None
@@ -3579,7 +3769,11 @@ def _build_source_aware_browser_delivery(
         native_reason = "native_disabled"
         blocked_profile_ids.add("native")
     elif not native_available:
-        native_reason = "privacy_filtering_required"
+        native_reason = (
+            "local_source_requires_processed_stream"
+            if source_kind is not CameraSourceKind.RTSP
+            else "privacy_filtering_required"
+        )
         blocked_profile_ids.add("native")
 
     allowed_profile_ids = {
@@ -3655,6 +3849,24 @@ async def _probe_source_capability(
     except RuntimeError:
         logger.exception("Failed to probe source capability for camera source.")
         return None
+
+
+async def _probe_camera_source_capability(
+    source: NormalizedCameraSource,
+    *,
+    settings: Settings,
+) -> SourceCapability | None:
+    if source.kind is CameraSourceKind.RTSP:
+        return await _probe_source_capability(source.capture_uri, settings=settings)
+    if not settings.enable_startup_services:
+        return None
+    if source.kind is CameraSourceKind.USB:
+        try:
+            return await asyncio.to_thread(probe_usb_source, source.capture_uri)
+        except RuntimeError:
+            logger.exception("Failed to probe USB camera source capability.")
+            return None
+    return None
 
 
 def _probe_source_capability_from_still(rtsp_url: str) -> SourceCapability:

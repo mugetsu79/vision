@@ -16,9 +16,14 @@ import httpx
 import numpy as np
 from numpy.typing import NDArray
 from prometheus_client import start_http_server
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from argus.api.contracts import DetectionRegion, EvidenceRecordingPolicy, SceneVisionProfile
+from argus.api.contracts import (
+    CameraSourceSettings,
+    DetectionRegion,
+    EvidenceRecordingPolicy,
+    SceneVisionProfile,
+)
 from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.db import (
@@ -48,6 +53,7 @@ from argus.inference.publisher import (
     TelemetryTrack,
 )
 from argus.models.enums import (
+    CameraSourceKind,
     DetectorCapability,
     ProcessingMode,
     RuleAction,
@@ -171,9 +177,48 @@ class RuntimeArtifactSettings(BaseModel):
 
 
 class CameraSettings(BaseModel):
-    rtsp_url: str
+    rtsp_url: str | None = None
+    source_uri: str | None = None
+    camera_source: CameraSourceSettings | None = None
     frame_skip: int = 1
     fps_cap: int = 25
+
+    @property
+    def source_kind(self) -> CameraSourceKind:
+        if self.camera_source is not None:
+            return self.camera_source.kind
+        return CameraSourceKind.RTSP
+
+    @property
+    def resolved_source_uri(self) -> str:
+        if self.source_uri is not None:
+            return self.source_uri
+        if self.rtsp_url is not None:
+            return self.rtsp_url
+        if self.camera_source is not None:
+            return self.camera_source.uri
+        raise ValueError("Camera settings require source_uri or rtsp_url.")
+
+    @model_validator(mode="after")
+    def resolve_source_fields(self) -> CameraSettings:
+        if self.source_uri is None and self.rtsp_url is not None:
+            self.source_uri = self.rtsp_url
+        if self.camera_source is None and self.rtsp_url is not None:
+            self.camera_source = CameraSourceSettings(
+                kind=CameraSourceKind.RTSP,
+                uri=self.rtsp_url,
+            )
+        if self.source_uri is None and self.camera_source is not None:
+            self.source_uri = self.camera_source.uri
+        if (
+            self.rtsp_url is None
+            and self.camera_source is not None
+            and self.camera_source.kind is CameraSourceKind.RTSP
+        ):
+            self.rtsp_url = self.camera_source.uri
+        if self.source_uri is None:
+            raise ValueError("Camera settings require source_uri or rtsp_url.")
+        return self
 
 
 class PublishSettings(BaseModel):
@@ -764,7 +809,7 @@ class InferenceEngine:
         else:
             self._stream_registration = await self.stream_client.register_stream(
                 camera_id=self.config.camera_id,
-                rtsp_url=self.config.camera.rtsp_url,
+                rtsp_url=self.config.camera.resolved_source_uri,
                 profile=self.profile,
                 stream_kind=self.config.stream.kind,
                 privacy=self._state.privacy,
@@ -1099,7 +1144,7 @@ class InferenceEngine:
         if self._started and should_register_stream:
             self._stream_registration = await self.stream_client.register_stream(
                 camera_id=self.config.camera_id,
-                rtsp_url=self.config.camera.rtsp_url,
+                rtsp_url=self.config.camera.resolved_source_uri,
                 profile=self.profile,
                 stream_kind=self.config.stream.kind,
                 privacy=self._state.privacy,
@@ -1583,7 +1628,7 @@ async def build_runtime_engine(
     profile = config.profile if config.profile is not None else PublishProfile.CENTRAL_GPU
     registration = await stream_client.register_stream(
         camera_id=config.camera_id,
-        rtsp_url=config.camera.rtsp_url,
+        rtsp_url=config.camera.resolved_source_uri,
         profile=profile,
         stream_kind=config.stream.kind,
         privacy=config.privacy,
@@ -1591,23 +1636,30 @@ async def build_runtime_engine(
         target_width=config.stream.width,
         target_height=config.stream.height,
     )
-    source_uri = config.camera.rtsp_url
+    source_uri = config.camera.resolved_source_uri
     source_uri_factory = None
+    source_label = (
+        "camera RTSP"
+        if config.camera.source_kind is CameraSourceKind.RTSP
+        else "camera source"
+    )
     if registration.mode is StreamMode.PASSTHROUGH:
         logger.info(
             (
-                "Worker ingesting directly from camera RTSP while browser delivery "
+                "Worker ingesting directly from %s while browser delivery "
                 "uses MediaMTX passthrough at %s (camera_id=%s)"
             ),
+            source_label,
             redact_url_secrets(registration.read_path),
             config.camera_id,
         )
     else:
         logger.info(
             (
-                "Worker ingesting directly from camera RTSP for processed stream "
+                "Worker ingesting directly from %s for processed stream "
                 "(stream_mode=%s, output_path=%s, camera_id=%s)"
             ),
+            source_label,
             registration.mode.value,
             registration.path_name,
             config.camera_id,

@@ -5,6 +5,8 @@ import math
 import subprocess
 from fractions import Fraction
 
+import cv2
+
 from argus.api.contracts import SourceCapability
 from argus.core.config import Settings
 from argus.core.logging import redact_url_secrets
@@ -86,6 +88,31 @@ def probe_rtsp_source(
         codec=str(codec) if codec else None,
         aspect_ratio=_aspect_ratio(width, height),
     )
+
+
+def probe_usb_source(device_path: str) -> SourceCapability:
+    capture = cv2.VideoCapture(device_path, cv2.CAP_V4L2)
+    try:
+        if not capture.isOpened():
+            raise RuntimeError(f"USB camera source is not reachable: {device_path}")
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        fps_value = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
+        success, frame = capture.read()
+        if (width <= 0 or height <= 0) and success and frame is not None:
+            height, width = frame.shape[:2]
+        if width <= 0 or height <= 0:
+            raise RuntimeError(f"USB camera source did not report dimensions: {device_path}")
+        fps = max(1, round(fps_value)) if fps_value > 0 else None
+        return SourceCapability(
+            width=width,
+            height=height,
+            fps=fps,
+            codec=None,
+            aspect_ratio=_aspect_ratio(width, height),
+        )
+    finally:
+        capture.release()
 
 
 def _positive_int(value: object, field_name: str) -> int:

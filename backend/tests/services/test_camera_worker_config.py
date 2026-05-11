@@ -10,6 +10,7 @@ from argus.api.contracts import SourceCapability
 from argus.core.config import Settings
 from argus.core.security import encrypt_rtsp_url
 from argus.models.enums import (
+    CameraSourceKind,
     DetectorCapability,
     ModelFormat,
     ModelTask,
@@ -471,6 +472,36 @@ async def test_worker_config_includes_accountable_scene_hashes_and_recording_pol
     assert len(config.scene_contract_hash) == 64
     assert config.privacy_manifest_hash is not None
     assert len(config.privacy_manifest_hash) == 64
+
+
+def test_worker_config_sends_usb_capture_uri_to_edge_runtime() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        edge_node_id=uuid4(),
+        processing_mode=ProcessingMode.EDGE,
+        primary_model_id=model.id,
+        source_kind=CameraSourceKind.USB.value,
+        source_config={
+            "kind": CameraSourceKind.USB.value,
+            "uri": "usb:///dev/video0",
+            "capture_uri": "/dev/video0",
+            "redacted_uri": "usb://***",
+        },
+    )
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=model,
+        secondary_model=None,
+        settings=settings,
+        rtsp_url="rtsp://legacy-camera.local/live",
+    )
+
+    assert config.camera.source_uri == "/dev/video0"
+    assert config.camera.camera_source is not None
+    assert config.camera.camera_source.kind is CameraSourceKind.USB
+    assert config.camera.camera_source.uri == "usb:///dev/video0"
 
 
 @pytest.mark.asyncio

@@ -505,6 +505,7 @@ class BrowserDeliverySettings(BaseModel):
 class CameraSourceProbeRequest(BaseModel):
     camera_id: UUID | None = None
     rtsp_url: str | None = Field(default=None, min_length=1)
+    camera_source: CameraSourceSettings | None = None
     processing_mode: ProcessingMode = ProcessingMode.CENTRAL
     edge_node_id: UUID | None = None
     browser_delivery: BrowserDeliverySettings | None = None
@@ -517,9 +518,32 @@ class CameraSourceProbeResponse(BaseModel):
 
 
 class WorkerCameraSettings(BaseModel):
-    rtsp_url: str = Field(min_length=1)
+    rtsp_url: str | None = Field(default=None, min_length=1)
+    source_uri: str | None = Field(default=None, min_length=1)
+    camera_source: CameraSourceSettings | None = None
     frame_skip: int = Field(default=1, ge=1)
     fps_cap: int = Field(default=25, ge=1)
+
+    @model_validator(mode="after")
+    def resolve_source_uri(self) -> WorkerCameraSettings:
+        if self.source_uri is None and self.rtsp_url is not None:
+            self.source_uri = self.rtsp_url
+        if self.camera_source is None and self.rtsp_url is not None:
+            self.camera_source = CameraSourceSettings(
+                kind=CameraSourceKind.RTSP,
+                uri=self.rtsp_url,
+            )
+        if self.source_uri is None and self.camera_source is not None:
+            self.source_uri = self.camera_source.uri
+        if (
+            self.rtsp_url is None
+            and self.camera_source is not None
+            and self.camera_source.kind is CameraSourceKind.RTSP
+        ):
+            self.rtsp_url = self.camera_source.uri
+        if self.source_uri is None:
+            raise ValueError("Worker camera settings require source_uri or rtsp_url.")
+        return self
 
 
 class WorkerPublishSettings(BaseModel):
@@ -665,8 +689,10 @@ class WorkerConfigResponse(BaseModel):
 
 class CameraCreate(BaseModel):
     site_id: UUID
+    edge_node_id: UUID | None = None
     name: str = Field(min_length=1, max_length=255)
-    rtsp_url: str = Field(min_length=1)
+    rtsp_url: str | None = Field(default=None, min_length=1)
+    camera_source: CameraSourceSettings | None = None
     processing_mode: ProcessingMode
     primary_model_id: UUID
     secondary_model_id: UUID | None = None
@@ -684,7 +710,11 @@ class CameraCreate(BaseModel):
     fps_cap: int = Field(default=25, ge=1)
 
     @model_validator(mode="after")
-    def require_homography_for_speed_metrics(self) -> CameraCreate:
+    def validate_camera_create(self) -> CameraCreate:
+        if self.camera_source is None and self.rtsp_url is None:
+            raise ValueError("Either rtsp_url or camera_source is required.")
+        if self.camera_source is not None and self.rtsp_url is None:
+            self.rtsp_url = self.camera_source.uri
         if self.vision_profile.motion_metrics.speed_enabled and self.homography is None:
             raise ValueError("Homography is required when speed metrics are enabled.")
         return self
@@ -692,8 +722,10 @@ class CameraCreate(BaseModel):
 
 class CameraUpdate(BaseModel):
     site_id: UUID | None = None
+    edge_node_id: UUID | None = None
     name: str | None = Field(default=None, min_length=1, max_length=255)
     rtsp_url: str | None = Field(default=None, min_length=1)
+    camera_source: CameraSourceSettings | None = None
     processing_mode: ProcessingMode | None = None
     primary_model_id: UUID | None = None
     secondary_model_id: UUID | None = None
@@ -732,6 +764,12 @@ class CameraResponse(BaseModel):
     edge_node_id: UUID | None = None
     name: str
     rtsp_url_masked: str
+    camera_source: CameraSourceSettings = Field(
+        default_factory=lambda: CameraSourceSettings(
+            kind=CameraSourceKind.RTSP,
+            uri="rtsp://***",
+        )
+    )
     processing_mode: ProcessingMode
     primary_model_id: UUID
     secondary_model_id: UUID | None = None

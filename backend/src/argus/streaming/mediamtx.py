@@ -592,14 +592,18 @@ class MediaMTXClient:
     ) -> StreamRegistration:
         passthrough_name = f"cameras/{camera_id}/passthrough"
         passthrough_read = f"{self.rtsp_base_url}/{passthrough_name}"
-        ingest_path = self._authenticated_read_url(
-            camera_id, passthrough_read, passthrough_name
-        )
-        await self._ensure_path(
-            passthrough_name,
-            source=rtsp_url,
-            source_on_demand=True,
-        )
+        source_scheme = urlsplit(rtsp_url).scheme.lower()
+        source_is_rtsp = source_scheme in {"rtsp", "rtsps"}
+        ingest_path = ""
+        if source_is_rtsp:
+            ingest_path = self._authenticated_read_url(
+                camera_id, passthrough_read, passthrough_name
+            )
+            await self._ensure_path(
+                passthrough_name,
+                source=rtsp_url,
+                source_on_demand=True,
+            )
 
         requested_passthrough = stream_kind == StreamMode.PASSTHROUGH.value
         if requested_passthrough and privacy.requires_filtering:
@@ -615,7 +619,9 @@ class MediaMTXClient:
                 },
             )
 
-        effective_passthrough = requested_passthrough and not privacy.requires_filtering
+        effective_passthrough = (
+            source_is_rtsp and requested_passthrough and not privacy.requires_filtering
+        )
 
         if effective_passthrough:
             return StreamRegistration(
