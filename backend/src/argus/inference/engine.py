@@ -63,12 +63,12 @@ from argus.models.enums import (
     RuntimeVocabularySource,
     TrackerType,
 )
+from argus.services.evidence_storage import build_evidence_store
 from argus.services.incident_capture import (
     IncidentClipCaptureService,
     IncidentTriggeredEvent,
     SQLIncidentRepository,
 )
-from argus.services.object_store import MinioObjectStore
 from argus.streaming.mediamtx import (
     MediaMTXClient,
     PrivacyPolicy,
@@ -945,6 +945,7 @@ class InferenceEngine:
                 )
             )
         for incident_event in incident_events:
+            incident_event = self._with_accountable_context(incident_event)
             await self.event_client.publish(
                 f"incident.triggered.{self.config.camera_id}",
                 incident_event,
@@ -1458,6 +1459,20 @@ class InferenceEngine:
                 )
         return incidents
 
+    def _with_accountable_context(
+        self,
+        event: IncidentTriggeredEvent,
+    ) -> IncidentTriggeredEvent:
+        return event.model_copy(
+            update={
+                "scene_contract_hash": event.scene_contract_hash
+                or self.config.scene_contract_hash,
+                "privacy_manifest_hash": event.privacy_manifest_hash
+                or self.config.privacy_manifest_hash,
+                "recording_policy": event.recording_policy or self.config.recording_policy,
+            }
+        )
+
     def _record_timing_summary(self) -> None:
         if self._timing_summary_interval_frames <= 0:
             return
@@ -1827,11 +1842,9 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         tracking_store=TrackingEventStore(db_manager.session_factory),
         count_event_store=CountEventStore(db_manager.session_factory),
         incident_capture=IncidentClipCaptureService(
-            object_store=MinioObjectStore(resolved_settings),
+            object_store=build_evidence_store(resolved_settings),
             repository=SQLIncidentRepository(db_manager.session_factory),
-            pre_seconds=resolved_settings.incident_clip_pre_seconds,
-            post_seconds=resolved_settings.incident_clip_post_seconds,
-            fps=resolved_settings.incident_clip_fps,
+            recording_policy=config.recording_policy,
         ),
     )
     await engine.start()

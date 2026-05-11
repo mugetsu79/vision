@@ -7,6 +7,14 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
+from argus.api.contracts import EvidenceRecordingPolicy
+from argus.models.enums import (
+    EvidenceArtifactKind,
+    EvidenceArtifactStatus,
+    EvidenceStorageProvider,
+    EvidenceStorageScope,
+)
+from argus.services.evidence_storage import StoredEvidenceObject
 from argus.services.incident_capture import (
     IncidentClipCaptureService,
     IncidentTenantPolicy,
@@ -18,9 +26,18 @@ from argus.services.incident_capture import (
 class _FakeObjectStore:
     uploads: list[tuple[str, bytes, str]] = field(default_factory=list)
 
-    async def put_object(self, *, key: str, data: bytes, content_type: str) -> str:
+    async def put_object(self, *, key: str, data: bytes, content_type: str) -> StoredEvidenceObject:
         self.uploads.append((key, data, content_type))
-        return f"https://minio.local/{key}"
+        return StoredEvidenceObject(
+            provider=EvidenceStorageProvider.MINIO,
+            scope=EvidenceStorageScope.CENTRAL,
+            bucket="incidents",
+            object_key=key,
+            content_type=content_type,
+            sha256="a" * 64,
+            size_bytes=len(data),
+            review_url=f"https://minio.local/{key}",
+        )
 
 
 @dataclass
@@ -40,6 +57,12 @@ class _FakeIncidentRepository:
         payload: dict[str, object],
         clip_url: str | None,
         storage_bytes: int,
+        scene_contract_snapshot_id=None,  # noqa: ANN001
+        scene_contract_hash: str | None = None,
+        privacy_manifest_snapshot_id=None,  # noqa: ANN001
+        privacy_manifest_hash: str | None = None,
+        recording_policy: dict[str, object] | None = None,
+        artifact_payload: dict[str, object] | None = None,
     ) -> None:
         self.incidents.append(
             {
@@ -49,6 +72,12 @@ class _FakeIncidentRepository:
                 "payload": payload,
                 "clip_url": clip_url,
                 "storage_bytes": storage_bytes,
+                "scene_contract_snapshot_id": scene_contract_snapshot_id,
+                "scene_contract_hash": scene_contract_hash,
+                "privacy_manifest_snapshot_id": privacy_manifest_snapshot_id,
+                "privacy_manifest_hash": privacy_manifest_hash,
+                "recording_policy": recording_policy,
+                "artifact_payload": artifact_payload,
             }
         )
 
@@ -91,6 +120,8 @@ async def test_incident_capture_uploads_clip_and_persists_incident() -> None:
             camera_id=camera_id,
             ts=started_at + timedelta(milliseconds=500),
             type="anpr.line_crossed",
+            scene_contract_hash="b" * 64,
+            privacy_manifest_hash="c" * 64,
             payload={
                 "plate_text": "ZH123456",
                 "plate_hash": "hash-value",
@@ -119,6 +150,23 @@ async def test_incident_capture_uploads_clip_and_persists_incident() -> None:
     assert incidents[0]["storage_bytes"] == len(b"synthetic-clip")
     assert incidents[0]["payload"]["plate_hash"] == "hash-value"
     assert "plate_text" not in incidents[0]["payload"]
+    assert incidents[0]["scene_contract_hash"] == "b" * 64
+    assert incidents[0]["privacy_manifest_hash"] == "c" * 64
+    artifact = incidents[0]["artifact_payload"]
+    assert isinstance(artifact, dict)
+    assert artifact["kind"] is EvidenceArtifactKind.EVENT_CLIP
+    assert artifact["status"] is EvidenceArtifactStatus.REMOTE_AVAILABLE
+    assert artifact["storage_provider"] is EvidenceStorageProvider.MINIO
+    assert artifact["storage_scope"] is EvidenceStorageScope.CENTRAL
+    assert artifact["bucket"] == "incidents"
+    assert artifact["object_key"] == uploads[0][0]
+    assert artifact["content_type"] == "video/x-motion-jpeg"
+    assert artifact["sha256"] == "a" * 64
+    assert artifact["size_bytes"] == len(b"synthetic-clip")
+    assert artifact["triggered_at"] == started_at + timedelta(milliseconds=500)
+    assert artifact["fps"] == 2
+    assert artifact["scene_contract_hash"] == "b" * 64
+    assert artifact["privacy_manifest_hash"] == "c" * 64
 
 
 @pytest.mark.asyncio
@@ -171,3 +219,48 @@ async def test_incident_capture_skips_clip_when_tenant_storage_quota_is_exceeded
     assert incidents[0]["storage_bytes"] == 0
     assert incidents[0]["payload"]["storage_quota_exceeded"] is True
     assert incidents[0]["payload"]["plate_text"] == "ZH987654"
+    assert incidents[0]["artifact_payload"] is None
+
+
+@pytest.mark.asyncio
+async def test_incident_capture_respects_disabled_recording_policy() -> None:
+    camera_id = uuid4()
+    service = IncidentClipCaptureService(
+        object_store=_FakeObjectStore(),
+        repository=_FakeIncidentRepository(
+            policy=IncidentTenantPolicy(
+                tenant_id=uuid4(),
+                allow_plaintext_plates=False,
+                plaintext_justification=None,
+                storage_quota_bytes=10_000,
+                current_storage_bytes=0,
+            )
+        ),
+        clip_encoder=_FakeClipEncoder(),
+        recording_policy=EvidenceRecordingPolicy(enabled=False),
+    )
+
+    frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    triggered_at = datetime(2026, 4, 19, 12, 10, tzinfo=UTC)
+    await service.record_frame(camera_id=camera_id, frame=frame, ts=triggered_at)
+    await service.queue_incident(
+        IncidentTriggeredEvent(
+            camera_id=camera_id,
+            ts=triggered_at,
+            type="rule.record_clip",
+            payload={"track_id": 42},
+        )
+    )
+    await service.flush(camera_id=camera_id)
+
+    incidents = service.repository.incidents  # type: ignore[attr-defined]
+    uploads = service.object_store.uploads  # type: ignore[attr-defined]
+    assert uploads == []
+    assert len(incidents) == 1
+    assert incidents[0]["clip_url"] is None
+    assert incidents[0]["storage_bytes"] == 0
+    assert incidents[0]["artifact_payload"] is None
+    assert incidents[0]["payload"]["recording_disabled"] is True
+    assert incidents[0]["recording_policy"] == EvidenceRecordingPolicy(
+        enabled=False
+    ).model_dump(mode="json")

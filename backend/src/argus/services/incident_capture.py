@@ -13,8 +13,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from argus.api.contracts import EvidenceRecordingPolicy
 from argus.core.events import EventMessage
-from argus.models.tables import Camera, Incident, Site, Tenant
+from argus.models.enums import (
+    EvidenceArtifactKind,
+    EvidenceArtifactStatus,
+    EvidenceStorageProvider,
+    EvidenceStorageScope,
+)
+from argus.models.tables import Camera, EvidenceArtifact, Incident, Site, Tenant
+from argus.services.evidence_storage import StoredEvidenceObject
 
 Frame = NDArray[np.uint8]
 
@@ -25,6 +33,11 @@ class IncidentTriggeredEvent(BaseModel):
     camera_id: UUID
     ts: datetime
     type: str
+    scene_contract_snapshot_id: UUID | None = None
+    scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    privacy_manifest_snapshot_id: UUID | None = None
+    privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    recording_policy: EvidenceRecordingPolicy | None = None
     payload: dict[str, object] = Field(default_factory=dict)
 
 
@@ -42,7 +55,13 @@ class SupportsIncidentSubscribe(Protocol):
 
 
 class ObjectStore(Protocol):
-    async def put_object(self, *, key: str, data: bytes, content_type: str) -> str: ...
+    async def put_object(
+        self,
+        *,
+        key: str,
+        data: bytes,
+        content_type: str,
+    ) -> StoredEvidenceObject: ...
 
 
 class IncidentRepository(Protocol):
@@ -57,6 +76,12 @@ class IncidentRepository(Protocol):
         payload: dict[str, object],
         clip_url: str | None,
         storage_bytes: int,
+        scene_contract_snapshot_id: UUID | None = None,
+        scene_contract_hash: str | None = None,
+        privacy_manifest_snapshot_id: UUID | None = None,
+        privacy_manifest_hash: str | None = None,
+        recording_policy: dict[str, object] | None = None,
+        artifact_payload: dict[str, object] | None = None,
     ) -> None: ...
 
 
@@ -97,13 +122,19 @@ class IncidentClipCaptureService:
         pre_seconds: int = 10,
         post_seconds: int = 10,
         fps: int = 10,
+        recording_policy: EvidenceRecordingPolicy | None = None,
     ) -> None:
         self.object_store = object_store
         self.repository = repository
         self.clip_encoder = clip_encoder or OpenCvMjpegClipEncoder()
-        self.pre_seconds = pre_seconds
-        self.post_seconds = post_seconds
-        self.fps = fps
+        self.recording_policy = recording_policy
+        self.pre_seconds = (
+            recording_policy.pre_seconds if recording_policy is not None else pre_seconds
+        )
+        self.post_seconds = (
+            recording_policy.post_seconds if recording_policy is not None else post_seconds
+        )
+        self.fps = recording_policy.fps if recording_policy is not None else fps
         self._buffers: dict[UUID, deque[tuple[datetime, Frame]]] = defaultdict(deque)
         self._pending: dict[UUID, list[_PendingIncident]] = defaultdict(list)
         self._subscriptions: list[Any] = []
@@ -178,24 +209,54 @@ class IncidentClipCaptureService:
         payload = dict(pending.event.payload)
         if not (policy.allow_plaintext_plates and policy.plaintext_justification):
             payload.pop("plate_text", None)
+        recording_policy = pending.event.recording_policy or self.recording_policy
+        recording_policy_payload = (
+            recording_policy.model_dump(mode="json") if recording_policy is not None else None
+        )
+        if recording_policy is not None and not recording_policy.enabled:
+            payload["recording_disabled"] = True
+            await self.repository.create_incident(
+                camera_id=pending.event.camera_id,
+                ts=pending.event.ts,
+                incident_type=pending.event.type,
+                payload=payload,
+                clip_url=None,
+                storage_bytes=0,
+                scene_contract_snapshot_id=pending.event.scene_contract_snapshot_id,
+                scene_contract_hash=pending.event.scene_contract_hash,
+                privacy_manifest_snapshot_id=pending.event.privacy_manifest_snapshot_id,
+                privacy_manifest_hash=pending.event.privacy_manifest_hash,
+                recording_policy=recording_policy_payload,
+                artifact_payload=None,
+            )
+            return
 
         clip_bytes = self.clip_encoder.encode_clip(pending.frames, fps=self.fps)
         clip_size = len(clip_bytes)
         clip_url: str | None = None
         storage_bytes = 0
+        artifact_payload: dict[str, object] | None = None
 
         if clip_size > 0 and policy.current_storage_bytes + clip_size <= policy.storage_quota_bytes:
             key = (
                 f"incidents/{pending.event.camera_id}/"
                 f"{pending.event.ts.strftime('%Y%m%dT%H%M%S.%fZ')}.mjpeg"
             )
-            clip_url = await self.object_store.put_object(
+            stored_object = await self.object_store.put_object(
                 key=key,
                 data=clip_bytes,
                 content_type="video/x-motion-jpeg",
             )
-            storage_bytes = clip_size
+            clip_url = stored_object.review_url
+            storage_bytes = stored_object.size_bytes
             policy.current_storage_bytes += clip_size
+            artifact_payload = _event_clip_artifact_payload(
+                stored_object=stored_object,
+                event=pending.event,
+                clip_started_at=pending.event.ts - timedelta(seconds=self.pre_seconds),
+                clip_ended_at=pending.event.ts + timedelta(seconds=self.post_seconds),
+                fps=self.fps,
+            )
         else:
             payload["storage_quota_exceeded"] = True
 
@@ -206,6 +267,12 @@ class IncidentClipCaptureService:
             payload=payload,
             clip_url=clip_url,
             storage_bytes=storage_bytes,
+            scene_contract_snapshot_id=pending.event.scene_contract_snapshot_id,
+            scene_contract_hash=pending.event.scene_contract_hash,
+            privacy_manifest_snapshot_id=pending.event.privacy_manifest_snapshot_id,
+            privacy_manifest_hash=pending.event.privacy_manifest_hash,
+            recording_policy=recording_policy_payload,
+            artifact_payload=artifact_payload,
         )
 
 
@@ -252,6 +319,12 @@ class SQLIncidentRepository:
         payload: dict[str, object],
         clip_url: str | None,
         storage_bytes: int,
+        scene_contract_snapshot_id: UUID | None = None,
+        scene_contract_hash: str | None = None,
+        privacy_manifest_snapshot_id: UUID | None = None,
+        privacy_manifest_hash: str | None = None,
+        recording_policy: dict[str, object] | None = None,
+        artifact_payload: dict[str, object] | None = None,
     ) -> None:
         async with self.session_factory() as session:
             incident = Incident(
@@ -262,6 +335,61 @@ class SQLIncidentRepository:
                 snapshot_url=None,
                 clip_url=clip_url,
                 storage_bytes=storage_bytes,
+                scene_contract_snapshot_id=scene_contract_snapshot_id,
+                scene_contract_hash=scene_contract_hash,
+                privacy_manifest_snapshot_id=privacy_manifest_snapshot_id,
+                privacy_manifest_hash=privacy_manifest_hash,
+                recording_policy=recording_policy,
             )
             session.add(incident)
+            await session.flush()
+            if artifact_payload is not None:
+                session.add(
+                    EvidenceArtifact(
+                        incident_id=incident.id,
+                        camera_id=camera_id,
+                        **artifact_payload,
+                    )
+                )
             await session.commit()
+
+
+def _event_clip_artifact_payload(
+    *,
+    stored_object: StoredEvidenceObject,
+    event: IncidentTriggeredEvent,
+    clip_started_at: datetime,
+    clip_ended_at: datetime,
+    fps: int,
+) -> dict[str, object]:
+    return {
+        "kind": EvidenceArtifactKind.EVENT_CLIP,
+        "status": _artifact_status_for_storage(
+            provider=stored_object.provider,
+            scope=stored_object.scope,
+        ),
+        "storage_provider": stored_object.provider,
+        "storage_scope": stored_object.scope,
+        "bucket": stored_object.bucket,
+        "object_key": stored_object.object_key,
+        "content_type": stored_object.content_type,
+        "sha256": stored_object.sha256,
+        "size_bytes": stored_object.size_bytes,
+        "clip_started_at": clip_started_at,
+        "triggered_at": event.ts,
+        "clip_ended_at": clip_ended_at,
+        "duration_seconds": max(0.0, (clip_ended_at - clip_started_at).total_seconds()),
+        "fps": fps,
+        "scene_contract_hash": event.scene_contract_hash,
+        "privacy_manifest_hash": event.privacy_manifest_hash,
+    }
+
+
+def _artifact_status_for_storage(
+    *,
+    provider: EvidenceStorageProvider,
+    scope: EvidenceStorageScope,
+) -> EvidenceArtifactStatus:
+    if provider is EvidenceStorageProvider.LOCAL_FILESYSTEM and scope is EvidenceStorageScope.EDGE:
+        return EvidenceArtifactStatus.LOCAL_ONLY
+    return EvidenceArtifactStatus.REMOTE_AVAILABLE
