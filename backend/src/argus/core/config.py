@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field, SecretStr
@@ -62,6 +63,13 @@ class Settings(BaseSettings):
     minio_secret_key: SecretStr = SecretStr("argus-dev-secret")
     minio_secure: bool = False
     minio_incidents_bucket: str = "incidents"
+    incident_storage_provider: Literal[
+        "local_filesystem",
+        "minio",
+        "s3_compatible",
+    ] = "minio"
+    incident_storage_scope: Literal["edge", "central", "cloud"] = "central"
+    incident_local_storage_root: str = "./var/evidence"
     incident_clip_pre_seconds: int = 10
     incident_clip_post_seconds: int = 10
     incident_clip_fps: int = 10
