@@ -4,11 +4,12 @@ Date: 2026-05-11
 
 ## Status
 
-Proposed product-direction slice after the Jetson optimized runtime artifacts and
+Unified implementation runway after the Jetson optimized runtime artifacts and
 open-vocab Track A/B work.
 
-This spec turns the first three Vezor differentiators into a concrete
-implementation target:
+This spec turns all still-pertinent handoff items into one ordered
+implementation target. The first three Vezor differentiators are still the
+foundation and must land first:
 
 1. **Scene Contract Compiler**
 2. **Evidence Ledger**
@@ -18,15 +19,19 @@ It also makes incident recording part of the accountability model. Every
 incident should carry a short reviewable clip when recording is enabled and
 storage policy allows it, including edge deployments.
 
-The remaining differentiators are intentionally deferred:
+After that foundation, continue in the same plan with:
 
 4. Runtime Passport
 5. Operational Memory
 6. Prompt-To-Policy
 7. Identity-Light Cross-Camera Intelligence
 
-They should be implemented after this slice because they need the same contract,
-ledger, privacy, and evidence artifact foundations.
+The same implementation runway also carries forward the unexecuted Evidence Desk
+timeline/case-context polish, optional still snapshot artifacts, Fleet/Operations
+production hardening, first-site Jetson runtime artifact soak validation, and the
+gated Track C / DeepStream lane. These later tasks must reuse the contract,
+ledger, privacy, and evidence artifact foundations instead of inventing parallel
+case-history primitives.
 
 ## Product Goal
 
@@ -74,21 +79,35 @@ Current gaps:
 - review audit exists, but there is no incident-specific evidence ledger
 - edge-mode clip availability is not explicit when remote object storage is not
   the chosen storage target
+- Evidence Desk timeline/case-context polish is planned but not executed
+- incident still snapshots are optional and not first-class artifacts yet
+- Runtime Passport, Operational Memory, Prompt-To-Policy, and Identity-Light
+  Cross-Camera Intelligence are not implemented
+- Fleet/Operations still lacks supervisor-backed lifecycle actions,
+  per-worker runtime truth, persistent reassignment, and credential rotation
+- registered TensorRT and compiled open-vocab artifacts still need first-site
+  Jetson soak validation
+- Track C / DeepStream is still unimplemented and should stay gated behind
+  runtime soak validation
 
 ## Non-Goals
 
 - No full VMS recorder.
 - No continuous 24/7 recording timeline.
 - No face recognition or person identification feature.
-- No DeepStream / Track C implementation.
 - No blockchain dependency.
 - No WebGL.
-- No prompt-to-policy compiler in this slice.
-- No cross-camera identity graph in this slice.
 - No cloud-only requirement.
 - No developer-laptop webcam acceptance target in this slice. Laptop OpenCV
   device index support may work opportunistically, but the product target is
   edge Linux/Jetson USB/UVC support.
+- No prompt-to-policy auto-apply. Prompt-To-Policy must produce reviewable
+  drafts that require operator approval.
+- No biometric cross-camera identity graph. Identity-Light correlation may use
+  class, zone, motion, time, direction, and non-biometric attributes only when
+  the privacy manifest allows it.
+- No DeepStream work before fixed-vocab TensorRT and compiled open-vocab runtime
+  artifacts pass real target Jetson validation.
 
 ## Core Concepts
 
@@ -188,6 +207,108 @@ An artifact records:
 
 The existing `incidents.clip_url` remains for compatibility, but the UI should
 move toward artifact-aware review links.
+
+### Runtime Passport
+
+A Runtime Passport is a product-visible explanation of the runtime that produced
+an incident or currently powers a camera.
+
+It promotes runtime metadata already captured in scene contracts into a focused
+operator artifact:
+
+- canonical model id and hash
+- runtime artifact id, path hash, target profile, precision, and backend
+- provider/library versions
+- validation timestamp and validation result
+- fallback reason when optimized runtime selection was not used
+- scene vocabulary hash for compiled open-vocab artifacts
+
+Runtime Passports attach to incident details and Operations camera rows. They
+must be derived from scene contracts, model runtime artifact records, and worker
+runtime selection reports.
+
+### Operational Memory
+
+Operational Memory is a low-noise pattern layer over incidents, contracts,
+artifacts, and ledgers. It should identify repeated operational conditions,
+not create a black-box prediction engine.
+
+Examples:
+
+- repeated event bursts by site, camera, zone, class, and time window
+- zones that repeatedly generate incidents after a contract change
+- storage or clip capture failures clustered by edge node or provider
+- incident rate changes after model/runtime/vocabulary changes
+
+Patterns must cite their source incidents and the scene contract/runtime context
+that produced them.
+
+### Prompt-To-Policy
+
+Prompt-To-Policy translates operator language into proposed scene contract,
+privacy manifest, recording policy, rule, and camera source changes.
+
+It is an approval workflow:
+
+1. operator writes intent
+2. backend compiles a draft policy
+3. UI shows the diff against current configuration
+4. operator approves or rejects
+5. approved changes use existing camera/scene update paths
+6. ledger records the policy proposal and approval
+
+Prompt text must never directly mutate worker configuration.
+
+### Identity-Light Cross-Camera Intelligence
+
+Identity-Light Cross-Camera Intelligence links events across cameras without
+face recognition or biometric identity.
+
+Allowed signals:
+
+- class and open-vocab terms
+- zone, line, direction, speed, and motion path
+- time proximity and camera topology
+- non-biometric attributes only when the privacy manifest allows them
+
+Disallowed by default:
+
+- face identification
+- biometric identity graph
+- persistent person identity
+- license plate plaintext correlation unless the privacy manifest explicitly
+  allows plaintext storage
+
+Cross-camera threads must cite the source incidents, privacy manifest hashes,
+and confidence rationale.
+
+### Supervisor-Backed Operations
+
+Production Operations must separate desired state from runtime truth.
+
+The control plane stores desired worker assignments and lifecycle requests.
+Central and edge supervisors reconcile those requests on the nodes that own the
+workers. Supervisors report per-worker state, heartbeat, restart count, last
+error, runtime artifact selection, and current scene contract hash.
+
+The backend API process must not shell out to start host processes. Browser
+buttons such as Start, Stop, Restart, and Drain create authorized lifecycle
+requests that supervisors consume.
+
+### Runtime Artifact Soak
+
+Track A/B runtime artifact support exists in code, but production readiness
+requires first-site Jetson validation:
+
+- chosen fixed-vocab TensorRT artifacts, for example YOLO26n, built on or for
+  the target Jetson profile
+- compiled YOLOE S/open-vocab scene artifacts built for stable scene
+  vocabularies
+- register, validate, select, run, restart, and rollback flows
+- evidence that dynamic `.pt`, ONNX, or CPU fallback is explicit when optimized
+  selection is unavailable
+
+Track C / DeepStream remains gated until this soak passes.
 
 ## Recording Requirements
 
@@ -412,6 +533,143 @@ Required UI elements:
 The existing Evidence Timeline and Case Context plan should be retuned around
 these concepts rather than treated as separate polish.
 
+### 7. Evidence Timeline And Case Context Polish
+
+Retune the unexecuted Evidence Desk polish plan around accountable evidence.
+
+Requirements:
+
+- Evidence Timeline density strip across the currently loaded incident set
+- selected-event marker and bucket selection
+- Case Context Strip that includes trigger, evidence, review, retention,
+  contract, manifest, and ledger status
+- type-colored review queue accents
+- cleaner raw payload disclosure that does not compete with decision facts
+- support clip-only, snapshot-only, clip-plus-snapshot, and metadata-only cases
+- remain frontend-first unless backend fields from Tasks 1-8 are missing
+
+### 8. Optional Incident Still Snapshot Artifacts
+
+Still snapshots are not mandatory for every incident, but deployments may need
+them as first-class evidence previews.
+
+Requirements:
+
+- add recording policy fields for still snapshot capture:
+  `snapshot_enabled`, `snapshot_offset_seconds`, and `snapshot_quality`
+- create `snapshot` evidence artifacts when enabled and capture succeeds
+- keep `snapshot_url` nullable when snapshots are disabled or unavailable
+- attach snapshot artifact ledger entries:
+  `evidence.snapshot.available`, `evidence.snapshot.capture_failed`, and
+  `evidence.snapshot.quota_exceeded`
+- show snapshot artifact status in Evidence Desk without assuming every incident
+  has a still image
+
+### 9. Runtime Passport
+
+Promote runtime metadata from scene contracts and artifact records into a
+dedicated passport.
+
+Requirements:
+
+- create immutable runtime passport snapshots keyed by passport hash
+- attach runtime passport id/hash to incidents when runtime metadata is known
+- expose passport details through incident and operations APIs
+- show selected backend, model hash, runtime artifact id/hash, target profile,
+  precision, provider versions, validation time, and fallback reason
+- include scene vocabulary hash for open-vocab compiled artifacts
+- keep fallback explicit when dynamic `.pt` or ONNX is used instead of an
+  optimized artifact
+
+### 10. Operational Memory
+
+Build pattern memory on top of incidents, evidence ledger, and scene contracts.
+
+Requirements:
+
+- compute repeated event bursts by site, camera, zone, class, and time window
+- detect repeated clip/storage failures by provider, edge node, and camera
+- detect zone hot spots and incident changes after scene contract changes
+- persist memory pattern snapshots with source incident ids and contract hashes
+- show concise memory cards in Evidence Desk and Operations
+- avoid predictive claims; present observed patterns and supporting evidence
+
+### 11. Prompt-To-Policy
+
+Compile operator language into proposed policies and scene changes.
+
+Requirements:
+
+- accept a natural-language prompt and target camera/site context
+- return a structured draft with camera source, vision profile, detection
+  regions, vocabulary, recording policy, privacy posture, and rule changes
+- render a diff against the current scene contract
+- require explicit operator approval before applying
+- apply approved changes through existing camera/scene update paths
+- write ledger entries for proposal, approval, rejection, and application
+- never mutate worker config directly from prompt text
+
+### 12. Identity-Light Cross-Camera Intelligence
+
+Create non-biometric cross-camera threads.
+
+Requirements:
+
+- correlate incidents using class, zone, direction, time, camera topology, and
+  allowed non-biometric attributes
+- respect each incident privacy manifest before using attributes
+- store thread snapshots with source incident ids, manifest hashes, confidence,
+  and rationale
+- show cross-camera thread context in Evidence Desk
+- keep face ID, biometric identity, and persistent person identity disabled
+
+### 13. Fleet And Operations Production Hardening
+
+Turn the read-first Operations workbench into a supervisor-backed production
+control surface.
+
+Requirements:
+
+- persistent worker assignment/reassignment model
+- per-worker runtime heartbeat, state, restart count, selected runtime, scene
+  contract hash, and last-error reporting
+- supervisor lifecycle request model for Start, Stop, Restart, and Drain
+- central and edge supervisor polling/claim contract
+- Operations UI actions that create lifecycle requests, not shell commands
+- credential rotation and bootstrap hardening for edge nodes
+- no plaintext secret persistence beyond one-time bootstrap responses
+- honest UI states when supervisors have not reported runtime truth
+
+### 14. Production Linux Master And Jetson Runtime Soak
+
+Create a production validation path for Linux master plus Jetson edge.
+
+Requirements:
+
+- run migration and deployment checks on a Linux master topology
+- build/register/validate a fixed-vocab TensorRT artifact for the chosen model,
+  for example YOLO26n
+- build/register/validate compiled YOLOE S/open-vocab scene artifacts for stable
+  vocabularies
+- verify runtime artifact selection, fallback, restart recovery, clip capture,
+  Evidence Desk review, Operations worker truth, and credential rotation
+- record soak results in docs with exact versions and known limitations
+
+### 15. Track C / DeepStream Runtime Lane
+
+Implement DeepStream only after Track A/B runtime artifacts pass real Jetson
+soak validation.
+
+Requirements:
+
+- define a DeepStream backend contract compatible with existing runtime
+  selection and Runtime Passport fields
+- add NvDCF/NvDeepSORT profile presets
+- bridge DeepStream metadata into existing track lifecycle and event persistence
+- add Jetson-only packaging under `infra/deepstream/`
+- expose DeepStream pipeline health in Operations
+- prove fallback to existing non-DeepStream runtimes remains available
+
 ## API Shape
 
 Extend `IncidentResponse` with:
@@ -433,6 +691,18 @@ GET /api/v1/incidents/{incident_id}/scene-contract
 GET /api/v1/incidents/{incident_id}/privacy-manifest
 GET /api/v1/incidents/{incident_id}/ledger
 GET /api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content
+GET /api/v1/incidents/{incident_id}/runtime-passport
+GET /api/v1/incidents/{incident_id}/cross-camera-threads
+POST /api/v1/policy-drafts
+POST /api/v1/policy-drafts/{draft_id}/approve
+POST /api/v1/policy-drafts/{draft_id}/reject
+GET /api/v1/operations/memory-patterns
+POST /api/v1/operations/workers/{camera_id}/lifecycle
+POST /api/v1/operations/workers/{camera_id}/assignment
+POST /api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate
+POST /api/v1/operations/supervisor-reports
+GET /api/v1/runtime-artifacts/soak-runs
+POST /api/v1/runtime-artifacts/soak-runs
 ```
 
 Add or extend camera contracts with:
@@ -452,6 +722,9 @@ class EvidenceRecordingPolicy(BaseModel):
     fps: int = Field(default=10, ge=1, le=30)
     max_duration_seconds: int = Field(default=15, ge=1, le=90)
     storage_profile: Literal["edge_local", "central", "cloud", "local_first"] = "central"
+    snapshot_enabled: bool = False
+    snapshot_offset_seconds: float = Field(default=0.0, ge=-30.0, le=60.0)
+    snapshot_quality: int = Field(default=85, ge=1, le=100)
 ```
 
 ## Data Model
@@ -561,6 +834,170 @@ Backfill existing rows with:
 
 Keep `rtsp_url_encrypted` for compatibility until a later cleanup migration.
 
+### Later runway tables
+
+After the foundation migration, add follow-on migrations for the remaining
+handoff work:
+
+#### `runtime_passport_snapshots`
+
+- `id`
+- `tenant_id`
+- `camera_id`
+- `incident_id nullable`
+- `schema_version`
+- `passport_hash`
+- `passport`
+- `created_at`
+
+Indexes:
+
+- unique `passport_hash`
+- `camera_id`, `created_at`
+- `incident_id`
+
+#### `operational_memory_patterns`
+
+- `id`
+- `tenant_id`
+- `site_id nullable`
+- `camera_id nullable`
+- `pattern_kind`
+- `summary`
+- `severity`
+- `source_incident_ids`
+- `source_contract_hashes`
+- `window_started_at`
+- `window_ended_at`
+- `pattern_hash`
+- `created_at`
+- `resolved_at nullable`
+
+Indexes:
+
+- unique `pattern_hash`
+- `tenant_id`, `created_at`
+- `camera_id`, `created_at`
+
+#### `policy_drafts`
+
+- `id`
+- `tenant_id`
+- `camera_id nullable`
+- `site_id nullable`
+- `prompt`
+- `draft`
+- `diff`
+- `status`
+- `created_by_subject`
+- `approved_by_subject nullable`
+- `created_at`
+- `decided_at nullable`
+
+Indexes:
+
+- `tenant_id`, `created_at`
+- `status`, `created_at`
+
+#### `cross_camera_threads`
+
+- `id`
+- `tenant_id`
+- `site_id nullable`
+- `thread_hash`
+- `source_incident_ids`
+- `privacy_manifest_hashes`
+- `confidence`
+- `rationale`
+- `created_at`
+- `updated_at`
+
+Indexes:
+
+- unique `thread_hash`
+- `tenant_id`, `created_at`
+- `site_id`, `created_at`
+
+#### `worker_assignments`
+
+- `id`
+- `tenant_id`
+- `camera_id`
+- `edge_node_id nullable`
+- `desired_state`
+- `assignment_reason`
+- `created_by_subject`
+- `updated_by_subject`
+- `created_at`
+- `updated_at`
+
+Indexes:
+
+- unique `camera_id`
+- `edge_node_id`, `desired_state`
+
+#### `worker_runtime_reports`
+
+- `id`
+- `tenant_id`
+- `camera_id`
+- `edge_node_id nullable`
+- `supervisor_id`
+- `runtime_state`
+- `heartbeat_at`
+- `restart_count`
+- `last_error`
+- `runtime_backend`
+- `runtime_artifact_id nullable`
+- `scene_contract_hash nullable`
+- `created_at`
+
+Indexes:
+
+- `camera_id`, `heartbeat_at`
+- `edge_node_id`, `heartbeat_at`
+
+#### `operations_lifecycle_requests`
+
+- `id`
+- `tenant_id`
+- `camera_id nullable`
+- `edge_node_id nullable`
+- `action`
+- `status`
+- `requested_by_subject`
+- `claimed_by_supervisor nullable`
+- `requested_at`
+- `claimed_at nullable`
+- `completed_at nullable`
+- `error nullable`
+
+Indexes:
+
+- `status`, `requested_at`
+- `camera_id`, `requested_at`
+- `edge_node_id`, `requested_at`
+
+#### `runtime_artifact_soak_runs`
+
+- `id`
+- `tenant_id`
+- `edge_node_id`
+- `runtime_artifact_id`
+- `runtime_kind`
+- `target_profile`
+- `status`
+- `started_at`
+- `ended_at nullable`
+- `metrics`
+- `notes`
+- `created_at`
+
+Indexes:
+
+- `edge_node_id`, `started_at`
+- `runtime_artifact_id`, `started_at`
+
 ## Architecture
 
 ```mermaid
@@ -580,6 +1017,15 @@ flowchart LR
   Artifact --> Desk
   ContractCompiler --> Desk
   ManifestBuilder --> Desk
+  ContractCompiler --> Passport["Runtime Passport"]
+  Ledger --> Memory["Operational Memory"]
+  Trigger --> CrossCamera["Identity-Light Threads"]
+  Privacy --> PolicyDraft["Prompt-To-Policy Drafts"]
+  PolicyDraft --> ContractCompiler
+  Worker --> RuntimeReport["Worker Runtime Reports"]
+  RuntimeReport --> Operations["Supervisor-Backed Operations"]
+  Operations --> Soak["Runtime Artifact Soak"]
+  Soak --> DeepStream["Track C / DeepStream Gate"]
 ```
 
 ## Error Handling
@@ -618,6 +1064,16 @@ Backend:
 - camera source contract tests for RTSP, USB, and Jetson CSI
 - USB capture resolution tests that do not require real hardware
 - source probe route tests for USB unavailable and USB reachable fake captures
+- snapshot artifact tests for enabled, disabled, quota, and capture failure
+- runtime passport hash and incident attachment tests
+- operational memory pattern detection tests
+- prompt-to-policy draft, approval, rejection, and ledger tests
+- identity-light correlation tests that prove privacy manifests block disallowed
+  attributes
+- worker assignment, runtime report, lifecycle request, and credential rotation
+  tests
+- runtime artifact soak run API tests
+- DeepStream backend contract tests after the soak gate is satisfied
 
 Frontend:
 
@@ -628,63 +1084,42 @@ Frontend:
 - ledger details are keyboard accessible
 - privacy labels do not rely on color only
 - responsive layout at 375px, 768px, 1024px, and 1440px
+- Evidence Timeline, Case Context Strip, and type-colored queue render with
+  accountable artifact states
+- Runtime Passport details render in Evidence Desk and Operations
+- Operational Memory cards render source incident citations
+- Prompt-To-Policy renders a readable diff and requires approval
+- Identity-Light threads render rationale and privacy posture
+- Operations lifecycle buttons create requests and show supervisor truth without
+  implying shell access
 
 Docs:
 
 - runbook storage configuration
 - edge deployment notes for local clips
 - Evidence Desk review explanation
+- supervisor operations deployment notes
+- edge credential rotation guidance
+- Linux master plus Jetson soak procedure
+- DeepStream gate and rollback guidance
 
-## Follow-Up Notes For Differentiators 4-7
+## Implementation Order
 
-### 4. Runtime Passport
+The implementation plan should execute these tracks in order:
 
-After this slice, promote runtime selection metadata from a scene contract
-section into a dedicated Runtime Passport view:
+1. Accountable scene and evidence foundation.
+2. Evidence Desk timeline/case-context polish and optional still snapshots.
+3. Runtime Passport.
+4. Operational Memory.
+5. Prompt-To-Policy.
+6. Identity-Light Cross-Camera Intelligence.
+7. Fleet/Operations production hardening.
+8. Production Linux master plus Jetson runtime artifact soak.
+9. Track C / DeepStream runtime lane, only after the soak gate passes.
 
-- selected detector backend
-- canonical model hash
-- runtime artifact id and hash
-- target profile
-- precision
-- provider versions
-- fallback reason
-- validation timestamp
-
-This should attach to incidents and operations status, but it should reuse the
-contract/ledger foundation from this slice.
-
-### 5. Operational Memory
-
-Use incident contracts, ledgers, and artifacts to build pattern memory:
-
-- repeated event bursts
-- recurring privacy/storage failures
-- zones that generate repeated incidents
-- scene contract changes correlated with incident volume
-
-Do not build this before the ledger exists.
-
-### 6. Prompt-To-Policy
-
-Translate natural-language operator intent into proposed scene contracts,
-privacy manifests, recording policy, and rules.
-
-This must be an approval workflow, not prompt-to-magic. The compiler from this
-slice becomes the boundary between language and executable configuration.
-
-### 7. Identity-Light Cross-Camera Intelligence
-
-Build cross-camera reasoning without person identity by default:
-
-- class, zone, direction, timing, color/attribute hints where privacy policy
-  allows
-- no face ID
-- no biometric identity graph
-- contract and manifest must govern what can be correlated
-
-This should wait until per-incident privacy posture and evidence ledger are
-visible.
+This is a single runway, but the later tasks intentionally depend on earlier
+data contracts. Do not implement a later feature by creating a parallel
+incident, policy, or runtime metadata model.
 
 ## Acceptance Criteria
 
@@ -703,3 +1138,20 @@ visible.
 - Existing `clip_url` clients continue to work.
 - No continuous recording is introduced.
 - No WebGL is introduced.
+- Evidence Desk includes timeline density, case context, queue polish, and raw
+  payload disclosure that does not crowd decision facts.
+- Still snapshots can be enabled as first-class evidence artifacts while
+  remaining optional.
+- Runtime Passport is visible for incidents and operations rows when runtime
+  metadata is available.
+- Operational Memory shows observed patterns with source incident citations.
+- Prompt-To-Policy produces reviewable drafts and never applies changes without
+  approval.
+- Identity-Light cross-camera threads use only privacy-allowed non-biometric
+  signals.
+- Operations supports persistent worker assignments, supervisor-reported runtime
+  truth, lifecycle requests, and credential rotation.
+- Linux master plus Jetson soak results are documented for fixed-vocab TensorRT
+  and compiled open-vocab artifacts.
+- DeepStream Track C is either implemented after the soak gate passes or remains
+  explicitly blocked with the soak evidence that is missing.

@@ -14,15 +14,16 @@ Continue from the pushed branch:
 codex/omnisight-ui-spec-implementation
 ```
 
-Latest pushed checkpoint before this carry-forward update:
+Latest pushed checkpoint before this runway expansion:
 
 ```text
-22730157 docs(handoff): carry forward evidence desk polish
+c316d4db docs(handoff): carry forward production hardening
 ```
 
 Recent checkpoints on this branch:
 
 ```text
+c316d4db docs(handoff): carry forward production hardening
 22730157 docs(handoff): carry forward evidence desk polish
 5fadfae7 docs(handoff): refresh accountable scene next steps
 712e0199 docs(cameras): add edge usb source support plan
@@ -62,7 +63,10 @@ Known local state:
 
 The scene vision profile implementation added camera columns in migration
 `0009_scene_vision_profiles`. The runtime artifact work added
-`0010_model_runtime_artifacts`.
+`0010_model_runtime_artifacts`. The unified plan starts with
+`0011_accountable_scene_evidence` and later adds runtime passport, operational
+memory, policy draft, cross-camera, supervisor operations, and runtime soak
+tables.
 
 If the dev UI shows 500s with either of these errors:
 
@@ -70,6 +74,9 @@ If the dev UI shows 500s with either of these errors:
 column cameras.vision_profile does not exist
 column cameras.detection_regions does not exist
 relation model_runtime_artifacts does not exist
+relation scene_contract_snapshots does not exist
+relation runtime_passport_snapshots does not exist
+relation worker_assignments does not exist
 ```
 
 run:
@@ -164,8 +171,22 @@ Build the first three differentiators first:
 2. Evidence Ledger
 3. Privacy Manifest Per Scene
 
-The plan also includes short incident recording and edge USB/UVC camera source
-support.
+The plan now includes every still-pertinent handoff item as an ordered
+implementation runway:
+
+- Tasks 1-12: accountable scene/evidence foundation
+- Task 13: Evidence Desk Timeline And Case Context polish, retuned around
+  accountable evidence
+- Task 14: optional still snapshot evidence artifacts
+- Tasks 15-16: Runtime Passport
+- Task 17: Operational Memory
+- Task 18: Prompt-To-Policy
+- Task 19: Identity-Light Cross-Camera Intelligence
+- Tasks 20-22: Fleet/Operations production hardening, supervisor lifecycle,
+  assignment, per-worker runtime truth, and edge credential rotation
+- Task 23: production Linux master plus Jetson runtime artifact soak validation
+- Task 24: Track C / DeepStream, gated behind Task 23 soak evidence
+- Task 25: full runway verification and handoff refresh
 
 Use this spec:
 
@@ -210,82 +231,27 @@ python3 -m uv run pytest \
   -q
 ```
 
-After Task 1, continue the plan one task at a time. Task 4 is the edge USB/UVC
-source implementation; it is part of this plan and should remain edge-first.
+After Task 1, continue the plan one task at a time through Task 25. Task 4 is
+the edge USB/UVC source implementation and should remain edge-first. Task 24 is
+DeepStream and remains gated until Task 23 records real Track A/B runtime
+artifact soak evidence, or until the user explicitly accepts implementing it
+before that evidence exists.
 
-## Pending Follow-Up Queue
+## Integrated Former Follow-Up Queue
 
-Do not lose these across chats. They remain important even though the immediate
-next work is the Accountable Scene Intelligence foundation.
+Do not recreate a separate follow-up queue for these items. They are now
+included directly in the latest plan:
 
-### Evidence Desk Timeline And Case Context Polish
-
-This is still pending and not obsolete:
-
-```text
-docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md
-```
-
-Original scope:
-
-- Evidence Timeline density strip
-- Case Context Strip
-- type-colored review queue
-- cleaner raw payload disclosure
-
-Current status:
-
-- not executed yet
-- superseded as the immediate next plan
-- should be retuned after Accountable Scene Intelligence Tasks 1-9, because the
-  Evidence Desk should first surface scene contracts, privacy manifests,
-  evidence artifact status, and ledger summary
-- after Task 9 lands, either adapt the old Evidence Desk polish plan into a new
-  follow-up plan or explicitly fold its useful pieces into the accountable
-  Evidence Desk UI before closing the evidence surface
-
-### Fleet And Operations Production Hardening
-
-These remain pertinent from earlier handoffs and current deployment docs:
-
-- supervisor-backed Start/Stop/Restart/Drain actions in Operations
-- per-worker runtime heartbeat, worker state, restart count, and last-error
-  reporting from central and edge supervisors
-- persistent worker assignment/reassignment workflows
-- production edge credential rotation and bootstrap automation
-- production Linux master plus Jetson edge deployment validation
-- first-site Jetson soak validation for registered TensorRT `.engine`
-  artifacts and compiled scene open-vocab artifacts
-
-Do not fold these into the Accountable Scene Intelligence foundation unless the
-user explicitly redirects. Keep them visible in future handoffs until they are
-planned and completed.
-
-### Evidence Media And Snapshot Follow-Up
-
-Incident clip capture is now part of the Accountable Scene Intelligence plan.
-Incident still snapshot generation remains optional but pertinent if deployments
-need still previews as first-class evidence rather than convenience metadata.
-The API/UI may continue to support `snapshot_url: null`; do not assume every
-incident has a still image.
-
-### Later Product Differentiators
-
-After the accountable evidence foundation and retuned Evidence Desk polish,
-decide whether to implement:
-
-- Runtime Passport
-- Operational Memory
-- Prompt-To-Policy
-- Identity-Light Cross-Camera Intelligence
-
-These should reuse the scene contract, privacy manifest, evidence artifact, and
-ledger primitives from the current plan.
-
-### Later Runtime Lane
-
-Track C / DeepStream remains deferred until Track A/B runtime artifacts have
-passed real Jetson soak validation.
+- Evidence Desk Timeline And Case Context polish: Task 13
+- incident still snapshot evidence artifacts: Task 14
+- Runtime Passport: Tasks 15-16
+- Operational Memory: Task 17
+- Prompt-To-Policy: Task 18
+- Identity-Light Cross-Camera Intelligence: Task 19
+- supervisor-backed Start/Stop/Restart/Drain, per-worker runtime truth,
+  persistent assignment/reassignment, and edge credential rotation: Tasks 20-22
+- production Linux master plus Jetson runtime artifact soak validation: Task 23
+- Track C / DeepStream: Task 24, gated by Task 23
 
 ## Working Rules For The Next Chat
 
@@ -297,16 +263,14 @@ passed real Jetson soak validation.
 - Push to origin after commits so the user can test.
 - Do not stage unrelated untracked scratch files.
 - Keep WebGL off.
-- Implement Accountable Scene Intelligence plan Tasks 1-12 in order unless the
-  user redirects.
-- Keep the pending Evidence Desk polish queue visible; do not drop it from
-  future handoffs.
-- Keep Fleet/Ops production hardening, evidence snapshot follow-up, and Jetson
-  runtime soak validation visible in future handoffs.
-- Do not implement Runtime Passport, Operational Memory, Prompt-To-Policy, or
-  Identity-Light cross-camera intelligence until this foundation and the retuned
-  Evidence Desk polish are complete or the user explicitly redirects.
-- Do not implement Track C / DeepStream yet.
+- Implement the unified plan Tasks 1-25 in order unless the user redirects.
+- Do not split former follow-up items back out of the plan; they now have task
+  numbers in the unified runway.
+- Runtime Passport, Operational Memory, Prompt-To-Policy, Identity-Light
+  cross-camera intelligence, Fleet/Ops hardening, and runtime soak are part of
+  this plan after the accountable evidence foundation.
+- Do not start Track C / DeepStream before Task 23 records passing Track A/B
+  Jetson soak evidence unless the user explicitly accepts the risk.
 - Do not reopen RTSP/TensorRT debugging unless fresh logs prove it is needed.
 - Treat USB camera support as edge-first production support for Linux/Jetson
   UVC devices exposed as `/dev/video*`.
@@ -342,7 +306,8 @@ Read the handoff first:
 docs/superpowers/status/2026-05-11-next-chat-accountable-scene-intelligence-handoff.md
 
 Goal for this chat:
-Start the Accountable Scene Intelligence And Evidence Recording implementation.
+Start the unified Accountable Scene Intelligence, Evidence Recording, Runtime,
+Operations, and Differentiator implementation runway.
 
 Use the spec:
 docs/superpowers/specs/2026-05-11-accountable-scene-intelligence-and-evidence-recording-design.md
@@ -364,15 +329,16 @@ Working rules:
 - Push to origin after commits so I can test.
 - Do not stage unrelated untracked scratch files.
 - Keep WebGL off.
-- Implement the Accountable Scene Intelligence plan in order.
+- Implement the unified plan Tasks 1-25 in order.
 - Treat edge USB/UVC camera source support as production edge-first.
 - Make incident clips reviewable in edge mode when recording is enabled.
 - Support local edge storage and remote/cloud S3-compatible storage options.
-- Keep the unexecuted Evidence Desk polish, Fleet/Ops production hardening,
-  evidence snapshot follow-up, and Jetson runtime soak validation queues visible
-  in future handoffs.
-- Do not implement Runtime Passport, Operational Memory, Prompt-To-Policy, or Identity-Light cross-camera intelligence yet.
-- Do not implement Track C / DeepStream yet.
+- Evidence Desk polish, evidence snapshot artifacts, Runtime Passport,
+  Operational Memory, Prompt-To-Policy, Identity-Light cross-camera
+  intelligence, Fleet/Ops production hardening, credential rotation, and Jetson
+  runtime soak validation are now tasks inside the plan; do not drop them from
+  future handoffs.
+- Do not start Track C / DeepStream before Task 23 records passing Track A/B Jetson soak evidence unless I explicitly accept the risk.
 - Do not reopen RTSP/TensorRT debugging unless fresh logs prove it is needed.
-- If dev DB errors mention cameras.vision_profile, cameras.detection_regions, or model_runtime_artifacts, run alembic upgrade head.
+- If dev DB errors mention cameras.vision_profile, cameras.detection_regions, model_runtime_artifacts, scene_contract_snapshots, runtime_passport_snapshots, worker_assignments, or any new plan table, run alembic upgrade head.
 ```

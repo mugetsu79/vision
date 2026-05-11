@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the first Vezor differentiator slice: Scene Contract Compiler, Evidence Ledger, Privacy Manifest, and artifact-aware short incident recording for local edge and remote/cloud storage.
+**Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
 
-**Architecture:** Keep existing incident capture and Evidence Desk flows, but add immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries. The worker continues to emit short event clips; storage becomes provider-aware so edge local, central MinIO, and S3-compatible/cloud deployments share one review contract.
+**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then reuse those primitives for the later differentiators and Operations hardening. The worker continues to emit short event clips; storage becomes provider-aware so edge local, central MinIO, and S3-compatible/cloud deployments share one review contract. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, and runtime-report data instead of adding parallel case-history systems.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy async, Alembic, PostgreSQL JSONB, OpenCV MJPEG clip encoding, local filesystem storage, MinIO/S3-compatible object storage, React 19, Vite 6, TypeScript 5.7, Tailwind v4, Vitest, pytest, Ruff, mypy.
 
@@ -21,9 +21,13 @@ Execute one task at a time. After each task:
 3. push the branch
 4. report the result before continuing
 
-Do not stage unrelated untracked scratch files. Keep WebGL off. Do not implement
-Runtime Passport, Operational Memory, Prompt-To-Policy, Identity-Light
-Cross-Camera Intelligence, or DeepStream in this plan.
+Do not stage unrelated untracked scratch files. Keep WebGL off. Execute the
+tasks in order. Runtime Passport, Operational Memory, Prompt-To-Policy,
+Identity-Light Cross-Camera Intelligence, Fleet/Operations hardening, and
+runtime soak are now part of this plan after the accountable evidence
+foundation. Track C / DeepStream remains a late gated task and must not start
+until the runtime soak task proves Track A/B readiness on target Jetson
+hardware.
 
 ## Pre-Flight
 
@@ -44,8 +48,10 @@ Expected:
 - no unrelated scratch files are staged
 - untracked scratch files may exist and must stay unstaged
 
-If dev DB errors mention `cameras.vision_profile` or
-`cameras.detection_regions`, run:
+If dev DB errors mention `cameras.vision_profile`, `cameras.detection_regions`,
+`model_runtime_artifacts`, `scene_contract_snapshots`,
+`runtime_passport_snapshots`, `worker_assignments`, or any table created by
+this plan, run:
 
 ```bash
 docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run alembic upgrade head
@@ -79,8 +85,33 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `frontend/src/components/evidence/AccountabilityStrip.test.tsx` | create | accountability strip rendering tests |
 | `frontend/src/components/cameras/CameraWizard.tsx` | modify | RTSP/USB source selection and recording policy controls |
 | `frontend/src/components/cameras/CameraWizard.test.tsx` | modify | camera source and recording policy tests |
+| `backend/src/argus/migrations/versions/0012_runtime_passports.py` | create | runtime passport table and incident attachment columns |
+| `backend/src/argus/migrations/versions/0013_operational_memory_patterns.py` | create | operational memory pattern table |
+| `backend/src/argus/migrations/versions/0014_policy_drafts.py` | create | prompt-to-policy draft table |
+| `backend/src/argus/migrations/versions/0015_cross_camera_threads.py` | create | identity-light cross-camera thread table |
+| `backend/src/argus/migrations/versions/0016_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
+| `backend/src/argus/migrations/versions/0017_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
+| `backend/src/argus/services/operational_memory.py` | create | pattern detection over incidents, artifacts, contracts, and ledgers |
+| `backend/src/argus/services/policy_drafts.py` | create | prompt-to-policy draft, diff, approval, rejection, and application service |
+| `backend/src/argus/services/cross_camera_threads.py` | create | identity-light non-biometric incident correlation |
+| `backend/src/argus/services/supervisor_operations.py` | create | worker assignments, supervisor reports, lifecycle requests, credential rotation |
+| `backend/src/argus/services/runtime_soak.py` | create | runtime artifact soak run recorder and validation summary |
+| `backend/src/argus/vision/deepstream_runtime.py` | create late | DeepStream backend adapter after soak gate |
+| `backend/src/argus/vision/deepstream_metadata.py` | create late | DeepStream metadata bridge into track lifecycle |
+| `backend/src/argus/api/v1/policy_drafts.py` | create | prompt-to-policy draft and decision routes |
+| `backend/src/argus/api/v1/runtime_soak.py` | create | runtime artifact soak routes |
+| `frontend/src/components/evidence/EvidenceTimeline.tsx` | create | accountable timeline density strip |
+| `frontend/src/components/evidence/CaseContextStrip.tsx` | create | selected incident context strip |
+| `frontend/src/components/evidence/RuntimePassportPanel.tsx` | create | runtime passport details |
+| `frontend/src/components/evidence/OperationalMemoryPanel.tsx` | create | cited operational patterns |
+| `frontend/src/components/evidence/CrossCameraThreadPanel.tsx` | create | privacy-aware thread context |
+| `frontend/src/components/policy/PolicyDraftReview.tsx` | create | prompt-to-policy draft diff and approval UI |
+| `frontend/src/components/operations/SupervisorLifecycleControls.tsx` | create | Start/Stop/Restart/Drain request controls |
 | `docs/runbook.md` | modify | storage and recording configuration |
 | `docs/operator-deployment-playbook.md` | modify | edge USB camera, local evidence, and remote/cloud evidence guidance |
+| `docs/imac-master-orin-lab-test-guide.md` | modify | Linux master plus Jetson soak validation and rollback |
+| `docs/model-loading-and-configuration-guide.md` | modify | runtime artifact soak and DeepStream gate notes |
 
 ## Task 1: Data Contract And Migration
 
@@ -1509,95 +1540,1057 @@ not hide them.
 
 - [ ] **Step 5: Commit fixes and push**
 
-If verification required fixes:
+If verification required fixes, inspect the changed files and stage only the
+files owned by Tasks 1-12. Do not use `git add -A`.
 
 ```bash
-git add <task-owned-files>
+git status --short
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/services/camera_sources.py \
+  backend/src/argus/services/scene_contracts.py \
+  backend/src/argus/services/privacy_manifests.py \
+  backend/src/argus/services/evidence_ledger.py \
+  backend/src/argus/services/evidence_storage.py \
+  backend/src/argus/services/incident_capture.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/api/v1/incidents.py \
+  backend/src/argus/vision/camera.py \
+  backend/src/argus/vision/source_probe.py \
+  backend/src/argus/inference/engine.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/hooks/use-incidents.ts \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/components/evidence/AccountabilityStrip.tsx \
+  frontend/src/components/cameras/CameraWizard.tsx \
+  docs/runbook.md \
+  docs/operator-deployment-playbook.md \
+  docs/scene-vision-profile-configuration-guide.md
 git commit -m "fix(evidence): address accountable evidence verification"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Follow-Up Queue After This Plan
+## Task 13: Evidence Desk Timeline And Case Context Polish
 
-Do not start these until Tasks 1-12 are complete and the user approves the next
-direction. Keep this queue in future handoffs so pending work does not disappear
-between chats.
+**Files:**
 
-### Evidence Desk Timeline And Case Context Polish
+- Create: `frontend/src/components/evidence/evidence-signals.ts`
+- Create: `frontend/src/components/evidence/evidence-signals.test.ts`
+- Create: `frontend/src/components/evidence/EvidenceTimeline.tsx`
+- Create: `frontend/src/components/evidence/EvidenceTimeline.test.tsx`
+- Create: `frontend/src/components/evidence/CaseContextStrip.tsx`
+- Create: `frontend/src/components/evidence/CaseContextStrip.test.tsx`
+- Modify: `frontend/src/pages/Incidents.tsx`
+- Modify: `frontend/src/pages/Incidents.test.tsx`
 
-The older Evidence Desk polish plan is still pending:
+- [ ] **Step 1: Add failing signal and UI tests**
 
-```text
-docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md
+Cover:
+
+- timeline buckets over the loaded incident set
+- selected incident bucket marker
+- clip-only, snapshot-only, clip-plus-snapshot, and metadata-only evidence states
+- contract, manifest, artifact, and ledger status in the Case Context Strip
+- type-colored queue accents
+- raw payload disclosure collapsed behind an accessible button
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/evidence-signals.test.ts \
+  src/components/evidence/EvidenceTimeline.test.tsx \
+  src/components/evidence/CaseContextStrip.test.tsx \
+  src/pages/Incidents.test.tsx
 ```
 
-It should not be executed verbatim before the accountable evidence foundation,
-because the Evidence Desk now needs to show scene contracts, privacy manifests,
-evidence artifacts, and ledger context first.
+Expected: fail until the new components and signal model exist.
 
-After Task 9 lands, retune or fold in:
+- [ ] **Step 3: Implement the retuned Evidence Desk polish**
 
-- Evidence Timeline density strip
-- Case Context Strip
-- type-colored review queue
-- cleaner raw payload disclosure
+Implement the old Evidence Desk polish scope around accountable fields from
+Tasks 1-9:
 
-Treat this as the next Evidence Desk refinement before moving into the larger
-product differentiators below, unless the user explicitly changes priority.
+- `Evidence Timeline` density strip between filters and the desk layout
+- `Case Context Strip` in the selected incident hero
+- type-colored review queue accents
+- raw payload disclosure that stays below decision facts
+- no WebGL, no decorative dashboards, no continuous animation
 
-### Fleet And Operations Production Hardening
+- [ ] **Step 4: Run tests**
 
-Carry these forward from earlier handoffs and deployment docs. They remain
-pertinent, but they are not part of Tasks 1-12 unless the user redirects:
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/evidence-signals.test.ts \
+  src/components/evidence/EvidenceTimeline.test.tsx \
+  src/components/evidence/CaseContextStrip.test.tsx \
+  src/pages/Incidents.test.tsx
+```
 
-- supervisor-backed Start/Stop/Restart/Drain actions in Operations
-- per-worker runtime heartbeat, worker state, restart count, and last-error
-  reporting from central and edge supervisors
-- persistent worker assignment/reassignment workflows
-- production edge credential rotation and bootstrap automation
-- production Linux master plus Jetson edge deployment validation
+Expected: pass.
 
-### Evidence Media And Runtime Soak Follow-Up
+- [ ] **Step 5: Commit and push**
 
-Carry these forward until explicitly completed or intentionally dropped:
+```bash
+git add frontend/src/components/evidence/evidence-signals.ts \
+  frontend/src/components/evidence/evidence-signals.test.ts \
+  frontend/src/components/evidence/EvidenceTimeline.tsx \
+  frontend/src/components/evidence/EvidenceTimeline.test.tsx \
+  frontend/src/components/evidence/CaseContextStrip.tsx \
+  frontend/src/components/evidence/CaseContextStrip.test.tsx \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/pages/Incidents.test.tsx
+git commit -m "feat(evidence): add accountable timeline and case context"
+git push origin codex/omnisight-ui-spec-implementation
+```
 
-- incident still snapshot generation if still previews become required evidence
-  rather than optional convenience metadata
-- first-site Jetson soak validation for registered TensorRT `.engine`
-  artifacts, including chosen fixed-vocab artifacts such as YOLO26n
-- first-site Jetson soak validation for compiled YOLOE S/open-vocab scene
-  artifacts keyed to stable scene vocabularies
+## Task 14: Optional Still Snapshot Evidence Artifacts
 
-### 4. Runtime Passport
+**Files:**
 
-Create a dedicated runtime passport from data already captured in scene
-contracts:
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/services/incident_capture.py`
+- Modify: `backend/src/argus/services/evidence_storage.py`
+- Modify: `backend/src/argus/services/evidence_ledger.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/tests/services/test_incident_capture.py`
+- Modify: `backend/tests/services/test_evidence_storage.py`
+- Modify: `frontend/src/pages/Incidents.tsx`
+- Modify: `frontend/src/pages/Incidents.test.tsx`
 
-- model hash
-- runtime artifact id/hash
-- selected backend
-- target profile
-- precision
-- provider versions
-- validation time
-- fallback reason
+- [ ] **Step 1: Add failing backend tests**
 
-### 5. Operational Memory
+Cover:
 
-Use evidence ledger and contracts to identify repeated operational patterns:
+- `EvidenceRecordingPolicy(snapshot_enabled=True)` produces a `snapshot`
+  artifact when a frame is available
+- disabled snapshots leave `snapshot_url` null and create no snapshot artifact
+- snapshot quota and encode failures write ledger entries
+- clip capture still succeeds when snapshot capture fails
 
-- repeated event bursts
-- zone hot spots
-- clip/storage failures by site
-- incident changes after scene contract changes
+- [ ] **Step 2: Run failing backend tests**
 
-### 6. Prompt-To-Policy
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_incident_capture.py \
+  tests/services/test_evidence_storage.py \
+  -q
+```
 
-Compile operator language into proposed scene contracts and recording/privacy
-policy. Require approval before applying changes.
+Expected: fail until snapshot policy/artifacts are implemented.
 
-### 7. Identity-Light Cross-Camera Intelligence
+- [ ] **Step 3: Implement snapshot artifacts**
 
-Build cross-camera reasoning that uses class, zone, motion, timing, and
-non-biometric attributes only when the privacy manifest allows it. Keep face ID
-and biometric identity off by default.
+Add policy fields:
+
+- `snapshot_enabled: bool = False`
+- `snapshot_offset_seconds: float = 0.0`
+- `snapshot_quality: int = 85`
+
+Add evidence artifact kind `snapshot`. On incident finalize, write one JPEG
+snapshot artifact only when enabled. Keep `incidents.snapshot_url` nullable and
+preserve clip behavior.
+
+- [ ] **Step 4: Add frontend coverage**
+
+Update Evidence Desk to display snapshot artifact availability as optional
+evidence, not as a missing-data error when disabled.
+
+- [ ] **Step 5: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_incident_capture.py tests/services/test_evidence_storage.py -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run src/pages/Incidents.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/models/enums.py \
+  backend/src/argus/services/incident_capture.py \
+  backend/src/argus/services/evidence_storage.py \
+  backend/src/argus/services/evidence_ledger.py \
+  backend/src/argus/services/app.py \
+  backend/tests/services/test_incident_capture.py \
+  backend/tests/services/test_evidence_storage.py \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/pages/Incidents.test.tsx
+git commit -m "feat(evidence): support optional snapshot artifacts"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 15: Runtime Passport Snapshots
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0012_runtime_passports.py`
+- Create: `backend/src/argus/services/runtime_passports.py`
+- Modify: `backend/src/argus/services/scene_contracts.py`
+- Modify: `backend/src/argus/services/app.py`
+- Test: `backend/tests/services/test_runtime_passports.py`
+- Test: `backend/tests/core/test_db.py`
+
+- [ ] **Step 1: Add failing passport tests**
+
+Cover deterministic passport hashes for:
+
+- fixed-vocab ONNX selection
+- fixed-vocab TensorRT artifact selection
+- compiled open-vocab scene artifact selection
+- dynamic `.pt` fallback with `fallback_reason`
+- provider/library version changes
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_runtime_passports.py tests/core/test_db.py -q
+```
+
+Expected: fail until passport model and service exist.
+
+- [ ] **Step 3: Implement runtime passport snapshots**
+
+Create `runtime_passport_snapshots` with immutable JSON and `passport_hash`.
+Build passports from scene contract runtime sections, runtime artifact records,
+worker selection reports, and model metadata. Attach passport ids/hashes to
+incidents when runtime context is available.
+
+- [ ] **Step 4: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_runtime_passports.py tests/core/test_db.py -q
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0012_runtime_passports.py \
+  backend/src/argus/services/runtime_passports.py \
+  backend/src/argus/services/scene_contracts.py \
+  backend/src/argus/services/app.py \
+  backend/tests/services/test_runtime_passports.py \
+  backend/tests/core/test_db.py
+git commit -m "feat(runtime): add incident runtime passports"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 16: Runtime Passport API And UI
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/api/v1/incidents.py`
+- Modify: `backend/src/argus/api/v1/operations.py`
+- Modify: `backend/tests/api/test_prompt9_routes.py`
+- Modify: `backend/tests/api/test_operations_endpoints.py`
+- Modify: `frontend/src/lib/api.generated.ts`
+- Create: `frontend/src/components/evidence/RuntimePassportPanel.tsx`
+- Create: `frontend/src/components/evidence/RuntimePassportPanel.test.tsx`
+- Modify: `frontend/src/pages/Incidents.tsx`
+- Modify: `frontend/src/pages/Settings.tsx`
+
+- [ ] **Step 1: Add failing API/UI tests**
+
+Cover:
+
+- `GET /api/v1/incidents/{incident_id}/runtime-passport`
+- incident response passport summary
+- Operations camera row passport status
+- UI renders backend, model hash, runtime artifact hash, target profile,
+  precision, validation timestamp, and fallback reason
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_prompt9_routes.py tests/api/test_operations_endpoints.py -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run src/components/evidence/RuntimePassportPanel.test.tsx
+```
+
+Expected: fail until API and UI are wired.
+
+- [ ] **Step 3: Implement passport routes and UI**
+
+Expose passport summaries in incident and operations payloads. Generate OpenAPI
+types and add `RuntimePassportPanel` to Evidence Desk and Operations without
+adding decorative cards inside cards.
+
+- [ ] **Step 4: Run tests and type generation**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_prompt9_routes.py tests/api/test_operations_endpoints.py -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run src/components/evidence/RuntimePassportPanel.test.tsx src/pages/Incidents.test.tsx src/pages/Settings.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/api/v1/incidents.py \
+  backend/src/argus/api/v1/operations.py \
+  backend/tests/api/test_prompt9_routes.py \
+  backend/tests/api/test_operations_endpoints.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/components/evidence/RuntimePassportPanel.tsx \
+  frontend/src/components/evidence/RuntimePassportPanel.test.tsx \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Incidents.test.tsx \
+  frontend/src/pages/Settings.test.tsx
+git commit -m "feat(ui): surface runtime passports"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 17: Operational Memory
+
+**Files:**
+
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0013_operational_memory_patterns.py`
+- Create: `backend/src/argus/services/operational_memory.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/api/v1/operations.py`
+- Test: `backend/tests/services/test_operational_memory.py`
+- Test: `backend/tests/api/test_operations_endpoints.py`
+- Create: `frontend/src/components/evidence/OperationalMemoryPanel.tsx`
+- Create: `frontend/src/components/evidence/OperationalMemoryPanel.test.tsx`
+- Modify: `frontend/src/pages/Incidents.tsx`
+- Modify: `frontend/src/pages/Settings.tsx`
+
+- [ ] **Step 1: Add failing memory tests**
+
+Cover:
+
+- repeated event bursts by site/camera/zone/class/time window
+- repeated clip/storage failures by provider and edge node
+- zone hot spots after scene contract changes
+- pattern records cite source incident ids and contract hashes
+
+- [ ] **Step 2: Run failing backend tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_operational_memory.py -q
+```
+
+Expected: fail until the service exists.
+
+- [ ] **Step 3: Implement pattern detection and API**
+
+Persist `operational_memory_patterns` with `pattern_hash`, source incident ids,
+source contract hashes, time window, severity, and summary. Expose current
+patterns through Operations and selected incident context.
+
+- [ ] **Step 4: Implement UI cards**
+
+Show observed patterns with source citations in Evidence Desk and Operations.
+Avoid predictive wording; use "observed pattern" language.
+
+- [ ] **Step 5: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_operational_memory.py tests/api/test_operations_endpoints.py -q
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/OperationalMemoryPanel.test.tsx \
+  src/pages/Incidents.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0013_operational_memory_patterns.py \
+  backend/src/argus/services/operational_memory.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/api/v1/operations.py \
+  backend/tests/services/test_operational_memory.py \
+  backend/tests/api/test_operations_endpoints.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/components/evidence/OperationalMemoryPanel.tsx \
+  frontend/src/components/evidence/OperationalMemoryPanel.test.tsx \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Incidents.test.tsx \
+  frontend/src/pages/Settings.test.tsx
+git commit -m "feat(operations): add operational memory patterns"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 18: Prompt-To-Policy Drafts
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0014_policy_drafts.py`
+- Create: `backend/src/argus/services/policy_drafts.py`
+- Create: `backend/src/argus/api/v1/policy_drafts.py`
+- Modify: `backend/src/argus/main.py`
+- Test: `backend/tests/services/test_policy_drafts.py`
+- Test: `backend/tests/api/test_policy_draft_routes.py`
+- Create: `frontend/src/components/policy/PolicyDraftReview.tsx`
+- Create: `frontend/src/components/policy/PolicyDraftReview.test.tsx`
+
+- [ ] **Step 1: Add failing policy draft tests**
+
+Cover:
+
+- prompt creates a draft, not an applied camera change
+- draft includes scene contract, privacy manifest, recording policy, vocabulary,
+  detection region, and rule diffs when requested
+- approval applies through existing camera/scene update paths
+- rejection does not apply changes
+- proposal, approval, rejection, and application write ledger entries
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_policy_drafts.py tests/api/test_policy_draft_routes.py -q
+```
+
+Expected: fail until policy draft service and routes exist.
+
+- [ ] **Step 3: Implement backend draft workflow**
+
+Create `policy_drafts` records with `status` values `draft`, `approved`,
+`rejected`, and `applied`. The compiler may use deterministic rule-based parsing
+first; it must return a structured diff and require approval before applying.
+
+- [ ] **Step 4: Implement draft review UI**
+
+Add a prompt field and diff review surface in the relevant scene/camera workflow.
+Use explicit Approve and Reject actions. Do not auto-apply prompt output.
+
+- [ ] **Step 5: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_policy_drafts.py tests/api/test_policy_draft_routes.py -q
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run src/components/policy/PolicyDraftReview.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0014_policy_drafts.py \
+  backend/src/argus/services/policy_drafts.py \
+  backend/src/argus/api/v1/policy_drafts.py \
+  backend/src/argus/main.py \
+  backend/tests/services/test_policy_drafts.py \
+  backend/tests/api/test_policy_draft_routes.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/components/policy/PolicyDraftReview.tsx \
+  frontend/src/components/policy/PolicyDraftReview.test.tsx
+git commit -m "feat(policy): add prompt-to-policy drafts"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 19: Identity-Light Cross-Camera Intelligence
+
+**Files:**
+
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0015_cross_camera_threads.py`
+- Create: `backend/src/argus/services/cross_camera_threads.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/api/v1/incidents.py`
+- Test: `backend/tests/services/test_cross_camera_threads.py`
+- Test: `backend/tests/api/test_prompt9_routes.py`
+- Create: `frontend/src/components/evidence/CrossCameraThreadPanel.tsx`
+- Create: `frontend/src/components/evidence/CrossCameraThreadPanel.test.tsx`
+- Modify: `frontend/src/pages/Incidents.tsx`
+
+- [ ] **Step 1: Add failing correlation tests**
+
+Cover:
+
+- class, zone, direction, time, and topology correlation
+- privacy manifest blocks disallowed non-biometric attributes
+- no face ID, biometric identity, or persistent person id fields are produced
+- thread records cite source incidents, manifest hashes, confidence, and
+  rationale
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_cross_camera_threads.py -q
+```
+
+Expected: fail until the thread service exists.
+
+- [ ] **Step 3: Implement identity-light threads**
+
+Create `cross_camera_threads` from privacy-allowed incident metadata only. Store
+thread hash, source incident ids, privacy manifest hashes, confidence, and
+rationale. Expose thread context on incident routes.
+
+- [ ] **Step 4: Implement Evidence Desk panel**
+
+Show thread context as a support panel with source incident citations and
+privacy labels. Never label a thread as a person identity.
+
+- [ ] **Step 5: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_cross_camera_threads.py tests/api/test_prompt9_routes.py -q
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/CrossCameraThreadPanel.test.tsx \
+  src/pages/Incidents.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0015_cross_camera_threads.py \
+  backend/src/argus/services/cross_camera_threads.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/api/v1/incidents.py \
+  backend/tests/services/test_cross_camera_threads.py \
+  backend/tests/api/test_prompt9_routes.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/components/evidence/CrossCameraThreadPanel.tsx \
+  frontend/src/components/evidence/CrossCameraThreadPanel.test.tsx \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/pages/Incidents.test.tsx
+git commit -m "feat(evidence): add identity-light cross-camera threads"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 20: Supervisor Operations Data Contract
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0016_supervisor_operations.py`
+- Create: `backend/src/argus/services/supervisor_operations.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/api/v1/operations.py`
+- Test: `backend/tests/services/test_supervisor_operations.py`
+- Test: `backend/tests/api/test_operations_endpoints.py`
+- Test: `backend/tests/core/test_db.py`
+
+- [ ] **Step 1: Add failing supervisor contract tests**
+
+Cover:
+
+- persistent worker assignment/reassignment records
+- per-worker runtime reports with heartbeat, runtime state, restart count,
+  last error, runtime artifact id, and scene contract hash
+- lifecycle request creation for Start, Stop, Restart, and Drain
+- no lifecycle route shells out from the API process
+- stale/missing supervisor reports render honest `unknown` or `not_reported`
+  states
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_supervisor_operations.py \
+  tests/api/test_operations_endpoints.py \
+  tests/core/test_db.py \
+  -q
+```
+
+Expected: fail until the supervisor data contract exists.
+
+- [ ] **Step 3: Implement assignments, reports, and requests**
+
+Add `worker_assignments`, `worker_runtime_reports`, and
+`operations_lifecycle_requests`. Extend Operations fleet responses to include
+desired assignment, latest runtime truth, lifecycle request state, and last
+error.
+
+- [ ] **Step 4: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_supervisor_operations.py \
+  tests/api/test_operations_endpoints.py \
+  tests/core/test_db.py \
+  -q
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0016_supervisor_operations.py \
+  backend/src/argus/services/supervisor_operations.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/api/v1/operations.py \
+  backend/tests/services/test_supervisor_operations.py \
+  backend/tests/api/test_operations_endpoints.py \
+  backend/tests/core/test_db.py
+git commit -m "feat(operations): add supervisor runtime contract"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 21: Operations Lifecycle And Assignment UI
+
+**Files:**
+
+- Modify: `frontend/src/hooks/use-operations.ts`
+- Modify: `frontend/src/hooks/use-operations.test.ts`
+- Create: `frontend/src/components/operations/SupervisorLifecycleControls.tsx`
+- Create: `frontend/src/components/operations/SupervisorLifecycleControls.test.tsx`
+- Modify: `frontend/src/pages/Settings.tsx`
+- Modify: `frontend/src/pages/Settings.test.tsx`
+
+- [ ] **Step 1: Add failing UI tests**
+
+Cover:
+
+- Start, Stop, Restart, and Drain buttons create lifecycle requests
+- lifecycle controls are disabled when no supervisor owns the worker
+- assignment/reassignment controls update desired worker location
+- runtime heartbeat, restart count, last error, runtime backend, and scene
+  contract hash render in Operations
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/hooks/use-operations.test.ts \
+  src/components/operations/SupervisorLifecycleControls.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: fail until the controls are implemented.
+
+- [ ] **Step 3: Implement Operations controls**
+
+Use API mutations that create lifecycle requests and assignment changes. Do not
+show shell-command semantics for production controls. Keep manual dev command
+copy for unsupervised local mode.
+
+- [ ] **Step 4: Run tests**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/hooks/use-operations.test.ts \
+  src/components/operations/SupervisorLifecycleControls.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add frontend/src/lib/api.generated.ts \
+  frontend/src/hooks/use-operations.ts \
+  frontend/src/hooks/use-operations.test.ts \
+  frontend/src/components/operations/SupervisorLifecycleControls.tsx \
+  frontend/src/components/operations/SupervisorLifecycleControls.test.tsx \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Settings.test.tsx
+git commit -m "feat(operations): add supervisor lifecycle controls"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 22: Edge Credential Rotation And Bootstrap Hardening
+
+**Files:**
+
+- Modify: `backend/src/argus/services/supervisor_operations.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/api/v1/operations.py`
+- Test: `backend/tests/services/test_supervisor_operations.py`
+- Test: `backend/tests/api/test_operations_endpoints.py`
+- Modify: `frontend/src/pages/Settings.tsx`
+- Modify: `frontend/src/pages/Settings.test.tsx`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/runbook.md`
+
+- [ ] **Step 1: Add failing rotation tests**
+
+Cover:
+
+- edge credential rotation invalidates prior bootstrap material
+- new credential material is returned once and not persisted in plaintext
+- rotation writes an operations lifecycle/audit record
+- UI warns that connected edge nodes must pick up the rotated credential
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_supervisor_operations.py tests/api/test_operations_endpoints.py -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run src/pages/Settings.test.tsx
+```
+
+Expected: fail until rotation is implemented.
+
+- [ ] **Step 3: Implement rotation and docs**
+
+Add `POST /api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate`.
+Return one-time secret material only in the response. Document the production
+rotation sequence and local lab limitations.
+
+- [ ] **Step 4: Run tests and docs check**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_supervisor_operations.py tests/api/test_operations_endpoints.py -q
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run src/pages/Settings.test.tsx
+git diff --check -- docs/operator-deployment-playbook.md docs/runbook.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add backend/src/argus/services/supervisor_operations.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/api/v1/operations.py \
+  backend/tests/services/test_supervisor_operations.py \
+  backend/tests/api/test_operations_endpoints.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Settings.test.tsx \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md
+git commit -m "feat(operations): rotate edge credentials"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 23: Production Linux And Jetson Runtime Artifact Soak
+
+**Files:**
+
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0017_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/services/runtime_soak.py`
+- Create: `backend/src/argus/api/v1/runtime_soak.py`
+- Modify: `backend/src/argus/main.py`
+- Test: `backend/tests/services/test_runtime_soak.py`
+- Test: `backend/tests/api/test_runtime_soak_routes.py`
+- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `docs/model-loading-and-configuration-guide.md`
+- Modify: `docs/runbook.md`
+
+- [ ] **Step 1: Add failing soak tests**
+
+Cover:
+
+- soak run records for fixed-vocab TensorRT artifacts such as YOLO26n
+- soak run records for compiled YOLOE S/open-vocab scene artifacts
+- pass/fail status, metrics, target profile, runtime artifact id, and edge node
+  id
+- fallback reason captured when optimized runtime is unavailable
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_runtime_soak.py tests/api/test_runtime_soak_routes.py -q
+```
+
+Expected: fail until soak run service/routes exist.
+
+- [ ] **Step 3: Implement soak run recording**
+
+Add `runtime_artifact_soak_runs`, service helpers, and routes to record target
+Jetson validation results. Do not fake hardware validation in code; unit tests
+cover the control-plane record, and docs define the physical soak procedure.
+
+- [ ] **Step 4: Document the first-site validation procedure**
+
+Document:
+
+- Linux master deployment validation
+- Jetson edge worker validation
+- fixed-vocab TensorRT build/register/validate/select sequence
+- compiled YOLOE S/open-vocab build/register/validate/select sequence
+- restart recovery, evidence clip review, credential rotation, fallback, and
+  rollback checks
+
+- [ ] **Step 5: Run tests and docs check**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_runtime_soak.py tests/api/test_runtime_soak_routes.py -q
+cd /Users/yann.moren/vision
+git diff --check -- docs/imac-master-orin-lab-test-guide.md docs/model-loading-and-configuration-guide.md docs/runbook.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0017_runtime_artifact_soak_runs.py \
+  backend/src/argus/services/runtime_soak.py \
+  backend/src/argus/api/v1/runtime_soak.py \
+  backend/src/argus/main.py \
+  backend/tests/services/test_runtime_soak.py \
+  backend/tests/api/test_runtime_soak_routes.py \
+  docs/imac-master-orin-lab-test-guide.md \
+  docs/model-loading-and-configuration-guide.md \
+  docs/runbook.md
+git commit -m "feat(runtime): record Jetson artifact soak runs"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 24: Track C DeepStream Runtime Lane
+
+**Gate:** Start this task only after Task 23 has recorded passing first-site
+Jetson soak evidence for the Track A/B runtime artifacts, or after the user
+explicitly accepts implementing DeepStream before that evidence exists.
+
+**Files:**
+
+- Create: `backend/src/argus/vision/deepstream_runtime.py`
+- Create: `backend/src/argus/vision/deepstream_metadata.py`
+- Modify: `backend/src/argus/vision/runtime.py`
+- Modify: `backend/src/argus/vision/runtime_selection.py`
+- Modify: `backend/src/argus/inference/engine.py`
+- Create: `infra/deepstream/README.md`
+- Create: `infra/deepstream/docker-compose.jetson.yml`
+- Test: `backend/tests/vision/test_deepstream_runtime.py`
+- Test: `backend/tests/vision/test_runtime_selection.py`
+- Test: `backend/tests/inference/test_engine.py`
+- Modify: `docs/model-loading-and-configuration-guide.md`
+- Modify: `docs/runbook.md`
+
+- [ ] **Step 1: Verify the gate**
+
+Check for a passing Task 23 soak record or a user message explicitly accepting
+the risk:
+
+```bash
+cd /Users/yann.moren/vision
+rg -n "DeepStream gate|soak run|YOLO26n|YOLOE S" docs/runbook.md docs/model-loading-and-configuration-guide.md
+```
+
+Expected: docs identify the soak evidence or the accepted exception.
+
+- [ ] **Step 2: Add failing DeepStream tests**
+
+Cover:
+
+- DeepStream runtime backend contract
+- metadata bridge into existing track lifecycle fields
+- DeepStream runtime selection only on supported Jetson target profiles
+- fallback to existing non-DeepStream runtime when unavailable
+
+- [ ] **Step 3: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/vision/test_deepstream_runtime.py \
+  tests/vision/test_runtime_selection.py \
+  tests/inference/test_engine.py \
+  -q
+```
+
+Expected: fail until DeepStream runtime adapter exists.
+
+- [ ] **Step 4: Implement DeepStream adapter and packaging**
+
+Add a Jetson-only adapter that produces the same detection/track metadata shape
+as existing runtimes. Add `infra/deepstream/` packaging docs and keep fallback
+to existing runtime paths explicit.
+
+- [ ] **Step 5: Run tests and docs check**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/vision/test_deepstream_runtime.py \
+  tests/vision/test_runtime_selection.py \
+  tests/inference/test_engine.py \
+  -q
+cd /Users/yann.moren/vision
+git diff --check -- infra/deepstream/README.md infra/deepstream/docker-compose.jetson.yml docs/model-loading-and-configuration-guide.md docs/runbook.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/vision/deepstream_runtime.py \
+  backend/src/argus/vision/deepstream_metadata.py \
+  backend/src/argus/vision/runtime.py \
+  backend/src/argus/vision/runtime_selection.py \
+  backend/src/argus/inference/engine.py \
+  backend/tests/vision/test_deepstream_runtime.py \
+  backend/tests/vision/test_runtime_selection.py \
+  backend/tests/inference/test_engine.py \
+  infra/deepstream/README.md \
+  infra/deepstream/docker-compose.jetson.yml \
+  docs/model-loading-and-configuration-guide.md \
+  docs/runbook.md
+git commit -m "feat(runtime): add DeepStream runtime lane"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 25: Full Runway Verification And Handoff Refresh
+
+**Files:**
+
+- Modify: `docs/superpowers/status/2026-05-11-next-chat-accountable-scene-intelligence-handoff.md`
+- Modify: `docs/runbook.md`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/model-loading-and-configuration-guide.md`
+
+- [ ] **Step 1: Backend focused suite**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_scene_contracts.py \
+  tests/services/test_privacy_manifests.py \
+  tests/services/test_evidence_ledger.py \
+  tests/services/test_evidence_storage.py \
+  tests/services/test_incident_capture.py \
+  tests/services/test_runtime_passports.py \
+  tests/services/test_operational_memory.py \
+  tests/services/test_policy_drafts.py \
+  tests/services/test_cross_camera_threads.py \
+  tests/services/test_supervisor_operations.py \
+  tests/services/test_runtime_soak.py \
+  tests/api/test_prompt9_routes.py \
+  tests/api/test_operations_endpoints.py \
+  tests/api/test_policy_draft_routes.py \
+  tests/api/test_runtime_soak_routes.py \
+  tests/vision/test_camera_source.py \
+  tests/vision/test_runtime_selection.py \
+  tests/inference/test_engine.py \
+  tests/core/test_db.py \
+  -q
+```
+
+- [ ] **Step 2: Frontend focused suite**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/evidence-signals.test.ts \
+  src/components/evidence/EvidenceTimeline.test.tsx \
+  src/components/evidence/CaseContextStrip.test.tsx \
+  src/components/evidence/AccountabilityStrip.test.tsx \
+  src/components/evidence/RuntimePassportPanel.test.tsx \
+  src/components/evidence/OperationalMemoryPanel.test.tsx \
+  src/components/evidence/CrossCameraThreadPanel.test.tsx \
+  src/components/policy/PolicyDraftReview.test.tsx \
+  src/components/operations/SupervisorLifecycleControls.test.tsx \
+  src/pages/Incidents.test.tsx \
+  src/pages/Settings.test.tsx \
+  src/components/cameras/CameraWizard.test.tsx
+```
+
+- [ ] **Step 3: Full frontend and backend checks**
+
+```bash
+cd /Users/yann.moren/vision
+CI=1 corepack pnpm --dir frontend test -- --run
+corepack pnpm --dir frontend build
+corepack pnpm --dir frontend lint
+cd /Users/yann.moren/vision/backend
+python3 -m uv run ruff check src tests
+python3 -m uv run mypy src
+```
+
+Record exact unrelated pre-existing failures if any remain.
+
+- [ ] **Step 4: Refresh docs and handoff**
+
+Update the handoff with:
+
+- completed task list and commit hashes
+- verification results
+- any blocked hardware soak or DeepStream gate notes
+- next recommended branch/chat prompt
+
+- [ ] **Step 5: Commit and push docs**
+
+```bash
+git add docs/superpowers/status/2026-05-11-next-chat-accountable-scene-intelligence-handoff.md \
+  docs/runbook.md \
+  docs/operator-deployment-playbook.md \
+  docs/model-loading-and-configuration-guide.md
+git commit -m "docs(handoff): refresh full accountable runtime runway"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Self-Review
+
+- Spec coverage: Tasks 1-12 cover accountable scene contracts, privacy
+  manifests, evidence ledger, artifact-aware clips, edge USB/UVC, storage, API,
+  UI, and docs. Tasks 13-14 cover the unexecuted Evidence Desk polish and
+  optional still snapshots. Tasks 15-19 cover Runtime Passport, Operational
+  Memory, Prompt-To-Policy, and Identity-Light Cross-Camera Intelligence. Tasks
+  20-22 cover Fleet/Operations supervisor hardening and credential rotation.
+  Task 23 covers Linux master plus Jetson TensorRT/open-vocab soak validation.
+  Task 24 covers gated Track C / DeepStream. Task 25 refreshes verification and
+  handoff.
+- Placeholder scan: no follow-up queue remains; all handoff items are expressed
+  as executable tasks with owned files, verification commands, commit messages,
+  and push steps.
+- Gate consistency: DeepStream remains in the one-go runway, but it is gated
+  behind first-site Track A/B Jetson soak evidence or explicit user acceptance
+  of the risk.
