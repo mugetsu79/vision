@@ -1545,6 +1545,29 @@ After Task 9 lands, retune or fold in:
 Treat this as the next Evidence Desk refinement before moving into the larger
 product differentiators below, unless the user explicitly changes priority.
 
+### Fleet And Operations Production Hardening
+
+Carry these forward from earlier handoffs and deployment docs. They remain
+pertinent, but they are not part of Tasks 1-12 unless the user redirects:
+
+- supervisor-backed Start/Stop/Restart/Drain actions in Operations
+- per-worker runtime heartbeat, worker state, restart count, and last-error
+  reporting from central and edge supervisors
+- persistent worker assignment/reassignment workflows
+- production edge credential rotation and bootstrap automation
+- production Linux master plus Jetson edge deployment validation
+
+### Evidence Media And Runtime Soak Follow-Up
+
+Carry these forward until explicitly completed or intentionally dropped:
+
+- incident still snapshot generation if still previews become required evidence
+  rather than optional convenience metadata
+- first-site Jetson soak validation for registered TensorRT `.engine`
+  artifacts, including chosen fixed-vocab artifacts such as YOLO26n
+- first-site Jetson soak validation for compiled YOLOE S/open-vocab scene
+  artifacts keyed to stable scene vocabularies
+
 ### 4. Runtime Passport
 
 Create a dedicated runtime passport from data already captured in scene

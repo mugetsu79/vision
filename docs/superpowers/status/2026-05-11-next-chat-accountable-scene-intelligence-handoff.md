@@ -14,15 +14,17 @@ Continue from the pushed branch:
 codex/omnisight-ui-spec-implementation
 ```
 
-Latest pushed implementation checkpoint before this handoff update:
+Latest pushed checkpoint before this carry-forward update:
 
 ```text
-712e0199 docs(cameras): add edge usb source support plan
+22730157 docs(handoff): carry forward evidence desk polish
 ```
 
 Recent checkpoints on this branch:
 
 ```text
+22730157 docs(handoff): carry forward evidence desk polish
+5fadfae7 docs(handoff): refresh accountable scene next steps
 712e0199 docs(cameras): add edge usb source support plan
 c4f64677 docs(evidence): plan accountable scene intelligence
 654cfd31 docs(models): add loading and configuration guide
@@ -133,8 +135,14 @@ Important posture:
 - ONNX model rows remain canonical camera choices for fixed-vocab production.
 - Raw TensorRT `.engine` files are target-specific runtime artifacts, not
   primary camera models.
+- The code supports registered TensorRT `.engine` artifacts, but production
+  artifacts still need to be built, registered, validated, and soaked on the
+  target Jetson for the chosen fixed-vocab model, for example YOLO26n.
 - Dynamic `.pt` open vocab remains the discovery/live vocabulary-change path.
 - Compiled scene artifacts are for saved stable scene vocabularies.
+- Compiled YOLOE S/open-vocab scene artifacts are supported by the build and
+  selection path, but each stable scene vocabulary still needs its own
+  target-specific artifact build, registration, validation, and soak.
 - Track C / DeepStream is still not implemented.
 
 Relevant docs:
@@ -236,6 +244,31 @@ Current status:
   follow-up plan or explicitly fold its useful pieces into the accountable
   Evidence Desk UI before closing the evidence surface
 
+### Fleet And Operations Production Hardening
+
+These remain pertinent from earlier handoffs and current deployment docs:
+
+- supervisor-backed Start/Stop/Restart/Drain actions in Operations
+- per-worker runtime heartbeat, worker state, restart count, and last-error
+  reporting from central and edge supervisors
+- persistent worker assignment/reassignment workflows
+- production edge credential rotation and bootstrap automation
+- production Linux master plus Jetson edge deployment validation
+- first-site Jetson soak validation for registered TensorRT `.engine`
+  artifacts and compiled scene open-vocab artifacts
+
+Do not fold these into the Accountable Scene Intelligence foundation unless the
+user explicitly redirects. Keep them visible in future handoffs until they are
+planned and completed.
+
+### Evidence Media And Snapshot Follow-Up
+
+Incident clip capture is now part of the Accountable Scene Intelligence plan.
+Incident still snapshot generation remains optional but pertinent if deployments
+need still previews as first-class evidence rather than convenience metadata.
+The API/UI may continue to support `snapshot_url: null`; do not assume every
+incident has a still image.
+
 ### Later Product Differentiators
 
 After the accountable evidence foundation and retuned Evidence Desk polish,
@@ -268,6 +301,8 @@ passed real Jetson soak validation.
   user redirects.
 - Keep the pending Evidence Desk polish queue visible; do not drop it from
   future handoffs.
+- Keep Fleet/Ops production hardening, evidence snapshot follow-up, and Jetson
+  runtime soak validation visible in future handoffs.
 - Do not implement Runtime Passport, Operational Memory, Prompt-To-Policy, or
   Identity-Light cross-camera intelligence until this foundation and the retuned
   Evidence Desk polish are complete or the user explicitly redirects.
@@ -333,6 +368,9 @@ Working rules:
 - Treat edge USB/UVC camera source support as production edge-first.
 - Make incident clips reviewable in edge mode when recording is enabled.
 - Support local edge storage and remote/cloud S3-compatible storage options.
+- Keep the unexecuted Evidence Desk polish, Fleet/Ops production hardening,
+  evidence snapshot follow-up, and Jetson runtime soak validation queues visible
+  in future handoffs.
 - Do not implement Runtime Passport, Operational Memory, Prompt-To-Policy, or Identity-Light cross-camera intelligence yet.
 - Do not implement Track C / DeepStream yet.
 - Do not reopen RTSP/TensorRT debugging unless fresh logs prove it is needed.
