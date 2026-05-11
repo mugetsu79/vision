@@ -1966,6 +1966,7 @@ def _privacy_detections_for_stream(
 def _telemetry_track_from_lifecycle_track(track: LifecycleTrack) -> TelemetryTrack:
     detection = track.detection
     x1, y1, x2, y2 = detection.bbox
+    track_state = track.state if track.state in ("active", "coasting") else None
     return TelemetryTrack(
         class_name=detection.class_name,
         confidence=detection.confidence,
@@ -1977,7 +1978,7 @@ def _telemetry_track_from_lifecycle_track(track: LifecycleTrack) -> TelemetryTra
         },
         track_id=track.stable_track_id,
         stable_track_id=track.stable_track_id,
-        track_state=track.state,
+        track_state=track_state,
         last_seen_age_ms=track.last_seen_age_ms,
         source_track_id=track.source_track_id,
         speed_kph=detection.speed_kph,

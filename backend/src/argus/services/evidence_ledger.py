@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -138,7 +138,7 @@ async def _load_latest_entry(
 
 
 def _json_safe_payload(payload: Mapping[str, object]) -> dict[str, Any]:
-    return json.loads(canonical_json(payload))
+    return cast(dict[str, Any], json.loads(canonical_json(payload)))
 
 
 def _json_default(value: object) -> str:

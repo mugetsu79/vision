@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -83,7 +83,7 @@ class PrivacyManifestService:
             snapshot = PrivacyManifestSnapshot(
                 tenant_id=tenant_id,
                 camera_id=camera_id,
-                schema_version=int(manifest.get("schema_version", SCHEMA_VERSION)),
+                schema_version=_schema_version(manifest),
                 manifest_hash=manifest_hash,
                 manifest=_json_safe_manifest(manifest),
             )
@@ -119,4 +119,13 @@ def _residency_for_storage_profile(profile: EvidenceStorageProfile) -> str:
 
 
 def _json_safe_manifest(manifest: Mapping[str, object]) -> dict[str, Any]:
-    return json.loads(canonical_json(manifest))
+    return cast(dict[str, Any], json.loads(canonical_json(manifest)))
+
+
+def _schema_version(manifest: Mapping[str, object]) -> int:
+    schema_version = manifest.get("schema_version", SCHEMA_VERSION)
+    if isinstance(schema_version, int):
+        return schema_version
+    if isinstance(schema_version, str):
+        return int(schema_version)
+    return SCHEMA_VERSION

@@ -76,6 +76,25 @@ class _FakeSession:
         if hasattr(camera, "updated_at") and camera.updated_at is None:
             camera.updated_at = now
 
+    async def execute(self, statement: object) -> _FakeResult:
+        del statement
+        return _FakeResult()
+
+    async def get(self, model: object, ident: object) -> object | None:
+        del model, ident
+        return None
+
+
+class _FakeResult:
+    def scalars(self) -> _FakeResult:
+        return self
+
+    def all(self) -> list[object]:
+        return []
+
+    def scalar_one_or_none(self) -> object | None:
+        return None
+
 
 class _FakeSessionFactory:
     def __call__(self) -> _FakeSession:
@@ -195,14 +214,14 @@ async def test_create_camera_allows_detection_only_scene_without_homography(
     tenant_id = uuid4()
     site_id = uuid4()
     model_id = uuid4()
+    model = _detector_model(model_id)
+    site = _site(site_id, tenant_id)
     service = CameraService(
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=_FakeAuditLogger(),
         events=None,
     )
-    model = _detector_model(model_id)
-    site = _site(site_id, tenant_id)
 
     async def fake_load_model(session, model_id_arg):  # noqa: ANN001
         assert model_id_arg == model_id
@@ -294,13 +313,13 @@ async def test_update_camera_rejects_enabling_speed_without_effective_homography
     model_id = uuid4()
     camera_id = uuid4()
     camera = _camera(camera_id, site_id, model_id, settings, homography=None)
+    model = _detector_model(model_id)
     service = CameraService(
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=_FakeAuditLogger(),
         events=None,
     )
-    model = _detector_model(model_id)
 
     async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
         assert tenant_id_arg == tenant_id
@@ -358,13 +377,13 @@ async def test_update_camera_rejects_clearing_homography_when_speed_is_enabled(
             "motion_metrics": {"speed_enabled": True},
         },
     )
+    model = _detector_model(model_id)
     service = CameraService(
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=_FakeAuditLogger(),
         events=None,
     )
-    model = _detector_model(model_id)
 
     async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
         assert tenant_id_arg == tenant_id
@@ -440,13 +459,13 @@ async def test_update_camera_normalizes_detection_region_coordinates(
         created_at=now,
         updated_at=now,
     )
+    model = _detector_model(model_id)
     service = CameraService(
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=_FakeAuditLogger(),
         events=None,
     )
-    model = _detector_model(model_id)
 
     async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
         assert tenant_id_arg == tenant_id
@@ -514,12 +533,6 @@ async def test_update_camera_rejects_detection_region_coordinates_outside_frame(
         fps_cap=25,
         created_at=now,
         updated_at=now,
-    )
-    service = CameraService(
-        session_factory=_FakeSessionFactory(),
-        settings=settings,
-        audit_logger=_FakeAuditLogger(),
-        events=None,
     )
     model = _detector_model(model_id)
 

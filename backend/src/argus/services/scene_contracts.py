@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -88,7 +88,7 @@ class SceneContractService:
             snapshot = SceneContractSnapshot(
                 tenant_id=tenant_id,
                 camera_id=camera_id,
-                schema_version=int(contract.get("schema_version", SCHEMA_VERSION)),
+                schema_version=_schema_version(contract),
                 contract_hash=contract_hash,
                 contract=_json_safe_contract(contract),
             )
@@ -116,4 +116,13 @@ async def _load_snapshot_by_hash(
 
 
 def _json_safe_contract(contract: Mapping[str, object]) -> dict[str, Any]:
-    return json.loads(canonical_json(contract))
+    return cast(dict[str, Any], json.loads(canonical_json(contract)))
+
+
+def _schema_version(contract: Mapping[str, object]) -> int:
+    schema_version = contract.get("schema_version", SCHEMA_VERSION)
+    if isinstance(schema_version, int):
+        return schema_version
+    if isinstance(schema_version, str):
+        return int(schema_version)
+    return SCHEMA_VERSION

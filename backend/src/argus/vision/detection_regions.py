@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -46,7 +47,7 @@ class _PreparedDetectionRegion:
 
 
 class DetectionRegionPolicy:
-    def __init__(self, regions: list[DetectionRegion | dict[str, Any]]) -> None:
+    def __init__(self, regions: Sequence[DetectionRegion | dict[str, Any]]) -> None:
         self._regions = [_prepare_region(region) for region in regions]
 
     def filter_detections(

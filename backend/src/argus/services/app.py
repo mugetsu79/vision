@@ -3658,7 +3658,7 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
         runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         attribute_rules=list(camera.attribute_rules),
         zones=cast(Any, list(camera.zones)),
-        vision_profile=camera.vision_profile or {},
+        vision_profile=SceneVisionProfile.model_validate(camera.vision_profile or {}),
         detection_regions=cast(Any, list(camera.detection_regions or [])),
         homography=(
             HomographyPayload.model_validate(camera.homography)
@@ -3869,9 +3869,9 @@ def _camera_source_settings_from_camera(
         uri = uri or _rtsp_response_uri_from_source_config(source_config)
         return CameraSourceSettings(kind=CameraSourceKind.RTSP, uri=uri, label=label)
 
-    uri = source_config.get("uri")
-    if isinstance(uri, str) and uri:
-        return CameraSourceSettings(kind=source_kind, uri=uri, label=label)
+    configured_uri = source_config.get("uri")
+    if isinstance(configured_uri, str) and configured_uri:
+        return CameraSourceSettings(kind=source_kind, uri=configured_uri, label=label)
     capture_uri = source_config.get("capture_uri")
     if source_kind is CameraSourceKind.USB and isinstance(capture_uri, str):
         return CameraSourceSettings(kind=source_kind, uri=f"usb://{capture_uri}", label=label)
