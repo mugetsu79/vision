@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -20,7 +21,14 @@ from argus.models.enums import (
     RuntimeVocabularySource,
     TrackerType,
 )
-from argus.models.tables import Camera, Model, ModelRuntimeArtifact
+from argus.models.tables import (
+    Camera,
+    Model,
+    ModelRuntimeArtifact,
+    PrivacyManifestSnapshot,
+    SceneContractSnapshot,
+    Tenant,
+)
 from argus.services.app import CameraService, _camera_to_worker_config, derive_browser_profiles
 from argus.vision.vocabulary import hash_vocabulary
 
@@ -119,6 +127,9 @@ class _WorkerConfigSession:
         assert isinstance(models, dict)
         if model_cls is Model:
             return models.get(model_id)
+        if model_cls is Tenant:
+            tenant = self.state.get("tenant")
+            return tenant if getattr(tenant, "id", None) == model_id else None
         return None
 
     async def execute(self, statement):  # noqa: ANN001
@@ -126,8 +137,52 @@ class _WorkerConfigSession:
             artifacts = self.state["artifacts"]
             assert isinstance(artifacts, list)
             return _Result(artifacts)
+        if "privacy_manifest_snapshots" in str(statement):
+            snapshots = self.state["privacy_manifest_snapshots"]
+            assert isinstance(snapshots, list)
+            manifest_hash = _hash_param_from_statement(statement)
+            return _Result(
+                [
+                    snapshot
+                    for snapshot in snapshots
+                    if manifest_hash is None or snapshot.manifest_hash == manifest_hash
+                ]
+            )
+        if "scene_contract_snapshots" in str(statement):
+            snapshots = self.state["scene_contract_snapshots"]
+            assert isinstance(snapshots, list)
+            contract_hash = _hash_param_from_statement(statement)
+            return _Result(
+                [
+                    snapshot
+                    for snapshot in snapshots
+                    if contract_hash is None or snapshot.contract_hash == contract_hash
+                ]
+            )
         camera = self.state["camera"]
         return _Result([camera])
+
+    def add(self, value: object) -> None:
+        if isinstance(value, PrivacyManifestSnapshot):
+            value.id = value.id or uuid4()
+            snapshots = self.state["privacy_manifest_snapshots"]
+            assert isinstance(snapshots, list)
+            snapshots.append(value)
+        if isinstance(value, SceneContractSnapshot):
+            value.id = value.id or uuid4()
+            snapshots = self.state["scene_contract_snapshots"]
+            assert isinstance(snapshots, list)
+            snapshots.append(value)
+
+    async def commit(self) -> None:
+        self.state["commits"] = int(self.state.get("commits", 0)) + 1
+
+    async def rollback(self) -> None:
+        self.state["rollbacks"] = int(self.state.get("rollbacks", 0)) + 1
+
+    async def refresh(self, value: object) -> None:
+        if isinstance(value, PrivacyManifestSnapshot | SceneContractSnapshot):
+            value.created_at = value.created_at or datetime.now(tz=UTC)
 
 
 class _WorkerConfigSessionFactory:
@@ -137,11 +192,15 @@ class _WorkerConfigSessionFactory:
         camera: Camera,
         models: dict[object, Model],
         artifacts: list[ModelRuntimeArtifact],
+        tenant: Tenant | None = None,
     ) -> None:
         self.state: dict[str, object] = {
             "camera": camera,
             "models": models,
             "artifacts": artifacts,
+            "privacy_manifest_snapshots": [],
+            "scene_contract_snapshots": [],
+            "tenant": tenant,
         }
 
     def __call__(self) -> _WorkerConfigSession:
@@ -153,12 +212,12 @@ class _FakeAuditLogger:
         return None
 
 
-def _tenant_context():
+def _tenant_context(tenant_id=None):  # noqa: ANN001
     from argus.api.contracts import TenantContext
     from argus.core.security import AuthenticatedUser
     from argus.models.enums import RoleEnum
 
-    tenant_id = uuid4()
+    tenant_id = tenant_id or uuid4()
     user = AuthenticatedUser(
         subject="worker-test",
         email="worker@argus.local",
@@ -172,8 +231,28 @@ def _tenant_context():
     return TenantContext(tenant_id=tenant_id, tenant_slug="argus-dev", user=user)
 
 
-def _encrypted_rtsp_url(settings: Settings) -> str:
-    return encrypt_rtsp_url("rtsp://lab-camera.local/live", settings)
+def _tenant(tenant_id, *, allow_plaintext_plates: bool = False) -> Tenant:  # noqa: ANN001
+    return Tenant(
+        id=tenant_id,
+        name="Worker Test Tenant",
+        slug="worker-test",
+        anpr_store_plaintext=allow_plaintext_plates,
+        anpr_plaintext_justification="Dock audit policy" if allow_plaintext_plates else None,
+    )
+
+
+def _encrypted_rtsp_url(
+    settings: Settings,
+    url: str = "rtsp://lab-camera.local/live",
+) -> str:
+    return encrypt_rtsp_url(url, settings)
+
+
+def _hash_param_from_statement(statement) -> str | None:  # noqa: ANN001
+    for key, value in statement.compile().params.items():
+        if "hash" in key and isinstance(value, str):
+            return value
+    return None
 
 
 def _runtime_artifact(
@@ -359,6 +438,112 @@ async def test_worker_config_includes_valid_fixed_vocab_runtime_artifact() -> No
 
     assert [candidate.id for candidate in config.runtime_artifacts] == [artifact.id]
     assert config.runtime_artifacts[0].runtime_backend == "tensorrt_engine"
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_accountable_scene_hashes_and_recording_policy() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert config.recording_policy.enabled is True
+    assert config.recording_policy.mode == "event_clip"
+    assert config.recording_policy.pre_seconds == 4
+    assert config.recording_policy.post_seconds == 8
+    assert config.recording_policy.fps == 10
+    assert config.recording_policy.max_duration_seconds == 15
+    assert config.scene_contract_hash is not None
+    assert len(config.scene_contract_hash) == 64
+    assert config.privacy_manifest_hash is not None
+    assert len(config.privacy_manifest_hash) == 64
+
+
+@pytest.mark.asyncio
+async def test_worker_config_snapshots_redact_source_and_reflect_tenant_privacy() -> None:
+    settings = _settings()
+    tenant_id = uuid4()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        rtsp_url_encrypted=_encrypted_rtsp_url(
+            settings,
+            "rtsp://user:pass@camera.local/live?api_key=secret&signature=abc",
+        ),
+    )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[],
+        tenant=_tenant(tenant_id, allow_plaintext_plates=True),
+    )
+    service = CameraService(
+        session_factory=session_factory,
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    await service.get_worker_config(_tenant_context(tenant_id), camera.id)
+
+    privacy_snapshots = session_factory.state["privacy_manifest_snapshots"]
+    scene_snapshots = session_factory.state["scene_contract_snapshots"]
+    assert isinstance(privacy_snapshots, list)
+    assert isinstance(scene_snapshots, list)
+    privacy_manifest = privacy_snapshots[0].manifest
+    scene_contract = scene_snapshots[0].contract
+    source = scene_contract["camera"]["source"]
+    assert privacy_manifest["plates"]["plaintext_storage"] == "allowed"
+    assert privacy_manifest["plates"]["plaintext_justification"] == "Dock audit policy"
+    assert source["uri"] == "rtsp://camera.local/live"
+    assert "secret" not in source["uri"]
+    assert "signature" not in source["uri"]
+    assert "user:pass" not in source["uri"]
+
+
+@pytest.mark.asyncio
+async def test_worker_config_rejection_does_not_commit_scene_snapshots() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+        vision_profile={
+            "accuracy_mode": "balanced",
+            "compute_tier": "edge_standard",
+            "motion_metrics": {"speed_enabled": True},
+        },
+        homography=None,
+    )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[],
+    )
+    service = CameraService(
+        session_factory=session_factory,
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    with pytest.raises(HTTPException):
+        await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert session_factory.state["privacy_manifest_snapshots"] == []
+    assert session_factory.state["scene_contract_snapshots"] == []
 
 
 @pytest.mark.asyncio

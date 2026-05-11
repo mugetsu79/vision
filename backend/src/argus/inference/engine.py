@@ -18,7 +18,7 @@ from numpy.typing import NDArray
 from prometheus_client import start_http_server
 from pydantic import BaseModel, ConfigDict, Field
 
-from argus.api.contracts import DetectionRegion, SceneVisionProfile
+from argus.api.contracts import DetectionRegion, EvidenceRecordingPolicy, SceneVisionProfile
 from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.db import (
@@ -199,6 +199,9 @@ class EngineConfig(BaseModel):
 
     camera_id: UUID
     mode: ProcessingMode
+    scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
     profile: PublishProfile | None = None
     camera: CameraSettings
     publish: PublishSettings = Field(default_factory=PublishSettings)

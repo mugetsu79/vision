@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
@@ -37,6 +38,7 @@ from argus.api.contracts import (
     EdgeHeartbeatResponse,
     EdgeRegisterRequest,
     EdgeRegisterResponse,
+    EvidenceRecordingPolicy,
     ExportArtifact,
     FleetBootstrapRequest,
     FleetBootstrapResponse,
@@ -89,6 +91,7 @@ from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.db import DatabaseManager
 from argus.core.events import EventMessage, NatsJetStreamClient
+from argus.core.logging import redact_url_secrets
 from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
@@ -118,11 +121,12 @@ from argus.models.tables import (
     TrackingEvent,
 )
 from argus.services.model_catalog import resolve_catalog_status
-from argus.services.privacy_manifests import PrivacyManifestService
+from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.runtime_artifacts import (
     RuntimeArtifactService,
     artifact_matches_camera_vocabulary,
 )
+from argus.services.scene_contracts import SceneContractService, build_scene_contract
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
@@ -183,6 +187,7 @@ class AppServices:
     models: ModelService
     runtime_artifacts: RuntimeArtifactService
     privacy_manifests: PrivacyManifestService
+    scene_contracts: SceneContractService
     edge: EdgeService
     operations: OperationsService
     history: HistoryService
@@ -563,15 +568,69 @@ class CameraService:
                 camera=camera,
                 model=primary_model,
             )
+            tenant = await session.get(Tenant, tenant_context.tenant_id)
 
         rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
-        return _camera_to_worker_config(
+        recording_policy = _recording_policy_from_camera(camera)
+        base_config = _camera_to_worker_config(
             camera=camera,
             primary_model=primary_model,
             secondary_model=secondary_model,
             settings=self.settings,
             rtsp_url=rtsp_url,
             runtime_artifacts=runtime_artifacts,
+            recording_policy=recording_policy,
+        )
+        privacy_manifest = build_privacy_manifest(
+            tenant_id=tenant_context.tenant_id,
+            camera_id=camera.id,
+            deployment_mode=camera.processing_mode.value,
+            recording_policy=recording_policy,
+            allow_plaintext_plates=bool(
+                getattr(tenant, "anpr_store_plaintext", False)
+            ),
+            plaintext_justification=getattr(tenant, "anpr_plaintext_justification", None),
+        )
+        privacy_snapshot = await PrivacyManifestService(
+            self.session_factory
+        ).get_or_create_snapshot(
+            tenant_id=tenant_context.tenant_id,
+            camera_id=camera.id,
+            manifest=privacy_manifest,
+        )
+        scene_contract = build_scene_contract(
+            tenant_id=tenant_context.tenant_id,
+            site_id=camera.site_id,
+            camera_id=camera.id,
+            camera_name=camera.name,
+            camera_source=_camera_source_contract_payload(camera, rtsp_url),
+            deployment_mode=camera.processing_mode.value,
+            model=_model_contract_payload(primary_model),
+            runtime_vocabulary=_runtime_vocabulary_contract_payload(camera),
+            runtime_selection=_runtime_selection_contract_payload(
+                primary_model,
+                runtime_artifacts=runtime_artifacts,
+            ),
+            vision_profile=base_config.vision_profile.model_dump(mode="json"),
+            detection_regions=[
+                region.model_dump(mode="json") for region in base_config.detection_regions
+            ],
+            candidate_quality=base_config.vision_profile.candidate_quality,
+            recording_policy=recording_policy,
+            privacy_manifest_hash=privacy_snapshot.manifest_hash,
+        )
+        contract_snapshot = await SceneContractService(
+            self.session_factory
+        ).get_or_create_snapshot(
+            tenant_id=tenant_context.tenant_id,
+            camera_id=camera.id,
+            contract=scene_contract,
+        )
+        return base_config.model_copy(
+            update={
+                "scene_contract_hash": contract_snapshot.contract_hash,
+                "privacy_manifest_hash": privacy_snapshot.manifest_hash,
+            }
         )
 
     async def probe_camera_source(
@@ -2646,6 +2705,7 @@ def build_app_services(
         models=ModelService(db.session_factory, audit_logger),
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
+        scene_contracts=SceneContractService(db.session_factory),
         edge=edge_service,
         operations=OperationsService(
             db.session_factory,
@@ -3190,7 +3250,11 @@ def _camera_to_worker_config(
     settings: Settings,
     rtsp_url: str,
     runtime_artifacts: list[ModelRuntimeArtifact] | None = None,
+    recording_policy: EvidenceRecordingPolicy | None = None,
+    scene_contract_hash: str | None = None,
+    privacy_manifest_hash: str | None = None,
 ) -> WorkerConfigResponse:
+    resolved_recording_policy = recording_policy or _recording_policy_from_camera(camera)
     privacy = PrivacySettings.model_validate(camera.privacy)
     requested_browser_delivery = BrowserDeliverySettings.model_validate(
         camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
@@ -3220,6 +3284,9 @@ def _camera_to_worker_config(
     return WorkerConfigResponse(
         camera_id=camera.id,
         mode=camera.processing_mode,
+        scene_contract_hash=scene_contract_hash,
+        privacy_manifest_hash=privacy_manifest_hash,
+        recording_policy=resolved_recording_policy,
         camera=WorkerCameraSettings(
             rtsp_url=rtsp_url,
             frame_skip=camera.frame_skip,
@@ -3260,6 +3327,90 @@ def _camera_to_worker_config(
         detection_regions=detection_regions,
         homography=_homography_to_worker_payload(camera.homography),
     )
+
+
+def _recording_policy_from_camera(camera: Camera) -> EvidenceRecordingPolicy:
+    return EvidenceRecordingPolicy.model_validate(camera.evidence_recording_policy or {})
+
+
+def _camera_source_contract_payload(camera: Camera, rtsp_url: str) -> dict[str, object]:
+    source_kind = camera.source_kind or "rtsp"
+    source_config = dict(camera.source_config or {})
+    source_uri = str(source_config.get("uri") or rtsp_url)
+    redacted_uri = _redact_scene_contract_source_uri(source_uri)
+    return {
+        "kind": source_kind,
+        "uri": redacted_uri,
+        "redacted_uri": redacted_uri,
+        "capture_mode": camera.processing_mode.value,
+    }
+
+
+def _redact_scene_contract_source_uri(uri: str) -> str:
+    parts = urlsplit(uri)
+    if parts.scheme in {"rtsp", "rtsps", "http", "https"}:
+        host = parts.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        netloc = host
+        if parts.port is not None:
+            netloc = f"{netloc}:{parts.port}"
+        return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    return redact_url_secrets(uri)
+
+
+def _model_contract_payload(model: Model) -> dict[str, object]:
+    return {
+        "id": str(model.id),
+        "name": model.name,
+        "version": model.version,
+        "format": model.format.value if hasattr(model.format, "value") else str(model.format),
+        "capability": _model_capability(model).value,
+        "classes": list(model.classes),
+        "sha256": model.sha256,
+    }
+
+
+def _runtime_vocabulary_contract_payload(camera: Camera) -> dict[str, object]:
+    terms = normalize_vocabulary_terms(getattr(camera, "runtime_vocabulary", None) or [])
+    return {
+        "terms": terms,
+        "source": _runtime_vocabulary_source_value(camera),
+        "version": camera.runtime_vocabulary_version,
+        "hash": hash_vocabulary(terms),
+    }
+
+
+def _runtime_selection_contract_payload(
+    model: Model,
+    *,
+    runtime_artifacts: list[ModelRuntimeArtifact] | None,
+) -> dict[str, object]:
+    artifacts = runtime_artifacts or []
+    if artifacts:
+        first = artifacts[0]
+        return {
+            "backend": first.runtime_backend,
+            "candidate_artifact_ids": [str(artifact.id) for artifact in artifacts],
+            "selected_artifact_id": str(first.id),
+            "target_profile": first.target_profile,
+            "precision": first.precision.value,
+            "fallback_reason": None,
+        }
+    capability_config = _model_capability_config(model)
+    return {
+        "backend": capability_config.get("runtime_backend") or "onnxruntime",
+        "candidate_artifact_ids": [],
+        "selected_artifact_id": None,
+        "target_profile": None,
+        "precision": None,
+        "fallback_reason": "no_validated_runtime_artifact",
+    }
+
+
+def _runtime_vocabulary_source_value(camera: Camera) -> str:
+    source = camera.runtime_vocabulary_source
+    return source.value if hasattr(source, "value") else str(source)
 
 
 def _runtime_artifact_to_worker_payload(artifact: ModelRuntimeArtifact) -> WorkerRuntimeArtifact:

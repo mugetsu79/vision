@@ -642,6 +642,9 @@ class WorkerRuntimeCapability(BaseModel):
 class WorkerConfigResponse(BaseModel):
     camera_id: UUID
     mode: ProcessingMode
+    scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
     camera: WorkerCameraSettings
     publish: WorkerPublishSettings = Field(default_factory=WorkerPublishSettings)
     stream: WorkerStreamSettings = Field(default_factory=WorkerStreamSettings)
