@@ -4,7 +4,7 @@
 
 **Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
 
-**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then reuse those primitives for the later differentiators and Operations hardening. The worker continues to emit short event clips; storage becomes provider-aware so edge local, central MinIO, and S3-compatible/cloud deployments share one review contract. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, and runtime-report data instead of adding parallel case-history systems.
+**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then reuse those primitives for the later differentiators and Operations hardening. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects the runtime route so edge local, central MinIO, and S3-compatible/cloud deployments share one review contract. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, and runtime-report data instead of adding parallel case-history systems.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy async, Alembic, PostgreSQL JSONB, OpenCV MJPEG clip encoding, local filesystem storage, MinIO/S3-compatible object storage, React 19, Vite 6, TypeScript 5.7, Tailwind v4, Vitest, pytest, Ruff, mypy.
 
@@ -84,6 +84,23 @@ Validation goal:
 
 Band gate: a reviewer can understand what happened, which contract produced it,
 which privacy posture governed it, and where the evidence clip lives.
+
+### Pre-Band 4: Recording Storage Routing Gate
+
+Task: `13A`
+
+Validation goal:
+
+- `EvidenceRecordingPolicy.storage_profile` is honored by incident capture at
+  runtime
+- `edge_local`, `central`, `cloud`, and `local_first` resolve to the expected
+  provider, scope, and artifact status
+- local-first writes a reviewable local artifact and records `upload_pending`
+  instead of pretending a remote copy exists
+- the Evidence Desk labels upload-pending clips correctly
+
+Band gate: before optional snapshot media is added, prove the storage selector
+is not only a UI field and that clip review still works in edge mode.
 
 ### Band 4: Evidence Media Completion
 
@@ -1806,6 +1823,220 @@ git add frontend/src/components/evidence/evidence-signals.ts \
   frontend/src/pages/Incidents.tsx \
   frontend/src/pages/Incidents.test.tsx
 git commit -m "feat(evidence): add accountable timeline and case context"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13A: Recording Storage Profile Runtime Routing
+
+**Files:**
+
+- Modify: `backend/src/argus/services/evidence_storage.py`
+- Modify: `backend/src/argus/services/incident_capture.py`
+- Modify: `backend/src/argus/inference/engine.py`
+- Modify: `backend/tests/services/test_evidence_storage.py`
+- Modify: `backend/tests/services/test_incident_capture.py`
+- Modify: `backend/tests/inference/test_engine.py`
+- Modify: `frontend/src/components/evidence/AccountabilityStrip.tsx`
+- Modify: `frontend/src/components/evidence/AccountabilityStrip.test.tsx`
+- Modify: `frontend/src/components/evidence/CaseContextStrip.test.tsx`
+
+Do this task before Task 14. Task 14 adds a second media kind; this task proves
+the existing event-clip path writes to the selected storage profile first.
+
+- [ ] **Step 1: Add failing storage route tests**
+
+Extend `backend/tests/services/test_evidence_storage.py` with route resolution
+coverage:
+
+- `storage_profile="edge_local"` returns local filesystem storage,
+  `EvidenceStorageProvider.LOCAL_FILESYSTEM`, `EvidenceStorageScope.EDGE`, and
+  no status override
+- `storage_profile="central"` returns remote storage with provider
+  `EvidenceStorageProvider.MINIO`, scope `EvidenceStorageScope.CENTRAL`, and no
+  status override
+- `storage_profile="cloud"` returns remote storage with provider
+  `EvidenceStorageProvider.S3_COMPATIBLE`, scope `EvidenceStorageScope.CLOUD`,
+  and no status override
+- `storage_profile="local_first"` returns local filesystem storage,
+  `EvidenceStorageProvider.LOCAL_FILESYSTEM`, `EvidenceStorageScope.EDGE`, and
+  `EvidenceArtifactStatus.UPLOAD_PENDING`
+- `None` uses `EvidenceRecordingPolicy()` defaults, which resolve to central
+  storage
+- the legacy `build_evidence_store(settings)` still honors
+  `settings.incident_storage_provider` and `settings.incident_storage_scope`
+
+- [ ] **Step 2: Add failing incident capture routing tests**
+
+Extend `backend/tests/services/test_incident_capture.py` with:
+
+- a fake resolver receiving an event policy with `storage_profile="cloud"` and
+  selecting a cloud fake object store
+- a second event policy with `storage_profile="edge_local"` selecting a local
+  fake object store in the same service instance
+- a local-first event producing an artifact with status `upload_pending`,
+  provider `local_filesystem`, and scope `edge`
+- a selected storage route whose store raises during `put_object`, proving the
+  incident is still created with no `clip_url`, `storage_bytes=0`, a
+  `capture_failed` artifact for the intended object key, and a payload field
+  `evidence_storage_error`
+
+- [ ] **Step 3: Add failing UI status tests**
+
+Extend `frontend/src/components/evidence/AccountabilityStrip.test.tsx` and
+`frontend/src/components/evidence/CaseContextStrip.test.tsx` so an artifact with
+`status: "upload_pending"` renders `Upload pending` rather than falling through
+to an expired or unavailable label.
+
+- [ ] **Step 4: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_evidence_storage.py \
+  tests/services/test_incident_capture.py \
+  tests/inference/test_engine.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/AccountabilityStrip.test.tsx \
+  src/components/evidence/CaseContextStrip.test.tsx
+```
+
+Expected: fail because storage is still built from process settings rather than
+the per-camera recording policy, and `AccountabilityStrip` does not yet label
+`upload_pending`.
+
+- [ ] **Step 5: Implement policy-to-storage routing**
+
+In `backend/src/argus/services/evidence_storage.py`, add a route object and
+resolver:
+
+```python
+@dataclass(frozen=True, slots=True)
+class EvidenceStorageRoute:
+    store: EvidenceObjectStore
+    provider: EvidenceStorageProvider
+    scope: EvidenceStorageScope
+    status_override: EvidenceArtifactStatus | None = None
+
+
+def resolve_evidence_storage_route(
+    settings: Settings,
+    *,
+    storage_profile: str | None,
+) -> EvidenceStorageRoute: ...
+```
+
+Implement the route mapping:
+
+- `None` and `central`: `S3CompatibleEvidenceStore`, provider `minio`, scope
+  `central`
+- `cloud`: `S3CompatibleEvidenceStore`, provider `s3_compatible`, scope `cloud`
+- `edge_local`: `LocalFilesystemEvidenceStore`, provider `local_filesystem`,
+  scope `edge`
+- `local_first`: `LocalFilesystemEvidenceStore`, provider `local_filesystem`,
+  scope `edge`, status override `upload_pending`
+
+Update `LocalFilesystemEvidenceStore` and `S3CompatibleEvidenceStore` so their
+constructors can receive explicit provider/scope values instead of reading only
+`settings.incident_storage_provider` and `settings.incident_storage_scope`.
+Keep `build_evidence_store(settings)` as a compatibility wrapper for direct
+settings-based use.
+
+- [ ] **Step 6: Wire route selection into clip capture**
+
+In `backend/src/argus/services/incident_capture.py`:
+
+- add an `EvidenceStorageResolver` protocol that returns an
+  `EvidenceStorageRoute` from `EvidenceRecordingPolicy | None`
+- keep the existing `object_store` constructor argument as the fallback for
+  tests and legacy callers
+- after resolving `recording_policy` in `_finalize_pending`, select the storage
+  route from the resolver when present
+- pass `route.status_override` into `_event_clip_artifact_payload`; if present,
+  use it instead of deriving status only from provider/scope
+- when `put_object` raises, create the incident with `clip_url=None`,
+  `storage_bytes=0`, payload key `evidence_storage_error`, and a failed artifact
+  payload:
+
+```python
+{
+    "kind": EvidenceArtifactKind.EVENT_CLIP,
+    "status": EvidenceArtifactStatus.CAPTURE_FAILED,
+    "storage_provider": route.provider,
+    "storage_scope": route.scope,
+    "bucket": None,
+    "object_key": key,
+    "content_type": "video/x-motion-jpeg",
+    "sha256": hashlib.sha256(clip_bytes).hexdigest(),
+    "size_bytes": clip_size,
+    "clip_started_at": ...,
+    "triggered_at": pending.event.ts,
+    "clip_ended_at": ...,
+    "duration_seconds": ...,
+    "fps": self.fps,
+    "scene_contract_hash": pending.event.scene_contract_hash,
+    "privacy_manifest_hash": pending.event.privacy_manifest_hash,
+}
+```
+
+Do not silently fall back to another profile when the selected route fails.
+
+- [ ] **Step 7: Wire the worker runtime**
+
+In `backend/src/argus/inference/engine.py`, construct the incident capture
+service with a resolver based on the worker settings:
+
+```python
+incident_capture=IncidentClipCaptureService(
+    object_store=build_evidence_store(resolved_settings),
+    storage_resolver=SettingsEvidenceStorageResolver(resolved_settings),
+    repository=SQLIncidentRepository(db_manager.session_factory),
+    recording_policy=config.recording_policy,
+)
+```
+
+Add or adjust the corresponding `tests/inference/test_engine.py` assertion so
+worker startup proves the resolver is present and the default central route is
+still compatible.
+
+- [ ] **Step 8: Update upload-pending UI labels**
+
+In `frontend/src/components/evidence/AccountabilityStrip.tsx`, update
+`artifactStatusLabel` so `upload_pending` returns `Upload pending`. Keep
+`CaseContextStrip` aligned with the same copy.
+
+- [ ] **Step 9: Run focused verification**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_evidence_storage.py \
+  tests/services/test_incident_capture.py \
+  tests/inference/test_engine.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/AccountabilityStrip.test.tsx \
+  src/components/evidence/CaseContextStrip.test.tsx \
+  src/pages/Incidents.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 10: Commit and push**
+
+```bash
+git add backend/src/argus/services/evidence_storage.py \
+  backend/src/argus/services/incident_capture.py \
+  backend/src/argus/inference/engine.py \
+  backend/tests/services/test_evidence_storage.py \
+  backend/tests/services/test_incident_capture.py \
+  backend/tests/inference/test_engine.py \
+  frontend/src/components/evidence/AccountabilityStrip.tsx \
+  frontend/src/components/evidence/AccountabilityStrip.test.tsx \
+  frontend/src/components/evidence/CaseContextStrip.test.tsx
+git commit -m "feat(evidence): route recording storage profiles"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 

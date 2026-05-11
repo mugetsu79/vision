@@ -380,6 +380,37 @@ The first implementation should support local filesystem and the existing
 MinIO/S3-compatible path. It should model local-first status even if the first
 background sync implementation is deliberately simple.
 
+### Storage Profile Runtime Routing
+
+`EvidenceRecordingPolicy.storage_profile` is the source of truth for where a
+camera's incident evidence is written. Global worker settings define available
+storage backends and credentials; the per-camera recording policy selects the
+route at incident finalization time.
+
+The worker must resolve evidence storage per incident, not once globally for the
+process. This matters when one worker process handles cameras with different
+residency requirements, and it prevents the UI storage selector from becoming a
+display-only field.
+
+| `storage_profile` | Runtime route | Required worker configuration | First artifact status |
+|---|---|---|---|
+| `edge_local` | local filesystem, `storage_scope=edge` | `ARGUS_INCIDENT_LOCAL_STORAGE_ROOT` writable by the edge worker | `local_only` |
+| `central` | MinIO-compatible object store, `storage_scope=central` | `ARGUS_MINIO_ENDPOINT`, `ARGUS_MINIO_ACCESS_KEY`, `ARGUS_MINIO_SECRET_KEY`, `ARGUS_MINIO_INCIDENTS_BUCKET`, optional `ARGUS_MINIO_SECURE` | `remote_available` |
+| `cloud` | S3-compatible object store, `storage_scope=cloud` | the same S3-compatible endpoint, bucket, and credential settings used by the object-store client, with provider recorded as `s3_compatible` | `remote_available` |
+| `local_first` | local filesystem first, optional later remote copy | local root is required; remote S3-compatible settings are required only when sync is enabled | `upload_pending` until a remote copy is confirmed |
+
+The backend should keep the existing authenticated artifact content route as the
+review contract for all profiles. For `edge_local` and the first slice of
+`local_first`, the API streams the local file when the reviewing service can
+reach the edge storage path. For `central` and `cloud`, it redirects to a
+short-lived signed URL or streams through a service-owned object-store adapter.
+
+If a selected profile is unavailable, the worker must create the incident when
+possible, record the storage failure in the evidence ledger, and avoid silently
+falling back to another residency profile. A central/cloud upload failure for
+`local_first` is not a clip-capture failure if the local write succeeded; it is
+an `upload_pending` artifact state.
+
 ### Access Model
 
 Evidence Desk should not rely on raw object URLs as the long-term contract.
@@ -1009,7 +1040,9 @@ flowchart LR
   WorkerConfig --> Worker["Worker / Inference Engine"]
   Worker --> Trigger["Incident Trigger"]
   Trigger --> Capture["Incident Clip Capture"]
-  Capture --> Store["Evidence Storage"]
+  WorkerConfig --> StorageRouter["Storage Profile Router"]
+  Capture --> StorageRouter
+  StorageRouter --> Store["Evidence Storage"]
   Store --> Artifact["Evidence Artifact"]
   Trigger --> Ledger["Evidence Ledger"]
   Artifact --> Ledger
