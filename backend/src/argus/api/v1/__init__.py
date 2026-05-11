@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from argus.api.v1 import (
     cameras,
+    configuration,
     edge,
     export,
     history,
@@ -23,6 +24,7 @@ router = APIRouter()
 router.include_router(system.router)
 router.include_router(sites.router)
 router.include_router(cameras.router)
+router.include_router(configuration.router)
 router.include_router(models.router)
 router.include_router(runtime_artifacts.router)
 router.include_router(model_catalog.router)

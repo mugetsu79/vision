@@ -141,6 +141,7 @@ from argus.services.camera_sources import (
 )
 from argus.services.evidence_ledger import EvidenceLedgerService
 from argus.services.model_catalog import resolve_catalog_status
+from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.runtime_artifacts import (
     RuntimeArtifactService,
@@ -158,7 +159,6 @@ from argus.streaming.webrtc import (
     resolve_stream_access,
 )
 from argus.vision.model_metadata import resolve_model_classes
-from argus.vision.source_probe import probe_rtsp_source, probe_usb_source
 from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
@@ -215,6 +215,7 @@ class AppServices:
     runtime_artifacts: RuntimeArtifactService
     privacy_manifests: PrivacyManifestService
     scene_contracts: SceneContractService
+    configuration: OperatorConfigurationService
     edge: EdgeService
     operations: OperationsService
     history: HistoryService
@@ -3148,6 +3149,7 @@ def build_app_services(
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
         scene_contracts=SceneContractService(db.session_factory),
+        configuration=OperatorConfigurationService(db.session_factory, settings, audit_logger),
         edge=edge_service,
         operations=OperationsService(
             db.session_factory,
@@ -4237,6 +4239,8 @@ async def _probe_source_capability(
     if not settings.enable_startup_services:
         return None
     try:
+        from argus.vision.source_probe import probe_rtsp_source
+
         return await asyncio.to_thread(probe_rtsp_source, rtsp_url, settings=settings)
     except RuntimeError:
         logger.warning(
@@ -4261,6 +4265,8 @@ async def _probe_camera_source_capability(
         return None
     if source.kind is CameraSourceKind.USB:
         try:
+            from argus.vision.source_probe import probe_usb_source
+
             return await asyncio.to_thread(probe_usb_source, source.capture_uri)
         except RuntimeError:
             logger.exception("Failed to probe USB camera source capability.")
