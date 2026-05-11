@@ -62,12 +62,84 @@ The Evidence Desk at `/incidents` reviews incidents that the worker pipeline alr
 Current behavior:
 
 - incident clips are captured by `IncidentClipCaptureService`
-- `clip_url` is the primary evidence artifact today
+- short event clips are governed by each camera's `recording_policy`
+- `clip_url` is retained for compatibility, and artifact rows are now the reviewable evidence record
 - `snapshot_url` is supported by API/UI but may be null
+- scene contract, privacy manifest, artifact, and ledger context is available from the incident detail view when the worker captured it
 - review state is persisted as `pending` or `reviewed`
 - operator review/reopen actions write audit entries
 
 If a still preview is required for a deployment, add snapshot generation as a separate feature rather than assuming every incident row has one.
+
+## Accountable Scene Evidence And Recording
+
+Accountable evidence starts at camera setup. A production camera should have a
+clear source, a saved scene configuration, a privacy posture, and a short event
+clip policy before it is treated as operational.
+
+### Edge USB/UVC Camera Sources
+
+Use an edge USB/UVC source when the camera is physically attached to the edge
+node or when the site should avoid pulling a raw camera stream back to the
+master. Configure the camera source as `usb` with a URI such as
+`usb:///dev/video0`, assign the edge node, and keep processing mode on `edge`.
+USB/UVC sources are not central-mode sources; the worker that opens the device
+must run on the node where the device exists.
+
+For pilots, `/dev/video0` is acceptable when only one capture device is attached.
+For production, prefer a stable device reference from `/dev/v4l/by-id/` or
+`/dev/v4l/by-path/` and record the mapping in the site deployment notes. Recheck
+the mapping after kernel, JetPack, cable, hub, or camera changes.
+
+### Scene Contracts, Privacy Manifests, And Ledger
+
+When a camera configuration is saved, the scene setup can be compiled into an
+accountability contract. Incidents can then carry:
+
+- the scene contract snapshot that explains the active source, model scope,
+  boundaries, detection regions, speed posture, and recording policy
+- the privacy manifest snapshot that explains blur policy and delivery posture
+- evidence artifacts such as event clips
+- ledger entries for trigger, artifact creation, review, reopen, and operator
+  decisions
+
+Treat the ledger as append-only operational evidence. Do not edit historical
+ledger rows to "fix" an incident; write a new entry or reopen/review the incident
+through the API/UI.
+
+### Evidence Storage Options
+
+Vezor supports three production storage postures for event clips:
+
+| Storage posture | Use when | Operator implication |
+|---|---|---|
+| Local filesystem | lab, single-node, or edge-local retention | simplest, but backup is the node's responsibility |
+| Central MinIO | normal HQ/master deployment | review is central and backups can follow the master object-store policy |
+| Remote/cloud S3-compatible | multi-site, managed retention, or off-site backup | configure credentials, bucket policy, lifecycle, and network egress deliberately |
+
+Edge-mode local clips remain reviewable when recording is enabled. If the clip is
+`local_only`, the Evidence Desk should show the artifact and ledger context even
+when the bytes must be fetched from the edge node or retained there until upload.
+Do not mark local-only evidence as missing solely because it is not in central
+MinIO.
+
+### Short Event Clip Policy
+
+The default evidence policy is short event clips, not continuous recording:
+
+- recording enabled
+- mode `event_clip`
+- 4 seconds before the event
+- 8 seconds after the event
+- 10 FPS evidence capture
+- 15 second maximum duration
+- central storage unless the camera selects `edge_local`, `cloud`, or
+  `local_first`
+
+Increase pre/post windows only when operators need the surrounding context and
+the storage budget supports it. For privacy-sensitive edge sites, use
+`edge_local` or `local_first` deliberately and document retention, backup, and
+review access before go-live.
 
 ## Secrets With SOPS And Age
 

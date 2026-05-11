@@ -20,6 +20,8 @@ The current product includes the operator workflows needed for a serious pilot:
 - experimental Ultralytics-backed open-vocab `.pt` runtime path
 - stabilized Live track lifecycle, class-colored overlays, and Telemetry Terrain
 - scene vision profiles with explicit speed enablement, optional speed-off homography, detection include/exclusion regions, and candidate quality gating
+- accountable scene contracts, privacy manifests, evidence ledger entries, and short event clip recording policy
+- RTSP and edge USB/UVC camera source configuration
 - Jetson edge compose stack and preflight tooling
 
 The production-critical layer still missing is supervisor-backed lifecycle control. Today, local development uses copyable commands and edge development uses Compose. Production should replace both with a central or edge supervisor that starts, stops, restarts, drains, monitors, and reports camera workers.
@@ -215,10 +217,11 @@ For the Jetson pattern, run the device in 25 W Super mode, validate JetPack/CUDA
 
 1. Deploy HQ/master and validate auth, health, and storage.
 2. Add a single production site.
-3. Connect one or two cameras first.
-4. Validate live viewing, telemetry, privacy behavior, incidents, and history.
-5. Validate Operations runtime truth: desired worker count, node health, worker heartbeat freshness, and last-error reporting.
-6. Only then add the rest of the site’s cameras.
+3. Choose the source type and evidence storage posture for one or two cameras.
+4. Connect those cameras first.
+5. Validate live viewing, telemetry, privacy behavior, incidents, evidence clips, ledger context, and history.
+6. Validate Operations runtime truth: desired worker count, node health, worker heartbeat freshness, and last-error reporting.
+7. Only then add the rest of the site’s cameras.
 
 ### Production lifecycle requirements
 
@@ -232,6 +235,35 @@ Before calling a site production-ready, the deployment needs:
 - logs and metrics visible from the central observability stack
 - backup and restore procedure for Postgres/TimescaleDB and incident object storage
 - scoped edge credentials with rotation path
+
+### Camera Source And Evidence Storage Choices
+
+Choose RTSP for network cameras that the central or edge worker can reach over a
+stable network path. Choose edge USB/UVC when the camera is attached directly to
+a Jetson or other edge node, when the site has constrained uplink, or when the
+raw camera feed should remain local to the site. USB/UVC cameras must be assigned
+to an edge node and run in `edge` processing mode because `/dev/video*` exists on
+that node, not on the master.
+
+For a quick pilot with one USB camera, `usb:///dev/video0` is acceptable. For a
+production installation, map the camera to a stable path under `/dev/v4l/by-id/`
+or `/dev/v4l/by-path/`, then record the mapping in the site handoff. Avoid
+depending on enumeration order when multiple capture devices, hubs, or JetPack
+updates are involved.
+
+Choose evidence storage by operational responsibility:
+
+| Storage choice | Choose when | Backup and review implication |
+|---|---|---|
+| Edge local | clips should stay at the site, uplink is limited, or privacy policy requires local custody | the edge node needs retention, disk monitoring, and backup/export procedure |
+| Central MinIO | the master is the normal review and retention point | central object storage backup covers event clips |
+| Cloud/S3-compatible | off-site retention, managed lifecycle, or multi-site evidence custody is required | bucket lifecycle, IAM, encryption, and egress cost become production responsibilities |
+| Local first | edge should record immediately and upload later when available | operators must track local-only artifacts until upload succeeds |
+
+The Evidence Desk can review local-only edge clips as accountable artifacts when
+recording is enabled. A local-only artifact should still have its incident,
+scene contract, privacy manifest, and ledger context centrally visible; only the
+clip bytes may remain on the edge node until retrieval or upload.
 
 ### Inference Runtime Overrides
 

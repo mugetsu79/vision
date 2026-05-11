@@ -2,7 +2,8 @@
 
 This guide explains how to configure OmniSight scenes with the current scene
 vision profile, tracking stability, speed, calibration, event boundary, and
-detection region settings.
+detection region settings. The same saved setup now forms the operator-facing
+accountability contract that can be attached to incidents.
 
 It is written for operators and implementers. The first half focuses on the UI
 workflow and field choices. The second half explains backend behavior, API
@@ -19,6 +20,8 @@ A scene configuration answers five questions:
    advanced Jetson edge, or central GPU?
 4. Should the scene compute calibrated speed, and therefore require homography?
 5. Where should detection happen, and where should events be counted?
+6. What evidence clip and privacy posture should be recorded when an incident is
+   triggered?
 
 The important split is:
 
@@ -29,10 +32,19 @@ The important split is:
 | Event boundaries | `zones` | Produce line crossing and zone enter/exit events |
 | Homography | `homography` | Map image motion into real-world distance for speed |
 | Browser delivery | `browser_delivery` | Choose operator-facing stream profile, independent of clean ingest |
+| Camera source | `camera_source` | Declare RTSP or edge USB/UVC capture source |
+| Recording policy | `recording_policy` | Define short event clip evidence windows and storage posture |
+| Privacy manifest | `privacy` and delivery fields | Explain what privacy controls were active for evidence review |
 
 The backend owns track truth. The frontend displays backend state; it should not
 invent identity, visible counts, or speed. The worker uses the same stabilized
 track state for telemetry and annotated overlays.
+
+When incidents are created, the active scene setup can be snapshotted as a scene
+contract and paired with a privacy manifest, evidence artifacts, and ledger
+entries. Operators should treat the scene setup as both runtime configuration and
+the explanation that future reviewers will use to understand why an incident was
+captured.
 
 ## Current UI Workflow
 
@@ -45,7 +57,9 @@ Use this step to set:
 - camera or scene name
 - site
 - processing mode
-- RTSP URL
+- source type, either RTSP or edge USB/UVC
+- RTSP URL or USB device URI
+- edge node assignment when using USB/UVC
 
 Processing mode describes where inference is expected to run:
 
@@ -57,6 +71,11 @@ Processing mode describes where inference is expected to run:
 
 The RTSP URL is masked after save. In edit mode, leave the field empty to keep
 the stored stream address.
+
+USB/UVC sources are edge-first. Use a URI such as `usb:///dev/video0` for a lab
+camera, or a stable `/dev/v4l/by-id/` or `/dev/v4l/by-path/` mapping for
+production. USB/UVC sources require an assigned edge node and force `edge`
+processing because the capture device exists on that node.
 
 ### 2. Models And Tracking
 
@@ -96,6 +115,7 @@ Use this step to configure:
 - compute target
 - speed metrics
 - browser delivery profile
+- event clip recording policy
 
 The profile controls are compact by design. They choose the high-level posture;
 the backend resolves the concrete tracking and candidate quality policy.
@@ -141,6 +161,26 @@ wizard and backend require:
 - reference distance greater than zero
 
 Note: `fast` on `cpu_low` may resolve speed off internally to protect latency.
+
+#### Event Clip Recording
+
+Recording policy controls evidence capture around incidents. It is not
+continuous recording.
+
+| Field | Default | Meaning |
+|---|---|---|
+| Enabled | `true` | record an event clip when an incident is emitted |
+| Mode | `event_clip` | short incident-centered clip |
+| Pre seconds | `4` | context before the trigger |
+| Post seconds | `8` | context after the trigger |
+| Recording FPS | `10` | clip frame rate, independent of detection cadence |
+| Max duration | `15` | guardrail for clip length |
+| Storage profile | `central` | `edge_local`, `central`, `cloud`, or `local_first` |
+
+Use `edge_local` when privacy, bandwidth, or site custody requires evidence to
+stay on the edge node. Use `central` when the master MinIO store is the review
+and retention point. Use `cloud` for S3-compatible remote custody, and
+`local_first` when the edge node should capture immediately and upload later.
 
 ### 4. Calibration
 
@@ -226,6 +266,13 @@ vision summary after save:
 - accuracy mode, such as `Balanced` or `Max accuracy`
 - compute tier, such as `Standard edge` or `Advanced edge`
 - speed state, `Speed off` or `Speed on`
+- source type, such as `RTSP` or `USB`
+- event clip storage posture
+
+Saving the scene gives the backend the material it needs to compile the
+accountability contract. Future incidents can cite the exact contract snapshot,
+privacy manifest, recording policy, artifact records, and ledger entries active
+when the event was captured.
 
 ## Choosing The Right Profile
 
