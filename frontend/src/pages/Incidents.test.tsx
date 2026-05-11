@@ -233,6 +233,166 @@ describe("IncidentsPage", () => {
     ).toBeInTheDocument();
   });
 
+  test("renders accountable scene contract, privacy manifest, clip artifact, and ledger context", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraPayload()]));
+      }
+
+      if (url.pathname === "/api/v1/incidents") {
+        return Promise.resolve(
+          jsonResponse([
+            incidentPayload({
+              clip_url: null,
+              scene_contract_hash:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              scene_contract_id: "22222222-2222-2222-2222-222222222222",
+              privacy_manifest_hash:
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              privacy_manifest_id: "33333333-3333-3333-3333-333333333333",
+              recording_policy: {
+                enabled: true,
+                mode: "event_clip",
+                pre_seconds: 4,
+                post_seconds: 8,
+                fps: 10,
+                max_duration_seconds: 15,
+                storage_profile: "cloud",
+              },
+              evidence_artifacts: [
+                {
+                  id: "44444444-4444-4444-4444-444444444444",
+                  incident_id: "99999999-9999-9999-9999-999999999999",
+                  camera_id: "11111111-1111-1111-1111-111111111111",
+                  kind: "event_clip",
+                  status: "remote_available",
+                  storage_provider: "s3_compatible",
+                  storage_scope: "cloud",
+                  bucket: "incidents",
+                  object_key: "tenant/camera/clip.mjpeg",
+                  content_type: "video/x-motion-jpeg",
+                  sha256:
+                    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  size_bytes: 2_097_152,
+                  clip_started_at: null,
+                  triggered_at: null,
+                  clip_ended_at: null,
+                  duration_seconds: 12,
+                  fps: 10,
+                  scene_contract_hash:
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  privacy_manifest_hash:
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  review_url:
+                    "https://minio.local/signed/incidents/accountable-clip.mjpeg",
+                },
+              ],
+              ledger_summary: {
+                entry_count: 3,
+                latest_action: "evidence.clip.available",
+                latest_at: "2026-04-18T10:16:00Z",
+              },
+            }),
+          ]),
+        );
+      }
+
+      if (
+        url.pathname ===
+        "/api/v1/incidents/99999999-9999-9999-9999-999999999999/scene-contract"
+      ) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "22222222-2222-2222-2222-222222222222",
+            camera_id: "11111111-1111-1111-1111-111111111111",
+            schema_version: 1,
+            contract_hash:
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            contract: {
+              camera: { name: "Forklift Gate" },
+              recording_policy: { storage_profile: "cloud" },
+            },
+            created_at: "2026-04-18T10:00:00Z",
+          }),
+        );
+      }
+
+      if (
+        url.pathname ===
+        "/api/v1/incidents/99999999-9999-9999-9999-999999999999/privacy-manifest"
+      ) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "33333333-3333-3333-3333-333333333333",
+            camera_id: "11111111-1111-1111-1111-111111111111",
+            schema_version: 1,
+            manifest_hash:
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            manifest: {
+              identity: {
+                face_identification: "disabled",
+                biometric_identification: "disabled",
+              },
+            },
+            created_at: "2026-04-18T10:00:00Z",
+          }),
+        );
+      }
+
+      if (
+        url.pathname ===
+        "/api/v1/incidents/99999999-9999-9999-9999-999999999999/ledger"
+      ) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              id: "55555555-5555-5555-5555-555555555555",
+              incident_id: "99999999-9999-9999-9999-999999999999",
+              camera_id: "11111111-1111-1111-1111-111111111111",
+              sequence: 1,
+              action: "incident.triggered",
+              actor_type: "system",
+              actor_subject: null,
+              occurred_at: "2026-04-18T10:15:00Z",
+              payload: { severity: "high" },
+              previous_entry_hash: null,
+              entry_hash:
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            },
+          ]),
+        );
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderIncidentsPage();
+
+    const hero = await screen.findByRole("region", {
+      name: /selected evidence/i,
+    });
+    expect(within(hero).getByText("Scene contract")).toBeInTheDocument();
+    expect(within(hero).getByText("aaaaaaaa")).toBeInTheDocument();
+    expect(within(hero).getByText("Privacy manifest")).toBeInTheDocument();
+    expect(within(hero).getByText("bbbbbbbb")).toBeInTheDocument();
+    expect(within(hero).getByText("Evidence clip")).toBeInTheDocument();
+    expect(within(hero).getByText("Cloud evidence")).toBeInTheDocument();
+    expect(within(hero).getByText("Ledger")).toBeInTheDocument();
+    expect(within(hero).getByText("3 entries")).toBeInTheDocument();
+    expect(within(hero).getByRole("link", { name: /open clip/i })).toHaveAttribute(
+      "href",
+      "https://minio.local/signed/incidents/accountable-clip.mjpeg",
+    );
+
+    expect(await screen.findByText("Face ID disabled")).toBeInTheDocument();
+    expect(screen.getByText("Biometric ID disabled")).toBeInTheDocument();
+    expect(screen.getByText(/incident\.triggered/i)).toBeInTheDocument();
+  });
+
   test("wraps selected evidence in an animated swap region", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {

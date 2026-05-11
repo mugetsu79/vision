@@ -1,6 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  AccountabilityStrip,
+  evidenceClipHref,
+} from "@/components/evidence/AccountabilityStrip";
 import {
   InstrumentRail,
   StatusToneBadge,
@@ -18,9 +23,17 @@ import {
   useUpdateIncidentReview,
 } from "@/hooks/use-incidents";
 import { useToast } from "@/hooks/use-toast";
+import { apiClient, toApiError } from "@/lib/api";
+import type { components } from "@/lib/api.generated";
 import { useReducedMotionSafe } from "@/lib/motion";
 
 type ReviewFilter = IncidentReviewStatus | "all";
+type SceneContractSnapshot =
+  components["schemas"]["SceneContractSnapshotResponse"];
+type PrivacyManifestSnapshot =
+  components["schemas"]["PrivacyManifestSnapshotResponse"];
+type EvidenceLedgerEntry =
+  components["schemas"]["EvidenceLedgerEntryResponse"];
 
 export function IncidentsPage() {
   const { data: cameras = [] } = useCameras();
@@ -307,6 +320,7 @@ function IncidentEvidenceHero({
     incident.review_status === "pending" ? "reviewed" : "pending";
   const actionLabel =
     incident.review_status === "pending" ? "Review" : "Reopen";
+  const clipHref = evidenceClipHref(incident);
 
   return (
     <section
@@ -332,6 +346,8 @@ function IncidentEvidenceHero({
         </div>
       </div>
 
+      <AccountabilityStrip incident={incident} />
+
       <div className="bg-black">
         {incident.snapshot_url ? (
           <img
@@ -353,9 +369,9 @@ function IncidentEvidenceHero({
 
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
         <div className="flex flex-wrap items-center gap-3">
-          {incident.clip_url ? (
+          {clipHref ? (
             <a
-              href={incident.clip_url}
+              href={clipHref}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center rounded-full border border-[#33528a] bg-[#08111d]/85 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#dce8ff] transition hover:border-[#5c7dd0] hover:text-white"
@@ -396,6 +412,7 @@ function IncidentFactsPanel({
   incident: Incident;
   cameraName: string;
 }) {
+  const accountability = useIncidentAccountabilityDetails(incident);
   const facts = [
     ["Scene", cameraName],
     ["Event type", incident.type],
@@ -431,6 +448,86 @@ function IncidentFactsPanel({
 
       <div className="border-t border-white/8 px-4 py-3">
         <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
+          Accountability
+        </h4>
+        <div className="mt-3 space-y-2">
+          <details open className="rounded-md border border-white/8 px-3 py-2">
+            <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
+              Scene contract
+            </summary>
+            <div className="mt-2 space-y-2">
+              <FactRow
+                label="Hash"
+                value={incident.scene_contract_hash?.slice(0, 12) ?? "Not attached"}
+                compact
+              />
+              {accountability.sceneContract.data ? (
+                <FactRow
+                  label="Schema"
+                  value={`v${accountability.sceneContract.data.schema_version}`}
+                  compact
+                />
+              ) : null}
+            </div>
+          </details>
+
+          <details open className="rounded-md border border-white/8 px-3 py-2">
+            <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
+              Privacy manifest
+            </summary>
+            <div className="mt-2 space-y-2">
+              <FactRow
+                label="Hash"
+                value={incident.privacy_manifest_hash?.slice(0, 12) ?? "Not attached"}
+                compact
+              />
+              {accountability.privacyManifest.data ? (
+                <>
+                  <FactRow
+                    label="Face ID"
+                    value={identityStatusLabel(
+                      accountability.privacyManifest.data,
+                      "face_identification",
+                    )}
+                    compact
+                  />
+                  <FactRow
+                    label="Biometric ID"
+                    value={identityStatusLabel(
+                      accountability.privacyManifest.data,
+                      "biometric_identification",
+                    )}
+                    compact
+                  />
+                </>
+              ) : null}
+            </div>
+          </details>
+
+          <details open className="rounded-md border border-white/8 px-3 py-2">
+            <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
+              Ledger
+            </summary>
+            <div className="mt-2 space-y-2">
+              {accountability.ledgerEntries.data?.length ? (
+                accountability.ledgerEntries.data.map((entry) => (
+                  <FactRow
+                    key={entry.id}
+                    label={`#${entry.sequence}`}
+                    value={entry.action}
+                    compact
+                  />
+                ))
+              ) : (
+                <FactRow label="Entries" value="No ledger entries" compact />
+              )}
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div className="border-t border-white/8 px-4 py-3">
+        <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
           Payload
         </h4>
         <dl className="mt-3 grid gap-3">
@@ -441,6 +538,73 @@ function IncidentFactsPanel({
       </div>
     </InstrumentRail>
   );
+}
+
+function useIncidentAccountabilityDetails(incident: Incident) {
+  const sceneContract = useQuery<SceneContractSnapshot | null>({
+    queryKey: ["incident-scene-contract", incident.id],
+    enabled: Boolean(incident.scene_contract_id || incident.scene_contract_hash),
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        "/api/v1/incidents/{incident_id}/scene-contract",
+        { params: { path: { incident_id: incident.id } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to load scene contract.");
+      }
+      return data ?? null;
+    },
+  });
+
+  const privacyManifest = useQuery<PrivacyManifestSnapshot | null>({
+    queryKey: ["incident-privacy-manifest", incident.id],
+    enabled: Boolean(
+      incident.privacy_manifest_id || incident.privacy_manifest_hash,
+    ),
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        "/api/v1/incidents/{incident_id}/privacy-manifest",
+        { params: { path: { incident_id: incident.id } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to load privacy manifest.");
+      }
+      return data ?? null;
+    },
+  });
+
+  const ledgerEntries = useQuery<EvidenceLedgerEntry[]>({
+    queryKey: ["incident-ledger", incident.id],
+    enabled: (incident.ledger_summary?.entry_count ?? 0) > 0,
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        "/api/v1/incidents/{incident_id}/ledger",
+        { params: { path: { incident_id: incident.id } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to load evidence ledger.");
+      }
+      return data ?? [];
+    },
+  });
+
+  return { sceneContract, privacyManifest, ledgerEntries };
+}
+
+function identityStatusLabel(
+  snapshot: PrivacyManifestSnapshot,
+  key: "face_identification" | "biometric_identification",
+) {
+  const identity =
+    snapshot.manifest.identity &&
+    typeof snapshot.manifest.identity === "object" &&
+    !Array.isArray(snapshot.manifest.identity)
+      ? (snapshot.manifest.identity as Record<string, unknown>)
+      : {};
+  const status = identity[key] === "disabled" ? "disabled" : "unknown";
+  return key === "face_identification"
+    ? `Face ID ${status}`
+    : `Biometric ID ${status}`;
 }
 
 function FactRow({
