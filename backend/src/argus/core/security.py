@@ -346,6 +346,29 @@ def decrypt_rtsp_url(ciphertext: str, settings: Settings) -> str:
     return plaintext.decode("utf-8")
 
 
+def encrypt_config_secret(plaintext: str, settings: Settings) -> str:
+    key = _derive_encryption_key(settings.config_encryption_key.get_secret_value())
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
+    return base64.urlsafe_b64encode(nonce + ciphertext).decode("utf-8")
+
+
+def decrypt_config_secret(ciphertext: str, settings: Settings) -> str:
+    key = _derive_encryption_key(settings.config_encryption_key.get_secret_value())
+    decoded = base64.urlsafe_b64decode(ciphertext.encode("utf-8"))
+    nonce = decoded[:12]
+    encrypted_payload = decoded[12:]
+    aesgcm = AESGCM(key)
+
+    try:
+        plaintext = aesgcm.decrypt(nonce, encrypted_payload, None)
+    except (InvalidTag, ValueError, TypeError) as exc:
+        raise ValueError("Unable to decrypt configuration secret.") from exc
+
+    return plaintext.decode("utf-8")
+
+
 def _derive_encryption_key(secret: str) -> bytes:
     try:
         decoded = base64.urlsafe_b64decode(secret.encode("utf-8"))

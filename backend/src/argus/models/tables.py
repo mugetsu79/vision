@@ -3,7 +3,18 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +31,9 @@ from argus.models.enums import (
     IncidentReviewStatus,
     ModelFormat,
     ModelTask,
+    OperatorConfigProfileKind,
+    OperatorConfigScope,
+    OperatorConfigValidationStatus,
     ProcessingMode,
     RoleEnum,
     RuleAction,
@@ -532,6 +546,126 @@ class EvidenceLedgerEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     previous_entry_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class OperatorConfigProfile(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "operator_config_profiles"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "kind", "slug", name="uq_op_cfg_profile_slug"),
+        Index("ix_op_cfg_profile_tenant_kind", "tenant_id", "kind"),
+        Index("ix_op_cfg_profile_tenant_default", "tenant_id", "kind", "is_default"),
+        Index("ix_op_cfg_profile_site_kind", "site_id", "kind"),
+        Index("ix_op_cfg_profile_edge_kind", "edge_node_id", "kind"),
+        Index("ix_op_cfg_profile_camera_kind", "camera_id", "kind"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id"),
+        nullable=True,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    kind: Mapped[OperatorConfigProfileKind] = mapped_column(
+        enum_column(OperatorConfigProfileKind, "operator_config_profile_kind_enum"),
+        nullable=False,
+    )
+    scope: Mapped[OperatorConfigScope] = mapped_column(
+        enum_column(OperatorConfigScope, "operator_config_scope_enum"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
+    config: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    validation_status: Mapped[OperatorConfigValidationStatus] = mapped_column(
+        enum_column(
+            OperatorConfigValidationStatus,
+            "operator_config_validation_status_enum",
+        ),
+        nullable=False,
+        default=OperatorConfigValidationStatus.UNVALIDATED,
+    )
+    validation_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    config_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class OperatorConfigSecret(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "operator_config_secrets"
+    __table_args__ = (
+        UniqueConstraint("profile_id", "key", name="uq_op_cfg_secret_key"),
+        Index("ix_op_cfg_secret_tenant_profile", "tenant_id", "profile_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_config_profiles.id"),
+        nullable=False,
+    )
+    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    encrypted_value: Mapped[str] = mapped_column(Text, nullable=False)
+    value_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class OperatorConfigBinding(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "operator_config_bindings"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "kind",
+            "scope",
+            "scope_key",
+            name="uq_op_cfg_binding_scope",
+        ),
+        Index("ix_op_cfg_binding_profile", "profile_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    kind: Mapped[OperatorConfigProfileKind] = mapped_column(
+        enum_column(OperatorConfigProfileKind, "operator_config_profile_kind_enum"),
+        nullable=False,
+    )
+    scope: Mapped[OperatorConfigScope] = mapped_column(
+        enum_column(OperatorConfigScope, "operator_config_scope_enum"),
+        nullable=False,
+    )
+    scope_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_config_profiles.id"),
+        nullable=False,
+    )
 
 
 class AuditLog(UUIDPrimaryKeyMixin, Base):

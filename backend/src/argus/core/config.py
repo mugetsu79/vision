@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     keycloak_jwks_cache_ttl_seconds: int = 3600
 
     rtsp_encryption_key: SecretStr = SecretStr("argus-dev-rtsp-key")
+    config_encryption_key: SecretStr = SecretStr("argus-dev-config-key")
 
     llm_provider: str = "openai"
     llm_model: str = "gpt-4.1-mini"

@@ -24,6 +24,9 @@ from argus.models.enums import (
     IncidentReviewStatus,
     ModelFormat,
     ModelTask,
+    OperatorConfigProfileKind,
+    OperatorConfigScope,
+    OperatorConfigValidationStatus,
     ProcessingMode,
     QueryResolutionMode,
     RuntimeArtifactKind,
@@ -135,6 +138,148 @@ RuntimeBackend = Literal[
     "ultralytics_yoloe",
     "tensorrt_engine",
 ]
+
+
+class EvidenceStorageProfileConfig(BaseModel):
+    provider: EvidenceStorageProvider = EvidenceStorageProvider.MINIO
+    storage_scope: EvidenceStorageScope = EvidenceStorageScope.CENTRAL
+    endpoint: str | None = Field(default=None, min_length=1)
+    region: str | None = Field(default=None, min_length=1)
+    bucket: str | None = Field(default=None, min_length=1)
+    secure: bool = False
+    path_prefix: str | None = Field(default=None, min_length=1)
+    local_root: str | None = Field(default=None, min_length=1)
+    remote_profile_id: UUID | None = None
+
+
+class StreamDeliveryProfileConfig(BaseModel):
+    delivery_mode: Literal["native", "webrtc", "hls", "mjpeg", "transcode"] = "native"
+    public_base_url: str | None = Field(default=None, min_length=1)
+    edge_override_url: str | None = Field(default=None, min_length=1)
+
+
+class RuntimeSelectionProfileConfig(BaseModel):
+    preferred_backend: RuntimeBackend | None = None
+    artifact_preference: Literal["tensorrt_first", "onnx_first", "dynamic_first"] = (
+        "tensorrt_first"
+    )
+    fallback_allowed: bool = True
+
+
+class PrivacyPolicyProfileConfig(BaseModel):
+    retention_days: int = Field(default=30, ge=0)
+    storage_quota_bytes: int = Field(default=10 * 1024 * 1024 * 1024, ge=0)
+    plaintext_plate_storage: Literal["blocked", "allowed"] = "blocked"
+    residency: Literal["edge", "central", "cloud", "local_first"] = "central"
+
+
+class LLMProviderProfileConfig(BaseModel):
+    provider: str = Field(default="openai", min_length=1)
+    model: str = Field(default="gpt-4.1-mini", min_length=1)
+    base_url: str | None = Field(default=None, min_length=1)
+    api_key_required: bool = True
+
+
+class OperationsModeProfileConfig(BaseModel):
+    lifecycle_owner: Literal["manual", "edge_supervisor", "central_supervisor"] = "manual"
+    supervisor_mode: Literal["disabled", "polling", "push"] = "disabled"
+    restart_policy: Literal["never", "on_failure", "always"] = "on_failure"
+
+
+_OPERATOR_CONFIG_MODELS = {
+    OperatorConfigProfileKind.EVIDENCE_STORAGE: EvidenceStorageProfileConfig,
+    OperatorConfigProfileKind.STREAM_DELIVERY: StreamDeliveryProfileConfig,
+    OperatorConfigProfileKind.RUNTIME_SELECTION: RuntimeSelectionProfileConfig,
+    OperatorConfigProfileKind.PRIVACY_POLICY: PrivacyPolicyProfileConfig,
+    OperatorConfigProfileKind.LLM_PROVIDER: LLMProviderProfileConfig,
+    OperatorConfigProfileKind.OPERATIONS_MODE: OperationsModeProfileConfig,
+}
+
+
+def _normalize_operator_config(
+    kind: OperatorConfigProfileKind,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    config_model = _OPERATOR_CONFIG_MODELS[kind]
+    return config_model.model_validate(config).model_dump(mode="json", exclude_none=True)
+
+
+class OperatorConfigProfileBase(BaseModel):
+    kind: OperatorConfigProfileKind
+    scope: OperatorConfigScope = OperatorConfigScope.TENANT
+    site_id: UUID | None = None
+    edge_node_id: UUID | None = None
+    camera_id: UUID | None = None
+    name: str = Field(min_length=1, max_length=255)
+    slug: str = Field(min_length=1, max_length=255)
+    enabled: bool = True
+    is_default: bool = False
+    config: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def normalize_config(self) -> OperatorConfigProfileBase:
+        self.config = _normalize_operator_config(self.kind, self.config)
+        return self
+
+
+class OperatorConfigProfileCreate(OperatorConfigProfileBase):
+    secrets: dict[str, str] = Field(default_factory=dict)
+
+
+class OperatorConfigProfileUpdate(BaseModel):
+    site_id: UUID | None = None
+    edge_node_id: UUID | None = None
+    camera_id: UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    slug: str | None = Field(default=None, min_length=1, max_length=255)
+    enabled: bool | None = None
+    is_default: bool | None = None
+    config: dict[str, Any] | None = None
+    secrets: dict[str, str] | None = None
+
+
+OperatorSecretState = Literal["missing", "present"]
+
+
+class OperatorConfigProfileResponse(OperatorConfigProfileBase):
+    id: UUID
+    tenant_id: UUID
+    secret_state: dict[str, OperatorSecretState] = Field(default_factory=dict)
+    validation_status: OperatorConfigValidationStatus = (
+        OperatorConfigValidationStatus.UNVALIDATED
+    )
+    validation_message: str | None = None
+    validated_at: datetime | None = None
+    config_hash: str = Field(min_length=64, max_length=64)
+    created_at: datetime
+    updated_at: datetime
+
+
+class OperatorConfigBindingRequest(BaseModel):
+    kind: OperatorConfigProfileKind
+    scope: OperatorConfigScope
+    scope_key: str = Field(min_length=1, max_length=255)
+    profile_id: UUID
+
+
+class OperatorConfigBindingResponse(OperatorConfigBindingRequest):
+    id: UUID
+    tenant_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class OperatorConfigTestResponse(BaseModel):
+    profile_id: UUID
+    status: OperatorConfigValidationStatus
+    message: str | None = None
+    tested_at: datetime
+
+
+class ResolvedOperatorConfigResponse(BaseModel):
+    profiles: dict[OperatorConfigProfileKind, OperatorConfigProfileResponse] = Field(
+        default_factory=dict
+    )
 
 
 class RuntimeArtifactBase(BaseModel):

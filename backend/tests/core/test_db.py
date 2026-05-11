@@ -16,6 +16,7 @@ from argus.core.db import (
     TrackingEventBatchRecord,
     TrackingEventStore,
 )
+from argus.models import Base
 from argus.models.enums import CountEventType
 from argus.vision.count_events import CountEventRecord
 from argus.vision.types import Detection
@@ -266,6 +267,39 @@ def test_accountable_scene_evidence_migration_constraint_names_fit_postgres() ->
     for constraint_name in legacy_constraint_names:
         assert constraint_name not in migration_text
         assert len(constraint_name) > 63
+
+    for constraint_name in constraint_names:
+        assert constraint_name in migration_text
+        assert len(constraint_name) <= 63
+
+
+def test_operator_configuration_models_are_registered() -> None:
+    assert "operator_config_profiles" in Base.metadata.tables
+    assert "operator_config_secrets" in Base.metadata.tables
+    assert "operator_config_bindings" in Base.metadata.tables
+
+
+def test_operator_configuration_migration_exists_with_short_names() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = (
+        repo_root
+        / "src/argus/migrations/versions/0012_operator_configuration_profiles.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    assert 'revision = "0012_operator_configuration_profiles"' in migration_text
+    assert 'down_revision = "0011_accountable_scene_evidence"' in migration_text
+    assert '"operator_config_profiles"' in migration_text
+    assert '"operator_config_secrets"' in migration_text
+    assert '"operator_config_bindings"' in migration_text
+
+    constraint_names = [
+        "uq_op_cfg_profile_slug",
+        "ix_op_cfg_profile_tenant_kind",
+        "uq_op_cfg_secret_key",
+        "uq_op_cfg_binding_scope",
+    ]
 
     for constraint_name in constraint_names:
         assert constraint_name in migration_text

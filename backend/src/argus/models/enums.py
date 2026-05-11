@@ -138,6 +138,28 @@ class EvidenceLedgerAction(StrEnum):
     INCIDENT_REOPENED = "incident.reopened"
 
 
+class OperatorConfigProfileKind(StrEnum):
+    EVIDENCE_STORAGE = "evidence_storage"
+    STREAM_DELIVERY = "stream_delivery"
+    RUNTIME_SELECTION = "runtime_selection"
+    PRIVACY_POLICY = "privacy_policy"
+    LLM_PROVIDER = "llm_provider"
+    OPERATIONS_MODE = "operations_mode"
+
+
+class OperatorConfigScope(StrEnum):
+    TENANT = "tenant"
+    SITE = "site"
+    EDGE_NODE = "edge_node"
+    CAMERA = "camera"
+
+
+class OperatorConfigValidationStatus(StrEnum):
+    UNVALIDATED = "unvalidated"
+    VALID = "valid"
+    INVALID = "invalid"
+
+
 class CountEventType(StrEnum):
     LINE_CROSS = "line_cross"
     ZONE_ENTER = "zone_enter"
