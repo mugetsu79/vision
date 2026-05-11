@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 from argus.api.contracts import TenantContext
 from argus.core.security import AuthenticatedUser
-from argus.models.enums import IncidentReviewStatus, RoleEnum
+from argus.models.enums import EvidenceLedgerAction, IncidentReviewStatus, RoleEnum
 from argus.models.tables import Incident
 from argus.services.app import IncidentService
 
@@ -83,6 +83,14 @@ class _FakeAuditLogger:
         session.add({"audit": kwargs})
 
 
+class _FakeEvidenceLedger:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def append_entry(self, **kwargs: object) -> None:
+        self.calls.append(kwargs)
+
+
 def _tenant_context(tenant_id=None) -> TenantContext:  # noqa: ANN001
     tenant_uuid = tenant_id or uuid4()
     return TenantContext(
@@ -121,10 +129,12 @@ def _incident() -> Incident:
 async def test_update_review_state_marks_incident_reviewed_and_audits() -> None:
     incident = _incident()
     audit = _FakeAuditLogger()
+    ledger = _FakeEvidenceLedger()
     session_factory = _FakeSessionFactory((incident, "Forklift Gate"))
     service = IncidentService(
         session_factory,
         audit_logger=audit,
+        evidence_ledger=ledger,
     )
     context = _tenant_context()
 
@@ -154,6 +164,18 @@ async def test_update_review_state_marks_incident_reviewed_and_audits() -> None:
     added_objects_at_commit = session_factory.state["added_objects_at_commit"]
     assert len(added_objects_at_commit) == 1
     assert added_objects_at_commit[0]["audit"] == audit.calls[0]
+    assert len(ledger.calls) == 1
+    assert ledger.calls[0]["tenant_id"] == context.tenant_id
+    assert ledger.calls[0]["incident_id"] == incident.id
+    assert ledger.calls[0]["camera_id"] == incident.camera_id
+    assert ledger.calls[0]["action"] is EvidenceLedgerAction.INCIDENT_REVIEWED
+    assert ledger.calls[0]["actor_type"] == "user"
+    assert ledger.calls[0]["actor_subject"] == "operator-1"
+    assert ledger.calls[0]["payload"] == {
+        "review_status": "reviewed",
+        "previous_review_status": "pending",
+        "incident_type": "ppe-missing",
+    }
 
 
 @pytest.mark.asyncio
@@ -162,10 +184,16 @@ async def test_update_review_state_reopens_incident_and_clears_reviewer() -> Non
     incident.review_status = IncidentReviewStatus.REVIEWED
     incident.reviewed_at = datetime(2026, 4, 28, 10, 5, tzinfo=UTC)
     incident.reviewed_by_subject = "operator-1"
-    service = IncidentService(_FakeSessionFactory((incident, "Forklift Gate")), audit_logger=None)
+    ledger = _FakeEvidenceLedger()
+    service = IncidentService(
+        _FakeSessionFactory((incident, "Forklift Gate")),
+        audit_logger=None,
+        evidence_ledger=ledger,
+    )
+    context = _tenant_context()
 
     response = await service.update_review_state(
-        _tenant_context(),
+        context,
         incident_id=incident.id,
         review_status=IncidentReviewStatus.PENDING,
     )
@@ -176,14 +204,31 @@ async def test_update_review_state_reopens_incident_and_clears_reviewer() -> Non
     assert incident.review_status == IncidentReviewStatus.PENDING
     assert incident.reviewed_at is None
     assert incident.reviewed_by_subject is None
+    assert len(ledger.calls) == 1
+    assert ledger.calls[0]["tenant_id"] == context.tenant_id
+    assert ledger.calls[0]["incident_id"] == incident.id
+    assert ledger.calls[0]["camera_id"] == incident.camera_id
+    assert ledger.calls[0]["action"] is EvidenceLedgerAction.INCIDENT_REOPENED
+    assert ledger.calls[0]["actor_type"] == "user"
+    assert ledger.calls[0]["actor_subject"] == "operator-1"
+    assert ledger.calls[0]["payload"] == {
+        "review_status": "pending",
+        "previous_review_status": "reviewed",
+        "incident_type": "ppe-missing",
+    }
 
 
 @pytest.mark.asyncio
 async def test_update_review_state_is_idempotent() -> None:
     incident = _incident()
     audit = _FakeAuditLogger()
+    ledger = _FakeEvidenceLedger()
     session_factory = _FakeSessionFactory((incident, "Forklift Gate"))
-    service = IncidentService(session_factory, audit_logger=audit)
+    service = IncidentService(
+        session_factory,
+        audit_logger=audit,
+        evidence_ledger=ledger,
+    )
 
     response = await service.update_review_state(
         _tenant_context(),
@@ -193,6 +238,7 @@ async def test_update_review_state_is_idempotent() -> None:
 
     assert response.review_status == IncidentReviewStatus.PENDING
     assert audit.calls == []
+    assert ledger.calls == []
     assert session_factory.state.get("commits", 0) == 0
 
 

@@ -99,6 +99,7 @@ from argus.models.enums import (
     CameraSourceKind,
     CountEventType,
     DetectorCapability,
+    EvidenceLedgerAction,
     HistoryCoverageStatus,
     HistoryMetric,
     IncidentReviewStatus,
@@ -127,6 +128,7 @@ from argus.services.camera_sources import (
     normalize_camera_source,
     validate_camera_source_assignment,
 )
+from argus.services.evidence_ledger import EvidenceLedgerService
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.runtime_artifacts import (
@@ -2374,9 +2376,11 @@ class IncidentService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         audit_logger: DatabaseAuditLogger | None = None,
+        evidence_ledger: EvidenceLedgerService | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.audit_logger = audit_logger
+        self.evidence_ledger = evidence_ledger
 
     async def list_incidents(
         self,
@@ -2459,8 +2463,50 @@ class IncidentService:
                     )
                 await session.commit()
                 await session.refresh(incident)
+                await self._append_review_ledger_entry(
+                    tenant_context=tenant_context,
+                    incident=incident,
+                    review_status=review_status,
+                    previous_review_status=previous_review_status,
+                )
 
             return _incident_response(incident, camera_name)
+
+    async def _append_review_ledger_entry(
+        self,
+        *,
+        tenant_context: TenantContext,
+        incident: Incident,
+        review_status: IncidentReviewStatus,
+        previous_review_status: IncidentReviewStatus,
+    ) -> None:
+        if self.evidence_ledger is None:
+            return
+        action = (
+            EvidenceLedgerAction.INCIDENT_REVIEWED
+            if review_status == IncidentReviewStatus.REVIEWED
+            else EvidenceLedgerAction.INCIDENT_REOPENED
+        )
+        occurred_at = (
+            incident.reviewed_at
+            if review_status == IncidentReviewStatus.REVIEWED
+            and incident.reviewed_at is not None
+            else datetime.now(tz=UTC)
+        )
+        await self.evidence_ledger.append_entry(
+            tenant_id=tenant_context.tenant_id,
+            incident_id=incident.id,
+            camera_id=incident.camera_id,
+            action=action,
+            actor_type="user",
+            actor_subject=tenant_context.user.subject,
+            occurred_at=occurred_at,
+            payload={
+                "review_status": review_status.value,
+                "previous_review_status": previous_review_status.value,
+                "incident_type": incident.type,
+            },
+        )
 
 
 def _incident_response(incident: Incident, camera_name: str | None) -> IncidentResponse:
@@ -2762,7 +2808,11 @@ def build_app_services(
             edge_service=edge_service,
         ),
         history=HistoryService(db.session_factory),
-        incidents=IncidentService(db.session_factory, audit_logger),
+        incidents=IncidentService(
+            db.session_factory,
+            audit_logger,
+            EvidenceLedgerService(db.session_factory),
+        ),
         streams=StreamService(db.session_factory, mediamtx, settings),
         query=query_service,
         telemetry=NatsTelemetryService(
