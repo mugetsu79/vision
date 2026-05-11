@@ -29,6 +29,168 @@ foundation. Track C / DeepStream remains a late gated task and must not start
 until the runtime soak task proves Track A/B readiness on target Jetson
 hardware.
 
+## Validation Bands
+
+The plan is executable task-by-task, but validation should happen in bands. Each
+task still requires its own focused tests, commit, and push. At the end of each
+band, pause and report the band result before continuing.
+
+### Band 1: Accountable Data Foundation
+
+Tasks: `1-3`
+
+Validation goal:
+
+- migrations apply cleanly
+- camera source and recording policy contracts are stable
+- privacy manifest hashes are deterministic
+- scene contract hashes are deterministic
+- snapshot dedupe works
+
+Band gate: confirm the durable primitives are correct before attaching them to
+capture, APIs, and UI.
+
+### Band 2: Capture, Storage, Ledger, API
+
+Tasks: `4-8`
+
+Validation goal:
+
+- USB/UVC source contracts and worker config work
+- local edge storage works
+- MinIO/S3-compatible storage still works
+- artifact-aware clip capture works
+- evidence ledger entries are emitted for incident, artifact, review, and
+  failure paths
+- authenticated artifact content routes serve or redirect reviewable clips
+
+Band gate: create an incident with scene contract, privacy manifest, evidence
+artifact, ledger entries, and a clip that can be opened through the API.
+
+### Band 3: Operator-Facing Evidence Foundation
+
+Tasks: `9-13`
+
+Validation goal:
+
+- Evidence Desk shows accountability strip, artifact status, ledger summary,
+  scene contract, and privacy manifest context
+- Camera Wizard exposes source and recording controls without implying
+  continuous recording
+- docs explain local edge, central, and cloud storage
+- focused verification sweep passes or records pre-existing unrelated failures
+- Evidence Timeline and Case Context polish are retuned around accountable
+  evidence
+
+Band gate: a reviewer can understand what happened, which contract produced it,
+which privacy posture governed it, and where the evidence clip lives.
+
+### Band 4: Evidence Media Completion
+
+Task: `14`
+
+Validation goal:
+
+- optional still snapshots can be captured as evidence artifacts
+- `snapshot_url` remains nullable when snapshots are disabled or unavailable
+- snapshot failures do not break clip capture
+- snapshot artifact ledger entries are emitted
+
+Band gate: clips remain the primary evidence path, with snapshots available as
+optional first-class evidence.
+
+### Band 5: Runtime Passport
+
+Tasks: `15-16`
+
+Validation goal:
+
+- runtime passport snapshots are deterministic
+- incidents and Operations rows can show selected backend, model hash, runtime
+  artifact id/hash, target profile, precision, validation time, and fallback
+  reason
+- fixed-vocab, TensorRT, compiled open-vocab, and dynamic fallback cases are
+  represented honestly
+
+Band gate: model/runtime accountability is visible without needing to inspect
+worker logs.
+
+### Band 6: Product Differentiators
+
+Tasks: `17-19`
+
+Validation goal:
+
+- Operational Memory shows observed patterns with source incident citations
+- Prompt-To-Policy creates reviewable drafts and never applies changes without
+  approval
+- Identity-Light Cross-Camera Intelligence links incidents only with
+  privacy-allowed non-biometric signals
+
+Band gate: pause after each task in this band for product-direction review, not
+only test review.
+
+### Band 7: Edge-First Production Operations
+
+Tasks: `20-22`
+
+Validation goal:
+
+- persistent worker assignments and reassignment work
+- supervisors can report per-worker runtime truth, heartbeat, restart count,
+  last error, runtime backend, and scene contract hash
+- Operations lifecycle buttons create Start/Stop/Restart/Drain requests instead
+  of shelling out
+- edge credential rotation returns one-time material and does not persist
+  plaintext secrets
+
+Band gate: Operations can be used as a production control surface without
+pretending the backend API owns host processes.
+
+### Band 8: Real Jetson Runtime Validation
+
+Task: `23`
+
+Validation goal:
+
+- Linux master plus Jetson edge topology is documented and exercised
+- chosen fixed-vocab TensorRT artifact, for example YOLO26n, is built,
+  registered, validated, selected, restarted, and rolled back
+- compiled YOLOE S/open-vocab scene artifacts are built, registered, validated,
+  selected, restarted, and rolled back
+- evidence clip review, Operations worker truth, credential rotation, and
+  fallback behavior are validated in the real topology
+
+Band gate: record actual hardware soak evidence before opening the DeepStream
+lane.
+
+### Band 9: DeepStream Gate
+
+Task: `24`
+
+Validation goal:
+
+- DeepStream starts only after Band 8 passes, unless the user explicitly accepts
+  the risk
+- DeepStream metadata maps into the existing track lifecycle
+- Operations reports DeepStream pipeline health
+- fallback to non-DeepStream runtimes remains available
+
+Band gate: DeepStream is treated as a separate runtime lane, not a rewrite of
+the accountability system.
+
+### Band 10: Final Hardening
+
+Task: `25`
+
+Validation goal:
+
+- full focused backend suite passes or records exact unrelated failures
+- focused frontend suite passes
+- frontend build/lint and backend Ruff/mypy results are recorded
+- docs and handoff match the implemented state
+- next-chat prompt is updated
+
 ## Pre-Flight
 
 Run:

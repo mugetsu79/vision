@@ -14,15 +14,16 @@ Continue from the pushed branch:
 codex/omnisight-ui-spec-implementation
 ```
 
-Latest pushed checkpoint before this runway expansion:
+Latest pushed checkpoint before this validation-band update:
 
 ```text
-c316d4db docs(handoff): carry forward production hardening
+f045e01f docs(plan): unify accountable runtime runway
 ```
 
 Recent checkpoints on this branch:
 
 ```text
+f045e01f docs(plan): unify accountable runtime runway
 c316d4db docs(handoff): carry forward production hardening
 22730157 docs(handoff): carry forward evidence desk polish
 5fadfae7 docs(handoff): refresh accountable scene next steps
@@ -253,11 +254,48 @@ included directly in the latest plan:
 - production Linux master plus Jetson runtime artifact soak validation: Task 23
 - Track C / DeepStream: Task 24, gated by Task 23
 
+## Validation Bands
+
+Execute one task at a time with task-level tests, commit, and push. Pause at
+these band gates so the user can validate the product shape along the way:
+
+1. **Band 1: Accountable Data Foundation** — Tasks 1-3
+   - validate migrations, camera source/recording contracts, privacy manifest
+     hashes, scene contract hashes, and snapshot dedupe
+2. **Band 2: Capture, Storage, Ledger, API** — Tasks 4-8
+   - validate USB/UVC worker config, local edge storage, MinIO/S3-compatible
+     storage, clip artifacts, ledger entries, and artifact content routes
+3. **Band 3: Operator-Facing Evidence Foundation** — Tasks 9-13
+   - validate Evidence Desk accountability, Camera Wizard recording/source
+     controls, docs, focused sweep, timeline, and case context polish
+4. **Band 4: Evidence Media Completion** — Task 14
+   - validate optional still snapshots as first-class evidence without making
+     `snapshot_url` mandatory
+5. **Band 5: Runtime Passport** — Tasks 15-16
+   - validate runtime passport snapshots, incident attribution, Operations
+     visibility, TensorRT/open-vocab/fallback cases
+6. **Band 6: Product Differentiators** — Tasks 17-19
+   - validate Operational Memory, Prompt-To-Policy, and Identity-Light
+     Cross-Camera Intelligence one task at a time with product-direction review
+7. **Band 7: Edge-First Production Operations** — Tasks 20-22
+   - validate persistent assignments, supervisor runtime truth, lifecycle
+     requests, Operations controls, and edge credential rotation
+8. **Band 8: Real Jetson Runtime Validation** — Task 23
+   - validate Linux master plus Jetson soak for YOLO26n TensorRT and YOLOE
+     S/open-vocab scene artifacts, including restart, rollback, evidence review,
+     Operations truth, and credential rotation
+9. **Band 9: DeepStream Gate** — Task 24
+   - start only after Band 8 passes, unless the user explicitly accepts the risk
+10. **Band 10: Final Hardening** — Task 25
+    - validate full focused suites, build/lint/type checks, docs, and handoff
+
 ## Working Rules For The Next Chat
 
 - Continue from `codex/omnisight-ui-spec-implementation`.
 - Pull latest branch state first.
 - Execute one task at a time.
+- Use the validation bands above. Commit and push after every task, and pause
+  for a band report after each band gate.
 - Use sub-agents where useful for independent implementation/review slices.
 - Commit after each completed task.
 - Push to origin after commits so the user can test.
@@ -316,6 +354,7 @@ Use the plan:
 docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md
 
 Start with:
+Band 1: Accountable Data Foundation
 Task 1: Data Contract And Migration
 
 Working rules:
@@ -327,6 +366,10 @@ Working rules:
 - Use sub-agents where useful.
 - Commit after each completed task.
 - Push to origin after commits so I can test.
+- Pause and report after each validation band:
+  Band 1 Tasks 1-3, Band 2 Tasks 4-8, Band 3 Tasks 9-13, Band 4 Task 14,
+  Band 5 Tasks 15-16, Band 6 Tasks 17-19, Band 7 Tasks 20-22, Band 8 Task 23,
+  Band 9 Task 24, Band 10 Task 25.
 - Do not stage unrelated untracked scratch files.
 - Keep WebGL off.
 - Implement the unified plan Tasks 1-25 in order.
