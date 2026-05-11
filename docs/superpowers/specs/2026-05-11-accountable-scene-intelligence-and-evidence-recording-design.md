@@ -54,6 +54,39 @@ The product promise is:
 > Vezor does not just detect events. It records the contract, evidence, privacy
 > posture, and review trail behind each event.
 
+## UI-Managed Configuration Principle
+
+After initial bootstrap, operator-facing configuration must be managed in the
+Vezor UI and API, not by editing backend environment variables or running shell
+commands. Environment variables remain acceptable only for the minimum
+infrastructure that lets the control plane start safely.
+
+Bootstrap-only configuration:
+
+- database, cache, and message-bus connection URLs needed before the API can
+  start
+- the encryption key used to store UI-managed secrets
+- initial identity-provider wiring and first-admin access
+- host bind addresses, container ports, and deployment-level service discovery
+- break-glass overrides used by support when the UI/API is unavailable
+
+UI-managed configuration:
+
+- evidence storage profiles: edge local disk, central MinIO, cloud
+  S3-compatible, and local-first profiles
+- retention, quota, privacy, and residency policies
+- camera source, recording, stream delivery, and browser delivery profiles
+- edge nodes, worker assignments, lifecycle policy, and credential rotation
+- model/runtime artifact selection, fallback policy, and runtime validation
+  targets
+- LLM/provider settings used by Prompt-To-Policy
+- DeepStream/runtime-lane settings when Track C is opened
+
+The backend may seed UI-visible defaults from bootstrap environment variables in
+development, but once a tenant has a UI-managed profile or binding, that profile
+wins. Later tasks must not introduce new product behavior that can only be
+configured through env files or command lines.
+
 ## Current State
 
 The branch already has strong foundations:
@@ -79,6 +112,9 @@ Current gaps:
 - review audit exists, but there is no incident-specific evidence ledger
 - edge-mode clip availability is not explicit when remote object storage is not
   the chosen storage target
+- storage backend details, runtime endpoints, and several operational defaults
+  are still mostly process settings rather than UI-managed product
+  configuration
 - Evidence Desk timeline/case-context polish is planned but not executed
 - incident still snapshots are optional and not first-class artifacts yet
 - Runtime Passport, Operational Memory, Prompt-To-Policy, and Identity-Light
@@ -207,6 +243,42 @@ An artifact records:
 
 The existing `incidents.clip_url` remains for compatibility, but the UI should
 move toward artifact-aware review links.
+
+### Operator Configuration Profile
+
+A tenant-scoped, UI-managed configuration object for a product subsystem.
+Profiles are typed, named, validated, audited, and optionally bound to a tenant,
+site, edge node, or camera.
+
+Examples:
+
+- `evidence_storage`: local disk, central MinIO, cloud S3-compatible, or
+  local-first storage
+- `stream_delivery`: native, WebRTC, HLS, transcode, and endpoint defaults
+- `runtime_selection`: default runtime backend, artifact preference, and
+  fallback policy
+- `privacy_policy`: retention, plaintext plate posture, blur defaults, and
+  residency guardrails
+- `llm_provider`: Prompt-To-Policy provider/model settings
+- `operations_mode`: supervisor ownership, lifecycle behavior, and edge restart
+  policy
+
+Profiles keep non-secret configuration in JSONB and secrets in encrypted
+write-only secret records. API responses expose secret presence and fingerprint,
+never plaintext. Worker-only resolved configuration may include decrypted
+runtime secrets when the caller is authorized as a worker or edge service.
+
+Resolution order:
+
+1. camera binding
+2. edge-node binding
+3. site binding
+4. tenant default profile
+5. bootstrap-seeded development default
+
+Resolved worker config should include a version/hash of the configuration
+profile payload so incidents can later explain which operator configuration was
+active.
 
 ### Runtime Passport
 
@@ -382,22 +454,28 @@ background sync implementation is deliberately simple.
 
 ### Storage Profile Runtime Routing
 
-`EvidenceRecordingPolicy.storage_profile` is the source of truth for where a
-camera's incident evidence is written. Global worker settings define available
-storage backends and credentials; the per-camera recording policy selects the
-route at incident finalization time.
+`EvidenceRecordingPolicy.storage_profile` records the residency intent for a
+camera's incident evidence. The concrete endpoint, bucket, local root, and
+credentials come from a UI-managed `evidence_storage` operator configuration
+profile. Development environment settings may seed a default profile, but they
+must not be the only way to configure storage.
+
+The per-camera recording policy or configuration binding selects a profile id at
+incident finalization time. The profile's kind and residency must agree with the
+recording policy; for example, a camera configured for `cloud` must resolve to an
+enabled S3-compatible profile with `storage_scope=cloud`.
 
 The worker must resolve evidence storage per incident, not once globally for the
 process. This matters when one worker process handles cameras with different
 residency requirements, and it prevents the UI storage selector from becoming a
 display-only field.
 
-| `storage_profile` | Runtime route | Required worker configuration | First artifact status |
+| `storage_profile` | Runtime route | UI-managed profile fields | First artifact status |
 |---|---|---|---|
-| `edge_local` | local filesystem, `storage_scope=edge` | `ARGUS_INCIDENT_LOCAL_STORAGE_ROOT` writable by the edge worker | `local_only` |
-| `central` | MinIO-compatible object store, `storage_scope=central` | `ARGUS_MINIO_ENDPOINT`, `ARGUS_MINIO_ACCESS_KEY`, `ARGUS_MINIO_SECRET_KEY`, `ARGUS_MINIO_INCIDENTS_BUCKET`, optional `ARGUS_MINIO_SECURE` | `remote_available` |
-| `cloud` | S3-compatible object store, `storage_scope=cloud` | the same S3-compatible endpoint, bucket, and credential settings used by the object-store client, with provider recorded as `s3_compatible` | `remote_available` |
-| `local_first` | local filesystem first, optional later remote copy | local root is required; remote S3-compatible settings are required only when sync is enabled | `upload_pending` until a remote copy is confirmed |
+| `edge_local` | local filesystem, `storage_scope=edge` | local root/path prefix, optional edge node binding | `local_only` |
+| `central` | MinIO-compatible object store, `storage_scope=central` | endpoint, bucket, secure flag, access key secret, secret key secret | `remote_available` |
+| `cloud` | S3-compatible object store, `storage_scope=cloud` | endpoint, region, bucket, secure flag, access key secret, secret key secret | `remote_available` |
+| `local_first` | local filesystem first, optional later remote copy | local root/path prefix plus optional remote storage profile binding | `upload_pending` until a remote copy is confirmed |
 
 The backend should keep the existing authenticated artifact content route as the
 review contract for all profiles. For `edge_local` and the first slice of
@@ -724,6 +802,14 @@ GET /api/v1/incidents/{incident_id}/ledger
 GET /api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content
 GET /api/v1/incidents/{incident_id}/runtime-passport
 GET /api/v1/incidents/{incident_id}/cross-camera-threads
+GET /api/v1/configuration/catalog
+GET /api/v1/configuration/profiles
+POST /api/v1/configuration/profiles
+PATCH /api/v1/configuration/profiles/{profile_id}
+DELETE /api/v1/configuration/profiles/{profile_id}
+POST /api/v1/configuration/profiles/{profile_id}/test
+POST /api/v1/configuration/bindings
+GET /api/v1/configuration/resolved
 POST /api/v1/policy-drafts
 POST /api/v1/policy-drafts/{draft_id}/approve
 POST /api/v1/policy-drafts/{draft_id}/reject
@@ -753,6 +839,7 @@ class EvidenceRecordingPolicy(BaseModel):
     fps: int = Field(default=10, ge=1, le=30)
     max_duration_seconds: int = Field(default=15, ge=1, le=90)
     storage_profile: Literal["edge_local", "central", "cloud", "local_first"] = "central"
+    storage_profile_id: UUID | None = None
     snapshot_enabled: bool = False
     snapshot_offset_seconds: float = Field(default=0.0, ge=-30.0, le=60.0)
     snapshot_quality: int = Field(default=85, ge=1, le=100)
@@ -864,6 +951,72 @@ Backfill existing rows with:
 - `source_config={"kind": "rtsp"}`
 
 Keep `rtsp_url_encrypted` for compatibility until a later cleanup migration.
+
+### `operator_config_profiles`
+
+Create migration `0012_operator_configuration_profiles`.
+
+- `id`
+- `tenant_id`
+- `site_id nullable`
+- `edge_node_id nullable`
+- `camera_id nullable`
+- `kind`: `evidence_storage`, `stream_delivery`, `runtime_selection`,
+  `privacy_policy`, `llm_provider`, `operations_mode`
+- `scope`: `tenant`, `site`, `edge_node`, `camera`
+- `name`
+- `slug`
+- `enabled`
+- `is_default`
+- `config JSONB`
+- `validation_status`: `unvalidated`, `valid`, `invalid`
+- `validation_message nullable`
+- `validated_at nullable`
+- `config_hash`
+- `created_at`
+- `updated_at`
+
+Indexes:
+
+- unique `tenant_id`, `kind`, `slug`
+- `tenant_id`, `kind`, `enabled`
+- `tenant_id`, `kind`, `is_default`
+- `site_id`, `kind`
+- `edge_node_id`, `kind`
+- `camera_id`, `kind`
+
+### `operator_config_secrets`
+
+- `id`
+- `tenant_id`
+- `profile_id`
+- `key`
+- `encrypted_value`
+- `value_fingerprint`
+- `created_at`
+- `updated_at`
+
+Indexes:
+
+- unique `profile_id`, `key`
+- `tenant_id`, `profile_id`
+
+### `operator_config_bindings`
+
+- `id`
+- `tenant_id`
+- `kind`
+- `scope`: `tenant`, `site`, `edge_node`, `camera`
+- `scope_key`: `tenant` for tenant default bindings, otherwise the target UUID
+  as a string
+- `profile_id`
+- `created_at`
+- `updated_at`
+
+Indexes:
+
+- unique `tenant_id`, `kind`, `scope`, `scope_key`
+- `profile_id`
 
 ### Later runway tables
 
@@ -1033,8 +1186,12 @@ Indexes:
 
 ```mermaid
 flowchart LR
+  ConfigUI["Settings / Configuration UI"] --> ConfigAPI["Configuration API"]
+  ConfigAPI --> ConfigProfiles["Operator Config Profiles + Secrets"]
   Camera["Camera + Scene Settings"] --> ContractCompiler["Scene Contract Compiler"]
   Privacy["Tenant + Privacy Settings"] --> ManifestBuilder["Privacy Manifest Builder"]
+  ConfigProfiles --> ContractCompiler
+  ConfigProfiles --> WorkerConfig
   ManifestBuilder --> ContractCompiler
   ContractCompiler --> WorkerConfig["Worker Config"]
   WorkerConfig --> Worker["Worker / Inference Engine"]
@@ -1063,6 +1220,12 @@ flowchart LR
 
 ## Error Handling
 
+- If required operator configuration is missing or invalid, the UI blocks
+  binding it as a default profile and worker config reports the unresolved
+  profile with a clear validation error.
+- If a secret-backed profile is read by a browser client, the API returns only
+  redacted secret metadata; plaintext secrets are returned only through
+  worker-authorized resolved configuration.
 - If the scene contract cannot be compiled, worker config load fails loudly.
 - If a clip cannot be encoded, create the incident, write
   `evidence.clip.capture_failed`, and set artifact status `capture_failed`.
@@ -1085,6 +1248,11 @@ flowchart LR
 
 Backend:
 
+- operator configuration profile, binding, secret-redaction, and resolution
+  tests
+- profile validation tests for local filesystem and S3-compatible evidence
+  storage
+- worker-config tests proving UI-managed profiles override bootstrap settings
 - deterministic contract hash tests
 - deterministic privacy manifest hash tests
 - migration/core DB tests
@@ -1110,6 +1278,10 @@ Backend:
 
 Frontend:
 
+- Settings Configuration UI creates, edits, validates, and binds profiles
+- secret fields are write-only and render masked state after save
+- Camera Wizard selects named configuration profiles instead of requiring
+  backend env edits
 - Evidence Desk renders contract, manifest, clip, and ledger status
 - artifact-aware clip link works
 - local-only and remote/cloud states are readable

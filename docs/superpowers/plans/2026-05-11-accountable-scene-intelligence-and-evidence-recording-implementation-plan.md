@@ -4,7 +4,7 @@
 
 **Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
 
-**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then reuse those primitives for the later differentiators and Operations hardening. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects the runtime route so edge local, central MinIO, and S3-compatible/cloud deployments share one review contract. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, and runtime-report data instead of adding parallel case-history systems.
+**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, and S3-compatible/cloud deployments share one review contract. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, and runtime-report data instead of adding parallel case-history systems.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy async, Alembic, PostgreSQL JSONB, OpenCV MJPEG clip encoding, local filesystem storage, MinIO/S3-compatible object storage, React 19, Vite 6, TypeScript 5.7, Tailwind v4, Vitest, pytest, Ruff, mypy.
 
@@ -28,6 +28,13 @@ runtime soak are now part of this plan after the accountable evidence
 foundation. Track C / DeepStream remains a late gated task and must not start
 until the runtime soak task proves Track A/B readiness on target Jetson
 hardware.
+
+After Task 13C, no new operator-facing product behavior may rely only on
+environment variables, command-line flags, or hand-edited backend files. A task
+that introduces configurable product behavior must either consume an existing
+operator configuration profile or add the UI/API/profile support in that same
+task. Environment variables are reserved for bootstrap-only infrastructure and
+break-glass support.
 
 ## Validation Bands
 
@@ -85,14 +92,33 @@ Validation goal:
 Band gate: a reviewer can understand what happened, which contract produced it,
 which privacy posture governed it, and where the evidence clip lives.
 
-### Pre-Band 4: Recording Storage Routing Gate
+### Pre-Band 4: UI-Managed Configuration Control Plane
 
-Task: `13A`
+Tasks: `13A-13C`
 
 Validation goal:
 
-- `EvidenceRecordingPolicy.storage_profile` is honored by incident capture at
-  runtime
+- operator-facing configuration has a database/API/UI control plane
+- product configuration profiles can be created, updated, tested, audited,
+  bound to tenants/sites/edge nodes/cameras, and resolved without shell edits
+- secrets are write-only in browser responses and encrypted at rest
+- Evidence storage, stream delivery, runtime selection, privacy/retention, LLM
+  provider, and operations-mode categories exist in the UI configuration
+  catalog
+- storage profiles are fully configurable from the UI before runtime routing is
+  tested
+
+Band gate: a normal admin can configure product behavior from Settings without
+editing backend env files, except for documented bootstrap-only infrastructure.
+
+### Pre-Band 4.5: Recording Storage Routing Gate
+
+Task: `13D`
+
+Validation goal:
+
+- `EvidenceRecordingPolicy.storage_profile` and the selected UI-managed storage
+  profile are honored by incident capture at runtime
 - `edge_local`, `central`, `cloud`, and `local_first` resolve to the expected
   provider, scope, and artifact status
 - local-first writes a reviewable local artifact and records `upload_pending`
@@ -100,7 +126,8 @@ Validation goal:
 - the Evidence Desk labels upload-pending clips correctly
 
 Band gate: before optional snapshot media is added, prove the storage selector
-is not only a UI field and that clip review still works in edge mode.
+and configured storage profile are not only UI metadata and that clip review
+still works in edge mode.
 
 ### Band 4: Evidence Media Completion
 
@@ -229,8 +256,9 @@ Expected:
 
 If dev DB errors mention `cameras.vision_profile`, `cameras.detection_regions`,
 `model_runtime_artifacts`, `scene_contract_snapshots`,
-`runtime_passport_snapshots`, `worker_assignments`, or any table created by
-this plan, run:
+`operator_config_profiles`, `operator_config_secrets`,
+`operator_config_bindings`, `runtime_passport_snapshots`,
+`worker_assignments`, or any table created by this plan, run:
 
 ```bash
 docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run alembic upgrade head
@@ -253,10 +281,17 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/services/object_store.py` | modify | compatibility wrapper or S3-compatible implementation reuse |
 | `backend/src/argus/services/app.py` | modify | worker config, incident responses, review ledger, new services |
 | `backend/src/argus/api/v1/incidents.py` | modify | contract, manifest, ledger, artifact content routes |
+| `backend/src/argus/migrations/versions/0012_operator_configuration_profiles.py` | create | UI-managed configuration profile, secret, and binding tables |
+| `backend/src/argus/services/operator_configuration.py` | create | configuration profile CRUD, secret handling, validation, binding, and resolution |
+| `backend/src/argus/api/v1/configuration.py` | create | configuration catalog, profile, test, binding, and resolved-config routes |
 | `backend/src/argus/vision/camera.py` | modify | resolve USB/UVC source URIs to edge V4L2/OpenCV capture |
 | `backend/src/argus/vision/source_probe.py` | modify | probe USB/UVC source capability without treating it as RTSP |
 | `backend/src/argus/inference/engine.py` | modify | carry camera source, recording policy, and scene contract context into capture |
 | `frontend/src/lib/api.generated.ts` | regenerate | OpenAPI types |
+| `frontend/src/hooks/use-configuration.ts` | create | configuration profile and binding API hooks |
+| `frontend/src/components/configuration/ConfigurationWorkspace.tsx` | create | Settings configuration control plane |
+| `frontend/src/components/configuration/ProfileEditor.tsx` | create | category-aware profile editors and validation actions |
+| `frontend/src/components/configuration/ProfileBindingPanel.tsx` | create | bind profiles to tenant, site, edge node, and camera scopes |
 | `frontend/src/hooks/use-incidents.ts` | modify | incident response type usage for accountability fields |
 | `frontend/src/pages/Incidents.tsx` | modify | display contract, manifest, artifact, and ledger status |
 | `frontend/src/pages/Incidents.test.tsx` | modify | UI coverage |
@@ -264,12 +299,12 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `frontend/src/components/evidence/AccountabilityStrip.test.tsx` | create | accountability strip rendering tests |
 | `frontend/src/components/cameras/CameraWizard.tsx` | modify | RTSP/USB source selection and recording policy controls |
 | `frontend/src/components/cameras/CameraWizard.test.tsx` | modify | camera source and recording policy tests |
-| `backend/src/argus/migrations/versions/0012_runtime_passports.py` | create | runtime passport table and incident attachment columns |
-| `backend/src/argus/migrations/versions/0013_operational_memory_patterns.py` | create | operational memory pattern table |
-| `backend/src/argus/migrations/versions/0014_policy_drafts.py` | create | prompt-to-policy draft table |
-| `backend/src/argus/migrations/versions/0015_cross_camera_threads.py` | create | identity-light cross-camera thread table |
-| `backend/src/argus/migrations/versions/0016_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
-| `backend/src/argus/migrations/versions/0017_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/migrations/versions/0013_runtime_passports.py` | create | runtime passport table and incident attachment columns |
+| `backend/src/argus/migrations/versions/0014_operational_memory_patterns.py` | create | operational memory pattern table |
+| `backend/src/argus/migrations/versions/0015_policy_drafts.py` | create | prompt-to-policy draft table |
+| `backend/src/argus/migrations/versions/0016_cross_camera_threads.py` | create | identity-light cross-camera thread table |
+| `backend/src/argus/migrations/versions/0017_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
+| `backend/src/argus/migrations/versions/0018_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
 | `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
 | `backend/src/argus/services/operational_memory.py` | create | pattern detection over incidents, artifacts, contracts, and ledgers |
 | `backend/src/argus/services/policy_drafts.py` | create | prompt-to-policy draft, diff, approval, rejection, and application service |
@@ -1826,53 +1861,574 @@ git commit -m "feat(evidence): add accountable timeline and case context"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
-## Task 13A: Recording Storage Profile Runtime Routing
+## Task 13A: Operator Configuration Data Foundation
 
 **Files:**
 
+- Modify: `backend/src/argus/core/config.py`
+- Modify: `backend/src/argus/core/security.py`
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0012_operator_configuration_profiles.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Test: `backend/tests/core/test_db.py`
+- Test: `backend/tests/services/test_operator_configuration.py`
+
+This task creates the product rule in code: operator-facing configuration is a
+database-backed control-plane object. Environment variables can seed defaults,
+but they are not the normal operator interface.
+
+- [ ] **Step 1: Add failing model and contract tests**
+
+Create `backend/tests/services/test_operator_configuration.py` with tests for:
+
+- profile kind enum values:
+  `evidence_storage`, `stream_delivery`, `runtime_selection`, `privacy_policy`,
+  `llm_provider`, `operations_mode`
+- profile scope enum values: `tenant`, `site`, `edge_node`, `camera`
+- validation status values: `unvalidated`, `valid`, `invalid`
+- `OperatorConfigProfileResponse` redacts secrets by exposing
+  `secret_state={"access_key": "present", "secret_key": "present"}` rather than
+  plaintext
+- `OperatorConfigProfileCreate` accepts category-specific storage config:
+
+```python
+{
+    "kind": "evidence_storage",
+    "scope": "tenant",
+    "name": "Dev MinIO",
+    "slug": "dev-minio",
+    "is_default": True,
+    "config": {
+        "provider": "minio",
+        "storage_scope": "central",
+        "endpoint": "localhost:9000",
+        "bucket": "incidents",
+        "secure": False,
+        "path_prefix": "dev",
+    },
+    "secrets": {
+        "access_key": "argus",
+        "secret_key": "argus-dev-secret",
+    },
+}
+```
+
+Extend `backend/tests/core/test_db.py` so `Base.metadata.create_all` includes:
+
+- `operator_config_profiles`
+- `operator_config_secrets`
+- `operator_config_bindings`
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_operator_configuration.py \
+  tests/core/test_db.py \
+  -q
+```
+
+Expected: fail because the models, contracts, and migration do not exist.
+
+- [ ] **Step 3: Add configuration enums**
+
+In `backend/src/argus/models/enums.py`, add:
+
+```python
+class OperatorConfigProfileKind(StrEnum):
+    EVIDENCE_STORAGE = "evidence_storage"
+    STREAM_DELIVERY = "stream_delivery"
+    RUNTIME_SELECTION = "runtime_selection"
+    PRIVACY_POLICY = "privacy_policy"
+    LLM_PROVIDER = "llm_provider"
+    OPERATIONS_MODE = "operations_mode"
+
+
+class OperatorConfigScope(StrEnum):
+    TENANT = "tenant"
+    SITE = "site"
+    EDGE_NODE = "edge_node"
+    CAMERA = "camera"
+
+
+class OperatorConfigValidationStatus(StrEnum):
+    UNVALIDATED = "unvalidated"
+    VALID = "valid"
+    INVALID = "invalid"
+```
+
+- [ ] **Step 4: Add configuration tables and migration**
+
+In `backend/src/argus/models/tables.py`, add:
+
+```python
+class OperatorConfigProfile(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "operator_config_profiles"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=True)
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("edge_nodes.id"), nullable=True)
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("cameras.id"), nullable=True)
+    kind: Mapped[OperatorConfigProfileKind] = mapped_column(enum_column(OperatorConfigProfileKind, "operator_config_profile_kind_enum"), nullable=False)
+    scope: Mapped[OperatorConfigScope] = mapped_column(enum_column(OperatorConfigScope, "operator_config_scope_enum"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
+    config: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    validation_status: Mapped[OperatorConfigValidationStatus] = mapped_column(enum_column(OperatorConfigValidationStatus, "operator_config_validation_status_enum"), nullable=False, default=OperatorConfigValidationStatus.UNVALIDATED)
+    validation_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    config_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+```
+
+Add `OperatorConfigSecret` and `OperatorConfigBinding` with the fields from the
+spec. The migration must use short constraint names and indexes:
+
+- `uq_op_cfg_profile_slug`
+- `ix_op_cfg_profile_tenant_kind`
+- `uq_op_cfg_secret_key`
+- `uq_op_cfg_binding_scope`
+
+- [ ] **Step 5: Add generic secret encryption helpers**
+
+In `backend/src/argus/core/config.py`, add:
+
+```python
+config_encryption_key: SecretStr = SecretStr("argus-dev-config-key")
+```
+
+In `backend/src/argus/core/security.py`, add:
+
+```python
+def encrypt_config_secret(plaintext: str, settings: Settings) -> str:
+    key = _derive_encryption_key(settings.config_encryption_key.get_secret_value())
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
+    return base64.urlsafe_b64encode(nonce + ciphertext).decode("utf-8")
+
+
+def decrypt_config_secret(ciphertext: str, settings: Settings) -> str:
+    key = _derive_encryption_key(settings.config_encryption_key.get_secret_value())
+    decoded = base64.urlsafe_b64decode(ciphertext.encode("utf-8"))
+    nonce = decoded[:12]
+    encrypted_payload = decoded[12:]
+    aesgcm = AESGCM(key)
+    try:
+        plaintext = aesgcm.decrypt(nonce, encrypted_payload, None)
+    except (InvalidTag, ValueError, TypeError) as exc:
+        raise ValueError("Unable to decrypt configuration secret.") from exc
+    return plaintext.decode("utf-8")
+```
+
+- [ ] **Step 6: Add API contracts**
+
+In `backend/src/argus/api/contracts.py`, add:
+
+- `EvidenceStorageProfileConfig`
+- `StreamDeliveryProfileConfig`
+- `RuntimeSelectionProfileConfig`
+- `PrivacyPolicyProfileConfig`
+- `LLMProviderProfileConfig`
+- `OperationsModeProfileConfig`
+- `OperatorConfigProfileCreate`
+- `OperatorConfigProfileUpdate`
+- `OperatorConfigProfileResponse`
+- `OperatorConfigBindingRequest`
+- `OperatorConfigBindingResponse`
+- `OperatorConfigTestResponse`
+- `ResolvedOperatorConfigResponse`
+
+Responses must include `secret_state` and must not include plaintext `secrets`.
+
+- [ ] **Step 7: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_operator_configuration.py \
+  tests/core/test_db.py \
+  -q
+```
+
+Expected: pass.
+
+- [ ] **Step 8: Commit and push**
+
+```bash
+git add backend/src/argus/core/config.py \
+  backend/src/argus/core/security.py \
+  backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0012_operator_configuration_profiles.py \
+  backend/src/argus/api/contracts.py \
+  backend/tests/services/test_operator_configuration.py \
+  backend/tests/core/test_db.py
+git commit -m "feat(config): add operator configuration profiles"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13B: Configuration Service, API, Validation, And Resolution
+
+**Files:**
+
+- Create: `backend/src/argus/services/operator_configuration.py`
+- Create: `backend/src/argus/api/v1/configuration.py`
+- Modify: `backend/src/argus/api/v1/__init__.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/services/evidence_storage.py`
+- Test: `backend/tests/services/test_operator_configuration.py`
+- Test: `backend/tests/api/test_configuration_routes.py`
+
+- [ ] **Step 1: Add failing service and route tests**
+
+Extend `backend/tests/services/test_operator_configuration.py` and create
+`backend/tests/api/test_configuration_routes.py` covering:
+
+- creating a profile writes non-secret config and encrypted secrets
+- listing profiles returns redacted secret state
+- patching a profile can rotate one secret without clearing untouched secrets
+- setting `is_default=True` clears the previous default for the same tenant and
+  kind
+- binding a profile to a camera returns the selected profile from resolution
+- resolution order is camera, edge node, site, tenant default, bootstrap default
+- `POST /api/v1/configuration/profiles/{profile_id}/test` validates local
+  filesystem and S3-compatible evidence storage config
+- audit action names:
+  - `configuration.profile.create`
+  - `configuration.profile.update`
+  - `configuration.profile.delete`
+  - `configuration.profile.test`
+  - `configuration.binding.upsert`
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_operator_configuration.py \
+  tests/api/test_configuration_routes.py \
+  -q
+```
+
+Expected: fail because service and routes do not exist.
+
+- [ ] **Step 3: Implement `OperatorConfigurationService`**
+
+Create `backend/src/argus/services/operator_configuration.py` with:
+
+- `list_catalog`
+- `list_profiles`
+- `create_profile`
+- `update_profile`
+- `delete_profile`
+- `test_profile`
+- `upsert_binding`
+- `resolve_profile`
+- `resolve_all_for_camera`
+- `seed_bootstrap_defaults`
+
+The service must:
+
+- hash profile config with canonical JSON
+- encrypt secrets with `encrypt_config_secret`
+- decrypt secrets only for worker/service resolution paths
+- keep browser/API responses redacted
+- use `DatabaseAuditLogger`
+- reject profile bindings across tenant boundaries
+- reject disabled profiles as defaults or bindings
+
+- [ ] **Step 4: Add profile validators**
+
+In `operator_configuration.py`, implement:
+
+- evidence storage local validator:
+  - requires `local_root`
+  - verifies path is absolute or under the configured dev storage root
+  - returns `valid` when the path can be created/written in local validation
+    mode
+- evidence storage S3-compatible validator:
+  - requires `endpoint`, `bucket`, `access_key`, and `secret_key`
+  - uses the existing MinIO/S3-compatible client interface
+  - returns `invalid` with a redacted message when the bucket check/upload check
+    fails
+- stream delivery validator:
+  - validates endpoint URL shape and selected delivery mode
+- runtime selection validator:
+  - validates requested backend/artifact preference shape
+- privacy/retention validator:
+  - validates quota and retention values are non-negative and residency is one
+    of `edge`, `central`, `cloud`, or `local_first`
+- LLM provider validator:
+  - validates provider/model/base URL shape without calling a paid remote API
+- operations-mode validator:
+  - validates lifecycle owner and supervisor mode values
+
+- [ ] **Step 5: Add API routes**
+
+Create `backend/src/argus/api/v1/configuration.py`:
+
+```text
+GET /api/v1/configuration/catalog
+GET /api/v1/configuration/profiles
+POST /api/v1/configuration/profiles
+PATCH /api/v1/configuration/profiles/{profile_id}
+DELETE /api/v1/configuration/profiles/{profile_id}
+POST /api/v1/configuration/profiles/{profile_id}/test
+POST /api/v1/configuration/bindings
+GET /api/v1/configuration/resolved
+```
+
+Include the router from `backend/src/argus/api/v1/__init__.py`.
+
+- [ ] **Step 6: Seed bootstrap defaults as UI-visible profiles**
+
+In `OperatorConfigurationService.seed_bootstrap_defaults`, create development
+defaults from existing settings when no tenant profile exists:
+
+- `Dev MinIO` from `minio_endpoint`, `minio_incidents_bucket`,
+  `minio_access_key`, `minio_secret_key`, `minio_secure`
+- `Dev local evidence` from `incident_local_storage_root`
+- `Default native stream delivery` from current MediaMTX/browser delivery
+  settings
+- `Default runtime selection` from current inference/runtime settings
+
+Seeded profiles are normal UI-managed profiles after creation. They can be
+edited, tested, disabled, or replaced from Settings.
+
+- [ ] **Step 7: Run tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_operator_configuration.py \
+  tests/api/test_configuration_routes.py \
+  tests/services/test_camera_worker_config.py \
+  -q
+```
+
+Expected: pass.
+
+- [ ] **Step 8: Commit and push**
+
+```bash
+git add backend/src/argus/services/operator_configuration.py \
+  backend/src/argus/api/v1/configuration.py \
+  backend/src/argus/api/v1/__init__.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/services/evidence_storage.py \
+  backend/tests/services/test_operator_configuration.py \
+  backend/tests/api/test_configuration_routes.py
+git commit -m "feat(config): expose UI-managed configuration API"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13C: Configuration Workspace UI
+
+**Files:**
+
+- Create: `frontend/src/hooks/use-configuration.ts`
+- Create: `frontend/src/components/configuration/ConfigurationWorkspace.tsx`
+- Create: `frontend/src/components/configuration/ProfileEditor.tsx`
+- Create: `frontend/src/components/configuration/ProfileBindingPanel.tsx`
+- Create: `frontend/src/components/configuration/configuration-copy.ts`
+- Create: `frontend/src/components/configuration/ConfigurationWorkspace.test.tsx`
+- Create: `frontend/src/components/configuration/ProfileEditor.test.tsx`
+- Modify: `frontend/src/pages/Settings.tsx`
+- Modify: `frontend/src/pages/Settings.test.tsx`
+- Regenerate: `frontend/src/lib/api.generated.ts`
+
+- [ ] **Step 1: Add failing UI tests**
+
+Create tests covering:
+
+- Settings shows a `Configuration` section before worker diagnostics
+- category tabs or segmented controls for:
+  - Evidence storage
+  - Streams
+  - Runtime
+  - Privacy and retention
+  - LLM and policy
+  - Operations
+- creating a cloud S3-compatible evidence storage profile submits endpoint,
+  bucket, region, secure flag, and write-only access/secret keys
+- saved secret fields render as `Stored` or `Replace secret`, never plaintext
+- `Test profile` calls the profile test endpoint and renders valid/invalid
+  status
+- setting a profile as default renders a single default badge for that category
+- profile binding panel can bind a profile to a camera, site, edge node, or
+  tenant scope
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/configuration/ConfigurationWorkspace.test.tsx \
+  src/components/configuration/ProfileEditor.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: fail because configuration UI does not exist.
+
+- [ ] **Step 3: Regenerate OpenAPI types**
+
+```bash
+cd /Users/yann.moren/vision
+python3 -m uv run --project backend python -c 'import json; from argus.main import create_app; from argus.core.config import Settings; app = create_app(Settings(enable_startup_services=False, enable_nats=False)); print(json.dumps(app.openapi()))' > /private/tmp/argus-openapi.json
+corepack pnpm --dir frontend exec openapi-typescript /private/tmp/argus-openapi.json -o src/lib/api.generated.ts
+```
+
+- [ ] **Step 4: Add configuration hooks**
+
+Create `frontend/src/hooks/use-configuration.ts` with hooks for:
+
+- `useConfigurationCatalog`
+- `useConfigurationProfiles`
+- `useCreateConfigurationProfile`
+- `useUpdateConfigurationProfile`
+- `useDeleteConfigurationProfile`
+- `useTestConfigurationProfile`
+- `useUpsertConfigurationBinding`
+- `useResolvedConfiguration`
+
+Use the existing API client pattern in `frontend/src/lib/api.ts`.
+
+- [ ] **Step 5: Build the Settings configuration workspace**
+
+Add `ConfigurationWorkspace` above the existing Operations rails in
+`frontend/src/pages/Settings.tsx`.
+
+Design rules:
+
+- compact operations UI, not a marketing page
+- no nested cards
+- no WebGL
+- no visible instructions that substitute for controls
+- category-specific controls instead of raw JSON
+- icons from `lucide-react`
+- secrets are write-only fields with explicit `Replace` behavior
+
+- [ ] **Step 6: Implement category editors**
+
+`ProfileEditor` must have concrete controls for:
+
+- Evidence storage:
+  - provider: local filesystem, MinIO, S3-compatible, local-first
+  - scope: edge, central, cloud
+  - local root
+  - endpoint
+  - region
+  - bucket
+  - secure/TLS toggle
+  - path prefix
+  - access key and secret key write-only fields
+- Streams:
+  - delivery mode
+  - native/WebRTC/HLS preference
+  - public base URL
+  - edge override URL
+- Runtime:
+  - preferred backend
+  - artifact preference
+  - fallback allowed toggle
+- Privacy and retention:
+  - retention days
+  - storage quota
+  - plaintext plate posture
+  - residency guardrail
+- LLM and policy:
+  - provider
+  - model
+  - base URL
+  - API key write-only field
+- Operations:
+  - lifecycle owner
+  - supervisor mode
+  - restart policy
+
+- [ ] **Step 7: Run UI tests**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/configuration/ConfigurationWorkspace.test.tsx \
+  src/components/configuration/ProfileEditor.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 8: Commit and push**
+
+```bash
+git add frontend/src/hooks/use-configuration.ts \
+  frontend/src/components/configuration/ConfigurationWorkspace.tsx \
+  frontend/src/components/configuration/ProfileEditor.tsx \
+  frontend/src/components/configuration/ProfileBindingPanel.tsx \
+  frontend/src/components/configuration/configuration-copy.ts \
+  frontend/src/components/configuration/ConfigurationWorkspace.test.tsx \
+  frontend/src/components/configuration/ProfileEditor.test.tsx \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Settings.test.tsx \
+  frontend/src/lib/api.generated.ts
+git commit -m "feat(config): add configuration workspace"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13D: Recording Storage Profile Runtime Routing
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/services/operator_configuration.py`
 - Modify: `backend/src/argus/services/evidence_storage.py`
 - Modify: `backend/src/argus/services/incident_capture.py`
 - Modify: `backend/src/argus/inference/engine.py`
 - Modify: `backend/tests/services/test_evidence_storage.py`
 - Modify: `backend/tests/services/test_incident_capture.py`
 - Modify: `backend/tests/inference/test_engine.py`
+- Modify: `backend/tests/services/test_camera_worker_config.py`
+- Modify: `frontend/src/components/cameras/CameraWizard.tsx`
+- Modify: `frontend/src/components/cameras/CameraWizard.test.tsx`
 - Modify: `frontend/src/components/evidence/AccountabilityStrip.tsx`
 - Modify: `frontend/src/components/evidence/AccountabilityStrip.test.tsx`
 - Modify: `frontend/src/components/evidence/CaseContextStrip.test.tsx`
 
-Do this task before Task 14. Task 14 adds a second media kind; this task proves
-the existing event-clip path writes to the selected storage profile first.
+Do this task after Task 13C and before Task 14. Task 14 adds a second media
+kind; this task proves the existing event-clip path writes to the selected
+UI-managed storage profile first.
 
 - [ ] **Step 1: Add failing storage route tests**
 
 Extend `backend/tests/services/test_evidence_storage.py` with route resolution
-coverage:
+coverage using resolved `evidence_storage` operator configuration profiles:
 
-- `storage_profile="edge_local"` returns local filesystem storage,
-  `EvidenceStorageProvider.LOCAL_FILESYSTEM`, `EvidenceStorageScope.EDGE`, and
-  no status override
-- `storage_profile="central"` returns remote storage with provider
-  `EvidenceStorageProvider.MINIO`, scope `EvidenceStorageScope.CENTRAL`, and no
-  status override
-- `storage_profile="cloud"` returns remote storage with provider
-  `EvidenceStorageProvider.S3_COMPATIBLE`, scope `EvidenceStorageScope.CLOUD`,
-  and no status override
-- `storage_profile="local_first"` returns local filesystem storage,
-  `EvidenceStorageProvider.LOCAL_FILESYSTEM`, `EvidenceStorageScope.EDGE`, and
+- an `edge_local` profile with `provider="local_filesystem"` and
+  `storage_scope="edge"` returns local filesystem storage and no status override
+- a `central` profile with `provider="minio"` and `storage_scope="central"`
+  returns remote storage with provider `EvidenceStorageProvider.MINIO`
+- a `cloud` profile with `provider="s3_compatible"` and
+  `storage_scope="cloud"` returns remote storage with provider
+  `EvidenceStorageProvider.S3_COMPATIBLE`
+- a `local_first` profile returns local filesystem storage and
   `EvidenceArtifactStatus.UPLOAD_PENDING`
-- `None` uses `EvidenceRecordingPolicy()` defaults, which resolve to central
-  storage
-- the legacy `build_evidence_store(settings)` still honors
-  `settings.incident_storage_provider` and `settings.incident_storage_scope`
+- `EvidenceRecordingPolicy(storage_profile="cloud", storage_profile_id=<central-profile>)`
+  fails validation because profile residency does not match policy intent
+- the legacy `build_evidence_store(settings)` remains available only as a
+  bootstrap/default compatibility path
 
 - [ ] **Step 2: Add failing incident capture routing tests**
 
 Extend `backend/tests/services/test_incident_capture.py` with:
 
-- a fake resolver receiving an event policy with `storage_profile="cloud"` and
-  selecting a cloud fake object store
-- a second event policy with `storage_profile="edge_local"` selecting a local
-  fake object store in the same service instance
+- a fake resolver receiving an event policy with `storage_profile_id` for a
+  cloud profile and selecting a cloud fake object store
+- a second event policy with `storage_profile_id` for an edge-local profile and
+  selecting a local fake object store in the same service instance
 - a local-first event producing an artifact with status `upload_pending`,
   provider `local_filesystem`, and scope `edge`
 - a selected storage route whose store raises during `put_object`, proving the
@@ -1882,7 +2438,10 @@ Extend `backend/tests/services/test_incident_capture.py` with:
 
 - [ ] **Step 3: Add failing UI status tests**
 
-Extend `frontend/src/components/evidence/AccountabilityStrip.test.tsx` and
+Extend `frontend/src/components/cameras/CameraWizard.test.tsx` so the recording
+section loads configured evidence storage profiles and submits
+`recording_policy.storage_profile_id` with the selected profile. Extend
+`frontend/src/components/evidence/AccountabilityStrip.test.tsx` and
 `frontend/src/components/evidence/CaseContextStrip.test.tsx` so an artifact with
 `status: "upload_pending"` renders `Upload pending` rather than falling through
 to an expired or unavailable label.
@@ -1898,13 +2457,14 @@ python3 -m uv run pytest \
   -q
 cd /Users/yann.moren/vision
 corepack pnpm --dir frontend exec vitest run \
+  src/components/cameras/CameraWizard.test.tsx \
   src/components/evidence/AccountabilityStrip.test.tsx \
   src/components/evidence/CaseContextStrip.test.tsx
 ```
 
 Expected: fail because storage is still built from process settings rather than
-the per-camera recording policy, and `AccountabilityStrip` does not yet label
-`upload_pending`.
+the resolved UI-managed profile, Camera Wizard does not submit a profile id, and
+`AccountabilityStrip` does not yet label `upload_pending`.
 
 - [ ] **Step 5: Implement policy-to-storage routing**
 
@@ -1923,36 +2483,46 @@ class EvidenceStorageRoute:
 def resolve_evidence_storage_route(
     settings: Settings,
     *,
-    storage_profile: str | None,
+    recording_policy: EvidenceRecordingPolicy,
+    profile: ResolvedOperatorConfigProfile,
 ) -> EvidenceStorageRoute: ...
 ```
 
-Implement the route mapping:
+Implement the route mapping from the resolved UI-managed profile:
 
-- `None` and `central`: `S3CompatibleEvidenceStore`, provider `minio`, scope
-  `central`
-- `cloud`: `S3CompatibleEvidenceStore`, provider `s3_compatible`, scope `cloud`
-- `edge_local`: `LocalFilesystemEvidenceStore`, provider `local_filesystem`,
-  scope `edge`
-- `local_first`: `LocalFilesystemEvidenceStore`, provider `local_filesystem`,
-  scope `edge`, status override `upload_pending`
+- profile provider `minio` and scope `central`: `S3CompatibleEvidenceStore`,
+  provider `minio`, scope `central`
+- profile provider `s3_compatible` and scope `cloud`:
+  `S3CompatibleEvidenceStore`, provider `s3_compatible`, scope `cloud`
+- profile provider `local_filesystem` and scope `edge`:
+  `LocalFilesystemEvidenceStore`, provider `local_filesystem`, scope `edge`
+- profile provider `local_first`: `LocalFilesystemEvidenceStore`, provider
+  `local_filesystem`, scope `edge`, status override `upload_pending`
+
+Reject mismatches between `recording_policy.storage_profile` and the resolved
+profile residency. The UI can show friendly validation before save, but runtime
+must also guard the invariant.
 
 Update `LocalFilesystemEvidenceStore` and `S3CompatibleEvidenceStore` so their
 constructors can receive explicit provider/scope values instead of reading only
 `settings.incident_storage_provider` and `settings.incident_storage_scope`.
-Keep `build_evidence_store(settings)` as a compatibility wrapper for direct
-settings-based use.
+Allow the S3-compatible store to receive endpoint, bucket, access key, secret
+key, region, secure flag, and path prefix from the decrypted configuration
+profile. Keep `build_evidence_store(settings)` as a bootstrap compatibility
+wrapper only.
 
 - [ ] **Step 6: Wire route selection into clip capture**
 
 In `backend/src/argus/services/incident_capture.py`:
 
 - add an `EvidenceStorageResolver` protocol that returns an
-  `EvidenceStorageRoute` from `EvidenceRecordingPolicy | None`
+  `EvidenceStorageRoute` from camera id plus `EvidenceRecordingPolicy`
 - keep the existing `object_store` constructor argument as the fallback for
   tests and legacy callers
 - after resolving `recording_policy` in `_finalize_pending`, select the storage
-  route from the resolver when present
+  route from the resolver when present; the resolver must use
+  `recording_policy.storage_profile_id` or the camera/site/edge/tenant binding
+  resolution order from Task 13B
 - pass `route.status_override` into `_event_clip_artifact_payload`; if present,
   use it instead of deriving status only from provider/scope
 - when `put_object` raises, create the incident with `clip_url=None`,
@@ -1982,25 +2552,59 @@ In `backend/src/argus/services/incident_capture.py`:
 
 Do not silently fall back to another profile when the selected route fails.
 
-- [ ] **Step 7: Wire the worker runtime**
+- [ ] **Step 7: Wire worker config and runtime**
+
+In `backend/src/argus/api/contracts.py`, extend `EvidenceRecordingPolicy` with:
+
+```python
+storage_profile_id: UUID | None = None
+```
+
+Add a worker-only resolved storage contract:
+
+```python
+class WorkerEvidenceStorageSettings(BaseModel):
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_hash: str | None = None
+    provider: EvidenceStorageProvider
+    storage_scope: EvidenceStorageScope
+    config: dict[str, object] = Field(default_factory=dict)
+    secrets: dict[str, str] = Field(default_factory=dict)
+```
+
+In `CameraService.get_worker_config`, include
+`WorkerEvidenceStorageSettings` resolved by `OperatorConfigurationService`.
+Browser-facing configuration routes remain redacted; the worker config route is
+the only path that may include decrypted runtime secrets.
 
 In `backend/src/argus/inference/engine.py`, construct the incident capture
-service with a resolver based on the worker settings:
+service with a resolver based on worker config, not local env settings:
 
 ```python
 incident_capture=IncidentClipCaptureService(
     object_store=build_evidence_store(resolved_settings),
-    storage_resolver=SettingsEvidenceStorageResolver(resolved_settings),
+    storage_resolver=ResolvedEvidenceStorageResolver(
+        settings=resolved_settings,
+        evidence_storage=config.evidence_storage,
+    ),
     repository=SQLIncidentRepository(db_manager.session_factory),
     recording_policy=config.recording_policy,
 )
 ```
 
 Add or adjust the corresponding `tests/inference/test_engine.py` assertion so
-worker startup proves the resolver is present and the default central route is
-still compatible.
+worker startup proves the resolver is present and the selected UI-managed
+profile is used.
 
-- [ ] **Step 8: Update upload-pending UI labels**
+- [ ] **Step 8: Update Camera Wizard and upload-pending UI labels**
+
+In `frontend/src/components/cameras/CameraWizard.tsx`, use
+`useConfigurationProfiles({kind: "evidence_storage"})` to show named storage
+profiles in the recording section. Submitting a camera should include both:
+
+- `recording_policy.storage_profile`: the profile's residency intent
+- `recording_policy.storage_profile_id`: the selected profile id
 
 In `frontend/src/components/evidence/AccountabilityStrip.tsx`, update
 `artifactStatusLabel` so `upload_pending` returns `Upload pending`. Keep
@@ -2011,12 +2615,15 @@ In `frontend/src/components/evidence/AccountabilityStrip.tsx`, update
 ```bash
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest \
+  tests/services/test_operator_configuration.py \
   tests/services/test_evidence_storage.py \
   tests/services/test_incident_capture.py \
+  tests/services/test_camera_worker_config.py \
   tests/inference/test_engine.py \
   -q
 cd /Users/yann.moren/vision
 corepack pnpm --dir frontend exec vitest run \
+  src/components/cameras/CameraWizard.test.tsx \
   src/components/evidence/AccountabilityStrip.test.tsx \
   src/components/evidence/CaseContextStrip.test.tsx \
   src/pages/Incidents.test.tsx
@@ -2028,11 +2635,16 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/services/evidence_storage.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/services/operator_configuration.py \
   backend/src/argus/services/incident_capture.py \
   backend/src/argus/inference/engine.py \
   backend/tests/services/test_evidence_storage.py \
   backend/tests/services/test_incident_capture.py \
+  backend/tests/services/test_camera_worker_config.py \
   backend/tests/inference/test_engine.py \
+  frontend/src/components/cameras/CameraWizard.tsx \
+  frontend/src/components/cameras/CameraWizard.test.tsx \
   frontend/src/components/evidence/AccountabilityStrip.tsx \
   frontend/src/components/evidence/AccountabilityStrip.test.tsx \
   frontend/src/components/evidence/CaseContextStrip.test.tsx
@@ -2128,7 +2740,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0012_runtime_passports.py`
+- Create: `backend/src/argus/migrations/versions/0013_runtime_passports.py`
 - Create: `backend/src/argus/services/runtime_passports.py`
 - Modify: `backend/src/argus/services/scene_contracts.py`
 - Modify: `backend/src/argus/services/app.py`
@@ -2175,7 +2787,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0012_runtime_passports.py \
+  backend/src/argus/migrations/versions/0013_runtime_passports.py \
   backend/src/argus/services/runtime_passports.py \
   backend/src/argus/services/scene_contracts.py \
   backend/src/argus/services/app.py \
@@ -2264,7 +2876,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0013_operational_memory_patterns.py`
+- Create: `backend/src/argus/migrations/versions/0014_operational_memory_patterns.py`
 - Create: `backend/src/argus/services/operational_memory.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
@@ -2323,7 +2935,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0013_operational_memory_patterns.py \
+  backend/src/argus/migrations/versions/0014_operational_memory_patterns.py \
   backend/src/argus/services/operational_memory.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
@@ -2346,7 +2958,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0014_policy_drafts.py`
+- Create: `backend/src/argus/migrations/versions/0015_policy_drafts.py`
 - Create: `backend/src/argus/services/policy_drafts.py`
 - Create: `backend/src/argus/api/v1/policy_drafts.py`
 - Modify: `backend/src/argus/main.py`
@@ -2403,7 +3015,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0014_policy_drafts.py \
+  backend/src/argus/migrations/versions/0015_policy_drafts.py \
   backend/src/argus/services/policy_drafts.py \
   backend/src/argus/api/v1/policy_drafts.py \
   backend/src/argus/main.py \
@@ -2421,7 +3033,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0015_cross_camera_threads.py`
+- Create: `backend/src/argus/migrations/versions/0016_cross_camera_threads.py`
 - Create: `backend/src/argus/services/cross_camera_threads.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/incidents.py`
@@ -2479,7 +3091,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0015_cross_camera_threads.py \
+  backend/src/argus/migrations/versions/0016_cross_camera_threads.py \
   backend/src/argus/services/cross_camera_threads.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/incidents.py \
@@ -2500,7 +3112,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0016_supervisor_operations.py`
+- Create: `backend/src/argus/migrations/versions/0017_supervisor_operations.py`
 - Create: `backend/src/argus/services/supervisor_operations.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
@@ -2558,7 +3170,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0016_supervisor_operations.py \
+  backend/src/argus/migrations/versions/0017_supervisor_operations.py \
   backend/src/argus/services/supervisor_operations.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
@@ -2712,7 +3324,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0017_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/migrations/versions/0018_runtime_artifact_soak_runs.py`
 - Create: `backend/src/argus/services/runtime_soak.py`
 - Create: `backend/src/argus/api/v1/runtime_soak.py`
 - Modify: `backend/src/argus/main.py`
@@ -2773,7 +3385,7 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0017_runtime_artifact_soak_runs.py \
+  backend/src/argus/migrations/versions/0018_runtime_artifact_soak_runs.py \
   backend/src/argus/services/runtime_soak.py \
   backend/src/argus/api/v1/runtime_soak.py \
   backend/src/argus/main.py \
