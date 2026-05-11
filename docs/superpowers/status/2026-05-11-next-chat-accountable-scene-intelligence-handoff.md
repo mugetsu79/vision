@@ -205,6 +205,55 @@ python3 -m uv run pytest \
 After Task 1, continue the plan one task at a time. Task 4 is the edge USB/UVC
 source implementation; it is part of this plan and should remain edge-first.
 
+## Pending Follow-Up Queue
+
+Do not lose these across chats. They remain important even though the immediate
+next work is the Accountable Scene Intelligence foundation.
+
+### Evidence Desk Timeline And Case Context Polish
+
+This is still pending and not obsolete:
+
+```text
+docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md
+```
+
+Original scope:
+
+- Evidence Timeline density strip
+- Case Context Strip
+- type-colored review queue
+- cleaner raw payload disclosure
+
+Current status:
+
+- not executed yet
+- superseded as the immediate next plan
+- should be retuned after Accountable Scene Intelligence Tasks 1-9, because the
+  Evidence Desk should first surface scene contracts, privacy manifests,
+  evidence artifact status, and ledger summary
+- after Task 9 lands, either adapt the old Evidence Desk polish plan into a new
+  follow-up plan or explicitly fold its useful pieces into the accountable
+  Evidence Desk UI before closing the evidence surface
+
+### Later Product Differentiators
+
+After the accountable evidence foundation and retuned Evidence Desk polish,
+decide whether to implement:
+
+- Runtime Passport
+- Operational Memory
+- Prompt-To-Policy
+- Identity-Light Cross-Camera Intelligence
+
+These should reuse the scene contract, privacy manifest, evidence artifact, and
+ledger primitives from the current plan.
+
+### Later Runtime Lane
+
+Track C / DeepStream remains deferred until Track A/B runtime artifacts have
+passed real Jetson soak validation.
+
 ## Working Rules For The Next Chat
 
 - Continue from `codex/omnisight-ui-spec-implementation`.
@@ -217,8 +266,11 @@ source implementation; it is part of this plan and should remain edge-first.
 - Keep WebGL off.
 - Implement Accountable Scene Intelligence plan Tasks 1-12 in order unless the
   user redirects.
+- Keep the pending Evidence Desk polish queue visible; do not drop it from
+  future handoffs.
 - Do not implement Runtime Passport, Operational Memory, Prompt-To-Policy, or
-  Identity-Light cross-camera intelligence until this foundation is complete.
+  Identity-Light cross-camera intelligence until this foundation and the retuned
+  Evidence Desk polish are complete or the user explicitly redirects.
 - Do not implement Track C / DeepStream yet.
 - Do not reopen RTSP/TensorRT debugging unless fresh logs prove it is needed.
 - Treat USB camera support as edge-first production support for Linux/Jetson

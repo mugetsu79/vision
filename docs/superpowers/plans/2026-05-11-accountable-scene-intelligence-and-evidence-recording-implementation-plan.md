@@ -1519,8 +1519,31 @@ git push origin codex/omnisight-ui-spec-implementation
 
 ## Follow-Up Queue After This Plan
 
-Do not start these until Tasks 1-11 are complete and the user approves the next
-direction.
+Do not start these until Tasks 1-12 are complete and the user approves the next
+direction. Keep this queue in future handoffs so pending work does not disappear
+between chats.
+
+### Evidence Desk Timeline And Case Context Polish
+
+The older Evidence Desk polish plan is still pending:
+
+```text
+docs/superpowers/plans/2026-05-09-evidence-desk-timeline-and-case-context-implementation-plan.md
+```
+
+It should not be executed verbatim before the accountable evidence foundation,
+because the Evidence Desk now needs to show scene contracts, privacy manifests,
+evidence artifacts, and ledger context first.
+
+After Task 9 lands, retune or fold in:
+
+- Evidence Timeline density strip
+- Case Context Strip
+- type-colored review queue
+- cleaner raw payload disclosure
+
+Treat this as the next Evidence Desk refinement before moving into the larger
+product differentiators below, unless the user explicitly changes priority.
 
 ### 4. Runtime Passport
 
