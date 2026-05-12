@@ -280,6 +280,28 @@ Resolved worker config should include a version/hash of the configuration
 profile payload so incidents can later explain which operator configuration was
 active.
 
+### Runtime Consumption Matrix
+
+A profile is not considered product-complete when it merely saves in Settings.
+Each profile kind must have a named runtime consumer, a verification path, and
+an operator-visible explanation of which profile was applied. Browser-facing
+responses stay redacted; worker/service-only resolved configuration may include
+decrypted secrets only for the narrow service that consumes them.
+
+| Profile kind | Runtime consumer | Resolution time | Evidence of use |
+|---|---|---|---|
+| `evidence_storage` | incident capture storage router, artifact content route, local-first sync worker | per incident, using recording policy profile id or camera/edge/site/default binding | artifact provider/scope/status, storage profile id/hash in recording policy and ledger payload |
+| `stream_delivery` | worker processed-stream publishing, MediaMTX/WebRTC/HLS/MJPEG delivery URL builders, Live/Evidence playback links | worker config load and playback URL generation | worker config stream section, camera playback response, stream profile id/hash in diagnostics |
+| `runtime_selection` | runtime artifact selector and detector factory | worker startup and runtime re-selection after vocabulary/artifact changes | runtime passport, scene contract runtime section, selected profile id/hash and fallback reason |
+| `privacy_policy` | privacy manifest builder, recording quota checks, retention/expiry service, plaintext plate guardrails | worker config load, incident finalize, retention sweep | privacy manifest profile id/hash, manifest retention/residency fields, ledger entries for quota/expiry |
+| `llm_provider` | Prompt-To-Policy draft compiler and any LLM-backed policy assistant | draft request time | draft metadata with provider/model/profile hash and redacted secret state |
+| `operations_mode` | supervisor assignment, lifecycle request validation, restart policy reconciliation, manual/dev control availability | operations API request and supervisor poll/report handling | operations response lifecycle policy, supervisor report reconciliation, lifecycle ledger/audit entry |
+
+Implementation tasks may land the edit/test/bind UI before the runtime consumer,
+but the plan must name the consumer task before the UI task is treated as
+complete. If a category is intentionally not consumed yet, the task must say
+which later task consumes it and which tests prove that handoff.
+
 ### Runtime Passport
 
 A Runtime Passport is a product-visible explanation of the runtime that produced
@@ -434,8 +456,9 @@ Supported edge paths:
    - If remote upload succeeds, the artifact becomes `remote_available`.
    - If remote upload fails, the artifact remains `upload_pending` or
      `local_only`.
-   - Full durable background sync can be a follow-up, but the schema and UI
-     status must not block it.
+   - Durable background sync is part of this runway: pending local-first
+     artifacts must retry remote upload, promote the artifact when the remote
+     copy is confirmed, and record upload lifecycle ledger entries.
 
 ### Storage Options
 
@@ -448,9 +471,10 @@ Operators need clear deployment options:
 | Remote/cloud S3-compatible | `s3_compatible` | `cloud` | Managed retention, backups, multi-site review |
 | Local-first remote copy | local plus S3-compatible | edge plus central/cloud | Intermittent connectivity, local review with later central availability |
 
-The first implementation should support local filesystem and the existing
-MinIO/S3-compatible path. It should model local-first status even if the first
-background sync implementation is deliberately simple.
+The storage foundation supports local filesystem and the existing
+MinIO/S3-compatible path. The remaining local-first work is the durable retry
+and promotion service that turns `upload_pending` local artifacts into confirmed
+remote artifacts when connectivity and remote policy allow it.
 
 ### Storage Profile Runtime Routing
 
@@ -476,6 +500,16 @@ display-only field.
 | `central` | MinIO-compatible object store, `storage_scope=central` | endpoint, bucket, secure flag, access key secret, secret key secret | `remote_available` |
 | `cloud` | S3-compatible object store, `storage_scope=cloud` | endpoint, region, bucket, secure flag, access key secret, secret key secret | `remote_available` |
 | `local_first` | local filesystem first, optional later remote copy | local root/path prefix plus optional remote storage profile binding | `upload_pending` until a remote copy is confirmed |
+
+`local_first` is not finished when it only writes the first local copy. The
+runtime must also persist enough retry state to resume upload after process
+restart, support a remote target profile, and record upload attempts without
+changing the local review URL. On successful remote promotion, the artifact keeps
+its original checksum and clip window, updates storage provider/scope/bucket/url
+metadata, and writes a ledger entry tying the remote copy to the original local
+capture. On repeated remote failure, the local copy remains reviewable and the
+artifact stays `upload_pending` with the latest failure reason visible to
+operators.
 
 The backend should keep the existing authenticated artifact content route as the
 review contract for all profiles. For `edge_local` and the first slice of
@@ -1236,6 +1270,12 @@ flowchart LR
   `capture_failed` and include the storage error in ledger payload.
 - If remote upload fails after local-first capture, keep the local artifact and
   mark remote state `upload_pending`.
+- If local-first retry promotion succeeds later, update the artifact to
+  `remote_available`, retain the original local checksum history in ledger
+  payload, and keep a reviewable link.
+- If a runtime profile is saved and bound but not consumed by its subsystem,
+  validation fails for the relevant band; UI-only product configuration is not
+  acceptable after the configuration control plane lands.
 - If a USB device cannot be opened on its assigned edge node, worker config
   remains valid but the worker reports capture failure/reconnect state; setup
   probe should return a clear source-unavailable error.
@@ -1252,7 +1292,13 @@ Backend:
   tests
 - profile validation tests for local filesystem and S3-compatible evidence
   storage
-- worker-config tests proving UI-managed profiles override bootstrap settings
+- worker-config and subsystem tests proving UI-managed profiles override
+  bootstrap settings for evidence storage, stream delivery, runtime selection,
+  privacy policy, LLM provider, and operations mode
+- local-first retry/promotion tests proving pending artifacts remain reviewable
+  and later become remote-available only after confirmed upload
+- browser delivery tests proving saved stream profiles affect actual playback
+  URLs and USB/non-RTSP delivery paths
 - deterministic contract hash tests
 - deterministic privacy manifest hash tests
 - migration/core DB tests

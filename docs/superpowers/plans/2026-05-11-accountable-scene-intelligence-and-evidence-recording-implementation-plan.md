@@ -4,7 +4,7 @@
 
 **Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
 
-**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, and S3-compatible/cloud deployments share one review contract. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, and runtime-report data instead of adding parallel case-history systems.
+**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before optional media, runtime passports, differentiators, or supervisor work continue, every Settings configuration category must have a named runtime consumer task with tests. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, and runtime-report data instead of adding parallel case-history systems.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy async, Alembic, PostgreSQL JSONB, OpenCV MJPEG clip encoding, local filesystem storage, MinIO/S3-compatible object storage, React 19, Vite 6, TypeScript 5.7, Tailwind v4, Vitest, pytest, Ruff, mypy.
 
@@ -35,6 +35,12 @@ that introduces configurable product behavior must either consume an existing
 operator configuration profile or add the UI/API/profile support in that same
 task. Environment variables are reserved for bootstrap-only infrastructure and
 break-glass support.
+
+After Task 13D, no configuration tab may be treated as complete because it only
+persists data. The plan must either implement runtime consumption for that
+profile kind, or name the later task and test that will consume it. This applies
+to evidence storage, stream delivery, runtime selection, privacy policy,
+LLM provider, and operations mode.
 
 ## Validation Bands
 
@@ -104,7 +110,7 @@ Validation goal:
 - secrets are write-only in browser responses and encrypted at rest
 - Evidence storage, stream delivery, runtime selection, privacy/retention, LLM
   provider, and operations-mode categories exist in the UI configuration
-  catalog
+  catalog, and each category has an explicit runtime-consumer task named below
 - storage profiles are fully configurable from the UI before runtime routing is
   tested
 
@@ -128,6 +134,30 @@ Validation goal:
 Band gate: before optional snapshot media is added, prove the storage selector
 and configured storage profile are not only UI metadata and that clip review
 still works in edge mode.
+
+### Pre-Band 4.6: UI-Managed Runtime Consumption Gate
+
+Tasks: `13E-13J`
+
+Validation goal:
+
+- local-first evidence sync retries pending uploads and promotes artifacts only
+  after confirmed remote upload
+- effective configuration diagnostics show which profile wins for every
+  category at tenant/site/edge/camera scope
+- stream delivery and browser playback URLs are driven by the selected
+  `stream_delivery` profile
+- runtime artifact selection honors the selected `runtime_selection` profile
+  before runtime passports are built
+- privacy manifests, clip quota, and retention/expiry behavior honor the
+  selected `privacy_policy` profile
+- LLM-backed policy draft code resolves the selected `llm_provider` profile and
+  never exposes secrets to the browser
+
+Band gate: a normal admin can save, bind, test, and then observe the runtime
+effect of every Settings category that exists before the next evidence-media
+task starts. `operations_mode` is allowed to wait for supervisor tasks, but
+Tasks 20-22 must explicitly consume it.
 
 ### Band 4: Evidence Media Completion
 
@@ -282,7 +312,12 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/services/app.py` | modify | worker config, incident responses, review ledger, new services |
 | `backend/src/argus/api/v1/incidents.py` | modify | contract, manifest, ledger, artifact content routes |
 | `backend/src/argus/migrations/versions/0012_operator_configuration_profiles.py` | create | UI-managed configuration profile, secret, and binding tables |
+| `backend/src/argus/migrations/versions/0013_local_first_sync_state.py` | create | local-first upload retry and promotion state |
 | `backend/src/argus/services/operator_configuration.py` | create | configuration profile CRUD, secret handling, validation, binding, and resolution |
+| `backend/src/argus/services/runtime_configuration.py` | create | worker/service-safe resolved configuration packet for all UI-managed profile kinds |
+| `backend/src/argus/services/local_first_sync.py` | create | retry and promote upload-pending local-first evidence artifacts |
+| `backend/src/argus/services/privacy_policy_runtime.py` | create | apply UI-managed privacy policy profiles to manifests, quotas, and retention |
+| `backend/src/argus/services/llm_provider_runtime.py` | create | resolve LLM provider profiles and secrets for policy draft services |
 | `backend/src/argus/api/v1/configuration.py` | create | configuration catalog, profile, test, binding, and resolved-config routes |
 | `backend/src/argus/vision/camera.py` | modify | resolve USB/UVC source URIs to edge V4L2/OpenCV capture |
 | `backend/src/argus/vision/source_probe.py` | modify | probe USB/UVC source capability without treating it as RTSP |
@@ -292,6 +327,7 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `frontend/src/components/configuration/ConfigurationWorkspace.tsx` | create | Settings configuration control plane |
 | `frontend/src/components/configuration/ProfileEditor.tsx` | create | category-aware profile editors and validation actions |
 | `frontend/src/components/configuration/ProfileBindingPanel.tsx` | create | bind profiles to tenant, site, edge node, and camera scopes |
+| `frontend/src/components/configuration/EffectiveConfigurationPanel.tsx` | create | show the resolved runtime profile for each category and target |
 | `frontend/src/hooks/use-incidents.ts` | modify | incident response type usage for accountability fields |
 | `frontend/src/pages/Incidents.tsx` | modify | display contract, manifest, artifact, and ledger status |
 | `frontend/src/pages/Incidents.test.tsx` | modify | UI coverage |
@@ -299,12 +335,12 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `frontend/src/components/evidence/AccountabilityStrip.test.tsx` | create | accountability strip rendering tests |
 | `frontend/src/components/cameras/CameraWizard.tsx` | modify | RTSP/USB source selection and recording policy controls |
 | `frontend/src/components/cameras/CameraWizard.test.tsx` | modify | camera source and recording policy tests |
-| `backend/src/argus/migrations/versions/0013_runtime_passports.py` | create | runtime passport table and incident attachment columns |
-| `backend/src/argus/migrations/versions/0014_operational_memory_patterns.py` | create | operational memory pattern table |
-| `backend/src/argus/migrations/versions/0015_policy_drafts.py` | create | prompt-to-policy draft table |
-| `backend/src/argus/migrations/versions/0016_cross_camera_threads.py` | create | identity-light cross-camera thread table |
-| `backend/src/argus/migrations/versions/0017_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
-| `backend/src/argus/migrations/versions/0018_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/migrations/versions/0014_runtime_passports.py` | create | runtime passport table and incident attachment columns |
+| `backend/src/argus/migrations/versions/0015_operational_memory_patterns.py` | create | operational memory pattern table |
+| `backend/src/argus/migrations/versions/0016_policy_drafts.py` | create | prompt-to-policy draft table |
+| `backend/src/argus/migrations/versions/0017_cross_camera_threads.py` | create | identity-light cross-camera thread table |
+| `backend/src/argus/migrations/versions/0018_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
+| `backend/src/argus/migrations/versions/0019_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
 | `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
 | `backend/src/argus/services/operational_memory.py` | create | pattern detection over incidents, artifacts, contracts, and ledgers |
 | `backend/src/argus/services/policy_drafts.py` | create | prompt-to-policy draft, diff, approval, rejection, and application service |
@@ -2398,9 +2434,10 @@ git push origin codex/omnisight-ui-spec-implementation
 - Modify: `frontend/src/components/evidence/AccountabilityStrip.test.tsx`
 - Modify: `frontend/src/components/evidence/CaseContextStrip.test.tsx`
 
-Do this task after Task 13C and before Task 14. Task 14 adds a second media
-kind; this task proves the existing event-clip path writes to the selected
-UI-managed storage profile first.
+Do this task after Task 13C and before Task 13E. Task 14 adds a second media
+kind later; this task proves the existing event-clip path writes to the selected
+UI-managed storage profile before local-first sync and the other runtime
+configuration consumers are added.
 
 - [ ] **Step 1: Add failing storage route tests**
 
@@ -2652,6 +2689,572 @@ git commit -m "feat(evidence): route recording storage profiles"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
+## Task 13E: Local-First Evidence Upload Sync
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0013_local_first_sync_state.py`
+- Create: `backend/src/argus/services/local_first_sync.py`
+- Modify: `backend/src/argus/services/evidence_storage.py`
+- Modify: `backend/src/argus/services/evidence_ledger.py`
+- Modify: `backend/src/argus/services/app.py`
+- Test: `backend/tests/services/test_local_first_sync.py`
+- Test: `backend/tests/services/test_evidence_storage.py`
+- Modify: `frontend/src/components/evidence/AccountabilityStrip.tsx`
+- Modify: `frontend/src/components/evidence/AccountabilityStrip.test.tsx`
+
+This task makes `local_first` a usable deployment option, not just a local write
+with a label. It must run before optional snapshot media so both clip and future
+snapshot artifacts share the same promotion path.
+
+- [ ] **Step 1: Add failing sync tests**
+
+Create `backend/tests/services/test_local_first_sync.py` covering:
+
+- an artifact with status `upload_pending`, provider `local_filesystem`, and a
+  local object key is retried against a configured remote profile
+- successful upload updates the artifact to `remote_available`, provider
+  `minio` or `s3_compatible`, scope `central` or `cloud`, bucket, object key,
+  and review URL metadata
+- the original local checksum and object key are retained in ledger payload
+- failed upload leaves the artifact reviewable locally, increments retry count,
+  records latest error, and keeps status `upload_pending`
+- sync is idempotent when the same artifact is processed twice
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_local_first_sync.py -q
+```
+
+Expected: fail because durable local-first sync state and service do not exist.
+
+- [ ] **Step 3: Add sync state and ledger actions**
+
+Add ledger actions:
+
+```python
+EVIDENCE_UPLOAD_STARTED = "evidence.upload.started"
+EVIDENCE_UPLOAD_AVAILABLE = "evidence.upload.available"
+EVIDENCE_UPLOAD_FAILED = "evidence.upload.failed"
+```
+
+Create `local_first_sync_attempts` with artifact id, tenant id, remote profile
+id, attempt count, latest status, latest error, last attempted at, and completed
+at. Keep revision ids under 32 characters.
+
+- [ ] **Step 4: Implement sync service**
+
+Create `LocalFirstEvidenceSyncService` that:
+
+- loads pending local-first artifacts by tenant/site/edge/camera scope
+- resolves the remote profile from `EvidenceStorageProfileConfig.remote_profile_id`
+  or a central/cloud evidence-storage binding
+- reads the local artifact through the authenticated local storage resolver
+- uploads through `S3CompatibleEvidenceStore`
+- updates artifact metadata only after confirmed upload
+- writes upload started/available/failed ledger entries
+
+Do not delete the local file in this task. Retention cleanup is handled by the
+privacy/retention task.
+
+- [ ] **Step 5: Add operator-visible status**
+
+Update Evidence Desk status copy so `upload_pending` can include the latest sync
+attempt status when present: `Upload pending`, `Retrying upload`, or
+`Upload failed; local copy available`.
+
+- [ ] **Step 6: Run focused verification**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_local_first_sync.py \
+  tests/services/test_evidence_storage.py \
+  tests/services/test_evidence_ledger.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/AccountabilityStrip.test.tsx \
+  src/pages/Incidents.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 7: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0013_local_first_sync_state.py \
+  backend/src/argus/services/local_first_sync.py \
+  backend/src/argus/services/evidence_storage.py \
+  backend/src/argus/services/evidence_ledger.py \
+  backend/src/argus/services/app.py \
+  backend/tests/services/test_local_first_sync.py \
+  backend/tests/services/test_evidence_storage.py \
+  frontend/src/components/evidence/AccountabilityStrip.tsx \
+  frontend/src/components/evidence/AccountabilityStrip.test.tsx \
+  frontend/src/pages/Incidents.test.tsx
+git commit -m "feat(evidence): sync local-first artifacts"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13F: Effective Configuration Runtime Diagnostics
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Create: `backend/src/argus/services/runtime_configuration.py`
+- Modify: `backend/src/argus/services/operator_configuration.py`
+- Modify: `backend/src/argus/api/v1/configuration.py`
+- Test: `backend/tests/services/test_runtime_configuration.py`
+- Test: `backend/tests/api/test_configuration_routes.py`
+- Modify: `frontend/src/hooks/use-configuration.ts`
+- Create: `frontend/src/components/configuration/EffectiveConfigurationPanel.tsx`
+- Create: `frontend/src/components/configuration/EffectiveConfigurationPanel.test.tsx`
+- Modify: `frontend/src/components/configuration/ConfigurationWorkspace.tsx`
+- Modify: `frontend/src/components/configuration/ConfigurationWorkspace.test.tsx`
+- Modify: `frontend/src/lib/api.generated.ts`
+
+- [ ] **Step 1: Add failing diagnostics tests**
+
+Cover:
+
+- `GET /api/v1/configuration/resolved?camera_id=<id>` returns all profile
+  kinds with profile id, name, slug, scope winner, config hash, validation
+  status, and redacted secret state
+- camera binding wins over edge-node, site, tenant default, and bootstrap seed
+- disabled or invalid profiles are reported as `unresolved` with an operator
+  message instead of silently falling back
+- browser responses never include decrypted secrets
+- UI renders an "Effective configuration" panel for the selected target
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_runtime_configuration.py \
+  tests/api/test_configuration_routes.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/configuration/EffectiveConfigurationPanel.test.tsx \
+  src/components/configuration/ConfigurationWorkspace.test.tsx
+```
+
+Expected: fail because resolved configuration is not yet a complete runtime
+diagnostic surface.
+
+- [ ] **Step 3: Implement resolved runtime packet**
+
+Create a service that returns a typed resolved configuration packet for:
+
+- `evidence_storage`
+- `stream_delivery`
+- `runtime_selection`
+- `privacy_policy`
+- `llm_provider`
+- `operations_mode`
+
+Each entry must include `kind`, `profile_id`, `profile_name`, `profile_hash`,
+`winner_scope`, `winner_scope_key`, `validation_status`, `applies_to_runtime`,
+and redacted secret state. Add a service-only method that can include decrypted
+secrets for LLM/storage consumers, but do not expose that method through browser
+routes.
+
+- [ ] **Step 4: Add Effective Configuration UI**
+
+Add a compact Settings panel that lets an admin choose tenant/site/edge/camera
+scope and see which profile is actually applied for every category. Include
+clear copy for "runtime-wired now" versus "runtime-wired in Task 20" for
+operations mode until supervisors land.
+
+- [ ] **Step 5: Run focused verification**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_runtime_configuration.py \
+  tests/api/test_configuration_routes.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/configuration/EffectiveConfigurationPanel.test.tsx \
+  src/components/configuration/ConfigurationWorkspace.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/services/runtime_configuration.py \
+  backend/src/argus/services/operator_configuration.py \
+  backend/src/argus/api/v1/configuration.py \
+  backend/tests/services/test_runtime_configuration.py \
+  backend/tests/api/test_configuration_routes.py \
+  frontend/src/hooks/use-configuration.ts \
+  frontend/src/components/configuration/EffectiveConfigurationPanel.tsx \
+  frontend/src/components/configuration/EffectiveConfigurationPanel.test.tsx \
+  frontend/src/components/configuration/ConfigurationWorkspace.tsx \
+  frontend/src/components/configuration/ConfigurationWorkspace.test.tsx \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/pages/Settings.test.tsx
+git commit -m "feat(config): show effective runtime configuration"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13G: Stream Delivery And Browser Playback Runtime Routing
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/services/operator_configuration.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/inference/engine.py`
+- Test: `backend/tests/services/test_camera_worker_config.py`
+- Test: `backend/tests/api/test_prompt5_routes.py`
+- Modify: `frontend/src/components/cameras/CameraWizard.tsx`
+- Modify: `frontend/src/components/cameras/CameraWizard.test.tsx`
+- Modify: `frontend/src/pages/Live.tsx`
+- Modify: `frontend/src/pages/Incidents.tsx`
+- Test: `frontend/src/pages/Live.test.tsx`
+- Test: `frontend/src/pages/Incidents.test.tsx`
+- Modify: `frontend/src/lib/api.generated.ts`
+
+- [ ] **Step 1: Add failing stream delivery tests**
+
+Cover:
+
+- worker config includes the resolved `stream_delivery` profile id/hash and
+  delivery mode
+- Live playback URL generation uses the selected profile's public base URL,
+  edge override URL, and delivery mode
+- USB/UVC processed streams use the same browser delivery route as RTSP-backed
+  processed streams
+- Camera Wizard can select a named stream delivery profile when creating or
+  editing a camera
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_camera_worker_config.py \
+  tests/api/test_prompt5_routes.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/cameras/CameraWizard.test.tsx \
+  src/pages/Live.test.tsx \
+  src/pages/Incidents.test.tsx
+```
+
+Expected: fail until stream delivery profiles drive worker/browser routes.
+
+- [ ] **Step 3: Implement stream delivery runtime fields**
+
+Add `WorkerStreamDeliverySettings` to worker config with `profile_id`,
+`profile_name`, `profile_hash`, `delivery_mode`, `public_base_url`, and
+`edge_override_url`. Resolve it through the runtime configuration service.
+Update playback URL builders so the profile controls WebRTC/HLS/MJPEG/native
+selection and base URL, with bootstrap settings used only when no profile
+exists.
+
+- [ ] **Step 4: Wire UI selection and playback**
+
+Camera Wizard should show named stream profiles and store the selected profile
+reference in camera browser delivery/source configuration. Live and Evidence
+Desk playback links should use API-provided URLs instead of re-deriving
+environment-specific URLs in the browser.
+
+- [ ] **Step 5: Run focused verification**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_camera_worker_config.py \
+  tests/api/test_prompt5_routes.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/cameras/CameraWizard.test.tsx \
+  src/pages/Live.test.tsx \
+  src/pages/Incidents.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/services/operator_configuration.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/inference/engine.py \
+  backend/tests/services/test_camera_worker_config.py \
+  backend/tests/api/test_prompt5_routes.py \
+  frontend/src/components/cameras/CameraWizard.tsx \
+  frontend/src/components/cameras/CameraWizard.test.tsx \
+  frontend/src/pages/Live.tsx \
+  frontend/src/pages/Live.test.tsx \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/pages/Incidents.test.tsx \
+  frontend/src/lib/api.generated.ts
+git commit -m "feat(streams): route browser delivery profiles"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13H: Runtime Selection Profile Consumption
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/services/operator_configuration.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/vision/runtime_selection.py`
+- Modify: `backend/src/argus/inference/engine.py`
+- Test: `backend/tests/vision/test_runtime_selection.py`
+- Test: `backend/tests/services/test_camera_worker_config.py`
+- Test: `backend/tests/inference/test_engine.py`
+
+- [ ] **Step 1: Add failing runtime selection tests**
+
+Cover:
+
+- a camera-bound profile with `preferred_backend="tensorrt_engine"` selects a
+  compatible TensorRT artifact when present
+- `artifact_preference="onnx_first"` prefers ONNX even when TensorRT exists
+- `fallback_allowed=False` returns a worker startup error instead of silently
+  falling back to dynamic `.pt`
+- profile id/hash and fallback reason are included in runtime selection logs and
+  worker config
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/vision/test_runtime_selection.py \
+  tests/services/test_camera_worker_config.py \
+  tests/inference/test_engine.py \
+  -q
+```
+
+Expected: fail because runtime selection still follows existing artifact logic
+without the UI-managed profile.
+
+- [ ] **Step 3: Implement profile-aware runtime selection**
+
+Add `WorkerRuntimeSelectionSettings` to worker config and pass it into
+`select_runtime_artifact`. Keep existing automatic selection as the bootstrap
+default. Enforce `fallback_allowed=False` at the selection boundary and return a
+clear operator-visible error that names the profile and missing artifact.
+
+- [ ] **Step 4: Run focused verification**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/vision/test_runtime_selection.py \
+  tests/services/test_camera_worker_config.py \
+  tests/inference/test_engine.py \
+  -q
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/services/operator_configuration.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/vision/runtime_selection.py \
+  backend/src/argus/inference/engine.py \
+  backend/tests/vision/test_runtime_selection.py \
+  backend/tests/services/test_camera_worker_config.py \
+  backend/tests/inference/test_engine.py
+git commit -m "feat(runtime): consume runtime selection profiles"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13I: Privacy Policy Runtime Consumption
+
+**Files:**
+
+- Create: `backend/src/argus/services/privacy_policy_runtime.py`
+- Modify: `backend/src/argus/services/privacy_manifests.py`
+- Modify: `backend/src/argus/services/incident_capture.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Test: `backend/tests/services/test_privacy_manifests.py`
+- Test: `backend/tests/services/test_incident_capture.py`
+- Test: `backend/tests/services/test_operator_configuration.py`
+- Modify: `frontend/src/components/configuration/ProfileEditor.tsx`
+- Modify: `frontend/src/components/configuration/ProfileEditor.test.tsx`
+
+- [ ] **Step 1: Add failing privacy runtime tests**
+
+Cover:
+
+- privacy manifest includes selected privacy profile id/hash
+- retention days, storage quota bytes, plaintext plate posture, and residency
+  come from the resolved `privacy_policy` profile
+- `plaintext_plate_storage="blocked"` overrides tenant plaintext plate allowance
+  for new incidents
+- clip quota uses the privacy profile quota when present
+- residency mismatch between privacy policy and evidence storage profile fails
+  worker config with a clear error
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_privacy_manifests.py \
+  tests/services/test_incident_capture.py \
+  tests/services/test_operator_configuration.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run src/components/configuration/ProfileEditor.test.tsx
+```
+
+Expected: fail until privacy profiles are consumed by manifests and capture.
+
+- [ ] **Step 3: Implement privacy policy runtime resolver**
+
+Create a resolver that turns the selected `privacy_policy` profile into a
+runtime policy object. Feed it into privacy manifest generation and incident
+capture quota checks. Store profile id/hash in the manifest JSON and scene
+contract. Keep tenant settings as bootstrap defaults only.
+
+- [ ] **Step 4: Add retention/expiry behavior**
+
+Add a service method that marks expired artifacts as `expired` and writes an
+evidence ledger entry when retention days are exceeded. Do not delete bytes in
+the first pass; physical cleanup can be a separate operator action after expiry
+is visible.
+
+- [ ] **Step 5: Run focused verification**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_privacy_manifests.py \
+  tests/services/test_incident_capture.py \
+  tests/services/test_operator_configuration.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run src/components/configuration/ProfileEditor.test.tsx
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/services/privacy_policy_runtime.py \
+  backend/src/argus/services/privacy_manifests.py \
+  backend/src/argus/services/incident_capture.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/api/contracts.py \
+  backend/tests/services/test_privacy_manifests.py \
+  backend/tests/services/test_incident_capture.py \
+  backend/tests/services/test_operator_configuration.py \
+  frontend/src/components/configuration/ProfileEditor.tsx \
+  frontend/src/components/configuration/ProfileEditor.test.tsx
+git commit -m "feat(privacy): consume privacy policy profiles"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 13J: LLM Provider Runtime Consumption
+
+**Files:**
+
+- Create: `backend/src/argus/services/llm_provider_runtime.py`
+- Modify: `backend/src/argus/services/operator_configuration.py`
+- Modify: `backend/src/argus/llm/parser.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Test: `backend/tests/services/test_llm_provider_runtime.py`
+- Test: `backend/tests/api/test_configuration_routes.py`
+- Modify: `docs/runbook.md`
+
+- [ ] **Step 1: Add failing LLM provider tests**
+
+Cover:
+
+- resolving an `llm_provider` profile returns provider, model, base URL, profile
+  id/hash, and decrypted API key only to service code
+- browser configuration responses expose only secret presence
+- existing LLM parser construction uses the selected profile when a tenant or
+  camera binding exists
+- missing required API key returns a validation error before a prompt request is
+  sent
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_llm_provider_runtime.py \
+  tests/api/test_configuration_routes.py \
+  -q
+```
+
+Expected: fail until LLM provider profiles are runtime-consumed.
+
+- [ ] **Step 3: Implement LLM provider resolver**
+
+Create a service-only resolver that converts `llm_provider` profiles into the
+settings needed by `argus.llm.parser`. Keep environment values as bootstrap
+defaults. Ensure Prompt-To-Policy in Task 18 calls this resolver instead of
+reading provider/model/API key from process settings.
+
+- [ ] **Step 4: Update docs**
+
+Document that LLM provider configuration is UI-managed after bootstrap, secrets
+are write-only in browser responses, and prompt workflows fail closed when the
+selected provider is invalid.
+
+- [ ] **Step 5: Run focused verification**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_llm_provider_runtime.py \
+  tests/api/test_configuration_routes.py \
+  -q
+git diff --check -- docs/runbook.md
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/services/llm_provider_runtime.py \
+  backend/src/argus/services/operator_configuration.py \
+  backend/src/argus/llm/parser.py \
+  backend/src/argus/api/contracts.py \
+  backend/tests/services/test_llm_provider_runtime.py \
+  backend/tests/api/test_configuration_routes.py \
+  docs/runbook.md
+git commit -m "feat(llm): consume provider configuration profiles"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
 ## Task 14: Optional Still Snapshot Evidence Artifacts
 
 **Files:**
@@ -2740,7 +3343,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0013_runtime_passports.py`
+- Create: `backend/src/argus/migrations/versions/0014_runtime_passports.py`
 - Create: `backend/src/argus/services/runtime_passports.py`
 - Modify: `backend/src/argus/services/scene_contracts.py`
 - Modify: `backend/src/argus/services/app.py`
@@ -2756,6 +3359,7 @@ Cover deterministic passport hashes for:
 - compiled open-vocab scene artifact selection
 - dynamic `.pt` fallback with `fallback_reason`
 - provider/library version changes
+- selected `runtime_selection` profile id/hash from Task 13H
 
 - [ ] **Step 2: Run failing tests**
 
@@ -2770,8 +3374,9 @@ Expected: fail until passport model and service exist.
 
 Create `runtime_passport_snapshots` with immutable JSON and `passport_hash`.
 Build passports from scene contract runtime sections, runtime artifact records,
-worker selection reports, and model metadata. Attach passport ids/hashes to
-incidents when runtime context is available.
+worker selection reports, selected runtime-selection profile id/hash, and model
+metadata. Attach passport ids/hashes to incidents when runtime context is
+available.
 
 - [ ] **Step 4: Run tests**
 
@@ -2787,7 +3392,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0013_runtime_passports.py \
+  backend/src/argus/migrations/versions/0014_runtime_passports.py \
   backend/src/argus/services/runtime_passports.py \
   backend/src/argus/services/scene_contracts.py \
   backend/src/argus/services/app.py \
@@ -2820,7 +3425,7 @@ Cover:
 - incident response passport summary
 - Operations camera row passport status
 - UI renders backend, model hash, runtime artifact hash, target profile,
-  precision, validation timestamp, and fallback reason
+  precision, validation timestamp, selected runtime profile, and fallback reason
 
 - [ ] **Step 2: Run failing tests**
 
@@ -2876,7 +3481,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0014_operational_memory_patterns.py`
+- Create: `backend/src/argus/migrations/versions/0015_operational_memory_patterns.py`
 - Create: `backend/src/argus/services/operational_memory.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
@@ -2935,7 +3540,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0014_operational_memory_patterns.py \
+  backend/src/argus/migrations/versions/0015_operational_memory_patterns.py \
   backend/src/argus/services/operational_memory.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
@@ -2958,8 +3563,9 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0015_policy_drafts.py`
+- Create: `backend/src/argus/migrations/versions/0016_policy_drafts.py`
 - Create: `backend/src/argus/services/policy_drafts.py`
+- Modify: `backend/src/argus/services/llm_provider_runtime.py`
 - Create: `backend/src/argus/api/v1/policy_drafts.py`
 - Modify: `backend/src/argus/main.py`
 - Test: `backend/tests/services/test_policy_drafts.py`
@@ -2974,6 +3580,8 @@ Cover:
 - prompt creates a draft, not an applied camera change
 - draft includes scene contract, privacy manifest, recording policy, vocabulary,
   detection region, and rule diffs when requested
+- draft compilation resolves the selected `llm_provider` profile from Task 13J
+  and records provider/model/profile hash in draft metadata
 - approval applies through existing camera/scene update paths
 - rejection does not apply changes
 - proposal, approval, rejection, and application write ledger entries
@@ -2990,8 +3598,10 @@ Expected: fail until policy draft service and routes exist.
 - [ ] **Step 3: Implement backend draft workflow**
 
 Create `policy_drafts` records with `status` values `draft`, `approved`,
-`rejected`, and `applied`. The compiler may use deterministic rule-based parsing
-first; it must return a structured diff and require approval before applying.
+`rejected`, and `applied`. The compiler must use `LLMProviderRuntimeResolver`
+from Task 13J when LLM assistance is enabled, fail closed when the selected
+provider is invalid, and keep deterministic rule-based parsing as the local
+fallback. It must return a structured diff and require approval before applying.
 
 - [ ] **Step 4: Implement draft review UI**
 
@@ -3015,8 +3625,9 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0015_policy_drafts.py \
+  backend/src/argus/migrations/versions/0016_policy_drafts.py \
   backend/src/argus/services/policy_drafts.py \
+  backend/src/argus/services/llm_provider_runtime.py \
   backend/src/argus/api/v1/policy_drafts.py \
   backend/src/argus/main.py \
   backend/tests/services/test_policy_drafts.py \
@@ -3033,7 +3644,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0016_cross_camera_threads.py`
+- Create: `backend/src/argus/migrations/versions/0017_cross_camera_threads.py`
 - Create: `backend/src/argus/services/cross_camera_threads.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/incidents.py`
@@ -3091,7 +3702,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0016_cross_camera_threads.py \
+  backend/src/argus/migrations/versions/0017_cross_camera_threads.py \
   backend/src/argus/services/cross_camera_threads.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/incidents.py \
@@ -3112,8 +3723,9 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0017_supervisor_operations.py`
+- Create: `backend/src/argus/migrations/versions/0018_supervisor_operations.py`
 - Create: `backend/src/argus/services/supervisor_operations.py`
+- Modify: `backend/src/argus/services/runtime_configuration.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
 - Test: `backend/tests/services/test_supervisor_operations.py`
@@ -3128,6 +3740,8 @@ Cover:
 - per-worker runtime reports with heartbeat, runtime state, restart count,
   last error, runtime artifact id, and scene contract hash
 - lifecycle request creation for Start, Stop, Restart, and Drain
+- resolved `operations_mode` profile controls lifecycle owner, supervisor mode,
+  and restart policy for each worker assignment
 - no lifecycle route shells out from the API process
 - stale/missing supervisor reports render honest `unknown` or `not_reported`
   states
@@ -3150,7 +3764,9 @@ Expected: fail until the supervisor data contract exists.
 Add `worker_assignments`, `worker_runtime_reports`, and
 `operations_lifecycle_requests`. Extend Operations fleet responses to include
 desired assignment, latest runtime truth, lifecycle request state, and last
-error.
+error. Resolve `operations_mode` profiles through the runtime configuration
+service so `manual`, `edge_supervisor`, and `central_supervisor` ownership
+produce different allowed lifecycle actions.
 
 - [ ] **Step 4: Run tests**
 
@@ -3170,8 +3786,9 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0017_supervisor_operations.py \
+  backend/src/argus/migrations/versions/0018_supervisor_operations.py \
   backend/src/argus/services/supervisor_operations.py \
+  backend/src/argus/services/runtime_configuration.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
   backend/tests/services/test_supervisor_operations.py \
@@ -3198,6 +3815,9 @@ Cover:
 
 - Start, Stop, Restart, and Drain buttons create lifecycle requests
 - lifecycle controls are disabled when no supervisor owns the worker
+- controls obey the resolved `operations_mode` profile: manual mode shows dev
+  guidance only, disabled supervisor mode hides lifecycle requests, and
+  supervisor-owned modes enable request buttons when a supervisor is healthy
 - assignment/reassignment controls update desired worker location
 - runtime heartbeat, restart count, last error, runtime backend, and scene
   contract hash render in Operations
@@ -3218,7 +3838,8 @@ Expected: fail until the controls are implemented.
 
 Use API mutations that create lifecycle requests and assignment changes. Do not
 show shell-command semantics for production controls. Keep manual dev command
-copy for unsupervised local mode.
+copy for unsupervised local mode and label it as manual-mode guidance from the
+resolved operations profile.
 
 - [ ] **Step 4: Run tests**
 
@@ -3324,7 +3945,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0018_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/migrations/versions/0019_runtime_artifact_soak_runs.py`
 - Create: `backend/src/argus/services/runtime_soak.py`
 - Create: `backend/src/argus/api/v1/runtime_soak.py`
 - Modify: `backend/src/argus/main.py`
@@ -3343,6 +3964,8 @@ Cover:
 - pass/fail status, metrics, target profile, runtime artifact id, and edge node
   id
 - fallback reason captured when optimized runtime is unavailable
+- selected `runtime_selection` profile id/hash and operations assignment id are
+  recorded with the soak run
 
 - [ ] **Step 2: Run failing tests**
 
@@ -3356,8 +3979,10 @@ Expected: fail until soak run service/routes exist.
 - [ ] **Step 3: Implement soak run recording**
 
 Add `runtime_artifact_soak_runs`, service helpers, and routes to record target
-Jetson validation results. Do not fake hardware validation in code; unit tests
-cover the control-plane record, and docs define the physical soak procedure.
+Jetson validation results. Include the runtime profile selected by Task 13H and
+the worker assignment selected by Tasks 20-21. Do not fake hardware validation
+in code; unit tests cover the control-plane record, and docs define the physical
+soak procedure.
 
 - [ ] **Step 4: Document the first-site validation procedure**
 
@@ -3385,7 +4010,7 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0018_runtime_artifact_soak_runs.py \
+  backend/src/argus/migrations/versions/0019_runtime_artifact_soak_runs.py \
   backend/src/argus/services/runtime_soak.py \
   backend/src/argus/api/v1/runtime_soak.py \
   backend/src/argus/main.py \
@@ -3438,6 +4063,8 @@ Cover:
 - DeepStream runtime backend contract
 - metadata bridge into existing track lifecycle fields
 - DeepStream runtime selection only on supported Jetson target profiles
+- DeepStream can be selected only through a UI-managed runtime profile after
+  the soak gate is satisfied
 - fallback to existing non-DeepStream runtime when unavailable
 
 - [ ] **Step 3: Run failing tests**
@@ -3457,7 +4084,9 @@ Expected: fail until DeepStream runtime adapter exists.
 
 Add a Jetson-only adapter that produces the same detection/track metadata shape
 as existing runtimes. Add `infra/deepstream/` packaging docs and keep fallback
-to existing runtime paths explicit.
+to existing runtime paths explicit. Wire DeepStream selection through the
+runtime-selection profile machinery from Task 13H; do not add a parallel
+environment-only switch.
 
 - [ ] **Step 5: Run tests and docs check**
 
@@ -3511,14 +4140,20 @@ python3 -m uv run pytest \
   tests/services/test_privacy_manifests.py \
   tests/services/test_evidence_ledger.py \
   tests/services/test_evidence_storage.py \
+  tests/services/test_local_first_sync.py \
+  tests/services/test_runtime_configuration.py \
   tests/services/test_incident_capture.py \
+  tests/services/test_camera_worker_config.py \
   tests/services/test_runtime_passports.py \
   tests/services/test_operational_memory.py \
+  tests/services/test_llm_provider_runtime.py \
   tests/services/test_policy_drafts.py \
   tests/services/test_cross_camera_threads.py \
   tests/services/test_supervisor_operations.py \
   tests/services/test_runtime_soak.py \
   tests/api/test_prompt9_routes.py \
+  tests/api/test_prompt5_routes.py \
+  tests/api/test_configuration_routes.py \
   tests/api/test_operations_endpoints.py \
   tests/api/test_policy_draft_routes.py \
   tests/api/test_runtime_soak_routes.py \
@@ -3541,8 +4176,11 @@ corepack pnpm --dir frontend exec vitest run \
   src/components/evidence/RuntimePassportPanel.test.tsx \
   src/components/evidence/OperationalMemoryPanel.test.tsx \
   src/components/evidence/CrossCameraThreadPanel.test.tsx \
+  src/components/configuration/EffectiveConfigurationPanel.test.tsx \
+  src/components/configuration/ConfigurationWorkspace.test.tsx \
   src/components/policy/PolicyDraftReview.test.tsx \
   src/components/operations/SupervisorLifecycleControls.test.tsx \
+  src/pages/Live.test.tsx \
   src/pages/Incidents.test.tsx \
   src/pages/Settings.test.tsx \
   src/components/cameras/CameraWizard.test.tsx
@@ -3574,7 +4212,9 @@ Update the handoff with:
 - [ ] **Step 5: Commit and push docs**
 
 ```bash
-git add docs/superpowers/status/2026-05-11-next-chat-accountable-scene-intelligence-handoff.md \
+git add docs/superpowers/specs/2026-05-11-accountable-scene-intelligence-and-evidence-recording-design.md \
+  docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md \
+  docs/superpowers/status/2026-05-11-next-chat-accountable-scene-intelligence-handoff.md \
   docs/runbook.md \
   docs/operator-deployment-playbook.md \
   docs/model-loading-and-configuration-guide.md
@@ -3586,13 +4226,17 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Spec coverage: Tasks 1-12 cover accountable scene contracts, privacy
   manifests, evidence ledger, artifact-aware clips, edge USB/UVC, storage, API,
-  UI, and docs. Tasks 13-14 cover the unexecuted Evidence Desk polish and
-  optional still snapshots. Tasks 15-19 cover Runtime Passport, Operational
-  Memory, Prompt-To-Policy, and Identity-Light Cross-Camera Intelligence. Tasks
-  20-22 cover Fleet/Operations supervisor hardening and credential rotation.
-  Task 23 covers Linux master plus Jetson TensorRT/open-vocab soak validation.
-  Task 24 covers gated Track C / DeepStream. Task 25 refreshes verification and
-  handoff.
+  UI, and docs. Tasks 13-13D cover the Evidence Desk polish, configuration
+  control plane, and storage routing. Tasks 13E-13J cover the missing runtime
+  consumption for local-first sync, effective configuration diagnostics, stream
+  delivery, runtime selection, privacy policy, and LLM provider profiles. Task
+  14 covers optional still snapshots. Tasks 15-19 cover Runtime Passport,
+  Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
+  Intelligence. Tasks 20-22 cover Fleet/Operations supervisor hardening,
+  operations-mode consumption, and credential rotation. Task 23 covers Linux
+  master plus Jetson TensorRT/open-vocab soak validation. Task 24 covers gated
+  Track C / DeepStream through UI-managed runtime selection. Task 25 refreshes
+  verification and handoff.
 - Placeholder scan: no follow-up queue remains; all handoff items are expressed
   as executable tasks with owned files, verification commands, commit messages,
   and push steps.
