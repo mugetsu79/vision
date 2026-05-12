@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
+**Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, per-worker incident rules, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
 
-**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before optional media, runtime passports, differentiators, or supervisor work continue, every Settings configuration category must have a named runtime consumer task with tests. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, and runtime-report data instead of adding parallel case-history systems.
+**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before Operational Memory starts, per-worker incident rules must become UI/API-managed scene policy that production workers load and report. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, rule, and runtime-report data instead of adding parallel case-history systems.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy async, Alembic, PostgreSQL JSONB, OpenCV MJPEG clip encoding, local filesystem storage, MinIO/S3-compatible object storage, React 19, Vite 6, TypeScript 5.7, Tailwind v4, Vitest, pytest, Ruff, mypy.
 
@@ -22,12 +22,12 @@ Execute one task at a time. After each task:
 4. report the result before continuing
 
 Do not stage unrelated untracked scratch files. Keep WebGL off. Execute the
-tasks in order. Runtime Passport, Operational Memory, Prompt-To-Policy,
-Identity-Light Cross-Camera Intelligence, Fleet/Operations hardening, and
-runtime soak are now part of this plan after the accountable evidence
-foundation. Track C / DeepStream remains a late gated task and must not start
-until the runtime soak task proves Track A/B readiness on target Jetson
-hardware.
+tasks in order. Runtime Passport, per-worker incident rules, Operational
+Memory, Prompt-To-Policy, Identity-Light Cross-Camera Intelligence,
+Fleet/Operations hardening, and runtime soak are now part of this plan after
+the accountable evidence foundation. Track C / DeepStream remains a late gated
+task and must not start until the runtime soak task proves Track A/B readiness
+on target Jetson hardware.
 
 After Task 13C, no new operator-facing product behavior may rely only on
 environment variables, command-line flags, or hand-edited backend files. A task
@@ -56,17 +56,18 @@ Completed and pushed on `codex/omnisight-ui-spec-implementation`:
   diagnostics, stream delivery profile routing, runtime-selection profile
   consumption, privacy-policy runtime consumption, and LLM-provider runtime
   consumption.
+- Task `14`: optional still snapshot evidence artifacts.
+- Tasks `15-16`: runtime passport snapshots, incident attachment, incident API,
+  and Operations/Evidence UI surfacing.
 
-Current migration head after the Task 13 checkpoint is
-`0014_evidence_expiry_action`. The migration file is still named
-`0014_evidence_expiry_ledger_action.py`, but its Alembic revision id is kept
-under the `alembic_version.version_num varchar(32)` limit. Future migration
-files in this plan start at `0015_runtime_passports.py`.
+Current migration head after the Task 16 checkpoint is
+`0016_runtime_passports`. The next planned migration in this plan is
+`0017_detection_rule_incident_metadata.py`.
 
 Next task:
 
 ```text
-Task 14: Optional Still Snapshot Evidence Artifacts
+Task 16A: Incident Rule Data Contract, Service, And API
 ```
 
 ## Validation Bands
@@ -202,6 +203,8 @@ Tasks 20-22 must explicitly consume it.
 
 Task: `14`
 
+Status: completed and pushed.
+
 Validation goal:
 
 - optional still snapshots can be captured as evidence artifacts
@@ -216,6 +219,8 @@ optional first-class evidence.
 
 Tasks: `15-16`
 
+Status: completed and pushed.
+
 Validation goal:
 
 - runtime passport snapshots are deterministic
@@ -227,6 +232,29 @@ Validation goal:
 
 Band gate: model/runtime accountability is visible without needing to inspect
 worker logs.
+
+### Pre-Band 6: Per-Worker Incident Rules
+
+Tasks: `16A-16E`
+
+Validation goal:
+
+- operators can define enabled/disabled incident rules per scene from
+  Control -> Scenes
+- rule predicates validate against scene classes, vocabulary, zones,
+  confidence, and supported non-biometric attributes
+- worker config and camera commands carry enabled rules to production workers
+- workers load and hot-reload persisted rules without requiring shell edits or
+  process restarts
+- non-count rule events create incidents whose type comes from the
+  operator-defined incident type slug
+- Evidence Desk shows the trigger rule summary and Operations shows effective
+  worker rule count/hash/load status
+- scene contracts and incident payloads carry deterministic rule hashes
+
+Band gate: a normal admin can define what counts as an incident for a scene
+worker, the worker can emit a real incident from that rule, and a reviewer can
+see the rule that caused the evidence record.
 
 ### Band 6: Product Differentiators
 
@@ -327,7 +355,9 @@ If dev DB errors mention `cameras.vision_profile`, `cameras.detection_regions`,
 `model_runtime_artifacts`, `scene_contract_snapshots`,
 `operator_config_profiles`, `operator_config_secrets`,
 `operator_config_bindings`, `runtime_passport_snapshots`,
-`worker_assignments`, or any table created by this plan, run:
+`detection_rules.enabled`, `detection_rules.incident_type`,
+`detection_rules.rule_hash`, `worker_assignments`, or any table created by this
+plan, run:
 
 ```bash
 docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run alembic upgrade head
@@ -374,13 +404,17 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `frontend/src/components/evidence/AccountabilityStrip.test.tsx` | create | accountability strip rendering tests |
 | `frontend/src/components/cameras/CameraWizard.tsx` | modify | RTSP/USB source selection and recording policy controls |
 | `frontend/src/components/cameras/CameraWizard.test.tsx` | modify | camera source and recording policy tests |
-| `backend/src/argus/migrations/versions/0015_runtime_passports.py` | create | runtime passport table and incident attachment columns |
-| `backend/src/argus/migrations/versions/0016_operational_memory_patterns.py` | create | operational memory pattern table |
-| `backend/src/argus/migrations/versions/0017_policy_drafts.py` | create | prompt-to-policy draft table |
-| `backend/src/argus/migrations/versions/0018_cross_camera_threads.py` | create | identity-light cross-camera thread table |
-| `backend/src/argus/migrations/versions/0019_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
-| `backend/src/argus/migrations/versions/0020_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/migrations/versions/0015_snapshot_ledger_actions.py` | created | snapshot evidence ledger actions |
+| `backend/src/argus/migrations/versions/0016_runtime_passports.py` | created | runtime passport table and incident attachment columns |
+| `backend/src/argus/migrations/versions/0017_detection_rule_incident_metadata.py` | create | detection rule incident metadata, deterministic rule hashes, and indexes |
+| `backend/src/argus/migrations/versions/0018_operational_memory_patterns.py` | create | operational memory pattern table |
+| `backend/src/argus/migrations/versions/0019_policy_drafts.py` | create | prompt-to-policy draft table |
+| `backend/src/argus/migrations/versions/0020_cross_camera_threads.py` | create | identity-light cross-camera thread table |
+| `backend/src/argus/migrations/versions/0021_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
+| `backend/src/argus/migrations/versions/0022_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
 | `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
+| `backend/src/argus/services/incident_rules.py` | create | per-camera incident rule CRUD, validation, hashing, and command publication |
+| `backend/src/argus/services/rule_events.py` | create | persistent rule event store for workers |
 | `backend/src/argus/services/operational_memory.py` | create | pattern detection over incidents, artifacts, contracts, and ledgers |
 | `backend/src/argus/services/policy_drafts.py` | create | prompt-to-policy draft, diff, approval, rejection, and application service |
 | `backend/src/argus/services/cross_camera_threads.py` | create | identity-light non-biometric incident correlation |
@@ -389,10 +423,14 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/vision/deepstream_runtime.py` | create late | DeepStream backend adapter after soak gate |
 | `backend/src/argus/vision/deepstream_metadata.py` | create late | DeepStream metadata bridge into track lifecycle |
 | `backend/src/argus/api/v1/policy_drafts.py` | create | prompt-to-policy draft and decision routes |
+| `backend/src/argus/api/v1/incident_rules.py` | create | camera-scoped incident rule routes |
 | `backend/src/argus/api/v1/runtime_soak.py` | create | runtime artifact soak routes |
 | `frontend/src/components/evidence/EvidenceTimeline.tsx` | create | accountable timeline density strip |
 | `frontend/src/components/evidence/CaseContextStrip.tsx` | create | selected incident context strip |
 | `frontend/src/components/evidence/RuntimePassportPanel.tsx` | create | runtime passport details |
+| `frontend/src/hooks/use-incident-rules.ts` | create | camera incident rule API hooks |
+| `frontend/src/components/cameras/IncidentRulesPanel.tsx` | create | Control -> Scenes rule builder |
+| `frontend/src/components/evidence/IncidentRuleSummary.tsx` | create | trigger rule summary for evidence review |
 | `frontend/src/components/evidence/OperationalMemoryPanel.tsx` | create | cited operational patterns |
 | `frontend/src/components/evidence/CrossCameraThreadPanel.tsx` | create | privacy-aware thread context |
 | `frontend/src/components/policy/PolicyDraftReview.tsx` | create | prompt-to-policy draft diff and approval UI |
@@ -3382,7 +3420,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0015_runtime_passports.py`
+- Create: `backend/src/argus/migrations/versions/0016_runtime_passports.py`
 - Create: `backend/src/argus/services/runtime_passports.py`
 - Modify: `backend/src/argus/services/scene_contracts.py`
 - Modify: `backend/src/argus/services/app.py`
@@ -3431,7 +3469,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0015_runtime_passports.py \
+  backend/src/argus/migrations/versions/0016_runtime_passports.py \
   backend/src/argus/services/runtime_passports.py \
   backend/src/argus/services/scene_contracts.py \
   backend/src/argus/services/app.py \
@@ -3515,12 +3553,572 @@ git commit -m "feat(ui): surface runtime passports"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
+## Task 16A: Incident Rule Data Contract, Service, And API
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0017_detection_rule_incident_metadata.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Create: `backend/src/argus/services/incident_rules.py`
+- Create: `backend/src/argus/api/v1/incident_rules.py`
+- Modify: `backend/src/argus/main.py`
+- Test: `backend/tests/services/test_incident_rules.py`
+- Test: `backend/tests/api/test_incident_rule_routes.py`
+- Test: `backend/tests/core/test_db.py`
+
+- [ ] **Step 1: Add failing service, route, and DB tests**
+
+Cover:
+
+- migration adds `enabled`, `incident_type`, `severity`, `description`,
+  `rule_hash`, `created_at`, and `updated_at` to `detection_rules`
+- existing rows are backfilled with enabled rules, warning severity, stable
+  incident type slugs, and deterministic hashes
+- admin can list/create/update/delete incident rules for a camera in their
+  tenant
+- viewer cannot mutate rules
+- cross-tenant camera/rule access returns `404`
+- rule names and incident type slugs are unique per camera
+- rule predicates reject unknown classes, unknown zones, invalid confidence, and
+  unsupported attribute values
+- validation/dry-run evaluates a sample detection against the candidate rule
+- browser responses and audit entries redact webhook URL secrets while still
+  exposing webhook presence
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_incident_rules.py \
+  tests/api/test_incident_rule_routes.py \
+  tests/core/test_db.py \
+  -q
+```
+
+Expected: fail until contracts, service, routes, and migration exist.
+
+- [ ] **Step 3: Add incident rule contracts and migration**
+
+Add contracts:
+
+- `IncidentRulePredicate`
+- `IncidentRuleCreate`
+- `IncidentRuleUpdate`
+- `IncidentRuleResponse`
+- `IncidentRuleValidationRequest`
+- `IncidentRuleValidationResponse`
+
+Extend `DetectionRule` with:
+
+- `enabled: bool`
+- `incident_type: str`
+- `severity: str`
+- `description: str | None`
+- `rule_hash: str`
+- timestamps
+
+Keep the existing `predicate`, `action`, `zone_id`, `webhook_url`, and
+`cooldown_seconds` columns so old rows and the current rule engine shape migrate
+forward instead of moving to a second table.
+
+- [ ] **Step 4: Implement service and routes**
+
+Create camera-scoped routes:
+
+```text
+GET /api/v1/cameras/{camera_id}/incident-rules
+POST /api/v1/cameras/{camera_id}/incident-rules
+GET /api/v1/cameras/{camera_id}/incident-rules/{rule_id}
+PATCH /api/v1/cameras/{camera_id}/incident-rules/{rule_id}
+DELETE /api/v1/cameras/{camera_id}/incident-rules/{rule_id}
+POST /api/v1/cameras/{camera_id}/incident-rules/validate
+```
+
+Service behavior:
+
+- load cameras through the tenant-owned site relationship
+- validate predicates against camera `active_classes`, runtime vocabulary
+  terms, `zones`, and supported attribute keys
+- normalize incident type slugs to lowercase snake-case
+- compute deterministic rule hashes from enabled state, incident type, severity,
+  predicate, action, cooldown, webhook presence, and zone id
+- redact webhook URLs from browser responses and audit payloads
+- audit `incident_rule.create`, `incident_rule.update`, and
+  `incident_rule.delete`
+
+- [ ] **Step 5: Run migration and tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run alembic upgrade head
+python3 -m uv run pytest \
+  tests/services/test_incident_rules.py \
+  tests/api/test_incident_rule_routes.py \
+  tests/core/test_db.py \
+  -q
+python3 -m uv run ruff check src/argus/services/incident_rules.py src/argus/api/v1/incident_rules.py tests/services/test_incident_rules.py tests/api/test_incident_rule_routes.py
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0017_detection_rule_incident_metadata.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/services/incident_rules.py \
+  backend/src/argus/api/v1/incident_rules.py \
+  backend/src/argus/main.py \
+  backend/tests/services/test_incident_rules.py \
+  backend/tests/api/test_incident_rule_routes.py \
+  backend/tests/core/test_db.py
+git commit -m "feat(rules): add per-scene incident rule API"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 16B: Worker Incident Rule Runtime Consumption
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/services/scene_contracts.py`
+- Modify: `backend/src/argus/inference/engine.py`
+- Modify: `backend/src/argus/vision/rules.py`
+- Create: `backend/src/argus/services/rule_events.py`
+- Test: `backend/tests/services/test_camera_worker_config.py`
+- Test: `backend/tests/services/test_scene_contracts.py`
+- Test: `backend/tests/vision/test_rules.py`
+- Test: `backend/tests/inference/test_engine.py`
+- Test: `backend/tests/inference/test_engine_config_loading.py`
+
+- [ ] **Step 1: Add failing worker/runtime tests**
+
+Cover:
+
+- `WorkerConfigResponse` includes only enabled incident rules for the camera
+- scene contracts include deterministic enabled rule summaries and rule hashes
+- worker config JSON validates into `EngineConfig.incident_rules`
+- `RuleEngine` emits event records containing rule id, incident type, severity,
+  action, cooldown, rule hash, predicate, and detection payload
+- `InferenceEngine` converts non-count rule events into
+  `IncidentTriggeredEvent(type=f"rule.{incident_type}")`
+- generated incident payloads include trigger rule name, id, severity, action,
+  cooldown, predicate, detection, and rule hash
+- camera command messages hot-reload incident rules in a running worker
+- disabled rules and `count` actions do not create incidents
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_camera_worker_config.py \
+  tests/services/test_scene_contracts.py \
+  tests/vision/test_rules.py \
+  tests/inference/test_engine_config_loading.py \
+  tests/inference/test_engine.py \
+  -q
+```
+
+Expected: fail until worker config and rule runtime are wired.
+
+- [ ] **Step 3: Add worker contracts and command payloads**
+
+Add:
+
+- `WorkerIncidentRulePredicate`
+- `WorkerIncidentRule`
+- `TriggerRuleSummary`
+
+Extend:
+
+- `WorkerConfigResponse.incident_rules`
+- `CameraCommandPayload.incident_rules`
+- `EngineConfig.incident_rules`
+- `CameraCommand.incident_rules`
+
+Keep rule payloads redacted: webhook URL may be present only where the worker
+needs it; browser responses should expose webhook presence, not secrets.
+
+- [ ] **Step 4: Build runtime rule engine from persisted rules**
+
+Update worker startup so `run_engine_for_camera` builds a real `RuleEngine`
+from `config.incident_rules` when no test rule engine is injected. Add a
+database-backed rule event store that writes `rule_events` rows without blocking
+the frame loop.
+
+Update `RuleEngine` with:
+
+- `replace_rules(rules: list[RuleDefinition])`
+- `RuleDefinition.incident_type`
+- `RuleDefinition.severity`
+- `RuleDefinition.rule_hash`
+- event payloads that include trigger rule metadata
+
+Update camera command handling so rule edits hot-reload without a process
+restart.
+
+- [ ] **Step 5: Attach rule hashes to contracts and incidents**
+
+Update scene contract compilation to include enabled incident rules as a stable
+ordered list of rule hashes and redacted summaries. Update
+`_rule_events_to_incidents` so Evidence receives the operator-defined incident
+type and trigger rule summary.
+
+- [ ] **Step 6: Run backend validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run alembic upgrade head
+python3 -m uv run pytest \
+  tests/services/test_camera_worker_config.py \
+  tests/services/test_scene_contracts.py \
+  tests/vision/test_rules.py \
+  tests/inference/test_engine_config_loading.py \
+  tests/inference/test_engine.py \
+  -q
+python3 -m uv run ruff check src/argus/inference/engine.py src/argus/vision/rules.py src/argus/services/app.py src/argus/services/rule_events.py
+```
+
+Expected: pass.
+
+- [ ] **Step 7: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/services/scene_contracts.py \
+  backend/src/argus/inference/engine.py \
+  backend/src/argus/vision/rules.py \
+  backend/src/argus/services/rule_events.py \
+  backend/tests/services/test_camera_worker_config.py \
+  backend/tests/services/test_scene_contracts.py \
+  backend/tests/vision/test_rules.py \
+  backend/tests/inference/test_engine.py \
+  backend/tests/inference/test_engine_config_loading.py
+git commit -m "feat(worker): consume per-scene incident rules"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 16C: Control Scenes Incident Rule Builder
+
+**Files:**
+
+- Modify: `frontend/src/lib/api.generated.ts`
+- Create: `frontend/src/hooks/use-incident-rules.ts`
+- Create: `frontend/src/components/cameras/IncidentRulesPanel.tsx`
+- Create: `frontend/src/components/cameras/IncidentRulesPanel.test.tsx`
+- Modify: `frontend/src/pages/Cameras.tsx`
+- Modify: `frontend/src/pages/Cameras.test.tsx`
+
+- [ ] **Step 1: Add failing UI tests**
+
+Cover:
+
+- Scenes inventory exposes a `Rules` action per scene row
+- selecting `Rules` opens a camera-scoped rule builder in Control -> Scenes
+- rule list shows enabled state, incident type, severity, action, cooldown, and
+  rule hash prefix
+- form can create and edit class, zone, confidence, severity, action, cooldown,
+  webhook presence, and enabled state
+- validation errors use `role="alert"` and are not color-only
+- dry-run/validate shows match/no-match feedback
+- successful save invalidates the camera rule query and leaves unrelated camera
+  edits untouched
+
+- [ ] **Step 2: Run failing UI tests**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/cameras/IncidentRulesPanel.test.tsx \
+  src/pages/Cameras.test.tsx
+```
+
+Expected: fail until hooks and UI exist.
+
+- [ ] **Step 3: Implement hooks and rule builder**
+
+Use the UI/UX placement decision:
+
+- primary authoring lives in Control -> Scenes
+- Operations remains read-only runtime truth
+- Evidence remains review and provenance
+
+Build `IncidentRulesPanel` with a dense operational layout:
+
+- class multi-select seeded from camera active classes and runtime vocabulary
+- zone selector seeded from camera zones
+- confidence slider/input with stable dimensions
+- severity select
+- action segmented control for `alert`, `record_clip`, and `webhook`
+- cooldown number input
+- enabled toggle
+- validate button with loading state
+- create, save, and delete actions with accessible labels
+
+Use lucide icons where actions benefit from icons. Keep text compact; this is a
+control surface, not a landing page.
+
+- [ ] **Step 4: Integrate into Scenes page**
+
+Add a `Rules` action next to `Edit` and `Delete` in the scene table. Opening it
+should select that camera and render the rule builder below the table, using the
+same workspace surface language as the existing scene wizard.
+
+If a scene has no saved zones or active classes, keep the panel usable and show
+validation feedback from the API instead of blocking the route client-side.
+
+- [ ] **Step 5: Run frontend validation**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/cameras/IncidentRulesPanel.test.tsx \
+  src/pages/Cameras.test.tsx
+corepack pnpm --dir frontend exec tsc -b
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add frontend/src/lib/api.generated.ts \
+  frontend/src/hooks/use-incident-rules.ts \
+  frontend/src/components/cameras/IncidentRulesPanel.tsx \
+  frontend/src/components/cameras/IncidentRulesPanel.test.tsx \
+  frontend/src/pages/Cameras.tsx \
+  frontend/src/pages/Cameras.test.tsx
+git commit -m "feat(ui): add scene incident rule builder"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 16D: Evidence And Operations Rule Provenance
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/api/v1/incidents.py`
+- Modify: `backend/src/argus/api/v1/operations.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/services/evidence_ledger.py`
+- Modify: `frontend/src/lib/api.generated.ts`
+- Create: `frontend/src/components/evidence/IncidentRuleSummary.tsx`
+- Create: `frontend/src/components/evidence/IncidentRuleSummary.test.tsx`
+- Modify: `frontend/src/pages/Incidents.tsx`
+- Modify: `frontend/src/pages/Incidents.test.tsx`
+- Modify: `frontend/src/components/operations/SceneIntelligenceMatrix.tsx`
+- Modify: `frontend/src/components/operations/SceneIntelligenceMatrix.test.tsx`
+- Modify: `frontend/src/pages/Settings.tsx`
+- Modify: `frontend/src/pages/Settings.test.tsx`
+- Test: `backend/tests/api/test_prompt9_routes.py`
+- Test: `backend/tests/api/test_operations_endpoints.py`
+- Test: `backend/tests/services/test_evidence_ledger.py`
+
+- [ ] **Step 1: Add failing API and UI tests**
+
+Cover:
+
+- incident responses expose `trigger_rule` when the payload contains rule
+  metadata
+- incident ledger writes an `incident_rule.attached` entry with rule hash,
+  incident type, action, and severity for rule-generated incidents
+- Operations rows show active rule count, effective rule hash, and latest rule
+  load status when known
+- Evidence Desk shows rule name, type, severity, action, cooldown, rule hash,
+  detection class, zone, and confidence
+- Evidence filter still uses incident type values such as
+  `rule.restricted_person`
+
+- [ ] **Step 2: Run failing tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/api/test_prompt9_routes.py \
+  tests/api/test_operations_endpoints.py \
+  tests/services/test_evidence_ledger.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/IncidentRuleSummary.test.tsx \
+  src/components/operations/SceneIntelligenceMatrix.test.tsx \
+  src/pages/Incidents.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: fail until provenance fields and UI surfaces are wired.
+
+- [ ] **Step 3: Add trigger rule summaries**
+
+Add a `TriggerRuleSummary` response contract and populate it from incident
+payloads. Do not require a live join for old incidents; if the payload has a
+rule summary, render it. If the rule was later deleted, Evidence should still
+show the captured summary.
+
+Add `incident_rule.attached` to the evidence ledger enum and write it during
+incident finalize when trigger rule metadata exists.
+
+- [ ] **Step 4: Add Operations runtime rule truth**
+
+Operations should show read-only truth:
+
+- configured active rule count
+- effective combined rule hash
+- last rule event timestamp when available
+- rule-load status: `loaded`, `stale`, `unknown`, or `not_configured`
+
+This belongs in Operations because it answers whether the worker is running the
+rules, not because Operations owns rule authoring.
+
+- [ ] **Step 5: Add Evidence trigger rule UI**
+
+Add `IncidentRuleSummary` to Evidence Desk near the Case Context Strip or
+accountability details. Keep it compact and factual. The user should be able to
+see what rule created the incident without opening raw payload JSON.
+
+- [ ] **Step 6: Run validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run alembic upgrade head
+python3 -m uv run pytest \
+  tests/api/test_prompt9_routes.py \
+  tests/api/test_operations_endpoints.py \
+  tests/services/test_evidence_ledger.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/IncidentRuleSummary.test.tsx \
+  src/components/operations/SceneIntelligenceMatrix.test.tsx \
+  src/pages/Incidents.test.tsx \
+  src/pages/Settings.test.tsx
+corepack pnpm --dir frontend exec tsc -b
+```
+
+Expected: pass.
+
+- [ ] **Step 7: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/api/v1/incidents.py \
+  backend/src/argus/api/v1/operations.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/services/evidence_ledger.py \
+  backend/tests/api/test_prompt9_routes.py \
+  backend/tests/api/test_operations_endpoints.py \
+  backend/tests/services/test_evidence_ledger.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/components/evidence/IncidentRuleSummary.tsx \
+  frontend/src/components/evidence/IncidentRuleSummary.test.tsx \
+  frontend/src/pages/Incidents.tsx \
+  frontend/src/pages/Incidents.test.tsx \
+  frontend/src/components/operations/SceneIntelligenceMatrix.tsx \
+  frontend/src/components/operations/SceneIntelligenceMatrix.test.tsx \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Settings.test.tsx
+git commit -m "feat(evidence): show incident rule provenance"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 16E: Incident Rule Band Validation And Docs
+
+**Files:**
+
+- Modify: `docs/runbook.md`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/superpowers/specs/2026-05-11-accountable-scene-intelligence-and-evidence-recording-design.md`
+- Modify: `docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md`
+- Modify: `docs/superpowers/status/2026-05-12-next-chat-accountable-scene-task14-handoff.md`
+
+- [ ] **Step 1: Update operator docs**
+
+Document:
+
+- incident rules live in Control -> Scenes
+- Operations shows worker rule consumption and readiness
+- Evidence shows the trigger rule summary after a rule fires
+- `record_clip` is the default incident action for reviewable evidence, while
+  recording policy and storage profile still decide which artifacts are
+  captured and where they are stored
+- edge/local-first deployments remain reviewable when recording is enabled
+- Prompt-To-Policy may propose rule changes later, but rules are not auto-applied
+
+- [ ] **Step 2: Run full targeted backend validation for the band**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run alembic upgrade head
+python3 -m uv run pytest \
+  tests/services/test_incident_rules.py \
+  tests/api/test_incident_rule_routes.py \
+  tests/services/test_camera_worker_config.py \
+  tests/services/test_scene_contracts.py \
+  tests/vision/test_rules.py \
+  tests/inference/test_engine_config_loading.py \
+  tests/inference/test_engine.py \
+  tests/api/test_prompt9_routes.py \
+  tests/api/test_operations_endpoints.py \
+  tests/services/test_evidence_ledger.py \
+  tests/core/test_db.py \
+  -q
+python3 -m uv run ruff check src tests
+```
+
+Expected: pass, or record exact unrelated pre-existing failures in the handoff.
+
+- [ ] **Step 3: Run full targeted frontend validation for the band**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/cameras/IncidentRulesPanel.test.tsx \
+  src/components/evidence/IncidentRuleSummary.test.tsx \
+  src/components/operations/SceneIntelligenceMatrix.test.tsx \
+  src/pages/Cameras.test.tsx \
+  src/pages/Incidents.test.tsx \
+  src/pages/Settings.test.tsx
+corepack pnpm --dir frontend exec tsc -b
+```
+
+Expected: pass.
+
+- [ ] **Step 4: Refresh handoff**
+
+Update the handoff so the next chat starts with Task 17 only after Task 16A-16E
+are implemented, validated, committed, and pushed.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add docs/runbook.md \
+  docs/operator-deployment-playbook.md \
+  docs/superpowers/specs/2026-05-11-accountable-scene-intelligence-and-evidence-recording-design.md \
+  docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md \
+  docs/superpowers/status/2026-05-12-next-chat-accountable-scene-task14-handoff.md
+git commit -m "docs(rules): document per-worker incident rule validation"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
 ## Task 17: Operational Memory
 
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0016_operational_memory_patterns.py`
+- Create: `backend/src/argus/migrations/versions/0018_operational_memory_patterns.py`
 - Create: `backend/src/argus/services/operational_memory.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
@@ -3579,7 +4177,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0016_operational_memory_patterns.py \
+  backend/src/argus/migrations/versions/0018_operational_memory_patterns.py \
   backend/src/argus/services/operational_memory.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
@@ -3602,7 +4200,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0017_policy_drafts.py`
+- Create: `backend/src/argus/migrations/versions/0019_policy_drafts.py`
 - Create: `backend/src/argus/services/policy_drafts.py`
 - Modify: `backend/src/argus/services/llm_provider_runtime.py`
 - Create: `backend/src/argus/api/v1/policy_drafts.py`
@@ -3664,7 +4262,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0017_policy_drafts.py \
+  backend/src/argus/migrations/versions/0019_policy_drafts.py \
   backend/src/argus/services/policy_drafts.py \
   backend/src/argus/services/llm_provider_runtime.py \
   backend/src/argus/api/v1/policy_drafts.py \
@@ -3683,7 +4281,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0018_cross_camera_threads.py`
+- Create: `backend/src/argus/migrations/versions/0020_cross_camera_threads.py`
 - Create: `backend/src/argus/services/cross_camera_threads.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/incidents.py`
@@ -3741,7 +4339,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0018_cross_camera_threads.py \
+  backend/src/argus/migrations/versions/0020_cross_camera_threads.py \
   backend/src/argus/services/cross_camera_threads.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/incidents.py \
@@ -3762,7 +4360,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0019_supervisor_operations.py`
+- Create: `backend/src/argus/migrations/versions/0021_supervisor_operations.py`
 - Create: `backend/src/argus/services/supervisor_operations.py`
 - Modify: `backend/src/argus/services/runtime_configuration.py`
 - Modify: `backend/src/argus/api/contracts.py`
@@ -3825,7 +4423,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0019_supervisor_operations.py \
+  backend/src/argus/migrations/versions/0021_supervisor_operations.py \
   backend/src/argus/services/supervisor_operations.py \
   backend/src/argus/services/runtime_configuration.py \
   backend/src/argus/api/contracts.py \
@@ -3984,7 +4582,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0020_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/migrations/versions/0022_runtime_artifact_soak_runs.py`
 - Create: `backend/src/argus/services/runtime_soak.py`
 - Create: `backend/src/argus/api/v1/runtime_soak.py`
 - Modify: `backend/src/argus/main.py`
@@ -4049,7 +4647,7 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0020_runtime_artifact_soak_runs.py \
+  backend/src/argus/migrations/versions/0022_runtime_artifact_soak_runs.py \
   backend/src/argus/services/runtime_soak.py \
   backend/src/argus/api/v1/runtime_soak.py \
   backend/src/argus/main.py \
@@ -4269,7 +4867,9 @@ git push origin codex/omnisight-ui-spec-implementation
   control plane, and storage routing. Tasks 13E-13J cover the missing runtime
   consumption for local-first sync, effective configuration diagnostics, stream
   delivery, runtime selection, privacy policy, and LLM provider profiles. Task
-  14 covers optional still snapshots. Tasks 15-19 cover Runtime Passport,
+  14 covers optional still snapshots. Tasks 15-16 cover Runtime Passport.
+  Tasks 16A-16E cover per-worker incident rule definition, runtime consumption,
+  UI authoring, and Evidence/Operations provenance. Tasks 17-19 cover
   Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
   Intelligence. Tasks 20-22 cover Fleet/Operations supervisor hardening,
   operations-mode consumption, and credential rotation. Task 23 covers Linux

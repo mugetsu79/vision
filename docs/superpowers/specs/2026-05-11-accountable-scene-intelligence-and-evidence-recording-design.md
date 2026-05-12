@@ -9,11 +9,12 @@ open-vocab Track A/B work.
 
 Implementation checkpoint, 2026-05-12:
 
-- Tasks 1-13J are implemented and pushed on
+- Tasks 1-16 are implemented and pushed on
   `codex/omnisight-ui-spec-implementation`.
-- The current Alembic head is `0014_evidence_expiry_action`.
-- The next implementation task is Task 14, optional still snapshot evidence
-  artifacts.
+- The current Alembic head is `0016_runtime_passports`.
+- Before Task 17 starts, the implementation plan adds a per-worker incident
+  rules band so operators can define what incidents mean for each scene worker
+  from the UI and have workers consume those rules at runtime.
 
 This spec turns all still-pertinent handoff items into one ordered
 implementation target. The first three Vezor differentiators are still the
@@ -30,17 +31,18 @@ storage policy allows it, including edge deployments.
 After that foundation, continue in the same plan with:
 
 4. Runtime Passport
-5. Operational Memory
-6. Prompt-To-Policy
-7. Identity-Light Cross-Camera Intelligence
+5. Per-Worker Incident Rules
+6. Operational Memory
+7. Prompt-To-Policy
+8. Identity-Light Cross-Camera Intelligence
 
 The same implementation runway also carries forward optional still snapshot
-artifacts, Runtime Passport, Operational Memory, Prompt-To-Policy,
-Identity-Light Cross-Camera Intelligence, Fleet/Operations production
-hardening, first-site Jetson runtime artifact soak validation, and the gated
-Track C / DeepStream lane. These later tasks must reuse the contract, ledger,
-privacy, evidence artifact, and configuration-profile foundations instead of
-inventing parallel case-history primitives.
+artifacts, Runtime Passport, Per-Worker Incident Rules, Operational Memory,
+Prompt-To-Policy, Identity-Light Cross-Camera Intelligence, Fleet/Operations
+production hardening, first-site Jetson runtime artifact soak validation, and
+the gated Track C / DeepStream lane. These later tasks must reuse the contract,
+ledger, privacy, evidence artifact, rule, and configuration-profile foundations
+instead of inventing parallel case-history primitives.
 
 ## Product Goal
 
@@ -50,6 +52,7 @@ sovereign, auditable scene intelligence platform.
 For every incident, an operator should be able to answer:
 
 - What scene configuration was active?
+- Which approved incident rule defined the event?
 - Which model, vocabulary, zones, rules, gates, and runtime artifact produced
   the event?
 - What privacy policy governed the scene?
@@ -120,9 +123,10 @@ The branch now has strong foundations:
 
 Current gaps:
 
-- incident still snapshots are optional and not first-class artifacts yet
-- Runtime Passport, Operational Memory, Prompt-To-Policy, and Identity-Light
-  Cross-Camera Intelligence are not implemented
+- persisted `detection_rules` exist, but operators cannot yet manage incident
+  rules from the UI/API and production workers do not yet load those rules
+- Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
+  Intelligence are not implemented
 - `operations_mode` profiles exist in the UI/configuration plane, but Tasks
   20-22 still need to consume them for supervisor lifecycle, worker assignment,
   and edge credential rotation
@@ -212,6 +216,10 @@ The ledger records:
 - `evidence.clip.available`
 - `evidence.clip.quota_exceeded`
 - `evidence.clip.capture_failed`
+- `evidence.snapshot.available`
+- `evidence.snapshot.quota_exceeded`
+- `evidence.snapshot.capture_failed`
+- `incident_rule.attached`
 - `incident.reviewed`
 - `incident.reopened`
 - later: `evidence.exported`, `evidence.downloaded`, `evidence.retained`,
@@ -226,13 +234,14 @@ tamper-evident product primitive that makes exportable case history stronger.
 A first-class row describing a clip, snapshot, manifest export, or future case
 export.
 
-For this slice, the required artifact type is `event_clip`.
+For this slice, the primary required artifact type is `event_clip`; optional
+still images use `snapshot`.
 
 An artifact records:
 
 - incident id
 - camera id
-- kind: `event_clip`
+- kind: `event_clip` or `snapshot`
 - status: `available`, `local_only`, `remote_available`, `upload_pending`,
   `quota_exceeded`, `capture_failed`, or `expired`
 - storage provider: `local_filesystem`, `minio`, or `s3_compatible`
@@ -327,6 +336,53 @@ operator artifact:
 Runtime Passports attach to incident details and Operations camera rows. They
 must be derived from scene contracts, model runtime artifact records, and worker
 runtime selection reports.
+
+### Per-Worker Incident Rule
+
+A Per-Worker Incident Rule is the operator-authored definition of what should
+become an incident for one scene worker.
+
+Rules are camera/scene scoped because they depend on the worker's model
+vocabulary, zones, privacy posture, recording policy, and runtime capability.
+They are not global Settings profiles and they are not Evidence records. A rule
+defines the trigger; Evidence shows the result after a worker fires it.
+
+A rule includes:
+
+- enabled/disabled state
+- operator-facing name
+- stable incident type slug, for example `restricted_person` or
+  `ppe_missing_hardhat`
+- severity: `info`, `warning`, or `critical`
+- predicate:
+  - class names
+  - zone ids
+  - minimum confidence
+  - required non-biometric attributes when available
+- action: `alert`, `record_clip`, or `webhook`
+- cooldown seconds
+- optional webhook URL for integrations, redacted from browser responses after
+  save
+- deterministic rule hash for scene contracts, worker config diagnostics, and
+  incident payload provenance
+
+The primary authoring surface belongs in **Control -> Scenes** because incident
+rules express scene semantics. The best UI fit is a rule builder tied to each
+scene row and, where practical, a guided "Incidents" step between privacy,
+boundaries, and calibration. The builder should use a data-dense operational
+layout: class selector, zone selector, confidence slider/input, severity menu,
+action segmented control, cooldown input, enabled toggle, and a dry-run/validate
+action with accessible labels and non-color-only status indicators.
+
+**Control -> Operations** should show the effective runtime truth: active rule
+count, last loaded rule hash, last rule event, and worker reload status. It
+should not be the primary authoring surface because Operations answers whether a
+worker is running the desired rules, not what the scene policy should be.
+
+**Intelligence -> Evidence** should show which rule triggered an incident:
+rule name, incident type, severity, action, detection summary, cooldown, rule
+hash, and scene contract hash. This lets a reviewer understand the rule behind
+the record without leaving the Evidence Desk.
 
 ### Operational Memory
 
@@ -731,7 +787,34 @@ Requirements:
 - keep fallback explicit when dynamic `.pt` or ONNX is used instead of an
   optimized artifact
 
-### 10. Operational Memory
+### 10. Per-Worker Incident Rules
+
+Turn the existing detection-rule primitive into an operator-facing incident
+policy surface that production workers actually consume.
+
+Requirements:
+
+- expose camera-scoped incident rule CRUD through authenticated API routes
+- add rule metadata needed by reviewers: enabled state, incident type slug,
+  severity, deterministic rule hash, and optional description
+- validate rule predicates against the target camera's active classes, runtime
+  vocabulary, zones, and available non-biometric attributes
+- provide a dry-run/validate route that evaluates a sample detection payload
+  against the rule before saving
+- include enabled rules in worker config and camera command updates
+- build a `RuleEngine` from persisted rules when the worker starts and hot-reload
+  rules after UI edits without requiring a process restart
+- persist rule events and convert non-count rule events into
+  `IncidentTriggeredEvent` records whose type is derived from the operator's
+  incident type slug, not only from the action
+- include trigger rule metadata in the incident payload, Evidence Desk, scene
+  contract, runtime diagnostics, and Operations worker rows
+- write audit entries for rule create/update/delete and incident ledger entries
+  that attach the triggering rule hash to the evidence record
+- keep Prompt-To-Policy as a draft producer only; it may propose rule changes
+  later, but cannot auto-apply them
+
+### 11. Operational Memory
 
 Build pattern memory on top of incidents, evidence ledger, and scene contracts.
 
@@ -744,7 +827,7 @@ Requirements:
 - show concise memory cards in Evidence Desk and Operations
 - avoid predictive claims; present observed patterns and supporting evidence
 
-### 11. Prompt-To-Policy
+### 12. Prompt-To-Policy
 
 Compile operator language into proposed policies and scene changes.
 
@@ -759,7 +842,7 @@ Requirements:
 - write ledger entries for proposal, approval, rejection, and application
 - never mutate worker config directly from prompt text
 
-### 12. Identity-Light Cross-Camera Intelligence
+### 13. Identity-Light Cross-Camera Intelligence
 
 Create non-biometric cross-camera threads.
 
@@ -773,7 +856,7 @@ Requirements:
 - show cross-camera thread context in Evidence Desk
 - keep face ID, biometric identity, and persistent person identity disabled
 
-### 13. Fleet And Operations Production Hardening
+### 14. Fleet And Operations Production Hardening
 
 Turn the read-first Operations workbench into a supervisor-backed production
 control surface.
@@ -790,7 +873,7 @@ Requirements:
 - no plaintext secret persistence beyond one-time bootstrap responses
 - honest UI states when supervisors have not reported runtime truth
 
-### 14. Production Linux Master And Jetson Runtime Soak
+### 15. Production Linux Master And Jetson Runtime Soak
 
 Create a production validation path for Linux master plus Jetson edge.
 
@@ -805,7 +888,7 @@ Requirements:
   Evidence Desk review, Operations worker truth, and credential rotation
 - record soak results in docs with exact versions and known limitations
 
-### 15. Track C / DeepStream Runtime Lane
+### 16. Track C / DeepStream Runtime Lane
 
 Implement DeepStream only after Track A/B runtime artifacts pass real Jetson
 soak validation.
@@ -843,6 +926,12 @@ GET /api/v1/incidents/{incident_id}/ledger
 GET /api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content
 GET /api/v1/incidents/{incident_id}/runtime-passport
 GET /api/v1/incidents/{incident_id}/cross-camera-threads
+GET /api/v1/cameras/{camera_id}/incident-rules
+POST /api/v1/cameras/{camera_id}/incident-rules
+GET /api/v1/cameras/{camera_id}/incident-rules/{rule_id}
+PATCH /api/v1/cameras/{camera_id}/incident-rules/{rule_id}
+DELETE /api/v1/cameras/{camera_id}/incident-rules/{rule_id}
+POST /api/v1/cameras/{camera_id}/incident-rules/validate
 GET /api/v1/configuration/catalog
 GET /api/v1/configuration/profiles
 POST /api/v1/configuration/profiles
@@ -884,6 +973,27 @@ class EvidenceRecordingPolicy(BaseModel):
     snapshot_enabled: bool = False
     snapshot_offset_seconds: float = Field(default=0.0, ge=-30.0, le=60.0)
     snapshot_quality: int = Field(default=85, ge=1, le=100)
+
+
+class IncidentRulePredicate(BaseModel):
+    class_names: list[str] = Field(default_factory=list)
+    zone_ids: list[str] = Field(default_factory=list)
+    min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    attributes: dict[str, object] = Field(default_factory=dict)
+
+
+class IncidentRuleResponse(BaseModel):
+    id: UUID
+    camera_id: UUID
+    enabled: bool
+    name: str
+    incident_type: str
+    severity: Literal["info", "warning", "critical"]
+    predicate: IncidentRulePredicate
+    action: Literal["alert", "record_clip", "webhook"]
+    cooldown_seconds: int
+    webhook_url_present: bool = False
+    rule_hash: str
 ```
 
 ## Data Model
@@ -992,6 +1102,35 @@ Backfill existing rows with:
 - `source_config={"kind": "rtsp"}`
 
 Keep `rtsp_url_encrypted` for compatibility until a later cleanup migration.
+
+### `detection_rules` additions
+
+Create migration `0017_detection_rule_incident_metadata`.
+
+The existing `detection_rules` table becomes the durable per-worker incident
+rule table. Add:
+
+- `enabled boolean`
+- `incident_type string`
+- `severity string`
+- `description text nullable`
+- `rule_hash string`
+- `created_at`
+- `updated_at`
+
+Indexes:
+
+- unique `camera_id`, `incident_type`
+- `camera_id`, `enabled`
+- `rule_hash`
+
+Backfill existing rows with:
+
+- `enabled=true`
+- `incident_type` derived from a slugified rule name when present, otherwise
+  from the existing action
+- `severity="warning"`
+- deterministic `rule_hash`
 
 ### `operator_config_profiles`
 
@@ -1229,14 +1368,19 @@ Indexes:
 flowchart LR
   ConfigUI["Settings / Configuration UI"] --> ConfigAPI["Configuration API"]
   ConfigAPI --> ConfigProfiles["Operator Config Profiles + Secrets"]
+  SceneRulesUI["Scenes Incident Rule Builder"] --> RuleAPI["Incident Rule API"]
+  RuleAPI --> Rules["Detection Rules + Rule Hashes"]
   Camera["Camera + Scene Settings"] --> ContractCompiler["Scene Contract Compiler"]
   Privacy["Tenant + Privacy Settings"] --> ManifestBuilder["Privacy Manifest Builder"]
+  Rules --> ContractCompiler
+  Rules --> WorkerConfig
   ConfigProfiles --> ContractCompiler
   ConfigProfiles --> WorkerConfig
   ManifestBuilder --> ContractCompiler
   ContractCompiler --> WorkerConfig["Worker Config"]
   WorkerConfig --> Worker["Worker / Inference Engine"]
-  Worker --> Trigger["Incident Trigger"]
+  Worker --> RuleEngine["Rule Engine"]
+  RuleEngine --> Trigger["Incident Trigger"]
   Trigger --> Capture["Incident Clip Capture"]
   WorkerConfig --> StorageRouter["Storage Profile Router"]
   Capture --> StorageRouter
@@ -1283,6 +1427,12 @@ flowchart LR
 - If a runtime profile is saved and bound but not consumed by its subsystem,
   validation fails for the relevant band; UI-only product configuration is not
   acceptable after the configuration control plane lands.
+- If an incident rule references a class, zone, confidence value, or attribute
+  that the scene cannot support, the API returns `422` and the worker keeps the
+  last valid loaded rules.
+- If rule hot-reload fails, Operations marks rule-load status `stale` and
+  Evidence records continue to carry the rule summary that was active when each
+  incident fired.
 - If a USB device cannot be opened on its assigned edge node, worker config
   remains valid but the worker reports capture failure/reconnect state; setup
   probe should return a clear source-unavailable error.
@@ -1320,6 +1470,12 @@ Backend:
 - source probe route tests for USB unavailable and USB reachable fake captures
 - snapshot artifact tests for enabled, disabled, quota, and capture failure
 - runtime passport hash and incident attachment tests
+- incident rule CRUD, validation, tenant isolation, and audit tests
+- worker config and command tests proving enabled per-camera incident rules are
+  loaded and hot-reloaded
+- rule engine tests proving operator incident type, severity, cooldown, zone,
+  class, confidence, and attribute predicates control emitted incidents
+- scene contract tests proving enabled incident rule hashes are captured
 - operational memory pattern detection tests
 - prompt-to-policy draft, approval, rejection, and ledger tests
 - identity-light correlation tests that prove privacy manifests block disallowed
@@ -1345,6 +1501,11 @@ Frontend:
 - Evidence Timeline, Case Context Strip, and type-colored queue render with
   accountable artifact states
 - Runtime Passport details render in Evidence Desk and Operations
+- Scene rule builder supports class, zone, confidence, severity, action,
+  cooldown, enabled state, and validation flows from Control -> Scenes
+- Operations shows active rule count/hash and worker rule-load status without
+  becoming the primary rule editor
+- Evidence Desk shows the trigger rule summary for rule-generated incidents
 - Operational Memory cards render source incident citations
 - Prompt-To-Policy renders a readable diff and requires approval
 - Identity-Light threads render rationale and privacy posture
@@ -1368,12 +1529,13 @@ The implementation plan should execute these tracks in order:
 1. Accountable scene and evidence foundation.
 2. Evidence Desk timeline/case-context polish and optional still snapshots.
 3. Runtime Passport.
-4. Operational Memory.
-5. Prompt-To-Policy.
-6. Identity-Light Cross-Camera Intelligence.
-7. Fleet/Operations production hardening.
-8. Production Linux master plus Jetson runtime artifact soak.
-9. Track C / DeepStream runtime lane, only after the soak gate passes.
+4. Per-worker incident rules.
+5. Operational Memory.
+6. Prompt-To-Policy.
+7. Identity-Light Cross-Camera Intelligence.
+8. Fleet/Operations production hardening.
+9. Production Linux master plus Jetson runtime artifact soak.
+10. Track C / DeepStream runtime lane, only after the soak gate passes.
 
 This is a single runway, but the later tasks intentionally depend on earlier
 data contracts. Do not implement a later feature by creating a parallel
@@ -1402,6 +1564,12 @@ incident, policy, or runtime metadata model.
   remaining optional.
 - Runtime Passport is visible for incidents and operations rows when runtime
   metadata is available.
+- Operators can define incident rules per scene worker from Control -> Scenes.
+- Production workers load enabled incident rules from worker config and
+  hot-reload rule edits.
+- Rule-generated incidents carry trigger rule name, type, severity, action,
+  cooldown, rule hash, scene contract hash, and evidence artifacts when
+  recording is enabled.
 - Operational Memory shows observed patterns with source incident citations.
 - Prompt-To-Policy produces reviewable drafts and never applies changes without
   approval.
