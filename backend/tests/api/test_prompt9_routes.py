@@ -16,6 +16,8 @@ from argus.api.contracts import (
     HistoryPoint,
     IncidentResponse,
     PrivacyManifestSnapshotResponse,
+    RuntimePassportSnapshotResponse,
+    RuntimePassportSummary,
     SceneContractSnapshotResponse,
     TenantContext,
 )
@@ -175,10 +177,12 @@ class RecordingIncidentService:
         self.review_calls: list[dict[str, object]] = []
         self.scene_contract_calls: list[dict[str, object]] = []
         self.privacy_manifest_calls: list[dict[str, object]] = []
+        self.runtime_passport_calls: list[dict[str, object]] = []
         self.ledger_calls: list[dict[str, object]] = []
         self.artifact_content_calls: list[dict[str, object]] = []
         self.scene_contract_id = uuid4()
         self.privacy_manifest_id = uuid4()
+        self.runtime_passport_id = uuid4()
         self.artifact_id = uuid4()
         self.incident_id = uuid4()
 
@@ -213,6 +217,9 @@ class RecordingIncidentService:
                 scene_contract_id=self.scene_contract_id,
                 privacy_manifest_hash="b" * 64,
                 privacy_manifest_id=self.privacy_manifest_id,
+                runtime_passport_hash="e" * 64,
+                runtime_passport_id=self.runtime_passport_id,
+                runtime_passport=_runtime_passport_summary(self.runtime_passport_id),
                 recording_policy=EvidenceRecordingPolicy(storage_profile="edge_local"),
                 evidence_artifacts=[
                     EvidenceArtifactResponse(
@@ -310,6 +317,26 @@ class RecordingIncidentService:
             created_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
         )
 
+    async def get_runtime_passport(
+        self,
+        context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> RuntimePassportSnapshotResponse:
+        self.runtime_passport_calls.append(
+            {"tenant_id": context.tenant_id, "incident_id": incident_id}
+        )
+        return RuntimePassportSnapshotResponse(
+            id=self.runtime_passport_id,
+            camera_id=uuid4(),
+            incident_id=incident_id,
+            schema_version=1,
+            passport_hash="e" * 64,
+            passport=_runtime_passport_payload(),
+            summary=_runtime_passport_summary(self.runtime_passport_id),
+            created_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
+        )
+
     async def list_ledger_entries(
         self,
         context: TenantContext,
@@ -352,6 +379,46 @@ class RecordingIncidentService:
             file_path=None,
             redirect_url="https://minio.local/signed/incidents/1.mjpeg",
         )
+
+
+def _runtime_passport_payload() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "model": {"sha256": "f" * 64},
+        "runtime_selection_profile": {
+            "profile_id": "11111111-1111-1111-1111-111111111111",
+            "profile_name": "Jetson runtime",
+            "profile_hash": "g" * 64,
+        },
+        "selected_runtime": {
+            "backend": "tensorrt_engine",
+            "runtime_artifact_id": "22222222-2222-2222-2222-222222222222",
+            "runtime_artifact_hash": "d" * 64,
+            "target_profile": "linux-aarch64-nvidia-jetson",
+            "precision": "fp16",
+            "validated_at": "2026-05-11T10:00:00+00:00",
+            "fallback_reason": None,
+        },
+        "provider_versions": {"tensorrt": "10.0.0", "cuda": "12.6"},
+    }
+
+
+def _runtime_passport_summary(passport_id: UUID) -> RuntimePassportSummary:
+    return RuntimePassportSummary(
+        id=passport_id,
+        passport_hash="e" * 64,
+        selected_backend="tensorrt_engine",
+        model_hash="f" * 64,
+        runtime_artifact_id="22222222-2222-2222-2222-222222222222",
+        runtime_artifact_hash="d" * 64,
+        target_profile="linux-aarch64-nvidia-jetson",
+        precision="fp16",
+        validated_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
+        fallback_reason=None,
+        runtime_selection_profile_id=UUID("11111111-1111-1111-1111-111111111111"),
+        runtime_selection_profile_name="Jetson runtime",
+        runtime_selection_profile_hash="g" * 64,
+    )
 
 
 def _create_test_app(
@@ -545,6 +612,9 @@ async def test_incidents_route_passes_camera_type_limit_and_review_status_filter
     assert response.json()[0]["review_status"] == "pending"
     assert response.json()[0]["scene_contract_hash"] == "a" * 64
     assert response.json()[0]["privacy_manifest_hash"] == "b" * 64
+    assert response.json()[0]["runtime_passport_hash"] == "e" * 64
+    assert response.json()[0]["runtime_passport"]["selected_backend"] == "tensorrt_engine"
+    assert response.json()[0]["runtime_passport"]["model_hash"] == "f" * 64
     assert response.json()[0]["recording_policy"]["storage_profile"] == "edge_local"
     assert response.json()[0]["evidence_artifacts"][0] == {
         "id": str(incidents.artifact_id),
@@ -567,6 +637,8 @@ async def test_incidents_route_passes_camera_type_limit_and_review_status_filter
         "scene_contract_hash": None,
         "privacy_manifest_hash": None,
         "review_url": "https://minio.local/signed/incidents/1.mjpeg",
+        "sync_status": None,
+        "sync_error": None,
     }
     assert response.json()[0]["ledger_summary"] == {
         "entry_count": 2,
@@ -599,6 +671,9 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
         privacy_response = await client.get(
             f"/api/v1/incidents/{incident_id}/privacy-manifest"
         )
+        runtime_response = await client.get(
+            f"/api/v1/incidents/{incident_id}/runtime-passport"
+        )
         ledger_response = await client.get(f"/api/v1/incidents/{incident_id}/ledger")
         content_response = await client.get(
             f"/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content"
@@ -608,6 +683,10 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
     assert scene_response.json()["contract_hash"] == "a" * 64
     assert privacy_response.status_code == 200
     assert privacy_response.json()["manifest_hash"] == "b" * 64
+    assert runtime_response.status_code == 200
+    assert runtime_response.json()["passport_hash"] == "e" * 64
+    assert runtime_response.json()["summary"]["runtime_artifact_hash"] == "d" * 64
+    assert runtime_response.json()["summary"]["runtime_selection_profile_hash"] == "g" * 64
     assert ledger_response.status_code == 200
     assert ledger_response.json()[0]["action"] == "incident.triggered"
     assert content_response.status_code == 307
@@ -618,6 +697,9 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
         {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
     ]
     assert incidents.privacy_manifest_calls == [
+        {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
+    ]
+    assert incidents.runtime_passport_calls == [
         {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
     ]
     assert incidents.ledger_calls == [

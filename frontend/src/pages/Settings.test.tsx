@@ -52,6 +52,26 @@ const fleetOverview = {
       dev_run_command:
         "python3 -m uv run python -m argus.inference.engine --camera-id 00000000-0000-0000-0000-000000000101",
       detail: "Start this worker manually in local development.",
+      runtime_passport: {
+        id: "00000000-0000-0000-0000-000000000901",
+        passport_hash:
+          "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        selected_backend: "tensorrt_engine",
+        model_hash:
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        runtime_artifact_id: "00000000-0000-0000-0000-000000000902",
+        runtime_artifact_hash:
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        target_profile: "linux-aarch64-nvidia-jetson",
+        precision: "fp16",
+        validated_at: "2026-05-11T10:00:00Z",
+        fallback_reason: null,
+        runtime_selection_profile_id: "00000000-0000-0000-0000-000000000903",
+        runtime_selection_profile_name: "Jetson runtime",
+        runtime_selection_profile_hash:
+          "9999999999999999999999999999999999999999999999999999999999999999",
+        provider_versions: { tensorrt: "10.0.0" },
+      },
     },
     {
       camera_id: "00000000-0000-0000-0000-000000000102",
@@ -376,6 +396,17 @@ describe("SettingsPage operations workbench", () => {
       within(screen.getByTestId("worker-rail")).getByText(
         /event clips: cloud storage/i,
       ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText("tensorrt_engine"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(
+        /linux-aarch64-nvidia-jetson/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText("Jetson runtime"),
     ).toBeInTheDocument();
     const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
     expect(

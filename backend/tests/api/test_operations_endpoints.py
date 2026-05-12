@@ -11,13 +11,15 @@ from httpx import ASGITransport, AsyncClient
 from argus.api.contracts import (
     FleetBootstrapRequest,
     FleetBootstrapResponse,
+    FleetCameraWorkerSummary,
     FleetOverviewResponse,
     FleetSummary,
+    RuntimePassportSummary,
     TenantContext,
 )
 from argus.api.v1 import router
 from argus.core.security import AuthenticatedUser
-from argus.models.enums import RoleEnum
+from argus.models.enums import ProcessingMode, RoleEnum
 
 
 def _tenant_context() -> TenantContext:
@@ -74,7 +76,30 @@ class _FakeOperationsService:
                 native_unavailable_cameras=0,
             ),
             nodes=[],
-            camera_workers=[],
+            camera_workers=[
+                FleetCameraWorkerSummary(
+                    camera_id=UUID("00000000-0000-0000-0000-000000000321"),
+                    camera_name="Dock Camera",
+                    site_id=UUID("00000000-0000-0000-0000-000000000456"),
+                    node_id=None,
+                    node_hostname=None,
+                    processing_mode=ProcessingMode.EDGE,
+                    desired_state="manual",
+                    runtime_status="running",
+                    lifecycle_owner="manual_dev",
+                    runtime_passport=RuntimePassportSummary(
+                        id=UUID("00000000-0000-0000-0000-000000000654"),
+                        passport_hash="e" * 64,
+                        selected_backend="tensorrt_engine",
+                        model_hash="f" * 64,
+                        runtime_artifact_hash="d" * 64,
+                        target_profile="linux-aarch64-nvidia-jetson",
+                        precision="fp16",
+                        validated_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
+                        fallback_reason=None,
+                    ),
+                )
+            ],
             delivery_diagnostics=[],
         )
 
@@ -131,7 +156,10 @@ async def test_operations_fleet_route_returns_overview() -> None:
     body = response.json()
     assert body["mode"] == "manual_dev"
     assert body["summary"]["desired_workers"] == 1
-    assert body["camera_workers"] == []
+    assert body["camera_workers"][0]["runtime_passport"]["selected_backend"] == (
+        "tensorrt_engine"
+    )
+    assert body["camera_workers"][0]["runtime_passport"]["runtime_artifact_hash"] == "d" * 64
 
 
 @pytest.mark.asyncio

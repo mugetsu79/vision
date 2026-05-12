@@ -338,6 +338,30 @@ describe("IncidentsPage", () => {
               privacy_manifest_hash:
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
               privacy_manifest_id: "33333333-3333-3333-3333-333333333333",
+              runtime_passport_hash:
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              runtime_passport_id: "66666666-6666-6666-6666-666666666666",
+              runtime_passport: {
+                id: "66666666-6666-6666-6666-666666666666",
+                passport_hash:
+                  "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                selected_backend: "tensorrt_engine",
+                model_hash:
+                  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                runtime_artifact_id: "77777777-7777-7777-7777-777777777777",
+                runtime_artifact_hash:
+                  "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                target_profile: "linux-aarch64-nvidia-jetson",
+                precision: "fp16",
+                validated_at: "2026-04-18T10:01:00Z",
+                fallback_reason: null,
+                runtime_selection_profile_id:
+                  "88888888-8888-8888-8888-888888888888",
+                runtime_selection_profile_name: "Jetson runtime",
+                runtime_selection_profile_hash:
+                  "9999999999999999999999999999999999999999999999999999999999999999",
+                provider_versions: { tensorrt: "10.0.0", cuda: "12.6" },
+              },
               recording_policy: {
                 enabled: true,
                 mode: "event_clip",
@@ -454,6 +478,51 @@ describe("IncidentsPage", () => {
         );
       }
 
+      if (
+        url.pathname ===
+        "/api/v1/incidents/99999999-9999-9999-9999-999999999999/runtime-passport"
+      ) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "66666666-6666-6666-6666-666666666666",
+            camera_id: "11111111-1111-1111-1111-111111111111",
+            incident_id: "99999999-9999-9999-9999-999999999999",
+            schema_version: 1,
+            passport_hash:
+              "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            passport: {
+              selected_runtime: {
+                backend: "tensorrt_engine",
+                runtime_artifact_hash:
+                  "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              },
+            },
+            summary: {
+              id: "66666666-6666-6666-6666-666666666666",
+              passport_hash:
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              selected_backend: "tensorrt_engine",
+              model_hash:
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              runtime_artifact_id: "77777777-7777-7777-7777-777777777777",
+              runtime_artifact_hash:
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              target_profile: "linux-aarch64-nvidia-jetson",
+              precision: "fp16",
+              validated_at: "2026-04-18T10:01:00Z",
+              fallback_reason: null,
+              runtime_selection_profile_id:
+                "88888888-8888-8888-8888-888888888888",
+              runtime_selection_profile_name: "Jetson runtime",
+              runtime_selection_profile_hash:
+                "9999999999999999999999999999999999999999999999999999999999999999",
+              provider_versions: { tensorrt: "10.0.0", cuda: "12.6" },
+            },
+            created_at: "2026-04-18T10:00:00Z",
+          }),
+        );
+      }
+
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
@@ -477,6 +546,10 @@ describe("IncidentsPage", () => {
 
     expect(await screen.findByText("Face ID disabled")).toBeInTheDocument();
     expect(screen.getByText("Biometric ID disabled")).toBeInTheDocument();
+    expect(await screen.findByText("tensorrt_engine")).toBeInTheDocument();
+    expect(screen.getByText("ffffffffffff")).toBeInTheDocument();
+    expect(screen.getByText("dddddddddddd")).toBeInTheDocument();
+    expect(screen.getByText("Jetson runtime")).toBeInTheDocument();
     expect(screen.getByText(/incident\.triggered/i)).toBeInTheDocument();
   });
 

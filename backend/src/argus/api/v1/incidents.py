@@ -11,6 +11,7 @@ from argus.api.contracts import (
     IncidentResponse,
     IncidentReviewUpdate,
     PrivacyManifestSnapshotResponse,
+    RuntimePassportSnapshotResponse,
     SceneContractSnapshotResponse,
     TenantContext,
 )
@@ -70,6 +71,19 @@ async def get_incident_privacy_manifest(
     services: ServicesDependency,
 ) -> PrivacyManifestSnapshotResponse:
     return await services.incidents.get_privacy_manifest(
+        tenant_context,
+        incident_id=incident_id,
+    )
+
+
+@router.get("/{incident_id}/runtime-passport", response_model=RuntimePassportSnapshotResponse)
+async def get_incident_runtime_passport(
+    incident_id: UUID,
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> RuntimePassportSnapshotResponse:
+    return await services.incidents.get_runtime_passport(
         tenant_context,
         incident_id=incident_id,
     )

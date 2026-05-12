@@ -14,6 +14,7 @@ import {
   WorkspaceBand,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
+import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
 import { Button } from "@/components/ui/button";
@@ -324,6 +325,10 @@ export function SettingsPage() {
                     {formatRecordingPolicy(camera)}
                   </p>
                 </div>
+                <RuntimePassportPanel
+                  summary={worker.runtime_passport}
+                  compact
+                />
                 {worker.detail ? (
                   <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
                 ) : null}

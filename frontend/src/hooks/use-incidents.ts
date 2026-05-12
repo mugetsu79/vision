@@ -5,6 +5,7 @@ import { apiClient, toApiError } from "@/lib/api";
 
 export type Incident = components["schemas"]["IncidentResponse"];
 export type IncidentReviewStatus = Incident["review_status"];
+export type RuntimePassportSnapshot = components["schemas"]["RuntimePassportSnapshotResponse"];
 
 export function useIncidents({
   cameraId,
@@ -67,6 +68,27 @@ export function useUpdateIncidentReview() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    },
+  });
+}
+
+export function useIncidentRuntimePassport(incidentId: string | null) {
+  return useQuery({
+    queryKey: ["incidents", incidentId, "runtime-passport"],
+    enabled: Boolean(incidentId),
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        "/api/v1/incidents/{incident_id}/runtime-passport",
+        {
+          params: { path: { incident_id: incidentId ?? "" } },
+        },
+      );
+
+      if (error) {
+        throw toApiError(error, "Failed to load runtime passport.");
+      }
+
+      return data ?? null;
     },
   });
 }

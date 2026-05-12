@@ -1100,6 +1100,27 @@ class FleetNodeSummary(BaseModel):
     reported_camera_count: int | None = None
 
 
+class RuntimePassportSummary(BaseModel):
+    id: UUID
+    passport_hash: str = Field(min_length=64, max_length=64)
+    selected_backend: str | None = None
+    model_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    runtime_artifact_id: UUID | None = None
+    runtime_artifact_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    target_profile: str | None = None
+    precision: str | None = None
+    validated_at: datetime | None = None
+    fallback_reason: str | None = None
+    runtime_selection_profile_id: UUID | None = None
+    runtime_selection_profile_name: str | None = None
+    runtime_selection_profile_hash: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+    )
+    provider_versions: dict[str, Any] = Field(default_factory=dict)
+
+
 class FleetCameraWorkerSummary(BaseModel):
     camera_id: UUID
     camera_name: str
@@ -1112,6 +1133,7 @@ class FleetCameraWorkerSummary(BaseModel):
     lifecycle_owner: Literal["manual_dev", "central_supervisor", "edge_supervisor", "none"]
     dev_run_command: str | None = None
     detail: str | None = None
+    runtime_passport: RuntimePassportSummary | None = None
 
 
 class FleetDeliveryDiagnostic(BaseModel):
@@ -1284,6 +1306,17 @@ class PrivacyManifestSnapshotResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class RuntimePassportSnapshotResponse(BaseModel):
+    id: UUID
+    camera_id: UUID
+    incident_id: UUID | None = None
+    schema_version: int
+    passport_hash: str = Field(min_length=64, max_length=64)
+    passport: dict[str, Any]
+    summary: RuntimePassportSummary
+    created_at: datetime | None = None
+
+
 class IncidentResponse(BaseModel):
     id: UUID
     camera_id: UUID
@@ -1301,6 +1334,9 @@ class IncidentResponse(BaseModel):
     scene_contract_id: UUID | None = None
     privacy_manifest_hash: str | None = None
     privacy_manifest_id: UUID | None = None
+    runtime_passport_hash: str | None = None
+    runtime_passport_id: UUID | None = None
+    runtime_passport: RuntimePassportSummary | None = None
     recording_policy: EvidenceRecordingPolicy | None = None
     evidence_artifacts: list[EvidenceArtifactResponse] = Field(default_factory=list)
     ledger_summary: EvidenceLedgerSummary | None = None

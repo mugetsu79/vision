@@ -71,6 +71,8 @@ from argus.api.contracts import (
     PrivacyManifestSnapshotResponse,
     PrivacySettings,
     RuntimeBackend,
+    RuntimePassportSnapshotResponse,
+    RuntimePassportSummary,
     RuntimeVocabularyState,
     SceneContractSnapshotResponse,
     SceneVisionProfile,
@@ -141,6 +143,7 @@ from argus.models.tables import (
     OperatorConfigBinding,
     OperatorConfigProfile,
     PrivacyManifestSnapshot,
+    RuntimePassportSnapshot,
     SceneContractSnapshot,
     Site,
     Tenant,
@@ -1395,6 +1398,10 @@ class OperationsService:
                     .order_by(Camera.name)
                 )
             ).all()
+            runtime_passports_by_camera = await _load_latest_runtime_passports_by_camera_ids(
+                session,
+                [camera.id for camera, _site in camera_rows],
+            )
 
         edge_by_id = {edge.id: edge for edge, _site in edge_rows}
         assigned_camera_ids: dict[UUID, list[UUID]] = {edge.id: [] for edge, _site in edge_rows}
@@ -1459,6 +1466,14 @@ class OperationsService:
                         _central_dev_run_command(camera.id) if owner == "manual_dev" else None
                     ),
                     detail=detail,
+                    runtime_passport=(
+                        _runtime_passport_summary(runtime_passport)
+                        if (
+                            runtime_passport := runtime_passports_by_camera.get(camera.id)
+                        )
+                        is not None
+                        else None
+                    ),
                 )
             )
             delivery_diagnostics.append(_camera_delivery_diagnostic(camera))
@@ -2542,12 +2557,17 @@ class IncidentService:
                 session,
                 incident_ids,
             )
+            runtime_passports_by_incident = await _load_runtime_passports_by_incident_ids(
+                session,
+                incident_ids,
+            )
         return [
             _incident_response(
                 incident,
                 camera_name,
                 evidence_artifacts=artifacts_by_incident.get(incident.id, []),
                 ledger_summary=ledger_summary_by_incident.get(incident.id),
+                runtime_passport_snapshot=runtime_passports_by_incident.get(incident.id),
             )
             for incident, camera_name in incidents
         ]
@@ -2662,6 +2682,32 @@ class IncidentService:
             )
         return _privacy_manifest_snapshot_response(snapshot)
 
+    async def get_runtime_passport(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> RuntimePassportSnapshotResponse:
+        async with self.session_factory() as session:
+            statement = (
+                select(RuntimePassportSnapshot)
+                .join(
+                    Incident,
+                    Incident.runtime_passport_snapshot_id == RuntimePassportSnapshot.id,
+                )
+                .join(Camera, Camera.id == Incident.camera_id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Incident.id == incident_id)
+            )
+            snapshot = (await session.execute(statement)).scalar_one_or_none()
+        if snapshot is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Runtime passport not found.",
+            )
+        return _runtime_passport_snapshot_response(snapshot)
+
     async def list_ledger_entries(
         self,
         tenant_context: TenantContext,
@@ -2775,6 +2821,7 @@ def _incident_response(
     *,
     evidence_artifacts: list[EvidenceArtifact] | None = None,
     ledger_summary: EvidenceLedgerSummary | None = None,
+    runtime_passport_snapshot: RuntimePassportSnapshot | None = None,
 ) -> IncidentResponse:
     return IncidentResponse(
         id=incident.id,
@@ -2793,6 +2840,13 @@ def _incident_response(
         scene_contract_id=incident.scene_contract_snapshot_id,
         privacy_manifest_hash=incident.privacy_manifest_hash,
         privacy_manifest_id=incident.privacy_manifest_snapshot_id,
+        runtime_passport_hash=incident.runtime_passport_hash,
+        runtime_passport_id=incident.runtime_passport_snapshot_id,
+        runtime_passport=(
+            _runtime_passport_summary(runtime_passport_snapshot)
+            if runtime_passport_snapshot is not None
+            else None
+        ),
         recording_policy=(
             EvidenceRecordingPolicy.model_validate(incident.recording_policy)
             if incident.recording_policy is not None
@@ -2811,6 +2865,43 @@ def _incident_response(
         ],
         ledger_summary=ledger_summary,
     )
+
+
+async def _load_runtime_passports_by_incident_ids(
+    session: AsyncSession,
+    incident_ids: list[UUID],
+) -> dict[UUID, RuntimePassportSnapshot]:
+    if not incident_ids:
+        return {}
+    statement = (
+        select(RuntimePassportSnapshot, Incident.id)
+        .join(Incident, Incident.runtime_passport_snapshot_id == RuntimePassportSnapshot.id)
+        .where(Incident.id.in_(incident_ids))
+    )
+    return {
+        incident_id: snapshot
+        for snapshot, incident_id in (await session.execute(statement)).all()
+    }
+
+
+async def _load_latest_runtime_passports_by_camera_ids(
+    session: AsyncSession,
+    camera_ids: list[UUID],
+) -> dict[UUID, RuntimePassportSnapshot]:
+    if not camera_ids:
+        return {}
+    statement = (
+        select(RuntimePassportSnapshot)
+        .where(RuntimePassportSnapshot.camera_id.in_(camera_ids))
+        .order_by(
+            RuntimePassportSnapshot.camera_id,
+            RuntimePassportSnapshot.created_at.desc(),
+        )
+    )
+    snapshots_by_camera: dict[UUID, RuntimePassportSnapshot] = {}
+    for snapshot in (await session.execute(statement)).scalars().all():
+        snapshots_by_camera.setdefault(snapshot.camera_id, snapshot)
+    return snapshots_by_camera
 
 
 async def _load_artifacts_by_incident_ids(
@@ -2914,6 +3005,85 @@ def _privacy_manifest_snapshot_response(
         manifest=snapshot.manifest,
         created_at=snapshot.created_at,
     )
+
+
+def _runtime_passport_snapshot_response(
+    snapshot: RuntimePassportSnapshot,
+) -> RuntimePassportSnapshotResponse:
+    return RuntimePassportSnapshotResponse(
+        id=snapshot.id,
+        camera_id=snapshot.camera_id,
+        incident_id=snapshot.incident_id,
+        schema_version=snapshot.schema_version,
+        passport_hash=snapshot.passport_hash,
+        passport=snapshot.passport,
+        summary=_runtime_passport_summary(snapshot),
+        created_at=snapshot.created_at,
+    )
+
+
+def _runtime_passport_summary(
+    snapshot: RuntimePassportSnapshot,
+) -> RuntimePassportSummary:
+    passport = snapshot.passport or {}
+    model = _dict_payload(passport.get("model"))
+    selected_runtime = _dict_payload(passport.get("selected_runtime"))
+    runtime_profile = _dict_payload(passport.get("runtime_selection_profile"))
+    provider_versions = _dict_payload(passport.get("provider_versions"))
+    return RuntimePassportSummary(
+        id=snapshot.id,
+        passport_hash=snapshot.passport_hash,
+        selected_backend=_string_or_none(selected_runtime.get("backend")),
+        model_hash=_string_or_none(model.get("sha256")),
+        runtime_artifact_id=_uuid_or_none(selected_runtime.get("runtime_artifact_id")),
+        runtime_artifact_hash=_string_or_none(
+            selected_runtime.get("runtime_artifact_hash")
+        ),
+        target_profile=_string_or_none(selected_runtime.get("target_profile")),
+        precision=_string_or_none(selected_runtime.get("precision")),
+        validated_at=_datetime_or_none(selected_runtime.get("validated_at")),
+        fallback_reason=_string_or_none(selected_runtime.get("fallback_reason")),
+        runtime_selection_profile_id=_uuid_or_none(runtime_profile.get("profile_id")),
+        runtime_selection_profile_name=_string_or_none(runtime_profile.get("profile_name")),
+        runtime_selection_profile_hash=_string_or_none(runtime_profile.get("profile_hash")),
+        provider_versions=provider_versions,
+    )
+
+
+def _dict_payload(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
+    return {}
+
+
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _uuid_or_none(value: object) -> UUID | None:
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
+
+
+def _datetime_or_none(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
 
 
 def _artifact_response(

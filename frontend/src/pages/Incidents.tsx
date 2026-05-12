@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { CaseContextStrip } from "@/components/evidence/CaseContextStrip";
 import { EvidenceTimeline } from "@/components/evidence/EvidenceTimeline";
+import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
 import {
   evidenceClipHref,
   evidenceSnapshotHref,
@@ -26,6 +27,7 @@ import {
   type Incident,
   type IncidentReviewStatus,
   useIncidents,
+  useIncidentRuntimePassport,
   useUpdateIncidentReview,
 } from "@/hooks/use-incidents";
 import { useToast } from "@/hooks/use-toast";
@@ -524,6 +526,12 @@ function IncidentFactsPanel({
             </div>
           </details>
 
+          <RuntimePassportPanel
+            summary={incident.runtime_passport}
+            snapshot={accountability.runtimePassport.data ?? null}
+            loading={accountability.runtimePassport.isLoading}
+          />
+
           <details open className="rounded-md border border-white/8 px-3 py-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
               Ledger
@@ -598,7 +606,13 @@ function useIncidentAccountabilityDetails(incident: Incident) {
     },
   });
 
-  return { sceneContract, privacyManifest, ledgerEntries };
+  const runtimePassport = useIncidentRuntimePassport(
+    incident.runtime_passport_id || incident.runtime_passport_hash
+      ? incident.id
+      : null,
+  );
+
+  return { sceneContract, privacyManifest, runtimePassport, ledgerEntries };
 }
 
 function identityStatusLabel(

@@ -643,6 +643,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents/{incident_id}/runtime-passport": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Runtime Passport */
+        get: operations["get_incident_runtime_passport_api_v1_incidents__incident_id__runtime_passport_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/incidents/{incident_id}/ledger": {
         parameters: {
             query?: never;
@@ -1389,6 +1406,7 @@ export interface components {
             dev_run_command?: string | null;
             /** Detail */
             detail?: string | null;
+            runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
         };
         /** FleetDeliveryDiagnostic */
         FleetDeliveryDiagnostic: {
@@ -1680,6 +1698,11 @@ export interface components {
             privacy_manifest_hash?: string | null;
             /** Privacy Manifest Id */
             privacy_manifest_id?: string | null;
+            /** Runtime Passport Hash */
+            runtime_passport_hash?: string | null;
+            /** Runtime Passport Id */
+            runtime_passport_id?: string | null;
+            runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
             recording_policy?: components["schemas"]["EvidenceRecordingPolicy"] | null;
             /** Evidence Artifacts */
             evidence_artifacts?: components["schemas"]["EvidenceArtifactResponse"][];
@@ -2315,7 +2338,7 @@ export interface components {
          * RuntimeArtifactKind
          * @enum {string}
          */
-        RuntimeArtifactKind: "onnx_export" | "tensorrt_engine";
+        RuntimeArtifactKind: "onnx_export" | "tensorrt_engine" | "compiled_open_vocab";
         /**
          * RuntimeArtifactPrecision
          * @enum {string}
@@ -2421,6 +2444,68 @@ export interface components {
          * @enum {string}
          */
         RuntimeArtifactValidationStatus: "unvalidated" | "valid" | "invalid" | "stale" | "missing_artifact" | "target_mismatch";
+        /** RuntimePassportSnapshotResponse */
+        RuntimePassportSnapshotResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Incident Id */
+            incident_id?: string | null;
+            /** Schema Version */
+            schema_version: number;
+            /** Passport Hash */
+            passport_hash: string;
+            /** Passport */
+            passport: {
+                [key: string]: unknown;
+            };
+            summary: components["schemas"]["RuntimePassportSummary"];
+            /** Created At */
+            created_at?: string | null;
+        };
+        /** RuntimePassportSummary */
+        RuntimePassportSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Passport Hash */
+            passport_hash: string;
+            /** Selected Backend */
+            selected_backend?: string | null;
+            /** Model Hash */
+            model_hash?: string | null;
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            /** Runtime Artifact Hash */
+            runtime_artifact_hash?: string | null;
+            /** Target Profile */
+            target_profile?: string | null;
+            /** Precision */
+            precision?: string | null;
+            /** Validated At */
+            validated_at?: string | null;
+            /** Fallback Reason */
+            fallback_reason?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /** Runtime Selection Profile Name */
+            runtime_selection_profile_name?: string | null;
+            /** Runtime Selection Profile Hash */
+            runtime_selection_profile_hash?: string | null;
+            /** Provider Versions */
+            provider_versions?: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * RuntimeVocabularySource
          * @enum {string}
@@ -2698,6 +2783,10 @@ export interface components {
             scene_contract_hash?: string | null;
             /** Privacy Manifest Hash */
             privacy_manifest_hash?: string | null;
+            /** Runtime Passport Snapshot Id */
+            runtime_passport_snapshot_id?: string | null;
+            /** Runtime Passport Hash */
+            runtime_passport_hash?: string | null;
             recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
             evidence_storage?: components["schemas"]["WorkerEvidenceStorageSettings"] | null;
             camera: components["schemas"]["WorkerCameraSettings"];
@@ -4513,6 +4602,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PrivacyManifestSnapshotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_runtime_passport_api_v1_incidents__incident_id__runtime_passport_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimePassportSnapshotResponse"];
                 };
             };
             /** @description Validation Error */
