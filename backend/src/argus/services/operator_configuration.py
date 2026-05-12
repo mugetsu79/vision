@@ -28,6 +28,7 @@ from argus.api.contracts import (
     StreamDeliveryProfileConfig,
     TenantContext,
     WorkerEvidenceStorageSettings,
+    WorkerPrivacyPolicySettings,
     WorkerRuntimeSelectionSettings,
     WorkerStreamDeliverySettings,
     _normalize_operator_config,
@@ -50,6 +51,7 @@ from argus.models.tables import (
     Site,
 )
 from argus.services.object_store import MinioObjectStore
+from argus.services.privacy_policy_runtime import worker_privacy_policy_from_runtime_config
 from argus.services.runtime_configuration import RuntimeConfigurationService
 
 RemoteStorageValidator = Callable[
@@ -557,6 +559,21 @@ class OperatorConfigurationService:
             artifact_preference=config.artifact_preference,
             fallback_allowed=config.fallback_allowed,
         )
+
+    async def resolve_worker_privacy_policy(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID,
+        profile_id: UUID | None = None,
+    ) -> WorkerPrivacyPolicySettings:
+        runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
+            tenant_context,
+            OperatorConfigProfileKind.PRIVACY_POLICY,
+            camera_id=camera_id,
+            profile_id=profile_id,
+        )
+        return worker_privacy_policy_from_runtime_config(runtime_config)
 
     async def seed_bootstrap_defaults(
         self,

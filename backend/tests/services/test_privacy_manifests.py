@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from math import nan
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -10,9 +11,16 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from argus.api.contracts import EvidenceRecordingPolicy
+from argus.api.contracts import EvidenceRecordingPolicy, WorkerPrivacyPolicySettings
 from argus.models import Base
-from argus.models.enums import ModelFormat, ModelTask, ProcessingMode, TrackerType
+from argus.models.enums import (
+    EvidenceArtifactStatus,
+    EvidenceLedgerAction,
+    ModelFormat,
+    ModelTask,
+    ProcessingMode,
+    TrackerType,
+)
 from argus.models.tables import Camera, Model, PrivacyManifestSnapshot, Site, Tenant
 from argus.services.privacy_manifests import (
     PrivacyManifestService,
@@ -20,6 +28,7 @@ from argus.services.privacy_manifests import (
     canonical_json,
     hash_manifest,
 )
+from argus.services.privacy_policy_runtime import PrivacyPolicyRetentionService
 
 
 def test_privacy_manifest_is_deterministic_and_disables_biometrics_by_default() -> None:
@@ -50,6 +59,97 @@ def test_privacy_manifest_is_deterministic_and_disables_biometrics_by_default() 
     assert first["plates"]["plaintext_storage"] == "blocked"
     assert first["storage"]["residency"] == "edge"
     assert hash_manifest(first) == hash_manifest(second)
+
+
+def test_privacy_manifest_includes_resolved_privacy_profile_policy() -> None:
+    profile_id = uuid4()
+    policy = WorkerPrivacyPolicySettings(
+        profile_id=profile_id,
+        profile_name="Edge retention",
+        profile_hash="d" * 64,
+        retention_days=7,
+        storage_quota_bytes=4096,
+        plaintext_plate_storage="blocked",
+        residency="edge",
+    )
+
+    manifest = build_privacy_manifest(
+        tenant_id=uuid4(),
+        camera_id=uuid4(),
+        deployment_mode="edge",
+        recording_policy=EvidenceRecordingPolicy(storage_profile="edge_local"),
+        allow_plaintext_plates=True,
+        plaintext_justification="Tenant would otherwise allow plaintext.",
+        privacy_policy=policy,
+    )
+
+    assert manifest["privacy_policy"] == {
+        "profile_id": str(profile_id),
+        "profile_name": "Edge retention",
+        "profile_hash": "d" * 64,
+    }
+    assert manifest["plates"]["plaintext_storage"] == "blocked"
+    assert manifest["plates"]["plaintext_justification"] is None
+    assert manifest["retention"] == {"days": 7}
+    assert manifest["storage"]["quota_bytes"] == 4096
+    assert manifest["storage"]["residency"] == "edge"
+
+
+@pytest.mark.asyncio
+async def test_privacy_retention_marks_expired_artifacts_and_writes_ledger() -> None:
+    tenant_id = uuid4()
+    incident_id = uuid4()
+    camera_id = uuid4()
+    now = datetime(2026, 5, 12, 12, 0, tzinfo=UTC)
+    artifact = SimpleNamespace(
+        id=uuid4(),
+        status=EvidenceArtifactStatus.REMOTE_AVAILABLE,
+        created_at=now - timedelta(days=8),
+        size_bytes=2048,
+        privacy_manifest_hash="e" * 64,
+    )
+    incident = SimpleNamespace(id=incident_id, camera_id=camera_id)
+    session_factory = _RetentionSessionFactory(rows=[(artifact, incident)])
+    ledger = _RetentionLedger()
+    service = PrivacyPolicyRetentionService(
+        session_factory=session_factory,
+        ledger=ledger,
+    )
+
+    expired_count = await service.mark_expired_artifacts(
+        tenant_id=tenant_id,
+        privacy_policy=WorkerPrivacyPolicySettings(
+            profile_id=uuid4(),
+            profile_name="Seven day retention",
+            profile_hash="f" * 64,
+            retention_days=7,
+            storage_quota_bytes=10_000,
+            plaintext_plate_storage="blocked",
+            residency="edge",
+        ),
+        now=now,
+    )
+
+    assert expired_count == 1
+    assert artifact.status is EvidenceArtifactStatus.EXPIRED
+    assert session_factory.state["commits"] == 1
+    assert ledger.entries == [
+        {
+            "tenant_id": tenant_id,
+            "incident_id": incident_id,
+            "camera_id": camera_id,
+            "action": EvidenceLedgerAction.EVIDENCE_EXPIRED,
+            "actor_type": "system",
+            "actor_subject": "privacy_retention",
+            "occurred_at": now,
+            "payload": {
+                "artifact_id": str(artifact.id),
+                "retention_days": 7,
+                "size_bytes": 2048,
+                "privacy_manifest_hash": "e" * 64,
+            },
+        }
+    ]
 
 
 class _Result:
@@ -131,6 +231,50 @@ class _SessionFactory:
 
     def __call__(self) -> _Session:
         return _Session(self.state)
+
+
+class _RetentionResult:
+    def __init__(self, rows: list[tuple[object, object]]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[tuple[object, object]]:
+        return self.rows
+
+
+class _RetentionSession:
+    def __init__(self, state: dict[str, object]) -> None:
+        self.state = state
+
+    async def __aenter__(self) -> _RetentionSession:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+        return None
+
+    async def execute(self, statement):  # noqa: ANN001
+        del statement
+        rows = self.state["rows"]
+        assert isinstance(rows, list)
+        return _RetentionResult(rows)
+
+    async def commit(self) -> None:
+        self.state["commits"] = int(self.state.get("commits", 0)) + 1
+
+
+class _RetentionSessionFactory:
+    def __init__(self, rows: list[tuple[object, object]]) -> None:
+        self.state: dict[str, object] = {"rows": rows, "commits": 0}
+
+    def __call__(self) -> _RetentionSession:
+        return _RetentionSession(self.state)
+
+
+class _RetentionLedger:
+    def __init__(self) -> None:
+        self.entries: list[dict[str, object]] = []
+
+    async def append_entry(self, **entry: object) -> None:
+        self.entries.append(dict(entry))
 
 
 @pytest.mark.asyncio

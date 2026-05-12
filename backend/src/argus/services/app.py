@@ -88,6 +88,7 @@ from argus.api.contracts import (
     WorkerDesiredState,
     WorkerEvidenceStorageSettings,
     WorkerModelSettings,
+    WorkerPrivacyPolicySettings,
     WorkerPrivacySettings,
     WorkerPublishSettings,
     WorkerRuntimeArtifact,
@@ -155,6 +156,7 @@ from argus.services.local_first_sync import LocalFirstEvidenceSyncService
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
+from argus.services.privacy_policy_runtime import validate_privacy_policy_residency
 from argus.services.runtime_artifacts import (
     RuntimeArtifactService,
     artifact_matches_camera_vocabulary,
@@ -618,6 +620,7 @@ class CameraService:
         evidence_storage = None
         stream_delivery = None
         runtime_selection = None
+        privacy_policy = None
         requested_browser_delivery = BrowserDeliverySettings.model_validate(
             camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
         )
@@ -636,6 +639,21 @@ class CameraService:
                 tenant_context,
                 camera_id=camera.id,
             )
+            privacy_policy = await self.configuration_service.resolve_worker_privacy_policy(
+                tenant_context,
+                camera_id=camera.id,
+            )
+            try:
+                validate_privacy_policy_residency(
+                    privacy_policy=privacy_policy,
+                    evidence_storage=evidence_storage,
+                    recording_policy=recording_policy,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=HTTP_422_UNPROCESSABLE,
+                    detail=str(exc),
+                ) from exc
         base_config = _camera_to_worker_config(
             camera=camera,
             primary_model=primary_model,
@@ -647,6 +665,7 @@ class CameraService:
             evidence_storage=evidence_storage,
             stream_delivery=stream_delivery,
             runtime_selection=runtime_selection,
+            privacy_policy=privacy_policy,
         )
         privacy_manifest = build_privacy_manifest(
             tenant_id=tenant_context.tenant_id,
@@ -657,6 +676,7 @@ class CameraService:
                 getattr(tenant, "anpr_store_plaintext", False)
             ),
             plaintext_justification=getattr(tenant, "anpr_plaintext_justification", None),
+            privacy_policy=base_config.privacy_policy,
         )
         privacy_snapshot = await PrivacyManifestService(
             self.session_factory
@@ -686,6 +706,7 @@ class CameraService:
             candidate_quality=base_config.vision_profile.candidate_quality,
             recording_policy=recording_policy,
             privacy_manifest_hash=privacy_snapshot.manifest_hash,
+            privacy_policy=_privacy_policy_contract_payload(base_config.privacy_policy),
         )
         contract_snapshot = await SceneContractService(
             self.session_factory
@@ -3910,6 +3931,7 @@ def _camera_to_worker_config(
     evidence_storage: WorkerEvidenceStorageSettings | None = None,
     stream_delivery: WorkerStreamDeliverySettings | None = None,
     runtime_selection: WorkerRuntimeSelectionSettings | None = None,
+    privacy_policy: WorkerPrivacyPolicySettings | None = None,
     scene_contract_hash: str | None = None,
     privacy_manifest_hash: str | None = None,
 ) -> WorkerConfigResponse:
@@ -3993,6 +4015,7 @@ def _camera_to_worker_config(
             frame_rate=camera.fps_cap,
         ),
         privacy=_worker_privacy_settings(privacy),
+        privacy_policy=privacy_policy,
         active_classes=list(camera.active_classes),
         runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         runtime_selection=runtime_selection or WorkerRuntimeSelectionSettings(),
@@ -4232,6 +4255,32 @@ def _runtime_selection_contract_payload(
         "precision": None,
         "fallback_reason": "no_validated_runtime_artifact",
         **profile_payload,
+    }
+
+
+def _privacy_policy_contract_payload(
+    privacy_policy: WorkerPrivacyPolicySettings | None,
+) -> dict[str, object | None]:
+    if privacy_policy is None:
+        return {
+            "profile_id": None,
+            "profile_name": None,
+            "profile_hash": None,
+            "retention_days": None,
+            "storage_quota_bytes": None,
+            "plaintext_plate_storage": None,
+            "residency": None,
+        }
+    return {
+        "profile_id": str(privacy_policy.profile_id)
+        if privacy_policy.profile_id is not None
+        else None,
+        "profile_name": privacy_policy.profile_name,
+        "profile_hash": privacy_policy.profile_hash,
+        "retention_days": privacy_policy.retention_days,
+        "storage_quota_bytes": privacy_policy.storage_quota_bytes,
+        "plaintext_plate_storage": privacy_policy.plaintext_plate_storage,
+        "residency": privacy_policy.residency,
     }
 
 

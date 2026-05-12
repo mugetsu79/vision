@@ -24,6 +24,7 @@ from argus.api.contracts import (
     EvidenceRecordingPolicy,
     SceneVisionProfile,
     WorkerEvidenceStorageSettings,
+    WorkerPrivacyPolicySettings,
     WorkerRuntimeSelectionSettings,
 )
 from argus.compat import UTC
@@ -268,6 +269,7 @@ class EngineConfig(BaseModel):
     secondary_model: ModelSettings | None = None
     tracker: TrackerSettings
     privacy: PrivacyPolicy = Field(default_factory=PrivacyPolicy)
+    privacy_policy: WorkerPrivacyPolicySettings | None = None
     active_classes: list[str] = Field(default_factory=list)
     runtime_selection: WorkerRuntimeSelectionSettings = Field(
         default_factory=WorkerRuntimeSelectionSettings
@@ -1881,6 +1883,7 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
             ),
             repository=SQLIncidentRepository(db_manager.session_factory),
             recording_policy=config.recording_policy,
+            privacy_policy=config.privacy_policy,
         ),
     )
     await engine.start()

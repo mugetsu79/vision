@@ -10,6 +10,7 @@ from argus.api.contracts import (
     BrowserDeliverySettings,
     SourceCapability,
     WorkerEvidenceStorageSettings,
+    WorkerPrivacyPolicySettings,
     WorkerRuntimeSelectionSettings,
     WorkerStreamDeliverySettings,
 )
@@ -231,13 +232,16 @@ class _FakeOperatorConfigurationService:
         evidence_storage: WorkerEvidenceStorageSettings | None = None,
         stream_delivery: WorkerStreamDeliverySettings | None = None,
         runtime_selection: WorkerRuntimeSelectionSettings | None = None,
+        privacy_policy: WorkerPrivacyPolicySettings | None = None,
     ) -> None:
         self.evidence_storage = evidence_storage
         self.stream_delivery = stream_delivery
         self.runtime_selection = runtime_selection
+        self.privacy_policy = privacy_policy
         self.calls: list[tuple[object, object, object | None]] = []
         self.stream_calls: list[tuple[object, object, object | None]] = []
         self.runtime_calls: list[tuple[object, object]] = []
+        self.privacy_calls: list[tuple[object, object]] = []
 
     async def resolve_worker_evidence_storage(
         self,
@@ -288,6 +292,15 @@ class _FakeOperatorConfigurationService:
         if self.runtime_selection is None:
             return WorkerRuntimeSelectionSettings()
         return self.runtime_selection
+
+    async def resolve_worker_privacy_policy(
+        self,
+        tenant_context: object,
+        *,
+        camera_id: object,
+    ) -> WorkerPrivacyPolicySettings | None:
+        self.privacy_calls.append((tenant_context, camera_id))
+        return self.privacy_policy
 
 
 def _tenant_context(tenant_id=None):  # noqa: ANN001
@@ -1185,6 +1198,53 @@ async def test_worker_config_includes_resolved_runtime_selection_profile() -> No
     assert config.runtime_selection.preferred_backend == "tensorrt_engine"
     assert config.runtime_selection.artifact_preference == "tensorrt_first"
     assert config.runtime_selection.fallback_allowed is False
+
+
+@pytest.mark.asyncio
+async def test_worker_config_rejects_privacy_policy_storage_residency_mismatch() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        evidence_storage=WorkerEvidenceStorageSettings(
+            profile_id=uuid4(),
+            profile_name="Edge local",
+            profile_hash="e" * 64,
+            provider="local_filesystem",
+            storage_scope="edge",
+            config={"provider": "local_filesystem", "storage_scope": "edge"},
+            secrets={},
+        ),
+        privacy_policy=WorkerPrivacyPolicySettings(
+            profile_id=uuid4(),
+            profile_name="Cloud privacy",
+            profile_hash="f" * 64,
+            retention_days=30,
+            storage_quota_bytes=10_000,
+            plaintext_plate_storage="blocked",
+            residency="cloud",
+        ),
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert exc_info.value.status_code == 422
+    assert "Privacy policy residency" in str(exc_info.value.detail)
 
 
 def test_central_native_browser_delivery_without_privacy_keeps_passthrough_stream() -> None:

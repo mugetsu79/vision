@@ -137,6 +137,7 @@ class EvidenceLedgerAction(StrEnum):
     EVIDENCE_UPLOAD_STARTED = "evidence.upload.started"
     EVIDENCE_UPLOAD_AVAILABLE = "evidence.upload.available"
     EVIDENCE_UPLOAD_FAILED = "evidence.upload.failed"
+    EVIDENCE_EXPIRED = "evidence.expired"
     INCIDENT_REVIEWED = "incident.reviewed"
     INCIDENT_REOPENED = "incident.reopened"
 

@@ -1200,7 +1200,7 @@ export interface components {
          * EvidenceLedgerAction
          * @enum {string}
          */
-        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "incident.reviewed" | "incident.reopened";
+        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "evidence.expired" | "incident.reviewed" | "incident.reopened";
         /** EvidenceLedgerEntryResponse */
         EvidenceLedgerEntryResponse: {
             /**
@@ -2693,6 +2693,7 @@ export interface components {
             secondary_model?: components["schemas"]["WorkerModelSettings"] | null;
             tracker: components["schemas"]["WorkerTrackerSettings"];
             privacy?: components["schemas"]["WorkerPrivacySettings"];
+            privacy_policy?: components["schemas"]["WorkerPrivacyPolicySettings"] | null;
             /** Active Classes */
             active_classes?: string[];
             runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
@@ -2794,6 +2795,37 @@ export interface components {
             polygon: number[][];
         } & {
             [key: string]: unknown;
+        };
+        /** WorkerPrivacyPolicySettings */
+        WorkerPrivacyPolicySettings: {
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /**
+             * Retention Days
+             * @default 30
+             */
+            retention_days: number;
+            /**
+             * Storage Quota Bytes
+             * @default 10737418240
+             */
+            storage_quota_bytes: number;
+            /**
+             * Plaintext Plate Storage
+             * @default blocked
+             * @enum {string}
+             */
+            plaintext_plate_storage: "blocked" | "allowed";
+            /**
+             * Residency
+             * @default central
+             * @enum {string}
+             */
+            residency: "edge" | "central" | "cloud" | "local_first";
         };
         /** WorkerPrivacySettings */
         WorkerPrivacySettings: {

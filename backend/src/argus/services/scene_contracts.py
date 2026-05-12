@@ -46,6 +46,7 @@ def build_scene_contract(
     candidate_quality: Mapping[str, object],
     recording_policy: EvidenceRecordingPolicy,
     privacy_manifest_hash: str,
+    privacy_policy: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -64,6 +65,7 @@ def build_scene_contract(
         "detection_regions": [dict(region) for region in detection_regions],
         "candidate_quality": dict(candidate_quality),
         "recording_policy": recording_policy.model_dump(mode="json"),
+        "privacy_policy": dict(privacy_policy or {}),
         "privacy_manifest_hash": privacy_manifest_hash,
     }
 

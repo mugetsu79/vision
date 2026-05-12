@@ -752,6 +752,16 @@ class WorkerRuntimeSelectionSettings(BaseModel):
     fallback_allowed: bool = True
 
 
+class WorkerPrivacyPolicySettings(BaseModel):
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    retention_days: int = Field(default=30, ge=0)
+    storage_quota_bytes: int = Field(default=10 * 1024 * 1024 * 1024, ge=0)
+    plaintext_plate_storage: Literal["blocked", "allowed"] = "blocked"
+    residency: Literal["edge", "central", "cloud", "local_first"] = "central"
+
+
 class WorkerEvidenceStorageSettings(BaseModel):
     profile_id: UUID | None = None
     profile_name: str | None = None
@@ -881,6 +891,7 @@ class WorkerConfigResponse(BaseModel):
     secondary_model: WorkerModelSettings | None = None
     tracker: WorkerTrackerSettings
     privacy: WorkerPrivacySettings = Field(default_factory=WorkerPrivacySettings)
+    privacy_policy: WorkerPrivacyPolicySettings | None = None
     active_classes: list[str] = Field(default_factory=list)
     runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
     runtime_selection: WorkerRuntimeSelectionSettings = Field(

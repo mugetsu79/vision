@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
-from argus.api.contracts import EvidenceRecordingPolicy
+from argus.api.contracts import EvidenceRecordingPolicy, WorkerPrivacyPolicySettings
 from argus.models.enums import (
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
@@ -243,6 +243,63 @@ async def test_incident_capture_skips_clip_when_tenant_storage_quota_is_exceeded
     assert incidents[0]["storage_bytes"] == 0
     assert incidents[0]["payload"]["storage_quota_exceeded"] is True
     assert incidents[0]["payload"]["plate_text"] == "ZH987654"
+    assert incidents[0]["artifact_payload"] is None
+
+
+@pytest.mark.asyncio
+async def test_incident_capture_privacy_profile_blocks_plaintext_and_controls_quota() -> None:
+    camera_id = uuid4()
+    service = IncidentClipCaptureService(
+        object_store=_FakeObjectStore(),
+        repository=_FakeIncidentRepository(
+            policy=IncidentTenantPolicy(
+                tenant_id=uuid4(),
+                allow_plaintext_plates=True,
+                plaintext_justification="Tenant allows plaintext.",
+                storage_quota_bytes=10_000,
+                current_storage_bytes=0,
+            )
+        ),
+        privacy_policy=WorkerPrivacyPolicySettings(
+            profile_id=uuid4(),
+            profile_name="Strict privacy",
+            profile_hash="d" * 64,
+            retention_days=7,
+            storage_quota_bytes=4,
+            plaintext_plate_storage="blocked",
+            residency="edge",
+        ),
+        clip_encoder=_FakeClipEncoder(encoded_bytes=b"longer-than-profile-quota"),
+        pre_seconds=1,
+        post_seconds=1,
+        fps=2,
+    )
+
+    frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    triggered_at = datetime(2026, 5, 12, 12, 0, tzinfo=UTC)
+    await service.record_frame(camera_id=camera_id, frame=frame, ts=triggered_at)
+    await service.queue_incident(
+        IncidentTriggeredEvent(
+            camera_id=camera_id,
+            ts=triggered_at,
+            type="anpr.line_crossed",
+            payload={
+                "plate_text": "ZH000001",
+                "plate_hash": "profile-hash",
+            },
+        )
+    )
+    await service.flush(camera_id=camera_id)
+
+    incidents = service.repository.incidents  # type: ignore[attr-defined]
+    uploads = service.object_store.uploads  # type: ignore[attr-defined]
+
+    assert uploads == []
+    assert incidents[0]["payload"]["plate_hash"] == "profile-hash"
+    assert "plate_text" not in incidents[0]["payload"]
+    assert incidents[0]["payload"]["storage_quota_exceeded"] is True
+    assert incidents[0]["payload"]["privacy_policy_profile_id"]
+    assert incidents[0]["clip_url"] is None
     assert incidents[0]["artifact_payload"] is None
 
 

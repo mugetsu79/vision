@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from argus.api.contracts import EvidenceRecordingPolicy
+from argus.api.contracts import EvidenceRecordingPolicy, WorkerPrivacyPolicySettings
 from argus.core.events import EventMessage
 from argus.models.enums import (
     EvidenceArtifactKind,
@@ -134,12 +134,14 @@ class IncidentClipCaptureService:
         post_seconds: int = 10,
         fps: int = 10,
         recording_policy: EvidenceRecordingPolicy | None = None,
+        privacy_policy: WorkerPrivacyPolicySettings | None = None,
     ) -> None:
         self.object_store = object_store
         self.storage_resolver = storage_resolver
         self.repository = repository
         self.clip_encoder = clip_encoder or OpenCvMjpegClipEncoder()
         self.recording_policy = recording_policy
+        self.privacy_policy = privacy_policy
         self.pre_seconds = (
             recording_policy.pre_seconds if recording_policy is not None else pre_seconds
         )
@@ -217,8 +219,13 @@ class IncidentClipCaptureService:
         await self.queue_incident(event)
 
     async def _finalize_pending(self, pending: _PendingIncident) -> None:
-        policy = await self.repository.tenant_policy_for_camera(camera_id=pending.event.camera_id)
+        policy = _apply_privacy_policy(
+            await self.repository.tenant_policy_for_camera(camera_id=pending.event.camera_id),
+            self.privacy_policy,
+        )
         payload = dict(pending.event.payload)
+        if self.privacy_policy is not None:
+            payload.update(_privacy_policy_payload(self.privacy_policy))
         if not (policy.allow_plaintext_plates and policy.plaintext_justification):
             payload.pop("plate_text", None)
         recording_policy = pending.event.recording_policy or self.recording_policy
@@ -513,3 +520,37 @@ def _fallback_storage_route_for_policy(
         provider=EvidenceStorageProvider.MINIO,
         scope=EvidenceStorageScope.CENTRAL,
     )
+
+
+def _apply_privacy_policy(
+    policy: IncidentTenantPolicy,
+    privacy_policy: WorkerPrivacyPolicySettings | None,
+) -> IncidentTenantPolicy:
+    if privacy_policy is None:
+        return policy
+    plaintext_allowed = privacy_policy.plaintext_plate_storage == "allowed"
+    return IncidentTenantPolicy(
+        tenant_id=policy.tenant_id,
+        allow_plaintext_plates=plaintext_allowed,
+        plaintext_justification=(
+            policy.plaintext_justification
+            or "Privacy policy profile allows plaintext plate storage."
+            if plaintext_allowed
+            else None
+        ),
+        storage_quota_bytes=privacy_policy.storage_quota_bytes,
+        current_storage_bytes=policy.current_storage_bytes,
+    )
+
+
+def _privacy_policy_payload(
+    privacy_policy: WorkerPrivacyPolicySettings,
+) -> dict[str, object]:
+    return {
+        "privacy_policy_profile_id": str(privacy_policy.profile_id)
+        if privacy_policy.profile_id is not None
+        else None,
+        "privacy_policy_profile_hash": privacy_policy.profile_hash,
+        "privacy_retention_days": privacy_policy.retention_days,
+        "privacy_residency": privacy_policy.residency,
+    }

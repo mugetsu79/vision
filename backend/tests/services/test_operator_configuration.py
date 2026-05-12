@@ -444,6 +444,51 @@ async def test_operator_config_service_tests_local_and_remote_storage_profiles(
 
 
 @pytest.mark.asyncio
+async def test_operator_config_service_resolves_worker_privacy_policy_profile(
+    tmp_path: Path,
+) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    camera_id = uuid4()
+    session_factory.state["cameras"].append(
+        SimpleNamespace(id=camera_id, site_id=uuid4(), edge_node_id=None)
+    )
+    profile = await service.create_profile(
+        context,
+        OperatorConfigProfileCreate.model_validate(
+            {
+                "kind": "privacy_policy",
+                "scope": "tenant",
+                "name": "Strict Edge Privacy",
+                "slug": "strict-edge-privacy",
+                "is_default": True,
+                "config": {
+                    "retention_days": 7,
+                    "storage_quota_bytes": 4096,
+                    "plaintext_plate_storage": "blocked",
+                    "residency": "edge",
+                },
+            }
+        ),
+    )
+
+    resolved = await service.resolve_worker_privacy_policy(context, camera_id=camera_id)
+
+    assert resolved.profile_id == profile.id
+    assert resolved.profile_name == "Strict Edge Privacy"
+    assert resolved.profile_hash == profile.config_hash
+    assert resolved.retention_days == 7
+    assert resolved.storage_quota_bytes == 4096
+    assert resolved.plaintext_plate_storage == "blocked"
+    assert resolved.residency == "edge"
+
+
+@pytest.mark.asyncio
 async def test_operator_config_service_audits_binding_and_delete(
     tmp_path: Path,
 ) -> None:
