@@ -32,6 +32,9 @@ function accountableIncident(overrides: Partial<Incident> = {}): Incident {
       fps: 10,
       max_duration_seconds: 15,
       storage_profile: "edge_local",
+      snapshot_enabled: false,
+      snapshot_offset_seconds: 0,
+      snapshot_quality: 85,
     },
     evidence_artifacts: [
       {
@@ -124,6 +127,9 @@ describe("AccountabilityStrip", () => {
             fps: 10,
             max_duration_seconds: 15,
             storage_profile: "local_first",
+            snapshot_enabled: false,
+            snapshot_offset_seconds: 0,
+            snapshot_quality: 85,
           },
           evidence_artifacts: [
             {

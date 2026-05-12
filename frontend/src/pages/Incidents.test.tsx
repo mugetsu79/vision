@@ -253,6 +253,70 @@ describe("IncidentsPage", () => {
     ).toBeInTheDocument();
   });
 
+  test("keeps snapshot artifact evidence inspectable without a legacy snapshot URL", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraPayload()]));
+      }
+
+      if (url.pathname === "/api/v1/incidents") {
+        return Promise.resolve(
+          jsonResponse([
+            incidentPayload({
+              snapshot_url: null,
+              clip_url: null,
+              evidence_artifacts: [
+                {
+                  id: "77777777-7777-7777-7777-777777777777",
+                  incident_id: "99999999-9999-9999-9999-999999999999",
+                  camera_id: "11111111-1111-1111-1111-111111111111",
+                  kind: "snapshot",
+                  status: "remote_available",
+                  storage_provider: "minio",
+                  storage_scope: "central",
+                  bucket: "incidents",
+                  object_key: "tenant/camera/snapshot.jpg",
+                  content_type: "image/jpeg",
+                  sha256:
+                    "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  size_bytes: 65_536,
+                  clip_started_at: null,
+                  triggered_at: "2026-04-18T10:15:00Z",
+                  clip_ended_at: null,
+                  duration_seconds: null,
+                  fps: null,
+                  scene_contract_hash: null,
+                  privacy_manifest_hash: null,
+                  review_url:
+                    "https://minio.local/signed/incidents/forklift-gate.jpg",
+                },
+              ],
+            }),
+          ]),
+        );
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderIncidentsPage();
+
+    const hero = await screen.findByRole("region", {
+      name: /selected evidence/i,
+    });
+    expect(within(hero).getByText(/snapshot only/i)).toBeInTheDocument();
+    expect(
+      within(hero).getByRole("img", { name: /evidence record/i }),
+    ).toHaveAttribute(
+      "src",
+      "https://minio.local/signed/incidents/forklift-gate.jpg",
+    );
+  });
+
   test("renders accountable scene contract, privacy manifest, clip artifact, and ledger context", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request =
@@ -282,6 +346,9 @@ describe("IncidentsPage", () => {
                 fps: 10,
                 max_duration_seconds: 15,
                 storage_profile: "cloud",
+                snapshot_enabled: false,
+                snapshot_offset_seconds: 0,
+                snapshot_quality: 85,
               },
               evidence_artifacts: [
                 {

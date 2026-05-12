@@ -69,6 +69,14 @@ export function primaryClipArtifact(
   );
 }
 
+export function primarySnapshotArtifact(
+  incident: Incident,
+): EvidenceArtifact | undefined {
+  return incident.evidence_artifacts?.find(
+    (artifact) => artifact.kind === "snapshot",
+  );
+}
+
 export function evidenceClipHref(incident: Incident): string | null {
   const artifact = primaryClipArtifact(incident);
   if (artifact?.review_url) {
@@ -76,6 +84,20 @@ export function evidenceClipHref(incident: Incident): string | null {
   }
   if (incident.clip_url) {
     return incident.clip_url;
+  }
+  if (artifact) {
+    return `/api/v1/incidents/${incident.id}/artifacts/${artifact.id}/content`;
+  }
+  return null;
+}
+
+export function evidenceSnapshotHref(incident: Incident): string | null {
+  const artifact = primarySnapshotArtifact(incident);
+  if (artifact?.review_url) {
+    return artifact.review_url;
+  }
+  if (incident.snapshot_url) {
+    return incident.snapshot_url;
   }
   if (artifact) {
     return `/api/v1/incidents/${incident.id}/artifacts/${artifact.id}/content`;

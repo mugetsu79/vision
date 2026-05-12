@@ -76,7 +76,10 @@ export function describeEvidenceState(incident: Incident): EvidenceState {
     incident.clip_url ||
       incident.evidence_artifacts?.some((artifact) => artifact.kind === "event_clip"),
   );
-  const hasSnapshot = Boolean(incident.snapshot_url);
+  const hasSnapshot = Boolean(
+    incident.snapshot_url ||
+      incident.evidence_artifacts?.some((artifact) => artifact.kind === "snapshot"),
+  );
 
   if (hasClip && hasSnapshot) {
     return {

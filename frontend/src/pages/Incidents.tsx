@@ -6,6 +6,7 @@ import { CaseContextStrip } from "@/components/evidence/CaseContextStrip";
 import { EvidenceTimeline } from "@/components/evidence/EvidenceTimeline";
 import {
   evidenceClipHref,
+  evidenceSnapshotHref,
 } from "@/components/evidence/AccountabilityStrip";
 import {
   describeEvidenceState,
@@ -338,6 +339,7 @@ function IncidentEvidenceHero({
   const actionLabel =
     incident.review_status === "pending" ? "Review" : "Reopen";
   const clipHref = evidenceClipHref(incident);
+  const snapshotHref = evidenceSnapshotHref(incident);
   const evidenceState = describeEvidenceState(incident);
 
   return (
@@ -367,9 +369,9 @@ function IncidentEvidenceHero({
       <CaseContextStrip incident={incident} />
 
       <div className="bg-black">
-        {incident.snapshot_url ? (
+        {snapshotHref ? (
           <img
-            src={incident.snapshot_url}
+            src={snapshotHref}
             alt={`Evidence record for ${cameraName}`}
             className="aspect-video w-full object-cover"
           />

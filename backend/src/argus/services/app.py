@@ -110,6 +110,7 @@ from argus.models.enums import (
     CameraSourceKind,
     CountEventType,
     DetectorCapability,
+    EvidenceArtifactKind,
     EvidenceLedgerAction,
     EvidenceStorageProvider,
     HistoryCoverageStatus,
@@ -2660,7 +2661,7 @@ class IncidentService:
     ) -> IncidentArtifactContent:
         async with self.session_factory() as session:
             statement = (
-                select(EvidenceArtifact, Incident.clip_url)
+                select(EvidenceArtifact, Incident.clip_url, Incident.snapshot_url)
                 .join(Incident, Incident.id == EvidenceArtifact.incident_id)
                 .join(Camera, Camera.id == Incident.camera_id)
                 .join(Site, Site.id == Camera.site_id)
@@ -2674,7 +2675,7 @@ class IncidentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Evidence artifact not found.",
             )
-        artifact, clip_url = row
+        artifact, clip_url, snapshot_url = row
         if artifact.storage_provider is EvidenceStorageProvider.LOCAL_FILESYSTEM:
             file_path = _resolve_local_artifact_path(self.settings, artifact.object_key)
             if not file_path.is_file():
@@ -2686,10 +2687,15 @@ class IncidentService:
                 content_type=artifact.content_type,
                 file_path=file_path,
             )
-        if clip_url:
+        artifact_review_url = _artifact_review_url(
+            artifact,
+            clip_url=clip_url,
+            snapshot_url=snapshot_url,
+        )
+        if artifact_review_url:
             return IncidentArtifactContent(
                 content_type=artifact.content_type,
-                redirect_url=clip_url,
+                redirect_url=artifact_review_url,
             )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -2763,7 +2769,14 @@ def _incident_response(
             else None
         ),
         evidence_artifacts=[
-            _artifact_response(artifact, review_url=incident.clip_url)
+            _artifact_response(
+                artifact,
+                review_url=_artifact_review_url(
+                    artifact,
+                    clip_url=incident.clip_url,
+                    snapshot_url=incident.snapshot_url,
+                ),
+            )
             for artifact in evidence_artifacts or []
         ],
         ledger_summary=ledger_summary,
@@ -2902,6 +2915,19 @@ def _artifact_response(
         sync_status=cast(str | None, getattr(artifact, "_local_first_sync_status", None)),
         sync_error=cast(str | None, getattr(artifact, "_local_first_sync_error", None)),
     )
+
+
+def _artifact_review_url(
+    artifact: EvidenceArtifact,
+    *,
+    clip_url: str | None,
+    snapshot_url: str | None,
+) -> str | None:
+    if artifact.kind is EvidenceArtifactKind.EVENT_CLIP:
+        return clip_url
+    if artifact.kind is EvidenceArtifactKind.SNAPSHOT:
+        return snapshot_url
+    return None
 
 
 def _ledger_entry_response(entry: EvidenceLedgerEntry) -> EvidenceLedgerEntryResponse:

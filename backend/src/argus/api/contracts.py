@@ -632,6 +632,9 @@ class EvidenceRecordingPolicy(BaseModel):
     max_duration_seconds: int = Field(default=15, ge=1, le=90)
     storage_profile: EvidenceStorageProfile = "central"
     storage_profile_id: UUID | None = None
+    snapshot_enabled: bool = False
+    snapshot_offset_seconds: float = Field(default=0.0, ge=-30.0, le=60.0)
+    snapshot_quality: int = Field(default=85, ge=1, le=100)
 
     @model_validator(mode="after")
     def validate_window(self) -> EvidenceRecordingPolicy:

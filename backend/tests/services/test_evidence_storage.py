@@ -4,6 +4,7 @@ import hashlib
 from io import BytesIO
 
 import pytest
+from pydantic import ValidationError
 
 from argus.api.contracts import EvidenceRecordingPolicy, WorkerEvidenceStorageSettings
 from argus.core.config import Settings
@@ -106,6 +107,26 @@ def test_build_evidence_store_uses_configured_provider(tmp_path) -> None:
 
     assert isinstance(local, LocalFilesystemEvidenceStore)
     assert isinstance(remote, S3CompatibleEvidenceStore)
+
+
+def test_evidence_recording_policy_accepts_optional_snapshot_controls() -> None:
+    policy = EvidenceRecordingPolicy(
+        snapshot_enabled=True,
+        snapshot_offset_seconds=1.5,
+        snapshot_quality=72,
+    )
+
+    assert policy.snapshot_enabled is True
+    assert policy.snapshot_offset_seconds == 1.5
+    assert policy.snapshot_quality == 72
+
+
+def test_evidence_recording_policy_rejects_invalid_snapshot_controls() -> None:
+    with pytest.raises(ValidationError):
+        EvidenceRecordingPolicy(snapshot_offset_seconds=61)
+
+    with pytest.raises(ValidationError):
+        EvidenceRecordingPolicy(snapshot_quality=0)
 
 
 def test_resolve_local_evidence_path_stays_under_storage_root(tmp_path) -> None:

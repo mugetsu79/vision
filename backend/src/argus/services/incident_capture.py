@@ -19,10 +19,19 @@ from argus.core.events import EventMessage
 from argus.models.enums import (
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
+    EvidenceLedgerAction,
     EvidenceStorageProvider,
     EvidenceStorageScope,
 )
-from argus.models.tables import Camera, EvidenceArtifact, Incident, Site, Tenant
+from argus.models.tables import (
+    Camera,
+    EvidenceArtifact,
+    EvidenceLedgerEntry,
+    Incident,
+    Site,
+    Tenant,
+)
+from argus.services.evidence_ledger import compute_entry_hash
 from argus.services.evidence_storage import EvidenceStorageRoute, StoredEvidenceObject
 
 Frame = NDArray[np.uint8]
@@ -49,6 +58,13 @@ class IncidentTenantPolicy:
     plaintext_justification: str | None
     storage_quota_bytes: int
     current_storage_bytes: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentLedgerPayload:
+    action: EvidenceLedgerAction
+    occurred_at: datetime
+    payload: dict[str, object]
 
 
 class SupportsIncidentSubscribe(Protocol):
@@ -91,12 +107,19 @@ class IncidentRepository(Protocol):
         privacy_manifest_snapshot_id: UUID | None = None,
         privacy_manifest_hash: str | None = None,
         recording_policy: dict[str, object] | None = None,
+        snapshot_url: str | None = None,
         artifact_payload: dict[str, object] | None = None,
+        artifact_payloads: list[dict[str, object]] | None = None,
+        ledger_payloads: list[IncidentLedgerPayload] | None = None,
     ) -> None: ...
 
 
 class ClipEncoder(Protocol):
     def encode_clip(self, frames: list[Frame], *, fps: int) -> bytes: ...
+
+
+class SnapshotEncoder(Protocol):
+    def encode_snapshot(self, frame: Frame, *, quality: int) -> bytes: ...
 
 
 class OpenCvMjpegClipEncoder:
@@ -115,11 +138,23 @@ class OpenCvMjpegClipEncoder:
         return b"".join(chunks)
 
 
+class OpenCvJpegSnapshotEncoder:
+    def encode_snapshot(self, frame: Frame, *, quality: int) -> bytes:
+        ok, encoded = cv2.imencode(
+            ".jpg",
+            frame,
+            [int(cv2.IMWRITE_JPEG_QUALITY), quality],
+        )
+        if not ok:
+            raise ValueError("OpenCV failed to encode snapshot JPEG.")
+        return encoded.tobytes()
+
+
 @dataclass(slots=True)
 class _PendingIncident:
     event: IncidentTriggeredEvent
     ends_at: datetime
-    frames: list[Frame] = field(default_factory=list)
+    frames: list[tuple[datetime, Frame]] = field(default_factory=list)
 
 
 class IncidentClipCaptureService:
@@ -130,6 +165,7 @@ class IncidentClipCaptureService:
         storage_resolver: EvidenceStorageResolver | None = None,
         repository: IncidentRepository,
         clip_encoder: ClipEncoder | None = None,
+        snapshot_encoder: SnapshotEncoder | None = None,
         pre_seconds: int = 10,
         post_seconds: int = 10,
         fps: int = 10,
@@ -140,6 +176,7 @@ class IncidentClipCaptureService:
         self.storage_resolver = storage_resolver
         self.repository = repository
         self.clip_encoder = clip_encoder or OpenCvMjpegClipEncoder()
+        self.snapshot_encoder = snapshot_encoder or OpenCvJpegSnapshotEncoder()
         self.recording_policy = recording_policy
         self.privacy_policy = privacy_policy
         self.pre_seconds = (
@@ -170,7 +207,7 @@ class IncidentClipCaptureService:
         completed: list[_PendingIncident] = []
         for pending in self._pending[camera_id]:
             if ts >= pending.event.ts:
-                pending.frames.append(frame.copy())
+                pending.frames.append((ts, frame.copy()))
             if ts >= pending.ends_at:
                 completed.append(pending)
 
@@ -181,7 +218,7 @@ class IncidentClipCaptureService:
     async def queue_incident(self, event: IncidentTriggeredEvent) -> None:
         pre_window_start = event.ts - timedelta(seconds=self.pre_seconds)
         frames = [
-            frame.copy()
+            (frame_ts, frame.copy())
             for frame_ts, frame in self._buffers[event.camera_id]
             if frame_ts >= pre_window_start
         ]
@@ -246,15 +283,21 @@ class IncidentClipCaptureService:
                 privacy_manifest_snapshot_id=pending.event.privacy_manifest_snapshot_id,
                 privacy_manifest_hash=pending.event.privacy_manifest_hash,
                 recording_policy=recording_policy_payload,
+                snapshot_url=None,
                 artifact_payload=None,
+                artifact_payloads=[],
+                ledger_payloads=[],
             )
             return
 
-        clip_bytes = self.clip_encoder.encode_clip(pending.frames, fps=self.fps)
+        clip_frames = [frame for _frame_ts, frame in pending.frames]
+        clip_bytes = self.clip_encoder.encode_clip(clip_frames, fps=self.fps)
         clip_size = len(clip_bytes)
         clip_url: str | None = None
+        snapshot_url: str | None = None
         storage_bytes = 0
-        artifact_payload: dict[str, object] | None = None
+        artifact_payloads: list[dict[str, object]] = []
+        ledger_payloads: list[IncidentLedgerPayload] = []
 
         if clip_size > 0 and policy.current_storage_bytes + clip_size <= policy.storage_quota_bytes:
             key = (
@@ -288,6 +331,7 @@ class IncidentClipCaptureService:
                     clip_ended_at=pending.event.ts + timedelta(seconds=self.post_seconds),
                     fps=self.fps,
                 )
+                artifact_payloads.append(artifact_payload)
             else:
                 clip_url = stored_object.review_url
                 storage_bytes = stored_object.size_bytes
@@ -300,8 +344,130 @@ class IncidentClipCaptureService:
                     fps=self.fps,
                     status_override=storage_route.status_override,
                 )
+                artifact_payloads.append(artifact_payload)
         else:
             payload["storage_quota_exceeded"] = True
+
+        if recording_policy is not None and recording_policy.snapshot_enabled:
+            snapshot_frame = _select_snapshot_frame(
+                pending.frames,
+                triggered_at=pending.event.ts,
+                offset_seconds=recording_policy.snapshot_offset_seconds,
+            )
+            if snapshot_frame is None:
+                error = "ValueError: no frame available for snapshot capture"
+                payload["snapshot_capture_error"] = error
+                ledger_payloads.append(
+                    _snapshot_ledger_payload(
+                        action=EvidenceLedgerAction.SNAPSHOT_CAPTURE_FAILED,
+                        event=pending.event,
+                        payload={"error": error},
+                    )
+                )
+            else:
+                try:
+                    snapshot_bytes = self.snapshot_encoder.encode_snapshot(
+                        snapshot_frame,
+                        quality=recording_policy.snapshot_quality,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    error = f"{type(exc).__name__}: {exc}"
+                    payload["snapshot_capture_error"] = error
+                    ledger_payloads.append(
+                        _snapshot_ledger_payload(
+                            action=EvidenceLedgerAction.SNAPSHOT_CAPTURE_FAILED,
+                            event=pending.event,
+                            payload={"error": error},
+                        )
+                    )
+                else:
+                    snapshot_size = len(snapshot_bytes)
+                    if snapshot_size <= 0:
+                        error = "ValueError: snapshot encoder produced no bytes"
+                        payload["snapshot_capture_error"] = error
+                        ledger_payloads.append(
+                            _snapshot_ledger_payload(
+                                action=EvidenceLedgerAction.SNAPSHOT_CAPTURE_FAILED,
+                                event=pending.event,
+                                payload={"error": error},
+                            )
+                        )
+                    elif (
+                        policy.current_storage_bytes + snapshot_size
+                        <= policy.storage_quota_bytes
+                    ):
+                        key = (
+                            f"incidents/{pending.event.camera_id}/"
+                            f"{pending.event.ts.strftime('%Y%m%dT%H%M%S.%fZ')}.jpg"
+                        )
+                        storage_route = None
+                        try:
+                            storage_route = await self._resolve_storage_route(
+                                camera_id=pending.event.camera_id,
+                                recording_policy=recording_policy,
+                            )
+                            stored_snapshot = await storage_route.store.put_object(
+                                key=key,
+                                data=snapshot_bytes,
+                                content_type="image/jpeg",
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            if storage_route is None:
+                                storage_route = _fallback_storage_route_for_policy(
+                                    object_store=self.object_store,
+                                    recording_policy=recording_policy,
+                                )
+                            error = f"{type(exc).__name__}: {exc}"
+                            payload["snapshot_capture_error"] = error
+                            ledger_payloads.append(
+                                _snapshot_ledger_payload(
+                                    action=EvidenceLedgerAction.SNAPSHOT_CAPTURE_FAILED,
+                                    event=pending.event,
+                                    payload={
+                                        "error": error,
+                                        "object_key": key,
+                                        "storage_provider": storage_route.provider.value,
+                                        "storage_scope": storage_route.scope.value,
+                                    },
+                                )
+                            )
+                        else:
+                            snapshot_url = stored_snapshot.review_url
+                            storage_bytes += stored_snapshot.size_bytes
+                            policy.current_storage_bytes += snapshot_size
+                            snapshot_artifact = _snapshot_artifact_payload(
+                                stored_object=stored_snapshot,
+                                event=pending.event,
+                                status_override=storage_route.status_override,
+                            )
+                            artifact_payloads.append(snapshot_artifact)
+                            ledger_payloads.append(
+                                _snapshot_ledger_payload(
+                                    action=EvidenceLedgerAction.SNAPSHOT_AVAILABLE,
+                                    event=pending.event,
+                                    payload={
+                                        "object_key": stored_snapshot.object_key,
+                                        "sha256": stored_snapshot.sha256,
+                                        "size_bytes": stored_snapshot.size_bytes,
+                                        "status": snapshot_artifact["status"].value,
+                                        "storage_provider": stored_snapshot.provider.value,
+                                        "storage_scope": stored_snapshot.scope.value,
+                                    },
+                                )
+                            )
+                    else:
+                        payload["snapshot_quota_exceeded"] = True
+                        ledger_payloads.append(
+                            _snapshot_ledger_payload(
+                                action=EvidenceLedgerAction.SNAPSHOT_QUOTA_EXCEEDED,
+                                event=pending.event,
+                                payload={
+                                    "size_bytes": snapshot_size,
+                                    "storage_quota_bytes": policy.storage_quota_bytes,
+                                    "current_storage_bytes": policy.current_storage_bytes,
+                                },
+                            )
+                        )
 
         await self.repository.create_incident(
             camera_id=pending.event.camera_id,
@@ -315,7 +481,10 @@ class IncidentClipCaptureService:
             privacy_manifest_snapshot_id=pending.event.privacy_manifest_snapshot_id,
             privacy_manifest_hash=pending.event.privacy_manifest_hash,
             recording_policy=recording_policy_payload,
-            artifact_payload=artifact_payload,
+            snapshot_url=snapshot_url,
+            artifact_payload=artifact_payloads[0] if artifact_payloads else None,
+            artifact_payloads=artifact_payloads,
+            ledger_payloads=ledger_payloads,
         )
 
     async def _resolve_storage_route(
@@ -384,7 +553,10 @@ class SQLIncidentRepository:
         privacy_manifest_snapshot_id: UUID | None = None,
         privacy_manifest_hash: str | None = None,
         recording_policy: dict[str, object] | None = None,
+        snapshot_url: str | None = None,
         artifact_payload: dict[str, object] | None = None,
+        artifact_payloads: list[dict[str, object]] | None = None,
+        ledger_payloads: list[IncidentLedgerPayload] | None = None,
     ) -> None:
         async with self.session_factory() as session:
             incident = Incident(
@@ -392,7 +564,7 @@ class SQLIncidentRepository:
                 ts=ts,
                 type=incident_type,
                 payload=payload,
-                snapshot_url=None,
+                snapshot_url=snapshot_url,
                 clip_url=clip_url,
                 storage_bytes=storage_bytes,
                 scene_contract_snapshot_id=scene_contract_snapshot_id,
@@ -403,14 +575,56 @@ class SQLIncidentRepository:
             )
             session.add(incident)
             await session.flush()
-            if artifact_payload is not None:
+            payloads = artifact_payloads or (
+                [artifact_payload] if artifact_payload is not None else []
+            )
+            for payload_item in payloads:
                 session.add(
                     EvidenceArtifact(
                         incident_id=incident.id,
                         camera_id=camera_id,
-                        **artifact_payload,
+                        **payload_item,
                     )
                 )
+            ledger_items = ledger_payloads or []
+            tenant_id = None
+            if ledger_items:
+                tenant_id = (
+                    await session.execute(
+                        select(Site.tenant_id)
+                        .join(Camera, Camera.site_id == Site.id)
+                        .where(Camera.id == camera_id)
+                    )
+                ).scalar_one()
+            previous_hash: str | None = None
+            for index, ledger_payload in enumerate(ledger_items, start=1):
+                assert tenant_id is not None
+                entry_hash = compute_entry_hash(
+                    incident_id=incident.id,
+                    sequence=index,
+                    action=ledger_payload.action,
+                    occurred_at=ledger_payload.occurred_at,
+                    actor_type="system",
+                    actor_subject=None,
+                    payload=ledger_payload.payload,
+                    previous_entry_hash=previous_hash,
+                )
+                session.add(
+                    EvidenceLedgerEntry(
+                        tenant_id=tenant_id,
+                        incident_id=incident.id,
+                        camera_id=camera_id,
+                        sequence=index,
+                        action=ledger_payload.action,
+                        actor_type="system",
+                        actor_subject=None,
+                        occurred_at=ledger_payload.occurred_at,
+                        payload=ledger_payload.payload,
+                        previous_entry_hash=previous_hash,
+                        entry_hash=entry_hash,
+                    )
+                )
+                previous_hash = entry_hash
             await session.commit()
 
 
@@ -475,6 +689,69 @@ def _failed_event_clip_artifact_payload(
         "scene_contract_hash": event.scene_contract_hash,
         "privacy_manifest_hash": event.privacy_manifest_hash,
     }
+
+
+def _snapshot_artifact_payload(
+    *,
+    stored_object: StoredEvidenceObject,
+    event: IncidentTriggeredEvent,
+    status_override: EvidenceArtifactStatus | None = None,
+) -> dict[str, object]:
+    return {
+        "kind": EvidenceArtifactKind.SNAPSHOT,
+        "status": status_override
+        or _artifact_status_for_storage(
+            provider=stored_object.provider,
+            scope=stored_object.scope,
+        ),
+        "storage_provider": stored_object.provider,
+        "storage_scope": stored_object.scope,
+        "bucket": stored_object.bucket,
+        "object_key": stored_object.object_key,
+        "content_type": stored_object.content_type,
+        "sha256": stored_object.sha256,
+        "size_bytes": stored_object.size_bytes,
+        "clip_started_at": None,
+        "triggered_at": event.ts,
+        "clip_ended_at": None,
+        "duration_seconds": None,
+        "fps": None,
+        "scene_contract_hash": event.scene_contract_hash,
+        "privacy_manifest_hash": event.privacy_manifest_hash,
+    }
+
+
+def _snapshot_ledger_payload(
+    *,
+    action: EvidenceLedgerAction,
+    event: IncidentTriggeredEvent,
+    payload: dict[str, object],
+) -> IncidentLedgerPayload:
+    return IncidentLedgerPayload(
+        action=action,
+        occurred_at=event.ts,
+        payload={
+            "artifact_kind": EvidenceArtifactKind.SNAPSHOT.value,
+            "scene_contract_hash": event.scene_contract_hash,
+            "privacy_manifest_hash": event.privacy_manifest_hash,
+            **payload,
+        },
+    )
+
+
+def _select_snapshot_frame(
+    frames: list[tuple[datetime, Frame]],
+    *,
+    triggered_at: datetime,
+    offset_seconds: float,
+) -> Frame | None:
+    if not frames:
+        return None
+    target_at = triggered_at + timedelta(seconds=offset_seconds)
+    return min(
+        frames,
+        key=lambda sample: abs((sample[0] - target_at).total_seconds()),
+    )[1]
 
 
 def _artifact_status_for_storage(

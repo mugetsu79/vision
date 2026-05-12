@@ -1200,7 +1200,7 @@ export interface components {
          * EvidenceLedgerAction
          * @enum {string}
          */
-        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "evidence.expired" | "incident.reviewed" | "incident.reopened";
+        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.snapshot.available" | "evidence.snapshot.quota_exceeded" | "evidence.snapshot.capture_failed" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "evidence.expired" | "incident.reviewed" | "incident.reopened";
         /** EvidenceLedgerEntryResponse */
         EvidenceLedgerEntryResponse: {
             /**
@@ -1291,6 +1291,21 @@ export interface components {
             storage_profile: "edge_local" | "central" | "cloud" | "local_first";
             /** Storage Profile Id */
             storage_profile_id?: string | null;
+            /**
+             * Snapshot Enabled
+             * @default false
+             */
+            snapshot_enabled: boolean;
+            /**
+             * Snapshot Offset Seconds
+             * @default 0
+             */
+            snapshot_offset_seconds: number;
+            /**
+             * Snapshot Quality
+             * @default 85
+             */
+            snapshot_quality: number;
         };
         /**
          * EvidenceStorageProvider

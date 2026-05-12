@@ -12,6 +12,7 @@ from argus.api.contracts import EvidenceRecordingPolicy, WorkerPrivacyPolicySett
 from argus.models.enums import (
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
+    EvidenceLedgerAction,
     EvidenceStorageProvider,
     EvidenceStorageScope,
 )
@@ -86,7 +87,10 @@ class _FakeIncidentRepository:
         privacy_manifest_snapshot_id=None,  # noqa: ANN001
         privacy_manifest_hash: str | None = None,
         recording_policy: dict[str, object] | None = None,
+        snapshot_url: str | None = None,
         artifact_payload: dict[str, object] | None = None,
+        artifact_payloads: list[dict[str, object]] | None = None,
+        ledger_payloads: list[object] | None = None,
     ) -> None:
         self.incidents.append(
             {
@@ -101,7 +105,10 @@ class _FakeIncidentRepository:
                 "privacy_manifest_snapshot_id": privacy_manifest_snapshot_id,
                 "privacy_manifest_hash": privacy_manifest_hash,
                 "recording_policy": recording_policy,
+                "snapshot_url": snapshot_url,
                 "artifact_payload": artifact_payload,
+                "artifact_payloads": artifact_payloads,
+                "ledger_payloads": ledger_payloads,
             }
         )
 
@@ -113,6 +120,19 @@ class _FakeClipEncoder:
     def encode_clip(self, frames: list[np.ndarray], *, fps: int) -> bytes:
         assert frames
         assert fps == 2
+        return self.encoded_bytes
+
+
+@dataclass
+class _FakeSnapshotEncoder:
+    encoded_bytes: bytes = b"synthetic-snapshot"
+    error: Exception | None = None
+    calls: list[tuple[tuple[int, ...], int]] = field(default_factory=list)
+
+    def encode_snapshot(self, frame: np.ndarray, *, quality: int) -> bytes:
+        if self.error is not None:
+            raise self.error
+        self.calls.append((frame.shape, quality))
         return self.encoded_bytes
 
 
@@ -191,6 +211,234 @@ async def test_incident_capture_uploads_clip_and_persists_incident() -> None:
     assert artifact["fps"] == 2
     assert artifact["scene_contract_hash"] == "b" * 64
     assert artifact["privacy_manifest_hash"] == "c" * 64
+
+
+@pytest.mark.asyncio
+async def test_incident_capture_creates_snapshot_artifact_when_enabled() -> None:
+    camera_id = uuid4()
+    snapshot_encoder = _FakeSnapshotEncoder()
+    service = IncidentClipCaptureService(
+        object_store=_FakeObjectStore(),
+        repository=_FakeIncidentRepository(
+            policy=IncidentTenantPolicy(
+                tenant_id=uuid4(),
+                allow_plaintext_plates=True,
+                plaintext_justification="policy",
+                storage_quota_bytes=10_000,
+                current_storage_bytes=0,
+            )
+        ),
+        clip_encoder=_FakeClipEncoder(encoded_bytes=b"clip-bytes"),
+        snapshot_encoder=snapshot_encoder,
+        pre_seconds=1,
+        post_seconds=1,
+        fps=2,
+    )
+
+    first_frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    snapshot_frame = np.full((16, 16, 3), 255, dtype=np.uint8)
+    triggered_at = datetime(2026, 5, 12, 12, 20, tzinfo=UTC)
+    await service.record_frame(
+        camera_id=camera_id,
+        frame=first_frame,
+        ts=triggered_at - timedelta(milliseconds=500),
+    )
+    await service.queue_incident(
+        IncidentTriggeredEvent(
+            camera_id=camera_id,
+            ts=triggered_at,
+            type="rule.snapshot",
+            scene_contract_hash="b" * 64,
+            privacy_manifest_hash="c" * 64,
+            recording_policy=EvidenceRecordingPolicy(
+                snapshot_enabled=True,
+                snapshot_offset_seconds=0.5,
+                snapshot_quality=72,
+            ),
+        )
+    )
+    await service.record_frame(
+        camera_id=camera_id,
+        frame=snapshot_frame,
+        ts=triggered_at + timedelta(milliseconds=500),
+    )
+    await service.flush(camera_id=camera_id)
+
+    incidents = service.repository.incidents  # type: ignore[attr-defined]
+    uploads = service.object_store.uploads  # type: ignore[attr-defined]
+    clip_upload, snapshot_upload = uploads
+    clip_artifact, snapshot_artifact = incidents[0]["artifact_payloads"]
+    ledger_entry = incidents[0]["ledger_payloads"][0]
+
+    assert snapshot_encoder.calls == [((16, 16, 3), 72)]
+    assert clip_upload[2] == "video/x-motion-jpeg"
+    assert snapshot_upload[0].endswith(".jpg")
+    assert snapshot_upload[1] == b"synthetic-snapshot"
+    assert snapshot_upload[2] == "image/jpeg"
+    assert incidents[0]["clip_url"] == f"https://minio.local/{clip_upload[0]}"
+    assert incidents[0]["snapshot_url"] == f"https://minio.local/{snapshot_upload[0]}"
+    assert incidents[0]["storage_bytes"] == len(b"clip-bytes") + len(b"synthetic-snapshot")
+    assert clip_artifact["kind"] is EvidenceArtifactKind.EVENT_CLIP
+    assert snapshot_artifact["kind"] is EvidenceArtifactKind.SNAPSHOT
+    assert snapshot_artifact["status"] is EvidenceArtifactStatus.REMOTE_AVAILABLE
+    assert snapshot_artifact["object_key"] == snapshot_upload[0]
+    assert snapshot_artifact["content_type"] == "image/jpeg"
+    assert snapshot_artifact["sha256"] == "a" * 64
+    assert snapshot_artifact["size_bytes"] == len(b"synthetic-snapshot")
+    assert snapshot_artifact["triggered_at"] == triggered_at
+    assert snapshot_artifact["scene_contract_hash"] == "b" * 64
+    assert snapshot_artifact["privacy_manifest_hash"] == "c" * 64
+    assert ledger_entry.action is EvidenceLedgerAction.SNAPSHOT_AVAILABLE
+    assert ledger_entry.payload["artifact_kind"] == "snapshot"
+    assert ledger_entry.payload["object_key"] == snapshot_upload[0]
+
+
+@pytest.mark.asyncio
+async def test_incident_capture_leaves_snapshot_nullable_when_disabled() -> None:
+    camera_id = uuid4()
+    service = IncidentClipCaptureService(
+        object_store=_FakeObjectStore(),
+        repository=_FakeIncidentRepository(
+            policy=IncidentTenantPolicy(
+                tenant_id=uuid4(),
+                allow_plaintext_plates=True,
+                plaintext_justification="policy",
+                storage_quota_bytes=10_000,
+                current_storage_bytes=0,
+            )
+        ),
+        clip_encoder=_FakeClipEncoder(encoded_bytes=b"clip-only"),
+        snapshot_encoder=_FakeSnapshotEncoder(),
+        pre_seconds=1,
+        post_seconds=1,
+        fps=2,
+    )
+
+    frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    triggered_at = datetime(2026, 5, 12, 12, 30, tzinfo=UTC)
+    await service.record_frame(camera_id=camera_id, frame=frame, ts=triggered_at)
+    await service.queue_incident(
+        IncidentTriggeredEvent(
+            camera_id=camera_id,
+            ts=triggered_at,
+            type="rule.clip_only",
+            recording_policy=EvidenceRecordingPolicy(snapshot_enabled=False),
+        )
+    )
+    await service.flush(camera_id=camera_id)
+
+    incidents = service.repository.incidents  # type: ignore[attr-defined]
+    artifacts = incidents[0]["artifact_payloads"]
+
+    assert incidents[0]["snapshot_url"] is None
+    assert [artifact["kind"] for artifact in artifacts] == [EvidenceArtifactKind.EVENT_CLIP]
+    assert incidents[0]["ledger_payloads"] == []
+
+
+@pytest.mark.asyncio
+async def test_incident_capture_writes_snapshot_quota_ledger_without_breaking_clip() -> None:
+    camera_id = uuid4()
+    service = IncidentClipCaptureService(
+        object_store=_FakeObjectStore(),
+        repository=_FakeIncidentRepository(
+            policy=IncidentTenantPolicy(
+                tenant_id=uuid4(),
+                allow_plaintext_plates=True,
+                plaintext_justification="policy",
+                storage_quota_bytes=len(b"clip-bytes") + 1,
+                current_storage_bytes=0,
+            )
+        ),
+        clip_encoder=_FakeClipEncoder(encoded_bytes=b"clip-bytes"),
+        snapshot_encoder=_FakeSnapshotEncoder(encoded_bytes=b"snapshot-too-large"),
+        pre_seconds=1,
+        post_seconds=1,
+        fps=2,
+    )
+
+    frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    triggered_at = datetime(2026, 5, 12, 12, 40, tzinfo=UTC)
+    await service.record_frame(camera_id=camera_id, frame=frame, ts=triggered_at)
+    await service.queue_incident(
+        IncidentTriggeredEvent(
+            camera_id=camera_id,
+            ts=triggered_at,
+            type="rule.snapshot_quota",
+            recording_policy=EvidenceRecordingPolicy(snapshot_enabled=True),
+        )
+    )
+    await service.flush(camera_id=camera_id)
+
+    incidents = service.repository.incidents  # type: ignore[attr-defined]
+    uploads = service.object_store.uploads  # type: ignore[attr-defined]
+    ledger_entry = incidents[0]["ledger_payloads"][0]
+
+    assert len(uploads) == 1
+    assert uploads[0][2] == "video/x-motion-jpeg"
+    assert incidents[0]["clip_url"] == f"https://minio.local/{uploads[0][0]}"
+    assert incidents[0]["snapshot_url"] is None
+    assert incidents[0]["storage_bytes"] == len(b"clip-bytes")
+    assert [artifact["kind"] for artifact in incidents[0]["artifact_payloads"]] == [
+        EvidenceArtifactKind.EVENT_CLIP
+    ]
+    assert incidents[0]["payload"]["snapshot_quota_exceeded"] is True
+    assert ledger_entry.action is EvidenceLedgerAction.SNAPSHOT_QUOTA_EXCEEDED
+    assert ledger_entry.payload["artifact_kind"] == "snapshot"
+    assert ledger_entry.payload["size_bytes"] == len(b"snapshot-too-large")
+
+
+@pytest.mark.asyncio
+async def test_incident_capture_writes_snapshot_failure_ledger_without_breaking_clip() -> None:
+    camera_id = uuid4()
+    service = IncidentClipCaptureService(
+        object_store=_FakeObjectStore(),
+        repository=_FakeIncidentRepository(
+            policy=IncidentTenantPolicy(
+                tenant_id=uuid4(),
+                allow_plaintext_plates=True,
+                plaintext_justification="policy",
+                storage_quota_bytes=10_000,
+                current_storage_bytes=0,
+            )
+        ),
+        clip_encoder=_FakeClipEncoder(encoded_bytes=b"clip-survives"),
+        snapshot_encoder=_FakeSnapshotEncoder(error=RuntimeError("jpeg encoder failed")),
+        pre_seconds=1,
+        post_seconds=1,
+        fps=2,
+    )
+
+    frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    triggered_at = datetime(2026, 5, 12, 12, 50, tzinfo=UTC)
+    await service.record_frame(camera_id=camera_id, frame=frame, ts=triggered_at)
+    await service.queue_incident(
+        IncidentTriggeredEvent(
+            camera_id=camera_id,
+            ts=triggered_at,
+            type="rule.snapshot_failure",
+            recording_policy=EvidenceRecordingPolicy(snapshot_enabled=True),
+        )
+    )
+    await service.flush(camera_id=camera_id)
+
+    incidents = service.repository.incidents  # type: ignore[attr-defined]
+    uploads = service.object_store.uploads  # type: ignore[attr-defined]
+    ledger_entry = incidents[0]["ledger_payloads"][0]
+
+    assert len(uploads) == 1
+    assert uploads[0][2] == "video/x-motion-jpeg"
+    assert incidents[0]["clip_url"] == f"https://minio.local/{uploads[0][0]}"
+    assert incidents[0]["snapshot_url"] is None
+    assert incidents[0]["storage_bytes"] == len(b"clip-survives")
+    assert [artifact["kind"] for artifact in incidents[0]["artifact_payloads"]] == [
+        EvidenceArtifactKind.EVENT_CLIP
+    ]
+    assert "RuntimeError: jpeg encoder failed" in incidents[0]["payload"][
+        "snapshot_capture_error"
+    ]
+    assert ledger_entry.action is EvidenceLedgerAction.SNAPSHOT_CAPTURE_FAILED
+    assert ledger_entry.payload["artifact_kind"] == "snapshot"
+    assert "RuntimeError: jpeg encoder failed" in ledger_entry.payload["error"]
 
 
 @pytest.mark.asyncio

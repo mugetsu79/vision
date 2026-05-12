@@ -166,6 +166,9 @@ export type CameraWizardData = {
   recordingMaxDurationSeconds: number;
   recordingStorageProfile: EvidenceStorageProfile;
   recordingStorageProfileId: string;
+  recordingSnapshotEnabled: boolean;
+  recordingSnapshotOffsetSeconds: number;
+  recordingSnapshotQuality: number;
   homography: {
     src: Point[];
     dst: Point[];
@@ -318,6 +321,9 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     recordingMaxDurationSeconds: recordingPolicy?.max_duration_seconds ?? 15,
     recordingStorageProfile: recordingPolicy?.storage_profile ?? "central",
     recordingStorageProfileId: recordingPolicy?.storage_profile_id ?? "",
+    recordingSnapshotEnabled: recordingPolicy?.snapshot_enabled ?? false,
+    recordingSnapshotOffsetSeconds: recordingPolicy?.snapshot_offset_seconds ?? 0,
+    recordingSnapshotQuality: recordingPolicy?.snapshot_quality ?? 85,
     homography: {
       src: toPointTupleArray(initialCamera?.homography?.src),
       dst: toPointTupleArray(initialCamera?.homography?.dst),
@@ -370,6 +376,9 @@ function buildRecordingPolicy(data: CameraWizardData): EvidenceRecordingPolicy {
     ),
     storage_profile: data.recordingStorageProfile,
     storage_profile_id: data.recordingStorageProfileId || null,
+    snapshot_enabled: data.recordingSnapshotEnabled,
+    snapshot_offset_seconds: data.recordingSnapshotOffsetSeconds,
+    snapshot_quality: data.recordingSnapshotQuality,
   };
 }
 
