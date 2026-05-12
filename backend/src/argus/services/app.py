@@ -3225,6 +3225,7 @@ def build_app_services(
     db: DatabaseManager,
     events: NatsJetStreamClient,
     query_service: QueryService,
+    configuration_service: OperatorConfigurationService | None = None,
 ) -> AppServices:
     audit_logger = DatabaseAuditLogger(db.session_factory)
     mediamtx = MediaMTXClient(
@@ -3239,7 +3240,11 @@ def build_app_services(
         ),
     )
     edge_service = EdgeService(db.session_factory, settings, events, audit_logger)
-    configuration_service = OperatorConfigurationService(db.session_factory, settings, audit_logger)
+    configuration_service = configuration_service or OperatorConfigurationService(
+        db.session_factory,
+        settings,
+        audit_logger,
+    )
     evidence_ledger = EvidenceLedgerService(db.session_factory)
     return AppServices(
         tenancy=TenancyService(db.session_factory, settings),

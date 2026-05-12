@@ -23,6 +23,7 @@ from argus.core.security import EdgeKeyMiddleware, SecurityService
 from argus.core.tracing import TracingManager
 from argus.llm.parser import ClassFilterParser
 from argus.services.app import DatabaseAuditLogger, build_app_services
+from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.query import QueryService, SQLCameraClassInventory, SQLQueryQuotaEnforcer
 
 
@@ -61,9 +62,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.security = SecurityService.from_settings(settings)
     app.state.tracing = TracingManager(settings)
     audit_logger = DatabaseAuditLogger(app.state.db.session_factory)
+    configuration_service = OperatorConfigurationService(
+        app.state.db.session_factory,
+        settings,
+        audit_logger,
+    )
     query_service = QueryService(
         inventory=SQLCameraClassInventory(app.state.db.session_factory),
-        parser=ClassFilterParser(settings),
+        parser=ClassFilterParser(
+            settings,
+            llm_provider_resolver=configuration_service.llm_provider_runtime,
+        ),
         events=app.state.events,
         audit_logger=audit_logger,
         quota_enforcer=SQLQueryQuotaEnforcer(app.state.db.session_factory),
@@ -73,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db=app.state.db,
         events=app.state.events,
         query_service=query_service,
+        configuration_service=configuration_service,
     )
     app.add_middleware(
         CORSMiddleware,

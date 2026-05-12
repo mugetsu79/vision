@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -140,9 +141,12 @@ class QueryService:
                 detail="No matching cameras or classes were found for this tenant.",
             )
 
-        parser_result = await self.parser.resolve_classes(
+        parser_result = await _resolve_classes_with_context(
+            self.parser,
             prompt=payload.prompt,
             allowed_classes=terms_for_resolution,
+            tenant_context=tenant_context,
+            camera_ids=payload.camera_ids,
         )
         parser_metadata = cast(_ParserMetadata, parser_result)
         resolved_terms = _resolved_classes_from_parser_result(parser_result)
@@ -445,6 +449,30 @@ def _resolved_classes_from_parser_result(parser_result: object) -> list[str]:
         resolved_result = cast(_ResolvedClassesResult, parser_result)
         return list(resolved_result.resolved_classes)
     raise AttributeError("Parser result must expose classes or resolved_classes.")
+
+
+async def _resolve_classes_with_context(
+    parser: QueryParser,
+    *,
+    prompt: str,
+    allowed_classes: list[str],
+    tenant_context: TenantContext,
+    camera_ids: list[UUID],
+) -> object:
+    method = parser.resolve_classes
+    parameters = inspect.signature(method).parameters
+    supports_context = (
+        "tenant_context" in parameters
+        or any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+    )
+    if supports_context:
+        return await method(
+            prompt=prompt,
+            allowed_classes=allowed_classes,
+            tenant_context=tenant_context,
+            camera_ids=camera_ids,
+        )
+    return await method(prompt=prompt, allowed_classes=allowed_classes)
 
 
 class _AllowAllQuotaEnforcer:

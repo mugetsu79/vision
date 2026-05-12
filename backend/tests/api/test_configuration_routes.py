@@ -214,6 +214,37 @@ async def test_configuration_routes_expose_catalog_and_profiles() -> None:
 
 
 @pytest.mark.asyncio
+async def test_configuration_routes_redact_llm_provider_secrets() -> None:
+    context = _tenant_context()
+    configuration = _FakeConfigurationService(context.tenant_id)
+    configuration.profile = _profile_response(
+        tenant_id=context.tenant_id,
+        kind=OperatorConfigProfileKind.LLM_PROVIDER,
+        config={
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "base_url": "https://api.openai.com/v1",
+            "api_key_required": True,
+        },
+        secret_state={"api_key": "present"},
+    )
+    app = _create_app(context, configuration)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/configuration/profiles?kind=llm_provider",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()[0]
+    assert payload["kind"] == "llm_provider"
+    assert payload["secret_state"] == {"api_key": "present"}
+    assert "api_key" not in payload["config"]
+    assert "sk-runtime" not in response.text
+
+
+@pytest.mark.asyncio
 async def test_configuration_routes_create_patch_test_bind_and_resolve() -> None:
     context = _tenant_context()
     configuration = _FakeConfigurationService(context.tenant_id)
@@ -308,25 +339,32 @@ async def test_configuration_routes_create_patch_test_bind_and_resolve() -> None
     assert configuration.deleted_profile_id == profile_id
 
 
-def _profile_response(tenant_id: UUID) -> OperatorConfigProfileResponse:
+def _profile_response(
+    tenant_id: UUID,
+    *,
+    kind: OperatorConfigProfileKind = OperatorConfigProfileKind.EVIDENCE_STORAGE,
+    config: dict[str, object] | None = None,
+    secret_state: dict[str, str] | None = None,
+) -> OperatorConfigProfileResponse:
     created_at = datetime(2026, 5, 11, 12, 0, tzinfo=UTC)
+    resolved_config = config or {
+        "provider": "minio",
+        "storage_scope": "central",
+        "endpoint": "localhost:9000",
+        "bucket": "incidents",
+        "secure": False,
+    }
     return OperatorConfigProfileResponse(
         id=uuid4(),
         tenant_id=tenant_id,
-        kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+        kind=kind,
         scope=OperatorConfigScope.TENANT,
         name="Dev MinIO",
         slug="dev-minio",
         enabled=True,
         is_default=True,
-        config={
-            "provider": "minio",
-            "storage_scope": "central",
-            "endpoint": "localhost:9000",
-            "bucket": "incidents",
-            "secure": False,
-        },
-        secret_state={"secret_key": "present"},
+        config=resolved_config,
+        secret_state=secret_state or {"secret_key": "present"},
         validation_status=OperatorConfigValidationStatus.UNVALIDATED,
         validation_message=None,
         validated_at=None,

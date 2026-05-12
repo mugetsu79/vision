@@ -141,6 +141,18 @@ the storage budget supports it. For privacy-sensitive edge sites, use
 `edge_local` or `local_first` deliberately and document retention, backup, and
 review access before go-live.
 
+### LLM Provider Configuration
+
+LLM provider selection is UI-managed after bootstrap. Configure provider,
+model, optional base URL, and the `api_key` secret in Settings -> Configuration
+under `LLM provider`; do not rely on command-line environment overrides for
+operator-facing prompt workflows once profiles are present.
+
+Browser configuration responses expose only secret presence, never plaintext
+API keys. Prompt workflows resolve the selected tenant/site/edge/camera profile
+inside the backend service path and fail closed before sending a request when a
+profile requires an API key that has not been stored.
+
 ## Secrets With SOPS And Age
 
 Vezor stores operational secrets under `/Users/yann.moren/vision/infra/secrets/` as encrypted `*.enc.yaml`, `*.enc.json`, or `*.enc.env` files. The repository is configured for SOPS + age through `/Users/yann.moren/vision/.sops.yaml`.

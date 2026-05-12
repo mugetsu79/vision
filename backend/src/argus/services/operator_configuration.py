@@ -50,6 +50,11 @@ from argus.models.tables import (
     OperatorConfigSecret,
     Site,
 )
+from argus.services.llm_provider_runtime import (
+    LLMProviderRuntimeService,
+    ResolvedLLMProviderSettings,
+    resolved_llm_provider_from_runtime_config,
+)
 from argus.services.object_store import MinioObjectStore
 from argus.services.privacy_policy_runtime import worker_privacy_policy_from_runtime_config
 from argus.services.runtime_configuration import RuntimeConfigurationService
@@ -89,6 +94,7 @@ class OperatorConfigurationService:
             settings,
             bootstrap_defaults=self.seed_bootstrap_defaults,
         )
+        self.llm_provider_runtime = LLMProviderRuntimeService(self.runtime_configuration)
 
     async def list_catalog(self) -> dict[str, object]:
         return {
@@ -574,6 +580,32 @@ class OperatorConfigurationService:
             profile_id=profile_id,
         )
         return worker_privacy_policy_from_runtime_config(runtime_config)
+
+    async def resolve_llm_provider_for_runtime(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID | None = None,
+    ) -> ResolvedLLMProviderSettings:
+        return await self.llm_provider_runtime.resolve_for_prompt(
+            tenant_context=tenant_context,
+            camera_id=camera_id,
+        )
+
+    async def resolve_llm_provider_profile(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID | None = None,
+        profile_id: UUID | None = None,
+    ) -> ResolvedLLMProviderSettings:
+        runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
+            tenant_context,
+            OperatorConfigProfileKind.LLM_PROVIDER,
+            camera_id=camera_id,
+            profile_id=profile_id,
+        )
+        return resolved_llm_provider_from_runtime_config(runtime_config)
 
     async def seed_bootstrap_defaults(
         self,
