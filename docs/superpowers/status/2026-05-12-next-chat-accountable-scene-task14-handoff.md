@@ -1,11 +1,11 @@
-# Next Chat Handoff: Accountable Scene Intelligence Task 14
+# Next Chat Handoff: Accountable Scene Intelligence Task 17
 
 Date: 2026-05-12
 
 Purpose: paste this document into a fresh chat to continue from the current
 `codex/omnisight-ui-spec-implementation` branch. The accountable scene,
-evidence, UI-managed configuration, and runtime-consumption runway is complete
-through Task 13J. The next task is Task 14.
+evidence, UI-managed configuration, runtime passport, and per-worker incident
+rule runway is complete through Task 16E. The next task is Task 17.
 
 ## Repository State
 
@@ -18,25 +18,24 @@ codex/omnisight-ui-spec-implementation
 Latest implementation checkpoint before this documentation refresh:
 
 ```text
-6f8360eb fix(db): shorten evidence expiry migration revision
+b3b651bd feat(evidence): show incident rule provenance
 ```
 
 Recent checkpoints:
 
 ```text
+b3b651bd feat(evidence): show incident rule provenance
+a12b33a0 feat(ui): add scene incident rule builder
+e561148c feat(worker): consume per-scene incident rules
+a217f955 feat(rules): add per-scene incident rule API
+6f29b0ac docs(rules): plan per-worker incident rules
+931284d6 feat(ui): surface runtime passports
+46b9c8be feat(runtime): add incident runtime passports
+2c51853e feat(evidence): support optional snapshot artifacts
+2d2c517c docs(handoff): refresh accountable scene task 14 handoff
 6f8360eb fix(db): shorten evidence expiry migration revision
 55fe0993 feat(llm): consume provider configuration profiles
 8032ddf2 feat(privacy): consume privacy policy profiles
-93e730f0 feat(runtime): consume runtime selection profiles
-2fbeed2a feat(streams): route browser delivery profiles
-33e22bae feat(config): show effective runtime configuration
-473603e1 feat(evidence): sync local-first artifacts
-2dc2e401 fix(db): shorten operator configuration migration id
-9f1c1611 feat(evidence): route recording storage profiles
-c83f2d9f feat(config): add configuration workspace
-bf35d20e feat(config): expose UI-managed configuration API
-280343e9 feat(config): add operator configuration profiles
-cb2ae3f6 feat(evidence): add accountable timeline and case context
 ```
 
 Start a fresh continuation like this:
@@ -66,26 +65,22 @@ cd "$HOME/vision/backend"
 python3 -m uv run alembic upgrade head
 ```
 
-If the backend only reaches Postgres inside the Docker dev network, run:
+If the backend only reaches Postgres inside the Docker dev network, run the
+container's installed Alembic entrypoint instead of `python -m uv`:
 
 ```bash
 cd "$HOME/vision"
 docker compose -f infra/docker-compose.dev.yml exec backend \
-  python -m uv run alembic upgrade head
+  alembic upgrade head
 ```
 
 Current Alembic head:
 
 ```text
-0014_evidence_expiry_action
+0018_incident_rule_ledger
 ```
 
-Note: the migration file is
-`backend/src/argus/migrations/versions/0014_evidence_expiry_ledger_action.py`,
-but its revision id is intentionally shortened to fit
-`alembic_version.version_num varchar(32)`.
-
-## What Is Implemented Through Task 13J
+## What Is Implemented Through Task 16E
 
 Implemented and pushed:
 
@@ -96,40 +91,46 @@ Implemented and pushed:
 - Band 3, Tasks 9-13: accountability strip, Evidence Desk context, camera
   source/recording controls, docs, validation sweep, timeline and case context
   polish
-- Task 13A: operator configuration data model, encrypted secrets, and contracts
-- Task 13B: configuration service, API, validation, resolution, and bootstrap
-  defaults
-- Task 13C: Settings configuration workspace UI
-- Task 13D: runtime recording storage profile routing
-- Task 13E: local-first evidence upload sync
-- Task 13F: effective configuration runtime diagnostics
-- Task 13G: stream delivery and browser playback runtime routing
-- Task 13H: runtime-selection profile consumption
-- Task 13I: privacy-policy runtime consumption, retention expiry marker, and
-  evidence expiry ledger action
-- Task 13J: LLM-provider runtime consumption with service-only secret access
+- Tasks 13A-13C: UI-managed configuration profile data model, API,
+  validation/resolution service, and Settings workspace
+- Tasks 13D-13J: runtime consumption for recording storage, local-first sync,
+  effective diagnostics, stream delivery, runtime selection, privacy policy, and
+  LLM provider profiles
+- Task 14: optional still snapshot evidence artifacts
+- Tasks 15-16: runtime passport snapshots, incident attachment, incident API,
+  and Operations/Evidence surfacing
+- Task 16A: camera-scoped incident rule data contract, service, validation,
+  audit, API, and migration `0017_detection_rule_incident_metadata`
+- Task 16B: worker config, camera command, scene contract, rule engine,
+  persisted rule event, and rule-generated incident runtime consumption
+- Task 16C: Control -> Scenes incident rule builder and generated API hooks
+- Task 16D: Evidence trigger rule summary, `incident_rule.attached` ledger
+  action, incident API trigger rule contract, and Operations rule runtime truth
+- Task 16E: operator docs, plan/spec/handoff refresh, and full per-worker
+  incident rule band validation
 
-Fresh validation before stopping after Task 13:
+## Task 16E Validation
+
+Fresh validation before this handoff refresh:
 
 ```text
-Backend focused Task 13 suite: 134 passed, 3 skipped
-Backend Ruff: passed
-Frontend TypeScript: passed
-Frontend configuration/camera/settings Vitest: 35 passed
+alembic upgrade head: passed
+backend targeted band suite: 140 passed, 46 warnings
+backend Ruff: passed
+frontend generate:api: passed
+frontend targeted Vitest: 6 files passed, 26 tests passed
+frontend TypeScript: passed
 git diff --check: passed
+alembic heads: 0018_incident_rule_ledger (head)
 ```
 
-Migration fix validation:
-
-```text
-backend/tests/core/test_db.py: 13 passed
-alembic heads: 0014_evidence_expiry_action (head)
-offline alembic SQL from 0013 to head updates version_num to 0014_evidence_expiry_action
-```
+The frontend Vitest warnings were React Router v7 future-flag warnings only.
+The backend warnings were the known missing `/run/secrets` warnings from local
+test settings.
 
 ## Current Product Posture
 
-Operator-facing configuration is now UI/API managed after bootstrap:
+Operator-facing configuration is UI/API managed after bootstrap:
 
 - evidence storage
 - stream delivery
@@ -147,6 +148,21 @@ Storage options are wired beyond UI metadata:
 - cloud S3-compatible
 - local-first local review plus remote sync
 
+Per-worker incident rules are now first-class scene policy:
+
+- define rules from Control -> Scenes
+- validate predicates against scene classes, vocabulary, zones, confidence, and
+  supported non-biometric attributes
+- use `record_clip` as the default rule action for reviewable incidents
+- let the camera recording policy and storage profile decide clip/snapshot
+  artifacts and local, edge-local, central, cloud, or local-first storage
+- confirm worker rule consumption in Control -> Operations by active count,
+  effective hash, latest rule event, and load status
+- review trigger rule name, type, severity, action, cooldown, rule hash, scene
+  contract hash, and detection context in Intelligence -> Evidence
+- keep Prompt-To-Policy as a future draft producer only; prompt workflows must
+  not auto-apply production incident rules
+
 Incident clips remain reviewable in edge/local-first mode when recording is
 enabled. Local-first artifacts are not promoted to remote-available until upload
 is confirmed.
@@ -156,7 +172,8 @@ is confirmed.
 Start with:
 
 ```text
-Task 14: Optional Still Snapshot Evidence Artifacts
+Band 6: Product Differentiators
+Task 17: Operational Memory
 ```
 
 Use this spec:
@@ -171,37 +188,36 @@ Use this plan:
 docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md
 ```
 
-Task 14 scope:
+Task 17 scope:
 
-- add optional snapshot fields to `EvidenceRecordingPolicy`
-- create `snapshot` evidence artifacts only when snapshot capture is enabled
-- keep `incidents.snapshot_url` nullable when disabled or unavailable
-- write snapshot artifact ledger entries
-- ensure snapshot quota or encode failures do not break clip capture
-- show snapshot availability in Evidence Desk as optional evidence, not as a
-  missing-data error when disabled
+- create `backend/src/argus/migrations/versions/0019_operational_memory_patterns.py`
+- add `operational_memory_patterns`
+- detect repeated event bursts by site/camera/zone/class/time window
+- detect repeated clip/storage failures by provider and edge node
+- detect zone hot spots after scene contract changes
+- cite source incident ids and contract hashes in every pattern
+- expose current patterns through Operations and selected incident context
+- show observed pattern cards in Evidence Desk and Operations without
+  predictive language
 
-Expected focused verification for Task 14:
+Expected focused verification for Task 17:
 
 ```bash
 cd "$HOME/vision/backend"
-python3 -m uv run pytest \
-  tests/services/test_incident_capture.py \
-  tests/services/test_evidence_storage.py \
-  -q
+python3 -m uv run pytest tests/services/test_operational_memory.py tests/api/test_operations_endpoints.py -q
 
 cd "$HOME/vision"
-corepack pnpm --dir frontend exec vitest run src/pages/Incidents.test.tsx
+corepack pnpm --dir frontend generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/evidence/OperationalMemoryPanel.test.tsx \
+  src/pages/Incidents.test.tsx \
+  src/pages/Settings.test.tsx
 ```
-
-After Task 14, commit and push, then pause for validation before Band 5
-Tasks 15-16.
 
 ## Guardrails To Carry Forward
 
 - Execute one task at a time.
 - Commit and push after each completed task.
-- Pause and report after Task 14 before starting Task 15.
 - Do not stage unrelated untracked scratch files.
 - Keep WebGL off.
 - Treat edge USB/UVC camera source support as production edge-first.
@@ -213,7 +229,9 @@ Tasks 15-16.
 - If dev DB errors mention `cameras.vision_profile`,
   `cameras.detection_regions`, `model_runtime_artifacts`,
   `scene_contract_snapshots`, `runtime_passport_snapshots`,
-  `worker_assignments`, or any new plan table, run `alembic upgrade head`.
+  `worker_assignments`, `detection_rules`, `rule_events`,
+  `operational_memory_patterns`, or any new plan table, run
+  `alembic upgrade head`.
 
 ## Suggested Next Prompt
 
@@ -230,8 +248,8 @@ Use the plan:
 docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md
 
 Start with:
-Band 4: Evidence Media Completion
-Task 14: Optional Still Snapshot Evidence Artifacts
+Band 6: Product Differentiators
+Task 17: Operational Memory
 
 Working rules:
 - Pull latest first:
@@ -243,7 +261,6 @@ Working rules:
 - Use sub-agents where useful.
 - Commit after the completed task.
 - Push to origin after the commit so I can test.
-- Pause and report after Task 14 before starting Task 15.
 - Do not stage unrelated untracked scratch files.
 - Keep WebGL off.
 - Treat edge USB/UVC camera source support as production edge-first.
@@ -251,5 +268,5 @@ Working rules:
 - Support local edge storage and remote/cloud S3-compatible storage options.
 - Do not start Track C / DeepStream before Task 23 records passing Track A/B Jetson soak evidence unless I explicitly accept the risk.
 - Do not reopen RTSP/TensorRT debugging unless fresh logs prove it is needed.
-- If dev DB errors mention cameras.vision_profile, cameras.detection_regions, model_runtime_artifacts, scene_contract_snapshots, runtime_passport_snapshots, worker_assignments, or any new plan table, run alembic upgrade head.
+- If dev DB errors mention cameras.vision_profile, cameras.detection_regions, model_runtime_artifacts, scene_contract_snapshots, runtime_passport_snapshots, worker_assignments, detection_rules, rule_events, operational_memory_patterns, or any new plan table, run alembic upgrade head.
 ```

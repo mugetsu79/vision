@@ -66,6 +66,8 @@ Current behavior:
 - `clip_url` is retained for compatibility, and artifact rows are now the reviewable evidence record
 - `snapshot_url` is supported by API/UI but may be null
 - scene contract, privacy manifest, artifact, and ledger context is available from the incident detail view when the worker captured it
+- rule-generated incidents include the trigger rule summary when a worker fired
+  an enabled per-scene incident rule
 - evidence storage, stream delivery, runtime selection, privacy policy, and LLM provider settings are UI-managed configuration profiles after bootstrap
 - local, edge-local, MinIO/S3-compatible, cloud, and local-first evidence storage profiles are selectable through Settings and consumed by runtime capture paths
 - local-first clips remain reviewable locally while upload sync records pending, available, or failed upload state
@@ -73,6 +75,42 @@ Current behavior:
 - operator review/reopen actions write audit entries
 
 If a still preview is required for a deployment, add snapshot generation as a separate feature rather than assuming every incident row has one.
+
+## Incident Rule Authoring And Provenance
+
+Per-worker incident rules define what counts as an incident for one scene
+worker. Author and edit them from Control -> Scenes on the scene's Rules
+surface. Do not treat Control -> Operations or Intelligence -> Evidence as rule
+authoring locations: Operations reports whether workers have loaded the desired
+rules, and Evidence reports which rule fired after an incident exists.
+
+The normal operator flow is:
+
+1. Configure the camera source, model, privacy posture, boundaries, calibration,
+   recording policy, and storage profile for the scene.
+2. In Control -> Scenes, create enabled incident rules with a stable incident
+   type, severity, predicate, action, cooldown, and validation sample.
+3. Prefer `record_clip` for reviewable evidence. The rule action says the event
+   should create reviewable evidence; the camera recording policy and bound
+   storage profile still decide which clip/snapshot artifacts are captured and
+   whether they live on edge local disk, central MinIO/S3-compatible storage,
+   cloud S3-compatible storage, or local-first storage.
+4. Use Control -> Operations to confirm active rule count, effective rule hash,
+   last rule event, and rule-load status for the worker.
+5. Review triggered incidents in Intelligence -> Evidence. Rule-generated
+   incidents should show rule name, incident type, severity, action, cooldown,
+   rule hash, scene contract hash, and detection context.
+
+Edge and local-first deployments remain reviewable when recording is enabled.
+For `edge_local` and `local_first` storage, the central record should still
+include the incident, scene/privacy context, artifact metadata, ledger entries,
+and trigger rule summary even when clip bytes are retained on the edge node or
+waiting for upload.
+
+Prompt-To-Policy may later propose incident rule changes, but those proposals
+must remain drafts. Operators must explicitly review and apply rule changes
+through the UI/API; prompt workflows must not auto-apply production incident
+rules.
 
 ## Accountable Scene Evidence And Recording
 
@@ -158,12 +196,11 @@ profile requires an API key that has not been stored.
 
 ### Development Migration Notes
 
-The accountable evidence and configuration runway currently migrates through
-Alembic head `0014_evidence_expiry_action`. The migration file is named
-`0014_evidence_expiry_ledger_action.py`, but the revision id is intentionally
-shorter so it fits `alembic_version.version_num varchar(32)`.
+The accountable evidence, configuration, runtime passport, and per-worker
+incident rule runway currently migrates through Alembic head
+`0018_incident_rule_ledger`.
 
-After pulling the Task 13 checkpoint, refresh the dev database with:
+After pulling the Task 16E checkpoint, refresh the dev database with:
 
 ```bash
 cd /Users/yann.moren/vision/backend

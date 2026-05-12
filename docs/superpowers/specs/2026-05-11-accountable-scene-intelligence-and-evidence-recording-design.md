@@ -9,12 +9,13 @@ open-vocab Track A/B work.
 
 Implementation checkpoint, 2026-05-12:
 
-- Tasks 1-16 are implemented and pushed on
+- Tasks 1-16E are implemented and pushed on
   `codex/omnisight-ui-spec-implementation`.
-- The current Alembic head is `0016_runtime_passports`.
-- Before Task 17 starts, the implementation plan adds a per-worker incident
-  rules band so operators can define what incidents mean for each scene worker
-  from the UI and have workers consume those rules at runtime.
+- The current Alembic head is `0018_incident_rule_ledger`.
+- The per-worker incident rules band is implemented: operators define scene
+  rules in Control -> Scenes, workers consume enabled rules through config and
+  hot reloads, Operations reports rule runtime truth, and Evidence shows the
+  trigger rule summary for rule-generated incidents.
 
 This spec turns all still-pertinent handoff items into one ordered
 implementation target. The first three Vezor differentiators are still the
@@ -120,11 +121,12 @@ The branch now has strong foundations:
   storage, stream delivery, runtime selection, privacy policy, and LLM provider
 - Evidence Desk UI that can open clips, show accountability context, and
   review/reopen incidents
+- camera-scoped incident rule CRUD, validation, worker config/runtime
+  consumption, rule event persistence, and trigger rule provenance in
+  Operations and Evidence
 
 Current gaps:
 
-- persisted `detection_rules` exist, but operators cannot yet manage incident
-  rules from the UI/API and production workers do not yet load those rules
 - Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
   Intelligence are not implemented
 - `operations_mode` profiles exist in the UI/configuration plane, but Tasks

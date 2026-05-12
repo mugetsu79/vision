@@ -21,6 +21,9 @@ The current product includes the operator workflows needed for a serious pilot:
 - stabilized Live track lifecycle, class-colored overlays, and Telemetry Terrain
 - scene vision profiles with explicit speed enablement, optional speed-off homography, detection include/exclusion regions, and candidate quality gating
 - accountable scene contracts, privacy manifests, evidence ledger entries, and short event clip recording policy
+- per-scene incident rule authoring in Control -> Scenes, worker rule
+  consumption in Control -> Operations, and trigger rule summaries in
+  Intelligence -> Evidence
 - RTSP and edge USB/UVC camera source configuration
 - Jetson edge compose stack and preflight tooling
 
@@ -131,7 +134,11 @@ Do not treat it as the final production topology for a real multi-site rollout.
 - backend health responds `200`
 - login works through Keycloak
 - you can create a site and camera
+- you can define an enabled incident rule for that camera from Control -> Scenes
 - Operations shows truthful node, worker, and delivery state for the current lab setup
+- Operations shows worker rule count/hash/readiness for cameras with incident
+  rules
+- a rule-generated incident is reviewable in Evidence with trigger rule context
 - tests and Playwright pass locally
 
 ### Worker lifecycle model
@@ -219,9 +226,13 @@ For the Jetson pattern, run the device in 25 W Super mode, validate JetPack/CUDA
 2. Add a single production site.
 3. Choose the source type and evidence storage posture for one or two cameras.
 4. Connect those cameras first.
-5. Validate live viewing, telemetry, privacy behavior, incidents, evidence clips, ledger context, and history.
-6. Validate Operations runtime truth: desired worker count, node health, worker heartbeat freshness, and last-error reporting.
-7. Only then add the rest of the site’s cameras.
+5. Define the first production incident rules for each scene from Control ->
+   Scenes.
+6. Validate live viewing, telemetry, privacy behavior, incidents, evidence
+   clips, trigger rule summaries, ledger context, and history.
+7. Validate Operations runtime truth: desired worker count, node health, worker
+   heartbeat freshness, rule count/hash/readiness, and last-error reporting.
+8. Only then add the rest of the site’s cameras.
 
 ### Production lifecycle requirements
 
@@ -264,6 +275,26 @@ The Evidence Desk can review local-only edge clips as accountable artifacts when
 recording is enabled. A local-only artifact should still have its incident,
 scene contract, privacy manifest, and ledger context centrally visible; only the
 clip bytes may remain on the edge node until retrieval or upload.
+
+### Incident Rule Choices
+
+Create incident rules in Control -> Scenes because rules are scene semantics:
+they bind model vocabulary, zones, confidence thresholds, severity, action, and
+cooldown to one camera worker. Use Control -> Operations to confirm that the
+worker has loaded the enabled rules and is reporting the expected active rule
+count, effective hash, latest rule event, and load status.
+
+Choose `record_clip` as the default rule action when the incident must be
+reviewable. The rule action does not choose storage by itself; the camera's
+recording policy and evidence storage profile decide whether clip and optional
+snapshot artifacts are written locally, to edge local storage, central
+MinIO/S3-compatible storage, cloud S3-compatible storage, or local-first storage.
+
+After a rule fires, Intelligence -> Evidence should show the trigger rule
+summary with the incident type, severity, action, cooldown, rule hash, scene
+contract hash, and detection context. Prompt-To-Policy may later draft rule
+changes, but operators must approve and apply those changes explicitly; prompt
+workflows are not allowed to auto-apply production rules.
 
 ### Inference Runtime Overrides
 

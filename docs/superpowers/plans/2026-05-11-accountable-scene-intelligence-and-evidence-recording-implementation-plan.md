@@ -59,15 +59,17 @@ Completed and pushed on `codex/omnisight-ui-spec-implementation`:
 - Task `14`: optional still snapshot evidence artifacts.
 - Tasks `15-16`: runtime passport snapshots, incident attachment, incident API,
   and Operations/Evidence UI surfacing.
+- Tasks `16A-16E`: per-worker incident rule data contract/API, worker runtime
+  consumption, Control -> Scenes rule builder, Evidence/Operations provenance,
+  and band documentation/validation.
 
-Current migration head after the Task 16 checkpoint is
-`0016_runtime_passports`. The next planned migration in this plan is
-`0017_detection_rule_incident_metadata.py`.
+Current migration head after the Task 16E checkpoint is
+`0018_incident_rule_ledger`.
 
 Next task:
 
 ```text
-Task 16A: Incident Rule Data Contract, Service, And API
+Task 17: Operational Memory
 ```
 
 ## Validation Bands
@@ -236,6 +238,8 @@ worker logs.
 ### Pre-Band 6: Per-Worker Incident Rules
 
 Tasks: `16A-16E`
+
+Status: completed and pushed.
 
 Validation goal:
 
@@ -407,11 +411,11 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/migrations/versions/0015_snapshot_ledger_actions.py` | created | snapshot evidence ledger actions |
 | `backend/src/argus/migrations/versions/0016_runtime_passports.py` | created | runtime passport table and incident attachment columns |
 | `backend/src/argus/migrations/versions/0017_detection_rule_incident_metadata.py` | create | detection rule incident metadata, deterministic rule hashes, and indexes |
-| `backend/src/argus/migrations/versions/0018_operational_memory_patterns.py` | create | operational memory pattern table |
-| `backend/src/argus/migrations/versions/0019_policy_drafts.py` | create | prompt-to-policy draft table |
-| `backend/src/argus/migrations/versions/0020_cross_camera_threads.py` | create | identity-light cross-camera thread table |
-| `backend/src/argus/migrations/versions/0021_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
-| `backend/src/argus/migrations/versions/0022_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/migrations/versions/0019_operational_memory_patterns.py` | create | operational memory pattern table |
+| `backend/src/argus/migrations/versions/0020_policy_drafts.py` | create | prompt-to-policy draft table |
+| `backend/src/argus/migrations/versions/0021_cross_camera_threads.py` | create | identity-light cross-camera thread table |
+| `backend/src/argus/migrations/versions/0022_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
+| `backend/src/argus/migrations/versions/0023_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
 | `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
 | `backend/src/argus/services/incident_rules.py` | create | per-camera incident rule CRUD, validation, hashing, and command publication |
 | `backend/src/argus/services/rule_events.py` | create | persistent rule event store for workers |
@@ -2955,7 +2959,7 @@ operations mode until supervisors land.
 
 ```bash
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest \
   tests/services/test_runtime_configuration.py \
@@ -3058,7 +3062,7 @@ environment-specific URLs in the browser.
 
 ```bash
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest \
   tests/services/test_camera_worker_config.py \
@@ -3525,7 +3529,7 @@ adding decorative cards inside cards.
 
 ```bash
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest tests/api/test_prompt9_routes.py tests/api/test_operations_endpoints.py -q
 cd /Users/yann.moren/vision
@@ -3836,7 +3840,7 @@ Cover:
 
 ```bash
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/components/cameras/IncidentRulesPanel.test.tsx \
   src/pages/Cameras.test.tsx
@@ -3880,7 +3884,7 @@ validation feedback from the API instead of blocking the route client-side.
 
 ```bash
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/components/cameras/IncidentRulesPanel.test.tsx \
   src/pages/Cameras.test.tsx
@@ -3949,7 +3953,7 @@ python3 -m uv run pytest \
   tests/services/test_evidence_ledger.py \
   -q
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/components/evidence/IncidentRuleSummary.test.tsx \
   src/components/operations/SceneIntelligenceMatrix.test.tsx \
@@ -3998,7 +4002,7 @@ python3 -m uv run pytest \
   tests/services/test_evidence_ledger.py \
   -q
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/components/evidence/IncidentRuleSummary.test.tsx \
   src/components/operations/SceneIntelligenceMatrix.test.tsx \
@@ -4043,7 +4047,7 @@ git push origin codex/omnisight-ui-spec-implementation
 - Modify: `docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md`
 - Modify: `docs/superpowers/status/2026-05-12-next-chat-accountable-scene-task14-handoff.md`
 
-- [ ] **Step 1: Update operator docs**
+- [x] **Step 1: Update operator docs**
 
 Document:
 
@@ -4056,7 +4060,7 @@ Document:
 - edge/local-first deployments remain reviewable when recording is enabled
 - Prompt-To-Policy may propose rule changes later, but rules are not auto-applied
 
-- [ ] **Step 2: Run full targeted backend validation for the band**
+- [x] **Step 2: Run full targeted backend validation for the band**
 
 ```bash
 cd /Users/yann.moren/vision/backend
@@ -4077,13 +4081,15 @@ python3 -m uv run pytest \
 python3 -m uv run ruff check src tests
 ```
 
-Expected: pass, or record exact unrelated pre-existing failures in the handoff.
+Result on 2026-05-12: passed. `alembic upgrade head` passed; the targeted
+backend band suite reported `140 passed, 46 warnings`; `ruff check src tests`
+passed.
 
-- [ ] **Step 3: Run full targeted frontend validation for the band**
+- [x] **Step 3: Run full targeted frontend validation for the band**
 
 ```bash
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/components/cameras/IncidentRulesPanel.test.tsx \
   src/components/evidence/IncidentRuleSummary.test.tsx \
@@ -4094,14 +4100,15 @@ corepack pnpm --dir frontend exec vitest run \
 corepack pnpm --dir frontend exec tsc -b
 ```
 
-Expected: pass.
+Result on 2026-05-12: passed. `generate:api` passed, the targeted Vitest band
+reported `6 passed` files and `26 passed` tests, and `tsc -b` passed.
 
-- [ ] **Step 4: Refresh handoff**
+- [x] **Step 4: Refresh handoff**
 
 Update the handoff so the next chat starts with Task 17 only after Task 16A-16E
 are implemented, validated, committed, and pushed.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 ```bash
 git add docs/runbook.md \
@@ -4118,7 +4125,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0018_operational_memory_patterns.py`
+- Create: `backend/src/argus/migrations/versions/0019_operational_memory_patterns.py`
 - Create: `backend/src/argus/services/operational_memory.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
@@ -4164,7 +4171,7 @@ Avoid predictive wording; use "observed pattern" language.
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest tests/services/test_operational_memory.py tests/api/test_operations_endpoints.py -q
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/components/evidence/OperationalMemoryPanel.test.tsx \
   src/pages/Incidents.test.tsx \
@@ -4177,7 +4184,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0018_operational_memory_patterns.py \
+  backend/src/argus/migrations/versions/0019_operational_memory_patterns.py \
   backend/src/argus/services/operational_memory.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
@@ -4200,7 +4207,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0019_policy_drafts.py`
+- Create: `backend/src/argus/migrations/versions/0020_policy_drafts.py`
 - Create: `backend/src/argus/services/policy_drafts.py`
 - Modify: `backend/src/argus/services/llm_provider_runtime.py`
 - Create: `backend/src/argus/api/v1/policy_drafts.py`
@@ -4251,7 +4258,7 @@ Use explicit Approve and Reject actions. Do not auto-apply prompt output.
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest tests/services/test_policy_drafts.py tests/api/test_policy_draft_routes.py -q
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run src/components/policy/PolicyDraftReview.test.tsx
 ```
 
@@ -4262,7 +4269,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0019_policy_drafts.py \
+  backend/src/argus/migrations/versions/0020_policy_drafts.py \
   backend/src/argus/services/policy_drafts.py \
   backend/src/argus/services/llm_provider_runtime.py \
   backend/src/argus/api/v1/policy_drafts.py \
@@ -4281,7 +4288,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0020_cross_camera_threads.py`
+- Create: `backend/src/argus/migrations/versions/0021_cross_camera_threads.py`
 - Create: `backend/src/argus/services/cross_camera_threads.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/incidents.py`
@@ -4327,7 +4334,7 @@ privacy labels. Never label a thread as a person identity.
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest tests/services/test_cross_camera_threads.py tests/api/test_prompt9_routes.py -q
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/components/evidence/CrossCameraThreadPanel.test.tsx \
   src/pages/Incidents.test.tsx
@@ -4339,7 +4346,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0020_cross_camera_threads.py \
+  backend/src/argus/migrations/versions/0021_cross_camera_threads.py \
   backend/src/argus/services/cross_camera_threads.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/incidents.py \
@@ -4360,7 +4367,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0021_supervisor_operations.py`
+- Create: `backend/src/argus/migrations/versions/0022_supervisor_operations.py`
 - Create: `backend/src/argus/services/supervisor_operations.py`
 - Modify: `backend/src/argus/services/runtime_configuration.py`
 - Modify: `backend/src/argus/api/contracts.py`
@@ -4423,7 +4430,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0021_supervisor_operations.py \
+  backend/src/argus/migrations/versions/0022_supervisor_operations.py \
   backend/src/argus/services/supervisor_operations.py \
   backend/src/argus/services/runtime_configuration.py \
   backend/src/argus/api/contracts.py \
@@ -4482,7 +4489,7 @@ resolved operations profile.
 
 ```bash
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run \
   src/hooks/use-operations.test.ts \
   src/components/operations/SupervisorLifecycleControls.test.tsx \
@@ -4552,7 +4559,7 @@ rotation sequence and local lab limitations.
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest tests/services/test_supervisor_operations.py tests/api/test_operations_endpoints.py -q
 cd /Users/yann.moren/vision
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run src/pages/Settings.test.tsx
 git diff --check -- docs/operator-deployment-playbook.md docs/runbook.md
 ```
@@ -4582,7 +4589,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0022_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/migrations/versions/0023_runtime_artifact_soak_runs.py`
 - Create: `backend/src/argus/services/runtime_soak.py`
 - Create: `backend/src/argus/api/v1/runtime_soak.py`
 - Modify: `backend/src/argus/main.py`
@@ -4647,7 +4654,7 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0022_runtime_artifact_soak_runs.py \
+  backend/src/argus/migrations/versions/0023_runtime_artifact_soak_runs.py \
   backend/src/argus/services/runtime_soak.py \
   backend/src/argus/api/v1/runtime_soak.py \
   backend/src/argus/main.py \
