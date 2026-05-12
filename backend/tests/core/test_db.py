@@ -326,3 +326,19 @@ def test_local_first_sync_migration_exists_with_short_revision_id() -> None:
     assert "evidence.upload.started" in migration_text
     assert "evidence.upload.available" in migration_text
     assert "evidence.upload.failed" in migration_text
+
+
+def test_evidence_expiry_migration_revision_id_fits_alembic_version_column() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = (
+        repo_root
+        / "src/argus/migrations/versions/0014_evidence_expiry_ledger_action.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    revision_id = "0014_evidence_expiry_action"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
+    assert 'down_revision = "0013_local_first_sync_state"' in migration_text
+    assert "evidence.expired" in migration_text
