@@ -71,6 +71,62 @@ def test_scene_contract_hash_changes_when_runtime_vocabulary_changes() -> None:
     assert hash_contract(base) != hash_contract(changed)
 
 
+def test_scene_contract_hash_changes_when_incident_rule_hash_changes() -> None:
+    base = build_scene_contract(
+        tenant_id="tenant-a",
+        site_id="site-a",
+        camera_id="camera-a",
+        camera_name="Gate A",
+        camera_source={"kind": "rtsp", "uri": "rtsp://camera.local/live"},
+        deployment_mode="central",
+        model={"id": "model-a", "format": "onnx", "capability": "fixed_vocab"},
+        runtime_vocabulary={"terms": ["person"], "version": 1, "hash": "a" * 64},
+        runtime_selection={"backend": "onnxruntime", "fallback_reason": None},
+        vision_profile={"preset": "industrial-yard"},
+        detection_regions=[],
+        candidate_quality={"min_confidence": 0.25},
+        recording_policy=EvidenceRecordingPolicy(),
+        privacy_manifest_hash="b" * 64,
+        incident_rules=[
+            {
+                "id": "rule-a",
+                "name": "Restricted person",
+                "incident_type": "restricted_person",
+                "severity": "critical",
+                "rule_hash": "c" * 64,
+            }
+        ],
+    )
+    changed = build_scene_contract(
+        tenant_id="tenant-a",
+        site_id="site-a",
+        camera_id="camera-a",
+        camera_name="Gate A",
+        camera_source={"kind": "rtsp", "uri": "rtsp://camera.local/live"},
+        deployment_mode="central",
+        model={"id": "model-a", "format": "onnx", "capability": "fixed_vocab"},
+        runtime_vocabulary={"terms": ["person"], "version": 1, "hash": "a" * 64},
+        runtime_selection={"backend": "onnxruntime", "fallback_reason": None},
+        vision_profile={"preset": "industrial-yard"},
+        detection_regions=[],
+        candidate_quality={"min_confidence": 0.25},
+        recording_policy=EvidenceRecordingPolicy(),
+        privacy_manifest_hash="b" * 64,
+        incident_rules=[
+            {
+                "id": "rule-a",
+                "name": "Restricted person",
+                "incident_type": "restricted_person",
+                "severity": "critical",
+                "rule_hash": "d" * 64,
+            }
+        ],
+    )
+
+    assert base["incident_rules"][0]["rule_hash"] == "c" * 64
+    assert hash_contract(base) != hash_contract(changed)
+
+
 class _Result:
     def __init__(self, values: list[SceneContractSnapshot]) -> None:
         self.values = values

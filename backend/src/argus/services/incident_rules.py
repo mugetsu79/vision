@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from collections.abc import Iterable
 from typing import Any, Protocol
@@ -12,6 +13,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
+    CameraCommandPayload,
     IncidentRuleCreate,
     IncidentRulePredicate,
     IncidentRuleResponse,
@@ -19,6 +21,8 @@ from argus.api.contracts import (
     IncidentRuleValidationRequest,
     IncidentRuleValidationResponse,
     TenantContext,
+    WorkerIncidentRule,
+    WorkerIncidentRulePredicate,
 )
 from argus.models.tables import Camera, DetectionRule, Site
 
@@ -41,6 +45,7 @@ _BLOCKED_ATTRIBUTE_KEYS = {
     "license_plate_plaintext",
     "person_id",
 }
+logger = logging.getLogger(__name__)
 
 
 class AuditLogger(Protocol):
@@ -52,6 +57,10 @@ class AuditLogger(Protocol):
         target: str,
         meta: dict[str, Any] | None = None,
     ) -> None: ...
+
+
+class CameraCommandPublisher(Protocol):
+    async def publish(self, subject: str, payload: CameraCommandPayload) -> object: ...
 
 
 def normalize_incident_type(value: str) -> str:
@@ -138,9 +147,11 @@ class IncidentRuleService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         audit_logger: AuditLogger,
+        events: CameraCommandPublisher | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.audit_logger = audit_logger
+        self.events = events
 
     async def list_rules(
         self,
@@ -210,6 +221,7 @@ class IncidentRuleService:
             target=f"incident_rule:{rule.id}",
             meta=_audit_meta(_rule_to_response(rule)),
         )
+        await self._publish_camera_rule_command(camera_id)
         return _rule_to_response(rule)
 
     async def update_rule(
@@ -251,6 +263,7 @@ class IncidentRuleService:
             target=f"incident_rule:{rule.id}",
             meta=_audit_meta(_rule_to_response(rule)),
         )
+        await self._publish_camera_rule_command(camera_id)
         return _rule_to_response(rule)
 
     async def delete_rule(
@@ -271,6 +284,7 @@ class IncidentRuleService:
             target=f"incident_rule:{rule_id}",
             meta=_audit_meta(response),
         )
+        await self._publish_camera_rule_command(camera_id)
 
     async def validate_rule(
         self,
@@ -349,6 +363,31 @@ class IncidentRuleService:
                 status_code=HTTP_422_UNPROCESSABLE,
                 detail="Incident rule name or incident type already exists for this camera.",
             )
+
+    async def _publish_camera_rule_command(self, camera_id: UUID) -> None:
+        if self.events is None:
+            return
+        async with self.session_factory() as session:
+            statement = (
+                select(DetectionRule)
+                .where(
+                    DetectionRule.camera_id == camera_id,
+                    DetectionRule.enabled.is_(True),
+                )
+                .order_by(DetectionRule.incident_type, DetectionRule.name, DetectionRule.id)
+            )
+            rules = (await session.execute(statement)).scalars().all()
+        command = CameraCommandPayload(
+            incident_rules=[
+                _rule_to_worker_rule(rule)
+                for rule in rules
+                if rule.enabled
+            ],
+        )
+        try:
+            await self.events.publish(f"cmd.camera.{camera_id}", command)
+        except Exception:
+            logger.exception("Failed to publish incident rule command for camera %s", camera_id)
 
 
 def _normalized_create_payload(payload: IncidentRuleCreate) -> IncidentRuleCreate:
@@ -496,6 +535,22 @@ def _rule_to_response(rule: DetectionRule) -> IncidentRuleResponse:
         rule_hash=rule.rule_hash,
         created_at=rule.created_at,
         updated_at=rule.updated_at,
+    )
+
+
+def _rule_to_worker_rule(rule: DetectionRule) -> WorkerIncidentRule:
+    return WorkerIncidentRule(
+        id=rule.id,
+        camera_id=rule.camera_id,
+        enabled=rule.enabled,
+        name=rule.name,
+        incident_type=rule.incident_type,
+        severity=rule.severity,
+        predicate=WorkerIncidentRulePredicate.model_validate(rule.predicate),
+        action=rule.action,
+        cooldown_seconds=rule.cooldown_seconds,
+        webhook_url=rule.webhook_url,
+        rule_hash=rule.rule_hash,
     )
 
 

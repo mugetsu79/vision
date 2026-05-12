@@ -23,7 +23,9 @@ from argus.api.contracts import (
     DetectionRegion,
     EvidenceRecordingPolicy,
     SceneVisionProfile,
+    TriggerRuleSummary,
     WorkerEvidenceStorageSettings,
+    WorkerIncidentRule,
     WorkerPrivacyPolicySettings,
     WorkerRuntimeSelectionSettings,
 )
@@ -72,6 +74,7 @@ from argus.services.incident_capture import (
     IncidentTriggeredEvent,
     SQLIncidentRepository,
 )
+from argus.services.rule_events import SQLRuleEventStore
 from argus.streaming.mediamtx import (
     MediaMTXClient,
     PrivacyPolicy,
@@ -93,6 +96,7 @@ from argus.vision.detector_factory import build_detector as _build_detector
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
 from argus.vision.profiles import resolve_scene_vision_profile
+from argus.vision.rules import RuleDefinition, RuleEngine
 from argus.vision.runtime import (
     RuntimeExecutionPolicy,
     import_onnxruntime,
@@ -278,6 +282,7 @@ class EngineConfig(BaseModel):
     )
     runtime_artifacts: list[RuntimeArtifactSettings] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
+    incident_rules: list[WorkerIncidentRule] = Field(default_factory=list)
     zones: list[dict[str, Any]] = Field(default_factory=list)
     vision_profile: SceneVisionProfile = Field(default_factory=SceneVisionProfile)
     detection_regions: list[DetectionRegion] = Field(default_factory=list)
@@ -293,6 +298,7 @@ class CameraCommand(BaseModel):
     privacy: PrivacyPolicy | None = None
     stream: StreamSettings | None = None
     attribute_rules: list[dict[str, Any]] | None = None
+    incident_rules: list[WorkerIncidentRule] | None = None
     zones: list[dict[str, Any]] | None = None
     vision_profile: SceneVisionProfile | None = None
     detection_regions: list[DetectionRegion] | None = None
@@ -628,6 +634,7 @@ class _EngineState:
     tracker_type: TrackerType
     privacy: PrivacyPolicy
     attribute_rules: list[dict[str, Any]]
+    incident_rules: list[WorkerIncidentRule]
     zones: list[dict[str, Any]]
     vision_profile: SceneVisionProfile
     detection_regions: list[DetectionRegion]
@@ -790,6 +797,7 @@ class InferenceEngine:
             tracker_type=config.tracker.tracker_type,
             privacy=config.privacy,
             attribute_rules=list(config.attribute_rules),
+            incident_rules=list(config.incident_rules),
             zones=list(config.zones),
             vision_profile=vision_profile,
             detection_regions=list(config.detection_regions),
@@ -1185,6 +1193,12 @@ class InferenceEngine:
             )
         if command.attribute_rules is not None:
             self._state.attribute_rules = list(command.attribute_rules)
+        if command.incident_rules is not None:
+            self._state.incident_rules = list(command.incident_rules)
+            self.config.incident_rules = list(command.incident_rules)
+            replace_rules = getattr(self.rule_engine, "replace_rules", None)
+            if callable(replace_rules):
+                replace_rules(_rule_definitions_from_worker_rules(command.incident_rules))
         if command.zones is not None:
             self._state.zones = list(command.zones)
             self._count_event_processor = self._build_count_event_processor()
@@ -1472,17 +1486,32 @@ class InferenceEngine:
         incidents: list[IncidentTriggeredEvent] = []
         for event in events:
             action = getattr(event, "action", None)
-            if action is None or action is RuleAction.COUNT:
+            if action is None:
+                continue
+            action_value = action.value if hasattr(action, "value") else str(action)
+            if action is RuleAction.COUNT or action_value == RuleAction.COUNT.value:
                 continue
             ts = getattr(event, "ts", datetime.now(tz=UTC))
+            incident_type = getattr(event, "incident_type", None) or action_value
+            trigger_rule = TriggerRuleSummary(
+                id=event.rule_id,
+                name=getattr(event, "name", "rule-triggered"),
+                incident_type=incident_type,
+                severity=getattr(event, "severity", "warning") or "warning",
+                action=RuleAction(action_value),
+                cooldown_seconds=int(getattr(event, "cooldown_seconds", 0) or 0),
+                predicate=getattr(event, "predicate", {}) or {},
+                rule_hash=getattr(event, "rule_hash", None),
+            )
             incidents.append(
                 IncidentTriggeredEvent(
                     camera_id=self.config.camera_id,
                     ts=ts,
-                    type=f"rule.{action.value}",
+                    type=f"rule.{incident_type}",
                     payload={
-                        "name": getattr(event, "name", "rule-triggered"),
-                        "action": action.value,
+                        "name": trigger_rule.name,
+                        "action": action_value,
+                        "trigger_rule": trigger_rule.model_dump(mode="json"),
                         "detection": getattr(event, "detection", {}),
                     },
                 )
@@ -1649,6 +1678,7 @@ async def build_runtime_engine(
     tracking_store: TrackingStore | None = None,
     count_event_store: CountEventStoreProtocol | None = None,
     rule_engine: RuleEvaluator | None = None,
+    rule_event_store: object | None = None,
     incident_capture: IncidentClipCaptureService | None = None,
 ) -> InferenceEngine:
     token_issuer = MediaMTXTokenIssuer.from_settings(settings)
@@ -1829,6 +1859,11 @@ async def build_runtime_engine(
         max_queue_size=settings.telemetry_publish_queue_size,
         shutdown_timeout_seconds=settings.telemetry_publish_shutdown_timeout_seconds,
     )
+    resolved_rule_engine = rule_engine or RuleEngine(
+        rules=_rule_definitions_from_worker_rules(config.incident_rules),
+        publisher=events_client,
+        store=rule_event_store or _NoopRuleEventStore(),
+    )
 
     engine = InferenceEngine(
         config=config,
@@ -1846,7 +1881,7 @@ async def build_runtime_engine(
             ),
         ),
         count_event_store=count_event_store or _NoopCountEventStore(),
-        rule_engine=rule_engine or _NoopRuleEngine(),
+        rule_engine=resolved_rule_engine,
         event_client=events_client,
         stream_client=stream_client,
         initial_registration=registration,
@@ -1881,6 +1916,7 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         events_client=events_client,
         tracking_store=TrackingEventStore(db_manager.session_factory),
         count_event_store=CountEventStore(db_manager.session_factory),
+        rule_event_store=SQLRuleEventStore(db_manager.session_factory),
         incident_capture=IncidentClipCaptureService(
             object_store=build_evidence_store(resolved_settings),
             storage_resolver=ResolvedEvidenceStorageResolver(
@@ -1916,6 +1952,31 @@ def _build_homography(config: dict[str, Any] | None) -> Homography | None:
         dst_points=dst_points,
         ref_distance_m=float(ref_distance_m),
     )
+
+
+def _rule_definitions_from_worker_rules(
+    rules: list[WorkerIncidentRule],
+) -> list[RuleDefinition]:
+    definitions: list[RuleDefinition] = []
+    for rule in rules:
+        zone_ids = list(rule.predicate.zone_ids)
+        definitions.append(
+            RuleDefinition(
+                id=rule.id,
+                camera_id=rule.camera_id,
+                name=rule.name,
+                enabled=rule.enabled,
+                incident_type=rule.incident_type,
+                severity=rule.severity.value,
+                predicate=rule.predicate.model_dump(mode="python"),
+                action=rule.action,
+                cooldown_seconds=rule.cooldown_seconds,
+                zone_id=zone_ids[0] if len(zone_ids) == 1 else None,
+                webhook_url=rule.webhook_url,
+                rule_hash=rule.rule_hash,
+            )
+        )
+    return definitions
 
 
 def _annotation_color_for_track(track: LifecycleTrack) -> tuple[int, int, int]:
@@ -2055,6 +2116,11 @@ class _NoopRuleEngine:
         ts: datetime,
     ) -> list[object]:
         return []
+
+
+class _NoopRuleEventStore:
+    async def record(self, event: BaseModel) -> None:
+        return None
 
 
 def main(argv: list[str] | None = None) -> int:

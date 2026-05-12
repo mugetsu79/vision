@@ -52,6 +52,26 @@ async def test_load_engine_config_sends_bearer_token_when_configured() -> None:
                 },
                 "active_classes": ["bus"],
                 "attribute_rules": [],
+                "incident_rules": [
+                    {
+                        "id": str(uuid4()),
+                        "camera_id": str(camera_id),
+                        "enabled": True,
+                        "name": "Restricted person",
+                        "incident_type": "restricted_person",
+                        "severity": "critical",
+                        "predicate": {
+                            "class_names": ["person"],
+                            "zone_ids": ["restricted"],
+                            "min_confidence": 0.7,
+                            "attributes": {"hi_vis": False},
+                        },
+                        "action": "record_clip",
+                        "cooldown_seconds": 60,
+                        "webhook_url": None,
+                        "rule_hash": "c" * 64,
+                    }
+                ],
                 "zones": [],
                 "homography": None,
             },
@@ -72,6 +92,8 @@ async def test_load_engine_config_sends_bearer_token_when_configured() -> None:
 
     assert config.camera_id == camera_id
     assert seen_authorization == ["Bearer worker-token"]
+    assert config.incident_rules[0].incident_type == "restricted_person"
+    assert config.incident_rules[0].rule_hash == "c" * 64
 
 
 @pytest.mark.asyncio

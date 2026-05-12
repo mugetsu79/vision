@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from argus.models.enums import RuleAction
 from argus.vision.types import Detection
@@ -27,9 +27,13 @@ class RuleDefinition:
     name: str
     predicate: dict[str, Any]
     action: RuleAction
+    enabled: bool = True
+    incident_type: str | None = None
+    severity: str = "warning"
     cooldown_seconds: int = 0
     zone_id: str | None = None
     webhook_url: str | None = None
+    rule_hash: str | None = None
 
 
 class RuleEventRecord(BaseModel):
@@ -39,6 +43,11 @@ class RuleEventRecord(BaseModel):
     camera_id: UUID
     action: RuleAction
     name: str
+    incident_type: str | None = None
+    severity: str | None = None
+    cooldown_seconds: int = 0
+    predicate: dict[str, Any] = Field(default_factory=dict)
+    rule_hash: str | None = None
     ts: datetime
     detection: dict[str, Any]
 
@@ -54,9 +63,15 @@ class RuleEngine:
         self.publisher = publisher
         self.store = store
         self._rules_by_camera: dict[UUID, list[RuleDefinition]] = defaultdict(list)
-        for rule in rules:
-            self._rules_by_camera[rule.camera_id].append(rule)
         self._last_triggered: dict[UUID, datetime] = {}
+        self.replace_rules(rules)
+
+    def replace_rules(self, rules: list[RuleDefinition]) -> None:
+        self._rules_by_camera.clear()
+        self._last_triggered.clear()
+        for rule in rules:
+            if rule.enabled:
+                self._rules_by_camera[rule.camera_id].append(rule)
 
     async def evaluate(
         self,
@@ -67,6 +82,8 @@ class RuleEngine:
     ) -> list[RuleEventRecord]:
         events: list[RuleEventRecord] = []
         for rule in self._rules_by_camera.get(camera_id, []):
+            if not rule.enabled:
+                continue
             if self._is_on_cooldown(rule, ts):
                 continue
 
@@ -79,6 +96,11 @@ class RuleEngine:
                     camera_id=camera_id,
                     action=rule.action,
                     name=rule.name,
+                    incident_type=rule.incident_type,
+                    severity=rule.severity,
+                    cooldown_seconds=rule.cooldown_seconds,
+                    predicate=dict(rule.predicate),
+                    rule_hash=rule.rule_hash,
                     ts=ts,
                     detection={
                         "class_name": detection.class_name,
@@ -108,11 +130,11 @@ class RuleEngine:
 
 def _matches_rule(rule: RuleDefinition, detection: Detection) -> bool:
     class_names = rule.predicate.get("class_names")
-    if class_names is not None and detection.class_name not in class_names:
+    if class_names and detection.class_name not in class_names:
         return False
 
     zone_ids = rule.predicate.get("zone_ids")
-    if zone_ids is not None and detection.zone_id not in zone_ids:
+    if zone_ids and detection.zone_id not in zone_ids:
         return False
 
     if rule.zone_id is not None and detection.zone_id != rule.zone_id:

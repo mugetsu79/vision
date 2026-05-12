@@ -89,6 +89,8 @@ from argus.api.contracts import (
     WorkerConfigResponse,
     WorkerDesiredState,
     WorkerEvidenceStorageSettings,
+    WorkerIncidentRule,
+    WorkerIncidentRulePredicate,
     WorkerModelSettings,
     WorkerPrivacyPolicySettings,
     WorkerPrivacySettings,
@@ -133,6 +135,7 @@ from argus.models.tables import (
     AuditLog,
     Camera,
     CameraVocabularySnapshot,
+    DetectionRule,
     EdgeNode,
     EvidenceArtifact,
     EvidenceLedgerEntry,
@@ -620,6 +623,10 @@ class CameraService:
                 camera=camera,
                 model=primary_model,
             )
+            incident_rules = await _load_enabled_incident_rules(
+                session=session,
+                camera_id=camera.id,
+            )
             tenant = await session.get(Tenant, tenant_context.tenant_id)
 
         rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
@@ -673,6 +680,7 @@ class CameraService:
             stream_delivery=stream_delivery,
             runtime_selection=runtime_selection,
             privacy_policy=privacy_policy,
+            incident_rules=incident_rules,
         )
         privacy_manifest = build_privacy_manifest(
             tenant_id=tenant_context.tenant_id,
@@ -714,6 +722,10 @@ class CameraService:
             recording_policy=recording_policy,
             privacy_manifest_hash=privacy_snapshot.manifest_hash,
             privacy_policy=_privacy_policy_contract_payload(base_config.privacy_policy),
+            incident_rules=[
+                _incident_rule_contract_payload(rule)
+                for rule in base_config.incident_rules
+            ],
         )
         contract_snapshot = await SceneContractService(
             self.session_factory
@@ -1227,6 +1239,11 @@ class CameraService:
         if self.events is None:
             return
         runtime_vocabulary = _runtime_vocabulary_state_from_camera(camera)
+        async with self.session_factory() as session:
+            incident_rules = await _load_enabled_incident_rules(
+                session=session,
+                camera_id=camera.id,
+            )
         command = CameraCommandPayload(
             active_classes=list(camera.active_classes),
             runtime_vocabulary=runtime_vocabulary.terms,
@@ -1242,6 +1259,10 @@ class CameraService:
                 fps_cap=int(camera.fps_cap or 25),
             ),
             attribute_rules=list(camera.attribute_rules),
+            incident_rules=[
+                _incident_rule_to_worker_rule(rule)
+                for rule in incident_rules
+            ],
             zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
             vision_profile=SceneVisionProfile.model_validate(camera.vision_profile or {}),
             detection_regions=[
@@ -3488,7 +3509,7 @@ def build_app_services(
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
         scene_contracts=SceneContractService(db.session_factory),
-        incident_rules=IncidentRuleService(db.session_factory, audit_logger),
+        incident_rules=IncidentRuleService(db.session_factory, audit_logger, events),
         configuration=configuration_service,
         local_first_sync=LocalFirstEvidenceSyncService(
             settings=settings,
@@ -3711,6 +3732,23 @@ async def _load_worker_runtime_artifacts(
             runtime_vocabulary_hash=runtime_vocabulary_hash,
         )
     ]
+
+
+async def _load_enabled_incident_rules(
+    *,
+    session: AsyncSession,
+    camera_id: UUID,
+) -> list[DetectionRule]:
+    statement = (
+        select(DetectionRule)
+        .where(
+            DetectionRule.camera_id == camera_id,
+            DetectionRule.enabled.is_(True),
+        )
+        .order_by(DetectionRule.incident_type, DetectionRule.name, DetectionRule.id)
+    )
+    rules = (await session.execute(statement)).scalars().all()
+    return [rule for rule in rules if rule.enabled]
 
 
 async def _get_site(
@@ -4170,6 +4208,7 @@ def _camera_to_worker_config(
     privacy_manifest_hash: str | None = None,
     runtime_passport_snapshot_id: UUID | None = None,
     runtime_passport_hash: str | None = None,
+    incident_rules: list[DetectionRule] | None = None,
 ) -> WorkerConfigResponse:
     resolved_recording_policy = recording_policy or _recording_policy_from_camera(camera)
     privacy = PrivacySettings.model_validate(camera.privacy)
@@ -4263,6 +4302,13 @@ def _camera_to_worker_config(
             for artifact in (runtime_artifacts or [])
         ],
         attribute_rules=list(camera.attribute_rules),
+        incident_rules=[
+            _incident_rule_to_worker_rule(rule)
+            for rule in sorted(
+                (rule for rule in (incident_rules or []) if rule.enabled),
+                key=lambda rule: (rule.incident_type, rule.name, str(rule.id)),
+            )
+        ],
         zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
         vision_profile=vision_profile,
         detection_regions=detection_regions,
@@ -4550,6 +4596,35 @@ def _privacy_policy_contract_payload(
         "storage_quota_bytes": privacy_policy.storage_quota_bytes,
         "plaintext_plate_storage": privacy_policy.plaintext_plate_storage,
         "residency": privacy_policy.residency,
+    }
+
+
+def _incident_rule_to_worker_rule(rule: DetectionRule) -> WorkerIncidentRule:
+    return WorkerIncidentRule(
+        id=rule.id,
+        camera_id=rule.camera_id,
+        enabled=rule.enabled,
+        name=rule.name,
+        incident_type=rule.incident_type,
+        severity=rule.severity,
+        predicate=WorkerIncidentRulePredicate.model_validate(rule.predicate or {}),
+        action=rule.action,
+        cooldown_seconds=rule.cooldown_seconds,
+        webhook_url=rule.webhook_url,
+        rule_hash=rule.rule_hash,
+    )
+
+
+def _incident_rule_contract_payload(rule: WorkerIncidentRule) -> dict[str, object]:
+    return {
+        "id": str(rule.id),
+        "name": rule.name,
+        "incident_type": rule.incident_type,
+        "severity": rule.severity.value,
+        "action": rule.action.value,
+        "cooldown_seconds": rule.cooldown_seconds,
+        "predicate": rule.predicate.model_dump(mode="json"),
+        "rule_hash": rule.rule_hash,
     }
 
 

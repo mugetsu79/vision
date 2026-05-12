@@ -364,6 +364,14 @@ class _RecordingRuleEngine:
         return []
 
 
+class _ReloadableRuleEngine(_FakeRuleEngine):
+    def __init__(self) -> None:
+        self.reloaded_rules: list[list[object]] = []
+
+    def replace_rules(self, rules: list[object]) -> None:
+        self.reloaded_rules.append(list(rules))
+
+
 class _FakeEventClient:
     def __init__(self) -> None:
         self.handlers: dict[str, object] = {}
@@ -455,6 +463,11 @@ class _RuleIncidentEngine:
                 camera_id=camera_id,
                 action=RuleAction.ALERT,
                 name="wrong-way",
+                incident_type="restricted_person",
+                severity="critical",
+                rule_hash="e" * 64,
+                cooldown_seconds=30,
+                predicate={"class_names": ["car"]},
                 ts=ts,
                 detection={
                     "class_name": "car",
@@ -706,6 +719,47 @@ async def test_engine_applies_profile_and_detection_regions_command() -> None:
 
     assert engine.config.homography is None
     assert engine.homography is None
+
+
+@pytest.mark.asyncio
+async def test_engine_hot_reloads_incident_rules_from_command() -> None:
+    camera_id = uuid4()
+    rule_engine = _ReloadableRuleEngine()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=rule_engine,
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.apply_command(
+        CameraCommand(
+            incident_rules=[
+                {
+                    "id": str(uuid4()),
+                    "camera_id": str(camera_id),
+                    "enabled": True,
+                    "name": "Restricted person",
+                    "incident_type": "restricted_person",
+                    "severity": "critical",
+                    "predicate": {"class_names": ["person"]},
+                    "action": "record_clip",
+                    "cooldown_seconds": 60,
+                    "webhook_url": None,
+                    "rule_hash": "f" * 64,
+                }
+            ]
+        )
+    )
+
+    assert len(rule_engine.reloaded_rules) == 1
+    assert rule_engine.reloaded_rules[0][0].incident_type == "restricted_person"
+    assert engine.config.incident_rules[0].rule_hash == "f" * 64
 
 
 @pytest.mark.asyncio
@@ -2000,7 +2054,10 @@ async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> 
     subject, payload = event_client.published[0]
     assert subject == f"incident.triggered.{camera_id}"
     assert isinstance(payload, IncidentTriggeredEvent)
-    assert payload.type == "rule.alert"
+    assert payload.type == "rule.restricted_person"
+    assert payload.payload["trigger_rule"]["name"] == "wrong-way"
+    assert payload.payload["trigger_rule"]["severity"] == "critical"
+    assert payload.payload["trigger_rule"]["rule_hash"] == "e" * 64
 
 
 @pytest.mark.asyncio

@@ -19,9 +19,11 @@ from argus.core.security import encrypt_rtsp_url
 from argus.models.enums import (
     CameraSourceKind,
     DetectorCapability,
+    IncidentRuleSeverity,
     ModelFormat,
     ModelTask,
     ProcessingMode,
+    RuleAction,
     RuntimeArtifactKind,
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
@@ -31,6 +33,7 @@ from argus.models.enums import (
 )
 from argus.models.tables import (
     Camera,
+    DetectionRule,
     Model,
     ModelRuntimeArtifact,
     PrivacyManifestSnapshot,
@@ -113,6 +116,38 @@ def _camera(**overrides):
     return Camera(**values)
 
 
+def _detection_rule(
+    camera_id,
+    *,
+    enabled: bool = True,
+    incident_type: str = "restricted_person",
+    rule_hash: str = "c" * 64,
+) -> DetectionRule:
+    now = datetime.now(tz=UTC)
+    return DetectionRule(
+        id=uuid4(),
+        camera_id=camera_id,
+        enabled=enabled,
+        name="Restricted person",
+        incident_type=incident_type,
+        severity=IncidentRuleSeverity.CRITICAL,
+        description="Person in restricted zone",
+        zone_id="restricted",
+        predicate={
+            "class_names": ["person"],
+            "zone_ids": ["restricted"],
+            "min_confidence": 0.7,
+            "attributes": {"hi_vis": False},
+        },
+        action=RuleAction.RECORD_CLIP,
+        webhook_url="https://hooks.example.local/secret",
+        cooldown_seconds=60,
+        rule_hash=rule_hash,
+        created_at=now,
+        updated_at=now,
+    )
+
+
 class _Result:
     def __init__(self, values: list[object]) -> None:
         self.values = values
@@ -185,6 +220,10 @@ class _WorkerConfigSession:
                     if passport_hash is None or snapshot.passport_hash == passport_hash
                 ]
             )
+        if "detection_rules" in str(statement):
+            rules = self.state["detection_rules"]
+            assert isinstance(rules, list)
+            return _Result(rules)
         camera = self.state["camera"]
         return _Result([camera])
 
@@ -227,6 +266,7 @@ class _WorkerConfigSessionFactory:
         models: dict[object, Model],
         artifacts: list[ModelRuntimeArtifact],
         tenant: Tenant | None = None,
+        detection_rules: list[DetectionRule] | None = None,
     ) -> None:
         self.state: dict[str, object] = {
             "camera": camera,
@@ -236,6 +276,7 @@ class _WorkerConfigSessionFactory:
             "scene_contract_snapshots": [],
             "runtime_passport_snapshots": [],
             "tenant": tenant,
+            "detection_rules": detection_rules or [],
         }
 
     def __call__(self) -> _WorkerConfigSession:
@@ -583,6 +624,47 @@ async def test_worker_config_includes_accountable_scene_hashes_and_recording_pol
     assert len(config.scene_contract_hash) == 64
     assert config.privacy_manifest_hash is not None
     assert len(config.privacy_manifest_hash) == 64
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_enabled_incident_rules_only() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        zones=[{"id": "restricted", "type": "polygon", "polygon": [[0, 0], [1, 0], [1, 1]]}],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    enabled_rule = _detection_rule(camera.id, enabled=True, rule_hash="d" * 64)
+    disabled_rule = _detection_rule(
+        camera.id,
+        enabled=False,
+        incident_type="disabled_rule",
+        rule_hash="e" * 64,
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+            detection_rules=[enabled_rule, disabled_rule],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert [rule.id for rule in config.incident_rules] == [enabled_rule.id]
+    worker_rule = config.incident_rules[0]
+    assert worker_rule.incident_type == "restricted_person"
+    assert worker_rule.severity == "critical"
+    assert worker_rule.predicate.class_names == ["person"]
+    assert worker_rule.predicate.zone_ids == ["restricted"]
+    assert worker_rule.predicate.attributes == {"hi_vis": False}
+    assert worker_rule.webhook_url == "https://hooks.example.local/secret"
+    assert worker_rule.rule_hash == "d" * 64
 
 
 @pytest.mark.asyncio
