@@ -30,12 +30,12 @@ from argus.models.enums import (
     OperatorConfigValidationStatus,
     ProcessingMode,
     QueryResolutionMode,
+    RuleAction,
     RuntimeArtifactKind,
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
     RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
-    RuleAction,
     TrackerType,
 )
 
@@ -1203,6 +1203,9 @@ class WorkerRuntimeStatus(StrEnum):
     NOT_REPORTED = "not_reported"
 
 
+RuleLoadStatus = Literal["loaded", "stale", "unknown", "not_configured"]
+
+
 class FleetSummary(BaseModel):
     desired_workers: int
     running_workers: int
@@ -1244,6 +1247,13 @@ class RuntimePassportSummary(BaseModel):
     provider_versions: dict[str, Any] = Field(default_factory=dict)
 
 
+class FleetRuleRuntimeSummary(BaseModel):
+    configured_rule_count: int = Field(default=0, ge=0)
+    effective_rule_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    latest_rule_event_at: datetime | None = None
+    load_status: RuleLoadStatus = "not_configured"
+
+
 class FleetCameraWorkerSummary(BaseModel):
     camera_id: UUID
     camera_name: str
@@ -1257,6 +1267,7 @@ class FleetCameraWorkerSummary(BaseModel):
     dev_run_command: str | None = None
     detail: str | None = None
     runtime_passport: RuntimePassportSummary | None = None
+    rule_runtime: FleetRuleRuntimeSummary = Field(default_factory=FleetRuleRuntimeSummary)
 
 
 class FleetDeliveryDiagnostic(BaseModel):
@@ -1460,6 +1471,7 @@ class IncidentResponse(BaseModel):
     runtime_passport_hash: str | None = None
     runtime_passport_id: UUID | None = None
     runtime_passport: RuntimePassportSummary | None = None
+    trigger_rule: TriggerRuleSummary | None = None
     recording_policy: EvidenceRecordingPolicy | None = None
     evidence_artifacts: list[EvidenceArtifactResponse] = Field(default_factory=list)
     ledger_summary: EvidenceLedgerSummary | None = None

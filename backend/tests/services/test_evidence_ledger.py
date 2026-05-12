@@ -24,6 +24,7 @@ def test_evidence_enums_expose_accountability_values() -> None:
     assert EvidenceStorageProvider.LOCAL_FILESYSTEM.value == "local_filesystem"
     assert EvidenceStorageScope.EDGE.value == "edge"
     assert EvidenceLedgerAction.INCIDENT_TRIGGERED.value == "incident.triggered"
+    assert EvidenceLedgerAction.INCIDENT_RULE_ATTACHED.value == "incident_rule.attached"
 
 
 @pytest.mark.asyncio

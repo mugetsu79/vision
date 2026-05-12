@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import hashlib
 import io
+import json
 import logging
 import math
 import secrets
@@ -53,6 +55,7 @@ from argus.api.contracts import (
     FleetNodeStatus,
     FleetNodeSummary,
     FleetOverviewResponse,
+    FleetRuleRuntimeSummary,
     FleetSummary,
     FrameSize,
     HistoryBucketCoverage,
@@ -85,6 +88,7 @@ from argus.api.contracts import (
     StreamOfferResponse,
     TelemetryEnvelope,
     TenantContext,
+    TriggerRuleSummary,
     WorkerCameraSettings,
     WorkerConfigResponse,
     WorkerDesiredState,
@@ -146,6 +150,7 @@ from argus.models.tables import (
     OperatorConfigBinding,
     OperatorConfigProfile,
     PrivacyManifestSnapshot,
+    RuleEvent,
     RuntimePassportSnapshot,
     SceneContractSnapshot,
     Site,
@@ -1421,9 +1426,18 @@ class OperationsService:
                     .order_by(Camera.name)
                 )
             ).all()
+            camera_ids = [camera.id for camera, _site in camera_rows]
             runtime_passports_by_camera = await _load_latest_runtime_passports_by_camera_ids(
                 session,
-                [camera.id for camera, _site in camera_rows],
+                camera_ids,
+            )
+            incident_rules_by_camera = await _load_enabled_incident_rules_by_camera_ids(
+                session,
+                camera_ids,
+            )
+            latest_rule_events_by_camera = await _load_latest_rule_events_by_camera_ids(
+                session,
+                camera_ids,
             )
 
         edge_by_id = {edge.id: edge for edge, _site in edge_rows}
@@ -1491,11 +1505,13 @@ class OperationsService:
                     detail=detail,
                     runtime_passport=(
                         _runtime_passport_summary(runtime_passport)
-                        if (
-                            runtime_passport := runtime_passports_by_camera.get(camera.id)
-                        )
+                        if (runtime_passport := runtime_passports_by_camera.get(camera.id))
                         is not None
                         else None
+                    ),
+                    rule_runtime=_fleet_rule_runtime_summary(
+                        incident_rules_by_camera.get(camera.id, []),
+                        latest_rule_events_by_camera.get(camera.id),
                     ),
                 )
             )
@@ -2870,6 +2886,7 @@ def _incident_response(
             if runtime_passport_snapshot is not None
             else None
         ),
+        trigger_rule=_trigger_rule_from_payload(incident.payload),
         recording_policy=(
             EvidenceRecordingPolicy.model_validate(incident.recording_policy)
             if incident.recording_policy is not None
@@ -2888,6 +2905,16 @@ def _incident_response(
         ],
         ledger_summary=ledger_summary,
     )
+
+
+def _trigger_rule_from_payload(payload: dict[str, object] | None) -> TriggerRuleSummary | None:
+    trigger_rule = (payload or {}).get("trigger_rule")
+    if not isinstance(trigger_rule, dict):
+        return None
+    try:
+        return TriggerRuleSummary.model_validate(trigger_rule)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 async def _load_runtime_passports_by_incident_ids(
@@ -2925,6 +2952,108 @@ async def _load_latest_runtime_passports_by_camera_ids(
     for snapshot in (await session.execute(statement)).scalars().all():
         snapshots_by_camera.setdefault(snapshot.camera_id, snapshot)
     return snapshots_by_camera
+
+
+async def _load_enabled_incident_rules_by_camera_ids(
+    session: AsyncSession,
+    camera_ids: list[UUID],
+) -> dict[UUID, list[DetectionRule]]:
+    if not camera_ids:
+        return {}
+    statement = (
+        select(DetectionRule)
+        .where(
+            DetectionRule.camera_id.in_(camera_ids),
+            DetectionRule.enabled.is_(True),
+        )
+        .order_by(
+            DetectionRule.camera_id,
+            DetectionRule.incident_type,
+            DetectionRule.name,
+        )
+    )
+    rules_by_camera: dict[UUID, list[DetectionRule]] = {
+        camera_id: [] for camera_id in camera_ids
+    }
+    for rule in (await session.execute(statement)).scalars().all():
+        rules_by_camera.setdefault(rule.camera_id, []).append(rule)
+    return rules_by_camera
+
+
+async def _load_latest_rule_events_by_camera_ids(
+    session: AsyncSession,
+    camera_ids: list[UUID],
+) -> dict[UUID, RuleEvent]:
+    if not camera_ids:
+        return {}
+    statement = (
+        select(RuleEvent)
+        .where(RuleEvent.camera_id.in_(camera_ids))
+        .order_by(RuleEvent.camera_id, RuleEvent.ts.desc())
+    )
+    events_by_camera: dict[UUID, RuleEvent] = {}
+    for event in (await session.execute(statement)).scalars().all():
+        events_by_camera.setdefault(event.camera_id, event)
+    return events_by_camera
+
+
+def _fleet_rule_runtime_summary(
+    rules: list[DetectionRule],
+    latest_event: RuleEvent | None,
+) -> FleetRuleRuntimeSummary:
+    effective_hash = _effective_incident_rule_hash(rules)
+    return FleetRuleRuntimeSummary(
+        configured_rule_count=len(rules),
+        effective_rule_hash=effective_hash,
+        latest_rule_event_at=latest_event.ts if latest_event is not None else None,
+        load_status=_fleet_rule_load_status(rules, latest_event),
+    )
+
+
+def _effective_incident_rule_hash(rules: list[DetectionRule]) -> str | None:
+    if not rules:
+        return None
+    ordered_hashes = [
+        rule.rule_hash
+        for rule in sorted(
+            rules,
+            key=lambda rule: (rule.incident_type, rule.name, str(rule.id)),
+        )
+    ]
+    if len(ordered_hashes) == 1:
+        return ordered_hashes[0]
+    encoded = json.dumps(ordered_hashes, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _fleet_rule_load_status(
+    rules: list[DetectionRule],
+    latest_event: RuleEvent | None,
+) -> Literal["loaded", "stale", "unknown", "not_configured"]:
+    if not rules:
+        return "not_configured"
+    if latest_event is None:
+        return "unknown"
+    latest_rule_hash = _rule_hash_from_rule_event(latest_event)
+    if latest_rule_hash is None:
+        return "unknown"
+    active_hashes = {rule.rule_hash for rule in rules}
+    return "loaded" if latest_rule_hash in active_hashes else "stale"
+
+
+def _rule_hash_from_rule_event(event: RuleEvent) -> str | None:
+    payload = event.event_payload or {}
+    direct_hash = payload.get("rule_hash")
+    if isinstance(direct_hash, str):
+        return direct_hash
+    trigger_rule = payload.get("trigger_rule")
+    if isinstance(trigger_rule, dict):
+        nested_hash = trigger_rule.get("rule_hash")
+        if isinstance(nested_hash, str):
+            return nested_hash
+    return None
 
 
 async def _load_artifacts_by_incident_ids(

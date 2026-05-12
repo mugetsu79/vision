@@ -8,8 +8,14 @@ import pytest
 from argus.api.contracts import FleetBootstrapRequest, TenantContext
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
-from argus.models.enums import ProcessingMode, RoleEnum, TrackerType
-from argus.models.tables import Camera, EdgeNode, Site
+from argus.models.enums import (
+    IncidentRuleSeverity,
+    ProcessingMode,
+    RoleEnum,
+    RuleAction,
+    TrackerType,
+)
+from argus.models.tables import Camera, DetectionRule, EdgeNode, RuleEvent, Site
 from argus.services.app import OperationsService
 
 
@@ -19,6 +25,9 @@ class _FakeResult:
 
     def all(self) -> list[object]:
         return self._rows
+
+    def scalars(self) -> _FakeResult:
+        return self
 
 
 class _FakeSession:
@@ -99,7 +108,7 @@ async def test_fleet_overview_derives_manual_central_worker() -> None:
         frame_skip=1,
         fps_cap=25,
     )
-    session_factory = _FakeSessionFactory([], [(camera, site)])
+    session_factory = _FakeSessionFactory([], [(camera, site)], [], [], [])
     service = OperationsService(session_factory=session_factory, settings=Settings(_env_file=None))
     response = await service.get_fleet_overview(_tenant_context(tenant_id))
 
@@ -115,6 +124,70 @@ async def test_fleet_overview_derives_manual_central_worker() -> None:
     assert 'ARGUS_API_BEARER_TOKEN="$TOKEN"' in dev_run_command
     assert "argus.inference.engine --camera-id" in dev_run_command
     assert response.delivery_diagnostics[0].source_capability is not None
+
+
+@pytest.mark.asyncio
+async def test_fleet_overview_reports_incident_rule_runtime_truth() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    camera = Camera(
+        id=uuid4(),
+        site_id=site.id,
+        edge_node_id=None,
+        name="Server Room",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={},
+        source_capability=None,
+        frame_skip=1,
+        fps_cap=25,
+    )
+    rule = DetectionRule(
+        id=uuid4(),
+        camera_id=camera.id,
+        enabled=True,
+        name="Restricted person",
+        incident_type="restricted_person",
+        severity=IncidentRuleSeverity.CRITICAL,
+        description=None,
+        zone_id=None,
+        predicate={"class_names": ["person"], "zone_ids": ["server-room"]},
+        action=RuleAction.RECORD_CLIP,
+        webhook_url=None,
+        cooldown_seconds=45,
+        rule_hash="f" * 64,
+    )
+    rule_event = RuleEvent(
+        id=uuid4(),
+        ts=datetime(2026, 5, 12, 9, 30, tzinfo=UTC),
+        camera_id=camera.id,
+        rule_id=rule.id,
+        event_payload={"rule_hash": "f" * 64},
+        snapshot_url=None,
+    )
+    session_factory = _FakeSessionFactory(
+        [],
+        [(camera, site)],
+        [],
+        [rule],
+        [rule_event],
+    )
+    service = OperationsService(session_factory=session_factory, settings=Settings(_env_file=None))
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    assert response.camera_workers[0].rule_runtime.configured_rule_count == 1
+    assert response.camera_workers[0].rule_runtime.effective_rule_hash == "f" * 64
+    assert response.camera_workers[0].rule_runtime.latest_rule_event_at == rule_event.ts
+    assert response.camera_workers[0].rule_runtime.load_status == "loaded"
 
 
 @pytest.mark.asyncio
@@ -149,7 +222,7 @@ async def test_fleet_overview_maps_edge_heartbeat_status() -> None:
         frame_skip=1,
         fps_cap=25,
     )
-    session_factory = _FakeSessionFactory([(edge, site)], [(camera, site)])
+    session_factory = _FakeSessionFactory([(edge, site)], [(camera, site)], [], [], [])
     service = OperationsService(session_factory=session_factory, settings=Settings(_env_file=None))
     response = await service.get_fleet_overview(_tenant_context(tenant_id))
     edge_node = next(node for node in response.nodes if node.hostname == "jetson-1")

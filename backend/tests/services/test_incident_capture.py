@@ -345,6 +345,75 @@ async def test_incident_capture_leaves_snapshot_nullable_when_disabled() -> None
 
 
 @pytest.mark.asyncio
+async def test_incident_capture_writes_trigger_rule_ledger_payload() -> None:
+    camera_id = uuid4()
+    rule_id = uuid4()
+    service = IncidentClipCaptureService(
+        object_store=_FakeObjectStore(),
+        repository=_FakeIncidentRepository(
+            policy=IncidentTenantPolicy(
+                tenant_id=uuid4(),
+                allow_plaintext_plates=True,
+                plaintext_justification="policy",
+                storage_quota_bytes=10_000,
+                current_storage_bytes=0,
+            )
+        ),
+        clip_encoder=_FakeClipEncoder(encoded_bytes=b"rule-clip"),
+        pre_seconds=1,
+        post_seconds=1,
+        fps=2,
+    )
+
+    frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    triggered_at = datetime(2026, 5, 12, 13, 0, tzinfo=UTC)
+    await service.record_frame(camera_id=camera_id, frame=frame, ts=triggered_at)
+    await service.queue_incident(
+        IncidentTriggeredEvent(
+            camera_id=camera_id,
+            ts=triggered_at,
+            type="rule.restricted_person",
+            payload={
+                "detection": {
+                    "class_name": "person",
+                    "zone_id": "server-room",
+                    "confidence": 0.91,
+                },
+                "trigger_rule": {
+                    "id": str(rule_id),
+                    "name": "Restricted person in server room",
+                    "incident_type": "restricted_person",
+                    "severity": "critical",
+                    "action": "record_clip",
+                    "cooldown_seconds": 45,
+                    "predicate": {
+                        "class_names": ["person"],
+                        "zone_ids": ["server-room"],
+                        "min_confidence": 0.82,
+                        "attributes": {"vest": "red"},
+                    },
+                    "rule_hash": "f" * 64,
+                },
+            },
+        )
+    )
+    await service.flush(camera_id=camera_id)
+
+    incidents = service.repository.incidents  # type: ignore[attr-defined]
+    rule_entry = incidents[0]["ledger_payloads"][0]
+
+    assert rule_entry.action is EvidenceLedgerAction.INCIDENT_RULE_ATTACHED
+    assert rule_entry.occurred_at == triggered_at
+    assert rule_entry.payload["rule_hash"] == "f" * 64
+    assert rule_entry.payload["incident_type"] == "restricted_person"
+    assert rule_entry.payload["action"] == "record_clip"
+    assert rule_entry.payload["severity"] == "critical"
+    assert rule_entry.payload["detection"]["class_name"] == "person"
+    assert rule_entry.payload["detection"]["zone_id"] == "server-room"
+    assert rule_entry.payload["detection"]["confidence"] == 0.91
+
+
+@pytest.mark.asyncio
 async def test_incident_capture_writes_snapshot_quota_ledger_without_breaking_clip() -> None:
     camera_id = uuid4()
     service = IncidentClipCaptureService(
@@ -442,9 +511,7 @@ async def test_incident_capture_writes_snapshot_failure_ledger_without_breaking_
     assert [artifact["kind"] for artifact in incidents[0]["artifact_payloads"]] == [
         EvidenceArtifactKind.EVENT_CLIP
     ]
-    assert "RuntimeError: jpeg encoder failed" in incidents[0]["payload"][
-        "snapshot_capture_error"
-    ]
+    assert "RuntimeError: jpeg encoder failed" in incidents[0]["payload"]["snapshot_capture_error"]
     assert ledger_entry.action is EvidenceLedgerAction.SNAPSHOT_CAPTURE_FAILED
     assert ledger_entry.payload["artifact_kind"] == "snapshot"
     assert "RuntimeError: jpeg encoder failed" in ledger_entry.payload["error"]
@@ -599,9 +666,9 @@ async def test_incident_capture_respects_disabled_recording_policy() -> None:
     assert incidents[0]["storage_bytes"] == 0
     assert incidents[0]["artifact_payload"] is None
     assert incidents[0]["payload"]["recording_disabled"] is True
-    assert incidents[0]["recording_policy"] == EvidenceRecordingPolicy(
-        enabled=False
-    ).model_dump(mode="json")
+    assert incidents[0]["recording_policy"] == EvidenceRecordingPolicy(enabled=False).model_dump(
+        mode="json"
+    )
 
 
 @pytest.mark.asyncio
@@ -890,8 +957,9 @@ async def test_incident_capture_persists_incident_when_storage_resolution_fails(
 
     assert incidents[0]["clip_url"] is None
     assert incidents[0]["storage_bytes"] == 0
-    assert "ValueError: recording policy does not match profile residency" in (
-        incidents[0]["payload"]["evidence_storage_error"]
+    assert (
+        "ValueError: recording policy does not match profile residency"
+        in (incidents[0]["payload"]["evidence_storage_error"])
     )
     assert artifact["status"] is EvidenceArtifactStatus.CAPTURE_FAILED
     assert artifact["storage_provider"] is EvidenceStorageProvider.S3_COMPATIBLE

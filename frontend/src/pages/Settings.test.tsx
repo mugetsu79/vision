@@ -72,6 +72,13 @@ const fleetOverview = {
           "9999999999999999999999999999999999999999999999999999999999999999",
         provider_versions: { tensorrt: "10.0.0" },
       },
+      rule_runtime: {
+        configured_rule_count: 2,
+        effective_rule_hash:
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        latest_rule_event_at: "2026-05-12T09:30:00Z",
+        load_status: "loaded",
+      },
     },
     {
       camera_id: "00000000-0000-0000-0000-000000000102",
@@ -85,6 +92,12 @@ const fleetOverview = {
       lifecycle_owner: "edge_supervisor",
       dev_run_command: null,
       detail: "Edge supervisor owns this worker process.",
+      rule_runtime: {
+        configured_rule_count: 0,
+        effective_rule_hash: null,
+        latest_rule_event_at: null,
+        load_status: "not_configured",
+      },
     },
   ],
   delivery_diagnostics: [
@@ -149,7 +162,16 @@ vi.mock("@/hooks/use-cameras", () => ({
         tracker_type: "bytetrack",
         active_classes: ["person"],
         attribute_rules: [],
-        zones: [{ id: "entry-line", type: "line", points: [[0, 0], [1, 1]] }],
+        zones: [
+          {
+            id: "entry-line",
+            type: "line",
+            points: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+        ],
         homography: { src: [], dst: [], ref_distance_m: 1 },
         privacy: {
           blur_faces: true,
@@ -308,11 +330,26 @@ vi.mock("@/hooks/use-configuration", () => ({
     ],
     isLoading: false,
   }),
-  useCreateConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useUpdateConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useDeleteConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useTestConfigurationProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useUpsertConfigurationBinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateConfigurationProfile: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useUpdateConfigurationProfile: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeleteConfigurationProfile: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useTestConfigurationProfile: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useUpsertConfigurationBinding: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
   useResolvedConfiguration: () => ({ data: null, isLoading: false }),
 }));
 
@@ -351,6 +388,10 @@ describe("SettingsPage operations workbench", () => {
     expect(
       within(sceneMatrix).getByText(/scene intelligence matrix/i),
     ).toBeInTheDocument();
+    expect(
+      within(sceneMatrix).getByText(/2 active rules/i),
+    ).toBeInTheDocument();
+    expect(within(sceneMatrix).getByText(/ffffffffffff/i)).toBeInTheDocument();
     expect(screen.getByTestId("edge-fleet-grid")).toBeInTheDocument();
     expect(screen.getByTestId("worker-rail")).toBeInTheDocument();
     expect(screen.getByTestId("stream-diagnostics-rail")).toBeInTheDocument();
@@ -366,9 +407,9 @@ describe("SettingsPage operations workbench", () => {
     expect(screen.getByText(/manual dev mode/i)).toBeInTheDocument();
     expect(screen.getAllByText(/planned workers/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/direct streams unavailable/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/direct stream unavailable/i).length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getAllByText(/direct stream unavailable/i).length,
+    ).toBeGreaterThan(0);
     expect(
       within(sceneMatrix).getByRole("link", {
         name: /inspect delivery for lobby/i,
@@ -408,6 +449,19 @@ describe("SettingsPage operations workbench", () => {
     expect(
       within(screen.getByTestId("worker-rail")).getByText("Jetson runtime"),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getAllByText(/^rules$/i).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(/2 active/i),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getAllByText(/ffffffffffff/i)
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(/loaded/i),
+    ).toBeInTheDocument();
     const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
     expect(
       within(diagnosticsRail).getByText(/direct stream unavailable:/i),
@@ -415,7 +469,9 @@ describe("SettingsPage operations workbench", () => {
     expect(
       within(diagnosticsRail).getByText(/privacy filtering required/i),
     ).toBeInTheDocument();
-    expect(within(diagnosticsRail).getByText(/1280 x 720/i)).toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).getByText(/1280 x 720/i),
+    ).toBeInTheDocument();
   });
 
   test("shows model runtime artifact status", () => {

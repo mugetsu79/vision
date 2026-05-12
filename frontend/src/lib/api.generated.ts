@@ -1271,7 +1271,7 @@ export interface components {
          * EvidenceLedgerAction
          * @enum {string}
          */
-        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.snapshot.available" | "evidence.snapshot.quota_exceeded" | "evidence.snapshot.capture_failed" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "evidence.expired" | "incident.reviewed" | "incident.reopened";
+        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.snapshot.available" | "evidence.snapshot.quota_exceeded" | "evidence.snapshot.capture_failed" | "incident_rule.attached" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "evidence.expired" | "incident.reviewed" | "incident.reopened";
         /** EvidenceLedgerEntryResponse */
         EvidenceLedgerEntryResponse: {
             /**
@@ -1461,6 +1461,7 @@ export interface components {
             /** Detail */
             detail?: string | null;
             runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
+            rule_runtime?: components["schemas"]["FleetRuleRuntimeSummary"];
         };
         /** FleetDeliveryDiagnostic */
         FleetDeliveryDiagnostic: {
@@ -1537,6 +1538,24 @@ export interface components {
             camera_workers: components["schemas"]["FleetCameraWorkerSummary"][];
             /** Delivery Diagnostics */
             delivery_diagnostics: components["schemas"]["FleetDeliveryDiagnostic"][];
+        };
+        /** FleetRuleRuntimeSummary */
+        FleetRuleRuntimeSummary: {
+            /**
+             * Configured Rule Count
+             * @default 0
+             */
+            configured_rule_count: number;
+            /** Effective Rule Hash */
+            effective_rule_hash?: string | null;
+            /** Latest Rule Event At */
+            latest_rule_event_at?: string | null;
+            /**
+             * Load Status
+             * @default not_configured
+             * @enum {string}
+             */
+            load_status: "loaded" | "stale" | "unknown" | "not_configured";
         };
         /** FleetSummary */
         FleetSummary: {
@@ -1757,6 +1776,7 @@ export interface components {
             /** Runtime Passport Id */
             runtime_passport_id?: string | null;
             runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
+            trigger_rule?: components["schemas"]["TriggerRuleSummary"] | null;
             recording_policy?: components["schemas"]["EvidenceRecordingPolicy"] | null;
             /** Evidence Artifacts */
             evidence_artifacts?: components["schemas"]["EvidenceArtifactResponse"][];
@@ -2928,6 +2948,29 @@ export interface components {
          * @enum {string}
          */
         TrackerType: "botsort" | "bytetrack" | "ocsort";
+        /** TriggerRuleSummary */
+        TriggerRuleSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Incident Type */
+            incident_type: string;
+            /** @default warning */
+            severity: components["schemas"]["IncidentRuleSeverity"];
+            action: components["schemas"]["RuleAction"];
+            /**
+             * Cooldown Seconds
+             * @default 0
+             */
+            cooldown_seconds: number;
+            predicate?: components["schemas"]["WorkerIncidentRulePredicate"];
+            /** Rule Hash */
+            rule_hash?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */

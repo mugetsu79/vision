@@ -273,6 +273,7 @@ class IncidentClipCaptureService:
         recording_policy_payload = (
             recording_policy.model_dump(mode="json") if recording_policy is not None else None
         )
+        ledger_payloads = _incident_rule_ledger_payloads(pending.event)
         if recording_policy is not None and not recording_policy.enabled:
             payload["recording_disabled"] = True
             await self.repository.create_incident(
@@ -292,7 +293,7 @@ class IncidentClipCaptureService:
                 snapshot_url=None,
                 artifact_payload=None,
                 artifact_payloads=[],
-                ledger_payloads=[],
+                ledger_payloads=ledger_payloads,
             )
             return
 
@@ -303,7 +304,6 @@ class IncidentClipCaptureService:
         snapshot_url: str | None = None
         storage_bytes = 0
         artifact_payloads: list[dict[str, object]] = []
-        ledger_payloads: list[IncidentLedgerPayload] = []
 
         if clip_size > 0 and policy.current_storage_bytes + clip_size <= policy.storage_quota_bytes:
             key = (
@@ -749,6 +749,38 @@ def _snapshot_ledger_payload(
             **payload,
         },
     )
+
+
+def _incident_rule_ledger_payloads(event: IncidentTriggeredEvent) -> list[IncidentLedgerPayload]:
+    trigger_rule = event.payload.get("trigger_rule")
+    if not isinstance(trigger_rule, dict):
+        return []
+    detection = event.payload.get("detection")
+    payload = {
+        "rule_id": trigger_rule.get("id"),
+        "name": trigger_rule.get("name"),
+        "incident_type": trigger_rule.get("incident_type"),
+        "severity": trigger_rule.get("severity"),
+        "action": trigger_rule.get("action"),
+        "cooldown_seconds": trigger_rule.get("cooldown_seconds"),
+        "predicate": trigger_rule.get("predicate"),
+        "rule_hash": trigger_rule.get("rule_hash"),
+        "scene_contract_hash": event.scene_contract_hash,
+        "privacy_manifest_hash": event.privacy_manifest_hash,
+    }
+    if isinstance(detection, dict):
+        payload["detection"] = {
+            key: detection[key]
+            for key in ("class_name", "zone_id", "confidence", "track_id")
+            if key in detection
+        }
+    return [
+        IncidentLedgerPayload(
+            action=EvidenceLedgerAction.INCIDENT_RULE_ATTACHED,
+            occurred_at=event.ts,
+            payload=payload,
+        )
+    ]
 
 
 def _select_snapshot_frame(

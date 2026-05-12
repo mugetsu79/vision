@@ -38,13 +38,18 @@ import { deriveSceneReadinessRows } from "@/lib/operational-health";
 type FleetSourceCapability = NonNullable<
   FleetOverview["delivery_diagnostics"][number]["source_capability"]
 >;
+type FleetRuleRuntime = NonNullable<
+  FleetOverview["camera_workers"][number]["rule_runtime"]
+>;
 
 export function SettingsPage() {
   const fleet = useFleetOverview();
   const { data: cameras = [] } = useCameras();
   const { data: sites = [] } = useSites();
   const { data: models = [] } = useModels();
-  const runtimeArtifacts = useRuntimeArtifactsByModelId(models.map((model) => model.id));
+  const runtimeArtifacts = useRuntimeArtifactsByModelId(
+    models.map((model) => model.id),
+  );
   const bootstrap = useCreateBootstrapMaterial();
   const [hostname, setHostname] = useState("");
   const [version, setVersion] = useState("0.1.0");
@@ -190,7 +195,8 @@ export function SettingsPage() {
                     </StatusToneBadge>
                   </div>
                   <p className="mt-2 text-sm text-[#93a7c5]">
-                    {artifacts.length} {artifacts.length === 1 ? "artifact" : "artifacts"}
+                    {artifacts.length}{" "}
+                    {artifacts.length === 1 ? "artifact" : "artifacts"}
                     {summary.detail ? ` - ${summary.detail}` : ""}
                   </p>
                 </div>
@@ -321,7 +327,9 @@ export function SettingsPage() {
                     {formatCameraSource(camera)}
                   </p>
                   <p>
-                    <span className="font-semibold text-[#d8e2f2]">Recording</span>{" "}
+                    <span className="font-semibold text-[#d8e2f2]">
+                      Recording
+                    </span>{" "}
                     {formatRecordingPolicy(camera)}
                   </p>
                 </div>
@@ -329,6 +337,7 @@ export function SettingsPage() {
                   summary={worker.runtime_passport}
                   compact
                 />
+                <RuleRuntimePanel summary={worker.rule_runtime} />
                 {worker.detail ? (
                   <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
                 ) : null}
@@ -380,6 +389,53 @@ export function SettingsPage() {
   );
 }
 
+function RuleRuntimePanel({ summary }: { summary?: FleetRuleRuntime | null }) {
+  const configuredCount = summary?.configured_rule_count ?? 0;
+  const status = summary?.load_status ?? "not_configured";
+
+  return (
+    <section aria-label="Rules" className="mt-3 border-t border-white/8 pt-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
+            Rules
+          </h4>
+          <p className="mt-1 text-sm font-semibold text-[#eef4ff]">
+            {configuredCount}{" "}
+            {configuredCount === 1 ? "active rule" : "active rules"}
+          </p>
+        </div>
+        <StatusToneBadge tone={ruleStatusTone(status)}>
+          {status}
+        </StatusToneBadge>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+        <RuntimeFact
+          label="Rule hash"
+          value={shortHash(summary?.effective_rule_hash)}
+        />
+        <RuntimeFact
+          label="Latest event"
+          value={formatRuleEventTime(summary?.latest_rule_event_at)}
+        />
+      </dl>
+    </section>
+  );
+}
+
+function RuntimeFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7894bd]">
+        {label}
+      </dt>
+      <dd className="mt-1 truncate text-[#d8e2f2]" title={value}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 function SummaryTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-[0.75rem] border border-white/10 bg-black/25 px-4 py-3">
@@ -403,10 +459,7 @@ function Panel({
   const Surface = testId?.endsWith("-rail") ? InstrumentRail : WorkspaceSurface;
 
   return (
-    <Surface
-      data-testid={testId}
-      className="p-4"
-    >
+    <Surface data-testid={testId} className="p-4">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#f4f8ff]">
         {icon}
         <h2>{title}</h2>
@@ -495,9 +548,36 @@ function statusTone(
   return "muted";
 }
 
-function summarizeModelRuntimeArtifacts(
-  artifacts: RuntimeArtifact[],
-): {
+function ruleStatusTone(
+  status: FleetRuleRuntime["load_status"] | "not_configured",
+): "healthy" | "attention" | "danger" | "muted" {
+  if (status === "loaded") {
+    return "healthy";
+  }
+  if (status === "stale") {
+    return "attention";
+  }
+  return "muted";
+}
+
+function shortHash(value: string | null | undefined) {
+  return value ? value.slice(0, 12) : "Not available";
+}
+
+function formatRuleEventTime(timestamp: string | null | undefined) {
+  if (!timestamp) {
+    return "No event";
+  }
+  return new Date(timestamp).toLocaleString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function summarizeModelRuntimeArtifacts(artifacts: RuntimeArtifact[]): {
   label: string;
   detail: string;
   tone: "healthy" | "attention" | "danger" | "muted" | "accent";

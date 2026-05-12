@@ -20,6 +20,7 @@ from argus.api.contracts import (
     RuntimePassportSummary,
     SceneContractSnapshotResponse,
     TenantContext,
+    TriggerRuleSummary,
 )
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, get_current_user
@@ -207,8 +208,12 @@ class RecordingIncidentService:
                 id=self.incident_id,
                 camera_id=camera_id or uuid4(),
                 ts=datetime.now(tz=UTC),
-                type=incident_type or "ppe-missing",
-                payload={"severity": "high"},
+                type=incident_type or "rule.restricted_person",
+                payload={
+                    "severity": "high",
+                    "trigger_rule": _trigger_rule_summary().model_dump(mode="json"),
+                },
+                trigger_rule=_trigger_rule_summary(),
                 snapshot_url="https://minio.local/signed/incidents/1.jpg",
                 clip_url="https://minio.local/signed/incidents/1.mjpeg",
                 storage_bytes=2_097_152,
@@ -421,6 +426,24 @@ def _runtime_passport_summary(passport_id: UUID) -> RuntimePassportSummary:
     )
 
 
+def _trigger_rule_summary() -> TriggerRuleSummary:
+    return TriggerRuleSummary(
+        id=UUID("99999999-9999-9999-9999-999999999111"),
+        name="Restricted person in server room",
+        incident_type="restricted_person",
+        severity="critical",
+        action="record_clip",
+        cooldown_seconds=45,
+        predicate={
+            "class_names": ["person"],
+            "zone_ids": ["server-room"],
+            "min_confidence": 0.82,
+            "attributes": {"vest": "red"},
+        },
+        rule_hash="f" * 64,
+    )
+
+
 def _create_test_app(
     *,
     user: AuthenticatedUser,
@@ -615,6 +638,21 @@ async def test_incidents_route_passes_camera_type_limit_and_review_status_filter
     assert response.json()[0]["runtime_passport_hash"] == "e" * 64
     assert response.json()[0]["runtime_passport"]["selected_backend"] == "tensorrt_engine"
     assert response.json()[0]["runtime_passport"]["model_hash"] == "f" * 64
+    assert response.json()[0]["trigger_rule"] == {
+        "id": "99999999-9999-9999-9999-999999999111",
+        "name": "Restricted person in server room",
+        "incident_type": "restricted_person",
+        "severity": "critical",
+        "action": "record_clip",
+        "cooldown_seconds": 45,
+        "predicate": {
+            "class_names": ["person"],
+            "zone_ids": ["server-room"],
+            "min_confidence": 0.82,
+            "attributes": {"vest": "red"},
+        },
+        "rule_hash": "f" * 64,
+    }
     assert response.json()[0]["recording_policy"]["storage_profile"] == "edge_local"
     assert response.json()[0]["evidence_artifacts"][0] == {
         "id": str(incidents.artifact_id),
@@ -668,12 +706,8 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
         follow_redirects=False,
     ) as client:
         scene_response = await client.get(f"/api/v1/incidents/{incident_id}/scene-contract")
-        privacy_response = await client.get(
-            f"/api/v1/incidents/{incident_id}/privacy-manifest"
-        )
-        runtime_response = await client.get(
-            f"/api/v1/incidents/{incident_id}/runtime-passport"
-        )
+        privacy_response = await client.get(f"/api/v1/incidents/{incident_id}/privacy-manifest")
+        runtime_response = await client.get(f"/api/v1/incidents/{incident_id}/runtime-passport")
         ledger_response = await client.get(f"/api/v1/incidents/{incident_id}/ledger")
         content_response = await client.get(
             f"/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content"
@@ -690,9 +724,7 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
     assert ledger_response.status_code == 200
     assert ledger_response.json()[0]["action"] == "incident.triggered"
     assert content_response.status_code == 307
-    assert content_response.headers["location"] == (
-        "https://minio.local/signed/incidents/1.mjpeg"
-    )
+    assert content_response.headers["location"] == ("https://minio.local/signed/incidents/1.mjpeg")
     assert incidents.scene_contract_calls == [
         {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
     ]

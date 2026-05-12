@@ -4,6 +4,7 @@ import { getHeartbeatStatus } from "@/lib/live";
 type FleetOverview = components["schemas"]["FleetOverviewResponse"];
 type FleetCameraWorker = components["schemas"]["FleetCameraWorkerSummary"];
 type FleetDeliveryDiagnostic = components["schemas"]["FleetDeliveryDiagnostic"];
+type FleetRuleRuntime = components["schemas"]["FleetRuleRuntimeSummary"];
 type Camera = components["schemas"]["CameraResponse"];
 type Site = components["schemas"]["SiteResponse"];
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
@@ -39,6 +40,7 @@ export type SceneHealthRow = {
   overall: HealthSignal;
   privacy: HealthSignal;
   worker: HealthSignal;
+  rules: HealthSignal;
   delivery: HealthSignal;
   telemetry: HealthSignal;
   actionHref: string;
@@ -68,7 +70,9 @@ export function healthToTone(health: OperationalHealth): HealthTone {
   return "muted";
 }
 
-export function deriveFleetHealth(fleet: FleetOverview | null | undefined): FleetHealth {
+export function deriveFleetHealth(
+  fleet: FleetOverview | null | undefined,
+): FleetHealth {
   if (!fleet) {
     return {
       health: "unknown",
@@ -147,8 +151,16 @@ export function deriveAttentionItems({
       title: "Edge or central workers need attention",
       detail:
         missingWorkers > 0
-          ? plural(missingWorkers, "worker is not running", "workers are not running")
-          : plural(fleet.summary.offline_nodes, "node is offline", "nodes are offline"),
+          ? plural(
+              missingWorkers,
+              "worker is not running",
+              "workers are not running",
+            )
+          : plural(
+              fleet.summary.offline_nodes,
+              "node is offline",
+              "nodes are offline",
+            ),
       href: "/settings",
     });
   }
@@ -173,7 +185,11 @@ export function deriveAttentionItems({
       id: "stale-nodes",
       health: "attention",
       title: "Node heartbeats stale",
-      detail: plural(fleet.summary.stale_nodes, "node heartbeat is stale", "node heartbeats are stale"),
+      detail: plural(
+        fleet.summary.stale_nodes,
+        "node heartbeat is stale",
+        "node heartbeats are stale",
+      ),
       href: "/settings",
     });
   }
@@ -195,11 +211,18 @@ export function deriveDeploymentPosture({
   return {
     siteCount: sites.length,
     sceneCount: cameras.length,
-    centralScenes: cameras.filter((camera) => camera.processing_mode === "central").length,
-    edgeScenes: cameras.filter((camera) => camera.processing_mode === "edge").length,
-    hybridScenes: cameras.filter((camera) => camera.processing_mode === "hybrid").length,
+    centralScenes: cameras.filter(
+      (camera) => camera.processing_mode === "central",
+    ).length,
+    edgeScenes: cameras.filter((camera) => camera.processing_mode === "edge")
+      .length,
+    hybridScenes: cameras.filter(
+      (camera) => camera.processing_mode === "hybrid",
+    ).length,
     assignedEdgeNodes: new Set(
-      cameras.map((camera) => camera.edge_node_id).filter((nodeId): nodeId is string => Boolean(nodeId)),
+      cameras
+        .map((camera) => camera.edge_node_id)
+        .filter((nodeId): nodeId is string => Boolean(nodeId)),
     ).size,
     pendingEvidence: pendingIncidents.length,
     privacyConfiguredScenes: cameras.filter(
@@ -216,7 +239,10 @@ export function derivePrivacyPosture(camera: Camera): HealthSignal {
   if (camera.privacy.blur_faces || camera.privacy.blur_plates) {
     return { health: "attention", label: "Partial privacy controls" };
   }
-  if (camera.processing_mode === "edge" || camera.processing_mode === "hybrid") {
+  if (
+    camera.processing_mode === "edge" ||
+    camera.processing_mode === "hybrid"
+  ) {
     return { health: "attention", label: "Edge processing configured" };
   }
   if (camera.browser_delivery.native_status?.available) {
@@ -240,7 +266,10 @@ export function deriveSceneReadinessRows({
     fleet?.camera_workers.map((worker) => [worker.camera_id, worker]) ?? [],
   );
   const diagnosticsByCamera = new Map(
-    fleet?.delivery_diagnostics.map((diagnostic) => [diagnostic.camera_id, diagnostic]) ?? [],
+    fleet?.delivery_diagnostics.map((diagnostic) => [
+      diagnostic.camera_id,
+      diagnostic,
+    ]) ?? [],
   );
   const sitesById = new Map(sites.map((site) => [site.id, site.name]));
 
@@ -251,6 +280,7 @@ export function deriveSceneReadinessRows({
     const delivery = deriveDeliverySignal(camera, diagnostic);
     const telemetry = deriveTelemetrySignal(framesByCamera[camera.id]);
     const workerSignal = deriveWorkerSignal(worker);
+    const rules = deriveRuleRuntimeSignal(worker?.rule_runtime);
     const readiness = deriveReadinessSignal({
       camera,
       worker: workerSignal,
@@ -258,7 +288,13 @@ export function deriveSceneReadinessRows({
       privacy,
       telemetry,
     });
-    const overall = mostSevere([readiness, privacy, workerSignal, delivery, telemetry]);
+    const overall = mostSevere([
+      readiness,
+      privacy,
+      workerSignal,
+      delivery,
+      telemetry,
+    ]);
     const action = deriveAction({
       readiness,
       worker: workerSignal,
@@ -270,12 +306,14 @@ export function deriveSceneReadinessRows({
       cameraId: camera.id,
       cameraName: camera.name,
       siteName: sitesById.get(camera.site_id) ?? "Unassigned site",
-      nodeLabel: worker?.node_hostname ?? diagnostic?.assigned_node_id ?? "Central",
+      nodeLabel:
+        worker?.node_hostname ?? diagnostic?.assigned_node_id ?? "Central",
       processingMode: camera.processing_mode,
       readiness,
       overall,
       privacy,
       worker: workerSignal,
+      rules,
       delivery,
       telemetry,
       actionHref: action.href,
@@ -284,7 +322,54 @@ export function deriveSceneReadinessRows({
   });
 }
 
-function deriveWorkerSignal(worker: FleetCameraWorker | undefined): HealthSignal {
+function deriveRuleRuntimeSignal(
+  ruleRuntime: FleetRuleRuntime | undefined,
+): HealthSignal {
+  if (!ruleRuntime || ruleRuntime.load_status === "not_configured") {
+    return {
+      health: "unknown",
+      label: "No active rules",
+      detail: "not configured",
+    };
+  }
+
+  const countLabel = plural(
+    ruleRuntime.configured_rule_count,
+    "active rule",
+    "active rules",
+  );
+  const detailParts = [
+    formatReason(ruleRuntime.load_status),
+    ruleRuntime.effective_rule_hash?.slice(0, 12),
+    ruleRuntime.latest_rule_event_at
+      ? formatRuleEventTime(ruleRuntime.latest_rule_event_at)
+      : null,
+  ].filter((part): part is string => Boolean(part));
+
+  if (ruleRuntime.load_status === "loaded") {
+    return {
+      health: "healthy",
+      label: countLabel,
+      detail: detailParts.join(" - "),
+    };
+  }
+  if (ruleRuntime.load_status === "stale") {
+    return {
+      health: "attention",
+      label: countLabel,
+      detail: detailParts.join(" - "),
+    };
+  }
+  return {
+    health: "unknown",
+    label: countLabel,
+    detail: detailParts.join(" - "),
+  };
+}
+
+function deriveWorkerSignal(
+  worker: FleetCameraWorker | undefined,
+): HealthSignal {
   if (!worker) {
     return { health: "unknown", label: "Worker not reported" };
   }
@@ -292,23 +377,41 @@ function deriveWorkerSignal(worker: FleetCameraWorker | undefined): HealthSignal
     return { health: "healthy", label: "Worker running" };
   }
   if (worker.runtime_status === "stale") {
-    return { health: "attention", label: "Worker stale", detail: worker.detail ?? undefined };
+    return {
+      health: "attention",
+      label: "Worker stale",
+      detail: worker.detail ?? undefined,
+    };
   }
   if (worker.runtime_status === "offline") {
-    return { health: "danger", label: "Worker offline", detail: worker.detail ?? undefined };
+    return {
+      health: "danger",
+      label: "Worker offline",
+      detail: worker.detail ?? undefined,
+    };
   }
   if (worker.runtime_status === "not_reported") {
-    return { health: "unknown", label: "Worker not reported", detail: worker.detail ?? undefined };
+    return {
+      health: "unknown",
+      label: "Worker not reported",
+      detail: worker.detail ?? undefined,
+    };
   }
-  return { health: "unknown", label: "Worker not reported", detail: worker.detail ?? undefined };
+  return {
+    health: "unknown",
+    label: "Worker not reported",
+    detail: worker.detail ?? undefined,
+  };
 }
 
 function deriveDeliverySignal(
   camera: Camera,
   diagnostic: FleetDeliveryDiagnostic | undefined,
 ): HealthSignal {
-  const nativeStatus = diagnostic?.native_status ?? camera.browser_delivery.native_status;
-  const defaultProfile = diagnostic?.default_profile ?? camera.browser_delivery.default_profile;
+  const nativeStatus =
+    diagnostic?.native_status ?? camera.browser_delivery.native_status;
+  const defaultProfile =
+    diagnostic?.default_profile ?? camera.browser_delivery.default_profile;
 
   if (nativeStatus?.available === true) {
     return { health: "healthy", label: "Native stream available" };
@@ -326,7 +429,9 @@ function deriveDeliverySignal(
   return { health: "unknown", label: "Delivery not reported" };
 }
 
-function deriveTelemetrySignal(frame: TelemetryFrame | undefined): HealthSignal {
+function deriveTelemetrySignal(
+  frame: TelemetryFrame | undefined,
+): HealthSignal {
   const status = getHeartbeatStatus(frame);
 
   if (status === "fresh") {
@@ -411,7 +516,11 @@ function deriveAction({
   if (delivery.health === "danger" || delivery.health === "attention") {
     return { href: "/settings", label: "Inspect delivery" };
   }
-  if (worker.health === "danger" || worker.health === "attention" || worker.health === "unknown") {
+  if (
+    worker.health === "danger" ||
+    worker.health === "attention" ||
+    worker.health === "unknown"
+  ) {
     return { href: "/settings", label: "Inspect operations" };
   }
   if (telemetry.health === "attention") {
@@ -422,7 +531,10 @@ function deriveAction({
 
 function mostSevere(signals: HealthSignal[]): HealthSignal {
   return signals.reduce<HealthSignal>(
-    (current, signal) => (severityRank(signal.health) > severityRank(current.health) ? signal : current),
+    (current, signal) =>
+      severityRank(signal.health) > severityRank(current.health)
+        ? signal
+        : current,
     { health: "healthy", label: "Ready" },
   );
 }
@@ -440,7 +552,11 @@ function affectedSceneDetail(cameras: Camera[], cameraIds: string[]): string {
     .filter((name): name is string => Boolean(name));
 
   if (names.length === 0) {
-    return plural(cameraIds.length, "scene needs delivery review", "scenes need delivery review");
+    return plural(
+      cameraIds.length,
+      "scene needs delivery review",
+      "scenes need delivery review",
+    );
   }
 
   if (names.length <= 2) {
@@ -454,6 +570,20 @@ function formatReason(reason: string | null | undefined): string | undefined {
   return reason ? reason.replaceAll("_", " ") : undefined;
 }
 
-function plural(count: number, singular: string, pluralLabel = `${singular}s`): string {
+function formatRuleEventTime(timestamp: string): string {
+  return new Date(timestamp).toLocaleString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function plural(
+  count: number,
+  singular: string,
+  pluralLabel = `${singular}s`,
+): string {
   return `${count} ${count === 1 ? singular : pluralLabel}`;
 }

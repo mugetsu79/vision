@@ -14,6 +14,7 @@ const row: SceneHealthRow = {
   overall: { health: "attention", label: "Telemetry stale" },
   privacy: { health: "healthy", label: "Face/plate filtering configured" },
   worker: { health: "healthy", label: "Worker running" },
+  rules: { health: "healthy", label: "1 active rule", detail: "loaded" },
   delivery: { health: "healthy", label: "Native stream available" },
   telemetry: { health: "attention", label: "Telemetry stale" },
   actionHref: "/settings",
@@ -50,9 +51,9 @@ describe("SceneStatusStrip", () => {
       />,
     );
 
-    expect(screen.getAllByText(/native passthrough gated/i).length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getAllByText(/native passthrough gated/i).length,
+    ).toBeGreaterThan(0);
     expect(
       screen.queryByText(/direct stream unavailable/i),
     ).not.toBeInTheDocument();

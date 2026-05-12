@@ -45,6 +45,7 @@ export function SceneIntelligenceMatrix({
                 <th className="px-4 py-3 font-semibold">Mode</th>
                 <th className="px-4 py-3 font-semibold">Privacy</th>
                 <th className="px-4 py-3 font-semibold">Worker</th>
+                <th className="px-4 py-3 font-semibold">Rules</th>
                 <th className="px-4 py-3 font-semibold">Delivery</th>
                 <th className="px-4 py-3 font-semibold">Telemetry</th>
                 <th className="px-4 py-3 font-semibold">Action</th>
@@ -67,6 +68,9 @@ export function SceneIntelligenceMatrix({
                   </td>
                   <td className="px-4 py-3">
                     <HealthCell signal={row.worker} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <HealthCell signal={row.rules} />
                   </td>
                   <td className="px-4 py-3">
                     <HealthCell signal={row.delivery} />

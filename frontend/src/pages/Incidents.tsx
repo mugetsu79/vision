@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { CaseContextStrip } from "@/components/evidence/CaseContextStrip";
 import { EvidenceTimeline } from "@/components/evidence/EvidenceTimeline";
+import { IncidentRuleSummary } from "@/components/evidence/IncidentRuleSummary";
 import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
 import {
   evidenceClipHref,
@@ -40,8 +41,7 @@ type SceneContractSnapshot =
   components["schemas"]["SceneContractSnapshotResponse"];
 type PrivacyManifestSnapshot =
   components["schemas"]["PrivacyManifestSnapshotResponse"];
-type EvidenceLedgerEntry =
-  components["schemas"]["EvidenceLedgerEntryResponse"];
+type EvidenceLedgerEntry = components["schemas"]["EvidenceLedgerEntryResponse"];
 
 export function IncidentsPage() {
   const { data: cameras = [] } = useCameras();
@@ -361,7 +361,9 @@ function IncidentEvidenceHero({
             </p>
           </div>
           <StatusToneBadge
-            tone={incident.review_status === "pending" ? "attention" : "healthy"}
+            tone={
+              incident.review_status === "pending" ? "attention" : "healthy"
+            }
           >
             {incident.review_status}
           </StatusToneBadge>
@@ -473,6 +475,11 @@ function IncidentFactsPanel({
           Accountability
         </h4>
         <div className="mt-3 space-y-2">
+          <IncidentRuleSummary
+            triggerRule={incident.trigger_rule}
+            detection={detectionContextFromPayload(incident.payload)}
+          />
+
           <details open className="rounded-md border border-white/8 px-3 py-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
               Scene contract
@@ -480,7 +487,9 @@ function IncidentFactsPanel({
             <div className="mt-2 space-y-2">
               <FactRow
                 label="Hash"
-                value={incident.scene_contract_hash?.slice(0, 12) ?? "Not attached"}
+                value={
+                  incident.scene_contract_hash?.slice(0, 12) ?? "Not attached"
+                }
                 compact
               />
               {accountability.sceneContract.data ? (
@@ -500,7 +509,9 @@ function IncidentFactsPanel({
             <div className="mt-2 space-y-2">
               <FactRow
                 label="Hash"
-                value={incident.privacy_manifest_hash?.slice(0, 12) ?? "Not attached"}
+                value={
+                  incident.privacy_manifest_hash?.slice(0, 12) ?? "Not attached"
+                }
                 compact
               />
               {accountability.privacyManifest.data ? (
@@ -553,7 +564,6 @@ function IncidentFactsPanel({
           </details>
         </div>
       </div>
-
     </InstrumentRail>
   );
 }
@@ -561,7 +571,9 @@ function IncidentFactsPanel({
 function useIncidentAccountabilityDetails(incident: Incident) {
   const sceneContract = useQuery<SceneContractSnapshot | null>({
     queryKey: ["incident-scene-contract", incident.id],
-    enabled: Boolean(incident.scene_contract_id || incident.scene_contract_hash),
+    enabled: Boolean(
+      incident.scene_contract_id || incident.scene_contract_hash,
+    ),
     queryFn: async () => {
       const { data, error } = await apiClient.GET(
         "/api/v1/incidents/{incident_id}/scene-contract",
@@ -629,6 +641,18 @@ function identityStatusLabel(
   return key === "face_identification"
     ? `Face ID ${status}`
     : `Biometric ID ${status}`;
+}
+
+function detectionContextFromPayload(payload: Record<string, unknown>) {
+  const detection = payload.detection;
+  if (!detection || typeof detection !== "object" || Array.isArray(detection)) {
+    return null;
+  }
+  return detection as {
+    class_name?: unknown;
+    zone_id?: unknown;
+    confidence?: unknown;
+  };
 }
 
 function FactRow({
@@ -699,7 +723,9 @@ export function formatIncidentTime(timestamp: string) {
   });
 }
 
-function evidenceHeroTitle(kind: ReturnType<typeof describeEvidenceState>["kind"]) {
+function evidenceHeroTitle(
+  kind: ReturnType<typeof describeEvidenceState>["kind"],
+) {
   if (kind === "clip_only") {
     return "Clip-only evidence";
   }

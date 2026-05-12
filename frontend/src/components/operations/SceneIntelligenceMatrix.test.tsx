@@ -16,6 +16,11 @@ const rows: SceneHealthRow[] = [
     overall: { health: "healthy", label: "Worker running" },
     privacy: { health: "healthy", label: "Face/plate filtering configured" },
     worker: { health: "healthy", label: "Worker running" },
+    rules: {
+      health: "healthy",
+      label: "2 active rules",
+      detail: "loaded - ffffffffffff - 12 May 2026, 09:30",
+    },
     delivery: { health: "healthy", label: "Native stream available" },
     telemetry: { health: "healthy", label: "Telemetry live" },
     actionHref: "/live",
@@ -34,6 +39,11 @@ const rows: SceneHealthRow[] = [
       health: "attention",
       label: "Worker stale",
       detail: "Edge heartbeat is stale.",
+    },
+    rules: {
+      health: "unknown",
+      label: "No active rules",
+      detail: "not configured",
     },
     delivery: {
       health: "danger",
@@ -65,6 +75,11 @@ describe("SceneIntelligenceMatrix", () => {
     expect(
       screen.getAllByText(/face\/plate filtering configured/i).length,
     ).toBeGreaterThan(0);
+    expect(screen.getByText("Rules")).toBeInTheDocument();
+    expect(screen.getByText("2 active rules")).toBeInTheDocument();
+    expect(screen.getByText(/ffffffffffff/i)).toBeInTheDocument();
+    expect(screen.getByText(/12 may 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/no active rules/i)).toBeInTheDocument();
     expect(screen.getAllByText(/worker stale/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/direct stream unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/awaiting telemetry/i)).toBeInTheDocument();

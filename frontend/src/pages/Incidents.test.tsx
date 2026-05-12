@@ -317,6 +317,86 @@ describe("IncidentsPage", () => {
     );
   });
 
+  test("shows trigger rule provenance and keeps rule incident type filtering", async () => {
+    const user = userEvent.setup();
+    const requests: Request[] = [];
+    const triggerRule = {
+      id: "99999999-9999-9999-9999-999999999111",
+      name: "Restricted person in server room",
+      incident_type: "restricted_person",
+      severity: "critical",
+      action: "record_clip",
+      cooldown_seconds: 45,
+      predicate: {
+        class_names: ["person"],
+        zone_ids: ["server-room"],
+        min_confidence: 0.82,
+        attributes: { vest: "red" },
+      },
+      rule_hash:
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    };
+
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      requests.push(request);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraPayload()]));
+      }
+
+      if (url.pathname === "/api/v1/incidents") {
+        return Promise.resolve(
+          jsonResponse([
+            incidentPayload({
+              type: "rule.restricted_person",
+              payload: {
+                detection: {
+                  class_name: "person",
+                  zone_id: "server-room",
+                  confidence: 0.91,
+                },
+                trigger_rule: triggerRule,
+              },
+              trigger_rule: triggerRule,
+            }),
+          ]),
+        );
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderIncidentsPage();
+
+    expect(
+      await screen.findByText("Restricted person in server room"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("restricted_person")).toBeInTheDocument();
+    expect(screen.getByText("critical")).toBeInTheDocument();
+    expect(screen.getByText("record_clip")).toBeInTheDocument();
+    expect(screen.getByText("45s")).toBeInTheDocument();
+    expect(screen.getByText("ffffffffffff")).toBeInTheDocument();
+    expect(screen.getAllByText("person").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("server-room").length).toBeGreaterThan(0);
+    expect(screen.getByText("91%")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/event type/i), [
+      "rule.restricted_person",
+    ]);
+
+    await waitFor(() => {
+      const incidentRequests = requests.filter(
+        (request) => new URL(request.url).pathname === "/api/v1/incidents",
+      );
+      const latestUrl = new URL((incidentRequests.at(-1) as Request).url);
+
+      expect(latestUrl.searchParams.get("type")).toBe("rule.restricted_person");
+    });
+  });
+
   test("renders accountable scene contract, privacy manifest, clip artifact, and ledger context", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request =
@@ -539,7 +619,9 @@ describe("IncidentsPage", () => {
     expect(within(hero).getByText("Cloud evidence")).toBeInTheDocument();
     expect(within(hero).getByText("Ledger")).toBeInTheDocument();
     expect(within(hero).getByText("3 entries")).toBeInTheDocument();
-    expect(within(hero).getByRole("link", { name: /open clip/i })).toHaveAttribute(
+    expect(
+      within(hero).getByRole("link", { name: /open clip/i }),
+    ).toHaveAttribute(
       "href",
       "https://minio.local/signed/incidents/accountable-clip.mjpeg",
     );

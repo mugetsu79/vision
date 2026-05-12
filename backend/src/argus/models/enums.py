@@ -138,6 +138,7 @@ class EvidenceLedgerAction(StrEnum):
     SNAPSHOT_AVAILABLE = "evidence.snapshot.available"
     SNAPSHOT_QUOTA_EXCEEDED = "evidence.snapshot.quota_exceeded"
     SNAPSHOT_CAPTURE_FAILED = "evidence.snapshot.capture_failed"
+    INCIDENT_RULE_ATTACHED = "incident_rule.attached"
     EVIDENCE_UPLOAD_STARTED = "evidence.upload.started"
     EVIDENCE_UPLOAD_AVAILABLE = "evidence.upload.available"
     EVIDENCE_UPLOAD_FAILED = "evidence.upload.failed"

@@ -98,6 +98,19 @@ class _FakeOperationsService:
                         validated_at=datetime(2026, 5, 11, 10, 0, tzinfo=UTC),
                         fallback_reason=None,
                     ),
+                    rule_runtime={
+                        "configured_rule_count": 2,
+                        "effective_rule_hash": "c" * 64,
+                        "latest_rule_event_at": datetime(
+                            2026,
+                            5,
+                            12,
+                            9,
+                            30,
+                            tzinfo=UTC,
+                        ),
+                        "load_status": "loaded",
+                    },
                 )
             ],
             delivery_diagnostics=[],
@@ -156,10 +169,14 @@ async def test_operations_fleet_route_returns_overview() -> None:
     body = response.json()
     assert body["mode"] == "manual_dev"
     assert body["summary"]["desired_workers"] == 1
-    assert body["camera_workers"][0]["runtime_passport"]["selected_backend"] == (
-        "tensorrt_engine"
-    )
+    assert body["camera_workers"][0]["runtime_passport"]["selected_backend"] == ("tensorrt_engine")
     assert body["camera_workers"][0]["runtime_passport"]["runtime_artifact_hash"] == "d" * 64
+    assert body["camera_workers"][0]["rule_runtime"] == {
+        "configured_rule_count": 2,
+        "effective_rule_hash": "c" * 64,
+        "latest_rule_event_at": "2026-05-12T09:30:00Z",
+        "load_status": "loaded",
+    }
 
 
 @pytest.mark.asyncio
