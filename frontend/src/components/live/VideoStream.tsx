@@ -35,11 +35,13 @@ export function VideoStream({
   cameraId,
   cameraName,
   defaultProfile,
+  deliveryMode = null,
   heartbeatTs = null,
 }: {
   cameraId: string;
   cameraName: string;
   defaultProfile: string;
+  deliveryMode?: string | null;
   heartbeatTs?: string | null;
 }) {
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -153,12 +155,13 @@ export function VideoStream({
       setFirstFrameMs(durationMs);
       window.dispatchEvent(
         new CustomEvent("argus:stream-first-frame", {
-          detail: {
-            cameraId,
-            defaultProfile,
-            durationMs,
-            transport: activeTransport,
-          },
+        detail: {
+          cameraId,
+          defaultProfile,
+          deliveryMode,
+          durationMs,
+          transport: activeTransport,
+        },
         }),
       );
     },
@@ -528,7 +531,7 @@ export function VideoStream({
 
       <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
         <Badge className="border-[#31538b] bg-[#081120]/80 text-[#eef4ff]">
-          {defaultProfile}
+          {deliveryMode ?? defaultProfile}
         </Badge>
         <Badge className="border-[#31538b] bg-[#081120]/80 text-[#eef4ff]">
           {transportLabel(transport)}

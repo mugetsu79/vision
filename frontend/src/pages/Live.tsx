@@ -342,6 +342,7 @@ function ScenePortalCard({
           cameraId={camera.id}
           cameraName={camera.name}
           defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
+          deliveryMode={camera.browser_delivery?.delivery_mode ?? null}
           heartbeatTs={frame?.ts ?? null}
         />
         <TelemetryCanvas

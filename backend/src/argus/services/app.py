@@ -78,6 +78,7 @@ from argus.api.contracts import (
     SiteResponse,
     SiteUpdate,
     SourceCapability,
+    StreamDeliveryProfileConfig,
     StreamOfferRequest,
     StreamOfferResponse,
     TelemetryEnvelope,
@@ -92,6 +93,7 @@ from argus.api.contracts import (
     WorkerRuntimeArtifact,
     WorkerRuntimeCapability,
     WorkerRuntimeStatus,
+    WorkerStreamDeliverySettings,
     WorkerStreamSettings,
     WorkerTrackerSettings,
 )
@@ -113,6 +115,9 @@ from argus.models.enums import (
     IncidentReviewStatus,
     ModelFormat,
     ModelTask,
+    OperatorConfigProfileKind,
+    OperatorConfigScope,
+    OperatorConfigValidationStatus,
     ProcessingMode,
     RuntimeArtifactScope,
     RuntimeArtifactValidationStatus,
@@ -130,6 +135,8 @@ from argus.models.tables import (
     LocalFirstSyncAttempt,
     Model,
     ModelRuntimeArtifact,
+    OperatorConfigBinding,
+    OperatorConfigProfile,
     PrivacyManifestSnapshot,
     SceneContractSnapshot,
     Site,
@@ -608,11 +615,20 @@ class CameraService:
         rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, self.settings)
         recording_policy = _recording_policy_from_camera(camera)
         evidence_storage = None
+        stream_delivery = None
+        requested_browser_delivery = BrowserDeliverySettings.model_validate(
+            camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+        )
         if self.configuration_service is not None:
             evidence_storage = await self.configuration_service.resolve_worker_evidence_storage(
                 tenant_context,
                 camera_id=camera.id,
                 profile_id=recording_policy.storage_profile_id,
+            )
+            stream_delivery = await self.configuration_service.resolve_worker_stream_delivery(
+                tenant_context,
+                camera_id=camera.id,
+                profile_id=requested_browser_delivery.delivery_profile_id,
             )
         base_config = _camera_to_worker_config(
             camera=camera,
@@ -623,6 +639,7 @@ class CameraService:
             runtime_artifacts=runtime_artifacts,
             recording_policy=recording_policy,
             evidence_storage=evidence_storage,
+            stream_delivery=stream_delivery,
         )
         privacy_manifest = build_privacy_manifest(
             tenant_id=tenant_context.tenant_id,
@@ -2990,9 +3007,20 @@ class StreamService:
         browser_delivery = BrowserDeliverySettings.model_validate(
             camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
         )
+        profile = await self._resolve_stream_delivery_profile(tenant_context, camera)
+        browser_delivery = _browser_delivery_with_stream_profile(
+            browser_delivery,
+            profile,
+        )
         stream_settings = _resolve_worker_stream_settings(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
+        )
+        base_urls = _stream_delivery_base_urls(
+            browser_delivery,
+            settings=self.settings,
+            edge_node_id=camera.edge_node_id,
+            processing_mode=camera.processing_mode,
         )
         access = resolve_stream_access(
             camera_id=camera.id,
@@ -3000,14 +3028,37 @@ class StreamService:
             edge_node_id=camera.edge_node_id,
             stream_kind=stream_settings.kind,
             privacy=camera.privacy,
-            rtsp_base_url=self.settings.mediamtx_rtsp_base_url,
-            webrtc_base_url=self.settings.mediamtx_webrtc_base_url,
-            hls_base_url=self.settings.mediamtx_hls_base_url,
-            mjpeg_base_url=self.settings.mediamtx_mjpeg_base_url,
+            rtsp_base_url=base_urls["rtsp"],
+            webrtc_base_url=base_urls["webrtc"],
+            hls_base_url=base_urls["hls"],
+            mjpeg_base_url=base_urls["mjpeg"],
             mjpeg_path_template=self.settings.mediamtx_mjpeg_path_template,
         )
         await self._ensure_edge_stream_relay(camera=camera, access=access)
         return access
+
+    async def _resolve_stream_delivery_profile(
+        self,
+        tenant_context: TenantContext,
+        camera: Camera,
+    ) -> WorkerStreamDeliverySettings | None:
+        async with self.session_factory() as session:
+            profile = await _resolve_stream_delivery_profile_row(
+                session=session,
+                tenant_id=tenant_context.tenant_id,
+                camera=camera,
+            )
+        if profile is None:
+            return None
+        config = StreamDeliveryProfileConfig.model_validate(profile.config)
+        return WorkerStreamDeliverySettings(
+            profile_id=profile.id,
+            profile_name=profile.name,
+            profile_hash=profile.config_hash,
+            delivery_mode=config.delivery_mode,
+            public_base_url=config.public_base_url,
+            edge_override_url=config.edge_override_url,
+        )
 
     async def _ensure_edge_stream_relay(
         self,
@@ -3709,6 +3760,120 @@ def _camera_to_response(camera: Camera) -> CameraResponse:
     )
 
 
+async def _resolve_stream_delivery_profile_row(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    camera: Camera,
+) -> OperatorConfigProfile | None:
+    requested = BrowserDeliverySettings.model_validate(
+        camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+    )
+    if requested.delivery_profile_id is not None:
+        profile = await session.get(OperatorConfigProfile, requested.delivery_profile_id)
+        if (
+            profile is None
+            or profile.tenant_id != tenant_id
+            or profile.kind != OperatorConfigProfileKind.STREAM_DELIVERY
+            or not profile.enabled
+            or profile.validation_status == OperatorConfigValidationStatus.INVALID
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Stream delivery profile could not be resolved.",
+            )
+        return profile
+
+    profiles = await _load_operator_profiles(
+        session=session,
+        tenant_id=tenant_id,
+        kind=OperatorConfigProfileKind.STREAM_DELIVERY,
+    )
+    bindings = await _load_operator_bindings(
+        session=session,
+        tenant_id=tenant_id,
+        kind=OperatorConfigProfileKind.STREAM_DELIVERY,
+    )
+    by_id = {profile.id: profile for profile in profiles}
+    candidates = [
+        (OperatorConfigScope.CAMERA, camera.id),
+        (OperatorConfigScope.EDGE_NODE, camera.edge_node_id),
+        (OperatorConfigScope.SITE, camera.site_id),
+    ]
+    for scope, scope_id in candidates:
+        if scope_id is None:
+            continue
+        binding = next(
+            (
+                candidate
+                for candidate in bindings
+                if candidate.scope == scope and candidate.scope_key == str(scope_id)
+            ),
+            None,
+        )
+        if binding is None:
+            continue
+        profile = by_id.get(binding.profile_id)
+        if (
+            profile is None
+            or not profile.enabled
+            or profile.validation_status == OperatorConfigValidationStatus.INVALID
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Stream delivery profile could not be resolved.",
+            )
+        return profile
+    return next(
+        (
+            profile
+            for profile in profiles
+            if profile.is_default
+            and profile.enabled
+            and profile.validation_status != OperatorConfigValidationStatus.INVALID
+        ),
+        None,
+    )
+
+
+async def _load_operator_profiles(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    kind: OperatorConfigProfileKind,
+) -> list[OperatorConfigProfile]:
+    result = await session.execute(
+        select(OperatorConfigProfile).where(
+            OperatorConfigProfile.tenant_id == tenant_id,
+            OperatorConfigProfile.kind == kind,
+        )
+    )
+    return [
+        profile
+        for profile in result.scalars().all()
+        if profile.tenant_id == tenant_id and profile.kind == kind
+    ]
+
+
+async def _load_operator_bindings(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    kind: OperatorConfigProfileKind,
+) -> list[OperatorConfigBinding]:
+    result = await session.execute(
+        select(OperatorConfigBinding).where(
+            OperatorConfigBinding.tenant_id == tenant_id,
+            OperatorConfigBinding.kind == kind,
+        )
+    )
+    return [
+        binding
+        for binding in result.scalars().all()
+        if binding.tenant_id == tenant_id and binding.kind == kind
+    ]
+
+
 def _worker_privacy_settings(
     privacy_payload: PrivacySettings | dict[str, Any],
 ) -> WorkerPrivacySettings:
@@ -3735,6 +3900,7 @@ def _camera_to_worker_config(
     runtime_artifacts: list[ModelRuntimeArtifact] | None = None,
     recording_policy: EvidenceRecordingPolicy | None = None,
     evidence_storage: WorkerEvidenceStorageSettings | None = None,
+    stream_delivery: WorkerStreamDeliverySettings | None = None,
     scene_contract_hash: str | None = None,
     privacy_manifest_hash: str | None = None,
 ) -> WorkerConfigResponse:
@@ -3743,6 +3909,17 @@ def _camera_to_worker_config(
     requested_browser_delivery = BrowserDeliverySettings.model_validate(
         camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
     )
+    if stream_delivery is not None:
+        requested_browser_delivery = requested_browser_delivery.model_copy(
+            update={
+                "delivery_profile_id": stream_delivery.profile_id,
+                "delivery_profile_name": stream_delivery.profile_name,
+                "delivery_profile_hash": stream_delivery.profile_hash,
+                "delivery_mode": stream_delivery.delivery_mode,
+                "public_base_url": stream_delivery.public_base_url,
+                "edge_override_url": stream_delivery.edge_override_url,
+            }
+        )
     source_capability = (
         SourceCapability.model_validate(camera.source_capability)
         if camera.source_capability is not None
@@ -3792,6 +3969,7 @@ def _camera_to_worker_config(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
         ),
+        stream_delivery=stream_delivery,
         model=_model_to_worker_settings(
             primary_model,
             runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
@@ -4237,6 +4415,12 @@ def _build_source_aware_browser_delivery(
     return BrowserDeliverySettings(
         default_profile=default_profile,
         allow_native_on_demand=requested.allow_native_on_demand,
+        delivery_profile_id=requested.delivery_profile_id,
+        delivery_profile_name=requested.delivery_profile_name,
+        delivery_profile_hash=requested.delivery_profile_hash,
+        delivery_mode=requested.delivery_mode,
+        public_base_url=requested.public_base_url,
+        edge_override_url=requested.edge_override_url,
         profiles=[
             profile.model_dump(exclude_none=True, mode="python")
             for profile in decorated_allowed
@@ -4246,6 +4430,88 @@ def _build_source_aware_browser_delivery(
             for profile in decorated_unsupported
         ],
         native_status=NativeAvailability(available=native_available, reason=native_reason),
+    )
+
+
+def _browser_delivery_with_stream_profile(
+    browser_delivery: BrowserDeliverySettings,
+    stream_delivery: WorkerStreamDeliverySettings | None,
+) -> BrowserDeliverySettings:
+    if stream_delivery is None:
+        return browser_delivery
+    default_profile = _browser_profile_for_delivery_mode(
+        stream_delivery.delivery_mode,
+        browser_delivery.default_profile,
+    )
+    return browser_delivery.model_copy(
+        update={
+            "default_profile": default_profile,
+            "delivery_profile_id": stream_delivery.profile_id,
+            "delivery_profile_name": stream_delivery.profile_name,
+            "delivery_profile_hash": stream_delivery.profile_hash,
+            "delivery_mode": stream_delivery.delivery_mode,
+            "public_base_url": stream_delivery.public_base_url,
+            "edge_override_url": stream_delivery.edge_override_url,
+        }
+    )
+
+
+def _browser_profile_for_delivery_mode(
+    delivery_mode: str | None,
+    current_profile: BrowserDeliveryProfileId,
+) -> BrowserDeliveryProfileId:
+    if delivery_mode in {"webrtc", "hls", "mjpeg", "transcode"}:
+        return "annotated"
+    if delivery_mode == "native":
+        return "native"
+    return current_profile
+
+
+def _stream_delivery_base_urls(
+    browser_delivery: BrowserDeliverySettings,
+    *,
+    settings: Settings,
+    edge_node_id: UUID | None,
+    processing_mode: ProcessingMode,
+) -> dict[str, str]:
+    base_url = (
+        browser_delivery.edge_override_url
+        if _is_edge_delivery_context(
+            processing_mode=processing_mode,
+            edge_node_id=edge_node_id,
+        )
+        and browser_delivery.edge_override_url
+        else browser_delivery.public_base_url
+    )
+    if base_url is None:
+        return {
+            "rtsp": settings.mediamtx_rtsp_base_url,
+            "webrtc": settings.mediamtx_webrtc_base_url,
+            "hls": settings.mediamtx_hls_base_url,
+            "mjpeg": settings.mediamtx_mjpeg_base_url,
+        }
+
+    return {
+        "rtsp": _replace_url_base(settings.mediamtx_rtsp_base_url, base_url),
+        "webrtc": _replace_url_base(settings.mediamtx_webrtc_base_url, base_url),
+        "hls": _replace_url_base(settings.mediamtx_hls_base_url, base_url),
+        "mjpeg": _replace_url_base(settings.mediamtx_mjpeg_base_url, base_url),
+    }
+
+
+def _replace_url_base(default_url: str, base_url: str) -> str:
+    default_parts = urlsplit(default_url)
+    base_parts = urlsplit(base_url)
+    if base_parts.scheme == "" or base_parts.netloc == "":
+        return default_url
+    return urlunsplit(
+        (
+            base_parts.scheme,
+            base_parts.netloc,
+            default_parts.path.rstrip("/"),
+            "",
+            "",
+        )
     )
 
 

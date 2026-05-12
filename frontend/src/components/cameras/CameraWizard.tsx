@@ -41,6 +41,9 @@ type BrowserDeliveryProfile = "native" | "annotated" | "1080p15" | "720p10" | "5
 type CameraSourceKind = components["schemas"]["CameraSourceKind"];
 type EvidenceRecordingPolicy = components["schemas"]["EvidenceRecordingPolicy"];
 type EvidenceStorageProfile = EvidenceRecordingPolicy["storage_profile"];
+type StreamDeliveryMode = NonNullable<
+  NonNullable<CreateCameraInput["browser_delivery"]>["delivery_mode"]
+>;
 type BoundaryType = "line" | "polygon";
 type DetectionRegionMode = SerializedDetectionRegion["mode"];
 type BrowserDeliveryProfilePayload = {
@@ -151,6 +154,10 @@ export type CameraWizardData = {
   browserDeliveryProfiles: BrowserDeliveryProfilePayload[];
   unsupportedBrowserDeliveryProfiles: BrowserDeliveryProfilePayload[];
   browserDeliveryNativeStatus: NativeDeliveryStatus;
+  streamDeliveryProfileId: string;
+  streamDeliveryMode: StreamDeliveryMode | null;
+  streamDeliveryPublicBaseUrl: string | null;
+  streamDeliveryEdgeOverrideUrl: string | null;
   sourceCapability: SourceCapability | null;
   recordingEnabled: boolean;
   recordingPreSeconds: number;
@@ -299,6 +306,10 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
     unsupportedBrowserDeliveryProfiles,
     browserDeliveryNativeStatus:
       initialCamera?.browser_delivery?.native_status ?? { available: true, reason: null },
+    streamDeliveryProfileId: initialCamera?.browser_delivery?.delivery_profile_id ?? "",
+    streamDeliveryMode: initialCamera?.browser_delivery?.delivery_mode ?? null,
+    streamDeliveryPublicBaseUrl: initialCamera?.browser_delivery?.public_base_url ?? null,
+    streamDeliveryEdgeOverrideUrl: initialCamera?.browser_delivery?.edge_override_url ?? null,
     sourceCapability: initialCamera?.source_capability ?? null,
     recordingEnabled: recordingPolicy?.enabled ?? true,
     recordingPreSeconds: recordingPolicy?.pre_seconds ?? 4,
@@ -322,6 +333,10 @@ function buildBrowserDelivery(data: CameraWizardData) {
   return {
     default_profile: data.browserDeliveryProfile,
     allow_native_on_demand: true,
+    delivery_profile_id: data.streamDeliveryProfileId || null,
+    delivery_mode: data.streamDeliveryMode,
+    public_base_url: data.streamDeliveryPublicBaseUrl,
+    edge_override_url: data.streamDeliveryEdgeOverrideUrl,
     profiles: data.browserDeliveryProfiles,
     unsupported_profiles: data.unsupportedBrowserDeliveryProfiles,
     native_status: data.browserDeliveryNativeStatus,
@@ -365,6 +380,14 @@ type EvidenceStorageProfileOption = {
   profileId: string | null;
 };
 
+type StreamDeliveryProfileOption = {
+  id: string;
+  label: string;
+  deliveryMode: StreamDeliveryMode | null;
+  publicBaseUrl: string | null;
+  edgeOverrideUrl: string | null;
+};
+
 const LEGACY_STORAGE_PROFILE_OPTIONS: EvidenceStorageProfileOption[] = [
   {
     id: "edge_local",
@@ -402,6 +425,37 @@ function evidenceStorageProfileOptions(
     });
   }
   return options.length > 0 ? options : LEGACY_STORAGE_PROFILE_OPTIONS;
+}
+
+function streamDeliveryProfileOptions(
+  profiles: OperatorConfigProfile[] | undefined,
+): StreamDeliveryProfileOption[] {
+  const isStreamDeliveryMode = (value: unknown): value is StreamDeliveryMode =>
+    value === "native" ||
+    value === "webrtc" ||
+    value === "hls" ||
+    value === "mjpeg" ||
+    value === "transcode";
+
+  return (profiles ?? [])
+    .filter((profile) => profile.enabled)
+    .map((profile) => {
+      const config = profile.config ?? {};
+      const deliveryMode = isStreamDeliveryMode(config.delivery_mode)
+        ? config.delivery_mode
+        : null;
+      const publicBaseUrl =
+        typeof config.public_base_url === "string" ? config.public_base_url : null;
+      const edgeOverrideUrl =
+        typeof config.edge_override_url === "string" ? config.edge_override_url : null;
+      return {
+        id: profile.id,
+        label: `${profile.name}${deliveryMode ? ` (${deliveryMode})` : ""}`,
+        deliveryMode,
+        publicBaseUrl,
+        edgeOverrideUrl,
+      };
+    });
 }
 
 function storageProfileForEvidenceConfig(
@@ -1025,6 +1079,7 @@ export function CameraWizard({
     isEditMode && stepTitle === "Calibration",
   );
   const evidenceStorageProfilesQuery = useConfigurationProfiles("evidence_storage");
+  const streamDeliveryProfilesQuery = useConfigurationProfiles("stream_delivery");
   const sourceProbeQuery = useQuery<CameraSourceProbeResponse>({
     enabled:
       stepTitle === "Privacy, Processing & Delivery" &&
@@ -1127,6 +1182,10 @@ export function CameraWizard({
   const selectedStorageProfileLabel =
     storageProfileOptions.find((option) => option.id === storageProfileSelectValue)?.label ??
     formatEvidenceStorageProfile(data.recordingStorageProfile);
+  const streamProfileOptions = useMemo(
+    () => streamDeliveryProfileOptions(streamDeliveryProfilesQuery.data),
+    [streamDeliveryProfilesQuery.data],
+  );
 
   useEffect(() => {
     setData(createDefaultData(initialCamera));
@@ -1356,6 +1415,36 @@ export function CameraWizard({
       ...current,
       recordingStorageProfile: option.storageProfile,
       recordingStorageProfileId: option.profileId ?? "",
+    }));
+  }
+
+  function updateStreamDeliveryProfile(optionId: string) {
+    if (optionId === "") {
+      setData((current) => ({
+        ...current,
+        streamDeliveryProfileId: "",
+        streamDeliveryMode: null,
+        streamDeliveryPublicBaseUrl: null,
+        streamDeliveryEdgeOverrideUrl: null,
+      }));
+      return;
+    }
+    const option = streamProfileOptions.find((candidate) => candidate.id === optionId);
+    if (!option) {
+      return;
+    }
+    setData((current) => ({
+      ...current,
+      streamDeliveryProfileId: option.id,
+      streamDeliveryMode: option.deliveryMode,
+      streamDeliveryPublicBaseUrl: option.publicBaseUrl,
+      streamDeliveryEdgeOverrideUrl: option.edgeOverrideUrl,
+      browserDeliveryProfile:
+        option.deliveryMode === "native"
+          ? "native"
+          : option.deliveryMode
+            ? "annotated"
+            : current.browserDeliveryProfile,
     }));
   }
 
@@ -2143,6 +2232,25 @@ export function CameraWizard({
                   </label>
                 </div>
               </section>
+              {streamProfileOptions.length > 0 ? (
+                <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                  <span>Stream delivery profile</span>
+                  <Select
+                    aria-label="Stream delivery profile"
+                    value={data.streamDeliveryProfileId}
+                    onChange={(event) =>
+                      updateStreamDeliveryProfile(event.target.value)
+                    }
+                  >
+                    <option value="">Use default binding</option>
+                    {streamProfileOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              ) : null}
               <label className="grid gap-2 text-sm text-[#d8e2f2]">
                 <span>Browser delivery profile</span>
                 <Select

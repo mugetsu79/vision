@@ -104,6 +104,8 @@ class RuntimeConfigurationService:
         kind: OperatorConfigProfileKind,
         *,
         camera_id: UUID | None = None,
+        site_id: UUID | None = None,
+        edge_node_id: UUID | None = None,
         profile_id: UUID | None = None,
     ) -> RuntimeOperatorConfig:
         async with self.session_factory() as session:
@@ -121,19 +123,21 @@ class RuntimeConfigurationService:
                         detail="Runtime configuration profile could not be resolved.",
                     )
             else:
-                site_id, edge_node_id = await self._camera_scope(
+                camera_site_id, camera_edge_node_id = await self._camera_scope(
                     session,
                     tenant_context.tenant_id,
                     camera_id,
                 )
+                resolved_site_id = camera_site_id or site_id
+                resolved_edge_node_id = camera_edge_node_id or edge_node_id
                 await self._seed_if_empty(session, tenant_context)
                 entry = await self._resolve_entry(
                     session,
                     tenant_id=tenant_context.tenant_id,
                     kind=kind,
                     camera_id=camera_id,
-                    site_id=site_id,
-                    edge_node_id=edge_node_id,
+                    site_id=resolved_site_id,
+                    edge_node_id=resolved_edge_node_id,
                 )
                 if entry.resolution_status != "resolved" or entry.profile_id is None:
                     raise HTTPException(

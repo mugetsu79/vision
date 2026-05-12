@@ -28,6 +28,7 @@ from argus.api.contracts import (
     StreamDeliveryProfileConfig,
     TenantContext,
     WorkerEvidenceStorageSettings,
+    WorkerStreamDeliverySettings,
     _normalize_operator_config,
 )
 from argus.compat import UTC
@@ -508,6 +509,29 @@ class OperatorConfigurationService:
             ),
             config=config,
             secrets=secrets,
+        )
+
+    async def resolve_worker_stream_delivery(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID,
+        profile_id: UUID | None = None,
+    ) -> WorkerStreamDeliverySettings:
+        runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
+            tenant_context,
+            OperatorConfigProfileKind.STREAM_DELIVERY,
+            camera_id=camera_id,
+            profile_id=profile_id,
+        )
+        config = StreamDeliveryProfileConfig.model_validate(runtime_config.config)
+        return WorkerStreamDeliverySettings(
+            profile_id=runtime_config.profile_id,
+            profile_name=runtime_config.profile_name,
+            profile_hash=runtime_config.profile_hash,
+            delivery_mode=config.delivery_mode,
+            public_base_url=config.public_base_url,
+            edge_override_url=config.edge_override_url,
         )
 
     async def seed_bootstrap_defaults(

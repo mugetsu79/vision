@@ -138,6 +138,7 @@ RuntimeBackend = Literal[
     "ultralytics_yoloe",
     "tensorrt_engine",
 ]
+StreamDeliveryMode = Literal["native", "webrtc", "hls", "mjpeg", "transcode"]
 
 
 EvidenceStorageConfigProvider = EvidenceStorageProvider | Literal["local_first"]
@@ -156,7 +157,7 @@ class EvidenceStorageProfileConfig(BaseModel):
 
 
 class StreamDeliveryProfileConfig(BaseModel):
-    delivery_mode: Literal["native", "webrtc", "hls", "mjpeg", "transcode"] = "native"
+    delivery_mode: StreamDeliveryMode = "native"
     public_base_url: str | None = Field(default=None, min_length=1)
     edge_override_url: str | None = Field(default=None, min_length=1)
 
@@ -666,6 +667,12 @@ class NativeAvailability(BaseModel):
 class BrowserDeliverySettings(BaseModel):
     default_profile: BrowserDeliveryProfileId = "720p10"
     allow_native_on_demand: bool = True
+    delivery_profile_id: UUID | None = None
+    delivery_profile_name: str | None = None
+    delivery_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    delivery_mode: StreamDeliveryMode | None = None
+    public_base_url: str | None = Field(default=None, min_length=1)
+    edge_override_url: str | None = Field(default=None, min_length=1)
     profiles: list[dict[str, Any]] = Field(default_factory=_default_browser_delivery_profiles)
     unsupported_profiles: list[dict[str, Any]] = Field(default_factory=list)
     native_status: NativeAvailability = Field(default_factory=NativeAvailability)
@@ -726,6 +733,15 @@ class WorkerStreamSettings(BaseModel):
     width: int | None = Field(default=None, gt=0)
     height: int | None = Field(default=None, gt=0)
     fps: int = Field(default=25, ge=1)
+
+
+class WorkerStreamDeliverySettings(BaseModel):
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    delivery_mode: StreamDeliveryMode = "native"
+    public_base_url: str | None = Field(default=None, min_length=1)
+    edge_override_url: str | None = Field(default=None, min_length=1)
 
 
 class WorkerEvidenceStorageSettings(BaseModel):
@@ -852,6 +868,7 @@ class WorkerConfigResponse(BaseModel):
     camera: WorkerCameraSettings
     publish: WorkerPublishSettings = Field(default_factory=WorkerPublishSettings)
     stream: WorkerStreamSettings = Field(default_factory=WorkerStreamSettings)
+    stream_delivery: WorkerStreamDeliverySettings | None = None
     model: WorkerModelSettings
     secondary_model: WorkerModelSettings | None = None
     tracker: WorkerTrackerSettings

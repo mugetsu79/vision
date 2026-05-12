@@ -7,7 +7,7 @@ import { createQueryClient } from "@/app/query-client";
 import { CameraWizard } from "@/components/cameras/CameraWizard";
 import type { CreateCameraInput, UpdateCameraInput } from "@/hooks/use-cameras";
 
-const evidenceStorageProfiles = vi.hoisted(() => [
+const configurationProfiles = vi.hoisted(() => [
   {
     id: "11111111-1111-1111-1111-111111111111",
     kind: "evidence_storage",
@@ -26,11 +26,24 @@ const evidenceStorageProfiles = vi.hoisted(() => [
     is_default: true,
     config: { provider: "s3_compatible", storage_scope: "cloud" },
   },
+  {
+    id: "44444444-4444-4444-4444-444444444444",
+    kind: "stream_delivery",
+    name: "Edge HLS delivery",
+    slug: "edge-hls-delivery",
+    enabled: true,
+    is_default: false,
+    config: {
+      delivery_mode: "hls",
+      public_base_url: "https://streams.example.com",
+      edge_override_url: "https://edge-streams.example.com",
+    },
+  },
 ]);
 
 vi.mock("@/hooks/use-configuration", () => ({
-  useConfigurationProfiles: () => ({
-    data: evidenceStorageProfiles,
+  useConfigurationProfiles: (kind?: string) => ({
+    data: configurationProfiles.filter((profile) => !kind || profile.kind === kind),
     isLoading: false,
   }),
 }));
@@ -721,6 +734,35 @@ describe("CameraWizard", () => {
       storage_profile: "cloud",
       storage_profile_id: "33333333-3333-3333-3333-333333333333",
     });
+  });
+
+  test("stores the selected named stream delivery profile on the camera payload", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    const streamProfile = screen.getByLabelText(/stream delivery profile/i);
+    expect(
+      within(streamProfile).getByRole("option", { name: /edge hls delivery/i }),
+    ).toBeInTheDocument();
+    await user.selectOptions(streamProfile, "44444444-4444-4444-4444-444444444444");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+    const browserDelivery = submittedPayload?.browser_delivery as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(browserDelivery?.delivery_profile_id).toBe(
+      "44444444-4444-4444-4444-444444444444",
+    );
+    expect(browserDelivery?.delivery_mode).toBe("hls");
+    expect(browserDelivery?.public_base_url).toBe("https://streams.example.com");
+    expect(browserDelivery?.edge_override_url).toBe("https://edge-streams.example.com");
   });
 
   test("submits USB edge source settings with edge-only guidance", async () => {

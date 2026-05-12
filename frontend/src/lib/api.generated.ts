@@ -823,6 +823,18 @@ export interface components {
              * @default true
              */
             allow_native_on_demand: boolean;
+            /** Delivery Profile Id */
+            delivery_profile_id?: string | null;
+            /** Delivery Profile Name */
+            delivery_profile_name?: string | null;
+            /** Delivery Profile Hash */
+            delivery_profile_hash?: string | null;
+            /** Delivery Mode */
+            delivery_mode?: ("native" | "webrtc" | "hls" | "mjpeg" | "transcode") | null;
+            /** Public Base Url */
+            public_base_url?: string | null;
+            /** Edge Override Url */
+            edge_override_url?: string | null;
             /** Profiles */
             profiles?: {
                 [key: string]: unknown;
@@ -2676,6 +2688,7 @@ export interface components {
             camera: components["schemas"]["WorkerCameraSettings"];
             publish?: components["schemas"]["WorkerPublishSettings"];
             stream?: components["schemas"]["WorkerStreamSettings"];
+            stream_delivery?: components["schemas"]["WorkerStreamDeliverySettings"] | null;
             model: components["schemas"]["WorkerModelSettings"];
             secondary_model?: components["schemas"]["WorkerModelSettings"] | null;
             tracker: components["schemas"]["WorkerTrackerSettings"];
@@ -2871,6 +2884,25 @@ export interface components {
          * @enum {string}
          */
         WorkerRuntimeStatus: "running" | "stale" | "offline" | "unknown" | "not_reported";
+        /** WorkerStreamDeliverySettings */
+        WorkerStreamDeliverySettings: {
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /**
+             * Delivery Mode
+             * @default native
+             * @enum {string}
+             */
+            delivery_mode: "native" | "webrtc" | "hls" | "mjpeg" | "transcode";
+            /** Public Base Url */
+            public_base_url?: string | null;
+            /** Edge Override Url */
+            edge_override_url?: string | null;
+        };
         /** WorkerStreamSettings */
         WorkerStreamSettings: {
             /**

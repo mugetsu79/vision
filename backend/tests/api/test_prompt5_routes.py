@@ -422,6 +422,14 @@ class FakeCameraService:
                 "http_fallback_url": None,
             },
             stream={},
+            stream_delivery={
+                "profile_id": None,
+                "profile_name": "Default native stream delivery",
+                "profile_hash": None,
+                "delivery_mode": "native",
+                "public_base_url": "http://localhost:8889",
+                "edge_override_url": None,
+            },
             model={
                 "name": "Argus YOLO",
                 "path": "/models/argus.onnx",
@@ -1146,6 +1154,8 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
     assert payload["camera"]["rtsp_url"] == "rtsp://example.local/live"
     assert payload["publish"]["subject_prefix"] == "evt.tracking"
     assert payload["publish"]["http_fallback_url"] is None
+    assert payload["stream_delivery"]["delivery_mode"] == "native"
+    assert payload["stream_delivery"]["profile_name"] == "Default native stream delivery"
     assert payload["tracker"]["tracker_type"] == "botsort"
     assert payload["tracker"]["frame_rate"] == 25
     assert payload["privacy"] == {

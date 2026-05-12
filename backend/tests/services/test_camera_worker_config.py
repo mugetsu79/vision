@@ -6,7 +6,12 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from argus.api.contracts import SourceCapability, WorkerEvidenceStorageSettings
+from argus.api.contracts import (
+    BrowserDeliverySettings,
+    SourceCapability,
+    WorkerEvidenceStorageSettings,
+    WorkerStreamDeliverySettings,
+)
 from argus.core.config import Settings
 from argus.core.security import encrypt_rtsp_url
 from argus.models.enums import (
@@ -30,7 +35,13 @@ from argus.models.tables import (
     SceneContractSnapshot,
     Tenant,
 )
-from argus.services.app import CameraService, _camera_to_worker_config, derive_browser_profiles
+from argus.services.app import (
+    CameraService,
+    _browser_delivery_with_stream_profile,
+    _camera_to_worker_config,
+    _stream_delivery_base_urls,
+    derive_browser_profiles,
+)
 from argus.vision.vocabulary import hash_vocabulary
 
 
@@ -214,9 +225,15 @@ class _FakeAuditLogger:
 
 
 class _FakeOperatorConfigurationService:
-    def __init__(self, evidence_storage: WorkerEvidenceStorageSettings) -> None:
+    def __init__(
+        self,
+        evidence_storage: WorkerEvidenceStorageSettings | None = None,
+        stream_delivery: WorkerStreamDeliverySettings | None = None,
+    ) -> None:
         self.evidence_storage = evidence_storage
+        self.stream_delivery = stream_delivery
         self.calls: list[tuple[object, object, object | None]] = []
+        self.stream_calls: list[tuple[object, object, object | None]] = []
 
     async def resolve_worker_evidence_storage(
         self,
@@ -226,7 +243,36 @@ class _FakeOperatorConfigurationService:
         profile_id: object | None = None,
     ) -> WorkerEvidenceStorageSettings:
         self.calls.append((tenant_context, camera_id, profile_id))
+        if self.evidence_storage is None:
+            return WorkerEvidenceStorageSettings(
+                profile_id=None,
+                profile_name="Default local evidence",
+                profile_hash=None,
+                provider="local_filesystem",
+                storage_scope="edge",
+                config={"local_root": "/tmp/argus-incidents"},
+                secrets={},
+            )
         return self.evidence_storage
+
+    async def resolve_worker_stream_delivery(
+        self,
+        tenant_context: object,
+        *,
+        camera_id: object,
+        profile_id: object | None = None,
+    ) -> WorkerStreamDeliverySettings:
+        self.stream_calls.append((tenant_context, camera_id, profile_id))
+        if self.stream_delivery is None:
+            return WorkerStreamDeliverySettings(
+                profile_id=None,
+                profile_name="Default native stream delivery",
+                profile_hash=None,
+                delivery_mode="native",
+                public_base_url=None,
+                edge_override_url=None,
+            )
+        return self.stream_delivery
 
 
 def _tenant_context(tenant_id=None):  # noqa: ANN001
@@ -552,6 +598,58 @@ async def test_worker_config_includes_decrypted_evidence_storage_profile() -> No
         "access_key": "cloud-key",
         "secret_key": "cloud-secret",
     }
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_resolved_stream_delivery_profile() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    stream_profile_id = uuid4()
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+        browser_delivery={
+            "default_profile": "720p10",
+            "allow_native_on_demand": True,
+            "delivery_profile_id": str(stream_profile_id),
+            "profiles": [],
+        },
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        stream_delivery=WorkerStreamDeliverySettings(
+            profile_id=stream_profile_id,
+            profile_name="Edge HLS delivery",
+            profile_hash="e" * 64,
+            delivery_mode="hls",
+            public_base_url="https://streams.example.com",
+            edge_override_url="https://edge-streams.example.com",
+        )
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+    tenant_context = _tenant_context()
+
+    config = await service.get_worker_config(tenant_context, camera.id)
+
+    assert configuration_service.stream_calls == [
+        (tenant_context, camera.id, stream_profile_id)
+    ]
+    assert config.stream_delivery is not None
+    assert config.stream_delivery.profile_id == stream_profile_id
+    assert config.stream_delivery.profile_name == "Edge HLS delivery"
+    assert config.stream_delivery.profile_hash == "e" * 64
+    assert config.stream_delivery.delivery_mode == "hls"
+    assert config.stream_delivery.public_base_url == "https://streams.example.com"
+    assert config.stream_delivery.edge_override_url == "https://edge-streams.example.com"
 
 
 def test_worker_config_sends_usb_capture_uri_to_edge_runtime() -> None:
@@ -992,6 +1090,42 @@ def test_edge_native_browser_delivery_keeps_passthrough_stream() -> None:
         "fps": 17,
     }
     assert config.model.classes == ["person", "car"]
+
+
+def test_stream_delivery_profile_controls_playback_base_urls_and_mode() -> None:
+    settings = _settings()
+    delivery = WorkerStreamDeliverySettings(
+        profile_id=uuid4(),
+        profile_name="Edge HLS delivery",
+        profile_hash="e" * 64,
+        delivery_mode="hls",
+        public_base_url="https://streams.example.com",
+        edge_override_url="https://edge-streams.example.com",
+    )
+
+    resolved = _browser_delivery_with_stream_profile(
+        BrowserDeliverySettings(default_profile="native"),
+        delivery,
+    )
+    central_urls = _stream_delivery_base_urls(
+        resolved,
+        settings=settings,
+        edge_node_id=None,
+        processing_mode=ProcessingMode.CENTRAL,
+    )
+    edge_urls = _stream_delivery_base_urls(
+        resolved,
+        settings=settings,
+        edge_node_id=uuid4(),
+        processing_mode=ProcessingMode.EDGE,
+    )
+
+    assert resolved.default_profile == "annotated"
+    assert resolved.delivery_profile_id == delivery.profile_id
+    assert resolved.delivery_mode == "hls"
+    assert central_urls["hls"] == "https://streams.example.com"
+    assert central_urls["webrtc"] == "https://streams.example.com"
+    assert edge_urls["hls"] == "https://edge-streams.example.com"
 
 
 def test_central_native_browser_delivery_without_privacy_keeps_passthrough_stream() -> None:

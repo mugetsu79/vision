@@ -21,12 +21,14 @@ vi.mock("@/components/live/VideoStream", () => ({
   VideoStream: ({
     cameraName,
     defaultProfile,
+    deliveryMode,
   }: {
     cameraName: string;
     defaultProfile: string;
+    deliveryMode?: string | null;
   }) => (
     <div aria-label={`${cameraName} video stream`} data-testid={`stream-${cameraName}`}>
-      {cameraName} stream {defaultProfile}
+      {cameraName} stream {defaultProfile} {deliveryMode ?? "default-delivery"}
     </div>
   ),
 }));
@@ -650,6 +652,9 @@ describe("LivePage", () => {
             browser_delivery: {
               default_profile: "native",
               allow_native_on_demand: true,
+              delivery_profile_id: "44444444-4444-4444-4444-444444444444",
+              delivery_profile_name: "Edge HLS delivery",
+              delivery_mode: "hls",
               profiles: [
                 {
                   id: "native",
@@ -681,6 +686,7 @@ describe("LivePage", () => {
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
     expect(screen.getByText(/central processing · Native camera/i)).toBeInTheDocument();
+    expect(screen.getByTestId("stream-North Gate")).toHaveTextContent("hls");
 
     act(() => {
       FakeWebSocket.instances[0]?.emit({

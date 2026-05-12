@@ -235,6 +235,15 @@ class StreamSettings(BaseModel):
     fps: int = Field(default=25, ge=1)
 
 
+class StreamDeliverySettings(BaseModel):
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    delivery_mode: str = "native"
+    public_base_url: str | None = None
+    edge_override_url: str | None = None
+
+
 class TrackerSettings(BaseModel):
     tracker_type: TrackerType
     frame_rate: int = 25
@@ -253,6 +262,7 @@ class EngineConfig(BaseModel):
     camera: CameraSettings
     publish: PublishSettings = Field(default_factory=PublishSettings)
     stream: StreamSettings = Field(default_factory=StreamSettings)
+    stream_delivery: StreamDeliverySettings | None = None
     model: ModelSettings
     secondary_model: ModelSettings | None = None
     tracker: TrackerSettings
