@@ -711,6 +711,60 @@ export interface paths {
         patch: operations["update_incident_review_api_v1_incidents__incident_id__review_patch"];
         trace?: never;
     };
+    "/api/v1/cameras/{camera_id}/incident-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Incident Rules */
+        get: operations["list_incident_rules_api_v1_cameras__camera_id__incident_rules_get"];
+        put?: never;
+        /** Create Incident Rule */
+        post: operations["create_incident_rule_api_v1_cameras__camera_id__incident_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/incident-rules/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Incident Rule */
+        post: operations["validate_incident_rule_api_v1_cameras__camera_id__incident_rules_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/incident-rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Rule */
+        get: operations["get_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Incident Rule */
+        delete: operations["delete_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Incident Rule */
+        patch: operations["update_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__patch"];
+        trace?: never;
+    };
     "/api/v1/streams/{camera_id}/offer": {
         parameters: {
             query?: never;
@@ -1717,6 +1771,135 @@ export interface components {
         IncidentReviewUpdate: {
             review_status: components["schemas"]["IncidentReviewStatus"];
         };
+        /** IncidentRuleCreate */
+        IncidentRuleCreate: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Incident Type */
+            incident_type?: string | null;
+            /** @default warning */
+            severity: components["schemas"]["IncidentRuleSeverity"];
+            /** Description */
+            description?: string | null;
+            predicate?: components["schemas"]["IncidentRulePredicate"];
+            /** @default record_clip */
+            action: components["schemas"]["RuleAction"];
+            /**
+             * Cooldown Seconds
+             * @default 0
+             */
+            cooldown_seconds: number;
+            /** Webhook Url */
+            webhook_url?: string | null;
+        };
+        /** IncidentRulePredicate */
+        IncidentRulePredicate: {
+            /** Class Names */
+            class_names?: string[];
+            /** Zone Ids */
+            zone_ids?: string[];
+            /**
+             * Min Confidence
+             * @default 0.5
+             */
+            min_confidence: number;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+        };
+        /** IncidentRuleResponse */
+        IncidentRuleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Incident Type */
+            incident_type: string;
+            severity: components["schemas"]["IncidentRuleSeverity"];
+            /** Description */
+            description?: string | null;
+            predicate: components["schemas"]["IncidentRulePredicate"];
+            action: components["schemas"]["RuleAction"];
+            /** Cooldown Seconds */
+            cooldown_seconds: number;
+            /**
+             * Webhook Url Present
+             * @default false
+             */
+            webhook_url_present: boolean;
+            /** Rule Hash */
+            rule_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * IncidentRuleSeverity
+         * @enum {string}
+         */
+        IncidentRuleSeverity: "info" | "warning" | "critical";
+        /** IncidentRuleUpdate */
+        IncidentRuleUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Incident Type */
+            incident_type?: string | null;
+            severity?: components["schemas"]["IncidentRuleSeverity"] | null;
+            /** Description */
+            description?: string | null;
+            predicate?: components["schemas"]["IncidentRulePredicate"] | null;
+            action?: components["schemas"]["RuleAction"] | null;
+            /** Cooldown Seconds */
+            cooldown_seconds?: number | null;
+            /** Webhook Url */
+            webhook_url?: string | null;
+        };
+        /** IncidentRuleValidationRequest */
+        IncidentRuleValidationRequest: {
+            rule: components["schemas"]["IncidentRuleCreate"];
+            /** Sample Detection */
+            sample_detection?: {
+                [key: string]: unknown;
+            };
+        };
+        /** IncidentRuleValidationResponse */
+        IncidentRuleValidationResponse: {
+            /** Valid */
+            valid: boolean;
+            /** Matches */
+            matches: boolean;
+            /** Errors */
+            errors?: string[];
+            /** Normalized Incident Type */
+            normalized_incident_type?: string | null;
+            /** Rule Hash */
+            rule_hash?: string | null;
+        };
         /** LegacyZone */
         LegacyZone: {
             /** Id */
@@ -2282,6 +2465,11 @@ export interface components {
                 [key: string]: components["schemas"]["OperatorConfigProfileResponse"];
             };
         };
+        /**
+         * RuleAction
+         * @enum {string}
+         */
+        RuleAction: "count" | "alert" | "record_clip" | "webhook";
         /** RuntimeArtifactCreate */
         RuntimeArtifactCreate: {
             /** Camera Id */
@@ -2809,6 +2997,8 @@ export interface components {
             attribute_rules?: {
                 [key: string]: unknown;
             }[];
+            /** Incident Rules */
+            incident_rules?: components["schemas"]["WorkerIncidentRule"][];
             /** Zones */
             zones?: (components["schemas"]["WorkerLineZone"] | components["schemas"]["WorkerPolygonZone"] | components["schemas"]["LegacyZone"])[];
             vision_profile?: components["schemas"]["SceneVisionProfile"];
@@ -2842,6 +3032,58 @@ export interface components {
             /** Secrets */
             secrets?: {
                 [key: string]: string;
+            };
+        };
+        /** WorkerIncidentRule */
+        WorkerIncidentRule: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Incident Type */
+            incident_type: string;
+            /** @default warning */
+            severity: components["schemas"]["IncidentRuleSeverity"];
+            predicate?: components["schemas"]["WorkerIncidentRulePredicate"];
+            /** @default record_clip */
+            action: components["schemas"]["RuleAction"];
+            /**
+             * Cooldown Seconds
+             * @default 0
+             */
+            cooldown_seconds: number;
+            /** Webhook Url */
+            webhook_url?: string | null;
+            /** Rule Hash */
+            rule_hash: string;
+        };
+        /** WorkerIncidentRulePredicate */
+        WorkerIncidentRulePredicate: {
+            /** Class Names */
+            class_names?: string[];
+            /** Zone Ids */
+            zone_ids?: string[];
+            /**
+             * Min Confidence
+             * @default 0.5
+             */
+            min_confidence: number;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
             };
         };
         /** WorkerLineZone */
@@ -4739,6 +4981,217 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_incident_rules_api_v1_cameras__camera_id__incident_rules_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_incident_rule_api_v1_cameras__camera_id__incident_rules_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_incident_rule_api_v1_cameras__camera_id__incident_rules_validate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentRuleValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleValidationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleResponse"];
                 };
             };
             /** @description Validation Error */

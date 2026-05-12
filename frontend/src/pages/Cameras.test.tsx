@@ -338,12 +338,17 @@ describe("CamerasPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /add scene/i }));
     await waitFor(() =>
-      expect(screen.queryByTestId("model-catalog-hints")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByTestId("model-catalog-hints"),
+      ).not.toBeInTheDocument(),
     );
 
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
-    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.type(
+      screen.getByLabelText(/rtsp url/i),
+      "rtsp://camera.local/live",
+    );
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(
@@ -518,7 +523,10 @@ describe("CamerasPage", () => {
     await user.click(await screen.findByRole("button", { name: /add scene/i }));
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
-    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.type(
+      screen.getByLabelText(/rtsp url/i),
+      "rtsp://camera.local/live",
+    );
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     await waitFor(() =>
@@ -882,12 +890,196 @@ describe("CamerasPage", () => {
     ).toBeInTheDocument();
     expect(dockRow).not.toBeNull();
     expect(gateRow).not.toBeNull();
-    expect(within(dockRow as HTMLElement).getByText("Balanced")).toBeInTheDocument();
-    expect(within(dockRow as HTMLElement).getByText("Standard edge")).toBeInTheDocument();
-    expect(within(dockRow as HTMLElement).getByText("Speed off")).toBeInTheDocument();
-    expect(within(gateRow as HTMLElement).getByText("Max accuracy")).toBeInTheDocument();
-    expect(within(gateRow as HTMLElement).getByText("Advanced edge")).toBeInTheDocument();
-    expect(within(gateRow as HTMLElement).getByText("Speed on")).toBeInTheDocument();
+    expect(
+      within(dockRow as HTMLElement).getByText("Balanced"),
+    ).toBeInTheDocument();
+    expect(
+      within(dockRow as HTMLElement).getByText("Standard edge"),
+    ).toBeInTheDocument();
+    expect(
+      within(dockRow as HTMLElement).getByText("Speed off"),
+    ).toBeInTheDocument();
+    expect(
+      within(gateRow as HTMLElement).getByText("Max accuracy"),
+    ).toBeInTheDocument();
+    expect(
+      within(gateRow as HTMLElement).getByText("Advanced edge"),
+    ).toBeInTheDocument();
+    expect(
+      within(gateRow as HTMLElement).getByText("Speed on"),
+    ).toBeInTheDocument();
+  });
+
+  test("opens camera-scoped incident rules from a scene row without editing the camera", async () => {
+    const user = userEvent.setup();
+    const cameraPatchRequests: Request[] = [];
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras" && request.method === "GET") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "camera-1",
+              site_id: "site-1",
+              edge_node_id: null,
+              name: "Dock Camera",
+              rtsp_url_masked: "rtsp://***",
+              processing_mode: "edge",
+              primary_model_id: "model-1",
+              secondary_model_id: null,
+              tracker_type: "botsort",
+              active_classes: ["person", "forklift"],
+              runtime_vocabulary: {
+                terms: ["hi_vis_worker"],
+                source: "manual",
+                version: 2,
+                updated_at: null,
+              },
+              attribute_rules: [{ attribute: "hi_vis" }],
+              zones: [
+                {
+                  id: "restricted",
+                  type: "polygon",
+                  polygon: [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                  ],
+                },
+              ],
+              vision_profile: {
+                compute_tier: "edge_standard",
+                accuracy_mode: "balanced",
+                scene_difficulty: "cluttered",
+                object_domain: "mixed",
+                motion_metrics: { speed_enabled: false },
+              },
+              privacy: {
+                blur_faces: false,
+                blur_plates: false,
+                method: "gaussian",
+                strength: 7,
+              },
+              browser_delivery: {
+                default_profile: "720p10",
+                allow_native_on_demand: true,
+                profiles: [],
+                unsupported_profiles: [],
+                native_status: { available: true, reason: null },
+              },
+              frame_skip: 1,
+              fps_cap: 10,
+              created_at: "2026-05-12T10:00:00Z",
+              updated_at: "2026-05-12T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (
+        url.pathname === "/api/v1/cameras/camera-1/incident-rules" &&
+        request.method === "GET"
+      ) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "rule-1",
+              camera_id: "camera-1",
+              enabled: true,
+              name: "Restricted person",
+              incident_type: "restricted_person",
+              severity: "critical",
+              description: "Person in restricted area.",
+              predicate: {
+                class_names: ["person"],
+                zone_ids: ["restricted"],
+                min_confidence: 0.7,
+                attributes: { hi_vis: false },
+              },
+              action: "record_clip",
+              cooldown_seconds: 60,
+              webhook_url_present: false,
+              rule_hash: "c".repeat(64),
+              created_at: "2026-05-12T10:00:00Z",
+              updated_at: "2026-05-12T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (
+        url.pathname === "/api/v1/cameras/camera-1" &&
+        request.method === "PATCH"
+      ) {
+        cameraPatchRequests.push(request);
+        return new Response(JSON.stringify({ id: "camera-1" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "HQ",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    const dockRow = (await screen.findByText("Dock Camera")).closest("tr");
+    expect(dockRow).not.toBeNull();
+    await user.click(
+      within(dockRow as HTMLElement).getByRole("button", { name: /rules/i }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /incident rules for dock camera/i,
+      }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Restricted person")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/camera name/i)).not.toBeInTheDocument();
+    expect(cameraPatchRequests).toEqual([]);
   });
 
   test("creates a camera with active classes after refetching class-bearing models", async () => {

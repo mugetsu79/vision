@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
 
 import { RequireRole } from "@/components/auth/RequireRole";
-import { CameraWizard, type ModelOption } from "@/components/cameras/CameraWizard";
+import {
+  CameraWizard,
+  type ModelOption,
+} from "@/components/cameras/CameraWizard";
+import { IncidentRulesPanel } from "@/components/cameras/IncidentRulesPanel";
 import {
   StatusToneBadge,
   WorkspaceBand,
@@ -19,7 +23,10 @@ import {
   type CreateCameraInput,
   type UpdateCameraInput,
 } from "@/hooks/use-cameras";
-import { useModelCatalog, type ModelCatalogEntry } from "@/hooks/use-model-catalog";
+import {
+  useModelCatalog,
+  type ModelCatalogEntry,
+} from "@/hooks/use-model-catalog";
 import { useModels, type Model } from "@/hooks/use-models";
 import { useFleetOverview } from "@/hooks/use-operations";
 import { useSites } from "@/hooks/use-sites";
@@ -40,6 +47,9 @@ function CamerasContent() {
   const brandName = productBrand.name;
   const [wizardMode, setWizardMode] = useState<"create" | "edit" | null>(null);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
+  const [selectedRulesCameraId, setSelectedRulesCameraId] = useState<
+    string | null
+  >(null);
   const { data: cameras = [], isLoading: camerasLoading } = useCameras();
   const { data: sites = [] } = useSites();
   const {
@@ -66,6 +76,10 @@ function CamerasContent() {
     () => new Map(sceneHealthRows.map((row) => [row.cameraId, row])),
     [sceneHealthRows],
   );
+  const rulesCamera = useMemo(
+    () => cameras.find((camera) => camera.id === selectedRulesCameraId) ?? null,
+    [cameras, selectedRulesCameraId],
+  );
   const modelQueryEmpty = models.length === 0;
   const wizardModels = useMemo(
     () =>
@@ -73,19 +87,31 @@ function CamerasContent() {
         selectedCamera?.primary_model_id,
         selectedCamera?.secondary_model_id,
       ]),
-    [models, selectedCamera?.primary_model_id, selectedCamera?.secondary_model_id],
+    [
+      models,
+      selectedCamera?.primary_model_id,
+      selectedCamera?.secondary_model_id,
+    ],
   );
 
   function openCreateWizard() {
     void refetchModels();
     setSelectedCamera(null);
+    setSelectedRulesCameraId(null);
     setWizardMode("create");
   }
 
   function openEditWizard(camera: Camera) {
     void refetchModels();
     setSelectedCamera(camera);
+    setSelectedRulesCameraId(null);
     setWizardMode("edit");
+  }
+
+  function openRulesPanel(camera: Camera) {
+    setWizardMode(null);
+    setSelectedCamera(null);
+    setSelectedRulesCameraId(camera.id);
   }
 
   function closeWizard() {
@@ -102,6 +128,9 @@ function CamerasContent() {
 
     if (selectedCamera?.id === camera.id) {
       closeWizard();
+    }
+    if (selectedRulesCameraId === camera.id) {
+      setSelectedRulesCameraId(null);
     }
   }
 
@@ -172,8 +201,12 @@ function CamerasContent() {
 
                 return (
                   <TR key={camera.id}>
-                    <TD className="font-medium text-[#eef4ff]">{camera.name}</TD>
-                    <TD>{siteNameById.get(camera.site_id) ?? "Unknown site"}</TD>
+                    <TD className="font-medium text-[#eef4ff]">
+                      {camera.name}
+                    </TD>
+                    <TD>
+                      {siteNameById.get(camera.site_id) ?? "Unknown site"}
+                    </TD>
                     <TD>{camera.processing_mode}</TD>
                     <TD>
                       <div className="min-w-[8rem] leading-tight">
@@ -224,6 +257,13 @@ function CamerasContent() {
                         <button
                           className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
                           type="button"
+                          onClick={() => openRulesPanel(camera)}
+                        >
+                          Rules
+                        </button>
+                        <button
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                          type="button"
                           onClick={() => openEditWizard(camera)}
                         >
                           Edit
@@ -244,6 +284,13 @@ function CamerasContent() {
           </TBody>
         </Table>
       </section>
+
+      {rulesCamera ? (
+        <IncidentRulesPanel
+          camera={rulesCamera}
+          onClose={() => setSelectedRulesCameraId(null)}
+        />
+      ) : null}
 
       {wizardMode ? (
         <section className="space-y-4">
@@ -303,7 +350,9 @@ function toWizardModelOptions(
   models: Model[],
   pinnedModelIds: Array<string | null | undefined>,
 ): ModelOption[] {
-  const pinnedIds = new Set(pinnedModelIds.filter((id): id is string => Boolean(id)));
+  const pinnedIds = new Set(
+    pinnedModelIds.filter((id): id is string => Boolean(id)),
+  );
   const optionsByKey = new Map<string, ModelOption>();
 
   for (const model of models) {
@@ -337,12 +386,13 @@ function modelOptionKey(model: ModelOption) {
 
 type CameraVisionProfile = NonNullable<Camera["vision_profile"]>;
 
-const accuracyModeLabels: Record<CameraVisionProfile["accuracy_mode"], string> = {
-  fast: "Fast",
-  balanced: "Balanced",
-  maximum_accuracy: "Max accuracy",
-  open_vocabulary: "Open vocab",
-};
+const accuracyModeLabels: Record<CameraVisionProfile["accuracy_mode"], string> =
+  {
+    fast: "Fast",
+    balanced: "Balanced",
+    maximum_accuracy: "Max accuracy",
+    open_vocabulary: "Open vocab",
+  };
 
 const computeTierLabels: Record<CameraVisionProfile["compute_tier"], string> = {
   cpu_low: "Low CPU",
@@ -365,7 +415,11 @@ function getCameraVisionSummary(camera: Camera) {
   };
 }
 
-function ModelCatalogHints({ modelInventoryCount }: { modelInventoryCount: number }) {
+function ModelCatalogHints({
+  modelInventoryCount,
+}: {
+  modelInventoryCount: number;
+}) {
   const { data: catalog = [] } = useModelCatalog();
   if (modelInventoryCount > 0) {
     return null;
@@ -374,7 +428,9 @@ function ModelCatalogHints({ modelInventoryCount }: { modelInventoryCount: numbe
   const visibleEntries = catalog
     .filter((entry) => entry.registration_state === "unregistered")
     .filter((entry) => entry.artifact_exists)
-    .filter((entry) => (entry.capability_config.readiness ?? "ready") === "ready")
+    .filter(
+      (entry) => (entry.capability_config.readiness ?? "ready") === "ready",
+    )
     .slice(0, 4);
 
   if (visibleEntries.length === 0) {
@@ -390,7 +446,9 @@ function ModelCatalogHints({ modelInventoryCount }: { modelInventoryCount: numbe
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
           Model catalog
         </p>
-        <p className="text-xs text-[#93a7c5]">{visibleEntries.length} available presets</p>
+        <p className="text-xs text-[#93a7c5]">
+          {visibleEntries.length} available presets
+        </p>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         {visibleEntries.map((entry) => (
@@ -409,7 +467,8 @@ function CatalogHintEntry({ entry }: { entry: ModelCatalogEntry }) {
     <div className="rounded-[0.75rem] border border-white/8 bg-white/[0.03] px-3 py-3">
       <p className="text-sm font-semibold text-[#eef4ff]">{entry.name}</p>
       <p className="mt-1 text-xs text-[#9eb2cf]">
-        {entry.registration_state} - {entry.capability} - {backend} - {readiness}
+        {entry.registration_state} - {entry.capability} - {backend} -{" "}
+        {readiness}
       </p>
     </div>
   );
