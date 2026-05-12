@@ -92,6 +92,7 @@ from argus.api.contracts import (
     WorkerPublishSettings,
     WorkerRuntimeArtifact,
     WorkerRuntimeCapability,
+    WorkerRuntimeSelectionSettings,
     WorkerRuntimeStatus,
     WorkerStreamDeliverySettings,
     WorkerStreamSettings,
@@ -616,6 +617,7 @@ class CameraService:
         recording_policy = _recording_policy_from_camera(camera)
         evidence_storage = None
         stream_delivery = None
+        runtime_selection = None
         requested_browser_delivery = BrowserDeliverySettings.model_validate(
             camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
         )
@@ -630,6 +632,10 @@ class CameraService:
                 camera_id=camera.id,
                 profile_id=requested_browser_delivery.delivery_profile_id,
             )
+            runtime_selection = await self.configuration_service.resolve_worker_runtime_selection(
+                tenant_context,
+                camera_id=camera.id,
+            )
         base_config = _camera_to_worker_config(
             camera=camera,
             primary_model=primary_model,
@@ -640,6 +646,7 @@ class CameraService:
             recording_policy=recording_policy,
             evidence_storage=evidence_storage,
             stream_delivery=stream_delivery,
+            runtime_selection=runtime_selection,
         )
         privacy_manifest = build_privacy_manifest(
             tenant_id=tenant_context.tenant_id,
@@ -670,6 +677,7 @@ class CameraService:
             runtime_selection=_runtime_selection_contract_payload(
                 primary_model,
                 runtime_artifacts=runtime_artifacts,
+                runtime_selection=base_config.runtime_selection,
             ),
             vision_profile=base_config.vision_profile.model_dump(mode="json"),
             detection_regions=[
@@ -3901,6 +3909,7 @@ def _camera_to_worker_config(
     recording_policy: EvidenceRecordingPolicy | None = None,
     evidence_storage: WorkerEvidenceStorageSettings | None = None,
     stream_delivery: WorkerStreamDeliverySettings | None = None,
+    runtime_selection: WorkerRuntimeSelectionSettings | None = None,
     scene_contract_hash: str | None = None,
     privacy_manifest_hash: str | None = None,
 ) -> WorkerConfigResponse:
@@ -3986,6 +3995,7 @@ def _camera_to_worker_config(
         privacy=_worker_privacy_settings(privacy),
         active_classes=list(camera.active_classes),
         runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
+        runtime_selection=runtime_selection or WorkerRuntimeSelectionSettings(),
         runtime_capability=_worker_runtime_capability(primary_model),
         runtime_artifacts=[
             _runtime_artifact_to_worker_payload(artifact)
@@ -4185,8 +4195,23 @@ def _runtime_selection_contract_payload(
     model: Model,
     *,
     runtime_artifacts: list[ModelRuntimeArtifact] | None,
+    runtime_selection: WorkerRuntimeSelectionSettings | None = None,
 ) -> dict[str, object]:
     artifacts = runtime_artifacts or []
+    profile_payload = (
+        {
+            "profile_id": str(runtime_selection.profile_id)
+            if runtime_selection.profile_id is not None
+            else None,
+            "profile_name": runtime_selection.profile_name,
+            "profile_hash": runtime_selection.profile_hash,
+            "artifact_preference": runtime_selection.artifact_preference,
+            "fallback_allowed": runtime_selection.fallback_allowed,
+            "preferred_backend": runtime_selection.preferred_backend,
+        }
+        if runtime_selection is not None
+        else {}
+    )
     if artifacts:
         first = artifacts[0]
         return {
@@ -4196,6 +4221,7 @@ def _runtime_selection_contract_payload(
             "target_profile": first.target_profile,
             "precision": first.precision.value,
             "fallback_reason": None,
+            **profile_payload,
         }
     capability_config = _model_capability_config(model)
     return {
@@ -4205,6 +4231,7 @@ def _runtime_selection_contract_payload(
         "target_profile": None,
         "precision": None,
         "fallback_reason": "no_validated_runtime_artifact",
+        **profile_payload,
     }
 
 

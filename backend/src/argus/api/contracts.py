@@ -139,6 +139,7 @@ RuntimeBackend = Literal[
     "tensorrt_engine",
 ]
 StreamDeliveryMode = Literal["native", "webrtc", "hls", "mjpeg", "transcode"]
+RuntimeArtifactPreference = Literal["tensorrt_first", "onnx_first", "dynamic_first"]
 
 
 EvidenceStorageConfigProvider = EvidenceStorageProvider | Literal["local_first"]
@@ -164,9 +165,7 @@ class StreamDeliveryProfileConfig(BaseModel):
 
 class RuntimeSelectionProfileConfig(BaseModel):
     preferred_backend: RuntimeBackend | None = None
-    artifact_preference: Literal["tensorrt_first", "onnx_first", "dynamic_first"] = (
-        "tensorrt_first"
-    )
+    artifact_preference: RuntimeArtifactPreference = "tensorrt_first"
     fallback_allowed: bool = True
 
 
@@ -744,6 +743,15 @@ class WorkerStreamDeliverySettings(BaseModel):
     edge_override_url: str | None = Field(default=None, min_length=1)
 
 
+class WorkerRuntimeSelectionSettings(BaseModel):
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    preferred_backend: RuntimeBackend | None = None
+    artifact_preference: RuntimeArtifactPreference = "tensorrt_first"
+    fallback_allowed: bool = True
+
+
 class WorkerEvidenceStorageSettings(BaseModel):
     profile_id: UUID | None = None
     profile_name: str | None = None
@@ -875,6 +883,9 @@ class WorkerConfigResponse(BaseModel):
     privacy: WorkerPrivacySettings = Field(default_factory=WorkerPrivacySettings)
     active_classes: list[str] = Field(default_factory=list)
     runtime_vocabulary: RuntimeVocabularyState = Field(default_factory=RuntimeVocabularyState)
+    runtime_selection: WorkerRuntimeSelectionSettings = Field(
+        default_factory=WorkerRuntimeSelectionSettings
+    )
     runtime_capability: WorkerRuntimeCapability = Field(default_factory=WorkerRuntimeCapability)
     runtime_artifacts: list[WorkerRuntimeArtifact] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)

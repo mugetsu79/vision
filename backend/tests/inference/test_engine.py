@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
-from argus.api.contracts import WorkerEvidenceStorageSettings
+from argus.api.contracts import WorkerEvidenceStorageSettings, WorkerRuntimeSelectionSettings
 from argus.core import metrics as core_metrics
 from argus.inference import engine as engine_module
 from argus.inference.engine import (
@@ -496,6 +496,7 @@ def _engine_config(camera_id: UUID) -> EngineConfig:
 
 def _runtime_artifact_settings(
     *,
+    kind: RuntimeArtifactKind = RuntimeArtifactKind.TENSORRT_ENGINE,
     capability: DetectorCapability = DetectorCapability.FIXED_VOCAB,
     target_profile: str = ExecutionProfile.MACOS_X86_64_INTEL.value,
     vocabulary_hash: str | None = None,
@@ -503,10 +504,18 @@ def _runtime_artifact_settings(
     return RuntimeArtifactSettings(
         id=uuid4(),
         scope=RuntimeArtifactScope.MODEL,
-        kind=RuntimeArtifactKind.TENSORRT_ENGINE,
+        kind=kind,
         capability=capability,
-        runtime_backend="tensorrt_engine",
-        path="/models/vehicles.engine",
+        runtime_backend=(
+            "tensorrt_engine"
+            if kind is RuntimeArtifactKind.TENSORRT_ENGINE
+            else "onnxruntime"
+        ),
+        path=(
+            "/models/vehicles.engine"
+            if kind is RuntimeArtifactKind.TENSORRT_ENGINE
+            else "/models/vehicles.onnx"
+        ),
         target_profile=target_profile,
         precision=RuntimeArtifactPrecision.FP16,
         input_shape={"width": 96, "height": 96},
@@ -2999,6 +3008,54 @@ async def test_build_runtime_engine_passes_selected_tensorrt_artifact_to_detecto
     assert selection.selected_backend == "tensorrt_engine"
     assert selection.artifact == artifact
     assert selection.fallback is False
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_honors_onnx_first_runtime_selection_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    tensorrt = _runtime_artifact_settings(kind=RuntimeArtifactKind.TENSORRT_ENGINE)
+    onnx_export = _runtime_artifact_settings(kind=RuntimeArtifactKind.ONNX_EXPORT)
+    detector_calls: dict[str, object] = {}
+
+    def fake_build_detector(
+        *,
+        model: object,
+        runtime: object,
+        runtime_policy: object,
+        runtime_selection: object,
+    ) -> object:
+        detector_calls["runtime_selection"] = runtime_selection
+        return object()
+
+    _patch_runtime_engine_build_dependencies(monkeypatch, build_detector=fake_build_detector)
+    runtime_selection = WorkerRuntimeSelectionSettings(
+        profile_id=uuid4(),
+        profile_name="ONNX first",
+        profile_hash="c" * 64,
+        preferred_backend=None,
+        artifact_preference="onnx_first",
+        fallback_allowed=True,
+    )
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "runtime_artifacts": [tensorrt, onnx_export],
+            "runtime_selection": runtime_selection,
+        }
+    )
+
+    await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    selection = detector_calls["runtime_selection"]
+    assert selection.selected_backend == "onnxruntime"
+    assert selection.artifact == onnx_export
+    assert selection.profile_name == "ONNX first"
+    assert selection.artifact_preference == "onnx_first"
 
 
 @pytest.mark.asyncio

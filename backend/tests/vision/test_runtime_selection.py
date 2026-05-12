@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 from argus.inference.engine import (
@@ -13,7 +14,7 @@ from argus.models.enums import (
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
 )
-from argus.vision.runtime_selection import select_runtime_artifact
+from argus.vision.runtime_selection import RuntimeSelectionError, select_runtime_artifact
 from argus.vision.vocabulary import hash_vocabulary
 
 
@@ -164,6 +165,59 @@ def test_select_runtime_artifact_onnx_export_wins_when_open_vocab_hash_matches()
     assert selection.artifact == artifact
     assert selection.fallback is False
     assert selection.fallback_reason is None
+
+
+def test_select_runtime_artifact_onnx_first_profile_overrides_tensorrt() -> None:
+    tensorrt = _artifact(kind=RuntimeArtifactKind.TENSORRT_ENGINE)
+    onnx_export = _artifact(kind=RuntimeArtifactKind.ONNX_EXPORT)
+
+    selection = select_runtime_artifact(
+        model=_model(),
+        host_profile="linux-aarch64-nvidia-jetson",
+        artifacts=[tensorrt, onnx_export],
+        runtime_vocabulary_hash=None,
+        runtime_profile=SimpleNamespace(
+            profile_id=uuid4(),
+            profile_name="ONNX first",
+            profile_hash="f" * 64,
+            preferred_backend=None,
+            artifact_preference="onnx_first",
+            fallback_allowed=True,
+        ),
+    )
+
+    assert selection.selected_backend == "onnxruntime"
+    assert selection.artifact == onnx_export
+    assert selection.profile_name == "ONNX first"
+    assert selection.artifact_preference == "onnx_first"
+    assert selection.fallback_allowed is True
+
+
+def test_select_runtime_artifact_disallows_fallback_when_profile_requires_artifact() -> None:
+    profile_id = uuid4()
+
+    try:
+        select_runtime_artifact(
+            model=_model(),
+            host_profile="linux-aarch64-nvidia-jetson",
+            artifacts=[],
+            runtime_vocabulary_hash=None,
+            runtime_profile=SimpleNamespace(
+                profile_id=profile_id,
+                profile_name="TensorRT required",
+                profile_hash="a" * 64,
+                preferred_backend="tensorrt_engine",
+                artifact_preference="tensorrt_first",
+                fallback_allowed=False,
+            ),
+        )
+    except RuntimeSelectionError as exc:
+        assert "TensorRT required" in str(exc)
+        assert "no_runtime_artifacts" in str(exc)
+        assert exc.profile_id == profile_id
+        assert exc.fallback_reason == "no_runtime_artifacts"
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("Expected runtime selection to fail closed.")
 
 
 def test_select_runtime_artifact_fallback_reason_is_explicit_without_candidates() -> None:

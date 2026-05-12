@@ -24,6 +24,7 @@ from argus.api.contracts import (
     EvidenceRecordingPolicy,
     SceneVisionProfile,
     WorkerEvidenceStorageSettings,
+    WorkerRuntimeSelectionSettings,
 )
 from argus.compat import UTC
 from argus.core.config import Settings
@@ -268,6 +269,9 @@ class EngineConfig(BaseModel):
     tracker: TrackerSettings
     privacy: PrivacyPolicy = Field(default_factory=PrivacyPolicy)
     active_classes: list[str] = Field(default_factory=list)
+    runtime_selection: WorkerRuntimeSelectionSettings = Field(
+        default_factory=WorkerRuntimeSelectionSettings
+    )
     runtime_artifacts: list[RuntimeArtifactSettings] = Field(default_factory=list)
     attribute_rules: list[dict[str, Any]] = Field(default_factory=list)
     zones: list[dict[str, Any]] = Field(default_factory=list)
@@ -810,6 +814,11 @@ class InferenceEngine:
             artifact=None,
             fallback=True,
             fallback_reason="not_selected",
+            profile_id=config.runtime_selection.profile_id,
+            profile_name=config.runtime_selection.profile_name,
+            profile_hash=config.runtime_selection.profile_hash,
+            artifact_preference=config.runtime_selection.artifact_preference,
+            fallback_allowed=config.runtime_selection.fallback_allowed,
         )
         self._started = False
 
@@ -1104,6 +1113,11 @@ class InferenceEngine:
                     artifact=None,
                     fallback=True,
                     fallback_reason="vocabulary_changed",
+                    profile_id=self.runtime_selection.profile_id,
+                    profile_name=self.runtime_selection.profile_name,
+                    profile_hash=self.runtime_selection.profile_hash,
+                    artifact_preference=self.runtime_selection.artifact_preference,
+                    fallback_allowed=self.runtime_selection.fallback_allowed,
                 )
                 if self._runtime is not None and self._runtime_policy is not None:
                     self.detector = _build_detector_with_selection(
@@ -1732,10 +1746,12 @@ async def build_runtime_engine(
             if config.model.capability is DetectorCapability.OPEN_VOCAB
             else None
         ),
+        runtime_profile=config.runtime_selection,
     )
     logger.info(
         "Selected inference runtime camera_id=%s model=%s selected_backend=%s "
-        "artifact_id=%s host_profile=%s fallback=%s fallback_reason=%s",
+        "artifact_id=%s host_profile=%s fallback=%s fallback_reason=%s "
+        "profile_id=%s profile_hash=%s artifact_preference=%s fallback_allowed=%s",
         config.camera_id,
         config.model.name,
         runtime_selection.selected_backend,
@@ -1743,6 +1759,10 @@ async def build_runtime_engine(
         runtime_policy.profile.value,
         runtime_selection.fallback,
         runtime_selection.fallback_reason,
+        runtime_selection.profile_id,
+        runtime_selection.profile_hash,
+        runtime_selection.artifact_preference,
+        runtime_selection.fallback_allowed,
     )
     detector = _build_detector_with_selection(
         model=config.model,

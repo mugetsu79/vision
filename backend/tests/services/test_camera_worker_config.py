@@ -10,6 +10,7 @@ from argus.api.contracts import (
     BrowserDeliverySettings,
     SourceCapability,
     WorkerEvidenceStorageSettings,
+    WorkerRuntimeSelectionSettings,
     WorkerStreamDeliverySettings,
 )
 from argus.core.config import Settings
@@ -229,11 +230,14 @@ class _FakeOperatorConfigurationService:
         self,
         evidence_storage: WorkerEvidenceStorageSettings | None = None,
         stream_delivery: WorkerStreamDeliverySettings | None = None,
+        runtime_selection: WorkerRuntimeSelectionSettings | None = None,
     ) -> None:
         self.evidence_storage = evidence_storage
         self.stream_delivery = stream_delivery
+        self.runtime_selection = runtime_selection
         self.calls: list[tuple[object, object, object | None]] = []
         self.stream_calls: list[tuple[object, object, object | None]] = []
+        self.runtime_calls: list[tuple[object, object]] = []
 
     async def resolve_worker_evidence_storage(
         self,
@@ -273,6 +277,17 @@ class _FakeOperatorConfigurationService:
                 edge_override_url=None,
             )
         return self.stream_delivery
+
+    async def resolve_worker_runtime_selection(
+        self,
+        tenant_context: object,
+        *,
+        camera_id: object,
+    ) -> WorkerRuntimeSelectionSettings:
+        self.runtime_calls.append((tenant_context, camera_id))
+        if self.runtime_selection is None:
+            return WorkerRuntimeSelectionSettings()
+        return self.runtime_selection
 
 
 def _tenant_context(tenant_id=None):  # noqa: ANN001
@@ -1126,6 +1141,50 @@ def test_stream_delivery_profile_controls_playback_base_urls_and_mode() -> None:
     assert central_urls["hls"] == "https://streams.example.com"
     assert central_urls["webrtc"] == "https://streams.example.com"
     assert edge_urls["hls"] == "https://edge-streams.example.com"
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_resolved_runtime_selection_profile() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    runtime_profile_id = uuid4()
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    runtime_selection = WorkerRuntimeSelectionSettings(
+        profile_id=runtime_profile_id,
+        profile_name="TensorRT required",
+        profile_hash="f" * 64,
+        preferred_backend="tensorrt_engine",
+        artifact_preference="tensorrt_first",
+        fallback_allowed=False,
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        runtime_selection=runtime_selection,
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+    tenant_context = _tenant_context()
+
+    config = await service.get_worker_config(tenant_context, camera.id)
+
+    assert configuration_service.runtime_calls == [(tenant_context, camera.id)]
+    assert config.runtime_selection.profile_id == runtime_profile_id
+    assert config.runtime_selection.profile_name == "TensorRT required"
+    assert config.runtime_selection.profile_hash == "f" * 64
+    assert config.runtime_selection.preferred_backend == "tensorrt_engine"
+    assert config.runtime_selection.artifact_preference == "tensorrt_first"
+    assert config.runtime_selection.fallback_allowed is False
 
 
 def test_central_native_browser_delivery_without_privacy_keeps_passthrough_stream() -> None:

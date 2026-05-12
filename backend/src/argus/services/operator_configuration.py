@@ -28,6 +28,7 @@ from argus.api.contracts import (
     StreamDeliveryProfileConfig,
     TenantContext,
     WorkerEvidenceStorageSettings,
+    WorkerRuntimeSelectionSettings,
     WorkerStreamDeliverySettings,
     _normalize_operator_config,
 )
@@ -532,6 +533,29 @@ class OperatorConfigurationService:
             delivery_mode=config.delivery_mode,
             public_base_url=config.public_base_url,
             edge_override_url=config.edge_override_url,
+        )
+
+    async def resolve_worker_runtime_selection(
+        self,
+        tenant_context: TenantContext,
+        *,
+        camera_id: UUID,
+        profile_id: UUID | None = None,
+    ) -> WorkerRuntimeSelectionSettings:
+        runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
+            tenant_context,
+            OperatorConfigProfileKind.RUNTIME_SELECTION,
+            camera_id=camera_id,
+            profile_id=profile_id,
+        )
+        config = RuntimeSelectionProfileConfig.model_validate(runtime_config.config)
+        return WorkerRuntimeSelectionSettings(
+            profile_id=runtime_config.profile_id,
+            profile_name=runtime_config.profile_name,
+            profile_hash=runtime_config.profile_hash,
+            preferred_backend=config.preferred_backend,
+            artifact_preference=config.artifact_preference,
+            fallback_allowed=config.fallback_allowed,
         )
 
     async def seed_bootstrap_defaults(

@@ -2696,6 +2696,7 @@ export interface components {
             /** Active Classes */
             active_classes?: string[];
             runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
+            runtime_selection?: components["schemas"]["WorkerRuntimeSelectionSettings"];
             runtime_capability?: components["schemas"]["WorkerRuntimeCapability"];
             /** Runtime Artifacts */
             runtime_artifacts?: components["schemas"]["WorkerRuntimeArtifact"][];
@@ -2878,6 +2879,28 @@ export interface components {
             hot_runtime_vocabulary_updates: boolean;
             /** Max Runtime Terms */
             max_runtime_terms?: number | null;
+        };
+        /** WorkerRuntimeSelectionSettings */
+        WorkerRuntimeSelectionSettings: {
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /** Preferred Backend */
+            preferred_backend?: ("onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine") | null;
+            /**
+             * Artifact Preference
+             * @default tensorrt_first
+             * @enum {string}
+             */
+            artifact_preference: "tensorrt_first" | "onnx_first" | "dynamic_first";
+            /**
+             * Fallback Allowed
+             * @default true
+             */
+            fallback_allowed: boolean;
         };
         /**
          * WorkerRuntimeStatus
