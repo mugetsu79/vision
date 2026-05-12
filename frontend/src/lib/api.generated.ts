@@ -1174,6 +1174,10 @@ export interface components {
             privacy_manifest_hash?: string | null;
             /** Review Url */
             review_url?: string | null;
+            /** Sync Status */
+            sync_status?: string | null;
+            /** Sync Error */
+            sync_error?: string | null;
         };
         /**
          * EvidenceArtifactStatus
@@ -1184,7 +1188,7 @@ export interface components {
          * EvidenceLedgerAction
          * @enum {string}
          */
-        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "incident.reviewed" | "incident.reopened";
+        EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "incident.reviewed" | "incident.reopened";
         /** EvidenceLedgerEntryResponse */
         EvidenceLedgerEntryResponse: {
             /**

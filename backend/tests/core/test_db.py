@@ -279,6 +279,10 @@ def test_operator_configuration_models_are_registered() -> None:
     assert "operator_config_bindings" in Base.metadata.tables
 
 
+def test_local_first_sync_model_is_registered() -> None:
+    assert "local_first_sync_attempts" in Base.metadata.tables
+
+
 def test_operator_configuration_migration_exists_with_short_names() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     migration_path = (
@@ -306,3 +310,19 @@ def test_operator_configuration_migration_exists_with_short_names() -> None:
     for constraint_name in constraint_names:
         assert constraint_name in migration_text
         assert len(constraint_name) <= 63
+
+
+def test_local_first_sync_migration_exists_with_short_revision_id() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = repo_root / "src/argus/migrations/versions/0013_local_first_sync_state.py"
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    revision_id = "0013_local_first_sync_state"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
+    assert 'down_revision = "0012_operator_config_profiles"' in migration_text
+    assert '"local_first_sync_attempts"' in migration_text
+    assert "evidence.upload.started" in migration_text
+    assert "evidence.upload.available" in migration_text
+    assert "evidence.upload.failed" in migration_text

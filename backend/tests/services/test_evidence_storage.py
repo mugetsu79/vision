@@ -18,6 +18,7 @@ from argus.services.evidence_storage import (
     S3CompatibleEvidenceStore,
     build_evidence_store,
     resolve_evidence_storage_route,
+    resolve_local_evidence_path,
 )
 from argus.services.object_store import MinioObjectStore
 
@@ -105,6 +106,27 @@ def test_build_evidence_store_uses_configured_provider(tmp_path) -> None:
 
     assert isinstance(local, LocalFilesystemEvidenceStore)
     assert isinstance(remote, S3CompatibleEvidenceStore)
+
+
+def test_resolve_local_evidence_path_stays_under_storage_root(tmp_path) -> None:
+    settings = Settings(
+        _env_file=None,
+        incident_local_storage_root=str(tmp_path),
+    )
+
+    path = resolve_local_evidence_path(settings, "tenant/camera/clip.mjpeg")
+
+    assert path == tmp_path / "tenant/camera/clip.mjpeg"
+
+
+def test_resolve_local_evidence_path_rejects_traversal(tmp_path) -> None:
+    settings = Settings(
+        _env_file=None,
+        incident_local_storage_root=str(tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="relative paths without traversal"):
+        resolve_local_evidence_path(settings, "../outside.mjpeg")
 
 
 def test_resolve_evidence_storage_route_maps_ui_managed_profiles(tmp_path) -> None:

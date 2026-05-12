@@ -1178,6 +1178,8 @@ class EvidenceArtifactResponse(BaseModel):
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     review_url: str | None = None
+    sync_status: str | None = None
+    sync_error: str | None = None
 
 
 class EvidenceLedgerSummary(BaseModel):

@@ -133,6 +133,15 @@ def build_evidence_store(settings: Settings) -> EvidenceObjectStore:
     return S3CompatibleEvidenceStore(settings)
 
 
+def resolve_local_evidence_path(settings: Settings, object_key: str) -> Path:
+    object_path = PurePosixPath(_safe_object_key(object_key))
+    root = Path(settings.incident_local_storage_root).expanduser().resolve()
+    candidate = root.joinpath(*object_path.parts).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("Evidence artifact object key escapes local storage root.")
+    return candidate
+
+
 def resolve_evidence_storage_route(
     settings: Settings,
     *,

@@ -548,6 +548,39 @@ class EvidenceLedgerEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
+class LocalFirstSyncAttempt(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "local_first_sync_attempts"
+    __table_args__ = (
+        UniqueConstraint("artifact_id", name="uq_local_first_sync_artifact"),
+        Index("ix_local_first_sync_tenant_status", "tenant_id", "latest_status"),
+        Index("ix_local_first_sync_profile", "remote_profile_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("evidence_artifacts.id"),
+        nullable=False,
+    )
+    remote_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_config_profiles.id"),
+        nullable=True,
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latest_status: Mapped[str] = mapped_column(String(64), nullable=False, default="pending")
+    latest_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class OperatorConfigProfile(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "operator_config_profiles"
     __table_args__ = (

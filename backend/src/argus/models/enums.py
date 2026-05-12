@@ -134,6 +134,9 @@ class EvidenceLedgerAction(StrEnum):
     CLIP_AVAILABLE = "evidence.clip.available"
     CLIP_QUOTA_EXCEEDED = "evidence.clip.quota_exceeded"
     CLIP_CAPTURE_FAILED = "evidence.clip.capture_failed"
+    EVIDENCE_UPLOAD_STARTED = "evidence.upload.started"
+    EVIDENCE_UPLOAD_AVAILABLE = "evidence.upload.available"
+    EVIDENCE_UPLOAD_FAILED = "evidence.upload.failed"
     INCIDENT_REVIEWED = "incident.reviewed"
     INCIDENT_REOPENED = "incident.reopened"
 

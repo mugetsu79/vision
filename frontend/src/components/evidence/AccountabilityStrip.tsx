@@ -1,6 +1,10 @@
 import type { Incident } from "@/hooks/use-incidents";
 
 type EvidenceArtifact = NonNullable<Incident["evidence_artifacts"]>[number];
+type EvidenceArtifactWithSync = EvidenceArtifact & {
+  sync_status?: string | null;
+  sync_error?: string | null;
+};
 
 export function AccountabilityStrip({ incident }: { incident: Incident }) {
   const clipArtifact = primaryClipArtifact(incident);
@@ -119,6 +123,13 @@ function artifactStatusLabel(artifact: EvidenceArtifact): string {
     return "Available";
   }
   if (artifact.status === "upload_pending") {
+    const syncStatus = (artifact as EvidenceArtifactWithSync).sync_status;
+    if (syncStatus === "failed") {
+      return "Upload failed; local copy available";
+    }
+    if (syncStatus === "uploading" || syncStatus === "retrying") {
+      return "Retrying upload";
+    }
     return "Upload pending";
   }
   return "Expired";

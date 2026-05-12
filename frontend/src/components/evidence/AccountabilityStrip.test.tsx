@@ -141,4 +141,31 @@ describe("AccountabilityStrip", () => {
     expect(clipCell).not.toBeNull();
     expect(within(clipCell as HTMLElement).getByText("Upload pending")).toBeInTheDocument();
   });
+
+  test("labels local-first clips when remote upload retry has failed", () => {
+    const baseArtifact = accountableIncident().evidence_artifacts?.[0];
+    expect(baseArtifact).toBeDefined();
+
+    render(
+      <AccountabilityStrip
+        incident={accountableIncident({
+          evidence_artifacts: [
+            {
+              ...baseArtifact!,
+              status: "upload_pending",
+              storage_provider: "local_filesystem",
+              storage_scope: "edge",
+              sync_status: "failed",
+            } as NonNullable<Incident["evidence_artifacts"]>[number],
+          ],
+        })}
+      />,
+    );
+
+    const clipCell = screen.getByText("Evidence clip").closest("div");
+    expect(clipCell).not.toBeNull();
+    expect(
+      within(clipCell as HTMLElement).getByText("Upload failed; local copy available"),
+    ).toBeInTheDocument();
+  });
 });

@@ -9,7 +9,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
@@ -127,6 +127,7 @@ from argus.models.tables import (
     EvidenceArtifact,
     EvidenceLedgerEntry,
     Incident,
+    LocalFirstSyncAttempt,
     Model,
     ModelRuntimeArtifact,
     PrivacyManifestSnapshot,
@@ -141,6 +142,8 @@ from argus.services.camera_sources import (
     validate_camera_source_assignment,
 )
 from argus.services.evidence_ledger import EvidenceLedgerService
+from argus.services.evidence_storage import resolve_local_evidence_path
+from argus.services.local_first_sync import LocalFirstEvidenceSyncService
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
@@ -217,6 +220,7 @@ class AppServices:
     privacy_manifests: PrivacyManifestService
     scene_contracts: SceneContractService
     configuration: OperatorConfigurationService
+    local_first_sync: LocalFirstEvidenceSyncService
     edge: EdgeService
     operations: OperationsService
     history: HistoryService
@@ -2727,15 +2731,25 @@ async def _load_artifacts_by_incident_ids(
     if not incident_ids:
         return {}
     statement = (
-        select(EvidenceArtifact)
+        select(
+            EvidenceArtifact,
+            LocalFirstSyncAttempt.latest_status,
+            LocalFirstSyncAttempt.latest_error,
+        )
+        .outerjoin(
+            LocalFirstSyncAttempt,
+            LocalFirstSyncAttempt.artifact_id == EvidenceArtifact.id,
+        )
         .where(EvidenceArtifact.incident_id.in_(incident_ids))
         .order_by(EvidenceArtifact.incident_id.asc(), EvidenceArtifact.created_at.asc())
     )
-    artifacts = list((await session.execute(statement)).scalars().all())
+    artifact_rows = list((await session.execute(statement)).all())
     by_incident: dict[UUID, list[EvidenceArtifact]] = {
         incident_id: [] for incident_id in incident_ids
     }
-    for artifact in artifacts:
+    for artifact, sync_status, sync_error in artifact_rows:
+        artifact._local_first_sync_status = sync_status
+        artifact._local_first_sync_error = sync_error
         by_incident.setdefault(artifact.incident_id, []).append(artifact)
     return by_incident
 
@@ -2839,6 +2853,8 @@ def _artifact_response(
         scene_contract_hash=artifact.scene_contract_hash,
         privacy_manifest_hash=artifact.privacy_manifest_hash,
         review_url=review_url,
+        sync_status=cast(str | None, getattr(artifact, "_local_first_sync_status", None)),
+        sync_error=cast(str | None, getattr(artifact, "_local_first_sync_error", None)),
     )
 
 
@@ -2867,22 +2883,13 @@ def _resolve_local_artifact_path(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Local evidence storage is not configured.",
         )
-    object_path = PurePosixPath(object_key)
-    if object_path.is_absolute() or any(
-        part in {"", ".", ".."} for part in object_path.parts
-    ):
+    try:
+        return resolve_local_evidence_path(settings, object_key)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evidence artifact content not found.",
-        )
-    root = Path(settings.incident_local_storage_root).expanduser().resolve()
-    candidate = root.joinpath(*object_path.parts).resolve()
-    if candidate != root and root not in candidate.parents:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Evidence artifact content not found.",
-        )
-    return candidate
+        ) from exc
 
 
 class StreamService:
@@ -3153,6 +3160,7 @@ def build_app_services(
     )
     edge_service = EdgeService(db.session_factory, settings, events, audit_logger)
     configuration_service = OperatorConfigurationService(db.session_factory, settings, audit_logger)
+    evidence_ledger = EvidenceLedgerService(db.session_factory)
     return AppServices(
         tenancy=TenancyService(db.session_factory, settings),
         sites=SiteService(db.session_factory, audit_logger),
@@ -3168,6 +3176,11 @@ def build_app_services(
         privacy_manifests=PrivacyManifestService(db.session_factory),
         scene_contracts=SceneContractService(db.session_factory),
         configuration=configuration_service,
+        local_first_sync=LocalFirstEvidenceSyncService(
+            settings=settings,
+            session_factory=db.session_factory,
+            ledger=evidence_ledger,
+        ),
         edge=edge_service,
         operations=OperationsService(
             db.session_factory,
@@ -3178,7 +3191,7 @@ def build_app_services(
         incidents=IncidentService(
             db.session_factory,
             audit_logger,
-            EvidenceLedgerService(db.session_factory),
+            evidence_ledger,
             settings,
         ),
         streams=StreamService(db.session_factory, mediamtx, settings),
