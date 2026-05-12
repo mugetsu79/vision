@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0012_operator_configuration_profiles"
+revision = "0012_operator_config_profiles"
 down_revision = "0011_accountable_scene_evidence"
 branch_labels = None
 depends_on = None

@@ -288,7 +288,9 @@ def test_operator_configuration_migration_exists_with_short_names() -> None:
     migration_text = migration_path.read_text(encoding="utf-8")
 
     assert migration_path.exists()
-    assert 'revision = "0012_operator_configuration_profiles"' in migration_text
+    revision_id = "0012_operator_config_profiles"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
     assert 'down_revision = "0011_accountable_scene_evidence"' in migration_text
     assert '"operator_config_profiles"' in migration_text
     assert '"operator_config_secrets"' in migration_text
