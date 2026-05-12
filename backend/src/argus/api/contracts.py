@@ -242,6 +242,7 @@ class OperatorConfigProfileUpdate(BaseModel):
 
 
 OperatorSecretState = Literal["missing", "present"]
+OperatorConfigResolutionStatus = Literal["resolved", "unresolved"]
 
 
 class OperatorConfigProfileResponse(OperatorConfigProfileBase):
@@ -279,7 +280,26 @@ class OperatorConfigTestResponse(BaseModel):
     tested_at: datetime
 
 
+class ResolvedOperatorConfigEntryResponse(BaseModel):
+    kind: OperatorConfigProfileKind
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_slug: str | None = None
+    profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    winner_scope: OperatorConfigScope | None = None
+    winner_scope_key: str | None = None
+    validation_status: OperatorConfigValidationStatus | None = None
+    resolution_status: OperatorConfigResolutionStatus = "unresolved"
+    applies_to_runtime: bool = False
+    secret_state: dict[str, OperatorSecretState] = Field(default_factory=dict)
+    operator_message: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
 class ResolvedOperatorConfigResponse(BaseModel):
+    entries: dict[OperatorConfigProfileKind, ResolvedOperatorConfigEntryResponse] = Field(
+        default_factory=dict
+    )
     profiles: dict[OperatorConfigProfileKind, OperatorConfigProfileResponse] = Field(
         default_factory=dict
     )

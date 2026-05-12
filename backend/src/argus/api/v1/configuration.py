@@ -27,6 +27,8 @@ TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 ConfigKindQuery = Annotated[OperatorConfigProfileKind | None, Query()]
 CameraIdQuery = Annotated[UUID | None, Query()]
+SiteIdQuery = Annotated[UUID | None, Query()]
+EdgeNodeIdQuery = Annotated[UUID | None, Query()]
 
 
 @router.get("/catalog")
@@ -109,8 +111,12 @@ async def resolve_configuration(
     tenant_context: TenantDependency,
     services: ServicesDependency,
     camera_id: CameraIdQuery = None,
+    site_id: SiteIdQuery = None,
+    edge_node_id: EdgeNodeIdQuery = None,
 ) -> ResolvedOperatorConfigResponse:
     return await services.configuration.resolve_all_for_camera(
         tenant_context,
         camera_id=camera_id,
+        site_id=site_id,
+        edge_node_id=edge_node_id,
     )

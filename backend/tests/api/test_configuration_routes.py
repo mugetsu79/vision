@@ -15,6 +15,7 @@ from argus.api.contracts import (
     OperatorConfigProfileResponse,
     OperatorConfigProfileUpdate,
     OperatorConfigTestResponse,
+    ResolvedOperatorConfigEntryResponse,
     ResolvedOperatorConfigResponse,
     TenantContext,
 )
@@ -149,9 +150,32 @@ class _FakeConfigurationService:
         self,
         tenant_context: TenantContext,
         camera_id: UUID | None = None,
+        site_id: UUID | None = None,
+        edge_node_id: UUID | None = None,
     ) -> ResolvedOperatorConfigResponse:
+        del site_id, edge_node_id
         return ResolvedOperatorConfigResponse(
-            profiles={OperatorConfigProfileKind.EVIDENCE_STORAGE: self.profile}
+            profiles={OperatorConfigProfileKind.EVIDENCE_STORAGE: self.profile},
+            entries={
+                OperatorConfigProfileKind.EVIDENCE_STORAGE: ResolvedOperatorConfigEntryResponse(
+                    kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+                    profile_id=self.profile.id,
+                    profile_name=self.profile.name,
+                    profile_slug=self.profile.slug,
+                    profile_hash=self.profile.config_hash,
+                    winner_scope=(
+                        OperatorConfigScope.CAMERA
+                        if camera_id
+                        else OperatorConfigScope.TENANT
+                    ),
+                    winner_scope_key=str(camera_id) if camera_id else str(tenant_context.tenant_id),
+                    validation_status=self.profile.validation_status,
+                    resolution_status="resolved",
+                    applies_to_runtime=True,
+                    secret_state=self.profile.secret_state,
+                    config=self.profile.config,
+                )
+            },
         )
 
 
@@ -256,7 +280,30 @@ async def test_configuration_routes_create_patch_test_bind_and_resolve() -> None
     assert configuration.binding_payload is not None
     assert configuration.binding_payload.scope is OperatorConfigScope.CAMERA
     assert resolved_response.status_code == 200
-    assert resolved_response.json()["profiles"]["evidence_storage"]["slug"] == "dev-minio"
+    resolved_payload = resolved_response.json()
+    assert resolved_payload["profiles"]["evidence_storage"]["slug"] == "dev-minio"
+    assert resolved_payload["entries"]["evidence_storage"] == {
+        "kind": "evidence_storage",
+        "profile_id": str(configuration.profile.id),
+        "profile_name": "Dev MinIO",
+        "profile_slug": "dev-minio",
+        "profile_hash": "a" * 64,
+        "winner_scope": "camera",
+        "winner_scope_key": str(camera_id),
+        "validation_status": "unvalidated",
+        "resolution_status": "resolved",
+        "applies_to_runtime": True,
+        "secret_state": {"secret_key": "present"},
+        "operator_message": None,
+        "config": {
+            "provider": "minio",
+            "storage_scope": "central",
+            "endpoint": "localhost:9000",
+            "bucket": "incidents",
+            "secure": False,
+        },
+    }
+    assert "argus-dev-secret" not in resolved_response.text
     assert delete_response.status_code == 204
     assert configuration.deleted_profile_id == profile_id
 

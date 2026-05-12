@@ -97,7 +97,28 @@ vi.mock("@/hooks/use-configuration", () => ({
     mutateAsync: upsertBinding,
     isPending: false,
   }),
-  useResolvedConfiguration: () => ({ data: null, isLoading: false }),
+  useResolvedConfiguration: () => ({
+    data: {
+      entries: {
+        evidence_storage: {
+          kind: "evidence_storage",
+          profile_id: "profile-minio",
+          profile_name: "Central MinIO",
+          profile_slug: "central-minio",
+          profile_hash: "a".repeat(64),
+          winner_scope: "tenant",
+          winner_scope_key: "tenant-1",
+          validation_status: "unvalidated",
+          resolution_status: "resolved",
+          applies_to_runtime: true,
+          secret_state: { secret_key: "present" },
+          operator_message: null,
+          config: {},
+        },
+      },
+    },
+    isLoading: false,
+  }),
 }));
 
 const cameras = [
@@ -144,7 +165,7 @@ describe("ConfigurationWorkspace", () => {
 
     const workspace = screen.getByTestId("configuration-workspace");
     expect(
-      within(workspace).getByRole("heading", { name: /configuration/i }),
+      within(workspace).getByRole("heading", { name: /^configuration$/i }),
     ).toBeInTheDocument();
     for (const label of [
       "Evidence storage",
@@ -160,6 +181,8 @@ describe("ConfigurationWorkspace", () => {
     expect(screen.queryByText("argus-dev-secret")).not.toBeInTheDocument();
     expect(screen.getAllByText("Stored").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Replace secret").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /effective configuration/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Central MinIO").length).toBeGreaterThan(0);
   });
 
   test("creates a cloud S3-compatible evidence profile with write-only secrets", async () => {
@@ -211,7 +234,7 @@ describe("ConfigurationWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: /test profile/i }));
     expect(testProfile).toHaveBeenCalledWith("profile-minio");
-    expect(await screen.findByText(/valid/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^valid - bucket reachable$/i)).toBeInTheDocument();
     expect(await screen.findByText(/bucket reachable/i)).toBeInTheDocument();
 
     const bindingPanel = screen.getByTestId("configuration-binding-panel");

@@ -365,7 +365,7 @@ describe("SettingsPage operations workbench", () => {
     expect(
       screen.getByText(/argus.inference.engine --camera-id/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("jetson-1")).toBeInTheDocument();
+    expect(screen.getAllByText("jetson-1").length).toBeGreaterThan(0);
     expect(
       within(screen.getByTestId("worker-rail")).getByText(/rtsp source/i),
     ).toBeInTheDocument();

@@ -18,6 +18,15 @@ export type OperatorConfigTestResponse =
   components["schemas"]["OperatorConfigTestResponse"];
 export type ResolvedOperatorConfig =
   components["schemas"]["ResolvedOperatorConfigResponse"];
+export type ResolvedOperatorConfigEntry =
+  components["schemas"]["ResolvedOperatorConfigEntryResponse"];
+export type ResolvedConfigurationTarget =
+  | string
+  | {
+      cameraId?: string | null;
+      siteId?: string | null;
+      edgeNodeId?: string | null;
+    };
 
 export type ConfigurationCatalog = {
   kinds?: Array<{
@@ -156,12 +165,27 @@ export function useUpsertConfigurationBinding() {
   });
 }
 
-export function useResolvedConfiguration(cameraId?: string) {
+export function useResolvedConfiguration(target?: ResolvedConfigurationTarget) {
+  const cameraId = typeof target === "string" ? target : target?.cameraId;
+  const siteId = typeof target === "string" ? null : target?.siteId;
+  const edgeNodeId = typeof target === "string" ? null : target?.edgeNodeId;
   return useQuery({
-    queryKey: ["configuration", "resolved", cameraId ?? "tenant"],
+    queryKey: [
+      "configuration",
+      "resolved",
+      cameraId ?? "tenant",
+      siteId ?? "none",
+      edgeNodeId ?? "none",
+    ],
     queryFn: async () => {
       const { data, error } = await apiClient.GET("/api/v1/configuration/resolved", {
-        params: { query: cameraId ? { camera_id: cameraId } : {} },
+        params: {
+          query: {
+            camera_id: cameraId ?? undefined,
+            site_id: siteId ?? undefined,
+            edge_node_id: edgeNodeId ?? undefined,
+          },
+        },
       });
       if (error || !data) {
         throw toApiError(error, "Failed to resolve configuration.");

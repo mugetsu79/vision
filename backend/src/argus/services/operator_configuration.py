@@ -48,6 +48,7 @@ from argus.models.tables import (
     Site,
 )
 from argus.services.object_store import MinioObjectStore
+from argus.services.runtime_configuration import RuntimeConfigurationService
 
 RemoteStorageValidator = Callable[
     [dict[str, Any], dict[str, str]],
@@ -79,6 +80,11 @@ class OperatorConfigurationService:
         self.settings = settings
         self.audit_logger = audit_logger
         self.remote_storage_validator = remote_storage_validator
+        self.runtime_configuration = RuntimeConfigurationService(
+            session_factory,
+            settings,
+            bootstrap_defaults=self.seed_bootstrap_defaults,
+        )
 
     async def list_catalog(self) -> dict[str, object]:
         return {
@@ -433,19 +439,15 @@ class OperatorConfigurationService:
         tenant_context: TenantContext,
         *,
         camera_id: UUID | None = None,
+        site_id: UUID | None = None,
+        edge_node_id: UUID | None = None,
     ) -> ResolvedOperatorConfigResponse:
-        profiles: dict[OperatorConfigProfileKind, OperatorConfigProfileResponse] = {}
-        for kind in OperatorConfigProfileKind:
-            try:
-                profiles[kind] = await self.resolve_profile(
-                    tenant_context,
-                    kind,
-                    camera_id=camera_id,
-                )
-            except HTTPException as exc:
-                if exc.status_code != status.HTTP_404_NOT_FOUND:
-                    raise
-        return ResolvedOperatorConfigResponse(profiles=profiles)
+        return await self.runtime_configuration.resolve_all_for_camera(
+            tenant_context,
+            camera_id=camera_id,
+            site_id=site_id,
+            edge_node_id=edge_node_id,
+        )
 
     async def resolve_worker_evidence_storage(
         self,

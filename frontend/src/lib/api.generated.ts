@@ -2184,8 +2184,49 @@ export interface components {
             /** Camera Ids */
             camera_ids: string[];
         };
+        /** ResolvedOperatorConfigEntryResponse */
+        ResolvedOperatorConfigEntryResponse: {
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Profile Slug */
+            profile_slug?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            winner_scope?: components["schemas"]["OperatorConfigScope"] | null;
+            /** Winner Scope Key */
+            winner_scope_key?: string | null;
+            validation_status?: components["schemas"]["OperatorConfigValidationStatus"] | null;
+            /**
+             * Resolution Status
+             * @default unresolved
+             * @enum {string}
+             */
+            resolution_status: "resolved" | "unresolved";
+            /**
+             * Applies To Runtime
+             * @default false
+             */
+            applies_to_runtime: boolean;
+            /** Secret State */
+            secret_state?: {
+                [key: string]: "missing" | "present";
+            };
+            /** Operator Message */
+            operator_message?: string | null;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+        };
         /** ResolvedOperatorConfigResponse */
         ResolvedOperatorConfigResponse: {
+            /** Entries */
+            entries?: {
+                [key: string]: components["schemas"]["ResolvedOperatorConfigEntryResponse"];
+            };
             /** Profiles */
             profiles?: {
                 [key: string]: components["schemas"]["OperatorConfigProfileResponse"];
@@ -3682,6 +3723,8 @@ export interface operations {
         parameters: {
             query?: {
                 camera_id?: string | null;
+                site_id?: string | null;
+                edge_node_id?: string | null;
             };
             header?: {
                 "X-Tenant-ID"?: string | null;

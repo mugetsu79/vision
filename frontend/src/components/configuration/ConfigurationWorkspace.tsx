@@ -8,6 +8,7 @@ import {
   Workflow,
 } from "lucide-react";
 
+import { EffectiveConfigurationPanel } from "@/components/configuration/EffectiveConfigurationPanel";
 import { ProfileBindingPanel } from "@/components/configuration/ProfileBindingPanel";
 import { ProfileEditor } from "@/components/configuration/ProfileEditor";
 import {
@@ -264,6 +265,17 @@ export function ConfigurationWorkspace({
             onBind={async (payload) => {
               await upsertBinding.mutateAsync(payload);
             }}
+          />
+          <EffectiveConfigurationPanel
+            cameras={cameras.map((camera) => ({
+              id: camera.id,
+              label: camera.name ?? camera.id,
+            }))}
+            sites={sites.map((site) => ({ id: site.id, label: site.name ?? site.id }))}
+            edgeNodes={edgeNodes.map((node) => ({
+              id: node.id,
+              label: node.hostname ?? node.id,
+            }))}
           />
         </div>
       </div>
