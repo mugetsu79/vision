@@ -330,6 +330,29 @@ class PrivacyManifestSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     manifest: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
 
 
+class RuntimePassportSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "runtime_passport_snapshots"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id"),
+        nullable=True,
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    passport_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    passport: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
 class DetectionRule(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "detection_rules"
 
@@ -458,6 +481,12 @@ class Incident(UUIDPrimaryKeyMixin, Base):
         nullable=True,
     )
     privacy_manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    runtime_passport_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("runtime_passport_snapshots.id"),
+        nullable=True,
+    )
+    runtime_passport_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     recording_policy: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     review_status: Mapped[IncidentReviewStatus] = mapped_column(
         enum_column(IncidentReviewStatus, "incident_review_status_enum"),

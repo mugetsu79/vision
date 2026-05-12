@@ -884,6 +884,8 @@ class WorkerConfigResponse(BaseModel):
     mode: ProcessingMode
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    runtime_passport_snapshot_id: UUID | None = None
+    runtime_passport_hash: str | None = Field(default=None, min_length=64, max_length=64)
     recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
     evidence_storage: WorkerEvidenceStorageSettings | None = None
     camera: WorkerCameraSettings

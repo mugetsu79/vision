@@ -47,6 +47,8 @@ class IncidentTriggeredEvent(BaseModel):
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_snapshot_id: UUID | None = None
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    runtime_passport_snapshot_id: UUID | None = None
+    runtime_passport_hash: str | None = Field(default=None, min_length=64, max_length=64)
     recording_policy: EvidenceRecordingPolicy | None = None
     payload: dict[str, object] = Field(default_factory=dict)
 
@@ -106,6 +108,8 @@ class IncidentRepository(Protocol):
         scene_contract_hash: str | None = None,
         privacy_manifest_snapshot_id: UUID | None = None,
         privacy_manifest_hash: str | None = None,
+        runtime_passport_snapshot_id: UUID | None = None,
+        runtime_passport_hash: str | None = None,
         recording_policy: dict[str, object] | None = None,
         snapshot_url: str | None = None,
         artifact_payload: dict[str, object] | None = None,
@@ -282,6 +286,8 @@ class IncidentClipCaptureService:
                 scene_contract_hash=pending.event.scene_contract_hash,
                 privacy_manifest_snapshot_id=pending.event.privacy_manifest_snapshot_id,
                 privacy_manifest_hash=pending.event.privacy_manifest_hash,
+                runtime_passport_snapshot_id=pending.event.runtime_passport_snapshot_id,
+                runtime_passport_hash=pending.event.runtime_passport_hash,
                 recording_policy=recording_policy_payload,
                 snapshot_url=None,
                 artifact_payload=None,
@@ -480,6 +486,8 @@ class IncidentClipCaptureService:
             scene_contract_hash=pending.event.scene_contract_hash,
             privacy_manifest_snapshot_id=pending.event.privacy_manifest_snapshot_id,
             privacy_manifest_hash=pending.event.privacy_manifest_hash,
+            runtime_passport_snapshot_id=pending.event.runtime_passport_snapshot_id,
+            runtime_passport_hash=pending.event.runtime_passport_hash,
             recording_policy=recording_policy_payload,
             snapshot_url=snapshot_url,
             artifact_payload=artifact_payloads[0] if artifact_payloads else None,
@@ -552,6 +560,8 @@ class SQLIncidentRepository:
         scene_contract_hash: str | None = None,
         privacy_manifest_snapshot_id: UUID | None = None,
         privacy_manifest_hash: str | None = None,
+        runtime_passport_snapshot_id: UUID | None = None,
+        runtime_passport_hash: str | None = None,
         recording_policy: dict[str, object] | None = None,
         snapshot_url: str | None = None,
         artifact_payload: dict[str, object] | None = None,
@@ -571,6 +581,8 @@ class SQLIncidentRepository:
                 scene_contract_hash=scene_contract_hash,
                 privacy_manifest_snapshot_id=privacy_manifest_snapshot_id,
                 privacy_manifest_hash=privacy_manifest_hash,
+                runtime_passport_snapshot_id=runtime_passport_snapshot_id,
+                runtime_passport_hash=runtime_passport_hash,
                 recording_policy=recording_policy,
             )
             session.add(incident)

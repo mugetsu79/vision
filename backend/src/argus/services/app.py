@@ -162,6 +162,7 @@ from argus.services.runtime_artifacts import (
     RuntimeArtifactService,
     artifact_matches_camera_vocabulary,
 )
+from argus.services.runtime_passports import RuntimePassportService, build_runtime_passport
 from argus.services.scene_contracts import SceneContractService, build_scene_contract
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
@@ -716,10 +717,39 @@ class CameraService:
             camera_id=camera.id,
             contract=scene_contract,
         )
+        runtime_selection_payload = scene_contract["runtime_selection"]
+        runtime_vocabulary_payload = scene_contract["runtime_vocabulary"]
+        runtime_passport = build_runtime_passport(
+            tenant_id=tenant_context.tenant_id,
+            camera_id=camera.id,
+            scene_contract_hash=contract_snapshot.contract_hash,
+            model_metadata=_model_contract_payload(primary_model),
+            runtime_selection=cast(dict[str, object], runtime_selection_payload),
+            runtime_artifact=(
+                _runtime_artifact_passport_payload(runtime_artifacts[0])
+                if runtime_artifacts
+                else None
+            ),
+            selection_report=_runtime_selection_report_payload(
+                cast(dict[str, object], runtime_selection_payload)
+            ),
+            scene_vocabulary_hash=cast(dict[str, object], runtime_vocabulary_payload).get(
+                "hash"
+            ),
+        )
+        runtime_passport_snapshot = await RuntimePassportService(
+            self.session_factory
+        ).get_or_create_snapshot(
+            tenant_id=tenant_context.tenant_id,
+            camera_id=camera.id,
+            passport=runtime_passport,
+        )
         return base_config.model_copy(
             update={
                 "scene_contract_hash": contract_snapshot.contract_hash,
                 "privacy_manifest_hash": privacy_snapshot.manifest_hash,
+                "runtime_passport_snapshot_id": runtime_passport_snapshot.id,
+                "runtime_passport_hash": runtime_passport_snapshot.passport_hash,
             }
         )
 
@@ -3965,6 +3995,8 @@ def _camera_to_worker_config(
     privacy_policy: WorkerPrivacyPolicySettings | None = None,
     scene_contract_hash: str | None = None,
     privacy_manifest_hash: str | None = None,
+    runtime_passport_snapshot_id: UUID | None = None,
+    runtime_passport_hash: str | None = None,
 ) -> WorkerConfigResponse:
     resolved_recording_policy = recording_policy or _recording_policy_from_camera(camera)
     privacy = PrivacySettings.model_validate(camera.privacy)
@@ -4014,6 +4046,8 @@ def _camera_to_worker_config(
         mode=camera.processing_mode,
         scene_contract_hash=scene_contract_hash,
         privacy_manifest_hash=privacy_manifest_hash,
+        runtime_passport_snapshot_id=runtime_passport_snapshot_id,
+        runtime_passport_hash=runtime_passport_hash,
         recording_policy=resolved_recording_policy,
         evidence_storage=evidence_storage,
         camera=WorkerCameraSettings(
@@ -4286,6 +4320,37 @@ def _runtime_selection_contract_payload(
         "precision": None,
         "fallback_reason": "no_validated_runtime_artifact",
         **profile_payload,
+    }
+
+
+def _runtime_selection_report_payload(
+    runtime_selection: dict[str, object],
+) -> dict[str, object | None]:
+    selected_artifact_id = runtime_selection.get("selected_artifact_id")
+    fallback_reason = runtime_selection.get("fallback_reason")
+    return {
+        "selected_backend": runtime_selection.get("backend"),
+        "fallback": selected_artifact_id is None and fallback_reason is not None,
+        "fallback_reason": fallback_reason,
+    }
+
+
+def _runtime_artifact_passport_payload(
+    artifact: ModelRuntimeArtifact,
+) -> dict[str, object | None]:
+    return {
+        "id": str(artifact.id),
+        "kind": artifact.kind.value,
+        "runtime_backend": artifact.runtime_backend,
+        "target_profile": artifact.target_profile,
+        "precision": artifact.precision.value,
+        "vocabulary_hash": artifact.vocabulary_hash,
+        "vocabulary_version": artifact.vocabulary_version,
+        "source_model_sha256": artifact.source_model_sha256,
+        "sha256": artifact.sha256,
+        "runtime_versions": dict(artifact.runtime_versions or {}),
+        "validation_status": artifact.validation_status.value,
+        "validated_at": artifact.validated_at,
     }
 
 

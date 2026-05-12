@@ -258,6 +258,8 @@ class EngineConfig(BaseModel):
     mode: ProcessingMode
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    runtime_passport_snapshot_id: UUID | None = None
+    runtime_passport_hash: str | None = Field(default=None, min_length=64, max_length=64)
     recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
     evidence_storage: WorkerEvidenceStorageSettings | None = None
     profile: PublishProfile | None = None
@@ -1497,6 +1499,10 @@ class InferenceEngine:
                 or self.config.scene_contract_hash,
                 "privacy_manifest_hash": event.privacy_manifest_hash
                 or self.config.privacy_manifest_hash,
+                "runtime_passport_snapshot_id": event.runtime_passport_snapshot_id
+                or self.config.runtime_passport_snapshot_id,
+                "runtime_passport_hash": event.runtime_passport_hash
+                or self.config.runtime_passport_hash,
                 "recording_policy": event.recording_policy or self.config.recording_policy,
             }
         )

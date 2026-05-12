@@ -342,3 +342,38 @@ def test_evidence_expiry_migration_revision_id_fits_alembic_version_column() -> 
     assert len(revision_id) <= 32
     assert 'down_revision = "0013_local_first_sync_state"' in migration_text
     assert "evidence.expired" in migration_text
+
+
+def test_runtime_passport_models_are_registered() -> None:
+    assert "runtime_passport_snapshots" in Base.metadata.tables
+    incident_columns = Base.metadata.tables["incidents"].columns
+    assert "runtime_passport_snapshot_id" in incident_columns
+    assert "runtime_passport_hash" in incident_columns
+
+
+def test_runtime_passport_migration_exists_with_short_revision_id() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = repo_root / "src/argus/migrations/versions/0016_runtime_passports.py"
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    revision_id = "0016_runtime_passports"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
+    assert 'down_revision = "0015_snapshot_ledger_actions"' in migration_text
+    assert '"runtime_passport_snapshots"' in migration_text
+    assert '"incident_id"' in migration_text
+    assert '"runtime_passport_snapshot_id"' in migration_text
+    assert '"runtime_passport_hash"' in migration_text
+
+    constraint_names = [
+        "fk_runtime_passports_camera",
+        "fk_runtime_passports_incident",
+        "fk_incidents_runtime_passport",
+        "ix_runtime_passports_camera_created",
+        "ix_runtime_passports_incident",
+    ]
+
+    for constraint_name in constraint_names:
+        assert constraint_name in migration_text
+        assert len(constraint_name) <= 63

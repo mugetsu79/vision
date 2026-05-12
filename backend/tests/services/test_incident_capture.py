@@ -86,6 +86,8 @@ class _FakeIncidentRepository:
         scene_contract_hash: str | None = None,
         privacy_manifest_snapshot_id=None,  # noqa: ANN001
         privacy_manifest_hash: str | None = None,
+        runtime_passport_snapshot_id=None,  # noqa: ANN001
+        runtime_passport_hash: str | None = None,
         recording_policy: dict[str, object] | None = None,
         snapshot_url: str | None = None,
         artifact_payload: dict[str, object] | None = None,
@@ -104,6 +106,8 @@ class _FakeIncidentRepository:
                 "scene_contract_hash": scene_contract_hash,
                 "privacy_manifest_snapshot_id": privacy_manifest_snapshot_id,
                 "privacy_manifest_hash": privacy_manifest_hash,
+                "runtime_passport_snapshot_id": runtime_passport_snapshot_id,
+                "runtime_passport_hash": runtime_passport_hash,
                 "recording_policy": recording_policy,
                 "snapshot_url": snapshot_url,
                 "artifact_payload": artifact_payload,
@@ -158,6 +162,7 @@ async def test_incident_capture_uploads_clip_and_persists_incident() -> None:
 
     frame = np.zeros((32, 32, 3), dtype=np.uint8)
     started_at = datetime(2026, 4, 19, 12, 0, tzinfo=UTC)
+    runtime_passport_snapshot_id = uuid4()
     await service.record_frame(camera_id=camera_id, frame=frame, ts=started_at)
     await service.queue_incident(
         IncidentTriggeredEvent(
@@ -166,6 +171,8 @@ async def test_incident_capture_uploads_clip_and_persists_incident() -> None:
             type="anpr.line_crossed",
             scene_contract_hash="b" * 64,
             privacy_manifest_hash="c" * 64,
+            runtime_passport_snapshot_id=runtime_passport_snapshot_id,
+            runtime_passport_hash="d" * 64,
             payload={
                 "plate_text": "ZH123456",
                 "plate_hash": "hash-value",
@@ -196,6 +203,8 @@ async def test_incident_capture_uploads_clip_and_persists_incident() -> None:
     assert "plate_text" not in incidents[0]["payload"]
     assert incidents[0]["scene_contract_hash"] == "b" * 64
     assert incidents[0]["privacy_manifest_hash"] == "c" * 64
+    assert incidents[0]["runtime_passport_snapshot_id"] == runtime_passport_snapshot_id
+    assert incidents[0]["runtime_passport_hash"] == "d" * 64
     artifact = incidents[0]["artifact_payload"]
     assert isinstance(artifact, dict)
     assert artifact["kind"] is EvidenceArtifactKind.EVENT_CLIP

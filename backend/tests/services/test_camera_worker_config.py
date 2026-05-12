@@ -34,6 +34,7 @@ from argus.models.tables import (
     Model,
     ModelRuntimeArtifact,
     PrivacyManifestSnapshot,
+    RuntimePassportSnapshot,
     SceneContractSnapshot,
     Tenant,
 )
@@ -173,6 +174,17 @@ class _WorkerConfigSession:
                     if contract_hash is None or snapshot.contract_hash == contract_hash
                 ]
             )
+        if "runtime_passport_snapshots" in str(statement):
+            snapshots = self.state["runtime_passport_snapshots"]
+            assert isinstance(snapshots, list)
+            passport_hash = _hash_param_from_statement(statement)
+            return _Result(
+                [
+                    snapshot
+                    for snapshot in snapshots
+                    if passport_hash is None or snapshot.passport_hash == passport_hash
+                ]
+            )
         camera = self.state["camera"]
         return _Result([camera])
 
@@ -187,6 +199,11 @@ class _WorkerConfigSession:
             snapshots = self.state["scene_contract_snapshots"]
             assert isinstance(snapshots, list)
             snapshots.append(value)
+        if isinstance(value, RuntimePassportSnapshot):
+            value.id = value.id or uuid4()
+            snapshots = self.state["runtime_passport_snapshots"]
+            assert isinstance(snapshots, list)
+            snapshots.append(value)
 
     async def commit(self) -> None:
         self.state["commits"] = int(self.state.get("commits", 0)) + 1
@@ -195,7 +212,10 @@ class _WorkerConfigSession:
         self.state["rollbacks"] = int(self.state.get("rollbacks", 0)) + 1
 
     async def refresh(self, value: object) -> None:
-        if isinstance(value, PrivacyManifestSnapshot | SceneContractSnapshot):
+        if isinstance(
+            value,
+            PrivacyManifestSnapshot | SceneContractSnapshot | RuntimePassportSnapshot,
+        ):
             value.created_at = value.created_at or datetime.now(tz=UTC)
 
 
@@ -214,6 +234,7 @@ class _WorkerConfigSessionFactory:
             "artifacts": artifacts,
             "privacy_manifest_snapshots": [],
             "scene_contract_snapshots": [],
+            "runtime_passport_snapshots": [],
             "tenant": tenant,
         }
 

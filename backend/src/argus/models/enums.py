@@ -41,6 +41,7 @@ class RuntimeArtifactScope(StrEnum):
 class RuntimeArtifactKind(StrEnum):
     ONNX_EXPORT = "onnx_export"
     TENSORRT_ENGINE = "tensorrt_engine"
+    COMPILED_OPEN_VOCAB = "compiled_open_vocab"
 
 
 class RuntimeArtifactPrecision(StrEnum):
