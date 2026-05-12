@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     Float,
@@ -29,6 +30,7 @@ from argus.models.enums import (
     EvidenceStorageProvider,
     EvidenceStorageScope,
     IncidentReviewStatus,
+    IncidentRuleSeverity,
     ModelFormat,
     ModelTask,
     OperatorConfigProfileKind,
@@ -353,15 +355,32 @@ class RuntimePassportSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     passport: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
 
 
-class DetectionRule(UUIDPrimaryKeyMixin, Base):
+class DetectionRule(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "detection_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "camera_id",
+            "incident_type",
+            name="uq_detection_rules_camera_incident_type",
+        ),
+        Index("ix_detection_rules_camera_enabled", "camera_id", "enabled"),
+        Index("ix_detection_rules_rule_hash", "rule_hash"),
+    )
 
     camera_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("cameras.id"),
         nullable=False,
     )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    incident_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    severity: Mapped[IncidentRuleSeverity] = mapped_column(
+        enum_column(IncidentRuleSeverity, "incident_rule_severity_enum"),
+        nullable=False,
+        default=IncidentRuleSeverity.WARNING,
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     zone_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     predicate: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     action: Mapped[RuleAction] = mapped_column(
@@ -370,6 +389,7 @@ class DetectionRule(UUIDPrimaryKeyMixin, Base):
     )
     webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     cooldown_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rule_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class TrackingEvent(UUIDPrimaryKeyMixin, Base):

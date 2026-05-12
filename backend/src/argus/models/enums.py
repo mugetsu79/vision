@@ -185,3 +185,9 @@ class RuleAction(StrEnum):
     ALERT = "alert"
     RECORD_CLIP = "record_clip"
     WEBHOOK = "webhook"
+
+
+class IncidentRuleSeverity(StrEnum):
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"

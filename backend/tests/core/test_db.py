@@ -377,3 +377,33 @@ def test_runtime_passport_migration_exists_with_short_revision_id() -> None:
     for constraint_name in constraint_names:
         assert constraint_name in migration_text
         assert len(constraint_name) <= 63
+
+
+def test_detection_rule_incident_metadata_columns_are_registered() -> None:
+    rule_columns = Base.metadata.tables["detection_rules"].columns
+
+    assert "enabled" in rule_columns
+    assert "incident_type" in rule_columns
+    assert "severity" in rule_columns
+    assert "description" in rule_columns
+    assert "rule_hash" in rule_columns
+    assert "created_at" in rule_columns
+    assert "updated_at" in rule_columns
+
+
+def test_detection_rule_incident_metadata_migration_exists() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = (
+        repo_root
+        / "src/argus/migrations/versions/0017_detection_rule_incident_metadata.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    revision_id = "0017_detection_rule_metadata"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
+    assert 'down_revision = "0016_runtime_passports"' in migration_text
+    assert '"incident_type"' in migration_text
+    assert '"rule_hash"' in migration_text
+    assert "uq_detection_rules_camera_incident_type" in migration_text

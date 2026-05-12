@@ -22,6 +22,7 @@ from argus.models.enums import (
     HistoryCoverageStatus,
     HistoryMetric,
     IncidentReviewStatus,
+    IncidentRuleSeverity,
     ModelFormat,
     ModelTask,
     OperatorConfigProfileKind,
@@ -34,6 +35,7 @@ from argus.models.enums import (
     RuntimeArtifactScope,
     RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
+    RuleAction,
     TrackerType,
 )
 
@@ -1015,6 +1017,83 @@ class CameraResponse(BaseModel):
     recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
     created_at: datetime
     updated_at: datetime
+
+
+class IncidentRulePredicate(BaseModel):
+    class_names: list[str] = Field(default_factory=list)
+    zone_ids: list[str] = Field(default_factory=list)
+    min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("class_names", "zone_ids")
+    @classmethod
+    def normalize_string_list(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for item in value:
+            stripped = item.strip()
+            if stripped and stripped not in normalized:
+                normalized.append(stripped)
+        return normalized
+
+
+class IncidentRuleCreate(BaseModel):
+    enabled: bool = True
+    name: str = Field(min_length=1, max_length=255)
+    incident_type: str | None = Field(default=None, min_length=1, max_length=255)
+    severity: IncidentRuleSeverity = IncidentRuleSeverity.WARNING
+    description: str | None = Field(default=None, max_length=2000)
+    predicate: IncidentRulePredicate = Field(default_factory=IncidentRulePredicate)
+    action: RuleAction = RuleAction.RECORD_CLIP
+    cooldown_seconds: int = Field(default=0, ge=0, le=86400)
+    webhook_url: str | None = Field(default=None, min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def validate_webhook_action(self) -> IncidentRuleCreate:
+        if self.action is RuleAction.WEBHOOK and self.webhook_url is None:
+            raise ValueError("webhook_url is required for webhook rules.")
+        return self
+
+
+class IncidentRuleUpdate(BaseModel):
+    enabled: bool | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    incident_type: str | None = Field(default=None, min_length=1, max_length=255)
+    severity: IncidentRuleSeverity | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    predicate: IncidentRulePredicate | None = None
+    action: RuleAction | None = None
+    cooldown_seconds: int | None = Field(default=None, ge=0, le=86400)
+    webhook_url: str | None = Field(default=None, min_length=1, max_length=2048)
+
+
+class IncidentRuleResponse(BaseModel):
+    id: UUID
+    camera_id: UUID
+    enabled: bool
+    name: str
+    incident_type: str
+    severity: IncidentRuleSeverity
+    description: str | None = None
+    predicate: IncidentRulePredicate
+    action: RuleAction
+    cooldown_seconds: int
+    webhook_url_present: bool = False
+    rule_hash: str = Field(min_length=64, max_length=64)
+    created_at: datetime
+    updated_at: datetime
+
+
+class IncidentRuleValidationRequest(BaseModel):
+    rule: IncidentRuleCreate
+    sample_detection: dict[str, Any] = Field(default_factory=dict)
+
+
+class IncidentRuleValidationResponse(BaseModel):
+    valid: bool
+    matches: bool
+    errors: list[str] = Field(default_factory=list)
+    normalized_incident_type: str | None = None
+    rule_hash: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class CameraSetupPreviewResponse(BaseModel):

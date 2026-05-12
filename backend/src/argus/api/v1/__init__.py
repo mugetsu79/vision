@@ -8,6 +8,7 @@ from argus.api.v1 import (
     edge,
     export,
     history,
+    incident_rules,
     incidents,
     model_catalog,
     models,
@@ -33,6 +34,7 @@ router.include_router(operations.router)
 router.include_router(history.router)
 router.include_router(export.router)
 router.include_router(incidents.router)
+router.include_router(incident_rules.router)
 router.include_router(streams.router)
 router.include_router(query.router)
 router.include_router(telemetry_ws.router)

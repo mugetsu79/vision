@@ -156,6 +156,7 @@ from argus.services.camera_sources import (
 )
 from argus.services.evidence_ledger import EvidenceLedgerService
 from argus.services.evidence_storage import resolve_local_evidence_path
+from argus.services.incident_rules import IncidentRuleService
 from argus.services.local_first_sync import LocalFirstEvidenceSyncService
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.operator_configuration import OperatorConfigurationService
@@ -234,6 +235,7 @@ class AppServices:
     runtime_artifacts: RuntimeArtifactService
     privacy_manifests: PrivacyManifestService
     scene_contracts: SceneContractService
+    incident_rules: IncidentRuleService
     configuration: OperatorConfigurationService
     local_first_sync: LocalFirstEvidenceSyncService
     edge: EdgeService
@@ -3486,6 +3488,7 @@ def build_app_services(
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
         scene_contracts=SceneContractService(db.session_factory),
+        incident_rules=IncidentRuleService(db.session_factory, audit_logger),
         configuration=configuration_service,
         local_first_sync=LocalFirstEvidenceSyncService(
             settings=settings,
