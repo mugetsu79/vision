@@ -507,6 +507,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/memory-patterns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Operational Memory Patterns */
+        get: operations["list_operational_memory_patterns_api_v1_operations_memory_patterns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/operations/bootstrap": {
         parameters: {
             query?: never;
@@ -2138,6 +2155,57 @@ export interface components {
             available: boolean;
             /** Reason */
             reason?: string | null;
+        };
+        /** OperationalMemoryPatternResponse */
+        OperationalMemoryPatternResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Site Id */
+            site_id?: string | null;
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Pattern Type */
+            pattern_type: string;
+            severity: components["schemas"]["IncidentRuleSeverity"];
+            /** Summary */
+            summary: string;
+            /**
+             * Window Started At
+             * Format: date-time
+             */
+            window_started_at: string;
+            /**
+             * Window Ended At
+             * Format: date-time
+             */
+            window_ended_at: string;
+            /** Source Incident Ids */
+            source_incident_ids?: string[];
+            /** Source Contract Hashes */
+            source_contract_hashes?: string[];
+            /** Dimensions */
+            dimensions?: {
+                [key: string]: unknown;
+            };
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /** Pattern Hash */
+            pattern_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** OperatorConfigBindingRequest */
         OperatorConfigBindingRequest: {
@@ -4593,6 +4661,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FleetOverviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_operational_memory_patterns_api_v1_operations_memory_patterns_get: {
+        parameters: {
+            query?: {
+                incident_id?: string | null;
+                camera_id?: string | null;
+                site_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationalMemoryPatternResponse"][];
                 };
             };
             /** @description Validation Error */

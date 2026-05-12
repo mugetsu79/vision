@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from argus.api.contracts import (
     FleetBootstrapRequest,
     FleetBootstrapResponse,
     FleetOverviewResponse,
+    OperationalMemoryPatternResponse,
     TenantContext,
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
@@ -28,6 +30,25 @@ async def get_fleet_overview(
     services: ServicesDependency,
 ) -> FleetOverviewResponse:
     return await services.operations.get_fleet_overview(tenant_context)
+
+
+@router.get("/memory-patterns", response_model=list[OperationalMemoryPatternResponse])
+async def list_operational_memory_patterns(
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+    incident_id: UUID | None = None,
+    camera_id: UUID | None = None,
+    site_id: UUID | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[OperationalMemoryPatternResponse]:
+    return await services.operations.list_memory_patterns(
+        tenant_context,
+        incident_id=incident_id,
+        camera_id=camera_id,
+        site_id=site_id,
+        limit=limit,
+    )
 
 
 @router.post(

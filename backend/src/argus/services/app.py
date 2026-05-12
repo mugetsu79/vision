@@ -71,6 +71,7 @@ from argus.api.contracts import (
     ModelResponse,
     ModelUpdate,
     NativeAvailability,
+    OperationalMemoryPatternResponse,
     PrivacyManifestSnapshotResponse,
     PrivacySettings,
     RuntimeBackend,
@@ -147,6 +148,7 @@ from argus.models.tables import (
     LocalFirstSyncAttempt,
     Model,
     ModelRuntimeArtifact,
+    OperationalMemoryPattern,
     OperatorConfigBinding,
     OperatorConfigProfile,
     PrivacyManifestSnapshot,
@@ -167,6 +169,7 @@ from argus.services.evidence_storage import resolve_local_evidence_path
 from argus.services.incident_rules import IncidentRuleService
 from argus.services.local_first_sync import LocalFirstEvidenceSyncService
 from argus.services.model_catalog import resolve_catalog_status
+from argus.services.operational_memory import OperationalMemoryService
 from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.privacy_policy_runtime import validate_privacy_policy_residency
@@ -1550,6 +1553,24 @@ class OperationsService:
             delivery_diagnostics=delivery_diagnostics,
         )
 
+    async def list_memory_patterns(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID | None = None,
+        camera_id: UUID | None = None,
+        site_id: UUID | None = None,
+        limit: int = 20,
+    ) -> list[OperationalMemoryPatternResponse]:
+        rows = await OperationalMemoryService(self.session_factory).list_patterns(
+            tenant_id=tenant_context.tenant_id,
+            incident_id=incident_id,
+            camera_id=camera_id,
+            site_id=site_id,
+            limit=limit,
+        )
+        return [_operational_memory_pattern_response(row) for row in rows]
+
     async def create_bootstrap_material(
         self,
         tenant_context: TenantContext,
@@ -2907,6 +2928,28 @@ def _incident_response(
     )
 
 
+def _operational_memory_pattern_response(
+    row: OperationalMemoryPattern,
+) -> OperationalMemoryPatternResponse:
+    return OperationalMemoryPatternResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        site_id=row.site_id,
+        camera_id=row.camera_id,
+        pattern_type=row.pattern_type,
+        severity=row.severity,
+        summary=row.summary,
+        window_started_at=row.window_started_at,
+        window_ended_at=row.window_ended_at,
+        source_incident_ids=_uuid_list(row.source_incident_ids),
+        source_contract_hashes=[str(value) for value in row.source_contract_hashes or []],
+        dimensions=dict(row.dimensions or {}),
+        evidence=dict(row.evidence or {}),
+        pattern_hash=row.pattern_hash,
+        created_at=row.created_at,
+    )
+
+
 def _trigger_rule_from_payload(payload: dict[str, object] | None) -> TriggerRuleSummary | None:
     trigger_rule = (payload or {}).get("trigger_rule")
     if not isinstance(trigger_rule, dict):
@@ -2915,6 +2958,16 @@ def _trigger_rule_from_payload(payload: dict[str, object] | None) -> TriggerRule
         return TriggerRuleSummary.model_validate(trigger_rule)
     except Exception:  # noqa: BLE001
         return None
+
+
+def _uuid_list(values: list[object] | None) -> list[UUID]:
+    parsed: list[UUID] = []
+    for value in values or []:
+        try:
+            parsed.append(UUID(str(value)))
+        except ValueError:
+            continue
+    return parsed
 
 
 async def _load_runtime_passports_by_incident_ids(

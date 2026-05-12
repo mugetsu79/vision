@@ -15,6 +15,7 @@ import {
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
 import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
+import { OperationalMemoryPanel } from "@/components/evidence/OperationalMemoryPanel";
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ import {
   type FleetOverview,
   useCreateBootstrapMaterial,
   useFleetOverview,
+  useOperationalMemoryPatterns,
 } from "@/hooks/use-operations";
 import { useSites } from "@/hooks/use-sites";
 import { deriveSceneReadinessRows } from "@/lib/operational-health";
@@ -51,6 +53,7 @@ export function SettingsPage() {
     models.map((model) => model.id),
   );
   const bootstrap = useCreateBootstrapMaterial();
+  const operationalMemory = useOperationalMemoryPatterns({ limit: 8 });
   const [hostname, setHostname] = useState("");
   const [version, setVersion] = useState("0.1.0");
   const [bootstrapResult, setBootstrapResult] =
@@ -130,6 +133,11 @@ export function SettingsPage() {
       />
 
       <SceneIntelligenceMatrix rows={sceneHealthRows} />
+
+      <OperationalMemoryPanel
+        patterns={operationalMemory.data ?? []}
+        loading={operationalMemory.isLoading}
+      />
 
       <ConfigurationWorkspace
         cameras={cameras}

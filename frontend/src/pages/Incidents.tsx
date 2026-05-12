@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { CaseContextStrip } from "@/components/evidence/CaseContextStrip";
 import { EvidenceTimeline } from "@/components/evidence/EvidenceTimeline";
 import { IncidentRuleSummary } from "@/components/evidence/IncidentRuleSummary";
+import { OperationalMemoryPanel } from "@/components/evidence/OperationalMemoryPanel";
 import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
 import {
   evidenceClipHref,
@@ -31,6 +32,7 @@ import {
   useIncidentRuntimePassport,
   useUpdateIncidentReview,
 } from "@/hooks/use-incidents";
+import { useOperationalMemoryPatterns } from "@/hooks/use-operations";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient, toApiError } from "@/lib/api";
 import type { components } from "@/lib/api.generated";
@@ -543,6 +545,11 @@ function IncidentFactsPanel({
             loading={accountability.runtimePassport.isLoading}
           />
 
+          <OperationalMemoryPanel
+            patterns={accountability.operationalMemory.data ?? []}
+            loading={accountability.operationalMemory.isLoading}
+          />
+
           <details open className="rounded-md border border-white/8 px-3 py-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
               Ledger
@@ -623,8 +630,18 @@ function useIncidentAccountabilityDetails(incident: Incident) {
       ? incident.id
       : null,
   );
+  const operationalMemory = useOperationalMemoryPatterns({
+    incidentId: incident.id,
+    limit: 6,
+  });
 
-  return { sceneContract, privacyManifest, runtimePassport, ledgerEntries };
+  return {
+    sceneContract,
+    privacyManifest,
+    runtimePassport,
+    operationalMemory,
+    ledgerEntries,
+  };
 }
 
 function identityStatusLabel(

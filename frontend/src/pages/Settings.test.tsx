@@ -123,6 +123,31 @@ vi.mock("@/hooks/use-operations", () => ({
     error: null,
     refetch: vi.fn(),
   }),
+  useOperationalMemoryPatterns: () => ({
+    data: [
+      {
+        id: "00000000-0000-0000-0000-000000000901",
+        tenant_id: "tenant-1",
+        site_id: "00000000-0000-0000-0000-000000000301",
+        camera_id: "00000000-0000-0000-0000-000000000101",
+        pattern_type: "event_burst",
+        severity: "warning",
+        summary: "Observed pattern: 3 incidents in one zone.",
+        window_started_at: "2026-05-12T08:00:00Z",
+        window_ended_at: "2026-05-12T08:15:00Z",
+        source_incident_ids: ["00000000-0000-0000-0000-000000000701"],
+        source_contract_hashes: [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ],
+        dimensions: { zone_id: "server-room" },
+        evidence: { incident_count: 3 },
+        pattern_hash:
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        created_at: "2026-05-12T08:20:00Z",
+      },
+    ],
+    isLoading: false,
+  }),
   useCreateBootstrapMaterial: () => ({
     mutateAsync: vi.fn(() =>
       Promise.resolve({
@@ -392,6 +417,11 @@ describe("SettingsPage operations workbench", () => {
       within(sceneMatrix).getByText(/2 active rules/i),
     ).toBeInTheDocument();
     expect(within(sceneMatrix).getByText(/ffffffffffff/i)).toBeInTheDocument();
+    const memoryPanel = screen.getByTestId("operational-memory-panel");
+    expect(within(memoryPanel).getByText(/observed patterns/i)).toBeInTheDocument();
+    expect(
+      within(memoryPanel).getByText(/observed pattern: 3 incidents in one zone/i),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("edge-fleet-grid")).toBeInTheDocument();
     expect(screen.getByTestId("worker-rail")).toBeInTheDocument();
     expect(screen.getByTestId("stream-diagnostics-rail")).toBeInTheDocument();

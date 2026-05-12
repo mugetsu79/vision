@@ -1270,6 +1270,24 @@ class FleetCameraWorkerSummary(BaseModel):
     rule_runtime: FleetRuleRuntimeSummary = Field(default_factory=FleetRuleRuntimeSummary)
 
 
+class OperationalMemoryPatternResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    site_id: UUID | None = None
+    camera_id: UUID | None = None
+    pattern_type: str
+    severity: IncidentRuleSeverity
+    summary: str
+    window_started_at: datetime
+    window_ended_at: datetime
+    source_incident_ids: list[UUID] = Field(default_factory=list)
+    source_contract_hashes: list[str] = Field(default_factory=list)
+    dimensions: dict[str, Any] = Field(default_factory=dict)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    pattern_hash: str = Field(min_length=64, max_length=64)
+    created_at: datetime
+
+
 class FleetDeliveryDiagnostic(BaseModel):
     camera_id: UUID
     camera_name: str

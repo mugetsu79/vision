@@ -14,6 +14,7 @@ from argus.api.contracts import (
     FleetCameraWorkerSummary,
     FleetOverviewResponse,
     FleetSummary,
+    OperationalMemoryPatternResponse,
     RuntimePassportSummary,
     TenantContext,
 )
@@ -116,6 +117,37 @@ class _FakeOperationsService:
             delivery_diagnostics=[],
         )
 
+    async def list_memory_patterns(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id=None,
+        camera_id=None,
+        site_id=None,
+        limit: int = 20,
+    ) -> list[OperationalMemoryPatternResponse]:
+        return [
+            OperationalMemoryPatternResponse(
+                id=UUID("00000000-0000-0000-0000-000000000901"),
+                tenant_id=tenant_context.tenant_id,
+                site_id=site_id or UUID("00000000-0000-0000-0000-000000000456"),
+                camera_id=camera_id or UUID("00000000-0000-0000-0000-000000000321"),
+                pattern_type="event_burst",
+                severity="warning",
+                summary="Observed pattern: 3 incidents in one zone.",
+                window_started_at=datetime(2026, 5, 12, 8, 0, tzinfo=UTC),
+                window_ended_at=datetime(2026, 5, 12, 8, 15, tzinfo=UTC),
+                source_incident_ids=[
+                    incident_id or UUID("00000000-0000-0000-0000-000000000701")
+                ],
+                source_contract_hashes=["a" * 64],
+                dimensions={"zone_id": "server-room"},
+                evidence={"incident_count": 3},
+                pattern_hash="b" * 64,
+                created_at=datetime(2026, 5, 12, 8, 20, tzinfo=UTC),
+            )
+        ][:limit]
+
     async def create_bootstrap_material(
         self,
         tenant_context: TenantContext,
@@ -177,6 +209,30 @@ async def test_operations_fleet_route_returns_overview() -> None:
         "latest_rule_event_at": "2026-05-12T09:30:00Z",
         "load_status": "loaded",
     }
+
+
+@pytest.mark.asyncio
+async def test_operations_memory_patterns_route_returns_observed_patterns() -> None:
+    context = _tenant_context()
+    app = _create_app(context, _FakeOperationsService())
+    incident_id = UUID("00000000-0000-0000-0000-000000000701")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            f"/api/v1/operations/memory-patterns?incident_id={incident_id}",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["pattern_type"] == "event_burst"
+    assert body[0]["severity"] == "warning"
+    assert body[0]["summary"].startswith("Observed pattern")
+    assert body[0]["source_incident_ids"] == [str(incident_id)]
+    assert body[0]["source_contract_hashes"] == ["a" * 64]
 
 
 @pytest.mark.asyncio

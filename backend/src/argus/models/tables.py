@@ -517,6 +517,44 @@ class Incident(UUIDPrimaryKeyMixin, Base):
     reviewed_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
+class OperationalMemoryPattern(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "operational_memory_patterns"
+    __table_args__ = (
+        UniqueConstraint("pattern_hash", name="uq_operational_memory_pattern_hash"),
+        Index("ix_operational_memory_tenant_created", "tenant_id", "created_at"),
+        Index("ix_operational_memory_camera_created", "camera_id", "created_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id"),
+        nullable=True,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    pattern_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[IncidentRuleSeverity] = mapped_column(
+        enum_column(IncidentRuleSeverity, "incident_rule_severity_enum"),
+        nullable=False,
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_incident_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    source_contract_hashes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    dimensions: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    evidence: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    pattern_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 class EvidenceArtifact(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "evidence_artifacts"
 

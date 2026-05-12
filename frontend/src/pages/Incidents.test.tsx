@@ -603,6 +603,33 @@ describe("IncidentsPage", () => {
         );
       }
 
+      if (url.pathname === "/api/v1/operations/memory-patterns") {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              id: "77777777-7777-7777-7777-777777777777",
+              tenant_id: "tenant-1",
+              site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              camera_id: "11111111-1111-1111-1111-111111111111",
+              pattern_type: "event_burst",
+              severity: "warning",
+              summary: "Observed pattern: 3 incidents in one zone.",
+              window_started_at: "2026-04-18T10:00:00Z",
+              window_ended_at: "2026-04-18T10:15:00Z",
+              source_incident_ids: ["99999999-9999-9999-9999-999999999999"],
+              source_contract_hashes: [
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              ],
+              dimensions: { zone_id: "forklift-gate" },
+              evidence: { incident_count: 3 },
+              pattern_hash:
+                "7777777777777777777777777777777777777777777777777777777777777777",
+              created_at: "2026-04-18T10:16:00Z",
+            },
+          ]),
+        );
+      }
+
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
@@ -632,6 +659,10 @@ describe("IncidentsPage", () => {
     expect(screen.getByText("ffffffffffff")).toBeInTheDocument();
     expect(screen.getByText("dddddddddddd")).toBeInTheDocument();
     expect(screen.getByText("Jetson runtime")).toBeInTheDocument();
+    expect(await screen.findByText(/observed patterns/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/observed pattern: 3 incidents in one zone/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/incident\.triggered/i)).toBeInTheDocument();
   });
 
