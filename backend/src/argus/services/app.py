@@ -171,6 +171,7 @@ from argus.services.local_first_sync import LocalFirstEvidenceSyncService
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.operational_memory import OperationalMemoryService
 from argus.services.operator_configuration import OperatorConfigurationService
+from argus.services.policy_drafts import PolicyDraftService
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.privacy_policy_runtime import validate_privacy_policy_residency
 from argus.services.runtime_artifacts import (
@@ -247,6 +248,7 @@ class AppServices:
     privacy_manifests: PrivacyManifestService
     scene_contracts: SceneContractService
     incident_rules: IncidentRuleService
+    policy_drafts: PolicyDraftService
     configuration: OperatorConfigurationService
     local_first_sync: LocalFirstEvidenceSyncService
     edge: EdgeService
@@ -3677,21 +3679,30 @@ def build_app_services(
         audit_logger,
     )
     evidence_ledger = EvidenceLedgerService(db.session_factory)
+    camera_service = CameraService(
+        db.session_factory,
+        settings,
+        audit_logger,
+        events,
+        configuration_service=configuration_service,
+    )
+    incident_rule_service = IncidentRuleService(db.session_factory, audit_logger, events)
     return AppServices(
         tenancy=TenancyService(db.session_factory, settings),
         sites=SiteService(db.session_factory, audit_logger),
-        cameras=CameraService(
-            db.session_factory,
-            settings,
-            audit_logger,
-            events,
-            configuration_service=configuration_service,
-        ),
+        cameras=camera_service,
         models=ModelService(db.session_factory, audit_logger),
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
         scene_contracts=SceneContractService(db.session_factory),
-        incident_rules=IncidentRuleService(db.session_factory, audit_logger, events),
+        incident_rules=incident_rule_service,
+        policy_drafts=PolicyDraftService(
+            db.session_factory,
+            audit_logger,
+            llm_provider_resolver=configuration_service.llm_provider_runtime,
+            camera_service=camera_service,
+            incident_rule_service=incident_rule_service,
+        ),
         configuration=configuration_service,
         local_first_sync=LocalFirstEvidenceSyncService(
             settings=settings,

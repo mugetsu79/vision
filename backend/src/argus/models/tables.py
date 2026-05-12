@@ -36,6 +36,8 @@ from argus.models.enums import (
     OperatorConfigProfileKind,
     OperatorConfigScope,
     OperatorConfigValidationStatus,
+    PolicyDraftLedgerAction,
+    PolicyDraftStatus,
     ProcessingMode,
     RoleEnum,
     RuleAction,
@@ -553,6 +555,93 @@ class OperationalMemoryPattern(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     dimensions: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     evidence: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     pattern_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class PolicyDraft(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "policy_drafts"
+    __table_args__ = (
+        Index("ix_policy_drafts_tenant_created", "tenant_id", "created_at"),
+        Index("ix_policy_drafts_camera_created", "camera_id", "created_at"),
+        Index("ix_policy_drafts_status_created", "status", "created_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id"),
+        nullable=True,
+    )
+    status: Mapped[PolicyDraftStatus] = mapped_column(
+        enum_column(PolicyDraftStatus, "policy_draft_status_enum"),
+        nullable=False,
+        default=PolicyDraftStatus.DRAFT,
+    )
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    structured_diff: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    draft_metadata: Mapped[dict[str, object]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rejected_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    applied_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PolicyDraftLedgerEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "policy_draft_ledger_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "policy_draft_id",
+            "sequence",
+            name="uq_policy_draft_ledger_sequence",
+        ),
+        Index("ix_policy_draft_ledger_draft_sequence", "policy_draft_id", "sequence"),
+        Index("ix_policy_draft_ledger_tenant_created", "tenant_id", "created_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    policy_draft_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("policy_drafts.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[PolicyDraftLedgerAction] = mapped_column(
+        enum_column(PolicyDraftLedgerAction, "policy_draft_ledger_action_enum"),
+        nullable=False,
+    )
+    actor_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    previous_entry_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class EvidenceArtifact(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):

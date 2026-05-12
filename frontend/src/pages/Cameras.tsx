@@ -10,6 +10,7 @@ import {
   StatusToneBadge,
   WorkspaceBand,
 } from "@/components/layout/workspace-surfaces";
+import { PolicyDraftReview } from "@/components/policy/PolicyDraftReview";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
@@ -50,6 +51,9 @@ function CamerasContent() {
   const [selectedRulesCameraId, setSelectedRulesCameraId] = useState<
     string | null
   >(null);
+  const [selectedPolicyCameraId, setSelectedPolicyCameraId] = useState<
+    string | null
+  >(null);
   const { data: cameras = [], isLoading: camerasLoading } = useCameras();
   const { data: sites = [] } = useSites();
   const {
@@ -80,6 +84,11 @@ function CamerasContent() {
     () => cameras.find((camera) => camera.id === selectedRulesCameraId) ?? null,
     [cameras, selectedRulesCameraId],
   );
+  const policyCamera = useMemo(
+    () =>
+      cameras.find((camera) => camera.id === selectedPolicyCameraId) ?? null,
+    [cameras, selectedPolicyCameraId],
+  );
   const modelQueryEmpty = models.length === 0;
   const wizardModels = useMemo(
     () =>
@@ -98,6 +107,7 @@ function CamerasContent() {
     void refetchModels();
     setSelectedCamera(null);
     setSelectedRulesCameraId(null);
+    setSelectedPolicyCameraId(null);
     setWizardMode("create");
   }
 
@@ -105,13 +115,22 @@ function CamerasContent() {
     void refetchModels();
     setSelectedCamera(camera);
     setSelectedRulesCameraId(null);
+    setSelectedPolicyCameraId(null);
     setWizardMode("edit");
   }
 
   function openRulesPanel(camera: Camera) {
     setWizardMode(null);
     setSelectedCamera(null);
+    setSelectedPolicyCameraId(null);
     setSelectedRulesCameraId(camera.id);
+  }
+
+  function openPolicyDraftPanel(camera: Camera) {
+    setWizardMode(null);
+    setSelectedCamera(null);
+    setSelectedRulesCameraId(null);
+    setSelectedPolicyCameraId(camera.id);
   }
 
   function closeWizard() {
@@ -131,6 +150,9 @@ function CamerasContent() {
     }
     if (selectedRulesCameraId === camera.id) {
       setSelectedRulesCameraId(null);
+    }
+    if (selectedPolicyCameraId === camera.id) {
+      setSelectedPolicyCameraId(null);
     }
   }
 
@@ -264,6 +286,13 @@ function CamerasContent() {
                         <button
                           className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
                           type="button"
+                          onClick={() => openPolicyDraftPanel(camera)}
+                        >
+                          Policy
+                        </button>
+                        <button
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                          type="button"
                           onClick={() => openEditWizard(camera)}
                         >
                           Edit
@@ -289,6 +318,13 @@ function CamerasContent() {
         <IncidentRulesPanel
           camera={rulesCamera}
           onClose={() => setSelectedRulesCameraId(null)}
+        />
+      ) : null}
+
+      {policyCamera ? (
+        <PolicyDraftReview
+          camera={policyCamera}
+          onClose={() => setSelectedPolicyCameraId(null)}
         />
       ) : null}
 

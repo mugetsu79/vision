@@ -28,6 +28,7 @@ from argus.models.enums import (
     OperatorConfigProfileKind,
     OperatorConfigScope,
     OperatorConfigValidationStatus,
+    PolicyDraftStatus,
     ProcessingMode,
     QueryResolutionMode,
     RuleAction,
@@ -1286,6 +1287,31 @@ class OperationalMemoryPatternResponse(BaseModel):
     evidence: dict[str, Any] = Field(default_factory=dict)
     pattern_hash: str = Field(min_length=64, max_length=64)
     created_at: datetime
+
+
+class PolicyDraftCreate(BaseModel):
+    camera_id: UUID
+    prompt: str = Field(min_length=1, max_length=8000)
+    use_llm: bool = True
+
+
+class PolicyDraftResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    camera_id: UUID | None = None
+    site_id: UUID | None = None
+    status: PolicyDraftStatus
+    prompt: str
+    structured_diff: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_by_subject: str | None = None
+    approved_by_subject: str | None = None
+    rejected_by_subject: str | None = None
+    applied_by_subject: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    decided_at: datetime | None = None
+    applied_at: datetime | None = None
 
 
 class FleetDeliveryDiagnostic(BaseModel):

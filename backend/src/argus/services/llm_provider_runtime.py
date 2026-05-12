@@ -21,6 +21,7 @@ class ResolvedLLMProviderSettings:
     base_url: str | None
     api_key: str | None
     api_key_required: bool
+    secret_state: dict[str, object] | None = None
 
 
 class RuntimeConfigurationResolver(Protocol):
@@ -60,6 +61,12 @@ def resolved_llm_provider_from_runtime_config(
         base_url=config.base_url,
         api_key=api_key,
         api_key_required=config.api_key_required,
+        secret_state={
+            "api_key": "present"
+            if api_key
+            else ("missing" if config.api_key_required else "not_required"),
+            "api_key_required": config.api_key_required,
+        },
     )
 
 
@@ -79,3 +86,6 @@ class LLMProviderRuntimeService:
             camera_id=camera_id,
         )
         return resolved_llm_provider_from_runtime_config(runtime_config)
+
+
+LLMProviderRuntimeResolver = LLMProviderRuntimeService

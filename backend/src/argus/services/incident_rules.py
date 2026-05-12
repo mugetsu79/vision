@@ -493,6 +493,11 @@ def _available_zone_ids(camera: Camera) -> set[str]:
             zone_id = zone.get("id")
             if isinstance(zone_id, str) and zone_id.strip():
                 zone_ids.add(zone_id.strip())
+    for region in getattr(camera, "detection_regions", None) or []:
+        if isinstance(region, dict):
+            region_id = region.get("id")
+            if isinstance(region_id, str) and region_id.strip():
+                zone_ids.add(region_id.strip())
     return zone_ids
 
 

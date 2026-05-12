@@ -192,3 +192,17 @@ class IncidentRuleSeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+class PolicyDraftStatus(StrEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    APPLIED = "applied"
+
+
+class PolicyDraftLedgerAction(StrEnum):
+    PROPOSED = "policy_draft.proposed"
+    APPROVED = "policy_draft.approved"
+    REJECTED = "policy_draft.rejected"
+    APPLIED = "policy_draft.applied"

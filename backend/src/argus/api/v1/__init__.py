@@ -13,6 +13,7 @@ from argus.api.v1 import (
     model_catalog,
     models,
     operations,
+    policy_drafts,
     query,
     runtime_artifacts,
     sites,
@@ -31,6 +32,7 @@ router.include_router(runtime_artifacts.router)
 router.include_router(model_catalog.router)
 router.include_router(edge.router)
 router.include_router(operations.router)
+router.include_router(policy_drafts.router)
 router.include_router(history.router)
 router.include_router(export.router)
 router.include_router(incidents.router)
