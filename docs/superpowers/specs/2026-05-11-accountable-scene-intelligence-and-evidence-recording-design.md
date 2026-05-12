@@ -7,6 +7,14 @@ Date: 2026-05-11
 Unified implementation runway after the Jetson optimized runtime artifacts and
 open-vocab Track A/B work.
 
+Implementation checkpoint, 2026-05-12:
+
+- Tasks 1-13J are implemented and pushed on
+  `codex/omnisight-ui-spec-implementation`.
+- The current Alembic head is `0014_evidence_expiry_action`.
+- The next implementation task is Task 14, optional still snapshot evidence
+  artifacts.
+
 This spec turns all still-pertinent handoff items into one ordered
 implementation target. The first three Vezor differentiators are still the
 foundation and must land first:
@@ -26,12 +34,13 @@ After that foundation, continue in the same plan with:
 6. Prompt-To-Policy
 7. Identity-Light Cross-Camera Intelligence
 
-The same implementation runway also carries forward the unexecuted Evidence Desk
-timeline/case-context polish, optional still snapshot artifacts, Fleet/Operations
-production hardening, first-site Jetson runtime artifact soak validation, and the
-gated Track C / DeepStream lane. These later tasks must reuse the contract,
-ledger, privacy, and evidence artifact foundations instead of inventing parallel
-case-history primitives.
+The same implementation runway also carries forward optional still snapshot
+artifacts, Runtime Passport, Operational Memory, Prompt-To-Policy,
+Identity-Light Cross-Camera Intelligence, Fleet/Operations production
+hardening, first-site Jetson runtime artifact soak validation, and the gated
+Track C / DeepStream lane. These later tasks must reuse the contract, ledger,
+privacy, evidence artifact, and configuration-profile foundations instead of
+inventing parallel case-history primitives.
 
 ## Product Goal
 
@@ -89,36 +98,34 @@ configured through env files or command lines.
 
 ## Current State
 
-The branch already has strong foundations:
+The branch now has strong foundations:
 
 - camera-scoped vision profiles and detection regions
 - runtime vocabulary state and hashes
 - fixed-vocab runtime artifacts and scene-scoped open-vocab artifacts
 - worker runtime selection and fallback visibility
-- incident rows with `snapshot_url`, `clip_url`, `storage_bytes`, and review
-  state
-- `IncidentClipCaptureService` with pre/post event frame buffering
-- MinIO-backed object storage through `MinioObjectStore`
-- Evidence Desk UI that can open clips and review/reopen incidents
+- incident rows with scene-contract, privacy-manifest, recording-policy, clip,
+  artifact, storage, and review context
+- `IncidentClipCaptureService` with pre/post event frame buffering and
+  profile-routed evidence storage
+- local filesystem, MinIO/S3-compatible, cloud, edge-local, and local-first
+  evidence artifact routing
+- evidence ledger entries for incident, artifact, review, upload, expiry, and
+  failure paths
+- UI-managed configuration profiles, secret redaction, bindings, validation,
+  effective configuration diagnostics, and runtime consumers for evidence
+  storage, stream delivery, runtime selection, privacy policy, and LLM provider
+- Evidence Desk UI that can open clips, show accountability context, and
+  review/reopen incidents
 
 Current gaps:
 
-- incident rows do not preserve the scene configuration snapshot that produced
-  the event
-- privacy behavior is scattered across settings, tenant policy, and payload
-  handling rather than surfaced as a scene manifest
-- evidence capture writes a clip URL, but not a first-class evidence artifact
-  record with provider, checksum, window, and availability state
-- review audit exists, but there is no incident-specific evidence ledger
-- edge-mode clip availability is not explicit when remote object storage is not
-  the chosen storage target
-- storage backend details, runtime endpoints, and several operational defaults
-  are still mostly process settings rather than UI-managed product
-  configuration
-- Evidence Desk timeline/case-context polish is planned but not executed
 - incident still snapshots are optional and not first-class artifacts yet
 - Runtime Passport, Operational Memory, Prompt-To-Policy, and Identity-Light
   Cross-Camera Intelligence are not implemented
+- `operations_mode` profiles exist in the UI/configuration plane, but Tasks
+  20-22 still need to consume them for supervisor lifecycle, worker assignment,
+  and edge credential rotation
 - Fleet/Operations still lacks supervisor-backed lifecycle actions,
   per-worker runtime truth, persistent reassignment, and credential rotation
 - registered TensorRT and compiled open-vocab artifacts still need first-site
@@ -678,7 +685,7 @@ these concepts rather than treated as separate polish.
 
 ### 7. Evidence Timeline And Case Context Polish
 
-Retune the unexecuted Evidence Desk polish plan around accountable evidence.
+Task 13 retuned the Evidence Desk polish plan around accountable evidence.
 
 Requirements:
 

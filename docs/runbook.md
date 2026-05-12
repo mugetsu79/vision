@@ -66,6 +66,9 @@ Current behavior:
 - `clip_url` is retained for compatibility, and artifact rows are now the reviewable evidence record
 - `snapshot_url` is supported by API/UI but may be null
 - scene contract, privacy manifest, artifact, and ledger context is available from the incident detail view when the worker captured it
+- evidence storage, stream delivery, runtime selection, privacy policy, and LLM provider settings are UI-managed configuration profiles after bootstrap
+- local, edge-local, MinIO/S3-compatible, cloud, and local-first evidence storage profiles are selectable through Settings and consumed by runtime capture paths
+- local-first clips remain reviewable locally while upload sync records pending, available, or failed upload state
 - review state is persisted as `pending` or `reviewed`
 - operator review/reopen actions write audit entries
 
@@ -152,6 +155,29 @@ Browser configuration responses expose only secret presence, never plaintext
 API keys. Prompt workflows resolve the selected tenant/site/edge/camera profile
 inside the backend service path and fail closed before sending a request when a
 profile requires an API key that has not been stored.
+
+### Development Migration Notes
+
+The accountable evidence and configuration runway currently migrates through
+Alembic head `0014_evidence_expiry_action`. The migration file is named
+`0014_evidence_expiry_ledger_action.py`, but the revision id is intentionally
+shorter so it fits `alembic_version.version_num varchar(32)`.
+
+After pulling the Task 13 checkpoint, refresh the dev database with:
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run alembic upgrade head
+```
+
+If the Docker dev stack is running and the host environment cannot connect to
+Postgres directly, run the same upgrade inside the backend container:
+
+```bash
+cd /Users/yann.moren/vision
+docker compose -f infra/docker-compose.dev.yml exec backend \
+  python -m uv run alembic upgrade head
+```
 
 ## Secrets With SOPS And Age
 

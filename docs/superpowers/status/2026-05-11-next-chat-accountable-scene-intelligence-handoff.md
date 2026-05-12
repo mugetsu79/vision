@@ -2,6 +2,11 @@
 
 Date: 2026-05-11
 
+> Superseded checkpoint: after Tasks 1-13J, continue from
+> `docs/superpowers/status/2026-05-12-next-chat-accountable-scene-task14-handoff.md`.
+> This original handoff is kept as historical context for the start of the
+> accountable-scene runway.
+
 Purpose: paste this document into a fresh chat to continue from the current
 `codex/omnisight-ui-spec-implementation` branch. The next implementation stage
 is Accountable Scene Intelligence And Evidence Recording.

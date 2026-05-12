@@ -42,6 +42,33 @@ profile kind, or name the later task and test that will consume it. This applies
 to evidence storage, stream delivery, runtime selection, privacy policy,
 LLM provider, and operations mode.
 
+## Implementation Progress As Of 2026-05-12
+
+Completed and pushed on `codex/omnisight-ui-spec-implementation`:
+
+- Tasks `1-13`: accountable data foundation, capture/storage/ledger/API,
+  operator-facing Evidence Desk foundation, and accountable evidence polish.
+- Tasks `13A-13C`: UI-managed configuration profile data model, API,
+  validation/resolution service, and Settings workspace.
+- Task `13D`: evidence recording storage profile runtime routing for local,
+  MinIO/S3-compatible, cloud, edge-local, and local-first policies.
+- Tasks `13E-13J`: local-first upload sync, effective runtime configuration
+  diagnostics, stream delivery profile routing, runtime-selection profile
+  consumption, privacy-policy runtime consumption, and LLM-provider runtime
+  consumption.
+
+Current migration head after the Task 13 checkpoint is
+`0014_evidence_expiry_action`. The migration file is still named
+`0014_evidence_expiry_ledger_action.py`, but its Alembic revision id is kept
+under the `alembic_version.version_num varchar(32)` limit. Future migration
+files in this plan start at `0015_runtime_passports.py`.
+
+Next task:
+
+```text
+Task 14: Optional Still Snapshot Evidence Artifacts
+```
+
 ## Validation Bands
 
 The plan is executable task-by-task, but validation should happen in bands. Each
@@ -51,6 +78,8 @@ band, pause and report the band result before continuing.
 ### Band 1: Accountable Data Foundation
 
 Tasks: `1-3`
+
+Status: completed and pushed.
 
 Validation goal:
 
@@ -66,6 +95,8 @@ capture, APIs, and UI.
 ### Band 2: Capture, Storage, Ledger, API
 
 Tasks: `4-8`
+
+Status: completed and pushed.
 
 Validation goal:
 
@@ -84,6 +115,8 @@ artifact, ledger entries, and a clip that can be opened through the API.
 
 Tasks: `9-13`
 
+Status: completed and pushed.
+
 Validation goal:
 
 - Evidence Desk shows accountability strip, artifact status, ledger summary,
@@ -101,6 +134,8 @@ which privacy posture governed it, and where the evidence clip lives.
 ### Pre-Band 4: UI-Managed Configuration Control Plane
 
 Tasks: `13A-13C`
+
+Status: completed and pushed.
 
 Validation goal:
 
@@ -121,6 +156,8 @@ editing backend env files, except for documented bootstrap-only infrastructure.
 
 Task: `13D`
 
+Status: completed and pushed.
+
 Validation goal:
 
 - `EvidenceRecordingPolicy.storage_profile` and the selected UI-managed storage
@@ -138,6 +175,8 @@ still works in edge mode.
 ### Pre-Band 4.6: UI-Managed Runtime Consumption Gate
 
 Tasks: `13E-13J`
+
+Status: completed and pushed.
 
 Validation goal:
 
@@ -335,12 +374,12 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `frontend/src/components/evidence/AccountabilityStrip.test.tsx` | create | accountability strip rendering tests |
 | `frontend/src/components/cameras/CameraWizard.tsx` | modify | RTSP/USB source selection and recording policy controls |
 | `frontend/src/components/cameras/CameraWizard.test.tsx` | modify | camera source and recording policy tests |
-| `backend/src/argus/migrations/versions/0014_runtime_passports.py` | create | runtime passport table and incident attachment columns |
-| `backend/src/argus/migrations/versions/0015_operational_memory_patterns.py` | create | operational memory pattern table |
-| `backend/src/argus/migrations/versions/0016_policy_drafts.py` | create | prompt-to-policy draft table |
-| `backend/src/argus/migrations/versions/0017_cross_camera_threads.py` | create | identity-light cross-camera thread table |
-| `backend/src/argus/migrations/versions/0018_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
-| `backend/src/argus/migrations/versions/0019_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/migrations/versions/0015_runtime_passports.py` | create | runtime passport table and incident attachment columns |
+| `backend/src/argus/migrations/versions/0016_operational_memory_patterns.py` | create | operational memory pattern table |
+| `backend/src/argus/migrations/versions/0017_policy_drafts.py` | create | prompt-to-policy draft table |
+| `backend/src/argus/migrations/versions/0018_cross_camera_threads.py` | create | identity-light cross-camera thread table |
+| `backend/src/argus/migrations/versions/0019_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
+| `backend/src/argus/migrations/versions/0020_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
 | `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
 | `backend/src/argus/services/operational_memory.py` | create | pattern detection over incidents, artifacts, contracts, and ledgers |
 | `backend/src/argus/services/policy_drafts.py` | create | prompt-to-policy draft, diff, approval, rejection, and application service |
@@ -3343,7 +3382,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0014_runtime_passports.py`
+- Create: `backend/src/argus/migrations/versions/0015_runtime_passports.py`
 - Create: `backend/src/argus/services/runtime_passports.py`
 - Modify: `backend/src/argus/services/scene_contracts.py`
 - Modify: `backend/src/argus/services/app.py`
@@ -3392,7 +3431,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0014_runtime_passports.py \
+  backend/src/argus/migrations/versions/0015_runtime_passports.py \
   backend/src/argus/services/runtime_passports.py \
   backend/src/argus/services/scene_contracts.py \
   backend/src/argus/services/app.py \
@@ -3481,7 +3520,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0015_operational_memory_patterns.py`
+- Create: `backend/src/argus/migrations/versions/0016_operational_memory_patterns.py`
 - Create: `backend/src/argus/services/operational_memory.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
@@ -3540,7 +3579,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0015_operational_memory_patterns.py \
+  backend/src/argus/migrations/versions/0016_operational_memory_patterns.py \
   backend/src/argus/services/operational_memory.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
@@ -3563,7 +3602,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0016_policy_drafts.py`
+- Create: `backend/src/argus/migrations/versions/0017_policy_drafts.py`
 - Create: `backend/src/argus/services/policy_drafts.py`
 - Modify: `backend/src/argus/services/llm_provider_runtime.py`
 - Create: `backend/src/argus/api/v1/policy_drafts.py`
@@ -3625,7 +3664,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0016_policy_drafts.py \
+  backend/src/argus/migrations/versions/0017_policy_drafts.py \
   backend/src/argus/services/policy_drafts.py \
   backend/src/argus/services/llm_provider_runtime.py \
   backend/src/argus/api/v1/policy_drafts.py \
@@ -3644,7 +3683,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0017_cross_camera_threads.py`
+- Create: `backend/src/argus/migrations/versions/0018_cross_camera_threads.py`
 - Create: `backend/src/argus/services/cross_camera_threads.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/incidents.py`
@@ -3702,7 +3741,7 @@ Expected: pass.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0017_cross_camera_threads.py \
+  backend/src/argus/migrations/versions/0018_cross_camera_threads.py \
   backend/src/argus/services/cross_camera_threads.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/incidents.py \
@@ -3723,7 +3762,7 @@ git push origin codex/omnisight-ui-spec-implementation
 
 - Modify: `backend/src/argus/models/enums.py`
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0018_supervisor_operations.py`
+- Create: `backend/src/argus/migrations/versions/0019_supervisor_operations.py`
 - Create: `backend/src/argus/services/supervisor_operations.py`
 - Modify: `backend/src/argus/services/runtime_configuration.py`
 - Modify: `backend/src/argus/api/contracts.py`
@@ -3786,7 +3825,7 @@ Expected: pass.
 ```bash
 git add backend/src/argus/models/enums.py \
   backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0018_supervisor_operations.py \
+  backend/src/argus/migrations/versions/0019_supervisor_operations.py \
   backend/src/argus/services/supervisor_operations.py \
   backend/src/argus/services/runtime_configuration.py \
   backend/src/argus/api/contracts.py \
@@ -3945,7 +3984,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0019_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/migrations/versions/0020_runtime_artifact_soak_runs.py`
 - Create: `backend/src/argus/services/runtime_soak.py`
 - Create: `backend/src/argus/api/v1/runtime_soak.py`
 - Modify: `backend/src/argus/main.py`
@@ -4010,7 +4049,7 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0019_runtime_artifact_soak_runs.py \
+  backend/src/argus/migrations/versions/0020_runtime_artifact_soak_runs.py \
   backend/src/argus/services/runtime_soak.py \
   backend/src/argus/api/v1/runtime_soak.py \
   backend/src/argus/main.py \
