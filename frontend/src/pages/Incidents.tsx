@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { CaseContextStrip } from "@/components/evidence/CaseContextStrip";
 import { EvidenceTimeline } from "@/components/evidence/EvidenceTimeline";
+import { CrossCameraThreadPanel } from "@/components/evidence/CrossCameraThreadPanel";
 import { IncidentRuleSummary } from "@/components/evidence/IncidentRuleSummary";
 import { OperationalMemoryPanel } from "@/components/evidence/OperationalMemoryPanel";
 import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
@@ -44,6 +45,7 @@ type SceneContractSnapshot =
 type PrivacyManifestSnapshot =
   components["schemas"]["PrivacyManifestSnapshotResponse"];
 type EvidenceLedgerEntry = components["schemas"]["EvidenceLedgerEntryResponse"];
+type CrossCameraThread = components["schemas"]["CrossCameraThreadResponse"];
 
 export function IncidentsPage() {
   const { data: cameras = [] } = useCameras();
@@ -550,6 +552,11 @@ function IncidentFactsPanel({
             loading={accountability.operationalMemory.isLoading}
           />
 
+          <CrossCameraThreadPanel
+            threads={accountability.crossCameraThreads.data ?? []}
+            loading={accountability.crossCameraThreads.isLoading}
+          />
+
           <details open className="rounded-md border border-white/8 px-3 py-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
               Ledger
@@ -634,12 +641,26 @@ function useIncidentAccountabilityDetails(incident: Incident) {
     incidentId: incident.id,
     limit: 6,
   });
+  const crossCameraThreads = useQuery<CrossCameraThread[]>({
+    queryKey: ["incident-cross-camera-threads", incident.id],
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        "/api/v1/incidents/{incident_id}/cross-camera-threads",
+        { params: { path: { incident_id: incident.id } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to load cross-camera context.");
+      }
+      return data ?? [];
+    },
+  });
 
   return {
     sceneContract,
     privacyManifest,
     runtimePassport,
     operationalMemory,
+    crossCameraThreads,
     ledgerEntries,
   };
 }

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from argus.api.contracts import (
+    CrossCameraThreadResponse,
     EvidenceLedgerEntryResponse,
     IncidentResponse,
     IncidentReviewUpdate,
@@ -97,6 +98,22 @@ async def list_incident_ledger(
     services: ServicesDependency,
 ) -> list[EvidenceLedgerEntryResponse]:
     return await services.incidents.list_ledger_entries(
+        tenant_context,
+        incident_id=incident_id,
+    )
+
+
+@router.get(
+    "/{incident_id}/cross-camera-threads",
+    response_model=list[CrossCameraThreadResponse],
+)
+async def list_incident_cross_camera_threads(
+    incident_id: UUID,
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> list[CrossCameraThreadResponse]:
+    return await services.incidents.list_cross_camera_threads(
         tenant_context,
         incident_id=incident_id,
     )

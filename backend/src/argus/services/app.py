@@ -36,6 +36,7 @@ from argus.api.contracts import (
     CameraSourceProbeResponse,
     CameraSourceSettings,
     CameraUpdate,
+    CrossCameraThreadResponse,
     DerivedBrowserProfiles,
     DetectionRegion,
     EdgeHeartbeatRequest,
@@ -163,6 +164,10 @@ from argus.services.camera_sources import (
     NormalizedCameraSource,
     normalize_camera_source,
     validate_camera_source_assignment,
+)
+from argus.services.cross_camera_threads import (
+    CrossCameraThreadService,
+    cross_camera_thread_response,
 )
 from argus.services.evidence_ledger import EvidenceLedgerService
 from argus.services.evidence_storage import resolve_local_evidence_path
@@ -2789,6 +2794,25 @@ class IncidentService:
             )
             entries = list((await session.execute(statement)).scalars().all())
         return [_ledger_entry_response(entry) for entry in entries]
+
+    async def list_cross_camera_threads(
+        self,
+        tenant_context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> list[CrossCameraThreadResponse]:
+        async with self.session_factory() as session:
+            await _ensure_incident_in_tenant(
+                session,
+                tenant_id=tenant_context.tenant_id,
+                incident_id=incident_id,
+            )
+        service = CrossCameraThreadService(self.session_factory)
+        rows = await service.list_threads_for_incident(
+            tenant_id=tenant_context.tenant_id,
+            incident_id=incident_id,
+        )
+        return [cross_camera_thread_response(row) for row in rows]
 
     async def get_artifact_content(
         self,

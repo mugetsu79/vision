@@ -1495,6 +1495,21 @@ class RuntimePassportSnapshotResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class CrossCameraThreadResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    site_id: UUID | None = None
+    camera_ids: list[UUID]
+    source_incident_ids: list[UUID]
+    privacy_manifest_hashes: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0, le=1)
+    rationale: list[str] = Field(default_factory=list)
+    signals: dict[str, Any] = Field(default_factory=dict)
+    privacy_labels: list[str] = Field(default_factory=list)
+    thread_hash: str = Field(min_length=64, max_length=64)
+    created_at: datetime | None = None
+
+
 class IncidentResponse(BaseModel):
     id: UUID
     camera_id: UUID

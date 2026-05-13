@@ -557,6 +557,38 @@ class OperationalMemoryPattern(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     pattern_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
+class CrossCameraThread(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "cross_camera_threads"
+    __table_args__ = (
+        UniqueConstraint("thread_hash", name="uq_cross_camera_thread_hash"),
+        Index("ix_cross_camera_threads_tenant_created", "tenant_id", "created_at"),
+        Index("ix_cross_camera_threads_site_created", "site_id", "created_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id"),
+        nullable=True,
+    )
+    camera_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    source_incident_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    privacy_manifest_hashes: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    rationale: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    signals: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    privacy_labels: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    thread_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 class PolicyDraft(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "policy_drafts"
     __table_args__ = (

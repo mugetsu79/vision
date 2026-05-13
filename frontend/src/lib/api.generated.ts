@@ -779,6 +779,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents/{incident_id}/cross-camera-threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Incident Cross Camera Threads */
+        get: operations["list_incident_cross_camera_threads_api_v1_incidents__incident_id__cross_camera_threads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content": {
         parameters: {
             query?: never;
@@ -1227,6 +1244,41 @@ export interface components {
          * @enum {string}
          */
         CountEventType: "line_cross" | "zone_enter" | "zone_exit";
+        /** CrossCameraThreadResponse */
+        CrossCameraThreadResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Site Id */
+            site_id?: string | null;
+            /** Camera Ids */
+            camera_ids: string[];
+            /** Source Incident Ids */
+            source_incident_ids: string[];
+            /** Privacy Manifest Hashes */
+            privacy_manifest_hashes?: string[];
+            /** Confidence */
+            confidence: number;
+            /** Rationale */
+            rationale?: string[];
+            /** Signals */
+            signals?: {
+                [key: string]: unknown;
+            };
+            /** Privacy Labels */
+            privacy_labels?: string[];
+            /** Thread Hash */
+            thread_hash: string;
+            /** Created At */
+            created_at?: string | null;
+        };
         /** DetectionRegion */
         DetectionRegion: {
             /** Id */
@@ -5379,6 +5431,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceLedgerEntryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_incident_cross_camera_threads_api_v1_incidents__incident_id__cross_camera_threads_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrossCameraThreadResponse"][];
                 };
             };
             /** @description Validation Error */

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -8,6 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
+    CrossCameraThreadResponse,
     EvidenceArtifactResponse,
     EvidenceLedgerEntryResponse,
     EvidenceLedgerSummary,
@@ -180,6 +182,7 @@ class RecordingIncidentService:
         self.privacy_manifest_calls: list[dict[str, object]] = []
         self.runtime_passport_calls: list[dict[str, object]] = []
         self.ledger_calls: list[dict[str, object]] = []
+        self.cross_camera_thread_calls: list[dict[str, object]] = []
         self.artifact_content_calls: list[dict[str, object]] = []
         self.scene_contract_id = uuid4()
         self.privacy_manifest_id = uuid4()
@@ -362,6 +365,39 @@ class RecordingIncidentService:
                 payload={"type": "ppe-missing"},
                 previous_entry_hash=None,
                 entry_hash="d" * 64,
+            )
+        ]
+
+    async def list_cross_camera_threads(
+        self,
+        context: TenantContext,
+        *,
+        incident_id: UUID,
+    ) -> list[CrossCameraThreadResponse]:
+        self.cross_camera_thread_calls.append(
+            {"tenant_id": context.tenant_id, "incident_id": incident_id}
+        )
+        return [
+            CrossCameraThreadResponse(
+                id=uuid4(),
+                tenant_id=context.tenant_id,
+                site_id=uuid4(),
+                camera_ids=[uuid4(), uuid4()],
+                source_incident_ids=[incident_id, uuid4()],
+                privacy_manifest_hashes=["a" * 64, "b" * 64],
+                confidence=0.82,
+                rationale=[
+                    "Same object class observed across adjacent cameras.",
+                    "Privacy manifests allowed only non-biometric attributes.",
+                ],
+                signals={
+                    "class_name": "person",
+                    "zone_id": "server-room",
+                    "attributes": {"vest_color": "red"},
+                },
+                privacy_labels=["identity-light", "non-biometric"],
+                thread_hash="c" * 64,
+                created_at=datetime(2026, 5, 13, 8, 5, tzinfo=UTC),
             )
         ]
 
@@ -709,6 +745,9 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
         privacy_response = await client.get(f"/api/v1/incidents/{incident_id}/privacy-manifest")
         runtime_response = await client.get(f"/api/v1/incidents/{incident_id}/runtime-passport")
         ledger_response = await client.get(f"/api/v1/incidents/{incident_id}/ledger")
+        cross_camera_response = await client.get(
+            f"/api/v1/incidents/{incident_id}/cross-camera-threads"
+        )
         content_response = await client.get(
             f"/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content"
         )
@@ -723,6 +762,13 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
     assert runtime_response.json()["summary"]["runtime_selection_profile_hash"] == "g" * 64
     assert ledger_response.status_code == 200
     assert ledger_response.json()[0]["action"] == "incident.triggered"
+    assert cross_camera_response.status_code == 200
+    assert cross_camera_response.json()[0]["thread_hash"] == "c" * 64
+    assert cross_camera_response.json()[0]["privacy_labels"] == [
+        "identity-light",
+        "non-biometric",
+    ]
+    assert "person_id" not in json.dumps(cross_camera_response.json())
     assert content_response.status_code == 307
     assert content_response.headers["location"] == ("https://minio.local/signed/incidents/1.mjpeg")
     assert incidents.scene_contract_calls == [
@@ -735,6 +781,9 @@ async def test_incident_accountability_detail_routes_call_service() -> None:
         {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
     ]
     assert incidents.ledger_calls == [
+        {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
+    ]
+    assert incidents.cross_camera_thread_calls == [
         {"tenant_id": UUID(str(user.tenant_context)), "incident_id": incident_id}
     ]
     assert incidents.artifact_content_calls == [

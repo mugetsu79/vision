@@ -630,6 +630,47 @@ describe("IncidentsPage", () => {
         );
       }
 
+      if (
+        url.pathname ===
+        "/api/v1/incidents/99999999-9999-9999-9999-999999999999/cross-camera-threads"
+      ) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              id: "88888888-8888-8888-8888-888888888888",
+              tenant_id: "tenant-1",
+              site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              camera_ids: [
+                "11111111-1111-1111-1111-111111111111",
+                "22222222-2222-2222-2222-222222222222",
+              ],
+              source_incident_ids: [
+                "99999999-9999-9999-9999-999999999999",
+                "77777777-7777-7777-7777-777777777777",
+              ],
+              privacy_manifest_hashes: [
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              ],
+              confidence: 0.84,
+              rationale: [
+                "Same object class observed across adjacent cameras.",
+                "Privacy manifests allowed only non-biometric attributes.",
+              ],
+              signals: {
+                class_name: "person",
+                zone_id: "forklift-gate",
+                direction: "eastbound",
+                attributes: { vest_color: "red" },
+              },
+              privacy_labels: ["identity-light", "non-biometric"],
+              thread_hash:
+                "8888888888888888888888888888888888888888888888888888888888888888",
+              created_at: "2026-04-18T10:18:00Z",
+            },
+          ]),
+        );
+      }
+
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
@@ -663,6 +704,12 @@ describe("IncidentsPage", () => {
     expect(
       screen.getByText(/observed pattern: 3 incidents in one zone/i),
     ).toBeInTheDocument();
+    expect(await screen.findByText(/cross-camera context/i)).toBeInTheDocument();
+    expect(screen.getByText("84% confidence")).toBeInTheDocument();
+    expect(screen.getByText("identity-light")).toBeInTheDocument();
+    expect(screen.getByText("non-biometric")).toBeInTheDocument();
+    expect(screen.getByText(/same object class observed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/person identity/i)).not.toBeInTheDocument();
     expect(screen.getByText(/incident\.triggered/i)).toBeInTheDocument();
   });
 
