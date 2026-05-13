@@ -241,6 +241,13 @@ function resolveBrowserDeliveryProfile(
   return profiles.find((profile) => profile.id === "720p10")?.id ?? profiles[0]?.id ?? "native";
 }
 
+function nativeOnlyBrowserDeliveryProfiles(
+  profiles: BrowserDeliveryProfilePayload[],
+): BrowserDeliveryProfilePayload[] {
+  const nativeProfile = profiles.find((profile) => profile.id === "native");
+  return nativeProfile ? [nativeProfile] : [{ id: "native", kind: "passthrough" }];
+}
+
 function formatBrowserDeliveryProfileLabel(
   profile: BrowserDeliveryProfilePayload,
   processingMode: CameraWizardData["processingMode"],
@@ -336,15 +343,21 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
 }
 
 function buildBrowserDelivery(data: CameraWizardData) {
+  const nativeStream = data.streamDeliveryMode === "native";
+
   return {
-    default_profile: data.browserDeliveryProfile,
+    default_profile: nativeStream ? "native" : data.browserDeliveryProfile,
     allow_native_on_demand: true,
     delivery_profile_id: data.streamDeliveryProfileId || null,
     delivery_mode: data.streamDeliveryMode,
     public_base_url: data.streamDeliveryPublicBaseUrl,
     edge_override_url: data.streamDeliveryEdgeOverrideUrl,
-    profiles: data.browserDeliveryProfiles,
-    unsupported_profiles: data.unsupportedBrowserDeliveryProfiles,
+    profiles: nativeStream
+      ? nativeOnlyBrowserDeliveryProfiles(data.browserDeliveryProfiles)
+      : data.browserDeliveryProfiles,
+    unsupported_profiles: nativeStream
+      ? []
+      : data.unsupportedBrowserDeliveryProfiles,
     native_status: data.browserDeliveryNativeStatus,
   };
 }
@@ -361,6 +374,10 @@ function buildCameraSource(data: CameraWizardData) {
     kind: "rtsp" as const,
     uri: data.rtspUrl.trim(),
   };
+}
+
+function edgeNodeIdForSource(data: CameraWizardData) {
+  return data.sourceKind === "usb" ? data.edgeNodeId.trim() || null : null;
 }
 
 function buildRecordingPolicy(data: CameraWizardData): EvidenceRecordingPolicy {
@@ -971,7 +988,7 @@ function toCreatePayload(
 ): CreateCameraInput {
   const payload: CreateCameraInput = {
     site_id: data.siteId,
-    edge_node_id: data.edgeNodeId.trim() || null,
+    edge_node_id: edgeNodeIdForSource(data),
     name: data.name.trim(),
     rtsp_url: data.sourceKind === "rtsp" ? data.rtspUrl.trim() : null,
     camera_source: buildCameraSource(data),
@@ -1011,7 +1028,7 @@ function toUpdatePayload(
 ): UpdateCameraInput {
   const payload: UpdateCameraInput = {
     site_id: data.siteId,
-    edge_node_id: data.edgeNodeId.trim() || null,
+    edge_node_id: edgeNodeIdForSource(data),
     name: data.name.trim(),
     processing_mode: data.processingMode,
     primary_model_id: data.primaryModelId,
@@ -1132,7 +1149,7 @@ export function CameraWizard({
               ? buildCameraSource(data)
               : null,
           processing_mode: data.processingMode,
-          edge_node_id: data.edgeNodeId.trim() || null,
+          edge_node_id: edgeNodeIdForSource(data),
           browser_delivery: buildBrowserDelivery(data),
           privacy: {
             blur_faces: data.blurFaces,
@@ -1195,6 +1212,13 @@ export function CameraWizard({
     () => streamDeliveryProfileOptions(streamDeliveryProfilesQuery.data),
     [streamDeliveryProfilesQuery.data],
   );
+  const browserDeliveryProfileOptions = useMemo(
+    () =>
+      data.streamDeliveryMode === "native"
+        ? nativeOnlyBrowserDeliveryProfiles(data.browserDeliveryProfiles)
+        : data.browserDeliveryProfiles,
+    [data.browserDeliveryProfiles, data.streamDeliveryMode],
+  );
 
   useEffect(() => {
     setData(createDefaultData(initialCamera));
@@ -1243,6 +1267,14 @@ export function CameraWizard({
       };
     });
   }, [sourceProbeQuery.data]);
+
+  useEffect(() => {
+    if (data.streamDeliveryMode !== "native" || data.browserDeliveryProfile === "native") {
+      return;
+    }
+
+    setData((current) => ({ ...current, browserDeliveryProfile: "native" }));
+  }, [data.browserDeliveryProfile, data.streamDeliveryMode]);
 
   useEffect(() => {
     setData((current) => {
@@ -2272,7 +2304,7 @@ export function CameraWizard({
                     )
                   }
                 >
-                  {data.browserDeliveryProfiles.map((profile) => (
+                  {browserDeliveryProfileOptions.map((profile) => (
                     <option key={profile.id} value={profile.id}>
                       {formatBrowserDeliveryProfileLabel(
                         profile,

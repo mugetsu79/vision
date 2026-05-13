@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -262,6 +263,89 @@ async def test_create_camera_allows_detection_only_scene_without_homography(
         [0.859375, 0.972222],
         [0.078125, 0.972222],
     ]
+
+
+@pytest.mark.asyncio
+async def test_create_camera_serializes_browser_delivery_profile_id_for_jsonb(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    site_id = uuid4()
+    model_id = uuid4()
+    delivery_profile_id = uuid4()
+    model = _detector_model(model_id)
+    site = _site(site_id, tenant_id)
+
+    class JsonCheckingSession(_FakeSession):
+        camera: Camera | None = None
+
+        def add(self, camera: object) -> None:
+            super().add(camera)
+            assert isinstance(camera, Camera)
+            json.dumps(camera.browser_delivery)
+            self.camera = camera
+
+    class JsonCheckingSessionFactory:
+        session = JsonCheckingSession()
+
+        def __call__(self) -> JsonCheckingSession:
+            return self.session
+
+    session_factory = JsonCheckingSessionFactory()
+    service = CameraService(
+        session_factory=session_factory,
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+
+    async def fake_load_model(session, model_id_arg):  # noqa: ANN001
+        assert model_id_arg == model_id
+        return model
+
+    async def fake_load_site(session, tenant_id_arg, site_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert site_id_arg == site_id
+        return site
+
+    monkeypatch.setattr(app_services, "_load_model", fake_load_model)
+    monkeypatch.setattr(app_services, "_load_site", fake_load_site)
+
+    response = await service.create_camera(
+        _tenant_context(tenant_id),
+        CameraCreate(
+            site_id=site_id,
+            name="Native Camera",
+            rtsp_url="rtsp://new-camera/live",
+            processing_mode=ProcessingMode.CENTRAL,
+            primary_model_id=model_id,
+            tracker_type=TrackerType.BOTSORT,
+            active_classes=["person"],
+            vision_profile=SCENE_VISION_PROFILE,
+            detection_regions=[],
+            privacy=PrivacySettings(),
+            browser_delivery=BrowserDeliverySettings(
+                default_profile="native",
+                delivery_profile_id=delivery_profile_id,
+                delivery_mode="native",
+                profiles=[{"id": "native", "kind": "passthrough"}],
+                unsupported_profiles=[],
+            ),
+            frame_skip=1,
+            fps_cap=25,
+        ),
+    )
+
+    assert response.browser_delivery.delivery_profile_id == delivery_profile_id
+    assert session_factory.session.camera is not None
+    assert session_factory.session.camera.browser_delivery["delivery_profile_id"] == str(
+        delivery_profile_id
+    )
 
 
 def test_create_camera_requires_homography_when_speed_enabled() -> None:

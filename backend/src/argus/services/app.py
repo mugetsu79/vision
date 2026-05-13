@@ -242,6 +242,12 @@ def capture_still_image(rtsp_url: str) -> tuple[bytes, int, int]:
     return _capture_still_image(rtsp_url)
 
 
+def probe_rtsp_source(rtsp_url: str, *, settings: Settings) -> SourceCapability:
+    from argus.vision.source_probe import probe_rtsp_source as _probe_rtsp_source
+
+    return _probe_rtsp_source(rtsp_url, settings=settings)
+
+
 def _probe_video_dimensions(rtsp_url: str) -> tuple[int, int]:
     from argus.vision.camera import _probe_video_dimensions as _probe_dimensions
 
@@ -1096,15 +1102,13 @@ class CameraService:
                     else None
                 ),
                 privacy=privacy,
-                browser_delivery=browser_delivery.model_dump(mode="python"),
+                browser_delivery=browser_delivery.model_dump(mode="json"),
                 source_capability=(
                     source_capability.model_dump(mode="python")
                     if source_capability is not None
                     else None
                 ),
-                evidence_recording_policy=payload.recording_policy.model_dump(
-                    mode="python"
-                ),
+                evidence_recording_policy=payload.recording_policy.model_dump(mode="json"),
                 frame_skip=payload.frame_skip,
                 fps_cap=payload.fps_cap,
             )
@@ -1225,7 +1229,7 @@ class CameraService:
                     ),
                     edge_node_id=update_data.get("edge_node_id", camera.edge_node_id),
                     source_kind=_source_kind_from_update(camera, update_data),
-                ).model_dump(mode="python")
+                ).model_dump(mode="json")
             if "homography" in update_data and update_data["homography"] is not None:
                 update_data["homography"] = dict(update_data["homography"])
             if "zones" in update_data and update_data["zones"] is not None:
@@ -1240,7 +1244,7 @@ class CameraService:
                     update_data["evidence_recording_policy"] = (
                         EvidenceRecordingPolicy.model_validate(
                             recording_policy
-                        ).model_dump(mode="python")
+                        ).model_dump(mode="json")
                     )
             _validate_effective_camera_motion_metrics(camera, update_data)
 
@@ -5534,8 +5538,6 @@ async def _probe_source_capability(
     if not settings.enable_startup_services:
         return None
     try:
-        from argus.vision.source_probe import probe_rtsp_source
-
         return await asyncio.to_thread(probe_rtsp_source, rtsp_url, settings=settings)
     except RuntimeError:
         logger.warning(

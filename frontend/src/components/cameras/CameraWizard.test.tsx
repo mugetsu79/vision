@@ -39,6 +39,17 @@ const configurationProfiles = vi.hoisted(() => [
       edge_override_url: "https://edge-streams.example.com",
     },
   },
+  {
+    id: "55555555-5555-5555-5555-555555555555",
+    kind: "stream_delivery",
+    name: "Native stream",
+    slug: "native-stream",
+    enabled: true,
+    is_default: false,
+    config: {
+      delivery_mode: "native",
+    },
+  },
 ]);
 
 vi.mock("@/hooks/use-configuration", () => ({
@@ -765,6 +776,55 @@ describe("CameraWizard", () => {
     expect(browserDelivery?.edge_override_url).toBe("https://edge-streams.example.com");
   });
 
+  test("locks browser delivery to native when a native stream profile is selected", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    const browserDeliveryProfile = screen.getByLabelText(/browser delivery profile/i);
+    await user.selectOptions(browserDeliveryProfile, "540p5");
+    expect(browserDeliveryProfile).toHaveValue("540p5");
+
+    await user.selectOptions(
+      screen.getByLabelText(/stream delivery profile/i),
+      "55555555-5555-5555-5555-555555555555",
+    );
+
+    expect(browserDeliveryProfile).toHaveValue("native");
+    expect(
+      within(browserDeliveryProfile).queryByRole("option", { name: /540p5/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(browserDeliveryProfile).queryByRole("option", { name: /720p10/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(browserDeliveryProfile).queryByRole("option", { name: /1080p15/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(browserDeliveryProfile).queryByRole("option", { name: /annotated/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+    const browserDelivery = submittedPayload?.browser_delivery as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(browserDelivery?.delivery_profile_id).toBe(
+      "55555555-5555-5555-5555-555555555555",
+    );
+    expect(browserDelivery?.delivery_mode).toBe("native");
+    expect(browserDelivery?.default_profile).toBe("native");
+    expect(browserDelivery?.profiles).toEqual([
+      { id: "native", kind: "passthrough" },
+    ]);
+  });
+
   test("submits USB edge source settings with edge-only guidance", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
@@ -812,6 +872,41 @@ describe("CameraWizard", () => {
       mode: "event_clip",
       storage_profile: "edge_local",
       storage_profile_id: "11111111-1111-1111-1111-111111111111",
+    });
+  });
+
+  test("does not submit stale USB edge node settings after switching back to RTSP", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/source type/i), "usb");
+    await user.clear(screen.getByLabelText(/usb device uri/i));
+    await user.type(screen.getByLabelText(/usb device uri/i), "usb:///dev/video0");
+    await user.type(
+      screen.getByLabelText(/edge node id/i),
+      "22222222-2222-2222-2222-222222222222",
+    );
+
+    await user.selectOptions(screen.getByLabelText(/source type/i), "rtsp");
+    await user.selectOptions(screen.getByLabelText(/processing mode/i), "central");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.edge_node_id).toBeNull();
+    expect(submittedPayload?.camera_source).toEqual({
+      kind: "rtsp",
+      uri: "rtsp://camera.local/live",
     });
   });
 
