@@ -23,6 +23,7 @@ from argus.models.enums import (
     HistoryMetric,
     IncidentReviewStatus,
     IncidentRuleSeverity,
+    ModelAdmissionStatus,
     ModelFormat,
     ModelTask,
     OperationsLifecycleAction,
@@ -1259,6 +1260,127 @@ class FleetRuleRuntimeSummary(BaseModel):
     load_status: RuleLoadStatus = "not_configured"
 
 
+class HardwarePerformanceSample(BaseModel):
+    model_id: UUID | None = None
+    model_name: str | None = None
+    runtime_backend: str = Field(min_length=1, max_length=64)
+    input_width: int = Field(gt=0)
+    input_height: int = Field(gt=0)
+    target_fps: float = Field(gt=0)
+    observed_fps: float | None = Field(default=None, ge=0)
+    stage_p95_ms: dict[str, float] = Field(default_factory=dict)
+    stage_p99_ms: dict[str, float] = Field(default_factory=dict)
+    captured_at: datetime | None = None
+
+
+class EdgeNodeHardwareReportCreate(BaseModel):
+    edge_node_id: UUID | None = None
+    reported_at: datetime
+    host_profile: str = Field(min_length=1, max_length=128)
+    os_name: str = Field(min_length=1, max_length=64)
+    machine_arch: str = Field(min_length=1, max_length=64)
+    cpu_model: str | None = Field(default=None, max_length=255)
+    cpu_cores: int | None = Field(default=None, ge=1)
+    memory_total_mb: int | None = Field(default=None, ge=1)
+    accelerators: list[str] = Field(default_factory=list)
+    provider_capabilities: dict[str, bool] = Field(default_factory=dict)
+    observed_performance: list[HardwarePerformanceSample] = Field(default_factory=list)
+    thermal_state: str | None = Field(default=None, max_length=64)
+
+
+class EdgeNodeHardwareReportResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    edge_node_id: UUID | None = None
+    supervisor_id: str
+    reported_at: datetime
+    host_profile: str
+    os_name: str
+    machine_arch: str
+    cpu_model: str | None = None
+    cpu_cores: int | None = None
+    memory_total_mb: int | None = None
+    accelerators: list[str] = Field(default_factory=list)
+    provider_capabilities: dict[str, bool] = Field(default_factory=dict)
+    observed_performance: list[HardwarePerformanceSample] = Field(default_factory=list)
+    thermal_state: str | None = None
+    report_hash: str = Field(min_length=64, max_length=64)
+    created_at: datetime
+
+
+class WorkerModelAdmissionRequest(BaseModel):
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    assignment_id: UUID | None = None
+    model_id: UUID | None = None
+    model_name: str | None = None
+    model_capability: DetectorCapability = DetectorCapability.FIXED_VOCAB
+    runtime_artifact_id: UUID | None = None
+    runtime_artifact_target_profile: str | None = Field(default=None, max_length=128)
+    runtime_selection_profile_id: UUID | None = None
+    selected_backend: str | None = Field(default=None, max_length=64)
+    preferred_backend: str | None = Field(default=None, max_length=64)
+    stream_profile: dict[str, Any] = Field(default_factory=dict)
+    fallback_allowed: bool = True
+
+
+class WorkerModelAdmissionResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    assignment_id: UUID | None = None
+    hardware_report_id: UUID | None = None
+    model_id: UUID | None = None
+    model_name: str | None = None
+    model_capability: DetectorCapability | None = None
+    runtime_artifact_id: UUID | None = None
+    runtime_selection_profile_id: UUID | None = None
+    stream_profile: dict[str, Any] = Field(default_factory=dict)
+    status: ModelAdmissionStatus
+    selected_backend: str | None = None
+    recommended_model_id: UUID | None = None
+    recommended_model_name: str | None = None
+    recommended_runtime_profile_id: UUID | None = None
+    recommended_backend: str | None = None
+    rationale: str
+    constraints: dict[str, Any] = Field(default_factory=dict)
+    evaluated_at: datetime
+    created_at: datetime
+
+
+class SupervisorPollRequest(BaseModel):
+    edge_node_id: UUID | None = None
+    limit: int = Field(default=10, ge=1, le=100)
+
+
+class SupervisorPollResponse(BaseModel):
+    supervisor_id: str
+    edge_node_id: UUID | None = None
+    requests: list[OperationsLifecycleRequestResponse] = Field(default_factory=list)
+
+
+class LifecycleRequestClaim(BaseModel):
+    supervisor_id: str = Field(min_length=1, max_length=128)
+    edge_node_id: UUID | None = None
+
+
+class LifecycleRequestCompletion(BaseModel):
+    supervisor_id: str = Field(min_length=1, max_length=128)
+    status: OperationsLifecycleStatus
+    admission_report_id: UUID | None = None
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_terminal_status(self) -> LifecycleRequestCompletion:
+        if self.status not in {
+            OperationsLifecycleStatus.COMPLETED,
+            OperationsLifecycleStatus.FAILED,
+        }:
+            raise ValueError("completion status must be completed or failed")
+        return self
+
+
 class WorkerAssignmentCreate(BaseModel):
     camera_id: UUID
     edge_node_id: UUID | None = None
@@ -1324,7 +1446,10 @@ class OperationsLifecycleRequestResponse(BaseModel):
     requested_by_subject: str | None = None
     requested_at: datetime
     acknowledged_at: datetime | None = None
+    claimed_by_supervisor: str | None = None
+    claimed_at: datetime | None = None
     completed_at: datetime | None = None
+    admission_report_id: UUID | None = None
     error: str | None = None
     request_payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
@@ -1348,6 +1473,8 @@ class FleetCameraWorkerSummary(BaseModel):
     assignment: WorkerAssignmentResponse | None = None
     runtime_report: SupervisorRuntimeReportResponse | None = None
     latest_lifecycle_request: OperationsLifecycleRequestResponse | None = None
+    latest_hardware_report: EdgeNodeHardwareReportResponse | None = None
+    latest_model_admission: WorkerModelAdmissionResponse | None = None
     supervisor_mode: SupervisorMode = SupervisorMode.DISABLED
     restart_policy: Literal["never", "on_failure", "always"] = "never"
     allowed_lifecycle_actions: list[OperationsLifecycleAction] = Field(default_factory=list)

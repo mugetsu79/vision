@@ -81,11 +81,38 @@ function supervisedWorker(overrides: Record<string, unknown> = {}) {
       requested_by_subject: "operator-1",
       requested_at: "2026-05-13T08:02:00Z",
       acknowledged_at: null,
+      claimed_by_supervisor: null,
+      claimed_at: null,
       completed_at: null,
+      admission_report_id: null,
       error: null,
       request_payload: { reason: "operator_test" },
       created_at: "2026-05-13T08:02:00Z",
       updated_at: "2026-05-13T08:02:00Z",
+    },
+    latest_model_admission: {
+      id: "00000000-0000-0000-0000-000000000801",
+      tenant_id: "tenant-1",
+      camera_id: "00000000-0000-0000-0000-000000000101",
+      edge_node_id: "00000000-0000-0000-0000-000000000201",
+      assignment_id: "00000000-0000-0000-0000-000000000401",
+      hardware_report_id: "00000000-0000-0000-0000-000000000802",
+      model_id: "00000000-0000-0000-0000-000000000803",
+      model_name: "YOLO26n COCO",
+      model_capability: "fixed_vocab",
+      runtime_artifact_id: null,
+      runtime_selection_profile_id: null,
+      stream_profile: { width: 1280, height: 720, fps: 10 },
+      status: "recommended",
+      selected_backend: "CoreMLExecutionProvider",
+      recommended_model_id: null,
+      recommended_model_name: null,
+      recommended_runtime_profile_id: null,
+      recommended_backend: "CoreMLExecutionProvider",
+      rationale: "CoreML p95 total fits the frame budget.",
+      constraints: { frame_budget_ms: 100 },
+      evaluated_at: "2026-05-13T08:03:00Z",
+      created_at: "2026-05-13T08:03:00Z",
     },
     supervisor_mode: "polling",
     restart_policy: "always",
@@ -156,6 +183,37 @@ describe("SupervisorLifecycleControls", () => {
 
     expect(screen.getByText(/lifecycle requests disabled/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
+  });
+
+  test("blocks start and restart when model admission is unsupported", async () => {
+    const user = userEvent.setup();
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker({
+          latest_model_admission: {
+            ...supervisedWorker().latest_model_admission,
+            status: "unsupported",
+            rationale: "Open-world model unsupported on CPU-only hardware.",
+          },
+        })}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^restart$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^stop$/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /^drain$/i })).not.toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /^stop$/i }));
+    expect(lifecycleMutateAsync).toHaveBeenCalledTimes(1);
+    expect(lifecycleMutateAsync).toHaveBeenCalledWith({
+      camera_id: "00000000-0000-0000-0000-000000000101",
+      edge_node_id: "00000000-0000-0000-0000-000000000201",
+      assignment_id: "00000000-0000-0000-0000-000000000401",
+      action: "stop",
+      request_payload: { source: "operations_ui" },
+    });
   });
 
   test("updates assignment and renders runtime report truth", async () => {

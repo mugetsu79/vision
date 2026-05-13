@@ -93,7 +93,11 @@ export function SupervisorLifecycleControls({
               key={action}
               type="button"
               onClick={() => void createRequest(action)}
-              disabled={!allowedActions.has(action) || lifecycle.isPending}
+              disabled={
+                !allowedActions.has(action) ||
+                !admissionAllowsAction(worker, action) ||
+                lifecycle.isPending
+              }
               variant="secondary"
               className="h-9 px-3 text-xs"
             >
@@ -201,6 +205,17 @@ function lifecycleReason(worker: Worker): string {
     return worker.detail ?? "Supervisor has not reported healthy runtime state.";
   }
   return worker.detail ?? "Supervisor lifecycle requests are available.";
+}
+
+function admissionAllowsAction(
+  worker: Worker,
+  action: (typeof lifecycleButtons)[number]["action"],
+): boolean {
+  if (action !== "start" && action !== "restart") {
+    return true;
+  }
+  const status = worker.latest_model_admission?.status;
+  return status === "recommended" || status === "supported" || status === "degraded";
 }
 
 function formatDate(value: string): string {

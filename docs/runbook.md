@@ -7,11 +7,18 @@ See also:
 
 ## Worker Lifecycle And Operations
 
-The Operations workbench currently lives at `/settings` in the frontend. It is the operator-facing view for fleet state, camera worker ownership, delivery diagnostics, edge bootstrap material, and copyable local-dev worker commands.
+The Operations workbench currently lives at `/settings` in the frontend. It is the operator-facing view for fleet state, camera worker ownership, delivery diagnostics, edge bootstrap material, hardware/model admission, and copyable local-dev worker commands.
 
 Local development can still start workers from a shell because there is no local supervisor process yet. Use the Operations copy button or the lab guide commands so the token fetch, API URL, database URL, NATS URL, and MinIO settings stay in sync with the current dev stack.
 
 Production start, stop, restart, and drain actions must be supervisor-backed. The intended path is: UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the worker process on the correct node -> worker heartbeat/runtime reports truth back to Operations. The API must not become a generic remote shell.
+
+Start and restart also pass through hardware admission. A supervisor reports its
+host profile, accelerator/provider availability, and recent p95/p99 performance
+samples. The backend records a model-admission decision for the worker. The UI
+is an early explanation layer, and the supervisor is the final enforcement gate.
+Manual iMac workers are labeled as a production-admission bypass because the
+operator starts those processes directly from a shell.
 
 ## Production Topology
 
@@ -44,8 +51,11 @@ An iMac can be used as a lab or pilot master, especially with a Jetson edge node
 
 Before calling a deployment production-ready, verify that the following are implemented or supplied by the deployment platform:
 
-- supervisor-backed Start/Stop/Restart/Drain for central and edge workers
+- packaged supervisor service wrappers for Start/Stop/Restart/Drain on central
+  and edge workers
 - per-worker heartbeat with camera id, status, freshness, restart count, and last error
+- regular hardware capability/performance reports from each supervisor
+- model-admission checks before production Start or Restart
 - persistent assignment/reassignment model or an equivalent supervised placement source
 - backup and restore for Postgres/TimescaleDB and incident object storage
 - TLS termination and stable DNS
@@ -54,6 +64,46 @@ Before calling a deployment production-ready, verify that the following are impl
 - soak testing for the first site before adding more cameras
 
 The current Operations page should render unknown runtime precision honestly as `not_reported`, `unknown`, `stale`, or `offline`. Do not treat missing heartbeat detail as proof that a worker is running.
+
+## Supervisor Hardware Admission
+
+The hardware-admission MVP stores two operational facts:
+
+- `edge_node_hardware_reports`: supervisor host profile, memory, CPU,
+  accelerator/provider capability, thermal state, and observed model p95/p99
+  samples
+- `worker_model_admission_reports`: the latest decision for a camera worker,
+  including status, rationale, selected backend, and safer recommendation fields
+
+Central supervisors should report with a stable `supervisor_id` and no
+`edge_node_id`. Edge supervisors should report with both `supervisor_id` and
+the assigned `edge_node_id`. This checkpoint provides the reconciler library and
+API/database contract; the long-running service wrapper should instantiate
+`argus.supervisor.reconciler.SupervisorReconciler` with an operations client and
+a platform-specific `WorkerProcessAdapter`.
+
+Admission statuses:
+
+| Status | Meaning | Start/Restart |
+|---|---|---|
+| `recommended` | matching backend is available and recent p95 fits the frame budget | allowed |
+| `supported` | matching backend is available but no matching performance sample exists yet | allowed |
+| `degraded` | fallback can run but recent p95 exceeds the frame budget | allowed with warning |
+| `unsupported` | required backend/artifact/target profile is missing or unsafe | blocked |
+| `unknown` | no fresh hardware report exists for the target node/supervisor | blocked |
+
+Model examples:
+
+- macOS CoreML with a fixed-vocab YOLO26n model should be
+  `recommended` or `supported` once CoreML is reported.
+- Jetson TensorRT should be preferred when a validated artifact matches the
+  node profile, and should become `recommended` after p95 fits the stream
+  budget.
+- CPU/ONNX fallback is acceptable for small fixed-vocab scenes only when p95
+  stays inside the budget; otherwise it becomes `degraded`.
+- open-world YOLOE on CPU-only hardware at 720p10 or higher should be
+  `unsupported`, with a recommendation for a smaller fixed-vocab model or a
+  hardware-backed runtime.
 
 ## Incident Evidence And Review
 
@@ -196,9 +246,9 @@ profile requires an API key that has not been stored.
 
 ### Development Migration Notes
 
-The accountable evidence, configuration, runtime passport, and per-worker
-incident rule runway currently migrates through Alembic head
-`0018_incident_rule_ledger`.
+The accountable evidence, configuration, runtime passport, per-worker incident
+rule runway, and supervisor hardware admission runway currently migrate through
+Alembic head `0023_supervisor_reconciler`.
 
 After pulling the Task 16E checkpoint, refresh the dev database with:
 
@@ -213,7 +263,7 @@ Postgres directly, run the same upgrade inside the backend container:
 ```bash
 cd /Users/yann.moren/vision
 docker compose -f infra/docker-compose.dev.yml exec backend \
-  python -m uv run alembic upgrade head
+  uv run alembic upgrade head
 ```
 
 ## Secrets With SOPS And Age
@@ -476,7 +526,7 @@ Cameras now carry a persisted `vision_profile` and optional `detection_regions`.
 
 ```bash
 docker compose -f /Users/yann.moren/vision/infra/docker-compose.dev.yml exec backend \
-  python -m uv run alembic upgrade head
+  uv run alembic upgrade head
 ```
 
 See `docs/scene-vision-profile-configuration-guide.md` for operator guidance.

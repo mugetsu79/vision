@@ -41,6 +41,8 @@ from argus.api.contracts import (
     DetectionRegion,
     EdgeHeartbeatRequest,
     EdgeHeartbeatResponse,
+    EdgeNodeHardwareReportCreate,
+    EdgeNodeHardwareReportResponse,
     EdgeRegisterRequest,
     EdgeRegisterResponse,
     EvidenceArtifactResponse,
@@ -66,6 +68,8 @@ from argus.api.contracts import (
     HistorySeriesRow,
     HomographyPayload,
     IncidentResponse,
+    LifecycleRequestClaim,
+    LifecycleRequestCompletion,
     ModelCapabilityConfig,
     ModelCatalogEntryResponse,
     ModelCreate,
@@ -90,6 +94,8 @@ from argus.api.contracts import (
     StreamDeliveryProfileConfig,
     StreamOfferRequest,
     StreamOfferResponse,
+    SupervisorPollRequest,
+    SupervisorPollResponse,
     SupervisorRuntimeReportCreate,
     SupervisorRuntimeReportResponse,
     TelemetryEnvelope,
@@ -103,6 +109,8 @@ from argus.api.contracts import (
     WorkerEvidenceStorageSettings,
     WorkerIncidentRule,
     WorkerIncidentRulePredicate,
+    WorkerModelAdmissionRequest,
+    WorkerModelAdmissionResponse,
     WorkerModelSettings,
     WorkerPrivacyPolicySettings,
     WorkerPrivacySettings,
@@ -179,6 +187,7 @@ from argus.services.evidence_ledger import EvidenceLedgerService
 from argus.services.evidence_storage import resolve_local_evidence_path
 from argus.services.incident_rules import IncidentRuleService
 from argus.services.local_first_sync import LocalFirstEvidenceSyncService
+from argus.services.model_admission import evaluate_worker_model_admission
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.operational_memory import OperationalMemoryService
 from argus.services.operator_configuration import OperatorConfigurationService
@@ -193,10 +202,13 @@ from argus.services.runtime_passports import RuntimePassportService, build_runti
 from argus.services.scene_contracts import SceneContractService, build_scene_contract
 from argus.services.supervisor_operations import (
     SupervisorOperationsService,
+    edge_node_hardware_report_response,
     operations_lifecycle_request_response,
     resolve_worker_operations_controls,
+    supervisor_poll_response,
     supervisor_runtime_report_response,
     worker_assignment_response,
+    worker_model_admission_response,
 )
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
@@ -1470,6 +1482,9 @@ class OperationsService:
         assignment_by_camera = {}
         runtime_report_by_camera = {}
         lifecycle_request_by_camera = {}
+        hardware_report_by_edge_node = {}
+        central_hardware_report = None
+        model_admission_by_camera = {}
         supervisor_service = self.supervisor_operations
         if supervisor_service is not None:
             assignment_by_camera = await supervisor_service.latest_assignments_by_camera(
@@ -1482,6 +1497,24 @@ class OperationsService:
             )
             lifecycle_request_by_camera = (
                 await supervisor_service.latest_lifecycle_requests_by_camera(
+                    tenant_id=tenant_context.tenant_id,
+                    camera_ids=camera_ids,
+                )
+            )
+            edge_ids = [edge.id for edge, _site in edge_rows]
+            hardware_report_by_edge_node = (
+                await supervisor_service.latest_hardware_reports_by_edge_node(
+                    tenant_id=tenant_context.tenant_id,
+                    edge_node_ids=edge_ids,
+                )
+            )
+            central_hardware_report = (
+                await supervisor_service.latest_hardware_report_for_central(
+                    tenant_id=tenant_context.tenant_id,
+                )
+            )
+            model_admission_by_camera = (
+                await supervisor_service.latest_model_admissions_by_camera(
                     tenant_id=tenant_context.tenant_id,
                     camera_ids=camera_ids,
                 )
@@ -1538,8 +1571,14 @@ class OperationsService:
             assignment = assignment_by_camera.get(camera.id)
             runtime_report = runtime_report_by_camera.get(camera.id)
             lifecycle_request = lifecycle_request_by_camera.get(camera.id)
+            model_admission = model_admission_by_camera.get(camera.id)
             assigned_edge_node_id = (
                 assignment.edge_node_id if assignment is not None else camera.edge_node_id
+            )
+            hardware_report = (
+                hardware_report_by_edge_node.get(assigned_edge_node_id)
+                if assigned_edge_node_id is not None
+                else central_hardware_report
             )
             if assignment is not None:
                 desired = assignment.desired_state
@@ -1614,6 +1653,16 @@ class OperationsService:
                     latest_lifecycle_request=(
                         operations_lifecycle_request_response(lifecycle_request)
                         if lifecycle_request is not None
+                        else None
+                    ),
+                    latest_hardware_report=(
+                        edge_node_hardware_report_response(hardware_report)
+                        if hardware_report is not None
+                        else None
+                    ),
+                    latest_model_admission=(
+                        worker_model_admission_response(model_admission)
+                        if model_admission is not None
                         else None
                     ),
                     supervisor_mode=(
@@ -1754,6 +1803,124 @@ class OperationsService:
             actor_subject=tenant_context.user.subject,
         )
         return operations_lifecycle_request_response(row)
+
+    async def poll_supervisor_lifecycle_requests(
+        self,
+        tenant_context: TenantContext,
+        supervisor_id: str,
+        payload: SupervisorPollRequest,
+    ) -> SupervisorPollResponse:
+        rows = await self._supervisor_operations().poll_lifecycle_requests(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            edge_node_id=payload.edge_node_id,
+            limit=payload.limit,
+        )
+        return supervisor_poll_response(
+            supervisor_id=supervisor_id,
+            edge_node_id=payload.edge_node_id,
+            rows=rows,
+        )
+
+    async def claim_lifecycle_request(
+        self,
+        tenant_context: TenantContext,
+        request_id: UUID,
+        payload: LifecycleRequestClaim,
+    ) -> OperationsLifecycleRequestResponse:
+        row = await self._supervisor_operations().claim_lifecycle_request(
+            tenant_id=tenant_context.tenant_id,
+            request_id=request_id,
+            supervisor_id=payload.supervisor_id,
+            edge_node_id=payload.edge_node_id,
+        )
+        return operations_lifecycle_request_response(row)
+
+    async def complete_lifecycle_request(
+        self,
+        tenant_context: TenantContext,
+        request_id: UUID,
+        payload: LifecycleRequestCompletion,
+    ) -> OperationsLifecycleRequestResponse:
+        row = await self._supervisor_operations().complete_lifecycle_request(
+            tenant_id=tenant_context.tenant_id,
+            request_id=request_id,
+            supervisor_id=payload.supervisor_id,
+            status=payload.status,
+            admission_report_id=payload.admission_report_id,
+            error=payload.error,
+        )
+        return operations_lifecycle_request_response(row)
+
+    async def record_hardware_report(
+        self,
+        tenant_context: TenantContext,
+        supervisor_id: str,
+        payload: EdgeNodeHardwareReportCreate,
+    ) -> EdgeNodeHardwareReportResponse:
+        row = await self._supervisor_operations().record_hardware_report(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            payload=payload,
+        )
+        return edge_node_hardware_report_response(row)
+
+    async def latest_hardware_report_for_supervisor(
+        self,
+        tenant_context: TenantContext,
+        supervisor_id: str,
+    ) -> EdgeNodeHardwareReportResponse | None:
+        row = await self._supervisor_operations().latest_hardware_report_for_supervisor(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+        )
+        return edge_node_hardware_report_response(row) if row is not None else None
+
+    async def latest_hardware_report_for_edge_node(
+        self,
+        tenant_context: TenantContext,
+        edge_node_id: UUID,
+    ) -> EdgeNodeHardwareReportResponse | None:
+        rows = await self._supervisor_operations().latest_hardware_reports_by_edge_node(
+            tenant_id=tenant_context.tenant_id,
+            edge_node_ids=[edge_node_id],
+        )
+        row = rows.get(edge_node_id)
+        return edge_node_hardware_report_response(row) if row is not None else None
+
+    async def evaluate_worker_model_admission(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+        payload: WorkerModelAdmissionRequest,
+    ) -> WorkerModelAdmissionResponse:
+        hardware_report = None
+        if payload.edge_node_id is not None:
+            hardware_reports = (
+                await self._supervisor_operations().latest_hardware_reports_by_edge_node(
+                    tenant_id=tenant_context.tenant_id,
+                    edge_node_ids=[payload.edge_node_id],
+                )
+            )
+            hardware_report = hardware_reports.get(payload.edge_node_id)
+        else:
+            hardware_report = (
+                await self._supervisor_operations().latest_hardware_report_for_central(
+                    tenant_id=tenant_context.tenant_id,
+                )
+            )
+        request_payload = payload.model_copy(update={"camera_id": camera_id})
+        decision = evaluate_worker_model_admission(
+            request_payload,
+            hardware_report=hardware_report,
+        )
+        row = await self._supervisor_operations().record_model_admission_decision(
+            tenant_id=tenant_context.tenant_id,
+            payload=request_payload,
+            hardware_report_id=hardware_report.id if hardware_report is not None else None,
+            decision=decision,
+        )
+        return worker_model_admission_response(row)
 
     def _supervisor_operations(self) -> SupervisorOperationsService:
         if self.supervisor_operations is None:

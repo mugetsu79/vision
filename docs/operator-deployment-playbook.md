@@ -24,10 +24,15 @@ The current product includes the operator workflows needed for a serious pilot:
 - per-scene incident rule authoring in Control -> Scenes, worker rule
   consumption in Control -> Operations, and trigger rule summaries in
   Intelligence -> Evidence
+- supervisor lifecycle request contracts, claim/complete transitions, and
+  hardware model-admission reporting in Control -> Operations
 - RTSP and edge USB/UVC camera source configuration
 - Jetson edge compose stack and preflight tooling
 
-The production-critical layer still missing is supervisor-backed lifecycle control. Today, local development uses copyable commands and edge development uses Compose. Production should replace both with a central or edge supervisor that starts, stops, restarts, drains, monitors, and reports camera workers.
+The supervisor lifecycle MVP is now present as API contracts, database records,
+UI admission status, and a reconciler library. Local development still uses
+manual terminal workers, and production still needs a packaged central or edge
+supervisor service that wires the reconciler to the deployment process manager.
 
 ## Dev Versus Production
 
@@ -46,6 +51,8 @@ Do not confuse the local dev stack with production.
 - Jetson edge nodes run a small edge stack near the cameras
 - all worker processes are owned by a local supervisor, not the browser or API container
 - Operations writes desired state or lifecycle requests, then displays reported runtime truth
+- supervisors report host hardware capability and observed model performance so
+  unsupported models do not start on unsuitable hardware
 - edge credentials are scoped, rotated, and provisioned through bootstrap, not copied from local dev tokens
 - the current iMac + Jetson lab should set the edge worker's `ARGUS_NATS_URL` directly to the iMac NATS listener; the NATS leaf shape is the production target once supervisor bootstrap owns credentials and routing
 
@@ -104,7 +111,7 @@ From [/Users/yann.moren/vision](/Users/yann.moren/vision):
 ```bash
 make dev-up
 docker compose -f infra/docker-compose.dev.yml exec backend \
-  python -m uv run alembic upgrade head
+  uv run alembic upgrade head
 corepack pnpm --dir frontend generate:api
 ```
 
@@ -138,6 +145,8 @@ Do not treat it as the final production topology for a real multi-site rollout.
 - Operations shows truthful node, worker, and delivery state for the current lab setup
 - Operations shows worker rule count/hash/readiness for cameras with incident
   rules
+- Operations shows either a manual production-admission bypass note or the
+  latest hardware/model admission status for supervised workers
 - a rule-generated incident is reviewable in Evidence with trigger rule context
 - tests and Playwright pass locally
 
@@ -146,6 +155,13 @@ Do not treat it as the final production topology for a real multi-site rollout.
 The lab UI can show desired worker ownership, runtime freshness, delivery diagnostics, and copyable local-dev worker commands from the Operations page. Those shell commands are a development bridge for workstations where no supervisor is running yet.
 
 Production lifecycle controls should not shell out from the browser or API container. Start, stop, restart, and drain should write desired state or send a constrained lifecycle request; a central or edge supervisor then owns the actual process reconciliation and reports runtime truth back through heartbeats.
+
+Start and restart also require model admission. The supervisor reports hardware
+capability and recent performance samples. The backend records a model-admission
+decision for each worker, and the Operations UI disables production Start and
+Restart when admission is `unknown` or `unsupported`. Manual iMac lab workers
+are explicitly labeled as a production-admission bypass because the operator is
+starting the process directly from a terminal.
 
 ### iMac + Jetson pilot interpretation
 
@@ -241,6 +257,8 @@ Before calling a site production-ready, the deployment needs:
 - central supervisor for central and hybrid workers
 - edge supervisor for Jetson-owned workers
 - worker heartbeat with per-camera runtime state
+- hardware capability reports from every central and edge supervisor
+- model admission reports before production Start or Restart
 - restart policy after worker crash or device reboot
 - drain behavior for planned maintenance
 - logs and metrics visible from the central observability stack
@@ -295,6 +313,47 @@ summary with the incident type, severity, action, cooldown, rule hash, scene
 contract hash, and detection context. Prompt-To-Policy may later draft rule
 changes, but operators must approve and apply those changes explicitly; prompt
 workflows are not allowed to auto-apply production rules.
+
+### Supervisor And Hardware Admission Operation
+
+The hardware-admission MVP has two parts:
+
+- supervisors post capability/performance reports through
+  `POST /api/v1/operations/supervisors/{supervisor_id}/hardware-reports`
+- the control plane evaluates a worker with
+  `POST /api/v1/operations/workers/{camera_id}/model-admission/evaluate`
+
+For central ownership, run one central supervisor on the master host with a
+stable `supervisor_id`, no `edge_node_id`, and access to the same worker runtime
+environment as central camera workers. For edge ownership, run one supervisor on
+the edge node with both a stable `supervisor_id` and the node's `edge_node_id`.
+This checkpoint provides the reconciler library and HTTP/DB contracts; the
+deployment service wrapper or systemd unit should instantiate
+`argus.supervisor.reconciler.SupervisorReconciler` with an operations client and
+a platform process adapter. Do not invent a browser/API shell bridge as a
+shortcut.
+
+Interpret admission statuses this way:
+
+| Status | Meaning | Production Start/Restart |
+|---|---|---|
+| `recommended` | backend is available and recent p95 fits the frame budget | allowed |
+| `supported` | backend is available, but no matching performance sample exists yet | allowed, watch the first run |
+| `degraded` | fallback can run, but recent p95 exceeds the frame budget | allowed with warning |
+| `unsupported` | required backend/artifact/target profile is missing or unsafe | blocked |
+| `unknown` | no fresh hardware report exists for the target supervisor/node | blocked |
+
+Examples:
+
+- macOS iMac with CoreML and a fixed-vocab YOLO26n model should normally be
+  `recommended` or `supported` when CoreML is reported.
+- Jetson with a validated TensorRT artifact should prefer the TensorRT runtime
+  and report `recommended` after p95 fits the stream frame budget.
+- CPU/ONNX fallback is acceptable for small fixed-vocab models only when p95
+  stays inside the stream budget; otherwise it becomes `degraded`.
+- open-world YOLOE on CPU-only hardware at 720p10 or higher should be
+  `unsupported`, with a recommendation to use a smaller fixed-vocab model or a
+  hardware-backed runtime.
 
 ### Inference Runtime Overrides
 
@@ -501,7 +560,7 @@ That path gives the best ratio of learning to operational risk.
 ```bash
 make dev-up
 docker compose -f infra/docker-compose.dev.yml exec backend \
-  python -m uv run alembic upgrade head
+  uv run alembic upgrade head
 corepack pnpm --dir frontend generate:api
 ```
 

@@ -9,6 +9,7 @@ from argus.models.tables import (
     CrossCameraThread,
     DetectionRule,
     EdgeNode,
+    EdgeNodeHardwareReport,
     EvidenceArtifact,
     EvidenceLedgerEntry,
     Incident,
@@ -28,6 +29,7 @@ from argus.models.tables import (
     TrackingEvent,
     User,
     WorkerAssignment,
+    WorkerModelAdmissionReport,
     WorkerRuntimeReport,
 )
 
@@ -41,6 +43,7 @@ __all__ = [
     "CrossCameraThread",
     "DetectionRule",
     "EdgeNode",
+    "EdgeNodeHardwareReport",
     "EvidenceArtifact",
     "EvidenceLedgerEntry",
     "Incident",
@@ -61,5 +64,6 @@ __all__ = [
     "TrackingEvent",
     "User",
     "WorkerAssignment",
+    "WorkerModelAdmissionReport",
     "WorkerRuntimeReport",
 ]

@@ -592,6 +592,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/supervisors/{supervisor_id}/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll Supervisor Lifecycle Requests */
+        post: operations["poll_supervisor_lifecycle_requests_api_v1_operations_supervisors__supervisor_id__poll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/lifecycle-requests/{request_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim Lifecycle Request */
+        post: operations["claim_lifecycle_request_api_v1_operations_lifecycle_requests__request_id__claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/lifecycle-requests/{request_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Lifecycle Request */
+        post: operations["complete_lifecycle_request_api_v1_operations_lifecycle_requests__request_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/supervisors/{supervisor_id}/hardware-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Hardware Report */
+        post: operations["record_hardware_report_api_v1_operations_supervisors__supervisor_id__hardware_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/supervisors/{supervisor_id}/hardware-reports/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Latest Supervisor Hardware Report */
+        get: operations["get_latest_supervisor_hardware_report_api_v1_operations_supervisors__supervisor_id__hardware_reports_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/edge-nodes/{edge_node_id}/hardware-reports/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Latest Edge Hardware Report */
+        get: operations["get_latest_edge_hardware_report_api_v1_operations_edge_nodes__edge_node_id__hardware_reports_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/workers/{camera_id}/model-admission/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate Worker Model Admission */
+        post: operations["evaluate_worker_model_admission_api_v1_operations_workers__camera_id__model_admission_evaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/policy-drafts": {
         parameters: {
             query?: never;
@@ -1374,6 +1493,89 @@ export interface components {
              */
             received_at: string;
         };
+        /** EdgeNodeHardwareReportCreate */
+        EdgeNodeHardwareReportCreate: {
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /**
+             * Reported At
+             * Format: date-time
+             */
+            reported_at: string;
+            /** Host Profile */
+            host_profile: string;
+            /** Os Name */
+            os_name: string;
+            /** Machine Arch */
+            machine_arch: string;
+            /** Cpu Model */
+            cpu_model?: string | null;
+            /** Cpu Cores */
+            cpu_cores?: number | null;
+            /** Memory Total Mb */
+            memory_total_mb?: number | null;
+            /** Accelerators */
+            accelerators?: string[];
+            /** Provider Capabilities */
+            provider_capabilities?: {
+                [key: string]: boolean;
+            };
+            /** Observed Performance */
+            observed_performance?: components["schemas"]["HardwarePerformanceSample"][];
+            /** Thermal State */
+            thermal_state?: string | null;
+        };
+        /** EdgeNodeHardwareReportResponse */
+        EdgeNodeHardwareReportResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Supervisor Id */
+            supervisor_id: string;
+            /**
+             * Reported At
+             * Format: date-time
+             */
+            reported_at: string;
+            /** Host Profile */
+            host_profile: string;
+            /** Os Name */
+            os_name: string;
+            /** Machine Arch */
+            machine_arch: string;
+            /** Cpu Model */
+            cpu_model?: string | null;
+            /** Cpu Cores */
+            cpu_cores?: number | null;
+            /** Memory Total Mb */
+            memory_total_mb?: number | null;
+            /** Accelerators */
+            accelerators?: string[];
+            /** Provider Capabilities */
+            provider_capabilities?: {
+                [key: string]: boolean;
+            };
+            /** Observed Performance */
+            observed_performance?: components["schemas"]["HardwarePerformanceSample"][];
+            /** Thermal State */
+            thermal_state?: string | null;
+            /** Report Hash */
+            report_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** EdgeRegisterRequest */
         EdgeRegisterRequest: {
             /**
@@ -1670,6 +1872,8 @@ export interface components {
             assignment?: components["schemas"]["WorkerAssignmentResponse"] | null;
             runtime_report?: components["schemas"]["SupervisorRuntimeReportResponse"] | null;
             latest_lifecycle_request?: components["schemas"]["OperationsLifecycleRequestResponse"] | null;
+            latest_hardware_report?: components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
+            latest_model_admission?: components["schemas"]["WorkerModelAdmissionResponse"] | null;
             /** @default disabled */
             supervisor_mode: components["schemas"]["SupervisorMode"];
             /**
@@ -1801,6 +2005,33 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HardwarePerformanceSample */
+        HardwarePerformanceSample: {
+            /** Model Id */
+            model_id?: string | null;
+            /** Model Name */
+            model_name?: string | null;
+            /** Runtime Backend */
+            runtime_backend: string;
+            /** Input Width */
+            input_width: number;
+            /** Input Height */
+            input_height: number;
+            /** Target Fps */
+            target_fps: number;
+            /** Observed Fps */
+            observed_fps?: number | null;
+            /** Stage P95 Ms */
+            stage_p95_ms?: {
+                [key: string]: number;
+            };
+            /** Stage P99 Ms */
+            stage_p99_ms?: {
+                [key: string]: number;
+            };
+            /** Captured At */
+            captured_at?: string | null;
         };
         /** HistoryBucketCoverage */
         HistoryBucketCoverage: {
@@ -2154,6 +2385,23 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** LifecycleRequestClaim */
+        LifecycleRequestClaim: {
+            /** Supervisor Id */
+            supervisor_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+        };
+        /** LifecycleRequestCompletion */
+        LifecycleRequestCompletion: {
+            /** Supervisor Id */
+            supervisor_id: string;
+            status: components["schemas"]["OperationsLifecycleStatus"];
+            /** Admission Report Id */
+            admission_report_id?: string | null;
+            /** Error */
+            error?: string | null;
+        };
         /** LineZone */
         LineZone: {
             /** Id */
@@ -2173,6 +2421,11 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * ModelAdmissionStatus
+         * @enum {string}
+         */
+        ModelAdmissionStatus: "recommended" | "supported" | "degraded" | "unsupported" | "unknown";
         /** ModelCapabilityConfig */
         ModelCapabilityConfig: {
             /**
@@ -2464,8 +2717,14 @@ export interface components {
             requested_at: string;
             /** Acknowledged At */
             acknowledged_at?: string | null;
+            /** Claimed By Supervisor */
+            claimed_by_supervisor?: string | null;
+            /** Claimed At */
+            claimed_at?: string | null;
             /** Completed At */
             completed_at?: string | null;
+            /** Admission Report Id */
+            admission_report_id?: string | null;
             /** Error */
             error?: string | null;
             /** Request Payload */
@@ -3310,6 +3569,25 @@ export interface components {
          * @enum {string}
          */
         SupervisorMode: "disabled" | "polling" | "push";
+        /** SupervisorPollRequest */
+        SupervisorPollRequest: {
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+        };
+        /** SupervisorPollResponse */
+        SupervisorPollResponse: {
+            /** Supervisor Id */
+            supervisor_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Requests */
+            requests?: components["schemas"]["OperationsLifecycleRequestResponse"][];
+        };
         /** SupervisorRuntimeReportCreate */
         SupervisorRuntimeReportCreate: {
             /**
@@ -3688,6 +3966,107 @@ export interface components {
             points: number[][];
         } & {
             [key: string]: unknown;
+        };
+        /** WorkerModelAdmissionRequest */
+        WorkerModelAdmissionRequest: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** Model Name */
+            model_name?: string | null;
+            /** @default fixed_vocab */
+            model_capability: components["schemas"]["DetectorCapability"];
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            /** Runtime Artifact Target Profile */
+            runtime_artifact_target_profile?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /** Selected Backend */
+            selected_backend?: string | null;
+            /** Preferred Backend */
+            preferred_backend?: string | null;
+            /** Stream Profile */
+            stream_profile?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Fallback Allowed
+             * @default true
+             */
+            fallback_allowed: boolean;
+        };
+        /** WorkerModelAdmissionResponse */
+        WorkerModelAdmissionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Hardware Report Id */
+            hardware_report_id?: string | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** Model Name */
+            model_name?: string | null;
+            model_capability?: components["schemas"]["DetectorCapability"] | null;
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /** Stream Profile */
+            stream_profile?: {
+                [key: string]: unknown;
+            };
+            status: components["schemas"]["ModelAdmissionStatus"];
+            /** Selected Backend */
+            selected_backend?: string | null;
+            /** Recommended Model Id */
+            recommended_model_id?: string | null;
+            /** Recommended Model Name */
+            recommended_model_name?: string | null;
+            /** Recommended Runtime Profile Id */
+            recommended_runtime_profile_id?: string | null;
+            /** Recommended Backend */
+            recommended_backend?: string | null;
+            /** Rationale */
+            rationale: string;
+            /** Constraints */
+            constraints?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** WorkerModelSettings */
         WorkerModelSettings: {
@@ -5318,6 +5697,257 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationsLifecycleRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    poll_supervisor_lifecycle_requests_api_v1_operations_supervisors__supervisor_id__poll_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorPollRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupervisorPollResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_lifecycle_request_api_v1_operations_lifecycle_requests__request_id__claim_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LifecycleRequestClaim"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsLifecycleRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_lifecycle_request_api_v1_operations_lifecycle_requests__request_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LifecycleRequestCompletion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsLifecycleRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_hardware_report_api_v1_operations_supervisors__supervisor_id__hardware_reports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeNodeHardwareReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeNodeHardwareReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_latest_supervisor_hardware_report_api_v1_operations_supervisors__supervisor_id__hardware_reports_latest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_latest_edge_hardware_report_api_v1_operations_edge_nodes__edge_node_id__hardware_reports_latest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                edge_node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluate_worker_model_admission_api_v1_operations_workers__camera_id__model_admission_evaluate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkerModelAdmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerModelAdmissionResponse"];
                 };
             };
             /** @description Validation Error */

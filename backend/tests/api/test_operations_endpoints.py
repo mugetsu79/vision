@@ -9,24 +9,33 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
+    EdgeNodeHardwareReportCreate,
+    EdgeNodeHardwareReportResponse,
     FleetBootstrapRequest,
     FleetBootstrapResponse,
     FleetCameraWorkerSummary,
     FleetOverviewResponse,
     FleetSummary,
+    HardwarePerformanceSample,
+    LifecycleRequestClaim,
+    LifecycleRequestCompletion,
     OperationalMemoryPatternResponse,
     OperationsLifecycleRequestCreate,
     OperationsLifecycleRequestResponse,
     RuntimePassportSummary,
+    SupervisorPollRequest,
+    SupervisorPollResponse,
     SupervisorRuntimeReportCreate,
     SupervisorRuntimeReportResponse,
     TenantContext,
     WorkerAssignmentCreate,
     WorkerAssignmentResponse,
+    WorkerModelAdmissionRequest,
+    WorkerModelAdmissionResponse,
 )
 from argus.api.v1 import router
 from argus.core.security import AuthenticatedUser
-from argus.models.enums import ProcessingMode, RoleEnum
+from argus.models.enums import ModelAdmissionStatus, ProcessingMode, RoleEnum
 
 
 def _tenant_context() -> TenantContext:
@@ -73,6 +82,11 @@ class _FakeOperationsService:
         self.assignment_payload: WorkerAssignmentCreate | None = None
         self.runtime_report_payload: SupervisorRuntimeReportCreate | None = None
         self.lifecycle_payload: OperationsLifecycleRequestCreate | None = None
+        self.poll_payload: SupervisorPollRequest | None = None
+        self.claim_payload: LifecycleRequestClaim | None = None
+        self.completion_payload: LifecycleRequestCompletion | None = None
+        self.hardware_payload: EdgeNodeHardwareReportCreate | None = None
+        self.admission_payload: WorkerModelAdmissionRequest | None = None
 
     async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
         return FleetOverviewResponse(
@@ -243,6 +257,219 @@ class _FakeOperationsService:
             created_at=datetime(2026, 5, 13, 8, 2, tzinfo=UTC),
             updated_at=datetime(2026, 5, 13, 8, 2, tzinfo=UTC),
         )
+
+    async def poll_supervisor_lifecycle_requests(
+        self,
+        tenant_context: TenantContext,
+        supervisor_id: str,
+        payload: SupervisorPollRequest,
+    ) -> SupervisorPollResponse:
+        self.poll_payload = payload
+        return SupervisorPollResponse(
+            supervisor_id=supervisor_id,
+            edge_node_id=payload.edge_node_id,
+            requests=[
+                OperationsLifecycleRequestResponse(
+                    id=UUID("00000000-0000-0000-0000-000000000814"),
+                    tenant_id=tenant_context.tenant_id,
+                    camera_id=UUID("00000000-0000-0000-0000-000000000321"),
+                    edge_node_id=payload.edge_node_id,
+                    assignment_id=None,
+                    action="start",
+                    status="requested",
+                    requested_by_subject="operator-1",
+                    requested_at=datetime(2026, 5, 13, 8, 3, tzinfo=UTC),
+                    acknowledged_at=None,
+                    claimed_by_supervisor=None,
+                    claimed_at=None,
+                    completed_at=None,
+                    admission_report_id=None,
+                    error=None,
+                    request_payload={},
+                    created_at=datetime(2026, 5, 13, 8, 3, tzinfo=UTC),
+                    updated_at=datetime(2026, 5, 13, 8, 3, tzinfo=UTC),
+                )
+            ],
+        )
+
+    async def claim_lifecycle_request(
+        self,
+        tenant_context: TenantContext,
+        request_id: UUID,
+        payload: LifecycleRequestClaim,
+    ) -> OperationsLifecycleRequestResponse:
+        self.claim_payload = payload
+        return OperationsLifecycleRequestResponse(
+            id=request_id,
+            tenant_id=tenant_context.tenant_id,
+            camera_id=UUID("00000000-0000-0000-0000-000000000321"),
+            edge_node_id=payload.edge_node_id,
+            assignment_id=None,
+            action="start",
+            status="acknowledged",
+            requested_by_subject="operator-1",
+            requested_at=datetime(2026, 5, 13, 8, 3, tzinfo=UTC),
+            acknowledged_at=datetime(2026, 5, 13, 8, 4, tzinfo=UTC),
+            claimed_by_supervisor=payload.supervisor_id,
+            claimed_at=datetime(2026, 5, 13, 8, 4, tzinfo=UTC),
+            completed_at=None,
+            admission_report_id=None,
+            error=None,
+            request_payload={},
+            created_at=datetime(2026, 5, 13, 8, 3, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 13, 8, 4, tzinfo=UTC),
+        )
+
+    async def complete_lifecycle_request(
+        self,
+        tenant_context: TenantContext,
+        request_id: UUID,
+        payload: LifecycleRequestCompletion,
+    ) -> OperationsLifecycleRequestResponse:
+        self.completion_payload = payload
+        return OperationsLifecycleRequestResponse(
+            id=request_id,
+            tenant_id=tenant_context.tenant_id,
+            camera_id=UUID("00000000-0000-0000-0000-000000000321"),
+            edge_node_id=None,
+            assignment_id=None,
+            action="start",
+            status=payload.status,
+            requested_by_subject="operator-1",
+            requested_at=datetime(2026, 5, 13, 8, 3, tzinfo=UTC),
+            acknowledged_at=datetime(2026, 5, 13, 8, 4, tzinfo=UTC),
+            claimed_by_supervisor=payload.supervisor_id,
+            claimed_at=datetime(2026, 5, 13, 8, 4, tzinfo=UTC),
+            completed_at=datetime(2026, 5, 13, 8, 5, tzinfo=UTC),
+            admission_report_id=payload.admission_report_id,
+            error=payload.error,
+            request_payload={},
+            created_at=datetime(2026, 5, 13, 8, 3, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 13, 8, 5, tzinfo=UTC),
+        )
+
+    async def record_hardware_report(
+        self,
+        tenant_context: TenantContext,
+        supervisor_id: str,
+        payload: EdgeNodeHardwareReportCreate,
+    ) -> EdgeNodeHardwareReportResponse:
+        self.hardware_payload = payload
+        return _hardware_report_response(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            payload=payload,
+        )
+
+    async def latest_hardware_report_for_supervisor(
+        self,
+        tenant_context: TenantContext,
+        supervisor_id: str,
+    ) -> EdgeNodeHardwareReportResponse | None:
+        return _hardware_report_response(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            payload=_hardware_payload(edge_node_id=None),
+        )
+
+    async def latest_hardware_report_for_edge_node(
+        self,
+        tenant_context: TenantContext,
+        edge_node_id: UUID,
+    ) -> EdgeNodeHardwareReportResponse | None:
+        return _hardware_report_response(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id="edge-supervisor-1",
+            payload=_hardware_payload(edge_node_id=edge_node_id),
+        )
+
+    async def evaluate_worker_model_admission(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+        payload: WorkerModelAdmissionRequest,
+    ) -> WorkerModelAdmissionResponse:
+        self.admission_payload = payload
+        return WorkerModelAdmissionResponse(
+            id=UUID("00000000-0000-0000-0000-000000000816"),
+            tenant_id=tenant_context.tenant_id,
+            camera_id=camera_id,
+            edge_node_id=payload.edge_node_id,
+            assignment_id=payload.assignment_id,
+            hardware_report_id=UUID("00000000-0000-0000-0000-000000000815"),
+            model_id=payload.model_id,
+            model_name=payload.model_name,
+            model_capability=payload.model_capability,
+            runtime_artifact_id=payload.runtime_artifact_id,
+            runtime_selection_profile_id=payload.runtime_selection_profile_id,
+            stream_profile=payload.stream_profile,
+            status=ModelAdmissionStatus.RECOMMENDED,
+            selected_backend=payload.selected_backend,
+            recommended_model_id=None,
+            recommended_model_name=None,
+            recommended_runtime_profile_id=None,
+            recommended_backend=payload.selected_backend,
+            rationale="CoreML p95 total fits the frame budget.",
+            constraints={"frame_budget_ms": 100.0},
+            evaluated_at=datetime(2026, 5, 13, 8, 6, tzinfo=UTC),
+            created_at=datetime(2026, 5, 13, 8, 6, tzinfo=UTC),
+        )
+
+
+def _hardware_payload(edge_node_id: UUID | None) -> EdgeNodeHardwareReportCreate:
+    return EdgeNodeHardwareReportCreate(
+        edge_node_id=edge_node_id,
+        reported_at=datetime(2026, 5, 13, 8, 6, tzinfo=UTC),
+        host_profile="macos-x86_64-intel",
+        os_name="darwin",
+        machine_arch="x86_64",
+        cpu_model="Intel Core i7",
+        cpu_cores=8,
+        memory_total_mb=32768,
+        accelerators=["coreml"],
+        provider_capabilities={"CoreMLExecutionProvider": True},
+        observed_performance=[
+            HardwarePerformanceSample(
+                model_id=UUID("00000000-0000-0000-0000-000000000611"),
+                model_name="YOLO26n COCO",
+                runtime_backend="CoreMLExecutionProvider",
+                input_width=1280,
+                input_height=720,
+                target_fps=10.0,
+                observed_fps=10.0,
+                stage_p95_ms={"total": 92.0},
+                stage_p99_ms={"total": 118.0},
+            )
+        ],
+        thermal_state="nominal",
+    )
+
+
+def _hardware_report_response(
+    *,
+    tenant_id: UUID,
+    supervisor_id: str,
+    payload: EdgeNodeHardwareReportCreate,
+) -> EdgeNodeHardwareReportResponse:
+    return EdgeNodeHardwareReportResponse(
+        id=UUID("00000000-0000-0000-0000-000000000815"),
+        tenant_id=tenant_id,
+        edge_node_id=payload.edge_node_id,
+        supervisor_id=supervisor_id,
+        reported_at=payload.reported_at,
+        host_profile=payload.host_profile,
+        os_name=payload.os_name,
+        machine_arch=payload.machine_arch,
+        cpu_model=payload.cpu_model,
+        cpu_cores=payload.cpu_cores,
+        memory_total_mb=payload.memory_total_mb,
+        accelerators=payload.accelerators,
+        provider_capabilities=payload.provider_capabilities,
+        observed_performance=payload.observed_performance,
+        thermal_state=payload.thermal_state,
+        report_hash="b" * 64,
+        created_at=datetime(2026, 5, 13, 8, 6, tzinfo=UTC),
+    )
 
 
 def _create_app(context: TenantContext, operations: _FakeOperationsService) -> FastAPI:
@@ -433,3 +660,143 @@ async def test_lifecycle_request_route_records_intent_without_shelling_out() -> 
     assert body["request_payload"] == {"reason": "operator_test"}
     assert operations.lifecycle_payload is not None
     assert operations.lifecycle_payload.action == "restart"
+
+
+@pytest.mark.asyncio
+async def test_supervisor_poll_route_returns_scoped_lifecycle_requests() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    edge_node_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/supervisors/edge-supervisor-1/poll",
+            headers={"Authorization": "Bearer token"},
+            json={"edge_node_id": str(edge_node_id), "limit": 5},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["supervisor_id"] == "edge-supervisor-1"
+    assert body["edge_node_id"] == str(edge_node_id)
+    assert body["requests"][0]["action"] == "start"
+    assert operations.poll_payload is not None
+    assert operations.poll_payload.edge_node_id == edge_node_id
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_claim_and_completion_routes_update_request_state() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    request_id = uuid4()
+    edge_node_id = uuid4()
+    admission_report_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        claim_response = await client.post(
+            f"/api/v1/operations/lifecycle-requests/{request_id}/claim",
+            headers={"Authorization": "Bearer token"},
+            json={"supervisor_id": "edge-supervisor-1", "edge_node_id": str(edge_node_id)},
+        )
+        complete_response = await client.post(
+            f"/api/v1/operations/lifecycle-requests/{request_id}/complete",
+            headers={"Authorization": "Bearer token"},
+            json={
+                "supervisor_id": "edge-supervisor-1",
+                "status": "completed",
+                "admission_report_id": str(admission_report_id),
+            },
+        )
+
+    assert claim_response.status_code == 200
+    assert claim_response.json()["status"] == "acknowledged"
+    assert claim_response.json()["claimed_by_supervisor"] == "edge-supervisor-1"
+    assert complete_response.status_code == 200
+    assert complete_response.json()["status"] == "completed"
+    assert complete_response.json()["admission_report_id"] == str(admission_report_id)
+    assert operations.claim_payload is not None
+    assert operations.claim_payload.edge_node_id == edge_node_id
+    assert operations.completion_payload is not None
+    assert operations.completion_payload.admission_report_id == admission_report_id
+
+
+@pytest.mark.asyncio
+async def test_hardware_report_routes_record_and_return_latest_capability() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    edge_node_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        create_response = await client.post(
+            "/api/v1/operations/supervisors/edge-supervisor-1/hardware-reports",
+            headers={"Authorization": "Bearer token"},
+            json=_hardware_payload(edge_node_id).model_dump(mode="json"),
+        )
+        latest_supervisor_response = await client.get(
+            "/api/v1/operations/supervisors/edge-supervisor-1/hardware-reports/latest",
+            headers={"Authorization": "Bearer token"},
+        )
+        latest_edge_response = await client.get(
+            f"/api/v1/operations/edge-nodes/{edge_node_id}/hardware-reports/latest",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert create_response.status_code == 201
+    body = create_response.json()
+    assert body["edge_node_id"] == str(edge_node_id)
+    assert body["provider_capabilities"]["CoreMLExecutionProvider"] is True
+    assert body["observed_performance"][0]["stage_p95_ms"]["total"] == 92.0
+    assert latest_supervisor_response.status_code == 200
+    assert latest_supervisor_response.json()["supervisor_id"] == "edge-supervisor-1"
+    assert latest_edge_response.status_code == 200
+    assert latest_edge_response.json()["edge_node_id"] == str(edge_node_id)
+    assert operations.hardware_payload is not None
+    assert operations.hardware_payload.edge_node_id == edge_node_id
+
+
+@pytest.mark.asyncio
+async def test_worker_model_admission_route_returns_recommendation() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    model_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/operations/workers/{camera_id}/model-admission/evaluate",
+            headers={"Authorization": "Bearer token"},
+            json={
+                "camera_id": str(camera_id),
+                "edge_node_id": str(edge_node_id),
+                "model_id": str(model_id),
+                "model_name": "YOLO26n COCO",
+                "model_capability": "fixed_vocab",
+                "selected_backend": "CoreMLExecutionProvider",
+                "stream_profile": {"width": 1280, "height": 720, "fps": 10},
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["camera_id"] == str(camera_id)
+    assert body["status"] == "recommended"
+    assert body["recommended_backend"] == "CoreMLExecutionProvider"
+    assert operations.admission_payload is not None
+    assert operations.admission_payload.model_id == model_id

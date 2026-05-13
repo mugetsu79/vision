@@ -413,6 +413,8 @@ def test_supervisor_operations_models_are_registered() -> None:
     assert "worker_assignments" in Base.metadata.tables
     assert "worker_runtime_reports" in Base.metadata.tables
     assert "operations_lifecycle_requests" in Base.metadata.tables
+    assert "edge_node_hardware_reports" in Base.metadata.tables
+    assert "worker_model_admission_reports" in Base.metadata.tables
 
 
 def test_supervisor_operations_migration_exists_with_short_names() -> None:
@@ -437,6 +439,40 @@ def test_supervisor_operations_migration_exists_with_short_names() -> None:
         "ix_worker_assignments_tenant_camera",
         "ix_worker_reports_tenant_camera",
         "ix_lifecycle_requests_tenant_camera",
+    ]
+    for constraint_name in constraint_names:
+        assert constraint_name in migration_text
+        assert len(constraint_name) <= 63
+
+
+def test_supervisor_reconciler_hardware_admission_migration_exists() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = (
+        repo_root
+        / "src/argus/migrations/versions/0023_supervisor_reconciler_hardware_admission.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    revision_id = "0023_supervisor_reconciler"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
+    assert 'down_revision = "0022_supervisor_operations"' in migration_text
+    assert '"edge_node_hardware_reports"' in migration_text
+    assert '"worker_model_admission_reports"' in migration_text
+    assert '"admission_report_id"' in migration_text
+    assert "model_admission_status_enum" in migration_text
+
+    constraint_names = [
+        "fk_hardware_reports_tenant",
+        "fk_hardware_reports_edge",
+        "uq_hardware_reports_supervisor_hash",
+        "fk_model_admissions_camera",
+        "fk_model_admissions_hardware",
+        "fk_model_admissions_artifact",
+        "fk_lifecycle_requests_admission",
+        "ix_model_admissions_camera_eval",
+        "ix_hardware_reports_edge_reported",
     ]
     for constraint_name in constraint_names:
         assert constraint_name in migration_text

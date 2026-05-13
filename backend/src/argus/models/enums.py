@@ -198,6 +198,14 @@ class OperationsLifecycleStatus(StrEnum):
     FAILED = "failed"
 
 
+class ModelAdmissionStatus(StrEnum):
+    RECOMMENDED = "recommended"
+    SUPPORTED = "supported"
+    DEGRADED = "degraded"
+    UNSUPPORTED = "unsupported"
+    UNKNOWN = "unknown"
+
+
 class CountEventType(StrEnum):
     LINE_CROSS = "line_cross"
     ZONE_ENTER = "zone_enter"

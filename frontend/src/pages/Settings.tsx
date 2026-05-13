@@ -16,6 +16,7 @@ import {
 } from "@/components/layout/workspace-surfaces";
 import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
 import { OperationalMemoryPanel } from "@/components/evidence/OperationalMemoryPanel";
+import { HardwareAdmissionPanel } from "@/components/operations/HardwareAdmissionPanel";
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
 import { SupervisorLifecycleControls } from "@/components/operations/SupervisorLifecycleControls";
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
@@ -346,6 +347,7 @@ export function SettingsPage() {
                   summary={worker.runtime_passport}
                   compact
                 />
+                <HardwareAdmissionPanel worker={worker} />
                 <RuleRuntimePanel summary={worker.rule_runtime} />
                 <SupervisorLifecycleControls
                   worker={worker}

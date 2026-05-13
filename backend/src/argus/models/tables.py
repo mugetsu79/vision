@@ -31,6 +31,7 @@ from argus.models.enums import (
     EvidenceStorageScope,
     IncidentReviewStatus,
     IncidentRuleSeverity,
+    ModelAdmissionStatus,
     ModelFormat,
     ModelTask,
     OperationsLifecycleAction,
@@ -708,13 +709,141 @@ class OperationsLifecycleRequest(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtM
         DateTime(timezone=True),
         nullable=True,
     )
+    claimed_by_supervisor: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admission_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("worker_model_admission_reports.id"),
+        nullable=True,
+    )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_payload: Mapped[dict[str, object]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
     )
+
+
+class EdgeNodeHardwareReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "edge_node_hardware_reports"
+    __table_args__ = (
+        UniqueConstraint(
+            "supervisor_id",
+            "report_hash",
+            name="uq_hardware_reports_supervisor_hash",
+        ),
+        Index("ix_hardware_reports_edge_reported", "edge_node_id", "reported_at"),
+        Index("ix_hardware_reports_tenant_reported", "tenant_id", "reported_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    supervisor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    host_profile: Mapped[str] = mapped_column(String(128), nullable=False)
+    os_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    machine_arch: Mapped[str] = mapped_column(String(64), nullable=False)
+    cpu_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cpu_cores: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    memory_total_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    accelerators: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    provider_capabilities: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    observed_performance: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    thermal_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    report_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class WorkerModelAdmissionReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "worker_model_admission_reports"
+    __table_args__ = (
+        Index("ix_model_admissions_camera_eval", "camera_id", "evaluated_at"),
+        Index("ix_model_admissions_edge_eval", "edge_node_id", "evaluated_at"),
+        Index("ix_model_admissions_status_eval", "status", "evaluated_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("worker_assignments.id"),
+        nullable=True,
+    )
+    hardware_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_node_hardware_reports.id"),
+        nullable=True,
+    )
+    model_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=True,
+    )
+    model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    model_capability: Mapped[DetectorCapability | None] = mapped_column(
+        enum_column(DetectorCapability, "admission_detector_capability_enum"),
+        nullable=True,
+    )
+    runtime_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("model_runtime_artifacts.id"),
+        nullable=True,
+    )
+    runtime_selection_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_config_profiles.id"),
+        nullable=True,
+    )
+    stream_profile: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[ModelAdmissionStatus] = mapped_column(
+        enum_column(ModelAdmissionStatus, "model_admission_status_enum"),
+        nullable=False,
+    )
+    selected_backend: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    recommended_model_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=True,
+    )
+    recommended_model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recommended_runtime_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_config_profiles.id"),
+        nullable=True,
+    )
+    recommended_backend: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    constraints: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class PolicyDraft(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
