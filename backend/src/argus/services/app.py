@@ -1575,10 +1575,11 @@ class OperationsService:
             assigned_edge_node_id = (
                 assignment.edge_node_id if assignment is not None else camera.edge_node_id
             )
-            hardware_report = (
-                hardware_report_by_edge_node.get(assigned_edge_node_id)
-                if assigned_edge_node_id is not None
-                else central_hardware_report
+            hardware_report = _fleet_worker_hardware_report(
+                camera=camera,
+                assigned_edge_node_id=assigned_edge_node_id,
+                hardware_report_by_edge_node=hardware_report_by_edge_node,
+                central_hardware_report=central_hardware_report,
             )
             if assignment is not None:
                 desired = assignment.desired_state
@@ -4089,6 +4090,20 @@ def _fleet_node_status(last_seen_at: datetime | None, now: datetime) -> FleetNod
     if age <= timedelta(minutes=15):
         return FleetNodeStatus.STALE
     return FleetNodeStatus.OFFLINE
+
+
+def _fleet_worker_hardware_report(
+    *,
+    camera: Camera,
+    assigned_edge_node_id: UUID | None,
+    hardware_report_by_edge_node: dict[UUID, object],
+    central_hardware_report: object | None,
+) -> object | None:
+    if assigned_edge_node_id is not None:
+        return hardware_report_by_edge_node.get(assigned_edge_node_id)
+    if camera.processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}:
+        return central_hardware_report
+    return None
 
 
 def _derive_worker_lifecycle(

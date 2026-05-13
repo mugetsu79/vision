@@ -15,7 +15,14 @@ from argus.models.enums import (
     RuleAction,
     TrackerType,
 )
-from argus.models.tables import Camera, DetectionRule, EdgeNode, RuleEvent, Site
+from argus.models.tables import (
+    Camera,
+    DetectionRule,
+    EdgeNode,
+    EdgeNodeHardwareReport,
+    RuleEvent,
+    Site,
+)
 from argus.services.app import OperationsService
 
 
@@ -232,6 +239,64 @@ async def test_fleet_overview_maps_edge_heartbeat_status() -> None:
     assert response.camera_workers[0].runtime_status == "stale"
 
 
+@pytest.mark.asyncio
+async def test_fleet_overview_does_not_attach_central_hardware_to_unassigned_edge_camera() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    camera = Camera(
+        id=uuid4(),
+        site_id=site.id,
+        edge_node_id=None,
+        name="Lab Camera 2",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        processing_mode=ProcessingMode.EDGE,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={},
+        source_capability=None,
+        frame_skip=1,
+        fps_cap=25,
+    )
+    central_report = EdgeNodeHardwareReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        supervisor_id="central-imac",
+        reported_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        host_profile="macos-x86_64-intel",
+        os_name="darwin",
+        machine_arch="x86_64",
+        cpu_model=None,
+        cpu_cores=8,
+        memory_total_mb=65536,
+        accelerators=["coreml", "cpu"],
+        provider_capabilities={"CoreMLExecutionProvider": True},
+        observed_performance=[],
+        thermal_state=None,
+        report_hash="a" * 64,
+        created_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+    )
+    session_factory = _FakeSessionFactory([], [(camera, site)], [], [], [])
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        supervisor_operations=_FakeSupervisorOperations(central_report=central_report),
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    worker = response.camera_workers[0]
+    assert worker.processing_mode is ProcessingMode.EDGE
+    assert worker.node_id is None
+    assert worker.latest_hardware_report is None
+
+
 class _FakeEdgeService:
     def __init__(self) -> None:
         self.payload = None
@@ -248,6 +313,35 @@ class _FakeEdgeService:
             mediamtx_url="http://mediamtx:9997",
             overlay_network_hints={"nats_url": "nats://nats:4222"},
         )
+
+
+class _FakeSupervisorOperations:
+    def __init__(self, *, central_report: EdgeNodeHardwareReport) -> None:
+        self.central_report = central_report
+
+    async def latest_assignments_by_camera(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        return {}
+
+    async def latest_runtime_reports_by_camera(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        return {}
+
+    async def latest_lifecycle_requests_by_camera(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        return {}
+
+    async def latest_hardware_reports_by_edge_node(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        return {}
+
+    async def latest_hardware_report_for_central(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        return self.central_report
+
+    async def latest_model_admissions_by_camera(self, **kwargs):  # noqa: ANN003
+        del kwargs
+        return {}
 
 
 @pytest.mark.asyncio
