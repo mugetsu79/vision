@@ -25,6 +25,8 @@ from argus.models.enums import (
     IncidentRuleSeverity,
     ModelFormat,
     ModelTask,
+    OperationsLifecycleAction,
+    OperationsLifecycleStatus,
     OperatorConfigProfileKind,
     OperatorConfigScope,
     OperatorConfigValidationStatus,
@@ -37,7 +39,9 @@ from argus.models.enums import (
     RuntimeArtifactScope,
     RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
+    SupervisorMode,
     TrackerType,
+    WorkerRuntimeState,
 )
 
 
@@ -1255,6 +1259,78 @@ class FleetRuleRuntimeSummary(BaseModel):
     load_status: RuleLoadStatus = "not_configured"
 
 
+class WorkerAssignmentCreate(BaseModel):
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    desired_state: WorkerDesiredState = WorkerDesiredState.SUPERVISED
+
+
+class WorkerAssignmentResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    desired_state: WorkerDesiredState
+    active: bool
+    supersedes_assignment_id: UUID | None = None
+    assigned_by_subject: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupervisorRuntimeReportCreate(BaseModel):
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    assignment_id: UUID | None = None
+    heartbeat_at: datetime
+    runtime_state: WorkerRuntimeState = WorkerRuntimeState.UNKNOWN
+    restart_count: int = Field(default=0, ge=0)
+    last_error: str | None = None
+    runtime_artifact_id: UUID | None = None
+    scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+
+
+class SupervisorRuntimeReportResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    assignment_id: UUID | None = None
+    heartbeat_at: datetime
+    runtime_state: WorkerRuntimeState
+    restart_count: int = Field(ge=0)
+    last_error: str | None = None
+    runtime_artifact_id: UUID | None = None
+    scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    created_at: datetime
+
+
+class OperationsLifecycleRequestCreate(BaseModel):
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    assignment_id: UUID | None = None
+    action: OperationsLifecycleAction
+    request_payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class OperationsLifecycleRequestResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    camera_id: UUID
+    edge_node_id: UUID | None = None
+    assignment_id: UUID | None = None
+    action: OperationsLifecycleAction
+    status: OperationsLifecycleStatus
+    requested_by_subject: str | None = None
+    requested_at: datetime
+    acknowledged_at: datetime | None = None
+    completed_at: datetime | None = None
+    error: str | None = None
+    request_payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
 class FleetCameraWorkerSummary(BaseModel):
     camera_id: UUID
     camera_name: str
@@ -1269,6 +1345,13 @@ class FleetCameraWorkerSummary(BaseModel):
     detail: str | None = None
     runtime_passport: RuntimePassportSummary | None = None
     rule_runtime: FleetRuleRuntimeSummary = Field(default_factory=FleetRuleRuntimeSummary)
+    assignment: WorkerAssignmentResponse | None = None
+    runtime_report: SupervisorRuntimeReportResponse | None = None
+    latest_lifecycle_request: OperationsLifecycleRequestResponse | None = None
+    supervisor_mode: SupervisorMode = SupervisorMode.DISABLED
+    restart_policy: Literal["never", "on_failure", "always"] = "never"
+    allowed_lifecycle_actions: list[OperationsLifecycleAction] = Field(default_factory=list)
+    last_error: str | None = None
 
 
 class OperationalMemoryPatternResponse(BaseModel):

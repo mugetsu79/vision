@@ -87,8 +87,8 @@ async def test_runtime_configuration_reports_effective_profiles_and_secret_state
     assert "camera-secret" not in resolved.model_dump_json()
 
     operations = resolved.entries[OperatorConfigProfileKind.OPERATIONS_MODE]
-    assert operations.applies_to_runtime is False
-    assert "Task 20" in (operations.operator_message or "")
+    assert operations.applies_to_runtime is True
+    assert operations.operator_message is None
 
 
 @pytest.mark.asyncio

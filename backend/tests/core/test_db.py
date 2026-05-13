@@ -407,3 +407,37 @@ def test_detection_rule_incident_metadata_migration_exists() -> None:
     assert '"incident_type"' in migration_text
     assert '"rule_hash"' in migration_text
     assert "uq_detection_rules_camera_incident_type" in migration_text
+
+
+def test_supervisor_operations_models_are_registered() -> None:
+    assert "worker_assignments" in Base.metadata.tables
+    assert "worker_runtime_reports" in Base.metadata.tables
+    assert "operations_lifecycle_requests" in Base.metadata.tables
+
+
+def test_supervisor_operations_migration_exists_with_short_names() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = repo_root / "src/argus/migrations/versions/0022_supervisor_operations.py"
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    revision_id = "0022_supervisor_operations"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
+    assert 'down_revision = "0021_cross_camera_threads"' in migration_text
+    assert '"worker_assignments"' in migration_text
+    assert '"worker_runtime_reports"' in migration_text
+    assert '"operations_lifecycle_requests"' in migration_text
+
+    constraint_names = [
+        "fk_worker_assignments_tenant",
+        "fk_worker_assignments_camera",
+        "fk_worker_runtime_reports_assignment",
+        "fk_lifecycle_requests_assignment",
+        "ix_worker_assignments_tenant_camera",
+        "ix_worker_reports_tenant_camera",
+        "ix_lifecycle_requests_tenant_camera",
+    ]
+    for constraint_name in constraint_names:
+        assert constraint_name in migration_text
+        assert len(constraint_name) <= 63

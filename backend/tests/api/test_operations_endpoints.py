@@ -15,8 +15,14 @@ from argus.api.contracts import (
     FleetOverviewResponse,
     FleetSummary,
     OperationalMemoryPatternResponse,
+    OperationsLifecycleRequestCreate,
+    OperationsLifecycleRequestResponse,
     RuntimePassportSummary,
+    SupervisorRuntimeReportCreate,
+    SupervisorRuntimeReportResponse,
     TenantContext,
+    WorkerAssignmentCreate,
+    WorkerAssignmentResponse,
 )
 from argus.api.v1 import router
 from argus.core.security import AuthenticatedUser
@@ -64,6 +70,9 @@ class _FakeSecurity:
 class _FakeOperationsService:
     def __init__(self) -> None:
         self.bootstrap_payload: FleetBootstrapRequest | None = None
+        self.assignment_payload: WorkerAssignmentCreate | None = None
+        self.runtime_report_payload: SupervisorRuntimeReportCreate | None = None
+        self.lifecycle_payload: OperationsLifecycleRequestCreate | None = None
 
     async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
         return FleetOverviewResponse(
@@ -171,6 +180,70 @@ class _FakeOperationsService:
             },
         )
 
+    async def create_worker_assignment(
+        self,
+        tenant_context: TenantContext,
+        payload: WorkerAssignmentCreate,
+    ) -> WorkerAssignmentResponse:
+        self.assignment_payload = payload
+        return WorkerAssignmentResponse(
+            id=UUID("00000000-0000-0000-0000-000000000811"),
+            tenant_id=tenant_context.tenant_id,
+            camera_id=payload.camera_id,
+            edge_node_id=payload.edge_node_id,
+            desired_state=payload.desired_state,
+            active=True,
+            supersedes_assignment_id=None,
+            assigned_by_subject=tenant_context.user.subject,
+            created_at=datetime(2026, 5, 13, 8, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 13, 8, 0, tzinfo=UTC),
+        )
+
+    async def record_worker_runtime_report(
+        self,
+        tenant_context: TenantContext,
+        payload: SupervisorRuntimeReportCreate,
+    ) -> SupervisorRuntimeReportResponse:
+        self.runtime_report_payload = payload
+        return SupervisorRuntimeReportResponse(
+            id=UUID("00000000-0000-0000-0000-000000000812"),
+            tenant_id=tenant_context.tenant_id,
+            camera_id=payload.camera_id,
+            edge_node_id=payload.edge_node_id,
+            assignment_id=payload.assignment_id,
+            heartbeat_at=payload.heartbeat_at,
+            runtime_state=payload.runtime_state,
+            restart_count=payload.restart_count,
+            last_error=payload.last_error,
+            runtime_artifact_id=payload.runtime_artifact_id,
+            scene_contract_hash=payload.scene_contract_hash,
+            created_at=datetime(2026, 5, 13, 8, 1, tzinfo=UTC),
+        )
+
+    async def create_lifecycle_request(
+        self,
+        tenant_context: TenantContext,
+        payload: OperationsLifecycleRequestCreate,
+    ) -> OperationsLifecycleRequestResponse:
+        self.lifecycle_payload = payload
+        return OperationsLifecycleRequestResponse(
+            id=UUID("00000000-0000-0000-0000-000000000813"),
+            tenant_id=tenant_context.tenant_id,
+            camera_id=payload.camera_id,
+            edge_node_id=payload.edge_node_id,
+            assignment_id=payload.assignment_id,
+            action=payload.action,
+            status="requested",
+            requested_by_subject=tenant_context.user.subject,
+            requested_at=datetime(2026, 5, 13, 8, 2, tzinfo=UTC),
+            acknowledged_at=None,
+            completed_at=None,
+            error=None,
+            request_payload=payload.request_payload,
+            created_at=datetime(2026, 5, 13, 8, 2, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 13, 8, 2, tzinfo=UTC),
+        )
+
 
 def _create_app(context: TenantContext, operations: _FakeOperationsService) -> FastAPI:
     app = FastAPI()
@@ -262,3 +335,101 @@ async def test_operations_bootstrap_route_returns_one_time_material() -> None:
     assert "docker compose" in body["dev_compose_command"]
     assert operations.bootstrap_payload is not None
     assert operations.bootstrap_payload.site_id == site_id
+
+
+@pytest.mark.asyncio
+async def test_worker_assignment_route_creates_assignment_record() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/worker-assignments",
+            headers={"Authorization": "Bearer token"},
+            json={
+                "camera_id": str(camera_id),
+                "edge_node_id": str(edge_node_id),
+                "desired_state": "supervised",
+            },
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["camera_id"] == str(camera_id)
+    assert body["edge_node_id"] == str(edge_node_id)
+    assert body["active"] is True
+    assert operations.assignment_payload is not None
+    assert operations.assignment_payload.camera_id == camera_id
+
+
+@pytest.mark.asyncio
+async def test_runtime_report_route_records_supervisor_truth() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    camera_id = uuid4()
+    heartbeat_at = datetime(2026, 5, 13, 8, 1, tzinfo=UTC)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/runtime-reports",
+            headers={"Authorization": "Bearer token"},
+            json={
+                "camera_id": str(camera_id),
+                "heartbeat_at": heartbeat_at.isoformat(),
+                "runtime_state": "running",
+                "restart_count": 2,
+                "last_error": "previous restart recovered",
+                "scene_contract_hash": "a" * 64,
+            },
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["camera_id"] == str(camera_id)
+    assert body["runtime_state"] == "running"
+    assert body["restart_count"] == 2
+    assert body["last_error"] == "previous restart recovered"
+    assert body["scene_contract_hash"] == "a" * 64
+    assert operations.runtime_report_payload is not None
+    assert operations.runtime_report_payload.camera_id == camera_id
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_request_route_records_intent_without_shelling_out() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    camera_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/lifecycle-requests",
+            headers={"Authorization": "Bearer token"},
+            json={
+                "camera_id": str(camera_id),
+                "action": "restart",
+                "request_payload": {"reason": "operator_test"},
+            },
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["camera_id"] == str(camera_id)
+    assert body["action"] == "restart"
+    assert body["status"] == "requested"
+    assert body["request_payload"] == {"reason": "operator_test"}
+    assert operations.lifecycle_payload is not None
+    assert operations.lifecycle_payload.action == "restart"

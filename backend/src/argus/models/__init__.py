@@ -15,6 +15,7 @@ from argus.models.tables import (
     LocalFirstSyncAttempt,
     Model,
     ModelRuntimeArtifact,
+    OperationsLifecycleRequest,
     OperatorConfigBinding,
     OperatorConfigProfile,
     OperatorConfigSecret,
@@ -26,6 +27,8 @@ from argus.models.tables import (
     Tenant,
     TrackingEvent,
     User,
+    WorkerAssignment,
+    WorkerRuntimeReport,
 )
 
 __all__ = [
@@ -44,6 +47,7 @@ __all__ = [
     "LocalFirstSyncAttempt",
     "Model",
     "ModelRuntimeArtifact",
+    "OperationsLifecycleRequest",
     "OperatorConfigBinding",
     "OperatorConfigProfile",
     "OperatorConfigSecret",
@@ -56,4 +60,6 @@ __all__ = [
     "Tenant",
     "TrackingEvent",
     "User",
+    "WorkerAssignment",
+    "WorkerRuntimeReport",
 ]

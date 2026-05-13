@@ -33,6 +33,8 @@ from argus.models.enums import (
     IncidentRuleSeverity,
     ModelFormat,
     ModelTask,
+    OperationsLifecycleAction,
+    OperationsLifecycleStatus,
     OperatorConfigProfileKind,
     OperatorConfigScope,
     OperatorConfigValidationStatus,
@@ -47,6 +49,7 @@ from argus.models.enums import (
     RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
     TrackerType,
+    WorkerRuntimeState,
 )
 
 
@@ -587,6 +590,131 @@ class CrossCameraThread(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     signals: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     privacy_labels: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     thread_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class WorkerAssignment(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "worker_assignments"
+    __table_args__ = (
+        Index("ix_worker_assignments_tenant_camera", "tenant_id", "camera_id"),
+        Index("ix_worker_assignments_edge_active", "edge_node_id", "active"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    desired_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    supersedes_assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("worker_assignments.id"),
+        nullable=True,
+    )
+    assigned_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class WorkerRuntimeReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "worker_runtime_reports"
+    __table_args__ = (
+        Index("ix_worker_reports_tenant_camera", "tenant_id", "camera_id", "heartbeat_at"),
+        Index("ix_worker_reports_assignment", "assignment_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("worker_assignments.id"),
+        nullable=True,
+    )
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    runtime_state: Mapped[WorkerRuntimeState] = mapped_column(
+        enum_column(WorkerRuntimeState, "worker_runtime_state_enum"),
+        nullable=False,
+    )
+    restart_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    runtime_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("model_runtime_artifacts.id"),
+        nullable=True,
+    )
+    scene_contract_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class OperationsLifecycleRequest(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "operations_lifecycle_requests"
+    __table_args__ = (
+        Index("ix_lifecycle_requests_tenant_camera", "tenant_id", "camera_id", "requested_at"),
+        Index("ix_lifecycle_requests_assignment", "assignment_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("worker_assignments.id"),
+        nullable=True,
+    )
+    action: Mapped[OperationsLifecycleAction] = mapped_column(
+        enum_column(OperationsLifecycleAction, "operations_lifecycle_action_enum"),
+        nullable=False,
+    )
+    status: Mapped[OperationsLifecycleStatus] = mapped_column(
+        enum_column(OperationsLifecycleStatus, "operations_lifecycle_status_enum"),
+        nullable=False,
+        default=OperationsLifecycleStatus.REQUESTED,
+    )
+    requested_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_payload: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
 
 
 class PolicyDraft(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):

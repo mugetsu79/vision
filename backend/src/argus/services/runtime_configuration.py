@@ -36,9 +36,6 @@ BootstrapDefaults = Callable[
     Awaitable[list[OperatorConfigProfileResponse]],
 ]
 
-_RUNTIME_DEFERRED_MESSAGE = "Runtime-wired in Task 20."
-
-
 @dataclass(frozen=True, slots=True)
 class RuntimeOperatorConfig:
     kind: OperatorConfigProfileKind
@@ -256,12 +253,11 @@ class RuntimeConfigurationService:
                 applies_to_runtime=False,
                 operator_message=f"Selected {winner_scope.value} profile is invalid: {message}",
             )
-        applies_to_runtime = profile.kind is not OperatorConfigProfileKind.OPERATIONS_MODE
         return ResolvedOperatorConfigEntryResponse(
             **base,
             resolution_status="resolved",
-            applies_to_runtime=applies_to_runtime,
-            operator_message=None if applies_to_runtime else _RUNTIME_DEFERRED_MESSAGE,
+            applies_to_runtime=True,
+            operator_message=None,
         )
 
     async def _seed_if_empty(

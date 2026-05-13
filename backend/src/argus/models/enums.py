@@ -169,6 +169,35 @@ class OperatorConfigValidationStatus(StrEnum):
     INVALID = "invalid"
 
 
+class SupervisorMode(StrEnum):
+    DISABLED = "disabled"
+    POLLING = "polling"
+    PUSH = "push"
+
+
+class WorkerRuntimeState(StrEnum):
+    STARTING = "starting"
+    RUNNING = "running"
+    STOPPED = "stopped"
+    DRAINING = "draining"
+    ERROR = "error"
+    UNKNOWN = "unknown"
+
+
+class OperationsLifecycleAction(StrEnum):
+    START = "start"
+    STOP = "stop"
+    RESTART = "restart"
+    DRAIN = "drain"
+
+
+class OperationsLifecycleStatus(StrEnum):
+    REQUESTED = "requested"
+    ACKNOWLEDGED = "acknowledged"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class CountEventType(StrEnum):
     LINE_CROSS = "line_cross"
     ZONE_ENTER = "zone_enter"

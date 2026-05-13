@@ -10,7 +10,13 @@ from argus.api.contracts import (
     FleetBootstrapResponse,
     FleetOverviewResponse,
     OperationalMemoryPatternResponse,
+    OperationsLifecycleRequestCreate,
+    OperationsLifecycleRequestResponse,
+    SupervisorRuntimeReportCreate,
+    SupervisorRuntimeReportResponse,
     TenantContext,
+    WorkerAssignmentCreate,
+    WorkerAssignmentResponse,
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
@@ -63,3 +69,48 @@ async def create_bootstrap_material(
     services: ServicesDependency,
 ) -> FleetBootstrapResponse:
     return await services.operations.create_bootstrap_material(tenant_context, payload)
+
+
+@router.post(
+    "/worker-assignments",
+    response_model=WorkerAssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_worker_assignment(
+    payload: WorkerAssignmentCreate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> WorkerAssignmentResponse:
+    return await services.operations.create_worker_assignment(tenant_context, payload)
+
+
+@router.post(
+    "/runtime-reports",
+    response_model=SupervisorRuntimeReportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_worker_runtime_report(
+    payload: SupervisorRuntimeReportCreate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> SupervisorRuntimeReportResponse:
+    return await services.operations.record_worker_runtime_report(
+        tenant_context,
+        payload,
+    )
+
+
+@router.post(
+    "/lifecycle-requests",
+    response_model=OperationsLifecycleRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_lifecycle_request(
+    payload: OperationsLifecycleRequestCreate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> OperationsLifecycleRequestResponse:
+    return await services.operations.create_lifecycle_request(tenant_context, payload)

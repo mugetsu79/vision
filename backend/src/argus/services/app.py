@@ -73,6 +73,8 @@ from argus.api.contracts import (
     ModelUpdate,
     NativeAvailability,
     OperationalMemoryPatternResponse,
+    OperationsLifecycleRequestCreate,
+    OperationsLifecycleRequestResponse,
     PrivacyManifestSnapshotResponse,
     PrivacySettings,
     RuntimeBackend,
@@ -88,9 +90,13 @@ from argus.api.contracts import (
     StreamDeliveryProfileConfig,
     StreamOfferRequest,
     StreamOfferResponse,
+    SupervisorRuntimeReportCreate,
+    SupervisorRuntimeReportResponse,
     TelemetryEnvelope,
     TenantContext,
     TriggerRuleSummary,
+    WorkerAssignmentCreate,
+    WorkerAssignmentResponse,
     WorkerCameraSettings,
     WorkerConfigResponse,
     WorkerDesiredState,
@@ -185,6 +191,13 @@ from argus.services.runtime_artifacts import (
 )
 from argus.services.runtime_passports import RuntimePassportService, build_runtime_passport
 from argus.services.scene_contracts import SceneContractService, build_scene_contract
+from argus.services.supervisor_operations import (
+    SupervisorOperationsService,
+    operations_lifecycle_request_response,
+    resolve_worker_operations_controls,
+    supervisor_runtime_report_response,
+    worker_assignment_response,
+)
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
@@ -1412,10 +1425,14 @@ class OperationsService:
         session_factory: async_sessionmaker[AsyncSession],
         settings: Settings,
         edge_service: EdgeService | None = None,
+        supervisor_operations: SupervisorOperationsService | None = None,
+        runtime_configuration: Any | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
         self.edge_service = edge_service
+        self.supervisor_operations = supervisor_operations
+        self.runtime_configuration = runtime_configuration
 
     async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
         now = datetime.now(tz=UTC)
@@ -1450,11 +1467,35 @@ class OperationsService:
                 camera_ids,
             )
 
+        assignment_by_camera = {}
+        runtime_report_by_camera = {}
+        lifecycle_request_by_camera = {}
+        supervisor_service = self.supervisor_operations
+        if supervisor_service is not None:
+            assignment_by_camera = await supervisor_service.latest_assignments_by_camera(
+                tenant_id=tenant_context.tenant_id,
+                camera_ids=camera_ids,
+            )
+            runtime_report_by_camera = await supervisor_service.latest_runtime_reports_by_camera(
+                tenant_id=tenant_context.tenant_id,
+                camera_ids=camera_ids,
+            )
+            lifecycle_request_by_camera = (
+                await supervisor_service.latest_lifecycle_requests_by_camera(
+                    tenant_id=tenant_context.tenant_id,
+                    camera_ids=camera_ids,
+                )
+            )
+
         edge_by_id = {edge.id: edge for edge, _site in edge_rows}
         assigned_camera_ids: dict[UUID, list[UUID]] = {edge.id: [] for edge, _site in edge_rows}
         for camera, _site in camera_rows:
-            if camera.edge_node_id in assigned_camera_ids:
-                assigned_camera_ids[camera.edge_node_id].append(camera.id)
+            assignment = assignment_by_camera.get(camera.id)
+            assigned_edge_node_id = (
+                assignment.edge_node_id if assignment is not None else camera.edge_node_id
+            )
+            if assigned_edge_node_id in assigned_camera_ids:
+                assigned_camera_ids[assigned_edge_node_id].append(camera.id)
 
         nodes: list[FleetNodeSummary] = [
             FleetNodeSummary(
@@ -1494,15 +1535,52 @@ class OperationsService:
                 edge_by_id=edge_by_id,
                 now=now,
             )
+            assignment = assignment_by_camera.get(camera.id)
+            runtime_report = runtime_report_by_camera.get(camera.id)
+            lifecycle_request = lifecycle_request_by_camera.get(camera.id)
+            assigned_edge_node_id = (
+                assignment.edge_node_id if assignment is not None else camera.edge_node_id
+            )
+            if assignment is not None:
+                desired = assignment.desired_state
+            if runtime_report is not None and supervisor_service is not None:
+                runtime = supervisor_service.runtime_status_for_report(
+                    runtime_report,
+                    now=now,
+                )
+            controls = None
+            if self.runtime_configuration is not None:
+                runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
+                    tenant_context,
+                    OperatorConfigProfileKind.OPERATIONS_MODE,
+                    camera_id=camera.id,
+                    site_id=site.id,
+                    edge_node_id=assigned_edge_node_id,
+                )
+                supervisor_healthy = runtime_report is not None and runtime in {
+                    WorkerRuntimeStatus.RUNNING,
+                    WorkerRuntimeStatus.STALE,
+                }
+                controls = resolve_worker_operations_controls(
+                    runtime_config.config,
+                    assigned_edge_node_id=assigned_edge_node_id,
+                    supervisor_healthy=supervisor_healthy,
+                )
+                owner = (
+                    "manual_dev"
+                    if controls.lifecycle_owner == "manual"
+                    else controls.lifecycle_owner
+                )
+                detail = controls.detail
             camera_workers.append(
                 FleetCameraWorkerSummary(
                     camera_id=camera.id,
                     camera_name=camera.name,
                     site_id=site.id,
-                    node_id=camera.edge_node_id,
+                    node_id=assigned_edge_node_id,
                     node_hostname=(
-                        edge_by_id[camera.edge_node_id].hostname
-                        if camera.edge_node_id in edge_by_id
+                        edge_by_id[assigned_edge_node_id].hostname
+                        if assigned_edge_node_id in edge_by_id
                         else None
                     ),
                     processing_mode=camera.processing_mode,
@@ -1523,9 +1601,45 @@ class OperationsService:
                         incident_rules_by_camera.get(camera.id, []),
                         latest_rule_events_by_camera.get(camera.id),
                     ),
+                    assignment=(
+                        worker_assignment_response(assignment)
+                        if assignment is not None
+                        else None
+                    ),
+                    runtime_report=(
+                        supervisor_runtime_report_response(runtime_report)
+                        if runtime_report is not None
+                        else None
+                    ),
+                    latest_lifecycle_request=(
+                        operations_lifecycle_request_response(lifecycle_request)
+                        if lifecycle_request is not None
+                        else None
+                    ),
+                    supervisor_mode=(
+                        controls.supervisor_mode if controls is not None else "disabled"
+                    ),
+                    restart_policy=(
+                        controls.restart_policy if controls is not None else "never"
+                    ),
+                    allowed_lifecycle_actions=(
+                        controls.allowed_actions if controls is not None else []
+                    ),
+                    last_error=runtime_report.last_error if runtime_report is not None else None,
                 )
             )
             delivery_diagnostics.append(_camera_delivery_diagnostic(camera))
+
+        reported_counts_by_node: dict[UUID, int] = {}
+        for report in runtime_report_by_camera.values():
+            if report.edge_node_id is None:
+                continue
+            reported_counts_by_node[report.edge_node_id] = (
+                reported_counts_by_node.get(report.edge_node_id, 0) + 1
+            )
+        for node in nodes:
+            if node.id in reported_counts_by_node:
+                node.reported_camera_count = reported_counts_by_node[node.id]
 
         summary = FleetSummary(
             desired_workers=sum(
@@ -1605,6 +1719,46 @@ class OperationsService:
                 "ARGUS_EDGE_API_KEY": edge_response.api_key,
             },
         )
+
+    async def create_worker_assignment(
+        self,
+        tenant_context: TenantContext,
+        payload: WorkerAssignmentCreate,
+    ) -> WorkerAssignmentResponse:
+        row = await self._supervisor_operations().create_assignment(
+            tenant_id=tenant_context.tenant_id,
+            payload=payload,
+            actor_subject=tenant_context.user.subject,
+        )
+        return worker_assignment_response(row)
+
+    async def record_worker_runtime_report(
+        self,
+        tenant_context: TenantContext,
+        payload: SupervisorRuntimeReportCreate,
+    ) -> SupervisorRuntimeReportResponse:
+        row = await self._supervisor_operations().record_runtime_report(
+            tenant_id=tenant_context.tenant_id,
+            payload=payload,
+        )
+        return supervisor_runtime_report_response(row)
+
+    async def create_lifecycle_request(
+        self,
+        tenant_context: TenantContext,
+        payload: OperationsLifecycleRequestCreate,
+    ) -> OperationsLifecycleRequestResponse:
+        row = await self._supervisor_operations().create_lifecycle_request(
+            tenant_id=tenant_context.tenant_id,
+            payload=payload,
+            actor_subject=tenant_context.user.subject,
+        )
+        return operations_lifecycle_request_response(row)
+
+    def _supervisor_operations(self) -> SupervisorOperationsService:
+        if self.supervisor_operations is None:
+            self.supervisor_operations = SupervisorOperationsService(self.session_factory)
+        return self.supervisor_operations
 
 
 class HistoryService:
@@ -3703,6 +3857,7 @@ def build_app_services(
         audit_logger,
     )
     evidence_ledger = EvidenceLedgerService(db.session_factory)
+    supervisor_operations = SupervisorOperationsService(db.session_factory)
     camera_service = CameraService(
         db.session_factory,
         settings,
@@ -3738,6 +3893,8 @@ def build_app_services(
             db.session_factory,
             settings,
             edge_service=edge_service,
+            supervisor_operations=supervisor_operations,
+            runtime_configuration=configuration_service.runtime_configuration,
         ),
         history=HistoryService(db.session_factory),
         incidents=IncidentService(
