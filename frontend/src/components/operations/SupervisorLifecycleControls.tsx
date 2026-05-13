@@ -215,7 +215,7 @@ function admissionAllowsAction(
     return true;
   }
   const status = worker.latest_model_admission?.status;
-  return status === "recommended" || status === "supported" || status === "degraded";
+  return status !== "unsupported";
 }
 
 function formatDate(value: string): string {

@@ -216,6 +216,37 @@ describe("SupervisorLifecycleControls", () => {
     });
   });
 
+  test("allows first start when model admission has not been evaluated yet", async () => {
+    const user = userEvent.setup();
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker({
+          runtime_status: "not_reported",
+          runtime_report: null,
+          latest_model_admission: null,
+          latest_lifecycle_request: {
+            ...supervisedWorker().latest_lifecycle_request,
+            action: "stop",
+            status: "completed",
+          },
+        })}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^start$/i })).not.toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /^start$/i }));
+
+    expect(lifecycleMutateAsync).toHaveBeenCalledWith({
+      camera_id: "00000000-0000-0000-0000-000000000101",
+      edge_node_id: "00000000-0000-0000-0000-000000000201",
+      assignment_id: "00000000-0000-0000-0000-000000000401",
+      action: "start",
+      request_payload: { source: "operations_ui" },
+    });
+  });
+
   test("updates assignment and renders runtime report truth", async () => {
     const user = userEvent.setup();
     render(
