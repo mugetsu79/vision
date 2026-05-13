@@ -1,0 +1,26 @@
+[Unit]
+Description=Vezor Supervisor Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vezor
+Group=vezor
+WorkingDirectory=/opt/vezor/app
+Environment=VEZOR_SUPERVISOR_CONFIG=/etc/vezor/supervisor.json
+LoadCredential=supervisor-credential:/etc/vezor/supervisor.credential
+ExecStart=/opt/vezor/venv/bin/python -m argus.supervisor.runner --config /etc/vezor/supervisor.json
+Restart=on-failure
+RestartSec=5s
+StateDirectory=vezor
+LogsDirectory=vezor
+RuntimeDirectory=vezor
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vezor /var/log/vezor /run/vezor
+
+[Install]
+WantedBy=multi-user.target

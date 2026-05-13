@@ -169,6 +169,31 @@ durable system service or production container service. After that installation,
 operators should pair the node and manage workers from the UI. Command-line
 runner invocations remain lab, smoke-test, or break-glass workflows only.
 
+### Installable Supervisor Service Shape
+
+Band 7.5 introduces checked-in service templates under
+`infra/install/`. They are product templates, not backend-executed commands.
+The browser and API continue to act as a control plane: they record desired
+state, pairing state, service reports, and diagnostics. They must not run
+generic host shell commands.
+
+Supported ownership shapes:
+
+- Linux production nodes use `systemd` with a dedicated `vezor` user,
+  restart-on-failure behavior, explicit state/log/runtime directories, and a
+  credential file reference such as `LoadCredential=`.
+- macOS pilot or packaged-server nodes use `launchd` with a daemon plist that
+  restarts the supervisor and points at `/etc/vezor/supervisor.json`.
+- Containerized edge or appliance deployments use the Compose supervisor
+  profile with a healthcheck, restart policy, mounted config, and mounted
+  credential directory.
+
+None of the service templates embeds a long-lived bearer token. Product
+credentials are paired, stored behind the node-local credential boundary, and
+rotated through the Deployment/Operations control plane. Direct child process
+mode remains for local development, deterministic smoke tests, and break-glass
+support only.
+
 Start and restart also require model admission. The supervisor reports hardware
 capability and recent performance samples. The backend records a model-admission
 decision for each worker, and the Operations UI disables production Start and

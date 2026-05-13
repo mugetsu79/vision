@@ -21,6 +21,22 @@ pairing sessions, platform credential storage, and macOS/Linux service wrappers
 so normal operation after installation does not require foreground terminal
 commands or copied bearer tokens.
 
+The first service-wrapper templates live in `infra/install/`:
+
+- `infra/install/systemd/vezor-supervisor.service` for Linux central and edge
+  nodes. It runs as the `vezor` user, restarts on failure, declares state/log
+  directories, and references credential material instead of embedding it.
+- `infra/install/launchd/com.vezor.supervisor.plist` for macOS pilot nodes and
+  future packaged helper registration. It runs the supervisor daemon at load
+  and points at a local config file.
+- `infra/install/compose/compose.supervisor.yml` for production container or
+  appliance-style deployments. It uses a restart policy, a healthcheck, mounted
+  config, and mounted credentials.
+
+The backend may render or validate these artifacts, but it must not install,
+start, or shell into a node. Installation is a bootstrap responsibility; daily
+operation is UI intent plus node-local supervisor reconciliation.
+
 Local development can still start workers from a shell, or run the pilot
 supervisor when you want Operations lifecycle buttons to reconcile a direct
 child worker process. Use the Operations copy button, supervisor command, or lab
