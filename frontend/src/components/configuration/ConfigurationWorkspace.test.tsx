@@ -6,6 +6,7 @@ import { ConfigurationWorkspace } from "@/components/configuration/Configuration
 
 const createProfile = vi.fn();
 const updateProfile = vi.fn();
+const deleteProfile = vi.fn();
 const testProfile = vi.fn();
 const upsertBinding = vi.fn();
 
@@ -86,7 +87,7 @@ vi.mock("@/hooks/use-configuration", () => ({
     isPending: false,
   }),
   useDeleteConfigurationProfile: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: deleteProfile,
     isPending: false,
   }),
   useTestConfigurationProfile: () => ({
@@ -149,6 +150,8 @@ describe("ConfigurationWorkspace", () => {
     createProfile.mockResolvedValue(profiles[0]);
     updateProfile.mockReset();
     updateProfile.mockResolvedValue(profiles[0]);
+    deleteProfile.mockReset();
+    deleteProfile.mockResolvedValue(undefined);
     testProfile.mockReset();
     testProfile.mockResolvedValue({
       profile_id: "profile-minio",
@@ -258,6 +261,23 @@ describe("ConfigurationWorkspace", () => {
       });
       expect(await screen.findByText(/binding saved/i)).toBeInTheDocument();
     }
+  });
+
+  test("updates default profile and deletes the selected profile from list actions", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    await user.click(screen.getByRole("button", { name: /set default/i }));
+
+    expect(updateProfile).toHaveBeenCalledWith({
+      profileId: "profile-local",
+      payload: { is_default: true },
+    });
+    expect(await screen.findByText(/default profile updated/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /delete/i }));
+
+    expect(deleteProfile).toHaveBeenCalledWith("profile-minio");
   });
 
   test("binds a profile that loads after the initial render", async () => {
