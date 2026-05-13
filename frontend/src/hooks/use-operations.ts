@@ -20,6 +20,9 @@ export type OperationalMemoryPattern =
 export function fleetOverviewQueryOptions() {
   return queryOptions({
     queryKey: ["operations", "fleet"],
+    staleTime: 0,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data, error } = await apiClient.GET("/api/v1/operations/fleet");
       if (error || !data) {

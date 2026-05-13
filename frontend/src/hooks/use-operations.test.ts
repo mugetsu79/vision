@@ -54,6 +54,9 @@ describe("use-operations query helpers", () => {
     const data = await queryFn({} as never);
 
     expect(options.queryKey).toEqual(["operations", "fleet"]);
+    expect(options.refetchInterval).toBe(5_000);
+    expect(options.staleTime).toBe(0);
+    expect(options.refetchOnWindowFocus).toBe(true);
     expect(data.mode).toBe("manual_dev");
     expect(apiClient.GET).toHaveBeenCalledWith("/api/v1/operations/fleet");
   });
