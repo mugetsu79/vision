@@ -722,6 +722,18 @@ def _duration_to_ms(duration: float | None) -> float | None:
     return duration * 1000.0
 
 
+def _stage_percentiles_ms(
+    timing_summary: _TimingSummaryWindow,
+    percentile: float,
+) -> dict[str, float]:
+    percentiles: dict[str, float] = {}
+    for stage_name in sorted(timing_summary.stage_values):
+        value = timing_summary.percentile(stage_name, percentile)
+        if value is not None:
+            percentiles[stage_name] = value * 1000.0
+    return percentiles
+
+
 def _canonical_model_backend(model: ModelSettings) -> str:
     backend = model.capability_config.get("runtime_backend")
     if backend is not None:
@@ -1553,6 +1565,8 @@ class InferenceEngine:
             stage_name: duration * 1000.0
             for stage_name, duration in sorted(self._timing_summary.stage_maximums.items())
         }
+        stage_p95_ms = _stage_percentiles_ms(self._timing_summary, 95.0)
+        stage_p99_ms = _stage_percentiles_ms(self._timing_summary, 99.0)
         capture_wait_p95_ms = _duration_to_ms(
             self._timing_summary.percentile("capture_wait", 95.0)
         )
@@ -1570,16 +1584,21 @@ class InferenceEngine:
             "frame_count": frame_count,
             "stage_avg_ms": stage_avg_ms,
             "stage_max_ms": stage_max_ms,
+            "stage_p95_ms": stage_p95_ms,
+            "stage_p99_ms": stage_p99_ms,
             "capture_wait_p95_ms": capture_wait_p95_ms,
             "capture_wait_p99_ms": capture_wait_p99_ms,
         }
         logger.info(
             "Inference stage timing summary "
-            "camera_id=%s frame_count=%s stage_avg_ms={%s} stage_max_ms={%s}%s",
+            "camera_id=%s frame_count=%s stage_avg_ms={%s} stage_max_ms={%s} "
+            "stage_p95_ms={%s} stage_p99_ms={%s}%s",
             str(self.config.camera_id),
             frame_count,
             _format_stage_timings_ms(stage_avg_ms),
             _format_stage_timings_ms(stage_max_ms),
+            _format_stage_timings_ms(stage_p95_ms),
+            _format_stage_timings_ms(stage_p99_ms),
             message_suffix,
             extra=extra,
         )

@@ -2694,12 +2694,16 @@ async def test_engine_logs_periodic_stage_timing_summary(caplog: pytest.LogCaptu
     assert "camera_id=" in record.message
     assert "stage_avg_ms=" in record.message
     assert "stage_max_ms=" in record.message
+    assert "stage_p95_ms=" in record.message
+    assert "stage_p99_ms=" in record.message
     assert "detect" in record.message
     assert "total" in record.message
     assert record.camera_id == str(camera_id)
     assert record.frame_count == 2
     assert "detect" in record.stage_avg_ms
     assert "total" in record.stage_max_ms
+    assert "detect" in record.stage_p95_ms
+    assert "total" in record.stage_p99_ms
 
 
 @pytest.mark.asyncio
