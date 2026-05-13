@@ -32,8 +32,11 @@ The current product includes the operator workflows needed for a serious pilot:
 The supervisor lifecycle MVP is now present as API contracts, database records,
 UI admission status, a reconciler library, and a runnable child-process
 supervisor for iMac and Jetson pilot use. Local development can still use manual
-terminal workers, while production still needs the deployment platform to run
-the supervisor as a durable service unit or container.
+terminal workers. The next planned implementation band, Band 7.5, turns that
+runner into an installable macOS/Linux supervisor product with UI-managed
+first-run setup, short-lived node pairing, platform credential storage, service
+health, diagnostics, and no normal copied-token terminal workflow after
+installation.
 
 ## Dev Versus Production
 
@@ -51,10 +54,14 @@ Do not confuse the local dev stack with production.
 - the master runs on Linux `amd64`, preferably through Helm/k3s or an equivalent supervised service platform
 - Jetson edge nodes run a small edge stack near the cameras
 - all worker processes are owned by a local supervisor, not the browser or API container
+- central and edge supervisors are installed as durable macOS/Linux services or
+  production container services, then paired from the UI
 - Operations writes desired state or lifecycle requests, then displays reported runtime truth
 - supervisors report host hardware capability and observed model performance so
   unsupported models do not start on unsuitable hardware
-- edge credentials are scoped, rotated, and provisioned through bootstrap, not copied from local dev tokens
+- edge and central supervisor credentials are scoped, rotated, revocable, and
+  provisioned through one-time pairing or credential rotation, not copied from
+  local dev tokens
 - the current iMac + Jetson lab should set the edge worker's `ARGUS_NATS_URL` directly to the iMac NATS listener; the NATS leaf shape is the production target once supervisor bootstrap owns credentials and routing
 
 Production topology:
@@ -157,6 +164,11 @@ The lab UI can show desired worker ownership, runtime freshness, delivery diagno
 
 Production lifecycle controls should not shell out from the browser or API container. Start, stop, restart, and drain should write desired state or send a constrained lifecycle request; a central or edge supervisor then owns the actual process reconciliation and reports runtime truth back through heartbeats.
 
+For final-product operation, the supervisor itself must be installed once as a
+durable system service or production container service. After that installation,
+operators should pair the node and manage workers from the UI. Command-line
+runner invocations remain lab, smoke-test, or break-glass workflows only.
+
 Start and restart also require model admission. The supervisor reports hardware
 capability and recent performance samples. The backend records a model-admission
 decision for each worker, and the Operations UI disables production Start and
@@ -257,6 +269,10 @@ Before calling a site production-ready, the deployment needs:
 
 - central supervisor for central and hybrid workers
 - edge supervisor for Jetson-owned workers
+- systemd, launchd, or production container ownership for each supervisor
+- UI-created one-time pairing material for central and edge nodes
+- node-bound credentials that are scoped, rotated, revocable, and not embedded
+  as long-lived bearer tokens in service files
 - worker heartbeat with per-camera runtime state
 - hardware capability reports from every central and edge supervisor
 - model admission reports before production Start or Restart
@@ -264,7 +280,7 @@ Before calling a site production-ready, the deployment needs:
 - drain behavior for planned maintenance
 - logs and metrics visible from the central observability stack
 - backup and restore procedure for Postgres/TimescaleDB and incident object storage
-- scoped edge credentials with rotation path
+- scoped supervisor credentials with rotation path
 
 ### Camera Source And Evidence Storage Choices
 

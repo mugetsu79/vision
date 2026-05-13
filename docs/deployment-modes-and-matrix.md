@@ -15,9 +15,15 @@ The strongest production-ready paths are still:
 - `central` with a Linux `amd64` master node
 - `edge` with Jetson Orin Nano Super 8 GB inference nodes
 
-The main missing production layer is worker lifecycle automation. Operations can show desired worker state, node state, delivery diagnostics, and bootstrap material, but production Start/Stop/Restart/Drain still needs a central or edge supervisor contract that reconciles desired state to real processes and reports per-worker runtime truth.
+The supervisor lifecycle MVP now includes operations contracts, persistent
+assignments, hardware/model admission, lifecycle request claim/complete flows,
+and a runnable child-process supervisor for iMac and Jetson pilot validation.
+The main missing final-product layer is installable supervisor productization:
+macOS/Linux service ownership, UI-managed first-run setup, one-time node
+pairing, node-bound credentials, service health, diagnostics, and no normal
+copied-token terminal workflow after installation.
 
-Raw TensorRT `.engine` files are now modeled as target-specific runtime artifacts, not normal camera model choices. Fixed-vocab production testing should still register portable ONNX model rows first, then attach validated `.engine` artifacts for compatible Jetson/NVIDIA targets. Stable open-vocab scenes can now register compiled scene artifacts keyed by camera, vocabulary hash, source model hash, and target profile. The next active implementation stage is accountable scene intelligence: scene contract snapshots, privacy manifests, evidence ledger, artifact-aware incident clips, storage policy choices, and edge USB/UVC camera sources.
+Raw TensorRT `.engine` files are now modeled as target-specific runtime artifacts, not normal camera model choices. Fixed-vocab production testing should still register portable ONNX model rows first, then attach validated `.engine` artifacts for compatible Jetson/NVIDIA targets. Stable open-vocab scenes can now register compiled scene artifacts keyed by camera, vocabulary hash, source model hash, and target profile. The next active implementation stage is Band 7.5: installable supervisor and first-run productization before credential rotation and Jetson runtime soak.
 
 ## Core Terms
 
@@ -143,6 +149,12 @@ Operators
 ```
 
 In this shape, Operations does not run shell commands. It changes desired state or sends a constrained lifecycle request. The central or edge supervisor owns the real process and reports heartbeat, worker status, metrics, and last error back to the control plane.
+
+The final-product install goal is: install the supervisor once on macOS or
+Linux, pair the node from the UI, and use Control -> Deployment plus Control ->
+Operations for setup, health, lifecycle, diagnostics, and credential rotation.
+Manual shell commands are retained for development, installer/bootstrap,
+smoke-test, and break-glass support only.
 
 ## Browser Delivery Model
 

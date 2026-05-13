@@ -1,5 +1,10 @@
 # Next Chat Handoff: Accountable Scene Intelligence Task 17
 
+> Superseded by:
+> `docs/superpowers/status/2026-05-13-next-chat-installable-supervisor-productization-handoff.md`.
+> This May 12 handoff is retained as historical context for the earlier Task 17
+> continuation point.
+
 Date: 2026-05-12
 
 Purpose: paste this document into a fresh chat to continue from the current

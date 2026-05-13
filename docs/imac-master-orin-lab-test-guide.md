@@ -1613,7 +1613,10 @@ This lab is clean only when the product workflow works. Production readiness sti
 
 - Linux master deployment
 - TLS and real OIDC realm configuration
-- durable service wrappers around the central and edge supervisor runner
+- durable macOS/Linux service wrappers around the central and edge supervisor
+- UI-managed first-run setup and node pairing, so normal operation after
+  installation does not require pasted bearer tokens or foreground terminal
+  commands
 - backups for database and incident object storage
 - edge credential rotation
 - soak testing over multiple days

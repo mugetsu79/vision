@@ -5,9 +5,21 @@ See also:
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 
-## Worker Lifecycle And Operations
+## Worker Lifecycle, Deployment, And Operations
 
-The Operations workbench currently lives at `/settings` in the frontend. It is the operator-facing view for fleet state, camera worker ownership, delivery diagnostics, edge bootstrap material, hardware/model admission, and copyable local-dev worker commands.
+The Operations workbench currently lives at `/settings` in the frontend. It is
+the operator-facing view for fleet state, camera worker ownership, delivery
+diagnostics, edge bootstrap material, hardware/model admission, and copyable
+local-dev worker commands.
+
+The final-product deployment path is now specified as Band 7.5 in
+`docs/superpowers/specs/2026-05-13-installable-supervisor-and-first-run-productization-design.md`
+and
+`docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md`.
+That band adds a dedicated Control -> Deployment surface, UI-created node
+pairing sessions, platform credential storage, and macOS/Linux service wrappers
+so normal operation after installation does not require foreground terminal
+commands or copied bearer tokens.
 
 Local development can still start workers from a shell, or run the pilot
 supervisor when you want Operations lifecycle buttons to reconcile a direct
@@ -55,15 +67,19 @@ An iMac can be used as a lab or pilot master, especially with a Jetson edge node
 
 Before calling a deployment production-ready, verify that the following are implemented or supplied by the deployment platform:
 
-- durable service wrappers around `argus.supervisor.runner` for central and edge
-  workers, such as systemd units or a production container profile
+- durable service wrappers around the Vezor supervisor for central and edge
+  workers, such as systemd, launchd, or a production container profile
+- UI-managed first-run setup and node pairing through short-lived one-time
+  material
+- node-bound supervisor credentials with rotation, revocation, and no long-lived
+  bearer tokens embedded in service definitions
 - per-worker heartbeat with camera id, status, freshness, restart count, and last error
 - regular hardware capability/performance reports from each supervisor
 - model-admission checks before production Start or Restart
 - persistent assignment/reassignment model or an equivalent supervised placement source
 - backup and restore for Postgres/TimescaleDB and incident object storage
 - TLS termination and stable DNS
-- scoped edge credentials with a rotation path
+- scoped edge and central supervisor credentials with a rotation path
 - log and metric collection from both master and edge nodes
 - soak testing for the first site before adding more cameras
 
@@ -275,9 +291,12 @@ profile requires an API key that has not been stored.
 
 The accountable evidence, configuration, runtime passport, per-worker incident
 rule runway, and supervisor hardware admission runway currently migrate through
-Alembic head `0023_supervisor_reconciler`.
+Alembic head `0023_supervisor_reconciler`. The next planned schema task is
+Task 21D, which will add `0024_installable_supervisor_productization` for
+deployment nodes, supervisor service reports, pairing sessions, node
+credentials, and credential audit events.
 
-After pulling the Task 16E checkpoint, refresh the dev database with:
+After pulling the current development branch, refresh the dev database with:
 
 ```bash
 cd /Users/yann.moren/vision/backend
