@@ -2,13 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, per-worker incident rules, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
+**Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, per-worker incident rules, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, installable first-run productization, Jetson runtime soak, and gated DeepStream.
 
-**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before Operational Memory starts, per-worker incident rules must become UI/API-managed scene policy that production workers load and report. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, rule, hardware-admission, and runtime-report data instead of adding parallel case-history systems.
+**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before Operational Memory starts, per-worker incident rules must become UI/API-managed scene policy that production workers load and report. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, rule, hardware-admission, runtime-report, install-state, and node-credential data instead of adding parallel case-history systems. The backend and browser remain a control plane; durable macOS/Linux supervisor services own local process reconciliation after a one-time install and UI-managed pairing flow.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy async, Alembic, PostgreSQL JSONB, OpenCV MJPEG clip encoding, local filesystem storage, MinIO/S3-compatible object storage, React 19, Vite 6, TypeScript 5.7, Tailwind v4, Vitest, pytest, Ruff, mypy.
 
-**Spec source:** `/Users/yann.moren/vision/docs/superpowers/specs/2026-05-11-accountable-scene-intelligence-and-evidence-recording-design.md`
+**Spec sources:**
+
+- `/Users/yann.moren/vision/docs/superpowers/specs/2026-05-11-accountable-scene-intelligence-and-evidence-recording-design.md`
+- `/Users/yann.moren/vision/docs/superpowers/specs/2026-05-13-installable-supervisor-and-first-run-productization-design.md`
 
 ---
 
@@ -24,10 +27,10 @@ Execute one task at a time. After each task:
 Do not stage unrelated untracked scratch files. Keep WebGL off. Execute the
 tasks in order. Runtime Passport, per-worker incident rules, Operational
 Memory, Prompt-To-Policy, Identity-Light Cross-Camera Intelligence,
-Fleet/Operations hardening, and runtime soak are now part of this plan after
-the accountable evidence foundation. Track C / DeepStream remains a late gated
-task and must not start until the runtime soak task proves Track A/B readiness
-on target Jetson hardware.
+Fleet/Operations hardening, installable first-run productization, and runtime
+soak are now part of this plan after the accountable evidence foundation. Track
+C / DeepStream remains a late gated task and must not start until the runtime
+soak task proves Track A/B readiness on target Jetson hardware.
 
 After Task 13C, no new operator-facing product behavior may rely only on
 environment variables, command-line flags, or hand-edited backend files. A task
@@ -41,6 +44,12 @@ persists data. The plan must either implement runtime consumption for that
 profile kind, or name the later task and test that will consume it. This applies
 to evidence storage, stream delivery, runtime selection, privacy policy,
 LLM provider, and operations mode.
+
+After Task 21C, no normal product workflow may require a copied bearer token,
+foreground terminal process, or hand-edited environment variable to start,
+stop, restart, drain, or monitor workers. Terminal commands are allowed only for
+the one-time installer/bootstrap path, local development, smoke tests, and
+break-glass support.
 
 ## Implementation Progress As Of 2026-05-12
 
@@ -76,7 +85,7 @@ Current migration head after the Task 21C checkpoint is
 Next task:
 
 ```text
-Task 22: Edge Credential Rotation And Bootstrap Hardening
+Task 21D: Deployment Node And Service Status Contract
 ```
 
 ## Validation Bands
@@ -284,7 +293,9 @@ only test review.
 
 ### Band 7: Edge-First Production Operations
 
-Tasks: `20-21C, 22`
+Tasks: `20-21C`
+
+Status: completed and pushed through the runnable supervisor checkpoint.
 
 Validation goal:
 
@@ -300,12 +311,34 @@ Validation goal:
 - edge/central supervisors report hardware capability and recent performance
 - model admission recommends a safe model/runtime and blocks unsupported or
   unknown production starts
+
+Band gate: Operations creates lifecycle requests without pretending the backend
+API owns host processes, and no supervisor-managed worker starts on hardware
+that has not passed model admission. The remaining product gap is installable
+service ownership and UI-managed pairing, covered by Band 7.5.
+
+### Band 7.5: Installable Supervisor And First-Run Productization
+
+Tasks: `21D-21H, 22`
+
+Validation goal:
+
+- a central or edge node can be installed once, then managed from the UI
+- macOS and Linux supervisors start after reboot through native service
+  managers or a production container profile
+- service definitions do not embed long-lived bearer tokens
+- node pairing uses one-time, short-lived material and stores only hashes or
+  encrypted credentials server-side
+- Control -> Deployment shows install health, node health, service manager,
+  version, credential status, hardware/model admission, and diagnostics
+- Operations lifecycle buttons continue to create constrained requests and
+  report supervisor truth
 - edge credential rotation returns one-time material and does not persist
   plaintext secrets
 
-Band gate: Operations can be used as a production control surface without
-pretending the backend API owns host processes, and no supervisor-managed worker
-starts on hardware that has not passed model admission.
+Band gate: after installation, normal Vezor operation is UI-managed. Terminal
+commands are limited to installer/bootstrap, development smoke tests, and
+break-glass support.
 
 ### Band 8: Real Jetson Runtime Validation
 
@@ -433,7 +466,8 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/migrations/versions/0021_cross_camera_threads.py` | create | identity-light cross-camera thread table |
 | `backend/src/argus/migrations/versions/0022_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
 | `backend/src/argus/migrations/versions/0023_supervisor_reconciler_hardware_admission.py` | create | supervisor hardware report and model admission tables |
-| `backend/src/argus/migrations/versions/0024_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/migrations/versions/0024_installable_supervisor_productization.py` | create | deployment node, supervisor install status, pairing session, and credential audit tables |
+| `backend/src/argus/migrations/versions/0025_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
 | `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
 | `backend/src/argus/services/incident_rules.py` | create | per-camera incident rule CRUD, validation, hashing, and command publication |
 | `backend/src/argus/services/rule_events.py` | create | persistent rule event store for workers |
@@ -441,6 +475,7 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/services/policy_drafts.py` | create | prompt-to-policy draft, diff, approval, rejection, and application service |
 | `backend/src/argus/services/cross_camera_threads.py` | create | identity-light non-biometric incident correlation |
 | `backend/src/argus/services/supervisor_operations.py` | create | worker assignments, supervisor reports, lifecycle requests, credential rotation |
+| `backend/src/argus/services/deployment_nodes.py` | create | deployment node, service status, pairing session, and support bundle service |
 | `backend/src/argus/services/model_admission.py` | create | hardware-aware model admission and recommendation evaluator |
 | `backend/src/argus/supervisor/hardware_probe.py` | create | local host capability probe for iMac, Linux, and Jetson supervisors |
 | `backend/src/argus/supervisor/metrics_probe.py` | create | local worker metrics scraper that produces p95/p99 performance samples |
@@ -448,11 +483,15 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/supervisor/reconciler.py` | create | supervisor-side lifecycle claim/execute loop |
 | `backend/src/argus/supervisor/process_adapter.py` | create | bounded local worker process adapter for supervisors |
 | `backend/src/argus/supervisor/runner.py` | create | runnable supervisor CLI and async loop for central/edge nodes |
+| `backend/src/argus/supervisor/service_manager.py` | create | cross-platform service manager protocol and detection helpers |
+| `backend/src/argus/supervisor/service_artifacts.py` | create | render redacted systemd, launchd, and Compose install artifacts |
+| `backend/src/argus/supervisor/credential_store.py` | create | platform credential-store boundary for node credentials |
 | `backend/src/argus/services/runtime_soak.py` | create | runtime artifact soak run recorder and validation summary |
 | `backend/src/argus/vision/deepstream_runtime.py` | create late | DeepStream backend adapter after soak gate |
 | `backend/src/argus/vision/deepstream_metadata.py` | create late | DeepStream metadata bridge into track lifecycle |
 | `backend/src/argus/api/v1/policy_drafts.py` | create | prompt-to-policy draft and decision routes |
 | `backend/src/argus/api/v1/incident_rules.py` | create | camera-scoped incident rule routes |
+| `backend/src/argus/api/v1/deployment.py` | create | deployment node, service status, pairing, credential exchange, and diagnostics routes |
 | `backend/src/argus/api/v1/runtime_soak.py` | create | runtime artifact soak routes |
 | `frontend/src/components/evidence/EvidenceTimeline.tsx` | create | accountable timeline density strip |
 | `frontend/src/components/evidence/CaseContextStrip.tsx` | create | selected incident context strip |
@@ -464,6 +503,12 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `frontend/src/components/evidence/CrossCameraThreadPanel.tsx` | create | privacy-aware thread context |
 | `frontend/src/components/policy/PolicyDraftReview.tsx` | create | prompt-to-policy draft diff and approval UI |
 | `frontend/src/components/operations/SupervisorLifecycleControls.tsx` | create | Start/Stop/Restart/Drain request controls |
+| `frontend/src/hooks/use-deployment.ts` | create | deployment node, pairing, service health, and support bundle API hooks |
+| `frontend/src/pages/Deployment.tsx` | create | Control -> Deployment first-run and node health workspace |
+| `frontend/src/pages/Deployment.test.tsx` | create | deployment setup, pairing, diagnostics, and no-token UI coverage |
+| `infra/install/systemd/vezor-supervisor.service` | create | Linux supervisor service unit template without embedded long-lived tokens |
+| `infra/install/launchd/com.vezor.supervisor.plist` | create | macOS LaunchDaemon template without embedded long-lived tokens |
+| `infra/install/compose/compose.supervisor.yml` | create | production container supervisor service profile with healthchecks and restart policy |
 | `docs/runbook.md` | modify | storage and recording configuration |
 | `docs/operator-deployment-playbook.md` | modify | edge USB camera, local evidence, and remote/cloud evidence guidance |
 | `docs/imac-master-orin-lab-test-guide.md` | modify | Linux master plus Jetson soak validation and rollback |
@@ -5122,18 +5167,623 @@ git commit -m "feat(operations): add runnable supervisor reporter"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
+## Task 21D: Deployment Node And Service Status Contract
+
+**Purpose:** Add the durable install-state contract that lets Vezor distinguish
+node installation health from worker runtime health. This is the data foundation
+for no-console product operation.
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0024_installable_supervisor_productization.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Create: `backend/src/argus/services/deployment_nodes.py`
+- Modify: `backend/src/argus/services/app.py`
+- Create: `backend/src/argus/api/v1/deployment.py`
+- Modify: `backend/src/argus/main.py`
+- Test: `backend/tests/services/test_deployment_nodes.py`
+- Test: `backend/tests/api/test_deployment_routes.py`
+- Test: `backend/tests/core/test_db.py`
+
+- [ ] **Step 1: Add failing deployment-node tests**
+
+Create tests covering:
+
+- `deployment_nodes` can represent central and edge nodes separately from
+  camera workers.
+- `supervisor_service_status_reports` can store service manager, service
+  status, install status, version, OS, host profile, credential status,
+  heartbeat, and redacted diagnostics.
+- `node_pairing_sessions`, `supervisor_node_credentials`, and
+  `deployment_credential_events` tables exist for Task 21F and Task 22.
+- service reports update a node's latest install status without mutating worker
+  runtime reports.
+- stale service reports produce `offline` install status.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_deployment_nodes.py tests/core/test_db.py -q
+```
+
+Expected: fail until the migration, tables, contracts, and service exist.
+
+- [ ] **Step 2: Add failing deployment API tests**
+
+Cover:
+
+- `GET /api/v1/deployment/nodes` returns central and edge install state.
+- `POST /api/v1/deployment/supervisors/{supervisor_id}/service-reports`
+  records a report and returns the resolved node state.
+- report payloads redact secret-like keys from diagnostics.
+- unauthenticated requests are rejected.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_deployment_routes.py -q
+```
+
+Expected: fail until deployment routes are wired.
+
+- [ ] **Step 3: Implement migration and tables**
+
+Create `0024_installable_supervisor_productization.py` with:
+
+- `deployment_nodes`
+- `supervisor_service_status_reports`
+- `node_pairing_sessions`
+- `supervisor_node_credentials`
+- `deployment_credential_events`
+
+Use tenant-scoped indexes for node lookup and latest status lookup. Store
+pairing codes and supervisor credentials only as hashes or encrypted values.
+Do not add plaintext secret columns.
+
+- [ ] **Step 4: Implement contracts, service, and routes**
+
+Add contracts for:
+
+- `DeploymentNodeResponse`
+- `SupervisorServiceReportCreate`
+- `SupervisorServiceReportResponse`
+- `DeploymentInstallStatus`
+- `DeploymentCredentialStatus`
+- `DeploymentServiceManager`
+
+Create `DeploymentNodeService` with methods to list nodes, record service
+reports, derive freshness, and redact diagnostics. Register the router from
+`argus.main`.
+
+- [ ] **Step 5: Run focused validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run alembic upgrade head
+python3 -m uv run pytest tests/services/test_deployment_nodes.py tests/api/test_deployment_routes.py tests/core/test_db.py -q
+python3 -m uv run ruff check src/argus/services/deployment_nodes.py src/argus/api/v1/deployment.py tests/services/test_deployment_nodes.py tests/api/test_deployment_routes.py
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0024_installable_supervisor_productization.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/services/deployment_nodes.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/api/v1/deployment.py \
+  backend/src/argus/main.py \
+  backend/tests/services/test_deployment_nodes.py \
+  backend/tests/api/test_deployment_routes.py \
+  backend/tests/core/test_db.py
+git commit -m "feat(deployment): add supervisor install state"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 21E: Cross-Platform Service Manager And Install Artifacts
+
+**Purpose:** Add the cross-platform service boundary that hides macOS, Linux,
+and container differences from the UI while keeping long-lived secrets out of
+service definitions.
+
+**Files:**
+
+- Create: `backend/src/argus/supervisor/service_manager.py`
+- Create: `backend/src/argus/supervisor/service_artifacts.py`
+- Test: `backend/tests/supervisor/test_service_manager.py`
+- Test: `backend/tests/supervisor/test_service_artifacts.py`
+- Create: `infra/install/systemd/vezor-supervisor.service`
+- Create: `infra/install/launchd/com.vezor.supervisor.plist`
+- Create: `infra/install/compose/compose.supervisor.yml`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/runbook.md`
+
+- [ ] **Step 1: Add failing service-manager tests**
+
+Cover:
+
+- Linux hosts detect `systemd` when `systemctl` and systemd runtime evidence
+  are available.
+- macOS hosts detect `launchd`.
+- containerized edge deployments can report `compose`.
+- unknown platforms fall back to `direct_child` and are labeled development
+  only.
+- detection never shells out with untrusted input.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_service_manager.py -q
+```
+
+Expected: fail until `service_manager.py` exists.
+
+- [ ] **Step 2: Add failing install-artifact tests**
+
+Cover:
+
+- systemd unit uses a dedicated `vezor` user, `Restart=on-failure`,
+  `StateDirectory=vezor`, `LogsDirectory=vezor`, and a credential file or
+  `LoadCredential=` reference.
+- launchd plist runs the supervisor as a daemon, restarts it, and references a
+  config path instead of embedding token material.
+- Compose service includes a healthcheck, restart policy, and mounted
+  credential/config path instead of bearer-token environment variables.
+- rendered artifacts do not contain strings matching `Bearer `,
+  `ARGUS_API_BEARER_TOKEN=`, or `token-password`.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_service_artifacts.py -q
+```
+
+Expected: fail until artifact renderers and templates exist.
+
+- [ ] **Step 3: Implement service manager and renderers**
+
+Create:
+
+- `DeploymentServiceManager` enum mapping to `systemd`, `launchd`, `compose`,
+  and `direct_child`
+- pure renderer helpers for systemd, launchd, and Compose artifacts
+- validation helper `assert_no_embedded_long_lived_secret(text: str)`
+- service-manager detection helper with injectable command runner for tests
+
+The renderers produce installable templates only. They must not install or
+start services from backend tests.
+
+- [ ] **Step 4: Add install templates and docs**
+
+Add checked-in templates under `infra/install/`. Document:
+
+- Linux/systemd production service shape
+- macOS/launchd production service shape
+- container/Compose production service shape
+- why browser/API shell execution remains forbidden
+- why command-line supervisor mode remains local dev and break-glass only
+
+- [ ] **Step 5: Run focused validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_service_manager.py tests/supervisor/test_service_artifacts.py -q
+python3 -m uv run ruff check src/argus/supervisor/service_manager.py src/argus/supervisor/service_artifacts.py tests/supervisor/test_service_manager.py tests/supervisor/test_service_artifacts.py
+cd /Users/yann.moren/vision
+git diff --check -- infra/install/systemd/vezor-supervisor.service infra/install/launchd/com.vezor.supervisor.plist infra/install/compose/compose.supervisor.yml docs/operator-deployment-playbook.md docs/runbook.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 6: Commit and push**
+
+```bash
+git add backend/src/argus/supervisor/service_manager.py \
+  backend/src/argus/supervisor/service_artifacts.py \
+  backend/tests/supervisor/test_service_manager.py \
+  backend/tests/supervisor/test_service_artifacts.py \
+  infra/install/systemd/vezor-supervisor.service \
+  infra/install/launchd/com.vezor.supervisor.plist \
+  infra/install/compose/compose.supervisor.yml \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md
+git commit -m "feat(supervisor): add service manager artifacts"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 21F: Pairing Sessions And Node Credential Exchange
+
+**Purpose:** Replace copied bearer-token workflows with UI-created, one-time
+node pairing sessions and scoped supervisor credentials.
+
+**Files:**
+
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/services/deployment_nodes.py`
+- Modify: `backend/src/argus/api/v1/deployment.py`
+- Modify: `backend/src/argus/services/app.py`
+- Create: `backend/src/argus/supervisor/credential_store.py`
+- Modify: `backend/src/argus/supervisor/operations_client.py`
+- Modify: `backend/src/argus/supervisor/runner.py`
+- Test: `backend/tests/services/test_deployment_nodes.py`
+- Test: `backend/tests/api/test_deployment_routes.py`
+- Test: `backend/tests/supervisor/test_credential_store.py`
+- Test: `backend/tests/supervisor/test_operations_client.py`
+- Test: `backend/tests/supervisor/test_runner.py`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/runbook.md`
+
+- [ ] **Step 1: Add failing pairing tests**
+
+Cover:
+
+- admins can create a pairing session for a central or edge node.
+- pairing codes expire after the configured short TTL.
+- only a pairing-code hash is stored.
+- claiming a pairing session returns one-time credential material once.
+- replaying a consumed code fails.
+- revoking a node credential prevents future supervisor polling.
+- credential lifecycle events are appended to `deployment_credential_events`.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/services/test_deployment_nodes.py tests/api/test_deployment_routes.py -q
+```
+
+Expected: fail until pairing methods and routes exist.
+
+- [ ] **Step 2: Add failing supervisor credential-store tests**
+
+Cover:
+
+- fake credential store can save, load, rotate, and delete node credentials.
+- runner can read credentials from the store without `--bearer-token`.
+- logs and errors never print credential material.
+- password-grant token provider remains dev-only and is not the product default.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_credential_store.py tests/supervisor/test_runner.py tests/supervisor/test_operations_client.py -q
+```
+
+Expected: fail until the credential-store boundary and runner product mode
+exist.
+
+- [ ] **Step 3: Implement pairing routes and service methods**
+
+Add routes:
+
+- `POST /api/v1/deployment/pairing-sessions`
+- `GET /api/v1/deployment/pairing-sessions/{session_id}`
+- `POST /api/v1/deployment/pairing-sessions/{session_id}/claim`
+- `POST /api/v1/deployment/nodes/{node_id}/credentials/revoke`
+
+The claim route returns one-time credential material only in the response body.
+It must store no plaintext copy and must mark the session consumed in the same
+transaction.
+
+- [ ] **Step 4: Implement supervisor credential-store boundary**
+
+Create `credential_store.py` with:
+
+- `SupervisorCredentialStore` protocol
+- `FileCredentialStore` for product server mode with owner-only file
+  permissions
+- `InMemoryCredentialStore` for tests
+- redaction helper used by runner/client logs
+
+The macOS Keychain and systemd `LoadCredential=` integrations can land behind
+this boundary later without changing the UI/API contract.
+
+- [ ] **Step 5: Update runner product mode**
+
+Update `argus.supervisor.runner` so product mode can use:
+
+```bash
+python -m argus.supervisor.runner --config /etc/vezor/supervisor.json
+```
+
+The config file points to the API base URL, supervisor id, role, optional edge
+node id, and credential-store path. It must not require a pasted bearer token.
+Keep `--bearer-token` and password-grant token provider documented as dev/lab
+and break-glass only.
+
+- [ ] **Step 6: Run focused validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_deployment_nodes.py \
+  tests/api/test_deployment_routes.py \
+  tests/supervisor/test_credential_store.py \
+  tests/supervisor/test_operations_client.py \
+  tests/supervisor/test_runner.py \
+  -q
+python3 -m uv run ruff check src/argus/services/deployment_nodes.py src/argus/api/v1/deployment.py src/argus/supervisor/credential_store.py src/argus/supervisor/runner.py
+cd /Users/yann.moren/vision
+git diff --check -- docs/operator-deployment-playbook.md docs/runbook.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 7: Commit and push**
+
+```bash
+git add backend/src/argus/api/contracts.py \
+  backend/src/argus/services/deployment_nodes.py \
+  backend/src/argus/api/v1/deployment.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/supervisor/credential_store.py \
+  backend/src/argus/supervisor/operations_client.py \
+  backend/src/argus/supervisor/runner.py \
+  backend/tests/services/test_deployment_nodes.py \
+  backend/tests/api/test_deployment_routes.py \
+  backend/tests/supervisor/test_credential_store.py \
+  backend/tests/supervisor/test_operations_client.py \
+  backend/tests/supervisor/test_runner.py \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md
+git commit -m "feat(deployment): add node pairing credentials"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 21G: Product-Mode Supervisor Reconciliation
+
+**Purpose:** Make the installed supervisor restart-safe: after reboot or
+service restart, it reports service health and reconciles desired workers
+without requiring a human to rerun terminal commands.
+
+**Files:**
+
+- Modify: `backend/src/argus/supervisor/runner.py`
+- Modify: `backend/src/argus/supervisor/reconciler.py`
+- Modify: `backend/src/argus/supervisor/process_adapter.py`
+- Modify: `backend/src/argus/supervisor/operations_client.py`
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/services/supervisor_operations.py`
+- Test: `backend/tests/supervisor/test_runner.py`
+- Test: `backend/tests/supervisor/test_reconciler.py`
+- Test: `backend/tests/supervisor/test_process_adapter.py`
+- Test: `backend/tests/services/test_supervisor_operations.py`
+
+- [ ] **Step 1: Add failing restart-safe reconciliation tests**
+
+Cover:
+
+- runner posts a service report before hardware reports and lifecycle polling.
+- runner can recover desired running workers from the fleet overview after a
+  restart.
+- workers that should be running are restarted only after model admission is
+  not `unknown` or `unsupported`.
+- workers that should be stopped remain stopped.
+- duplicate Start requests do not spawn duplicate worker processes.
+- Stop/Drain requests still target only the selected camera worker.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_runner.py tests/supervisor/test_reconciler.py tests/supervisor/test_process_adapter.py tests/services/test_supervisor_operations.py -q
+```
+
+Expected: fail until product-mode reconciliation exists.
+
+- [ ] **Step 2: Implement service-reporting in runner**
+
+Add service report posting to the runner loop using Task 21D contracts. Include:
+
+- supervisor id
+- role
+- edge node id when present
+- service manager
+- supervisor version
+- install status
+- credential status
+- OS and host profile
+- redacted diagnostics
+
+- [ ] **Step 3: Implement desired-state reconciliation**
+
+Extend the reconciler to handle two inputs:
+
+- explicit lifecycle requests from Operations
+- current desired worker state from fleet/assignments after a supervisor
+  restart
+
+Keep model admission in front of every product-mode Start and Restart.
+
+- [ ] **Step 4: Run focused validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/supervisor/test_runner.py \
+  tests/supervisor/test_reconciler.py \
+  tests/supervisor/test_process_adapter.py \
+  tests/services/test_supervisor_operations.py \
+  -q
+python3 -m uv run ruff check src/argus/supervisor src/argus/services/supervisor_operations.py tests/supervisor tests/services/test_supervisor_operations.py
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit and push**
+
+```bash
+git add backend/src/argus/supervisor/runner.py \
+  backend/src/argus/supervisor/reconciler.py \
+  backend/src/argus/supervisor/process_adapter.py \
+  backend/src/argus/supervisor/operations_client.py \
+  backend/src/argus/services/app.py \
+  backend/src/argus/services/supervisor_operations.py \
+  backend/tests/supervisor/test_runner.py \
+  backend/tests/supervisor/test_reconciler.py \
+  backend/tests/supervisor/test_process_adapter.py \
+  backend/tests/services/test_supervisor_operations.py
+git commit -m "feat(supervisor): reconcile installed workers"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
+## Task 21H: Deployment UI, Diagnostics, And No-Console Docs
+
+**Purpose:** Add the operator-facing first-run/deployment surface and remove
+the implication that normal production use requires copied commands.
+
+**Files:**
+
+- Modify: `frontend/src/lib/api.generated.ts`
+- Create: `frontend/src/hooks/use-deployment.ts`
+- Create: `frontend/src/pages/Deployment.tsx`
+- Create: `frontend/src/pages/Deployment.test.tsx`
+- Modify: `frontend/src/App.tsx`
+- Modify: `frontend/src/components/Layout.tsx`
+- Modify: `frontend/src/pages/Settings.tsx`
+- Modify: `frontend/src/pages/Settings.test.tsx`
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/services/deployment_nodes.py`
+- Modify: `backend/src/argus/api/v1/deployment.py`
+- Test: `backend/tests/api/test_deployment_routes.py`
+- Test: `backend/tests/services/test_deployment_nodes.py`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/runbook.md`
+- Modify: `docs/imac-master-orin-lab-test-guide.md`
+
+- [ ] **Step 1: Add failing backend diagnostics tests**
+
+Cover:
+
+- support bundle endpoint returns service reports, lifecycle summary, runtime
+  summary, hardware/model-admission summary, and redacted diagnostics.
+- support bundle excludes credential material and bearer tokens.
+- deployment node list exposes enough fields for UI status chips without
+  requiring frontend inference from worker runtime state.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_deployment_routes.py tests/services/test_deployment_nodes.py -q
+```
+
+Expected: fail until diagnostics helpers exist.
+
+- [ ] **Step 2: Add failing frontend tests**
+
+Cover:
+
+- sidebar includes `Deployment` under Control.
+- Deployment page shows central node, edge node, service manager, install
+  status, credential status, heartbeat, and model-admission summary.
+- pairing action shows one-time material and warns it will not be shown again.
+- support bundle action shows redacted diagnostics.
+- Settings no longer presents command-line worker launch as normal production
+  setup.
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run src/pages/Deployment.test.tsx src/pages/Settings.test.tsx
+```
+
+Expected: fail until the Deployment UI exists and Settings copy is retuned.
+
+- [ ] **Step 3: Implement backend diagnostics**
+
+Add deployment diagnostics contracts and service methods. Redact keys matching:
+
+- `token`
+- `secret`
+- `password`
+- `credential`
+- `authorization`
+- `bearer`
+
+Expose support bundle data through
+`GET /api/v1/deployment/nodes/{node_id}/support-bundle`.
+
+- [ ] **Step 4: Generate API types and implement UI**
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend generate:api
+```
+
+Create:
+
+- `use-deployment.ts`
+- `Deployment.tsx`
+- `Deployment.test.tsx`
+
+Keep the UI operational and compact. Use status chips and action buttons. Do
+not put copyable shell commands in the normal success path.
+
+- [ ] **Step 5: Update docs**
+
+Document:
+
+- final-product install goal: install once, then configure in UI
+- Linux/systemd setup shape
+- macOS/launchd setup shape
+- container/Compose setup shape
+- node pairing and credential lifecycle
+- break-glass terminal usage boundaries
+- how to verify supervisor restarts after reboot
+
+- [ ] **Step 6: Run focused validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_deployment_routes.py tests/services/test_deployment_nodes.py -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend generate:api
+corepack pnpm --dir frontend exec vitest run src/pages/Deployment.test.tsx src/pages/Settings.test.tsx
+git diff --check -- docs/operator-deployment-playbook.md docs/runbook.md docs/imac-master-orin-lab-test-guide.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 7: Commit and push**
+
+```bash
+git add frontend/src/lib/api.generated.ts \
+  frontend/src/hooks/use-deployment.ts \
+  frontend/src/pages/Deployment.tsx \
+  frontend/src/pages/Deployment.test.tsx \
+  frontend/src/App.tsx \
+  frontend/src/components/Layout.tsx \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Settings.test.tsx \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/services/deployment_nodes.py \
+  backend/src/argus/api/v1/deployment.py \
+  backend/tests/api/test_deployment_routes.py \
+  backend/tests/services/test_deployment_nodes.py \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md \
+  docs/imac-master-orin-lab-test-guide.md
+git commit -m "feat(deployment): add first-run deployment UI"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
 ## Task 22: Edge Credential Rotation And Bootstrap Hardening
+
+**Purpose:** Build on Task 21F's node credential model so edge and central
+supervisor credentials can be rotated or revoked from the UI without exposing
+plaintext secrets after the one-time response.
 
 **Files:**
 
 - Modify: `backend/src/argus/services/supervisor_operations.py`
+- Modify: `backend/src/argus/services/deployment_nodes.py`
 - Modify: `backend/src/argus/services/app.py`
 - Modify: `backend/src/argus/api/contracts.py`
 - Modify: `backend/src/argus/api/v1/operations.py`
+- Modify: `backend/src/argus/api/v1/deployment.py`
 - Test: `backend/tests/services/test_supervisor_operations.py`
+- Test: `backend/tests/services/test_deployment_nodes.py`
 - Test: `backend/tests/api/test_operations_endpoints.py`
+- Test: `backend/tests/api/test_deployment_routes.py`
 - Modify: `frontend/src/pages/Settings.tsx`
+- Modify: `frontend/src/pages/Deployment.tsx`
 - Modify: `frontend/src/pages/Settings.test.tsx`
+- Modify: `frontend/src/pages/Deployment.test.tsx`
 - Modify: `docs/operator-deployment-playbook.md`
 - Modify: `docs/runbook.md`
 
@@ -5145,14 +5795,17 @@ Cover:
 - new credential material is returned once and not persisted in plaintext
 - rotation writes an operations lifecycle/audit record
 - UI warns that connected edge nodes must pick up the rotated credential
+- rotated credentials update the Task 21F node credential version and mark old
+  credentials revoked
+- supervisors using revoked credentials cannot poll lifecycle requests
 
 - [ ] **Step 2: Run failing tests**
 
 ```bash
 cd /Users/yann.moren/vision/backend
-python3 -m uv run pytest tests/services/test_supervisor_operations.py tests/api/test_operations_endpoints.py -q
+python3 -m uv run pytest tests/services/test_supervisor_operations.py tests/services/test_deployment_nodes.py tests/api/test_operations_endpoints.py tests/api/test_deployment_routes.py -q
 cd /Users/yann.moren/vision
-corepack pnpm --dir frontend exec vitest run src/pages/Settings.test.tsx
+corepack pnpm --dir frontend exec vitest run src/pages/Settings.test.tsx src/pages/Deployment.test.tsx
 ```
 
 Expected: fail until rotation is implemented.
@@ -5162,15 +5815,18 @@ Expected: fail until rotation is implemented.
 Add `POST /api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate`.
 Return one-time secret material only in the response. Document the production
 rotation sequence and local lab limitations.
+Also add the deployment-plane route
+`POST /api/v1/deployment/nodes/{node_id}/credentials/rotate` for paired central
+or edge nodes, backed by the same credential versioning service.
 
 - [ ] **Step 4: Run tests and docs check**
 
 ```bash
 cd /Users/yann.moren/vision/backend
-python3 -m uv run pytest tests/services/test_supervisor_operations.py tests/api/test_operations_endpoints.py -q
+python3 -m uv run pytest tests/services/test_supervisor_operations.py tests/services/test_deployment_nodes.py tests/api/test_operations_endpoints.py tests/api/test_deployment_routes.py -q
 cd /Users/yann.moren/vision
 corepack pnpm --dir frontend generate:api
-corepack pnpm --dir frontend exec vitest run src/pages/Settings.test.tsx
+corepack pnpm --dir frontend exec vitest run src/pages/Settings.test.tsx src/pages/Deployment.test.tsx
 git diff --check -- docs/operator-deployment-playbook.md docs/runbook.md
 ```
 
@@ -5180,14 +5836,20 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/services/supervisor_operations.py \
+  backend/src/argus/services/deployment_nodes.py \
   backend/src/argus/services/app.py \
   backend/src/argus/api/contracts.py \
   backend/src/argus/api/v1/operations.py \
+  backend/src/argus/api/v1/deployment.py \
   backend/tests/services/test_supervisor_operations.py \
+  backend/tests/services/test_deployment_nodes.py \
   backend/tests/api/test_operations_endpoints.py \
+  backend/tests/api/test_deployment_routes.py \
   frontend/src/lib/api.generated.ts \
   frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Deployment.tsx \
   frontend/src/pages/Settings.test.tsx \
+  frontend/src/pages/Deployment.test.tsx \
   docs/operator-deployment-playbook.md \
   docs/runbook.md
 git commit -m "feat(operations): rotate edge credentials"
@@ -5199,7 +5861,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0024_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/migrations/versions/0025_runtime_artifact_soak_runs.py`
 - Create: `backend/src/argus/services/runtime_soak.py`
 - Create: `backend/src/argus/api/v1/runtime_soak.py`
 - Modify: `backend/src/argus/main.py`
@@ -5269,7 +5931,7 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0024_runtime_artifact_soak_runs.py \
+  backend/src/argus/migrations/versions/0025_runtime_artifact_soak_runs.py \
   backend/src/argus/services/runtime_soak.py \
   backend/src/argus/api/v1/runtime_soak.py \
   backend/src/argus/main.py \
@@ -5498,8 +6160,12 @@ git push origin codex/omnisight-ui-spec-implementation
   Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
   Intelligence. Tasks 20-21C cover Fleet/Operations supervisor hardening,
   operations-mode consumption, supervisor lifecycle reconciliation, runnable
-  supervisor reporting, and hardware model-admission safety. Task 22 covers credential rotation. Task 23
-  covers Linux master plus Jetson TensorRT/open-vocab soak validation including
+  supervisor reporting, and hardware model-admission safety. Tasks 21D-21H
+  cover installable macOS/Linux supervisor productization, service manager
+  artifacts, UI-managed node pairing, product-mode credential storage,
+  restart-safe reconciliation, Deployment UI, and diagnostics. Task 22 covers
+  credential rotation on top of that node credential model. Task 23 covers
+  Linux master plus Jetson TensorRT/open-vocab soak validation including
   hardware performance/admission evidence. Task 24 covers gated Track C /
   DeepStream through UI-managed runtime selection. Task 25 refreshes
   verification and handoff.

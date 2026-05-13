@@ -29,6 +29,11 @@ It also makes incident recording part of the accountability model. Every
 incident should carry a short reviewable clip when recording is enabled and
 storage policy allows it, including edge deployments.
 
+The installable supervisor and no-console first-run requirements are expanded
+in:
+
+- `docs/superpowers/specs/2026-05-13-installable-supervisor-and-first-run-productization-design.md`
+
 After that foundation, continue in the same plan with:
 
 4. Runtime Passport
@@ -129,12 +134,15 @@ Current gaps:
 
 - Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
   Intelligence are not implemented
-- `operations_mode` profiles exist in the UI/configuration plane, but Tasks
-  20-21C and 22 still need to consume them for supervisor lifecycle, worker
-  assignment, model admission, runnable reporting, and edge credential rotation
-- Fleet/Operations still lacks supervisor-backed lifecycle reconciliation,
-  per-worker runtime truth, persistent reassignment, hardware admission, and
-  credential rotation
+- `operations_mode` profiles exist in the UI/configuration plane, and Tasks
+  20-21C now consume them for supervisor lifecycle, worker assignment, model
+  admission, runnable reporting, and bounded child-process reconciliation
+- Fleet/Operations still needs installable productization before it can be
+  called final-product ready: the supervisor must run as a durable macOS/Linux
+  service, node pairing must replace copied bearer tokens, first-run setup must
+  live in the UI, and normal operation must not require terminal commands
+- edge credential rotation still needs to consume the installable node
+  credential model
 - registered TensorRT and compiled open-vocab artifacts still need first-site
   Jetson soak validation
 - Track C / DeepStream is still unimplemented and should stay gated behind
@@ -1665,8 +1673,9 @@ The implementation plan should execute these tracks in order:
 6. Prompt-To-Policy.
 7. Identity-Light Cross-Camera Intelligence.
 8. Fleet/Operations production hardening.
-9. Production Linux master plus Jetson runtime artifact soak.
-10. Track C / DeepStream runtime lane, only after the soak gate passes.
+9. Installable Supervisor and first-run productization.
+10. Production Linux master plus Jetson runtime artifact soak.
+11. Track C / DeepStream runtime lane, only after the soak gate passes.
 
 This is a single runway, but the later tasks intentionally depend on earlier
 data contracts. Do not implement a later feature by creating a parallel
@@ -1708,6 +1717,10 @@ incident, policy, or runtime metadata model.
   signals.
 - Operations supports persistent worker assignments, supervisor-reported runtime
   truth, lifecycle requests, and credential rotation.
+- Vezor can be installed on macOS or Linux so the supervisor starts after reboot,
+  pairs through UI-managed one-time material, reports node health, and supports
+  normal operation without copied tokens or terminal commands after
+  installation.
 - Linux master plus Jetson soak results are documented for fixed-vocab TensorRT
   and compiled open-vocab artifacts.
 - DeepStream Track C is either implemented after the soak gate passes or remains
