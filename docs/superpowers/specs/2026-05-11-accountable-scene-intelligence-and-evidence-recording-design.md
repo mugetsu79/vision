@@ -130,10 +130,11 @@ Current gaps:
 - Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
   Intelligence are not implemented
 - `operations_mode` profiles exist in the UI/configuration plane, but Tasks
-  20-22 still need to consume them for supervisor lifecycle, worker assignment,
-  and edge credential rotation
-- Fleet/Operations still lacks supervisor-backed lifecycle actions,
-  per-worker runtime truth, persistent reassignment, and credential rotation
+  20-21B and 22 still need to consume them for supervisor lifecycle, worker
+  assignment, model admission, reconciliation, and edge credential rotation
+- Fleet/Operations still lacks supervisor-backed lifecycle reconciliation,
+  per-worker runtime truth, persistent reassignment, hardware admission, and
+  credential rotation
 - registered TensorRT and compiled open-vocab artifacts still need first-site
   Jetson soak validation
 - Track C / DeepStream is still unimplemented and should stay gated behind
@@ -453,6 +454,26 @@ error, runtime artifact selection, and current scene contract hash.
 The backend API process must not shell out to start host processes. Browser
 buttons such as Start, Stop, Restart, and Drain create authorized lifecycle
 requests that supervisors consume.
+
+The supervisor is the only production component allowed to turn lifecycle
+intent into host process actions. A supervisor polls for requests scoped to its
+edge node or central ownership, claims one request at a time, evaluates model
+admission, starts/stops/drains/restarts the local worker through a bounded
+process adapter, and completes the request with runtime truth. Manual
+developer-mode workers may still be launched from a terminal, but Operations
+must label that path as a production-admission bypass.
+
+Hardware admission runs before supervisor-managed Start and Restart actions.
+Each supervisor reports static capability (architecture, memory, accelerator
+providers, GPU/NPU/TensorRT/CoreML availability) and recent observed
+performance (model, runtime backend, input size/FPS, p95/p99 stage timings,
+stream publish latency, thermal/throttle state when available). The admission
+service compares that report with the worker's scene contract, stream profile,
+runtime-selection profile, and registered runtime artifacts. It returns one of
+`recommended`, `supported`, `degraded`, `unsupported`, or `unknown`, plus a
+human-readable rationale and an optional safer model/runtime recommendation.
+Production supervisors must refuse to start `unsupported` or `unknown`
+admissions unless a future explicit break-glass policy is added.
 
 ### Runtime Artifact Soak
 
@@ -870,6 +891,13 @@ Requirements:
   contract hash, and last-error reporting
 - supervisor lifecycle request model for Start, Stop, Restart, and Drain
 - central and edge supervisor polling/claim contract
+- supervisor reconciliation loop that claims lifecycle requests and executes
+  bounded local process actions on the node that owns the worker
+- hardware capability and recent performance reports for each edge/central node
+- model admission recommendations that compare the selected model/runtime,
+  camera stream profile, and node capability before a supervisor starts work
+- supervisor-side blocking for unsupported model/hardware pairings, with clear
+  UI reasons and safer recommended model/runtime options
 - Operations UI actions that create lifecycle requests, not shell commands
 - credential rotation and bootstrap hardening for edge nodes
 - no plaintext secret persistence beyond one-time bootstrap responses
@@ -887,7 +915,8 @@ Requirements:
 - build/register/validate compiled YOLOE S/open-vocab scene artifacts for stable
   vocabularies
 - verify runtime artifact selection, fallback, restart recovery, clip capture,
-  Evidence Desk review, Operations worker truth, and credential rotation
+  Evidence Desk review, Operations worker truth, model admission, hardware
+  performance reporting, and credential rotation
 - record soak results in docs with exact versions and known limitations
 
 ### 16. Track C / DeepStream Runtime Lane
@@ -948,6 +977,13 @@ POST /api/v1/policy-drafts/{draft_id}/reject
 GET /api/v1/operations/memory-patterns
 POST /api/v1/operations/workers/{camera_id}/lifecycle
 POST /api/v1/operations/workers/{camera_id}/assignment
+POST /api/v1/operations/supervisors/{supervisor_id}/poll
+POST /api/v1/operations/lifecycle-requests/{request_id}/claim
+POST /api/v1/operations/lifecycle-requests/{request_id}/complete
+POST /api/v1/operations/supervisors/{supervisor_id}/hardware-reports
+GET /api/v1/operations/supervisors/{supervisor_id}/hardware-reports/latest
+GET /api/v1/operations/edge-nodes/{edge_node_id}/hardware-reports/latest
+POST /api/v1/operations/workers/{camera_id}/model-admission/evaluate
 POST /api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate
 POST /api/v1/operations/supervisor-reports
 GET /api/v1/runtime-artifacts/soak-runs
@@ -1336,6 +1372,7 @@ Indexes:
 - `requested_at`
 - `claimed_at nullable`
 - `completed_at nullable`
+- `admission_report_id nullable`
 - `error nullable`
 
 Indexes:
@@ -1343,6 +1380,60 @@ Indexes:
 - `status`, `requested_at`
 - `camera_id`, `requested_at`
 - `edge_node_id`, `requested_at`
+
+#### `edge_node_hardware_reports`
+
+- `id`
+- `tenant_id`
+- `edge_node_id nullable`
+- `supervisor_id`
+- `reported_at`
+- `host_profile`
+- `os_name`
+- `machine_arch`
+- `cpu_model nullable`
+- `cpu_cores nullable`
+- `memory_total_mb nullable`
+- `accelerators`
+- `provider_capabilities`
+- `observed_performance`
+- `thermal_state nullable`
+- `report_hash`
+- `created_at`
+
+Indexes:
+
+- `edge_node_id`, `reported_at`
+- `tenant_id`, `reported_at`
+- unique `supervisor_id`, `report_hash`
+
+#### `worker_model_admission_reports`
+
+- `id`
+- `tenant_id`
+- `camera_id`
+- `edge_node_id nullable`
+- `assignment_id nullable`
+- `hardware_report_id nullable`
+- `model_id nullable`
+- `runtime_artifact_id nullable`
+- `runtime_selection_profile_id nullable`
+- `stream_profile`
+- `status`
+- `selected_backend nullable`
+- `recommended_model_id nullable`
+- `recommended_runtime_profile_id nullable`
+- `recommended_backend nullable`
+- `rationale`
+- `constraints`
+- `evaluated_at`
+- `created_at`
+
+Indexes:
+
+- `camera_id`, `evaluated_at`
+- `edge_node_id`, `evaluated_at`
+- `status`, `evaluated_at`
 
 #### `runtime_artifact_soak_runs`
 

@@ -4,7 +4,7 @@
 
 **Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, per-worker incident rules, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, Jetson runtime soak, and gated DeepStream.
 
-**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before Operational Memory starts, per-worker incident rules must become UI/API-managed scene policy that production workers load and report. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, rule, and runtime-report data instead of adding parallel case-history systems.
+**Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before Operational Memory starts, per-worker incident rules must become UI/API-managed scene policy that production workers load and report. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, rule, hardware-admission, and runtime-report data instead of adding parallel case-history systems.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy async, Alembic, PostgreSQL JSONB, OpenCV MJPEG clip encoding, local filesystem storage, MinIO/S3-compatible object storage, React 19, Vite 6, TypeScript 5.7, Tailwind v4, Vitest, pytest, Ruff, mypy.
 
@@ -62,14 +62,18 @@ Completed and pushed on `codex/omnisight-ui-spec-implementation`:
 - Tasks `16A-16E`: per-worker incident rule data contract/API, worker runtime
   consumption, Control -> Scenes rule builder, Evidence/Operations provenance,
   and band documentation/validation.
+- Tasks `17-19`: Operational Memory, Prompt-To-Policy, and Identity-Light
+  Cross-Camera Intelligence.
+- Tasks `20-21`: supervisor operations data contract plus Operations lifecycle
+  and assignment UI.
 
-Current migration head after the Task 16E checkpoint is
-`0018_incident_rule_ledger`.
+Current migration head after the Task 21 checkpoint is
+`0022_supervisor_operations`.
 
 Next task:
 
 ```text
-Task 17: Operational Memory
+Task 21B: Supervisor Reconciler And Hardware Admission MVP
 ```
 
 ## Validation Bands
@@ -199,7 +203,7 @@ Validation goal:
 Band gate: a normal admin can save, bind, test, and then observe the runtime
 effect of every Settings category that exists before the next evidence-media
 task starts. `operations_mode` is allowed to wait for supervisor tasks, but
-Tasks 20-22 must explicitly consume it.
+Tasks 20-21B and 22 must explicitly consume it.
 
 ### Band 4: Evidence Media Completion
 
@@ -277,7 +281,7 @@ only test review.
 
 ### Band 7: Edge-First Production Operations
 
-Tasks: `20-22`
+Tasks: `20-21B, 22`
 
 Validation goal:
 
@@ -286,11 +290,17 @@ Validation goal:
   last error, runtime backend, and scene contract hash
 - Operations lifecycle buttons create Start/Stop/Restart/Drain requests instead
   of shelling out
+- supervisor reconcilers can claim lifecycle requests and execute bounded local
+  process actions on the node that owns the worker
+- edge/central supervisors report hardware capability and recent performance
+- model admission recommends a safe model/runtime and blocks unsupported or
+  unknown production starts
 - edge credential rotation returns one-time material and does not persist
   plaintext secrets
 
 Band gate: Operations can be used as a production control surface without
-pretending the backend API owns host processes.
+pretending the backend API owns host processes, and no supervisor-managed worker
+starts on hardware that has not passed model admission.
 
 ### Band 8: Real Jetson Runtime Validation
 
@@ -305,6 +315,8 @@ Validation goal:
   selected, restarted, and rolled back
 - evidence clip review, Operations worker truth, credential rotation, and
   fallback behavior are validated in the real topology
+- hardware performance/admission evidence is recorded for the tested model and
+  at least one safer recommended alternative
 
 Band gate: record actual hardware soak evidence before opening the DeepStream
 lane.
@@ -415,7 +427,8 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/migrations/versions/0020_policy_drafts.py` | create | prompt-to-policy draft table |
 | `backend/src/argus/migrations/versions/0021_cross_camera_threads.py` | create | identity-light cross-camera thread table |
 | `backend/src/argus/migrations/versions/0022_supervisor_operations.py` | create | worker assignment, runtime report, and lifecycle request tables |
-| `backend/src/argus/migrations/versions/0023_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
+| `backend/src/argus/migrations/versions/0023_supervisor_reconciler_hardware_admission.py` | create | supervisor hardware report and model admission tables |
+| `backend/src/argus/migrations/versions/0024_runtime_artifact_soak_runs.py` | create | runtime artifact soak run table |
 | `backend/src/argus/services/runtime_passports.py` | create | runtime passport snapshot builder and incident attachment |
 | `backend/src/argus/services/incident_rules.py` | create | per-camera incident rule CRUD, validation, hashing, and command publication |
 | `backend/src/argus/services/rule_events.py` | create | persistent rule event store for workers |
@@ -423,6 +436,9 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/services/policy_drafts.py` | create | prompt-to-policy draft, diff, approval, rejection, and application service |
 | `backend/src/argus/services/cross_camera_threads.py` | create | identity-light non-biometric incident correlation |
 | `backend/src/argus/services/supervisor_operations.py` | create | worker assignments, supervisor reports, lifecycle requests, credential rotation |
+| `backend/src/argus/services/model_admission.py` | create | hardware-aware model admission and recommendation evaluator |
+| `backend/src/argus/supervisor/reconciler.py` | create | supervisor-side lifecycle claim/execute loop |
+| `backend/src/argus/supervisor/process_adapter.py` | create | bounded local worker process adapter for supervisors |
 | `backend/src/argus/services/runtime_soak.py` | create | runtime artifact soak run recorder and validation summary |
 | `backend/src/argus/vision/deepstream_runtime.py` | create late | DeepStream backend adapter after soak gate |
 | `backend/src/argus/vision/deepstream_metadata.py` | create late | DeepStream metadata bridge into track lifecycle |
@@ -4512,6 +4528,248 @@ git commit -m "feat(operations): add supervisor lifecycle controls"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
+## Task 21B: Supervisor Reconciler And Hardware Admission MVP
+
+**Files:**
+
+- Modify: `backend/src/argus/models/enums.py`
+- Modify: `backend/src/argus/models/tables.py`
+- Create: `backend/src/argus/migrations/versions/0023_supervisor_reconciler_hardware_admission.py`
+- Modify: `backend/src/argus/services/supervisor_operations.py`
+- Create: `backend/src/argus/services/model_admission.py`
+- Create: `backend/src/argus/supervisor/process_adapter.py`
+- Create: `backend/src/argus/supervisor/reconciler.py`
+- Modify: `backend/src/argus/api/contracts.py`
+- Modify: `backend/src/argus/api/v1/operations.py`
+- Test: `backend/tests/services/test_supervisor_operations.py`
+- Test: `backend/tests/services/test_model_admission.py`
+- Test: `backend/tests/supervisor/test_reconciler.py`
+- Test: `backend/tests/api/test_operations_endpoints.py`
+- Test: `backend/tests/core/test_db.py`
+- Modify: `frontend/src/lib/api.generated.ts`
+- Create: `frontend/src/components/operations/HardwareAdmissionPanel.tsx`
+- Create: `frontend/src/components/operations/HardwareAdmissionPanel.test.tsx`
+- Modify: `frontend/src/components/operations/SupervisorLifecycleControls.tsx`
+- Modify: `frontend/src/components/operations/SupervisorLifecycleControls.test.tsx`
+- Modify: `frontend/src/pages/Settings.tsx`
+- Modify: `frontend/src/pages/Settings.test.tsx`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/runbook.md`
+
+- [ ] **Step 1: Add failing backend contract tests**
+
+Cover:
+
+- `edge_node_hardware_reports` stores a fresh edge or central supervisor report
+  with static capability (`machine_arch`, memory, accelerator/provider
+  availability) and observed performance (`model_id`, backend, input size/FPS,
+  p95/p99 timings)
+- `worker_model_admission_reports` records `recommended`, `supported`,
+  `degraded`, `unsupported`, and `unknown` decisions with rationale and
+  recommended model/runtime fields
+- no fresh hardware report produces `unknown` and blocks production Start
+- a TensorRT-required runtime on a node without TensorRT produces
+  `unsupported`
+- a fixed-vocab model with matching CoreML/TensorRT/ONNX capability produces
+  `recommended` or `supported`
+- an open-world YOLOE runtime on CPU-only hardware at production stream rates
+  produces `unsupported` with a recommendation for a smaller fixed-vocab model
+- lifecycle request claim/complete transitions are tenant scoped and
+  supervisor scoped
+- supervisor claim returns only requests for its edge node or central ownership
+
+- [ ] **Step 2: Run failing backend tests**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/services/test_supervisor_operations.py \
+  tests/services/test_model_admission.py \
+  tests/supervisor/test_reconciler.py \
+  tests/api/test_operations_endpoints.py \
+  tests/core/test_db.py \
+  -q
+```
+
+Expected: fail until hardware/admission tables, service methods, routes, and
+reconciler exist.
+
+- [ ] **Step 3: Implement database, contracts, and operations routes**
+
+Add:
+
+- enum `ModelAdmissionStatus` with values `recommended`, `supported`,
+  `degraded`, `unsupported`, and `unknown`
+- table `edge_node_hardware_reports`
+- table `worker_model_admission_reports`
+- `HardwarePerformanceSample`, `EdgeNodeHardwareReportCreate`,
+  `EdgeNodeHardwareReportResponse`, `WorkerModelAdmissionRequest`,
+  `WorkerModelAdmissionResponse`, `SupervisorPollRequest`,
+  `SupervisorPollResponse`, `LifecycleRequestClaim`, and
+  `LifecycleRequestCompletion` contracts
+- operations routes:
+  - `POST /api/v1/operations/supervisors/{supervisor_id}/poll`
+  - `POST /api/v1/operations/lifecycle-requests/{request_id}/claim`
+  - `POST /api/v1/operations/lifecycle-requests/{request_id}/complete`
+  - `POST /api/v1/operations/supervisors/{supervisor_id}/hardware-reports`
+  - `GET /api/v1/operations/supervisors/{supervisor_id}/hardware-reports/latest`
+  - `GET /api/v1/operations/edge-nodes/{edge_node_id}/hardware-reports/latest`
+  - `POST /api/v1/operations/workers/{camera_id}/model-admission/evaluate`
+
+Extend Operations fleet worker responses with latest hardware report summary
+and latest admission decision so the UI can explain why Start is enabled,
+warned, or blocked. Keep manual/dev workers explicit: manual launch remains
+possible from a terminal, but it is labeled as bypassing production admission.
+
+- [ ] **Step 4: Implement model admission service**
+
+Create `argus.services.model_admission.evaluate_worker_model_admission`.
+The MVP evaluator is deterministic and conservative:
+
+- return `unknown` when no fresh hardware report exists for the target node
+- return `unsupported` when the selected runtime profile requires a backend
+  that the hardware report does not list as available
+- return `unsupported` when the selected runtime artifact target does not match
+  the node profile
+- return `unsupported` for production open-world YOLOE on CPU-only hardware at
+  720p10 or higher
+- return `degraded` when a fallback CPU/ONNX route exists but recent p95 total
+  timing exceeds the stream frame budget
+- return `supported` when the backend is available but no matching performance
+  sample exists yet
+- return `recommended` when the backend is available and recent p95 total
+  timing stays within the stream frame budget
+
+Recommendations must favor:
+
+- TensorRT artifacts on Jetson nodes when a matching artifact is registered
+- CoreML on supported macOS hosts for fixed-vocab models
+- the smallest fixed-vocab model profile that satisfies the stream FPS budget
+  when open-world or larger models are unsupported
+
+- [ ] **Step 5: Implement supervisor reconciler**
+
+Create a supervisor-local reconciler that:
+
+- polls for lifecycle requests scoped to its `supervisor_id` and optional
+  `edge_node_id`
+- evaluates model admission before Start and Restart
+- completes unsupported or unknown Start/Restart requests as failed before any
+  process action is attempted
+- uses a `WorkerProcessAdapter` interface with `start`, `stop`, `restart`, and
+  `drain` methods that accept structured argv/config, not shell strings
+- records runtime reports after each successful or failed action
+- never imports FastAPI app state or shells out from the backend API process
+
+Tests must use a fake process adapter and assert that unsupported/unknown
+admission never calls `start` or `restart`.
+
+- [ ] **Step 6: Add failing frontend tests**
+
+Cover:
+
+- Operations renders hardware capability, latest p95/p99 timing, and admission
+  status for a worker
+- unsupported or unknown admission disables Start and Restart with the backend
+  rationale
+- degraded admission keeps Start available but shows the recommended safer
+  model/runtime
+- manual/dev mode shows a production-admission bypass note instead of implying
+  the supervisor can control the local terminal worker
+
+```bash
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend exec vitest run \
+  src/components/operations/HardwareAdmissionPanel.test.tsx \
+  src/components/operations/SupervisorLifecycleControls.test.tsx \
+  src/pages/Settings.test.tsx
+```
+
+Expected: fail until the UI consumes the new fields.
+
+- [ ] **Step 7: Implement Operations hardware admission UI**
+
+Add `HardwareAdmissionPanel` to the worker card in Control -> Operations. Show:
+
+- latest node capability summary
+- latest observed performance sample for the selected model/runtime when present
+- admission status
+- recommendation and rationale
+- whether the worker is supervisor-managed or manual-admission-bypass
+
+Update lifecycle controls so Start and Restart require both existing allowed
+lifecycle actions and an admission status of `recommended`, `supported`, or
+`degraded`. The supervisor remains the final enforcement gate; the UI is an
+early explanation layer.
+
+- [ ] **Step 8: Document supervisor and hardware admission operation**
+
+Update docs with:
+
+- local iMac/manual mode caveat
+- central supervisor and edge supervisor startup commands
+- how hardware reports are produced
+- why `unknown` and `unsupported` block production Start/Restart
+- how to interpret `recommended`, `supported`, `degraded`, `unsupported`, and
+  `unknown`
+- model recommendation examples for macOS CoreML, Jetson TensorRT, CPU/ONNX,
+  fixed-vocab YOLO26n, and open-world YOLOE
+
+- [ ] **Step 9: Run migrations, tests, and docs check**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run alembic upgrade head
+python3 -m uv run pytest \
+  tests/services/test_supervisor_operations.py \
+  tests/services/test_model_admission.py \
+  tests/supervisor/test_reconciler.py \
+  tests/api/test_operations_endpoints.py \
+  tests/core/test_db.py \
+  -q
+cd /Users/yann.moren/vision
+corepack pnpm --dir frontend generate:api
+corepack pnpm --dir frontend exec vitest run \
+  src/components/operations/HardwareAdmissionPanel.test.tsx \
+  src/components/operations/SupervisorLifecycleControls.test.tsx \
+  src/pages/Settings.test.tsx
+git diff --check -- \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 10: Commit and push**
+
+```bash
+git add backend/src/argus/models/enums.py \
+  backend/src/argus/models/tables.py \
+  backend/src/argus/migrations/versions/0023_supervisor_reconciler_hardware_admission.py \
+  backend/src/argus/services/supervisor_operations.py \
+  backend/src/argus/services/model_admission.py \
+  backend/src/argus/supervisor/process_adapter.py \
+  backend/src/argus/supervisor/reconciler.py \
+  backend/src/argus/api/contracts.py \
+  backend/src/argus/api/v1/operations.py \
+  backend/tests/services/test_supervisor_operations.py \
+  backend/tests/services/test_model_admission.py \
+  backend/tests/supervisor/test_reconciler.py \
+  backend/tests/api/test_operations_endpoints.py \
+  backend/tests/core/test_db.py \
+  frontend/src/lib/api.generated.ts \
+  frontend/src/components/operations/HardwareAdmissionPanel.tsx \
+  frontend/src/components/operations/HardwareAdmissionPanel.test.tsx \
+  frontend/src/components/operations/SupervisorLifecycleControls.tsx \
+  frontend/src/components/operations/SupervisorLifecycleControls.test.tsx \
+  frontend/src/pages/Settings.tsx \
+  frontend/src/pages/Settings.test.tsx \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md
+git commit -m "feat(operations): add supervisor reconciler admission"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
 ## Task 22: Edge Credential Rotation And Bootstrap Hardening
 
 **Files:**
@@ -4589,7 +4847,7 @@ git push origin codex/omnisight-ui-spec-implementation
 **Files:**
 
 - Modify: `backend/src/argus/models/tables.py`
-- Create: `backend/src/argus/migrations/versions/0023_runtime_artifact_soak_runs.py`
+- Create: `backend/src/argus/migrations/versions/0024_runtime_artifact_soak_runs.py`
 - Create: `backend/src/argus/services/runtime_soak.py`
 - Create: `backend/src/argus/api/v1/runtime_soak.py`
 - Modify: `backend/src/argus/main.py`
@@ -4610,6 +4868,8 @@ Cover:
 - fallback reason captured when optimized runtime is unavailable
 - selected `runtime_selection` profile id/hash and operations assignment id are
   recorded with the soak run
+- latest hardware admission status, hardware report id, and model
+  recommendation rationale are recorded with the soak run
 
 - [ ] **Step 2: Run failing tests**
 
@@ -4624,8 +4884,9 @@ Expected: fail until soak run service/routes exist.
 
 Add `runtime_artifact_soak_runs`, service helpers, and routes to record target
 Jetson validation results. Include the runtime profile selected by Task 13H and
-the worker assignment selected by Tasks 20-21. Do not fake hardware validation
-in code; unit tests cover the control-plane record, and docs define the physical
+the worker assignment selected by Tasks 20-21B. Include the hardware report and
+model admission report created by Task 21B. Do not fake hardware validation in
+code; unit tests cover the control-plane record, and docs define the physical
 soak procedure.
 
 - [ ] **Step 4: Document the first-site validation procedure**
@@ -4638,6 +4899,8 @@ Document:
 - compiled YOLOE S/open-vocab build/register/validate/select sequence
 - restart recovery, evidence clip review, credential rotation, fallback, and
   rollback checks
+- hardware performance report capture, model admission status, and safer
+  model/runtime recommendation review
 
 - [ ] **Step 5: Run tests and docs check**
 
@@ -4654,7 +4917,7 @@ Expected: pass and no diff-check output.
 
 ```bash
 git add backend/src/argus/models/tables.py \
-  backend/src/argus/migrations/versions/0023_runtime_artifact_soak_runs.py \
+  backend/src/argus/migrations/versions/0024_runtime_artifact_soak_runs.py \
   backend/src/argus/services/runtime_soak.py \
   backend/src/argus/api/v1/runtime_soak.py \
   backend/src/argus/main.py \
@@ -4794,7 +5057,9 @@ python3 -m uv run pytest \
   tests/services/test_policy_drafts.py \
   tests/services/test_cross_camera_threads.py \
   tests/services/test_supervisor_operations.py \
+  tests/services/test_model_admission.py \
   tests/services/test_runtime_soak.py \
+  tests/supervisor/test_reconciler.py \
   tests/api/test_prompt9_routes.py \
   tests/api/test_prompt5_routes.py \
   tests/api/test_configuration_routes.py \
@@ -4823,6 +5088,7 @@ corepack pnpm --dir frontend exec vitest run \
   src/components/configuration/EffectiveConfigurationPanel.test.tsx \
   src/components/configuration/ConfigurationWorkspace.test.tsx \
   src/components/policy/PolicyDraftReview.test.tsx \
+  src/components/operations/HardwareAdmissionPanel.test.tsx \
   src/components/operations/SupervisorLifecycleControls.test.tsx \
   src/pages/Live.test.tsx \
   src/pages/Incidents.test.tsx \
@@ -4878,10 +5144,12 @@ git push origin codex/omnisight-ui-spec-implementation
   Tasks 16A-16E cover per-worker incident rule definition, runtime consumption,
   UI authoring, and Evidence/Operations provenance. Tasks 17-19 cover
   Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
-  Intelligence. Tasks 20-22 cover Fleet/Operations supervisor hardening,
-  operations-mode consumption, and credential rotation. Task 23 covers Linux
-  master plus Jetson TensorRT/open-vocab soak validation. Task 24 covers gated
-  Track C / DeepStream through UI-managed runtime selection. Task 25 refreshes
+  Intelligence. Tasks 20-21B cover Fleet/Operations supervisor hardening,
+  operations-mode consumption, supervisor lifecycle reconciliation, and
+  hardware model-admission safety. Task 22 covers credential rotation. Task 23
+  covers Linux master plus Jetson TensorRT/open-vocab soak validation including
+  hardware performance/admission evidence. Task 24 covers gated Track C /
+  DeepStream through UI-managed runtime selection. Task 25 refreshes
   verification and handoff.
 - Placeholder scan: no follow-up queue remains; all handoff items are expressed
   as executable tasks with owned files, verification commands, commit messages,
