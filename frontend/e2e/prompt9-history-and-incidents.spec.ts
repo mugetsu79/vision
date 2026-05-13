@@ -294,10 +294,16 @@ test("history renders quickly, CSV export works, and incidents cover review flow
 });
 
 test("incidents render signed snapshot previews", async ({ page }) => {
+  const loadingDockCamera = {
+    ...cameraPayload(),
+    id: "22222222-2222-2222-2222-222222222222",
+    name: "Loading Dock",
+  };
+
   await page.route("**/api/v1/cameras", async (route) =>
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify([cameraPayload()]),
+      body: JSON.stringify([cameraPayload(), loadingDockCamera]),
     }),
   );
   await page.route("**/api/v1/incidents**", async (route) => {
@@ -309,7 +315,26 @@ test("incidents render signed snapshot previews", async ({ page }) => {
     if (url.pathname.endsWith("/cross-camera-threads")) {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify([]),
+        body: JSON.stringify([
+          {
+            id: "88888888-8888-8888-8888-888888888888",
+            tenant_id: "tenant-1",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            camera_ids: [
+              "11111111-1111-1111-1111-111111111111",
+              "22222222-2222-2222-2222-222222222222",
+            ],
+            source_incident_ids: ["99999999-9999-9999-9999-999999999999"],
+            privacy_manifest_hashes: [],
+            confidence: 0.84,
+            rationale: ["Same object class observed across adjacent cameras."],
+            signals: { class_name: "person" },
+            privacy_labels: ["identity-light"],
+            thread_hash:
+              "8888888888888888888888888888888888888888888888888888888888888888",
+            created_at: "2026-04-18T10:18:00Z",
+          },
+        ]),
       });
       return;
     }
@@ -351,6 +376,23 @@ test("incidents render signed snapshot previews", async ({ page }) => {
   await expect(
     page.getByRole("img", { name: /evidence record for forklift gate/i }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Filter evidence to Loading Dock" }),
+  ).toBeVisible();
+
+  const filteredRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/api/v1/incidents" &&
+      url.searchParams.get("camera_id") ===
+        "22222222-2222-2222-2222-222222222222"
+    );
+  });
+  await page
+    .getByRole("button", { name: "Filter evidence to Loading Dock" })
+    .click();
+  await filteredRequest;
+  await expect(page).toHaveURL(/\/incidents$/);
 });
 
 test("history filter state survives navigation via URL", async ({ page }) => {

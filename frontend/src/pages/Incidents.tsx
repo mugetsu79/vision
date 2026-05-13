@@ -260,6 +260,11 @@ export function IncidentsPage() {
             <IncidentFactsPanel
               incident={selectedIncident}
               cameraName={cameraNameFor(selectedIncident, cameraNamesById)}
+              cameraNamesById={cameraNamesById}
+              onCameraSelect={(cameraId) => {
+                setSelectedCameraId(cameraId);
+                setSelectedIncidentId(null);
+              }}
             />
           </div>
         </>
@@ -436,9 +441,13 @@ function IncidentEvidenceHero({
 function IncidentFactsPanel({
   incident,
   cameraName,
+  cameraNamesById,
+  onCameraSelect,
 }: {
   incident: Incident;
   cameraName: string;
+  cameraNamesById: Map<string, string>;
+  onCameraSelect: (cameraId: string) => void;
 }) {
   const accountability = useIncidentAccountabilityDetails(incident);
   const facts = [
@@ -555,6 +564,8 @@ function IncidentFactsPanel({
           <CrossCameraThreadPanel
             threads={accountability.crossCameraThreads.data ?? []}
             loading={accountability.crossCameraThreads.isLoading}
+            cameraNamesById={cameraNamesById}
+            onCameraSelect={onCameraSelect}
           />
 
           <details open className="rounded-md border border-white/8 px-3 py-2">

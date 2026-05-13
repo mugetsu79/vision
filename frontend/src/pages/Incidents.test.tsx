@@ -759,6 +759,86 @@ describe("IncidentsPage", () => {
     });
   });
 
+  test("filters evidence from right-rail cross-camera scene actions", async () => {
+    const user = userEvent.setup();
+    const requests: Request[] = [];
+    const loadingDockCamera = {
+      ...cameraPayload(),
+      id: "22222222-2222-2222-2222-222222222222",
+      name: "Loading Dock",
+    };
+
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      requests.push(request);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(jsonResponse([cameraPayload(), loadingDockCamera]));
+      }
+
+      if (url.pathname === "/api/v1/incidents") {
+        return Promise.resolve(jsonResponse([incidentPayload()]));
+      }
+
+      if (url.pathname === "/api/v1/operations/memory-patterns") {
+        return Promise.resolve(jsonResponse([]));
+      }
+
+      if (
+        url.pathname ===
+        "/api/v1/incidents/99999999-9999-9999-9999-999999999999/cross-camera-threads"
+      ) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              id: "88888888-8888-8888-8888-888888888888",
+              tenant_id: "tenant-1",
+              site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              camera_ids: [
+                "11111111-1111-1111-1111-111111111111",
+                "22222222-2222-2222-2222-222222222222",
+              ],
+              source_incident_ids: [
+                "99999999-9999-9999-9999-999999999999",
+              ],
+              privacy_manifest_hashes: [],
+              confidence: 0.84,
+              rationale: ["Same object class observed across adjacent cameras."],
+              signals: { class_name: "person" },
+              privacy_labels: ["identity-light"],
+              thread_hash:
+                "8888888888888888888888888888888888888888888888888888888888888888",
+              created_at: "2026-04-18T10:18:00Z",
+            },
+          ]),
+        );
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderIncidentsPage();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /filter evidence to loading dock/i,
+      }),
+    );
+
+    await waitFor(() => {
+      const incidentRequests = requests.filter(
+        (request) => new URL(request.url).pathname === "/api/v1/incidents",
+      );
+      const latestUrl = new URL((incidentRequests.at(-1) as Request).url);
+
+      expect(latestUrl.searchParams.get("camera_id")).toBe(
+        "22222222-2222-2222-2222-222222222222",
+      );
+    });
+  });
+
   test("persists review state from the evidence hero", async () => {
     const user = userEvent.setup();
     const requests: Request[] = [];

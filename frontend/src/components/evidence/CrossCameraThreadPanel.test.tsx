@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, test, vi } from "vitest";
 
 import { CrossCameraThreadPanel } from "@/components/evidence/CrossCameraThreadPanel";
 import type { components } from "@/lib/api.generated";
@@ -68,6 +69,40 @@ describe("CrossCameraThreadPanel", () => {
     expect(within(panel).getByText("88888888-8888")).toBeInTheDocument();
     expect(panel).not.toHaveTextContent(/person identity/i);
     expect(panel).not.toHaveTextContent(/face id/i);
+  });
+
+  test("keeps related camera actions inside the evidence desk", async () => {
+    const user = userEvent.setup();
+    const selectCamera = vi.fn();
+    const cameraNamesById = new Map([
+      ["11111111-1111-1111-1111-111111111111", "Forklift Gate"],
+      ["22222222-2222-2222-2222-222222222222", "Loading Dock"],
+    ]);
+
+    render(
+      <CrossCameraThreadPanel
+        threads={[threadPayload()]}
+        loading={false}
+        cameraNamesById={cameraNamesById}
+        onCameraSelect={selectCamera}
+      />,
+    );
+
+    const panel = screen.getByTestId("cross-camera-thread-panel");
+    expect(within(panel).getByText("Related scenes")).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("link", { name: /forklift gate/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(panel).getByRole("button", {
+        name: /filter evidence to forklift gate/i,
+      }),
+    );
+
+    expect(selectCamera).toHaveBeenCalledWith(
+      "11111111-1111-1111-1111-111111111111",
+    );
   });
 
   test("renders an empty privacy-safe state", () => {

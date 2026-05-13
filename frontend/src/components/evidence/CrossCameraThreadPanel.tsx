@@ -5,9 +5,13 @@ type CrossCameraThread = components["schemas"]["CrossCameraThreadResponse"];
 export function CrossCameraThreadPanel({
   threads,
   loading = false,
+  cameraNamesById,
+  onCameraSelect,
 }: {
   threads?: CrossCameraThread[] | null;
   loading?: boolean;
+  cameraNamesById?: Map<string, string>;
+  onCameraSelect?: (cameraId: string) => void;
 }) {
   const visibleThreads = threads ?? [];
 
@@ -35,7 +39,12 @@ export function CrossCameraThreadPanel({
       {visibleThreads.length ? (
         <div className="mt-3 space-y-3">
           {visibleThreads.map((thread) => (
-            <ThreadCard key={thread.id} thread={thread} />
+            <ThreadCard
+              key={thread.id}
+              thread={thread}
+              cameraNamesById={cameraNamesById}
+              onCameraSelect={onCameraSelect}
+            />
           ))}
         </div>
       ) : (
@@ -49,7 +58,15 @@ export function CrossCameraThreadPanel({
   );
 }
 
-function ThreadCard({ thread }: { thread: CrossCameraThread }) {
+function ThreadCard({
+  thread,
+  cameraNamesById,
+  onCameraSelect,
+}: {
+  thread: CrossCameraThread;
+  cameraNamesById?: Map<string, string>;
+  onCameraSelect?: (cameraId: string) => void;
+}) {
   return (
     <article className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -62,6 +79,11 @@ function ThreadCard({ thread }: { thread: CrossCameraThread }) {
       </div>
 
       <PrivacyLabels labels={thread.privacy_labels ?? []} />
+      <RelatedCameraChips
+        cameraIds={thread.camera_ids}
+        cameraNamesById={cameraNamesById}
+        onCameraSelect={onCameraSelect}
+      />
       <SignalGrid thread={thread} />
       <RationaleList rationale={thread.rationale ?? []} />
       <CitationChips
@@ -73,6 +95,52 @@ function ThreadCard({ thread }: { thread: CrossCameraThread }) {
         values={(thread.privacy_manifest_hashes ?? []).map(hashPrefix)}
       />
     </article>
+  );
+}
+
+function RelatedCameraChips({
+  cameraIds,
+  cameraNamesById,
+  onCameraSelect,
+}: {
+  cameraIds: string[];
+  cameraNamesById?: Map<string, string>;
+  onCameraSelect?: (cameraId: string) => void;
+}) {
+  if (!cameraIds.length) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7894bd]">
+        Related scenes
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {cameraIds.map((cameraId) => {
+          const label = cameraNamesById?.get(cameraId) ?? shortUuid(cameraId);
+
+          return onCameraSelect ? (
+            <button
+              key={cameraId}
+              type="button"
+              aria-label={`Filter evidence to ${label}`}
+              onClick={() => onCameraSelect(cameraId)}
+              className="rounded-full border border-[#315675] bg-[#081c2b] px-2 py-1 text-[11px] font-semibold text-[#aee6ff] transition hover:border-[#76e0ff] hover:text-white"
+            >
+              {label}
+            </button>
+          ) : (
+            <span
+              key={cameraId}
+              className="rounded-full border border-white/10 px-2 py-1 text-[11px] text-[#aebfde]"
+            >
+              {label}
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
