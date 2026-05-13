@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     Float,
@@ -23,6 +24,10 @@ from argus.compat import StrEnum
 from argus.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
 from argus.models.enums import (
     CountEventType,
+    DeploymentCredentialStatus,
+    DeploymentInstallStatus,
+    DeploymentNodeKind,
+    DeploymentServiceManager,
     DetectorCapability,
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
@@ -844,6 +849,210 @@ class WorkerModelAdmissionReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     rationale: Mapped[str] = mapped_column(Text, nullable=False)
     constraints: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DeploymentNode(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "deployment_nodes"
+    __table_args__ = (
+        CheckConstraint(
+            "(node_kind = 'central' AND edge_node_id IS NULL) "
+            "OR (node_kind = 'edge' AND edge_node_id IS NOT NULL)",
+            name="ck_deploy_nodes_kind_edge",
+        ),
+        UniqueConstraint("tenant_id", "supervisor_id", name="uq_deploy_nodes_supervisor"),
+        Index("ix_deploy_nodes_tenant_kind", "tenant_id", "node_kind"),
+        Index("ix_deploy_nodes_edge", "edge_node_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    supervisor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    node_kind: Mapped[DeploymentNodeKind] = mapped_column(
+        enum_column(DeploymentNodeKind, "deployment_node_kind_enum"),
+        nullable=False,
+    )
+    hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    install_status: Mapped[DeploymentInstallStatus] = mapped_column(
+        enum_column(DeploymentInstallStatus, "deployment_install_status_enum"),
+        nullable=False,
+        default=DeploymentInstallStatus.NOT_INSTALLED,
+    )
+    credential_status: Mapped[DeploymentCredentialStatus] = mapped_column(
+        enum_column(DeploymentCredentialStatus, "deployment_credential_status_enum"),
+        nullable=False,
+        default=DeploymentCredentialStatus.MISSING,
+    )
+    service_manager: Mapped[DeploymentServiceManager | None] = mapped_column(
+        enum_column(DeploymentServiceManager, "deployment_service_manager_enum"),
+        nullable=True,
+    )
+    service_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    os_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    host_profile: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_service_reported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    diagnostics: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class SupervisorServiceStatusReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "supervisor_service_status_reports"
+    __table_args__ = (
+        CheckConstraint(
+            "(node_kind = 'central' AND edge_node_id IS NULL) "
+            "OR (node_kind = 'edge' AND edge_node_id IS NOT NULL)",
+            name="ck_svc_reports_kind_edge",
+        ),
+        Index("ix_svc_reports_node_heartbeat", "deployment_node_id", "heartbeat_at"),
+        Index("ix_svc_reports_supervisor", "tenant_id", "supervisor_id", "heartbeat_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    supervisor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    node_kind: Mapped[DeploymentNodeKind] = mapped_column(
+        enum_column(DeploymentNodeKind, "deployment_report_node_kind_enum"),
+        nullable=False,
+    )
+    hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    service_manager: Mapped[DeploymentServiceManager] = mapped_column(
+        enum_column(DeploymentServiceManager, "deployment_report_service_manager_enum"),
+        nullable=False,
+    )
+    service_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    install_status: Mapped[DeploymentInstallStatus] = mapped_column(
+        enum_column(DeploymentInstallStatus, "deployment_report_install_status_enum"),
+        nullable=False,
+    )
+    credential_status: Mapped[DeploymentCredentialStatus] = mapped_column(
+        enum_column(DeploymentCredentialStatus, "deployment_report_credential_status_enum"),
+        nullable=False,
+    )
+    version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    os_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    host_profile: Mapped[str] = mapped_column(String(128), nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    diagnostics: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class NodePairingSession(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "node_pairing_sessions"
+    __table_args__ = (
+        Index("ix_pairing_sessions_tenant_status", "tenant_id", "status"),
+        Index("ix_pairing_sessions_node", "deployment_node_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=True,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    node_kind: Mapped[DeploymentNodeKind] = mapped_column(
+        enum_column(DeploymentNodeKind, "pairing_session_node_kind_enum"),
+        nullable=False,
+    )
+    pairing_code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_by_supervisor: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class SupervisorNodeCredential(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "supervisor_node_credentials"
+    __table_args__ = (
+        Index("ix_node_credentials_node_status", "deployment_node_id", "status"),
+        Index("ix_node_credentials_tenant_status", "tenant_id", "status"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    supervisor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    credential_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    encrypted_credential: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[DeploymentCredentialStatus] = mapped_column(
+        enum_column(DeploymentCredentialStatus, "supervisor_credential_status_enum"),
+        nullable=False,
+        default=DeploymentCredentialStatus.ACTIVE,
+    )
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DeploymentCredentialEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "deployment_credential_events"
+    __table_args__ = (
+        Index("ix_credential_events_node_time", "deployment_node_id", "occurred_at"),
+        Index("ix_credential_events_tenant_time", "tenant_id", "occurred_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("supervisor_node_credentials.id"),
+        nullable=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    event_metadata: Mapped[dict[str, object]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
 
 
 class PolicyDraft(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):

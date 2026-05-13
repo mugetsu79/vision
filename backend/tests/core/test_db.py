@@ -477,3 +477,60 @@ def test_supervisor_reconciler_hardware_admission_migration_exists() -> None:
     for constraint_name in constraint_names:
         assert constraint_name in migration_text
         assert len(constraint_name) <= 63
+
+
+def test_installable_supervisor_productization_models_are_registered() -> None:
+    assert "deployment_nodes" in Base.metadata.tables
+    assert "supervisor_service_status_reports" in Base.metadata.tables
+    assert "node_pairing_sessions" in Base.metadata.tables
+    assert "supervisor_node_credentials" in Base.metadata.tables
+    assert "deployment_credential_events" in Base.metadata.tables
+
+
+def test_installable_supervisor_productization_migration_exists() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = (
+        repo_root
+        / "src/argus/migrations/versions/0024_installable_supervisor_productization.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert migration_path.exists()
+    revision_id = "0024_installable_supervisor"
+    assert f'revision = "{revision_id}"' in migration_text
+    assert len(revision_id) <= 32
+    assert 'down_revision = "0023_supervisor_reconciler"' in migration_text
+    assert '"deployment_nodes"' in migration_text
+    assert '"supervisor_service_status_reports"' in migration_text
+    assert '"node_pairing_sessions"' in migration_text
+    assert '"supervisor_node_credentials"' in migration_text
+    assert '"deployment_credential_events"' in migration_text
+    assert '"pairing_code_hash"' in migration_text
+    assert '"credential_hash"' in migration_text
+    assert '"encrypted_credential"' in migration_text
+
+    forbidden_secret_columns = [
+        "pairing_code_plaintext",
+        "plaintext_pairing_code",
+        "credential_plaintext",
+        "plaintext_credential",
+        "credential_material",
+    ]
+    for column_name in forbidden_secret_columns:
+        assert column_name not in migration_text
+
+    constraint_names = [
+        "ck_deploy_nodes_kind_edge",
+        "ck_svc_reports_kind_edge",
+        "fk_deploy_nodes_tenant",
+        "fk_deploy_nodes_edge",
+        "uq_deploy_nodes_supervisor",
+        "ix_deploy_nodes_tenant_kind",
+        "ix_svc_reports_node_heartbeat",
+        "ix_pairing_sessions_tenant_status",
+        "ix_node_credentials_node_status",
+        "ix_credential_events_node_time",
+    ]
+    for constraint_name in constraint_names:
+        assert constraint_name in migration_text
+        assert len(constraint_name) <= 63

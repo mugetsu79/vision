@@ -183,6 +183,7 @@ from argus.services.cross_camera_threads import (
     CrossCameraThreadService,
     cross_camera_thread_response,
 )
+from argus.services.deployment_nodes import DeploymentNodeService
 from argus.services.evidence_ledger import EvidenceLedgerService
 from argus.services.evidence_storage import resolve_local_evidence_path
 from argus.services.incident_rules import IncidentRuleService
@@ -283,6 +284,7 @@ class AppServices:
     configuration: OperatorConfigurationService
     local_first_sync: LocalFirstEvidenceSyncService
     edge: EdgeService
+    deployment: DeploymentNodeService
     operations: OperationsService
     history: HistoryService
     incidents: IncidentService
@@ -4031,6 +4033,7 @@ def build_app_services(
     )
     evidence_ledger = EvidenceLedgerService(db.session_factory)
     supervisor_operations = SupervisorOperationsService(db.session_factory)
+    deployment_nodes = DeploymentNodeService(db.session_factory)
     camera_service = CameraService(
         db.session_factory,
         settings,
@@ -4062,6 +4065,7 @@ def build_app_services(
             ledger=evidence_ledger,
         ),
         edge=edge_service,
+        deployment=deployment_nodes,
         operations=OperationsService(
             db.session_factory,
             settings,

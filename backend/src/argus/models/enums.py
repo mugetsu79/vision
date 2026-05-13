@@ -206,6 +206,37 @@ class ModelAdmissionStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
+class DeploymentNodeKind(StrEnum):
+    CENTRAL = "central"
+    EDGE = "edge"
+
+
+class DeploymentInstallStatus(StrEnum):
+    NOT_INSTALLED = "not_installed"
+    PAIRING_PENDING = "pairing_pending"
+    INSTALLED = "installed"
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    OFFLINE = "offline"
+    REVOKED = "revoked"
+
+
+class DeploymentCredentialStatus(StrEnum):
+    MISSING = "missing"
+    PENDING = "pending"
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+
+class DeploymentServiceManager(StrEnum):
+    SYSTEMD = "systemd"
+    LAUNCHD = "launchd"
+    COMPOSE = "compose"
+    DIRECT_CHILD = "direct_child"
+    UNKNOWN = "unknown"
+
+
 class CountEventType(StrEnum):
     LINE_CROSS = "line_cross"
     ZONE_ENTER = "zone_enter"

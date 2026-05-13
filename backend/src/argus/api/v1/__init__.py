@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from argus.api.v1 import (
     cameras,
     configuration,
+    deployment,
     edge,
     export,
     history,
@@ -27,6 +28,7 @@ router.include_router(system.router)
 router.include_router(sites.router)
 router.include_router(cameras.router)
 router.include_router(configuration.router)
+router.include_router(deployment.router)
 router.include_router(models.router)
 router.include_router(runtime_artifacts.router)
 router.include_router(model_catalog.router)

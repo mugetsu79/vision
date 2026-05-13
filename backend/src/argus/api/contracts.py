@@ -13,6 +13,10 @@ from argus.inference.publisher import TelemetryFrame
 from argus.models.enums import (
     CameraSourceKind,
     CountEventType,
+    DeploymentCredentialStatus,
+    DeploymentInstallStatus,
+    DeploymentNodeKind,
+    DeploymentServiceManager,
     DetectorCapability,
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
@@ -1306,6 +1310,70 @@ class EdgeNodeHardwareReportResponse(BaseModel):
     thermal_state: str | None = None
     report_hash: str = Field(min_length=64, max_length=64)
     created_at: datetime
+
+
+class SupervisorServiceReportCreate(BaseModel):
+    node_kind: DeploymentNodeKind
+    edge_node_id: UUID | None = None
+    hostname: str = Field(min_length=1, max_length=255)
+    service_manager: DeploymentServiceManager
+    service_status: str = Field(min_length=1, max_length=64)
+    install_status: DeploymentInstallStatus
+    credential_status: DeploymentCredentialStatus
+    version: str | None = Field(default=None, max_length=64)
+    os_name: str = Field(min_length=1, max_length=64)
+    host_profile: str = Field(min_length=1, max_length=128)
+    heartbeat_at: datetime
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_node_shape(self) -> SupervisorServiceReportCreate:
+        if self.node_kind is DeploymentNodeKind.CENTRAL and self.edge_node_id is not None:
+            raise ValueError("central deployment nodes cannot include edge_node_id")
+        if self.node_kind is DeploymentNodeKind.EDGE and self.edge_node_id is None:
+            raise ValueError("edge deployment nodes require edge_node_id")
+        return self
+
+
+class DeploymentNodeResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    node_kind: DeploymentNodeKind
+    edge_node_id: UUID | None = None
+    supervisor_id: str
+    hostname: str
+    install_status: DeploymentInstallStatus
+    credential_status: DeploymentCredentialStatus
+    service_manager: DeploymentServiceManager | None = None
+    service_status: str | None = None
+    version: str | None = None
+    os_name: str | None = None
+    host_profile: str | None = None
+    last_service_reported_at: datetime | None = None
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupervisorServiceReportResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    deployment_node_id: UUID
+    edge_node_id: UUID | None = None
+    supervisor_id: str
+    node_kind: DeploymentNodeKind
+    hostname: str
+    service_manager: DeploymentServiceManager
+    service_status: str
+    install_status: DeploymentInstallStatus
+    credential_status: DeploymentCredentialStatus
+    version: str | None = None
+    os_name: str
+    host_profile: str
+    heartbeat_at: datetime
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    node: DeploymentNodeResponse
 
 
 class WorkerModelAdmissionRequest(BaseModel):
