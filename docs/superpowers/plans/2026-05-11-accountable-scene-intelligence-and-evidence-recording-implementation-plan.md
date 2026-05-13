@@ -66,14 +66,17 @@ Completed and pushed on `codex/omnisight-ui-spec-implementation`:
   Cross-Camera Intelligence.
 - Tasks `20-21B`: supervisor operations data contract, Operations lifecycle
   and assignment UI, supervisor reconciler contract, and hardware admission UI.
+- Task `21C`: runnable iMac/Jetson supervisor hardware reporter, metrics
+  scraper, operations client, bounded child-process adapter, edge Compose
+  profile, and deployment smoke documentation.
 
-Current migration head after the Task 21B checkpoint is
+Current migration head after the Task 21C checkpoint is
 `0023_supervisor_reconciler`.
 
 Next task:
 
 ```text
-Task 21C: Runnable Supervisor Hardware Reporter
+Task 22: Edge Credential Rotation And Bootstrap Hardening
 ```
 
 ## Validation Bands
@@ -4802,7 +4805,7 @@ Start/Stop/Restart/Drain requests without shelling out from the backend API.
 - Modify: `docs/runbook.md`
 - Modify: `docs/imac-master-orin-lab-test-guide.md`
 
-- [ ] **Step 1: Add failing hardware probe tests**
+- [x] **Step 1: Add failing hardware probe tests**
 
 Cover:
 
@@ -4825,7 +4828,7 @@ python3 -m uv run pytest tests/supervisor/test_hardware_probe.py -q
 
 Expected: fail until `hardware_probe.py` exists.
 
-- [ ] **Step 2: Implement hardware probe**
+- [x] **Step 2: Implement hardware probe**
 
 Create `argus.supervisor.hardware_probe` with:
 
@@ -4848,7 +4851,7 @@ Create `argus.supervisor.hardware_probe` with:
 
 Do not add `psutil` for this MVP.
 
-- [ ] **Step 3: Add failing metrics probe tests**
+- [x] **Step 3: Add failing metrics probe tests**
 
 Cover:
 
@@ -4868,7 +4871,7 @@ python3 -m uv run pytest tests/supervisor/test_metrics_probe.py -q
 
 Expected: fail until `metrics_probe.py` exists.
 
-- [ ] **Step 4: Implement worker metrics probe**
+- [x] **Step 4: Implement worker metrics probe**
 
 Create `argus.supervisor.metrics_probe` with:
 
@@ -4885,7 +4888,7 @@ The probe must not invent performance. If only capability exists, the next
 hardware report should still be posted with `observed_performance=[]`; admission
 can then return `supported` rather than `recommended`.
 
-- [ ] **Step 5: Add failing supervisor operations client tests**
+- [x] **Step 5: Add failing supervisor operations client tests**
 
 Use `httpx.MockTransport` to cover:
 
@@ -4906,7 +4909,7 @@ python3 -m uv run pytest tests/supervisor/test_operations_client.py -q
 
 Expected: fail until `operations_client.py` exists.
 
-- [ ] **Step 6: Implement supervisor operations HTTP client**
+- [x] **Step 6: Implement supervisor operations HTTP client**
 
 Create `argus.supervisor.operations_client.SupervisorOperationsClient` that
 implements the protocol consumed by `SupervisorReconciler`.
@@ -4927,7 +4930,7 @@ runtime backend is known yet, pass the selected model backend preference from
 worker config or `preferred_backend="onnxruntime"` and let admission return
 `supported` or `unknown` honestly.
 
-- [ ] **Step 7: Add failing bounded process adapter tests**
+- [x] **Step 7: Add failing bounded process adapter tests**
 
 Cover:
 
@@ -4950,7 +4953,7 @@ python3 -m uv run pytest tests/supervisor/test_process_adapter.py -q
 
 Expected: fail until `process_adapter.py` has a concrete adapter.
 
-- [ ] **Step 8: Implement local worker process adapter**
+- [x] **Step 8: Implement local worker process adapter**
 
 Extend `argus.supervisor.process_adapter` with:
 
@@ -4967,7 +4970,7 @@ Extend `argus.supervisor.process_adapter` with:
 Keep this adapter small. Production systemd/Kubernetes adapters can be added
 later behind the same protocol.
 
-- [ ] **Step 9: Add failing runner tests**
+- [x] **Step 9: Add failing runner tests**
 
 Cover:
 
@@ -4989,7 +4992,7 @@ python3 -m uv run pytest tests/supervisor/test_runner.py tests/supervisor/test_r
 
 Expected: fail until `runner.py` wires the pieces together.
 
-- [ ] **Step 10: Implement runnable supervisor CLI**
+- [x] **Step 10: Implement runnable supervisor CLI**
 
 Create `argus.supervisor.runner` with:
 
@@ -5026,7 +5029,7 @@ CLI requirements:
 - `--once` for tests and manual smoke checks
 - log hardware/admission/runtime outcomes without leaking bearer tokens
 
-- [ ] **Step 11: Add optional edge Compose supervisor service**
+- [x] **Step 11: Add optional edge Compose supervisor service**
 
 Modify `infra/docker-compose.edge.yml` to add a `supervisor` service under a
 Compose profile so existing manual edge worker bring-up remains available:
@@ -5052,7 +5055,7 @@ MediaMTX/NATS/MinIO environment, and metrics port wiring. Keep the existing
 `inference-worker` service for manual lab operation until the user confirms the
 supervisor profile should become the default.
 
-- [ ] **Step 12: Document iMac and Jetson smoke tests**
+- [x] **Step 12: Document iMac and Jetson smoke tests**
 
 Update:
 
@@ -5072,7 +5075,7 @@ Document:
 - known limitation: this MVP owns direct child worker processes, not systemd,
   Kubernetes, or Docker daemon lifecycle yet
 
-- [ ] **Step 13: Run validation**
+- [x] **Step 13: Run validation**
 
 ```bash
 cd /Users/yann.moren/vision/backend
@@ -5096,7 +5099,7 @@ git diff --check -- \
 
 Expected: pass and no diff-check output.
 
-- [ ] **Step 14: Commit and push**
+- [x] **Step 14: Commit and push**
 
 ```bash
 git add backend/src/argus/supervisor/hardware_probe.py \

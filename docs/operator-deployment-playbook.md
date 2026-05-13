@@ -30,9 +30,10 @@ The current product includes the operator workflows needed for a serious pilot:
 - Jetson edge compose stack and preflight tooling
 
 The supervisor lifecycle MVP is now present as API contracts, database records,
-UI admission status, and a reconciler library. Local development still uses
-manual terminal workers, and production still needs a packaged central or edge
-supervisor service that wires the reconciler to the deployment process manager.
+UI admission status, a reconciler library, and a runnable child-process
+supervisor for iMac and Jetson pilot use. Local development can still use manual
+terminal workers, while production still needs the deployment platform to run
+the supervisor as a durable service unit or container.
 
 ## Dev Versus Production
 
@@ -327,11 +328,54 @@ For central ownership, run one central supervisor on the master host with a
 stable `supervisor_id`, no `edge_node_id`, and access to the same worker runtime
 environment as central camera workers. For edge ownership, run one supervisor on
 the edge node with both a stable `supervisor_id` and the node's `edge_node_id`.
-This checkpoint provides the reconciler library and HTTP/DB contracts; the
-deployment service wrapper or systemd unit should instantiate
-`argus.supervisor.reconciler.SupervisorReconciler` with an operations client and
-a platform process adapter. Do not invent a browser/API shell bridge as a
-shortcut.
+The runnable pilot supervisor is `argus.supervisor.runner`. It reports host
+capability on startup, scrapes worker metrics when configured, evaluates
+admission before Start/Restart, and owns only direct child worker processes. Do
+not invent a browser/API shell bridge as a shortcut.
+
+iMac central smoke command:
+
+```bash
+cd /Users/yann.moren/vision/backend
+TOKEN="PUT_FRESH_ADMIN_OR_SUPERVISOR_TOKEN_HERE"
+python3 -m uv run python -m argus.supervisor.runner \
+  --supervisor-id central-imac \
+  --role central \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN" \
+  --worker-metrics-url http://127.0.0.1:9108/metrics \
+  --once
+```
+
+Jetson edge smoke command:
+
+```bash
+cd "$HOME/vision"
+export ARGUS_SUPERVISOR_ID="jetson-lab-1"
+export ARGUS_EDGE_NODE_ID="PUT_EDGE_NODE_UUID_HERE"
+export ARGUS_API_BASE_URL="http://PUT_IMAC_IP_HERE:8000"
+export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
+docker compose -f infra/docker-compose.edge.yml --profile supervisor \
+  up -d --no-build mediamtx nats-leaf otel-collector supervisor
+```
+
+Run the named `supervisor` service, not a broad `--profile supervisor up`,
+because the manual `inference-worker` service remains available and also binds
+the worker metrics port. Stop the supervisor with:
+
+```bash
+docker compose -f infra/docker-compose.edge.yml stop supervisor
+```
+
+After the first hardware report, Control -> Operations should show the
+supervisor host profile and model admission as `supported` when the backend is
+available but no p95/p99 performance sample exists yet. After a worker has run
+long enough to expose metrics, the next report should move matching models to
+`recommended` or `degraded` based on p95 against the stream frame budget.
+
+Known limitation: this MVP starts and stops workers that are direct children of
+the supervisor process. It does not yet manage systemd units, Kubernetes pods,
+or Docker daemon lifecycle outside its own container/process tree.
 
 Interpret admission statuses this way:
 

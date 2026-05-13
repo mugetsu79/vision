@@ -9,7 +9,11 @@ See also:
 
 The Operations workbench currently lives at `/settings` in the frontend. It is the operator-facing view for fleet state, camera worker ownership, delivery diagnostics, edge bootstrap material, hardware/model admission, and copyable local-dev worker commands.
 
-Local development can still start workers from a shell because there is no local supervisor process yet. Use the Operations copy button or the lab guide commands so the token fetch, API URL, database URL, NATS URL, and MinIO settings stay in sync with the current dev stack.
+Local development can still start workers from a shell, or run the pilot
+supervisor when you want Operations lifecycle buttons to reconcile a direct
+child worker process. Use the Operations copy button, supervisor command, or lab
+guide commands so the token fetch, API URL, database URL, NATS URL, and MinIO
+settings stay in sync with the current dev stack.
 
 Production start, stop, restart, and drain actions must be supervisor-backed. The intended path is: UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the worker process on the correct node -> worker heartbeat/runtime reports truth back to Operations. The API must not become a generic remote shell.
 
@@ -51,8 +55,8 @@ An iMac can be used as a lab or pilot master, especially with a Jetson edge node
 
 Before calling a deployment production-ready, verify that the following are implemented or supplied by the deployment platform:
 
-- packaged supervisor service wrappers for Start/Stop/Restart/Drain on central
-  and edge workers
+- durable service wrappers around `argus.supervisor.runner` for central and edge
+  workers, such as systemd units or a production container profile
 - per-worker heartbeat with camera id, status, freshness, restart count, and last error
 - regular hardware capability/performance reports from each supervisor
 - model-admission checks before production Start or Restart
@@ -77,10 +81,33 @@ The hardware-admission MVP stores two operational facts:
 
 Central supervisors should report with a stable `supervisor_id` and no
 `edge_node_id`. Edge supervisors should report with both `supervisor_id` and
-the assigned `edge_node_id`. This checkpoint provides the reconciler library and
-API/database contract; the long-running service wrapper should instantiate
-`argus.supervisor.reconciler.SupervisorReconciler` with an operations client and
-a platform-specific `WorkerProcessAdapter`.
+the assigned `edge_node_id`. The pilot runner is:
+
+```bash
+python3 -m uv run python -m argus.supervisor.runner \
+  --supervisor-id central-imac \
+  --role central \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN" \
+  --worker-metrics-url http://127.0.0.1:9108/metrics
+```
+
+For Jetson edge Compose, export `ARGUS_SUPERVISOR_ID`, `ARGUS_EDGE_NODE_ID`,
+`ARGUS_API_BASE_URL`, and `ARGUS_API_BEARER_TOKEN`, then start the named
+supervisor service:
+
+```bash
+docker compose -f infra/docker-compose.edge.yml --profile supervisor \
+  up -d --no-build mediamtx nats-leaf otel-collector supervisor
+```
+
+Use `--once` on the Python command for deterministic smoke checks. A first
+hardware-only report can produce `supported`; after worker metrics include
+p95/p99 samples, a matching model should become `recommended` or `degraded`.
+Stop the pilot supervisor with `Ctrl-C` for the direct Python command or
+`docker compose -f infra/docker-compose.edge.yml stop supervisor` for Jetson.
+This MVP owns direct child worker processes only; systemd, Kubernetes, and
+external Docker daemon lifecycle adapters are still future production work.
 
 Admission statuses:
 

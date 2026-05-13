@@ -1362,6 +1362,48 @@ docker compose -f infra/docker-compose.edge.yml config >/tmp/argus-edge-compose.
 docker compose -f infra/docker-compose.edge.yml up -d --force-recreate --no-build mediamtx inference-worker
 ```
 
+#### Optional: run the Jetson supervisor profile instead
+
+The command above keeps the existing manual `inference-worker` path. To test the
+Operations lifecycle path, stop the manual worker and run the named supervisor
+service. The supervisor reports Jetson hardware first, then starts/stops direct
+child worker processes after Operations creates lifecycle requests.
+
+On the Jetson:
+
+```bash
+cd "$HOME/vision"
+docker compose -f infra/docker-compose.edge.yml stop inference-worker
+
+export ARGUS_SUPERVISOR_ID="jetson-lab-1"
+export ARGUS_EDGE_NODE_ID="PUT_EDGE_NODE_UUID_HERE"
+export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
+
+docker compose -f infra/docker-compose.edge.yml --profile supervisor \
+  up -d --no-build mediamtx nats-leaf otel-collector supervisor
+docker compose -f infra/docker-compose.edge.yml logs -f supervisor
+```
+
+Use the named `supervisor` service as shown. A broad
+`docker compose --profile supervisor up` will also try to start the manual
+`inference-worker`, and both services would compete for the worker metrics port.
+
+On the iMac browser, open **Control -> Operations**. After the first hardware
+report, the worker should show a real supervisor/hardware admission state. Before
+the worker has emitted metrics, a compatible backend can show `supported`.
+After metrics include p95/p99 samples from `http://127.0.0.1:9108/metrics`, the
+next report should move the matching model to `recommended` or `degraded`.
+
+To stop this MVP cleanly:
+
+```bash
+docker compose -f infra/docker-compose.edge.yml stop supervisor
+```
+
+Known limitation: the supervisor profile owns direct child worker processes
+inside its own container. It does not yet manage systemd units, Kubernetes pods,
+or an already-running manual `inference-worker` container.
+
 Now watch the logs:
 
 ```bash
@@ -1571,8 +1613,7 @@ This lab is clean only when the product workflow works. Production readiness sti
 
 - Linux master deployment
 - TLS and real OIDC realm configuration
-- supervisor-managed central and edge workers
-- per-worker heartbeat and last-error reporting
+- durable service wrappers around the central and edge supervisor runner
 - backups for database and incident object storage
 - edge credential rotation
 - soak testing over multiple days
