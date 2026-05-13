@@ -20,7 +20,16 @@ const baseCamera: Camera = {
   tracker_type: "bytetrack",
   active_classes: ["person"],
   attribute_rules: [],
-  zones: [{ id: "entry-line", type: "line", points: [[0, 0], [1, 1]] }],
+  zones: [
+    {
+      id: "entry-line",
+      type: "line",
+      points: [
+        [0, 0],
+        [1, 1],
+      ],
+    },
+  ],
   homography: { src: [], dst: [], ref_distance_m: 1 },
   privacy: {
     blur_faces: true,
@@ -66,6 +75,8 @@ const fleet: FleetOverview = {
       lifecycle_owner: "manual_dev",
       dev_run_command: null,
       detail: null,
+      supervisor_mode: "disabled",
+      restart_policy: "never",
     },
     {
       camera_id: "camera-2",
@@ -79,6 +90,8 @@ const fleet: FleetOverview = {
       lifecycle_owner: "edge_supervisor",
       dev_run_command: null,
       detail: "Edge heartbeat is stale.",
+      supervisor_mode: "polling",
+      restart_policy: "always",
     },
   ],
   delivery_diagnostics: [
@@ -129,9 +142,7 @@ vi.mock("@/hooks/use-cameras", () => ({
 
 vi.mock("@/hooks/use-incidents", () => ({
   useIncidents: () => ({
-    data: [
-      { id: "incident-1", review_status: "pending", type: "ppe-missing" },
-    ],
+    data: [{ id: "incident-1", review_status: "pending", type: "ppe-missing" }],
     isLoading: false,
   }),
 }));

@@ -17,13 +17,16 @@ vi.mock("@/hooks/use-operations", () => ({
 }));
 
 import { SupervisorLifecycleControls } from "@/components/operations/SupervisorLifecycleControls";
+import type { FleetOverview } from "@/hooks/use-operations";
+
+type Worker = FleetOverview["camera_workers"][number];
 
 const edgeNodes = [
   { id: "00000000-0000-0000-0000-000000000201", hostname: "jetson-1" },
   { id: "00000000-0000-0000-0000-000000000202", hostname: "jetson-2" },
 ];
 
-function supervisedWorker(overrides: Record<string, unknown> = {}) {
+function supervisedWorker(overrides: Partial<Worker> = {}): Worker {
   return {
     camera_id: "00000000-0000-0000-0000-000000000101",
     camera_name: "Driveway",
@@ -181,7 +184,9 @@ describe("SupervisorLifecycleControls", () => {
       />,
     );
 
-    expect(screen.getByText(/lifecycle requests disabled/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/lifecycle requests disabled/i),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
   });
 
@@ -191,7 +196,7 @@ describe("SupervisorLifecycleControls", () => {
       <SupervisorLifecycleControls
         worker={supervisedWorker({
           latest_model_admission: {
-            ...supervisedWorker().latest_model_admission,
+            ...supervisedWorker().latest_model_admission!,
             status: "unsupported",
             rationale: "Open-world model unsupported on CPU-only hardware.",
           },
@@ -225,7 +230,7 @@ describe("SupervisorLifecycleControls", () => {
           runtime_report: null,
           latest_model_admission: null,
           latest_lifecycle_request: {
-            ...supervisedWorker().latest_lifecycle_request,
+            ...supervisedWorker().latest_lifecycle_request!,
             action: "stop",
             status: "completed",
           },
@@ -267,9 +272,10 @@ describe("SupervisorLifecycleControls", () => {
     expect(within(panel).getByText(/aaaaaaaaaaaa/i)).toBeInTheDocument();
     expect(within(panel).getByText(/requested restart/i)).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText(/desired worker location/i), [
-      "00000000-0000-0000-0000-000000000202",
-    ]);
+    await user.selectOptions(
+      screen.getByLabelText(/desired worker location/i),
+      ["00000000-0000-0000-0000-000000000202"],
+    );
     await user.click(screen.getByRole("button", { name: /assign worker/i }));
 
     expect(assignmentMutateAsync).toHaveBeenCalledWith({

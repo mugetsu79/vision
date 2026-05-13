@@ -266,6 +266,11 @@ async def test_pairing_session_stores_only_hash_and_claim_returns_credential_onc
     assert credential_rows[0].credential_hash == claimed.credential_hash
     assert credential_rows[0].encrypted_credential is None
     assert credential_rows[0].status is DeploymentCredentialStatus.ACTIVE
+    assert any(
+        SupervisorNodeCredential in snapshot
+        and DeploymentCredentialEvent not in snapshot
+        for snapshot in service.session_factory.session.flush_snapshots
+    )
 
     with pytest.raises(ValueError, match="already consumed"):
         await service.claim_pairing_session(
@@ -610,6 +615,7 @@ class _Result:
 class _MemorySession:
     def __init__(self) -> None:
         self.rows: list[object] = []
+        self.flush_snapshots: list[tuple[type[object], ...]] = []
 
     async def __aenter__(self) -> _MemorySession:
         return self
@@ -673,6 +679,9 @@ class _MemorySession:
 
     def add(self, row: object) -> None:
         self.rows.append(row)
+
+    async def flush(self) -> None:
+        self.flush_snapshots.append(tuple(type(row) for row in self.rows))
 
     async def get(self, entity: type[object], row_id: object) -> object | None:
         return next(

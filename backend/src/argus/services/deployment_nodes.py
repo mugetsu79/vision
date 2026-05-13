@@ -418,6 +418,7 @@ class DeploymentNodeService:
             )
             _ensure_identity_and_timestamps(credential, now=now)
             session.add(credential)
+            await _flush_if_available(session)
             pairing.deployment_node_id = node.id
             pairing.status = "consumed"
             pairing.consumed_at = now

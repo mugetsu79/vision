@@ -4,6 +4,9 @@ import { StatusToneBadge } from "@/components/layout/workspace-surfaces";
 import type { FleetOverview } from "@/hooks/use-operations";
 
 type Worker = FleetOverview["camera_workers"][number];
+type HardwarePerformanceSample = NonNullable<
+  NonNullable<Worker["latest_hardware_report"]>["observed_performance"]
+>[number];
 
 export function HardwareAdmissionPanel({ worker }: { worker: Worker }) {
   const hardware = worker.latest_hardware_report ?? null;
@@ -26,17 +29,23 @@ export function HardwareAdmissionPanel({ worker }: { worker: Worker }) {
           <p className="mt-1 text-sm text-[#d8e2f2]">
             {manualBypass
               ? "Manual worker: production admission bypass."
-              : admission?.rationale ?? "Model admission not reported."}
+              : (admission?.rationale ?? "Model admission not reported.")}
           </p>
         </div>
         <StatusToneBadge tone={admissionTone(admission?.status)}>
-          {manualBypass ? "bypass" : admission?.status ?? "unknown"}
+          {manualBypass ? "bypass" : (admission?.status ?? "unknown")}
         </StatusToneBadge>
       </div>
 
       <dl className="mt-3 grid gap-2 text-xs md:grid-cols-2">
-        <AdmissionFact label="Host" value={hardware?.host_profile ?? "Not reported"} />
-        <AdmissionFact label="Memory" value={formatMemory(hardware?.memory_total_mb)} />
+        <AdmissionFact
+          label="Host"
+          value={hardware?.host_profile ?? "Not reported"}
+        />
+        <AdmissionFact
+          label="Memory"
+          value={formatMemory(hardware?.memory_total_mb)}
+        />
         <AdmissionFact
           label="Accelerators"
           value={formatList(hardware?.accelerators)}
@@ -51,10 +60,17 @@ export function HardwareAdmissionPanel({ worker }: { worker: Worker }) {
         />
         <AdmissionFact
           label="Runtime"
-          value={admission?.selected_backend ?? sample?.runtime_backend ?? "Not reported"}
+          value={
+            admission?.selected_backend ??
+            sample?.runtime_backend ??
+            "Not reported"
+          }
         />
         <AdmissionFact label="Performance" value={formatPerformance(sample)} />
-        <AdmissionFact label="Thermal" value={hardware?.thermal_state ?? "Not reported"} />
+        <AdmissionFact
+          label="Thermal"
+          value={hardware?.thermal_state ?? "Not reported"}
+        />
       </dl>
 
       {admission?.recommended_model_name || admission?.recommended_backend ? (
@@ -97,7 +113,9 @@ function formatList(values: string[] | null | undefined): string {
   return values && values.length > 0 ? values.join(", ") : "Not reported";
 }
 
-function formatProviders(values: Record<string, boolean> | null | undefined): string {
+function formatProviders(
+  values: Record<string, boolean> | null | undefined,
+): string {
   if (!values) return "Not reported";
   const enabled = Object.entries(values)
     .filter(([, available]) => available)
@@ -105,9 +123,7 @@ function formatProviders(values: Record<string, boolean> | null | undefined): st
   return enabled.length > 0 ? enabled.join(", ") : "Not available";
 }
 
-function formatPerformance(
-  sample: NonNullable<Worker["latest_hardware_report"]>["observed_performance"][number] | null,
-): string {
+function formatPerformance(sample: HardwarePerformanceSample | null): string {
   if (!sample) return "Not reported";
   const p95 = sample.stage_p95_ms?.total;
   const p99 = sample.stage_p99_ms?.total;

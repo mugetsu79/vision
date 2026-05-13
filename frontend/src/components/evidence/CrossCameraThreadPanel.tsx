@@ -1,7 +1,6 @@
 import type { components } from "@/lib/api.generated";
 
-type CrossCameraThread =
-  components["schemas"]["CrossCameraThreadResponse"];
+type CrossCameraThread = components["schemas"]["CrossCameraThreadResponse"];
 
 export function CrossCameraThreadPanel({
   threads,
@@ -62,16 +61,16 @@ function ThreadCard({ thread }: { thread: CrossCameraThread }) {
         </span>
       </div>
 
-      <PrivacyLabels labels={thread.privacy_labels} />
+      <PrivacyLabels labels={thread.privacy_labels ?? []} />
       <SignalGrid thread={thread} />
-      <RationaleList rationale={thread.rationale} />
+      <RationaleList rationale={thread.rationale ?? []} />
       <CitationChips
         label="Source incidents"
         values={thread.source_incident_ids.map(shortUuid)}
       />
       <CitationChips
         label="Manifest hashes"
-        values={thread.privacy_manifest_hashes.map(hashPrefix)}
+        values={(thread.privacy_manifest_hashes ?? []).map(hashPrefix)}
       />
     </article>
   );

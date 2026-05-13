@@ -2,8 +2,11 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
 import { HardwareAdmissionPanel } from "@/components/operations/HardwareAdmissionPanel";
+import type { FleetOverview } from "@/hooks/use-operations";
 
-function worker(overrides: Record<string, unknown> = {}) {
+type Worker = FleetOverview["camera_workers"][number];
+
+function worker(overrides: Partial<Worker> = {}): Worker {
   return {
     camera_id: "00000000-0000-0000-0000-000000000101",
     camera_name: "Driveway",
@@ -116,7 +119,9 @@ describe("HardwareAdmissionPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/production admission bypass/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/production admission bypass/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/not reported/i).length).toBeGreaterThan(0);
   });
 });
