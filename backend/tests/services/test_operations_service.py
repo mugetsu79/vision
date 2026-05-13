@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,7 @@ from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
 from argus.models.enums import (
     IncidentRuleSeverity,
+    OperationsLifecycleAction,
     ProcessingMode,
     RoleEnum,
     RuleAction,
@@ -297,6 +299,72 @@ async def test_fleet_overview_does_not_attach_central_hardware_to_unassigned_edg
     assert worker.latest_hardware_report is None
 
 
+@pytest.mark.asyncio
+async def test_fleet_overview_allows_central_start_when_supervisor_hardware_is_fresh() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    camera = Camera(
+        id=uuid4(),
+        site_id=site.id,
+        edge_node_id=None,
+        name="Camera 1",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={},
+        source_capability=None,
+        frame_skip=1,
+        fps_cap=25,
+    )
+    central_report = EdgeNodeHardwareReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        supervisor_id="central-imac",
+        reported_at=datetime.now(tz=UTC),
+        host_profile="macos-x86_64-intel",
+        os_name="darwin",
+        machine_arch="x86_64",
+        cpu_model=None,
+        cpu_cores=8,
+        memory_total_mb=65536,
+        accelerators=["coreml", "cpu"],
+        provider_capabilities={"CoreMLExecutionProvider": True},
+        observed_performance=[],
+        thermal_state=None,
+        report_hash="b" * 64,
+        created_at=datetime.now(tz=UTC),
+    )
+    session_factory = _FakeSessionFactory([], [(camera, site)], [], [], [])
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        supervisor_operations=_FakeSupervisorOperations(central_report=central_report),
+        runtime_configuration=_FakeRuntimeConfiguration(
+            {
+                "lifecycle_owner": "central_supervisor",
+                "supervisor_mode": "polling",
+                "restart_policy": "on_failure",
+            }
+        ),
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    worker = response.camera_workers[0]
+    assert worker.lifecycle_owner == "central_supervisor"
+    assert worker.dev_run_command is None
+    assert OperationsLifecycleAction.START in worker.allowed_lifecycle_actions
+    assert worker.detail == "Central Supervisor owns this worker process."
+
+
 class _FakeEdgeService:
     def __init__(self) -> None:
         self.payload = None
@@ -342,6 +410,15 @@ class _FakeSupervisorOperations:
     async def latest_model_admissions_by_camera(self, **kwargs):  # noqa: ANN003
         del kwargs
         return {}
+
+
+class _FakeRuntimeConfiguration:
+    def __init__(self, config: dict[str, object]) -> None:
+        self.config = config
+
+    async def resolve_profile_for_runtime(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        del args, kwargs
+        return SimpleNamespace(config=self.config)
 
 
 @pytest.mark.asyncio

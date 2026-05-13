@@ -50,6 +50,33 @@ async def test_start_uses_structured_default_worker_argv_and_env() -> None:
 
 
 @pytest.mark.asyncio
+async def test_start_can_inject_bearer_token_from_async_provider() -> None:
+    camera_id = uuid4()
+    calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = []
+
+    async def _exec(*argv: str, env: Mapping[str, str]) -> _FakeProcess:
+        calls.append((argv, env))
+        return _FakeProcess()
+
+    async def _token_provider() -> str:
+        return "fresh-worker-token"
+
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(
+            api_base_url="http://127.0.0.1:8000",
+            bearer_token_provider=_token_provider,
+            base_env={},
+        ),
+        subprocess_exec=_exec,
+    )
+
+    result = await adapter.start(camera_id)
+
+    assert result.runtime_state == "running"
+    assert calls[0][1]["ARGUS_API_BEARER_TOKEN"] == "fresh-worker-token"
+
+
+@pytest.mark.asyncio
 async def test_stop_terminates_tracked_process_and_reports_stopped() -> None:
     camera_id = uuid4()
     process = _FakeProcess()

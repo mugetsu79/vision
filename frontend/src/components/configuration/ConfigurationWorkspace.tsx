@@ -42,6 +42,11 @@ type ConfigurationWorkspaceProps = {
   edgeNodes?: NamedTarget[];
 };
 
+type ConfigurationFeedback = {
+  tone: "healthy" | "danger" | "accent" | "muted";
+  message: string;
+};
+
 const KIND_ICONS: Record<OperatorConfigKind, typeof Database> = {
   evidence_storage: Database,
   stream_delivery: Radio,
@@ -61,6 +66,8 @@ export function ConfigurationWorkspace({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [profileFeedback, setProfileFeedback] = useState<ConfigurationFeedback | null>(null);
+  const [bindingFeedback, setBindingFeedback] = useState<ConfigurationFeedback | null>(null);
   const profilesQuery = useConfigurationProfiles(activeKind);
   const createProfile = useCreateConfigurationProfile();
   const updateProfile = useUpdateConfigurationProfile();
@@ -79,22 +86,32 @@ export function ConfigurationWorkspace({
   );
 
   async function handleSave(payload: OperatorConfigProfileCreate) {
-    if (selectedProfile && !isCreating) {
-      await updateProfile.mutateAsync({
-        profileId: selectedProfile.id,
-        payload: {
-          name: payload.name,
-          slug: payload.slug,
-          enabled: payload.enabled,
-          is_default: payload.is_default,
-          config: payload.config,
-          secrets: payload.secrets,
-        },
+    setProfileFeedback(null);
+    try {
+      if (selectedProfile && !isCreating) {
+        await updateProfile.mutateAsync({
+          profileId: selectedProfile.id,
+          payload: {
+            name: payload.name,
+            slug: payload.slug,
+            enabled: payload.enabled,
+            is_default: payload.is_default,
+            config: payload.config,
+            secrets: payload.secrets,
+          },
+        });
+      } else {
+        await createProfile.mutateAsync(payload);
+        setIsCreating(false);
+      }
+      setProfileFeedback({ tone: "healthy", message: "Profile saved." });
+    } catch (error) {
+      setProfileFeedback({
+        tone: "danger",
+        message: error instanceof Error ? error.message : "Failed to save profile.",
       });
-      return;
+      throw error;
     }
-    await createProfile.mutateAsync(payload);
-    setIsCreating(false);
   }
 
   async function handleTest(profile: OperatorConfigProfile) {
@@ -122,6 +139,8 @@ export function ConfigurationWorkspace({
             setIsCreating(true);
             setSelectedProfileId(null);
             setTestResult(null);
+            setProfileFeedback(null);
+            setBindingFeedback(null);
           }}
         >
           New profile
@@ -149,6 +168,8 @@ export function ConfigurationWorkspace({
                 setSelectedProfileId(null);
                 setIsCreating(false);
                 setTestResult(null);
+                setProfileFeedback(null);
+                setBindingFeedback(null);
               }}
             >
               <Icon className="size-3.5" />
@@ -177,6 +198,8 @@ export function ConfigurationWorkspace({
                     setIsCreating(false);
                     setSelectedProfileId(profile.id);
                     setTestResult(null);
+                    setProfileFeedback(null);
+                    setBindingFeedback(null);
                   }}
                 >
                   <span className="block text-sm font-semibold text-[#f4f8ff]">
@@ -195,10 +218,27 @@ export function ConfigurationWorkspace({
                       variant="ghost"
                       className="px-3 py-1.5 text-xs"
                       onClick={() => {
-                        void updateProfile.mutateAsync({
-                          profileId: profile.id,
-                          payload: { is_default: true },
-                        });
+                        void (async () => {
+                          setProfileFeedback(null);
+                          try {
+                            await updateProfile.mutateAsync({
+                              profileId: profile.id,
+                              payload: { is_default: true },
+                            });
+                            setProfileFeedback({
+                              tone: "healthy",
+                              message: "Default profile updated.",
+                            });
+                          } catch (error) {
+                            setProfileFeedback({
+                              tone: "danger",
+                              message:
+                                error instanceof Error
+                                  ? error.message
+                                  : "Failed to update default profile.",
+                            });
+                          }
+                        })();
                       }}
                     >
                       Set default
@@ -228,9 +268,18 @@ export function ConfigurationWorkspace({
               setSelectedProfileId(null);
               setIsCreating(false);
               setTestResult(null);
+              setProfileFeedback(null);
+              setBindingFeedback(null);
             }}
             onSave={handleSave}
           />
+          {profileFeedback ? (
+            <div role="status" aria-live="polite">
+              <StatusToneBadge tone={profileFeedback.tone}>
+                {profileFeedback.message}
+              </StatusToneBadge>
+            </div>
+          ) : null}
           {selectedProfile && !isCreating ? (
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={() => void handleTest(selectedProfile)}>
@@ -263,9 +312,27 @@ export function ConfigurationWorkspace({
               label: node.hostname ?? node.id,
             }))}
             onBind={async (payload) => {
-              await upsertBinding.mutateAsync(payload);
+              setBindingFeedback(null);
+              try {
+                await upsertBinding.mutateAsync(payload);
+                setBindingFeedback({ tone: "healthy", message: "Binding saved." });
+              } catch (error) {
+                setBindingFeedback({
+                  tone: "danger",
+                  message:
+                    error instanceof Error ? error.message : "Failed to bind profile.",
+                });
+                throw error;
+              }
             }}
           />
+          {bindingFeedback ? (
+            <div role="status" aria-live="polite">
+              <StatusToneBadge tone={bindingFeedback.tone}>
+                {bindingFeedback.message}
+              </StatusToneBadge>
+            </div>
+          ) : null}
           <EffectiveConfigurationPanel
             cameras={cameras.map((camera) => ({
               id: camera.id,

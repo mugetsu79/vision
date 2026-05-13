@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import sys
 from collections.abc import Awaitable, Callable, Mapping
@@ -26,6 +27,7 @@ class WorkerProcessAdapter(Protocol):
 
 
 SubprocessExec = Callable[..., Awaitable[object]]
+BearerTokenProvider = Callable[[], str | Awaitable[str]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,7 @@ class WorkerLaunchConfig:
     module_name: str = "argus.inference.engine"
     api_base_url: str | None = None
     bearer_token: str | None = None
+    bearer_token_provider: BearerTokenProvider | None = None
     edge_node_id: UUID | None = None
     extra_env: Mapping[str, str] | None = None
     base_env: Mapping[str, str] | None = None
@@ -63,7 +66,7 @@ class LocalWorkerProcessAdapter:
             return WorkerProcessResult(runtime_state="running")
         argv = self._argv(camera_id)
         try:
-            process = await self._subprocess_exec(*argv, env=self._env())
+            process = await self._subprocess_exec(*argv, env=await self._env())
         except Exception as exc:
             return WorkerProcessResult(runtime_state="error", last_error=str(exc))
         self._processes[camera_id] = process
@@ -98,17 +101,25 @@ class LocalWorkerProcessAdapter:
             str(camera_id),
         ]
 
-    def _env(self) -> dict[str, str]:
+    async def _env(self) -> dict[str, str]:
         env = dict(self.config.base_env) if self.config.base_env is not None else dict(os.environ)
         if self.config.api_base_url:
             env["ARGUS_API_BASE_URL"] = self.config.api_base_url
-        if self.config.bearer_token:
-            env["ARGUS_API_BEARER_TOKEN"] = self.config.bearer_token
+        bearer_token = await self._bearer_token()
+        if bearer_token:
+            env["ARGUS_API_BEARER_TOKEN"] = bearer_token
         if self.config.edge_node_id is not None:
             env["ARGUS_EDGE_NODE_ID"] = str(self.config.edge_node_id)
         if self.config.extra_env:
             env.update({str(key): str(value) for key, value in self.config.extra_env.items()})
         return env
+
+    async def _bearer_token(self) -> str | None:
+        if self.config.bearer_token_provider is None:
+            return self.config.bearer_token
+        provided = self.config.bearer_token_provider()
+        token = await provided if inspect.isawaitable(provided) else provided
+        return token or None
 
     async def _terminate(self, process: object) -> str | None:
         if _returncode(process) is not None:

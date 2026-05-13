@@ -201,6 +201,7 @@ from argus.services.runtime_artifacts import (
 from argus.services.runtime_passports import RuntimePassportService, build_runtime_passport
 from argus.services.scene_contracts import SceneContractService, build_scene_contract
 from argus.services.supervisor_operations import (
+    REPORT_STALE_AFTER,
     SupervisorOperationsService,
     edge_node_hardware_report_response,
     operations_lifecycle_request_response,
@@ -1597,10 +1598,14 @@ class OperationsService:
                     site_id=site.id,
                     edge_node_id=assigned_edge_node_id,
                 )
-                supervisor_healthy = runtime_report is not None and runtime in {
-                    WorkerRuntimeStatus.RUNNING,
-                    WorkerRuntimeStatus.STALE,
-                }
+                supervisor_healthy = (
+                    runtime_report is not None
+                    and runtime
+                    in {
+                        WorkerRuntimeStatus.RUNNING,
+                        WorkerRuntimeStatus.STALE,
+                    }
+                ) or _fleet_hardware_report_is_fresh(hardware_report, now)
                 controls = resolve_worker_operations_controls(
                     runtime_config.config,
                     assigned_edge_node_id=assigned_edge_node_id,
@@ -4104,6 +4109,17 @@ def _fleet_worker_hardware_report(
     if camera.processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}:
         return central_hardware_report
     return None
+
+
+def _fleet_hardware_report_is_fresh(report: object | None, now: datetime) -> bool:
+    if report is None:
+        return False
+    reported_at = getattr(report, "reported_at", None)
+    if not isinstance(reported_at, datetime):
+        return False
+    if reported_at.tzinfo is None:
+        reported_at = reported_at.replace(tzinfo=UTC)
+    return now - reported_at <= REPORT_STALE_AFTER
 
 
 def _derive_worker_lifecycle(

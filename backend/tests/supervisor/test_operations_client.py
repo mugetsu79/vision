@@ -20,6 +20,7 @@ from argus.models.enums import (
     OperationsLifecycleStatus,
 )
 from argus.supervisor.operations_client import (
+    PasswordGrantTokenProvider,
     SupervisorClientError,
     SupervisorOperationsClient,
 )
@@ -263,6 +264,98 @@ async def test_client_error_includes_method_path_status_and_body() -> None:
     assert exc_info.value.path == "/api/v1/operations/supervisors/edge-supervisor-1/poll"
     assert exc_info.value.status_code == 503
     assert exc_info.value.response_body == "offline"
+
+
+@pytest.mark.asyncio
+async def test_client_retries_once_with_fresh_token_after_unauthorized() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    tokens = iter(["stale-token", "fresh-token"])
+    invalidations = 0
+    seen: list[httpx.Request] = []
+
+    class _TokenProvider:
+        def invalidate(self) -> None:
+            nonlocal invalidations
+            invalidations += 1
+
+        async def __call__(self) -> str:
+            return next(tokens)
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.headers["authorization"] == "Bearer stale-token":
+            return httpx.Response(401, json={"detail": "Token verification failed."})
+        return httpx.Response(
+            201,
+            json=_hardware_report_response_json(
+                tenant_id=tenant_id,
+                edge_node_id=edge_node_id,
+                supervisor_id="edge-supervisor-1",
+            ),
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as http_client:
+        client = SupervisorOperationsClient(
+            api_base_url="http://api.local",
+            supervisor_id="edge-supervisor-1",
+            token_provider=_TokenProvider(),
+            http_client=http_client,
+        )
+
+        response = await client.record_hardware_report(
+            EdgeNodeHardwareReportCreate(
+                edge_node_id=edge_node_id,
+                reported_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+                host_profile="linux-aarch64-nvidia-jetson",
+                os_name="linux",
+                machine_arch="aarch64",
+                provider_capabilities={"TensorrtExecutionProvider": True},
+            )
+        )
+
+    assert response.supervisor_id == "edge-supervisor-1"
+    assert invalidations == 1
+    assert [request.headers["authorization"] for request in seen] == [
+        "Bearer stale-token",
+        "Bearer fresh-token",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_password_grant_token_provider_caches_and_can_refresh() -> None:
+    seen: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "access_token": f"token-{len(seen)}",
+                "expires_in": 3600,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as http_client:
+        provider = PasswordGrantTokenProvider(
+            token_url="http://keycloak.local/token",
+            client_id="argus-cli",
+            username="admin-dev",
+            password="argus-admin-pass",
+            http_client=http_client,
+        )
+
+        first = await provider()
+        second = await provider()
+        provider.invalidate()
+        third = await provider()
+
+    assert (first, second, third) == ("token-1", "token-1", "token-2")
+    assert len(seen) == 2
+    assert seen[0].url.path == "/token"
+    assert seen[0].content == (
+        b"grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass"
+    )
 
 
 def _hardware_report_response_json(

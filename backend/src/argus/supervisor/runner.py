@@ -15,7 +15,11 @@ from argus.api.contracts import (
 )
 from argus.supervisor.hardware_probe import HostCapabilityProbe
 from argus.supervisor.metrics_probe import WorkerMetricsContext, WorkerMetricsProbe
-from argus.supervisor.operations_client import SupervisorOperationsClient
+from argus.supervisor.operations_client import (
+    BearerTokenProvider,
+    PasswordGrantTokenProvider,
+    SupervisorOperationsClient,
+)
 from argus.supervisor.process_adapter import LocalWorkerProcessAdapter, WorkerLaunchConfig
 from argus.supervisor.reconciler import SupervisorReconciler
 
@@ -45,9 +49,15 @@ class RunnerConfig:
     supervisor_id: str
     role: str
     api_base_url: str
-    bearer_token: str
+    bearer_token: str | None = None
     edge_node_id: UUID | None = None
     worker_metrics_url: str | None = None
+    token_url: str | None = None
+    token_client_id: str = "argus-cli"
+    token_username: str | None = None
+    token_password: str | None = None
+    token_client_secret: str | None = None
+    token_scope: str | None = None
     hardware_report_interval_seconds: float = 60.0
     poll_interval_seconds: float = 5.0
     once: bool = False
@@ -141,10 +151,12 @@ class SupervisorRunner:
 
 
 def build_runner(config: RunnerConfig) -> SupervisorRunner:
+    token_provider = _build_token_provider(config)
     operations = SupervisorOperationsClient(
         api_base_url=config.api_base_url,
         supervisor_id=config.supervisor_id,
         bearer_token=config.bearer_token,
+        token_provider=token_provider,
     )
     return SupervisorRunner(
         supervisor_id=config.supervisor_id,
@@ -156,6 +168,7 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
             WorkerLaunchConfig(
                 api_base_url=config.api_base_url,
                 bearer_token=config.bearer_token,
+                bearer_token_provider=token_provider,
                 edge_node_id=config.edge_node_id,
             )
         ),
@@ -170,6 +183,18 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
     parser.add_argument("--edge-node-id")
     parser.add_argument("--api-base-url", default=os.getenv("ARGUS_API_BASE_URL"))
     parser.add_argument("--bearer-token", default=os.getenv("ARGUS_API_BEARER_TOKEN"))
+    parser.add_argument("--token-url", default=os.getenv("ARGUS_API_TOKEN_URL"))
+    parser.add_argument(
+        "--token-client-id",
+        default=os.getenv("ARGUS_API_TOKEN_CLIENT_ID", "argus-cli"),
+    )
+    parser.add_argument("--token-username", default=os.getenv("ARGUS_API_TOKEN_USERNAME"))
+    parser.add_argument("--token-password", default=os.getenv("ARGUS_API_TOKEN_PASSWORD"))
+    parser.add_argument(
+        "--token-client-secret",
+        default=os.getenv("ARGUS_API_TOKEN_CLIENT_SECRET"),
+    )
+    parser.add_argument("--token-scope", default=os.getenv("ARGUS_API_TOKEN_SCOPE"))
     parser.add_argument("--worker-metrics-url", default=os.getenv("ARGUS_WORKER_METRICS_URL"))
     parser.add_argument("--hardware-report-interval-seconds", type=float, default=60.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
@@ -177,8 +202,12 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
     args = parser.parse_args(argv)
     if not args.api_base_url:
         parser.error("--api-base-url or ARGUS_API_BASE_URL is required")
-    if not args.bearer_token:
-        parser.error("--bearer-token or ARGUS_API_BEARER_TOKEN is required")
+    has_refreshable_token = bool(args.token_url and args.token_username and args.token_password)
+    if not args.bearer_token and not has_refreshable_token:
+        parser.error(
+            "--bearer-token/ARGUS_API_BEARER_TOKEN or "
+            "--token-url plus --token-username plus --token-password is required"
+        )
     edge_node_id = UUID(args.edge_node_id) if args.edge_node_id else None
     if args.role == "edge" and edge_node_id is None:
         parser.error("--edge-node-id is required for edge supervisors")
@@ -191,6 +220,12 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         bearer_token=args.bearer_token,
         edge_node_id=edge_node_id,
         worker_metrics_url=args.worker_metrics_url,
+        token_url=args.token_url,
+        token_client_id=args.token_client_id,
+        token_username=args.token_username,
+        token_password=args.token_password,
+        token_client_secret=args.token_client_secret,
+        token_scope=args.token_scope,
         hardware_report_interval_seconds=args.hardware_report_interval_seconds,
         poll_interval_seconds=args.poll_interval_seconds,
         once=args.once,
@@ -209,6 +244,19 @@ async def async_main(argv: list[str] | None = None) -> int:
             poll_interval_seconds=config.poll_interval_seconds,
         )
     return 0
+
+
+def _build_token_provider(config: RunnerConfig) -> BearerTokenProvider | None:
+    if not (config.token_url and config.token_username and config.token_password):
+        return None
+    return PasswordGrantTokenProvider(
+        token_url=config.token_url,
+        client_id=config.token_client_id,
+        username=config.token_username,
+        password=config.token_password,
+        client_secret=config.token_client_secret,
+        scope=config.token_scope,
+    )
 
 
 def main() -> None:

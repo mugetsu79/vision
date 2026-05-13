@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 
 import type { components } from "@/lib/api.generated";
 import { apiClient, toApiError } from "@/lib/api";
@@ -35,6 +36,13 @@ export type ConfigurationCatalog = {
     secret_keys?: string[];
   }>;
 };
+
+async function invalidateConfigurationRuntimeQueries(queryClient: QueryClient) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["configuration"] }),
+    queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] }),
+  ]);
+}
 
 export function useConfigurationCatalog() {
   return useQuery({
@@ -77,7 +85,7 @@ export function useCreateConfigurationProfile() {
       return data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["configuration"] });
+      await invalidateConfigurationRuntimeQueries(queryClient);
     },
   });
 }
@@ -105,7 +113,7 @@ export function useUpdateConfigurationProfile() {
       return data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["configuration"] });
+      await invalidateConfigurationRuntimeQueries(queryClient);
     },
   });
 }
@@ -123,7 +131,7 @@ export function useDeleteConfigurationProfile() {
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["configuration"] });
+      await invalidateConfigurationRuntimeQueries(queryClient);
     },
   });
 }
@@ -142,7 +150,7 @@ export function useTestConfigurationProfile() {
       return data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["configuration"] });
+      await invalidateConfigurationRuntimeQueries(queryClient);
     },
   });
 }
@@ -160,7 +168,7 @@ export function useUpsertConfigurationBinding() {
       return data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["configuration"] });
+      await invalidateConfigurationRuntimeQueries(queryClient);
     },
   });
 }

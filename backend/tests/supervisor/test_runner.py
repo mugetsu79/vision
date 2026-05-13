@@ -17,7 +17,30 @@ from argus.models.enums import (
     OperationsLifecycleStatus,
 )
 from argus.supervisor.process_adapter import WorkerProcessResult
-from argus.supervisor.runner import SupervisorRunner
+from argus.supervisor.runner import SupervisorRunner, parse_args
+
+
+def test_parse_args_accepts_refreshable_token_credentials_without_static_bearer() -> None:
+    config = parse_args(
+        [
+            "--supervisor-id",
+            "central-imac",
+            "--role",
+            "central",
+            "--api-base-url",
+            "http://127.0.0.1:8000",
+            "--token-url",
+            "http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token",
+            "--token-username",
+            "admin-dev",
+            "--token-password",
+            "argus-admin-pass",
+        ]
+    )
+
+    assert config.bearer_token is None
+    assert config.token_client_id == "argus-cli"
+    assert config.token_username == "admin-dev"
 
 
 @pytest.mark.asyncio

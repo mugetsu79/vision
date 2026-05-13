@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import inspect
+import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -22,6 +25,8 @@ from argus.api.contracts import (
 from argus.compat import UTC
 from argus.models.enums import DetectorCapability, OperationsLifecycleStatus, WorkerRuntimeState
 
+BearerTokenProvider = Callable[[], str | Awaitable[str]]
+
 
 @dataclass(frozen=True, slots=True)
 class SupervisorClientError(RuntimeError):
@@ -37,18 +42,92 @@ class SupervisorClientError(RuntimeError):
         )
 
 
+class PasswordGrantTokenProvider:
+    def __init__(
+        self,
+        *,
+        token_url: str,
+        client_id: str,
+        username: str,
+        password: str,
+        client_secret: str | None = None,
+        scope: str | None = None,
+        http_client: httpx.AsyncClient | None = None,
+        refresh_margin_seconds: float = 30.0,
+    ) -> None:
+        self.token_url = token_url
+        self.client_id = client_id
+        self.username = username
+        self.password = password
+        self.client_secret = client_secret
+        self.scope = scope
+        self.http_client = http_client
+        self.refresh_margin_seconds = refresh_margin_seconds
+        self._access_token: str | None = None
+        self._expires_at = 0.0
+        self._owns_client = http_client is None
+
+    async def __call__(self) -> str:
+        now = time.monotonic()
+        if self._access_token is not None and now < self._expires_at - self.refresh_margin_seconds:
+            return self._access_token
+        return await self._fetch_token(now)
+
+    def invalidate(self) -> None:
+        self._access_token = None
+        self._expires_at = 0.0
+
+    async def aclose(self) -> None:
+        if self.http_client is not None and self._owns_client:
+            await self.http_client.aclose()
+
+    async def _fetch_token(self, now: float) -> str:
+        payload = {
+            "grant_type": "password",
+            "client_id": self.client_id,
+            "username": self.username,
+            "password": self.password,
+        }
+        if self.client_secret:
+            payload["client_secret"] = self.client_secret
+        if self.scope:
+            payload["scope"] = self.scope
+        response = await self._client().post(self.token_url, data=payload)
+        if response.status_code < 200 or response.status_code >= 300:
+            raise RuntimeError(
+                f"Token request failed with HTTP {response.status_code}: {response.text}"
+            )
+        body = response.json()
+        token = body.get("access_token")
+        if not isinstance(token, str) or not token:
+            raise RuntimeError("Token response did not include an access_token.")
+        expires_in = _positive_float(body.get("expires_in"), 300.0)
+        self._access_token = token
+        self._expires_at = now + expires_in
+        return token
+
+    def _client(self) -> httpx.AsyncClient:
+        if self.http_client is None:
+            self.http_client = httpx.AsyncClient()
+        return self.http_client
+
+
 class SupervisorOperationsClient:
     def __init__(
         self,
         *,
         api_base_url: str,
         supervisor_id: str,
-        bearer_token: str,
+        bearer_token: str | None = None,
+        token_provider: BearerTokenProvider | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
+        if not bearer_token and token_provider is None:
+            raise ValueError("bearer_token or token_provider is required.")
         self.api_base_url = api_base_url.rstrip("/")
         self.supervisor_id = supervisor_id
         self.bearer_token = bearer_token
+        self.token_provider = token_provider
         self.http_client = http_client
         self._owns_client = http_client is None
 
@@ -187,8 +266,18 @@ class SupervisorOperationsClient:
             method,
             f"{self.api_base_url}{path}",
             json=json,
-            headers={"Authorization": f"Bearer {self.bearer_token}"},
+            headers={"Authorization": f"Bearer {await self._bearer_token()}"},
         )
+        if response.status_code == 401 and self.token_provider is not None:
+            invalidate = getattr(self.token_provider, "invalidate", None)
+            if callable(invalidate):
+                invalidate()
+            response = await client.request(
+                method,
+                f"{self.api_base_url}{path}",
+                json=json,
+                headers={"Authorization": f"Bearer {await self._bearer_token()}"},
+            )
         if response.status_code < 200 or response.status_code >= 300:
             raise SupervisorClientError(
                 method=method,
@@ -197,6 +286,16 @@ class SupervisorOperationsClient:
                 response_body=response.text,
             )
         return response.json()
+
+    async def _bearer_token(self) -> str:
+        if self.token_provider is None:
+            token = self.bearer_token
+        else:
+            provided = self.token_provider()
+            token = await provided if inspect.isawaitable(provided) else provided
+        if not isinstance(token, str) or not token:
+            raise RuntimeError("Supervisor API bearer token is not configured.")
+        return token
 
     def _client(self) -> httpx.AsyncClient:
         if self.http_client is None:
@@ -292,6 +391,14 @@ def _string(value: object | None) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _positive_float(value: object, fallback: float) -> float:
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+    return number if number > 0 else fallback
 
 
 def _detector_capability(

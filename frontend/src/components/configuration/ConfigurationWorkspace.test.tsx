@@ -226,6 +226,7 @@ describe("ConfigurationWorkspace", () => {
         secret_key: "super-secret",
       },
     });
+    expect(await screen.findByText(/profile saved/i)).toBeInTheDocument();
   });
 
   test("tests profiles and binds selected profile to each supported scope", async () => {
@@ -255,6 +256,7 @@ describe("ConfigurationWorkspace", () => {
         scope_key: target,
         profile_id: "profile-minio",
       });
+      expect(await screen.findByText(/binding saved/i)).toBeInTheDocument();
     }
   });
 
