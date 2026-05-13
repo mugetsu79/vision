@@ -6,6 +6,14 @@ import { apiClient, toApiError } from "@/lib/api";
 export type FleetOverview = components["schemas"]["FleetOverviewResponse"];
 export type FleetBootstrapRequest = components["schemas"]["FleetBootstrapRequest"];
 export type FleetBootstrapResponse = components["schemas"]["FleetBootstrapResponse"];
+export type WorkerAssignmentCreate =
+  components["schemas"]["WorkerAssignmentCreate"];
+export type WorkerAssignmentResponse =
+  components["schemas"]["WorkerAssignmentResponse"];
+export type OperationsLifecycleRequestCreate =
+  components["schemas"]["OperationsLifecycleRequestCreate"];
+export type OperationsLifecycleRequestResponse =
+  components["schemas"]["OperationsLifecycleRequestResponse"];
 export type OperationalMemoryPattern =
   components["schemas"]["OperationalMemoryPatternResponse"];
 
@@ -30,6 +38,40 @@ export function createBootstrapMutationOptions() {
       });
       if (error || !data) {
         throw toApiError(error, "Failed to create edge bootstrap material.");
+      }
+      return data;
+    },
+  };
+}
+
+export function createWorkerAssignmentMutationOptions() {
+  return {
+    mutationFn: async (payload: WorkerAssignmentCreate) => {
+      const { data, error } = await apiClient.POST(
+        "/api/v1/operations/worker-assignments",
+        {
+          body: payload,
+        },
+      );
+      if (error || !data) {
+        throw toApiError(error, "Failed to update worker assignment.");
+      }
+      return data;
+    },
+  };
+}
+
+export function createLifecycleRequestMutationOptions() {
+  return {
+    mutationFn: async (payload: OperationsLifecycleRequestCreate) => {
+      const { data, error } = await apiClient.POST(
+        "/api/v1/operations/lifecycle-requests",
+        {
+          body: payload,
+        },
+      );
+      if (error || !data) {
+        throw toApiError(error, "Failed to create lifecycle request.");
       }
       return data;
     },
@@ -84,6 +126,31 @@ export function useCreateBootstrapMaterial() {
 
   return useMutation({
     ...createBootstrapMutationOptions(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] });
+    },
+  });
+}
+
+export function useCreateWorkerAssignment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...createWorkerAssignmentMutationOptions(),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] }),
+        queryClient.invalidateQueries({ queryKey: ["cameras"] }),
+      ]);
+    },
+  });
+}
+
+export function useCreateLifecycleRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...createLifecycleRequestMutationOptions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] });
     },

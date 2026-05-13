@@ -541,6 +541,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/worker-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Worker Assignment */
+        post: operations["create_worker_assignment_api_v1_operations_worker_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/runtime-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Worker Runtime Report */
+        post: operations["record_worker_runtime_report_api_v1_operations_runtime_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/lifecycle-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Lifecycle Request */
+        post: operations["create_lifecycle_request_api_v1_operations_lifecycle_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/policy-drafts": {
         parameters: {
             query?: never;
@@ -1616,6 +1667,21 @@ export interface components {
             detail?: string | null;
             runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
             rule_runtime?: components["schemas"]["FleetRuleRuntimeSummary"];
+            assignment?: components["schemas"]["WorkerAssignmentResponse"] | null;
+            runtime_report?: components["schemas"]["SupervisorRuntimeReportResponse"] | null;
+            latest_lifecycle_request?: components["schemas"]["OperationsLifecycleRequestResponse"] | null;
+            /** @default disabled */
+            supervisor_mode: components["schemas"]["SupervisorMode"];
+            /**
+             * Restart Policy
+             * @default never
+             * @enum {string}
+             */
+            restart_policy: "never" | "on_failure" | "always";
+            /** Allowed Lifecycle Actions */
+            allowed_lifecycle_actions?: components["schemas"]["OperationsLifecycleAction"][];
+            /** Last Error */
+            last_error?: string | null;
         };
         /** FleetDeliveryDiagnostic */
         FleetDeliveryDiagnostic: {
@@ -2344,6 +2410,84 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * OperationsLifecycleAction
+         * @enum {string}
+         */
+        OperationsLifecycleAction: "start" | "stop" | "restart" | "drain";
+        /** OperationsLifecycleRequestCreate */
+        OperationsLifecycleRequestCreate: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            action: components["schemas"]["OperationsLifecycleAction"];
+            /** Request Payload */
+            request_payload?: {
+                [key: string]: unknown;
+            };
+        };
+        /** OperationsLifecycleRequestResponse */
+        OperationsLifecycleRequestResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            action: components["schemas"]["OperationsLifecycleAction"];
+            status: components["schemas"]["OperationsLifecycleStatus"];
+            /** Requested By Subject */
+            requested_by_subject?: string | null;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Request Payload */
+            request_payload?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * OperationsLifecycleStatus
+         * @enum {string}
+         */
+        OperationsLifecycleStatus: "requested" | "acknowledged" | "completed" | "failed";
         /** OperatorConfigBindingRequest */
         OperatorConfigBindingRequest: {
             kind: components["schemas"]["OperatorConfigProfileKind"];
@@ -3161,6 +3305,82 @@ export interface components {
             /** Sdp Answer */
             sdp_answer: string;
         };
+        /**
+         * SupervisorMode
+         * @enum {string}
+         */
+        SupervisorMode: "disabled" | "polling" | "push";
+        /** SupervisorRuntimeReportCreate */
+        SupervisorRuntimeReportCreate: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /**
+             * Heartbeat At
+             * Format: date-time
+             */
+            heartbeat_at: string;
+            /** @default unknown */
+            runtime_state: components["schemas"]["WorkerRuntimeState"];
+            /**
+             * Restart Count
+             * @default 0
+             */
+            restart_count: number;
+            /** Last Error */
+            last_error?: string | null;
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+        };
+        /** SupervisorRuntimeReportResponse */
+        SupervisorRuntimeReportResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /**
+             * Heartbeat At
+             * Format: date-time
+             */
+            heartbeat_at: string;
+            runtime_state: components["schemas"]["WorkerRuntimeState"];
+            /** Restart Count */
+            restart_count: number;
+            /** Last Error */
+            last_error?: string | null;
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** TelemetryEnvelope */
         TelemetryEnvelope: {
             /** Events */
@@ -3258,6 +3478,55 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WorkerAssignmentCreate */
+        WorkerAssignmentCreate: {
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** @default supervised */
+            desired_state: components["schemas"]["WorkerDesiredState"];
+        };
+        /** WorkerAssignmentResponse */
+        WorkerAssignmentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            desired_state: components["schemas"]["WorkerDesiredState"];
+            /** Active */
+            active: boolean;
+            /** Supersedes Assignment Id */
+            supersedes_assignment_id?: string | null;
+            /** Assigned By Subject */
+            assigned_by_subject?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** WorkerCameraSettings */
         WorkerCameraSettings: {
@@ -3598,6 +3867,11 @@ export interface components {
              */
             fallback_allowed: boolean;
         };
+        /**
+         * WorkerRuntimeState
+         * @enum {string}
+         */
+        WorkerRuntimeState: "starting" | "running" | "stopped" | "draining" | "error" | "unknown";
         /**
          * WorkerRuntimeStatus
          * @enum {string}
@@ -4939,6 +5213,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FleetBootstrapResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_worker_assignment_api_v1_operations_worker_assignments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkerAssignmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_worker_runtime_report_api_v1_operations_runtime_reports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorRuntimeReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupervisorRuntimeReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_lifecycle_request_api_v1_operations_lifecycle_requests_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationsLifecycleRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsLifecycleRequestResponse"];
                 };
             };
             /** @description Validation Error */

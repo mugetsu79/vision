@@ -17,6 +17,7 @@ import {
 import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
 import { OperationalMemoryPanel } from "@/components/evidence/OperationalMemoryPanel";
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
+import { SupervisorLifecycleControls } from "@/components/operations/SupervisorLifecycleControls";
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -346,6 +347,10 @@ export function SettingsPage() {
                   compact
                 />
                 <RuleRuntimePanel summary={worker.rule_runtime} />
+                <SupervisorLifecycleControls
+                  worker={worker}
+                  edgeNodes={edgeNodes}
+                />
                 {worker.detail ? (
                   <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
                 ) : null}

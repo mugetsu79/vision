@@ -39,6 +39,8 @@ vi.mock("@/lib/api", () => ({
 import { apiClient } from "@/lib/api";
 import {
   createBootstrapMutationOptions,
+  createLifecycleRequestMutationOptions,
+  createWorkerAssignmentMutationOptions,
   fleetOverviewQueryOptions,
 } from "@/hooks/use-operations";
 
@@ -72,5 +74,49 @@ describe("use-operations query helpers", () => {
         version: "0.1.0",
       },
     });
+  });
+
+  test("builds the worker assignment mutation", async () => {
+    const options = createWorkerAssignmentMutationOptions();
+    await options.mutationFn({
+      camera_id: "00000000-0000-0000-0000-000000000101",
+      edge_node_id: "00000000-0000-0000-0000-000000000201",
+      desired_state: "supervised",
+    });
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/api/v1/operations/worker-assignments",
+      {
+        body: {
+          camera_id: "00000000-0000-0000-0000-000000000101",
+          edge_node_id: "00000000-0000-0000-0000-000000000201",
+          desired_state: "supervised",
+        },
+      },
+    );
+  });
+
+  test("builds the lifecycle request mutation", async () => {
+    const options = createLifecycleRequestMutationOptions();
+    await options.mutationFn({
+      camera_id: "00000000-0000-0000-0000-000000000101",
+      edge_node_id: "00000000-0000-0000-0000-000000000201",
+      assignment_id: "00000000-0000-0000-0000-000000000301",
+      action: "restart",
+      request_payload: { reason: "operator_test" },
+    });
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/api/v1/operations/lifecycle-requests",
+      {
+        body: {
+          camera_id: "00000000-0000-0000-0000-000000000101",
+          edge_node_id: "00000000-0000-0000-0000-000000000201",
+          assignment_id: "00000000-0000-0000-0000-000000000301",
+          action: "restart",
+          request_payload: { reason: "operator_test" },
+        },
+      },
+    );
   });
 });

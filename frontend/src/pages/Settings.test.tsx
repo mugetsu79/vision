@@ -98,6 +98,54 @@ const fleetOverview = {
         latest_rule_event_at: null,
         load_status: "not_configured",
       },
+      assignment: {
+        id: "00000000-0000-0000-0000-000000000401",
+        tenant_id: "tenant-1",
+        camera_id: "00000000-0000-0000-0000-000000000102",
+        edge_node_id: "00000000-0000-0000-0000-000000000201",
+        desired_state: "supervised",
+        active: true,
+        supersedes_assignment_id: null,
+        assigned_by_subject: "operator-1",
+        created_at: "2026-05-13T08:00:00Z",
+        updated_at: "2026-05-13T08:00:00Z",
+      },
+      runtime_report: {
+        id: "00000000-0000-0000-0000-000000000501",
+        tenant_id: "tenant-1",
+        camera_id: "00000000-0000-0000-0000-000000000102",
+        edge_node_id: "00000000-0000-0000-0000-000000000201",
+        assignment_id: "00000000-0000-0000-0000-000000000401",
+        heartbeat_at: "2026-05-13T08:01:00Z",
+        runtime_state: "running",
+        restart_count: 3,
+        last_error: "previous restart recovered",
+        runtime_artifact_id: "00000000-0000-0000-0000-000000000601",
+        scene_contract_hash:
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        created_at: "2026-05-13T08:01:00Z",
+      },
+      latest_lifecycle_request: {
+        id: "00000000-0000-0000-0000-000000000701",
+        tenant_id: "tenant-1",
+        camera_id: "00000000-0000-0000-0000-000000000102",
+        edge_node_id: "00000000-0000-0000-0000-000000000201",
+        assignment_id: "00000000-0000-0000-0000-000000000401",
+        action: "restart",
+        status: "requested",
+        requested_by_subject: "operator-1",
+        requested_at: "2026-05-13T08:02:00Z",
+        acknowledged_at: null,
+        completed_at: null,
+        error: null,
+        request_payload: { reason: "operator_test" },
+        created_at: "2026-05-13T08:02:00Z",
+        updated_at: "2026-05-13T08:02:00Z",
+      },
+      supervisor_mode: "polling",
+      restart_policy: "always",
+      allowed_lifecycle_actions: ["start", "stop", "restart", "drain"],
+      last_error: "previous restart recovered",
     },
   ],
   delivery_diagnostics: [
@@ -164,6 +212,14 @@ vi.mock("@/hooks/use-operations", () => ({
         },
       }),
     ),
+    isPending: false,
+  }),
+  useCreateLifecycleRequest: () => ({
+    mutateAsync: vi.fn(() => Promise.resolve({})),
+    isPending: false,
+  }),
+  useCreateWorkerAssignment: () => ({
+    mutateAsync: vi.fn(() => Promise.resolve({})),
     isPending: false,
   }),
 }));
@@ -492,6 +548,38 @@ describe("SettingsPage operations workbench", () => {
     expect(
       within(screen.getByTestId("worker-rail")).getByText(/loaded/i),
     ).toBeInTheDocument();
+    const supervisorControls = screen.getAllByTestId(
+      "supervisor-lifecycle-controls",
+    );
+    expect(supervisorControls.length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /^start$/i }).some((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen.getAllByRole("button", { name: /^stop$/i }).some((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen.getAllByRole("button", { name: /^restart$/i }).some((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen.getAllByRole("button", { name: /^drain$/i }).some((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(/3 restarts/i),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(
+        /previous restart recovered/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(/aaaaaaaaaaaa/i),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getAllByLabelText(
+        /desired worker location/i,
+      ).length,
+    ).toBeGreaterThan(0);
     const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
     expect(
       within(diagnosticsRail).getByText(/direct stream unavailable:/i),
