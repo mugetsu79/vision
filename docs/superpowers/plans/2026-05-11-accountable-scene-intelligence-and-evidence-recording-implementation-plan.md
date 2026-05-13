@@ -64,16 +64,16 @@ Completed and pushed on `codex/omnisight-ui-spec-implementation`:
   and band documentation/validation.
 - Tasks `17-19`: Operational Memory, Prompt-To-Policy, and Identity-Light
   Cross-Camera Intelligence.
-- Tasks `20-21`: supervisor operations data contract plus Operations lifecycle
-  and assignment UI.
+- Tasks `20-21B`: supervisor operations data contract, Operations lifecycle
+  and assignment UI, supervisor reconciler contract, and hardware admission UI.
 
-Current migration head after the Task 21 checkpoint is
-`0022_supervisor_operations`.
+Current migration head after the Task 21B checkpoint is
+`0023_supervisor_reconciler`.
 
 Next task:
 
 ```text
-Task 21B: Supervisor Reconciler And Hardware Admission MVP
+Task 21C: Runnable Supervisor Hardware Reporter
 ```
 
 ## Validation Bands
@@ -203,7 +203,7 @@ Validation goal:
 Band gate: a normal admin can save, bind, test, and then observe the runtime
 effect of every Settings category that exists before the next evidence-media
 task starts. `operations_mode` is allowed to wait for supervisor tasks, but
-Tasks 20-21B and 22 must explicitly consume it.
+Tasks 20-21C and 22 must explicitly consume it.
 
 ### Band 4: Evidence Media Completion
 
@@ -281,7 +281,7 @@ only test review.
 
 ### Band 7: Edge-First Production Operations
 
-Tasks: `20-21B, 22`
+Tasks: `20-21C, 22`
 
 Validation goal:
 
@@ -292,6 +292,8 @@ Validation goal:
   of shelling out
 - supervisor reconcilers can claim lifecycle requests and execute bounded local
   process actions on the node that owns the worker
+- a runnable supervisor process can be launched on an iMac central node or
+  Jetson edge node
 - edge/central supervisors report hardware capability and recent performance
 - model admission recommends a safe model/runtime and blocks unsupported or
   unknown production starts
@@ -437,8 +439,12 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `backend/src/argus/services/cross_camera_threads.py` | create | identity-light non-biometric incident correlation |
 | `backend/src/argus/services/supervisor_operations.py` | create | worker assignments, supervisor reports, lifecycle requests, credential rotation |
 | `backend/src/argus/services/model_admission.py` | create | hardware-aware model admission and recommendation evaluator |
+| `backend/src/argus/supervisor/hardware_probe.py` | create | local host capability probe for iMac, Linux, and Jetson supervisors |
+| `backend/src/argus/supervisor/metrics_probe.py` | create | local worker metrics scraper that produces p95/p99 performance samples |
+| `backend/src/argus/supervisor/operations_client.py` | create | HTTP client for supervisor poll, claim, report, admission, runtime report, and completion routes |
 | `backend/src/argus/supervisor/reconciler.py` | create | supervisor-side lifecycle claim/execute loop |
 | `backend/src/argus/supervisor/process_adapter.py` | create | bounded local worker process adapter for supervisors |
+| `backend/src/argus/supervisor/runner.py` | create | runnable supervisor CLI and async loop for central/edge nodes |
 | `backend/src/argus/services/runtime_soak.py` | create | runtime artifact soak run recorder and validation summary |
 | `backend/src/argus/vision/deepstream_runtime.py` | create late | DeepStream backend adapter after soak gate |
 | `backend/src/argus/vision/deepstream_metadata.py` | create late | DeepStream metadata bridge into track lifecycle |
@@ -4770,6 +4776,349 @@ git commit -m "feat(operations): add supervisor reconciler admission"
 git push origin codex/omnisight-ui-spec-implementation
 ```
 
+## Task 21C: Runnable Supervisor Hardware Reporter
+
+**Purpose:** Turn Task 21B's supervisor contract into a runnable iMac/Jetson
+supervisor process that automatically reports host capability, scrapes worker
+metrics for p95/p99 samples when available, evaluates admission, and reconciles
+Start/Stop/Restart/Drain requests without shelling out from the backend API.
+
+**Files:**
+
+- Create: `backend/src/argus/supervisor/hardware_probe.py`
+- Create: `backend/src/argus/supervisor/metrics_probe.py`
+- Create: `backend/src/argus/supervisor/operations_client.py`
+- Modify: `backend/src/argus/supervisor/process_adapter.py`
+- Modify: `backend/src/argus/supervisor/reconciler.py`
+- Create: `backend/src/argus/supervisor/runner.py`
+- Test: `backend/tests/supervisor/test_hardware_probe.py`
+- Test: `backend/tests/supervisor/test_metrics_probe.py`
+- Test: `backend/tests/supervisor/test_operations_client.py`
+- Test: `backend/tests/supervisor/test_process_adapter.py`
+- Test: `backend/tests/supervisor/test_runner.py`
+- Test: `backend/tests/supervisor/test_reconciler.py`
+- Modify: `infra/docker-compose.edge.yml`
+- Modify: `docs/operator-deployment-playbook.md`
+- Modify: `docs/runbook.md`
+- Modify: `docs/imac-master-orin-lab-test-guide.md`
+
+- [ ] **Step 1: Add failing hardware probe tests**
+
+Cover:
+
+- Darwin `x86_64` Intel host reports `host_profile="macos-x86_64-intel"`,
+  `os_name="darwin"`, `machine_arch="x86_64"`, CPU count, memory when
+  available, and CoreML provider availability when ONNX Runtime reports it.
+- Linux `aarch64` host with Jetson release evidence reports
+  `host_profile="linux-aarch64-nvidia-jetson"` and includes NVIDIA/CUDA/TensorRT
+  capability when providers or local files prove availability.
+- Linux `x86_64` NVIDIA host reports `linux-x86_64-nvidia` when CUDA/TensorRT
+  providers are available.
+- Probe failures never crash the supervisor. Missing provider libraries or
+  unreadable system files produce conservative capability values and a valid
+  `EdgeNodeHardwareReportCreate`.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_hardware_probe.py -q
+```
+
+Expected: fail until `hardware_probe.py` exists.
+
+- [ ] **Step 2: Implement hardware probe**
+
+Create `argus.supervisor.hardware_probe` with:
+
+- `HostCapabilityProbe` dataclass that accepts injectable platform, filesystem,
+  provider, and command helpers for tests
+- `build_hardware_report(edge_node_id: UUID | None, observed_performance:
+  list[HardwarePerformanceSample]) -> EdgeNodeHardwareReportCreate`
+- host profile resolver for:
+  - `macos-x86_64-intel`
+  - `macos-arm64-apple`
+  - `linux-aarch64-nvidia-jetson`
+  - `linux-x86_64-nvidia`
+  - `linux-x86_64-intel`
+  - fallback `<system>-<machine>`
+- provider capability resolver that uses `onnxruntime.get_available_providers()`
+  when importable and otherwise returns `{}` without failing
+- memory resolver using standard library `os.sysconf` when available; macOS
+  may use structured `subprocess.run(["sysctl", "-n", "hw.memsize"], ...)`
+  with timeout, never `shell=True`
+
+Do not add `psutil` for this MVP.
+
+- [ ] **Step 3: Add failing metrics probe tests**
+
+Cover:
+
+- Prometheus text with `argus_inference_stage_duration_seconds_bucket` for
+  `stage="total"` and `stage="detect"` is converted into p95/p99 milliseconds.
+- `argus_inference_frames_processed_total` deltas produce observed FPS when two
+  scrapes have timestamps.
+- missing metrics URL, HTTP failure, or missing histogram data returns an empty
+  sample list.
+- generated `HardwarePerformanceSample` includes camera id, model id/name,
+  runtime backend, stream width/height/FPS, p95, and p99.
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_metrics_probe.py -q
+```
+
+Expected: fail until `metrics_probe.py` exists.
+
+- [ ] **Step 4: Implement worker metrics probe**
+
+Create `argus.supervisor.metrics_probe` with:
+
+- `WorkerMetricsProbe(metrics_url: str | None, http_client: httpx.AsyncClient |
+  None = None)`
+- `scrape()` returning parsed Prometheus samples without requiring Prometheus
+  server dependencies beyond `httpx`
+- `build_performance_samples(worker_contexts, previous_snapshot=None)` that
+  maps metrics by camera id to `HardwarePerformanceSample`
+- histogram quantile helper for cumulative Prometheus buckets
+- strict unit conversion: Prometheus seconds to report milliseconds
+
+The probe must not invent performance. If only capability exists, the next
+hardware report should still be posted with `observed_performance=[]`; admission
+can then return `supported` rather than `recommended`.
+
+- [ ] **Step 5: Add failing supervisor operations client tests**
+
+Use `httpx.MockTransport` to cover:
+
+- bearer token is sent as `Authorization: Bearer <token>`
+- `record_hardware_report()` posts to
+  `/api/v1/operations/supervisors/{supervisor_id}/hardware-reports`
+- `poll_lifecycle_requests()`, `claim_lifecycle_request()`,
+  `complete_lifecycle_request()`, `record_runtime_report()`, and
+  `evaluate_model_admission()` call the Task 20-21B routes with the expected
+  JSON
+- non-2xx responses raise a typed supervisor client error that includes method,
+  path, status code, and response body
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_operations_client.py -q
+```
+
+Expected: fail until `operations_client.py` exists.
+
+- [ ] **Step 6: Implement supervisor operations HTTP client**
+
+Create `argus.supervisor.operations_client.SupervisorOperationsClient` that
+implements the protocol consumed by `SupervisorReconciler`.
+
+Required methods:
+
+- `record_hardware_report(report: EdgeNodeHardwareReportCreate)`
+- `poll_lifecycle_requests(...)`
+- `claim_lifecycle_request(...)`
+- `complete_lifecycle_request(...)`
+- `record_runtime_report_for_request(...)`
+- `evaluate_model_admission_for_request(...)`
+- `fetch_fleet_overview()`
+
+The admission request builder should derive model, stream, assignment, and node
+fields from the fleet worker summary plus any latest runtime passport. If no
+runtime backend is known yet, pass the selected model backend preference from
+worker config or `preferred_backend="onnxruntime"` and let admission return
+`supported` or `unknown` honestly.
+
+- [ ] **Step 7: Add failing bounded process adapter tests**
+
+Cover:
+
+- `LocalWorkerProcessAdapter.start(camera_id)` calls
+  `asyncio.create_subprocess_exec()` with argv, never `create_subprocess_shell`
+  and never `shell=True`
+- default worker argv is
+  `[python_executable, "-m", "argus.inference.engine", "--camera-id", str(camera_id)]`
+- env overrides include API URL, bearer token, edge node id when present, and
+  existing media/storage settings from the supervisor environment
+- `stop()` terminates a tracked process and reports `runtime_state="stopped"`
+- `restart()` performs stop then start for a tracked worker
+- `drain()` stops accepting new work and terminates only the target worker in
+  this MVP
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_process_adapter.py -q
+```
+
+Expected: fail until `process_adapter.py` has a concrete adapter.
+
+- [ ] **Step 8: Implement local worker process adapter**
+
+Extend `argus.supervisor.process_adapter` with:
+
+- `WorkerLaunchConfig`
+- `LocalWorkerProcessAdapter`
+- tracked child process registry by camera id
+- graceful stop timeout and forced kill fallback
+- structured argv construction, no shell strings
+- runtime report mapping:
+  - successful start -> `running`
+  - successful stop/drain -> `stopped`
+  - subprocess creation failure -> `error` with `last_error`
+
+Keep this adapter small. Production systemd/Kubernetes adapters can be added
+later behind the same protocol.
+
+- [ ] **Step 9: Add failing runner tests**
+
+Cover:
+
+- runner posts one hardware report on startup before polling lifecycle requests
+- runner includes metrics-derived performance samples when a metrics URL is
+  configured
+- runner polls, claims, evaluates admission, and delegates execution to
+  `SupervisorReconciler`
+- unsupported/unknown Start and Restart complete as failed and never call the
+  process adapter
+- recommended/supported/degraded Start calls the process adapter and records a
+  runtime report
+- `--once` exits after one hardware-report/poll cycle for deterministic tests
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/supervisor/test_runner.py tests/supervisor/test_reconciler.py -q
+```
+
+Expected: fail until `runner.py` wires the pieces together.
+
+- [ ] **Step 10: Implement runnable supervisor CLI**
+
+Create `argus.supervisor.runner` with:
+
+```bash
+python3 -m uv run python -m argus.supervisor.runner \
+  --supervisor-id central-imac \
+  --role central \
+  --api-base-url http://127.0.0.1:8000 \
+  --bearer-token "$TOKEN" \
+  --worker-metrics-url http://127.0.0.1:9108/metrics
+```
+
+and edge form:
+
+```bash
+python3 -m uv run python -m argus.supervisor.runner \
+  --supervisor-id jetson-lab-1 \
+  --role edge \
+  --edge-node-id "$EDGE_NODE_ID" \
+  --api-base-url http://<master-ip>:8000 \
+  --bearer-token "$TOKEN" \
+  --worker-metrics-url http://127.0.0.1:9108/metrics
+```
+
+CLI requirements:
+
+- `--supervisor-id` required
+- `--role central|edge` required
+- `--edge-node-id` required for `edge` and rejected for `central`
+- `--api-base-url` and `--bearer-token` default from `ARGUS_API_BASE_URL` and
+  `ARGUS_API_BEARER_TOKEN`
+- `--hardware-report-interval-seconds` default `60`
+- `--poll-interval-seconds` default `5`
+- `--once` for tests and manual smoke checks
+- log hardware/admission/runtime outcomes without leaking bearer tokens
+
+- [ ] **Step 11: Add optional edge Compose supervisor service**
+
+Modify `infra/docker-compose.edge.yml` to add a `supervisor` service under a
+Compose profile so existing manual edge worker bring-up remains available:
+
+```yaml
+profiles: ["supervisor"]
+command:
+  - python
+  - -m
+  - argus.supervisor.runner
+  - --supervisor-id
+  - ${ARGUS_SUPERVISOR_ID:?Set ARGUS_SUPERVISOR_ID}
+  - --role
+  - edge
+  - --edge-node-id
+  - ${ARGUS_EDGE_NODE_ID:?Set ARGUS_EDGE_NODE_ID}
+  - --api-base-url
+  - ${ARGUS_API_BASE_URL:?Set ARGUS_API_BASE_URL}
+```
+
+The supervisor service should reuse the edge image, model mount, NVIDIA runtime,
+MediaMTX/NATS/MinIO environment, and metrics port wiring. Keep the existing
+`inference-worker` service for manual lab operation until the user confirms the
+supervisor profile should become the default.
+
+- [ ] **Step 12: Document iMac and Jetson smoke tests**
+
+Update:
+
+- `docs/operator-deployment-playbook.md`
+- `docs/runbook.md`
+- `docs/imac-master-orin-lab-test-guide.md`
+
+Document:
+
+- iMac central supervisor command
+- Jetson edge supervisor command and Compose profile command
+- token setup
+- expected Operations UI changes after the first hardware report
+- expected `supported` status before metrics exist
+- expected `recommended` or `degraded` status after metrics include p95/p99
+- how to stop the supervisor and child worker cleanly
+- known limitation: this MVP owns direct child worker processes, not systemd,
+  Kubernetes, or Docker daemon lifecycle yet
+
+- [ ] **Step 13: Run validation**
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest \
+  tests/supervisor/test_hardware_probe.py \
+  tests/supervisor/test_metrics_probe.py \
+  tests/supervisor/test_operations_client.py \
+  tests/supervisor/test_process_adapter.py \
+  tests/supervisor/test_runner.py \
+  tests/supervisor/test_reconciler.py \
+  -q
+python3 -m uv run ruff check src/argus/supervisor tests/supervisor
+
+cd /Users/yann.moren/vision
+git diff --check -- \
+  infra/docker-compose.edge.yml \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md \
+  docs/imac-master-orin-lab-test-guide.md
+```
+
+Expected: pass and no diff-check output.
+
+- [ ] **Step 14: Commit and push**
+
+```bash
+git add backend/src/argus/supervisor/hardware_probe.py \
+  backend/src/argus/supervisor/metrics_probe.py \
+  backend/src/argus/supervisor/operations_client.py \
+  backend/src/argus/supervisor/process_adapter.py \
+  backend/src/argus/supervisor/reconciler.py \
+  backend/src/argus/supervisor/runner.py \
+  backend/tests/supervisor/test_hardware_probe.py \
+  backend/tests/supervisor/test_metrics_probe.py \
+  backend/tests/supervisor/test_operations_client.py \
+  backend/tests/supervisor/test_process_adapter.py \
+  backend/tests/supervisor/test_runner.py \
+  backend/tests/supervisor/test_reconciler.py \
+  infra/docker-compose.edge.yml \
+  docs/operator-deployment-playbook.md \
+  docs/runbook.md \
+  docs/imac-master-orin-lab-test-guide.md
+git commit -m "feat(operations): add runnable supervisor reporter"
+git push origin codex/omnisight-ui-spec-implementation
+```
+
 ## Task 22: Edge Credential Rotation And Bootstrap Hardening
 
 **Files:**
@@ -4884,8 +5233,8 @@ Expected: fail until soak run service/routes exist.
 
 Add `runtime_artifact_soak_runs`, service helpers, and routes to record target
 Jetson validation results. Include the runtime profile selected by Task 13H and
-the worker assignment selected by Tasks 20-21B. Include the hardware report and
-model admission report created by Task 21B. Do not fake hardware validation in
+the worker assignment selected by Tasks 20-21C. Include the hardware report and
+model admission report created by Tasks 21B-21C. Do not fake hardware validation in
 code; unit tests cover the control-plane record, and docs define the physical
 soak procedure.
 
@@ -5144,9 +5493,9 @@ git push origin codex/omnisight-ui-spec-implementation
   Tasks 16A-16E cover per-worker incident rule definition, runtime consumption,
   UI authoring, and Evidence/Operations provenance. Tasks 17-19 cover
   Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
-  Intelligence. Tasks 20-21B cover Fleet/Operations supervisor hardening,
-  operations-mode consumption, supervisor lifecycle reconciliation, and
-  hardware model-admission safety. Task 22 covers credential rotation. Task 23
+  Intelligence. Tasks 20-21C cover Fleet/Operations supervisor hardening,
+  operations-mode consumption, supervisor lifecycle reconciliation, runnable
+  supervisor reporting, and hardware model-admission safety. Task 22 covers credential rotation. Task 23
   covers Linux master plus Jetson TensorRT/open-vocab soak validation including
   hardware performance/admission evidence. Task 24 covers gated Track C /
   DeepStream through UI-managed runtime selection. Task 25 refreshes

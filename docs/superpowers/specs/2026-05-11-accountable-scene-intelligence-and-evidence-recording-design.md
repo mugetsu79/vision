@@ -130,8 +130,8 @@ Current gaps:
 - Operational Memory, Prompt-To-Policy, and Identity-Light Cross-Camera
   Intelligence are not implemented
 - `operations_mode` profiles exist in the UI/configuration plane, but Tasks
-  20-21B and 22 still need to consume them for supervisor lifecycle, worker
-  assignment, model admission, reconciliation, and edge credential rotation
+  20-21C and 22 still need to consume them for supervisor lifecycle, worker
+  assignment, model admission, runnable reporting, and edge credential rotation
 - Fleet/Operations still lacks supervisor-backed lifecycle reconciliation,
   per-worker runtime truth, persistent reassignment, hardware admission, and
   credential rotation
@@ -474,6 +474,39 @@ runtime-selection profile, and registered runtime artifacts. It returns one of
 human-readable rationale and an optional safer model/runtime recommendation.
 Production supervisors must refuse to start `unsupported` or `unknown`
 admissions unless a future explicit break-glass policy is added.
+
+The product needs a runnable supervisor wrapper, not only the API contract. The
+runner must be usable on an iMac pilot master and on a Jetson edge node with the
+same command shape:
+
+```bash
+python -m argus.supervisor.runner \
+  --supervisor-id central-imac \
+  --role central \
+  --api-base-url http://127.0.0.1:8000
+
+python -m argus.supervisor.runner \
+  --supervisor-id jetson-lab-1 \
+  --role edge \
+  --edge-node-id <edge-node-id> \
+  --api-base-url http://<master-ip>:8000
+```
+
+The runner owns four responsibilities:
+
+- report hardware capability on startup and on a fixed interval
+- scrape local worker metrics when available and include p95/p99 timing samples
+  in the next hardware report
+- poll, claim, evaluate, and complete lifecycle requests through the operations
+  API
+- start/stop/restart/drain workers through structured argv and tracked child
+  processes, never through shell strings and never from the backend API process
+
+The first implementation should be conservative. It may report `supported` when
+capability is available but no performance sample exists yet; it must report
+`unknown` rather than inventing performance. Once a worker has emitted metrics,
+the next report should include observed p95/p99 stage timings so admission can
+move to `recommended` or `degraded`.
 
 ### Runtime Artifact Soak
 
@@ -893,7 +926,10 @@ Requirements:
 - central and edge supervisor polling/claim contract
 - supervisor reconciliation loop that claims lifecycle requests and executes
   bounded local process actions on the node that owns the worker
+- runnable central/edge supervisor process for iMac and Jetson lab validation
 - hardware capability and recent performance reports for each edge/central node
+- worker metrics scraping that turns local Prometheus histogram data into
+  observed p95/p99 hardware-report samples when metrics are available
 - model admission recommendations that compare the selected model/runtime,
   camera stream profile, and node capability before a supervisor starts work
 - supervisor-side blocking for unsupported model/hardware pairings, with clear
@@ -1604,6 +1640,8 @@ Frontend:
 - Identity-Light threads render rationale and privacy posture
 - Operations lifecycle buttons create requests and show supervisor truth without
   implying shell access
+- supervisor runner command examples cover iMac central mode and Jetson edge
+  mode, including required API token and edge node identity
 
 Docs:
 
