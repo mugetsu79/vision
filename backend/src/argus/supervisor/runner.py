@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
@@ -13,6 +15,7 @@ from argus.api.contracts import (
     FleetOverviewResponse,
     HardwarePerformanceSample,
 )
+from argus.supervisor.credential_store import FileCredentialStore
 from argus.supervisor.hardware_probe import HostCapabilityProbe
 from argus.supervisor.metrics_probe import WorkerMetricsContext, WorkerMetricsProbe
 from argus.supervisor.operations_client import (
@@ -50,6 +53,7 @@ class RunnerConfig:
     role: str
     api_base_url: str
     bearer_token: str | None = None
+    credential_store_path: Path | None = None
     edge_node_id: UUID | None = None
     worker_metrics_url: str | None = None
     token_url: str | None = None
@@ -62,6 +66,8 @@ class RunnerConfig:
     poll_interval_seconds: float = 5.0
     once: bool = False
     tenant_id: UUID = _NIL_TENANT_ID
+    product_mode: bool = False
+    auth_mode: str = "static_bearer_dev"
 
 
 class SupervisorRunner:
@@ -152,11 +158,20 @@ class SupervisorRunner:
 
 def build_runner(config: RunnerConfig) -> SupervisorRunner:
     token_provider = _build_token_provider(config)
+    credential_store = (
+        FileCredentialStore(config.credential_store_path)
+        if config.credential_store_path is not None
+        else None
+    )
     operations = SupervisorOperationsClient(
         api_base_url=config.api_base_url,
         supervisor_id=config.supervisor_id,
         bearer_token=config.bearer_token,
         token_provider=token_provider,
+        credential_store=credential_store,
+    )
+    worker_token_provider = token_provider or (
+        credential_store.load if credential_store is not None else None
     )
     return SupervisorRunner(
         supervisor_id=config.supervisor_id,
@@ -168,7 +183,7 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
             WorkerLaunchConfig(
                 api_base_url=config.api_base_url,
                 bearer_token=config.bearer_token,
-                bearer_token_provider=token_provider,
+                bearer_token_provider=worker_token_provider,
                 edge_node_id=config.edge_node_id,
             )
         ),
@@ -178,8 +193,9 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
 
 def parse_args(argv: list[str] | None = None) -> RunnerConfig:
     parser = argparse.ArgumentParser(description="Run a Vezor worker supervisor.")
-    parser.add_argument("--supervisor-id", required=True)
-    parser.add_argument("--role", required=True, choices=["central", "edge"])
+    parser.add_argument("--config")
+    parser.add_argument("--supervisor-id")
+    parser.add_argument("--role", choices=["central", "edge"])
     parser.add_argument("--edge-node-id")
     parser.add_argument("--api-base-url", default=os.getenv("ARGUS_API_BASE_URL"))
     parser.add_argument("--bearer-token", default=os.getenv("ARGUS_API_BEARER_TOKEN"))
@@ -200,8 +216,16 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.config:
+        return _parse_config_file(args, parser)
+
     if not args.api_base_url:
         parser.error("--api-base-url or ARGUS_API_BASE_URL is required")
+    if not args.supervisor_id:
+        parser.error("--supervisor-id is required")
+    if not args.role:
+        parser.error("--role is required")
     has_refreshable_token = bool(args.token_url and args.token_username and args.token_password)
     if not args.bearer_token and not has_refreshable_token:
         parser.error(
@@ -229,7 +253,105 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         hardware_report_interval_seconds=args.hardware_report_interval_seconds,
         poll_interval_seconds=args.poll_interval_seconds,
         once=args.once,
+        product_mode=False,
+        auth_mode="password_grant_dev" if has_refreshable_token else "static_bearer_dev",
     )
+
+
+def _parse_config_file(args: argparse.Namespace, parser: argparse.ArgumentParser) -> RunnerConfig:
+    config_path = Path(args.config).expanduser().resolve()
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        parser.error(f"unable to read supervisor config: {exc}")
+    if not isinstance(payload, dict):
+        parser.error("supervisor config must be a JSON object")
+
+    supervisor_id = _required_string(payload, "supervisor_id", parser)
+    role = _required_string(payload, "role", parser)
+    if role not in {"central", "edge"}:
+        parser.error("config role must be central or edge")
+    api_base_url = _required_string(payload, "api_base_url", parser)
+    edge_node_id = _optional_uuid(payload.get("edge_node_id"), parser, "edge_node_id")
+    if role == "edge" and edge_node_id is None:
+        parser.error("edge supervisor config requires edge_node_id")
+    if role == "central" and edge_node_id is not None:
+        parser.error("central supervisor config cannot include edge_node_id")
+    credential_store_path = _config_path(
+        payload.get("credential_store_path"),
+        base_dir=config_path.parent,
+        parser=parser,
+    )
+    if credential_store_path is None:
+        parser.error("product supervisor config requires credential_store_path")
+    return RunnerConfig(
+        supervisor_id=supervisor_id,
+        role=role,
+        api_base_url=api_base_url,
+        bearer_token=None,
+        credential_store_path=credential_store_path,
+        edge_node_id=edge_node_id,
+        worker_metrics_url=_optional_string(payload.get("worker_metrics_url")),
+        hardware_report_interval_seconds=float(
+            payload.get(
+                "hardware_report_interval_seconds",
+                args.hardware_report_interval_seconds,
+            )
+        ),
+        poll_interval_seconds=float(
+            payload.get("poll_interval_seconds", args.poll_interval_seconds)
+        ),
+        once=args.once or bool(payload.get("once", False)),
+        product_mode=True,
+        auth_mode="credential_store",
+    )
+
+
+def _required_string(
+    payload: dict[str, object],
+    key: str,
+    parser: argparse.ArgumentParser,
+) -> str:
+    value = _optional_string(payload.get(key))
+    if value is None:
+        parser.error(f"supervisor config requires {key}")
+    return value
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_uuid(
+    value: object,
+    parser: argparse.ArgumentParser,
+    key: str,
+) -> UUID | None:
+    text = _optional_string(value)
+    if text is None:
+        return None
+    try:
+        return UUID(text)
+    except ValueError:
+        parser.error(f"supervisor config {key} must be a UUID")
+
+
+def _config_path(
+    value: object,
+    *,
+    base_dir: Path,
+    parser: argparse.ArgumentParser,
+) -> Path | None:
+    text = _optional_string(value)
+    if text is None:
+        return None
+    path = Path(text).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    return path.resolve()
 
 
 async def async_main(argv: list[str] | None = None) -> int:

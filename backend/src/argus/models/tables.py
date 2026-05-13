@@ -984,6 +984,7 @@ class NodePairingSession(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Ba
         enum_column(DeploymentNodeKind, "pairing_session_node_kind_enum"),
         nullable=False,
     )
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pairing_code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

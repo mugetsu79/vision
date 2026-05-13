@@ -37,6 +37,34 @@ The backend may render or validate these artifacts, but it must not install,
 start, or shell into a node. Installation is a bootstrap responsibility; daily
 operation is UI intent plus node-local supervisor reconciliation.
 
+### Node Pairing And Credentials
+
+Normal installed operation uses a node credential store, not a copied bearer
+token. Create a pairing session from the Deployment/Operations control plane
+for either a central supervisor or a specific edge node. The returned pairing
+code is short-lived and one-time use. The backend persists only its hash and
+emits credential material only in the successful claim response.
+
+The supervisor product config should contain stable identity and local storage
+paths, for example:
+
+```json
+{
+  "supervisor_id": "central-imac-1",
+  "role": "central",
+  "api_base_url": "https://vezor.example.com",
+  "credential_store_path": "/var/lib/vezor/supervisor/credential.json",
+  "worker_metrics_url": "http://127.0.0.1:9108/metrics"
+}
+```
+
+The pairing claim writes the credential to that local store with owner-only
+permissions. Service units, launch daemons, and production Compose services
+reference the config and credential location; they do not embed access tokens.
+Revoking node credentials from Operations marks all active credentials for that
+node as revoked, records a credential event, and blocks future supervisor
+authentication with the old material.
+
 Local development can still start workers from a shell, or run the pilot
 supervisor when you want Operations lifecycle buttons to reconcile a direct
 child worker process. Use the Operations copy button, supervisor command, or lab
@@ -124,6 +152,13 @@ python3 -m uv run python -m argus.supervisor.runner \
   --worker-metrics-url http://127.0.0.1:9108/metrics
 ```
 
+For the installed product path, prefer a config file and credential store:
+
+```bash
+python3 -m uv run python -m argus.supervisor.runner \
+  --config /etc/vezor/supervisor.json
+```
+
 For Jetson edge Compose, export `ARGUS_SUPERVISOR_ID`, `ARGUS_EDGE_NODE_ID`,
 `ARGUS_API_BASE_URL`, and `ARGUS_API_BEARER_TOKEN`, then start the named
 supervisor service:
@@ -140,6 +175,9 @@ Stop the pilot supervisor with `Ctrl-C` for the direct Python command or
 `docker compose -f infra/docker-compose.edge.yml stop supervisor` for Jetson.
 This MVP owns direct child worker processes only; systemd, Kubernetes, and
 external Docker daemon lifecycle adapters are still future production work.
+The password grant and static bearer arguments are development or break-glass
+authentication modes only; they should not appear in installed service
+definitions.
 
 Admission statuses:
 

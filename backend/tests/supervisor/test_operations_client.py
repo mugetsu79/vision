@@ -19,6 +19,7 @@ from argus.models.enums import (
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
 )
+from argus.supervisor.credential_store import InMemoryCredentialStore
 from argus.supervisor.operations_client import (
     PasswordGrantTokenProvider,
     SupervisorClientError,
@@ -320,6 +321,46 @@ async def test_client_retries_once_with_fresh_token_after_unauthorized() -> None
         "Bearer stale-token",
         "Bearer fresh-token",
     ]
+
+
+@pytest.mark.asyncio
+async def test_client_can_use_credential_store_without_static_bearer() -> None:
+    edge_node_id = uuid4()
+    tenant_id = uuid4()
+    seen: list[httpx.Request] = []
+    store = InMemoryCredentialStore("node-credential-secret")
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            201,
+            json=_hardware_report_response_json(
+                tenant_id=tenant_id,
+                edge_node_id=edge_node_id,
+                supervisor_id="edge-supervisor-1",
+            ),
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as http_client:
+        client = SupervisorOperationsClient(
+            api_base_url="http://api.local",
+            supervisor_id="edge-supervisor-1",
+            credential_store=store,
+            http_client=http_client,
+        )
+
+        await client.record_hardware_report(
+            EdgeNodeHardwareReportCreate(
+                edge_node_id=edge_node_id,
+                reported_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+                host_profile="linux-aarch64-nvidia-jetson",
+                os_name="linux",
+                machine_arch="aarch64",
+                provider_capabilities={"TensorrtExecutionProvider": True},
+            )
+        )
+
+    assert seen[0].headers["authorization"] == "Bearer node-credential-secret"
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
@@ -73,7 +73,44 @@ class _FakeSecurity:
         self.user = user
 
     async def authenticate_request(self, request) -> AuthenticatedUser:  # noqa: ANN001
+        if request.headers.get("Authorization") == "Bearer node-credential":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token issuer is not trusted.",
+            )
         return self.user
+
+
+class _FakeDeploymentService:
+    def __init__(self, context: TenantContext) -> None:
+        self.context = context
+        self.credential_material: str | None = None
+        self.supervisor_id: str | None = None
+
+    async def authenticate_supervisor_credential(
+        self,
+        *,
+        credential_material: str,
+        supervisor_id: str | None = None,
+    ) -> TenantContext:
+        self.credential_material = credential_material
+        self.supervisor_id = supervisor_id
+        if credential_material != "node-credential":
+            raise ValueError("Invalid supervisor credential.")
+        return TenantContext(
+            tenant_id=self.context.tenant_id,
+            tenant_slug=self.context.tenant_slug,
+            user=AuthenticatedUser(
+                subject="supervisor:edge-supervisor-1",
+                email=None,
+                role=RoleEnum.OPERATOR,
+                issuer="vezor-node-credential",
+                realm=self.context.tenant_slug,
+                is_superadmin=False,
+                tenant_context=str(self.context.tenant_id),
+                claims={"auth_type": "supervisor_node_credential"},
+            ),
+        )
 
 
 class _FakeOperationsService:
@@ -478,6 +515,7 @@ def _create_app(context: TenantContext, operations: _FakeOperationsService) -> F
     app.state.services = SimpleNamespace(
         tenancy=_FakeTenancyService(context),
         operations=operations,
+        deployment=_FakeDeploymentService(context),
     )
     app.state.security = _FakeSecurity(context.user)
     return app
@@ -689,6 +727,29 @@ async def test_supervisor_poll_route_returns_scoped_lifecycle_requests() -> None
 
 
 @pytest.mark.asyncio
+async def test_supervisor_operations_accept_node_credential_without_admin_jwt() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    edge_node_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/supervisors/edge-supervisor-1/poll",
+            headers={"Authorization": "Bearer node-credential"},
+            json={"edge_node_id": str(edge_node_id), "limit": 5},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["supervisor_id"] == "edge-supervisor-1"
+    assert app.state.services.deployment.credential_material == "node-credential"
+    assert app.state.services.deployment.supervisor_id == "edge-supervisor-1"
+
+
+@pytest.mark.asyncio
 async def test_lifecycle_claim_and_completion_routes_update_request_state() -> None:
     context = _tenant_context()
     operations = _FakeOperationsService()
@@ -726,6 +787,27 @@ async def test_lifecycle_claim_and_completion_routes_update_request_state() -> N
     assert operations.claim_payload.edge_node_id == edge_node_id
     assert operations.completion_payload is not None
     assert operations.completion_payload.admission_report_id == admission_report_id
+
+
+@pytest.mark.asyncio
+async def test_node_credential_cannot_act_for_a_different_supervisor() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    request_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/operations/lifecycle-requests/{request_id}/claim",
+            headers={"Authorization": "Bearer node-credential"},
+            json={"supervisor_id": "other-supervisor"},
+        )
+
+    assert response.status_code == 403
+    assert operations.claim_payload is None
 
 
 @pytest.mark.asyncio

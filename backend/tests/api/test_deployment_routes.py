@@ -10,6 +10,11 @@ from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
     DeploymentNodeResponse,
+    NodeCredentialRevokeResponse,
+    NodePairingClaim,
+    NodePairingClaimResponse,
+    NodePairingSessionCreate,
+    NodePairingSessionResponse,
     SupervisorServiceReportCreate,
     SupervisorServiceReportResponse,
     TenantContext,
@@ -75,6 +80,10 @@ class _FakeSecurity:
 class _FakeDeploymentService:
     def __init__(self) -> None:
         self.report_payload: SupervisorServiceReportCreate | None = None
+        self.pairing_payload: NodePairingSessionCreate | None = None
+        self.claim_payload: NodePairingClaim | None = None
+        self.revoked_node_id: UUID | None = None
+        self.tenant_id: UUID | None = None
 
     async def list_nodes(self, *, tenant_id: UUID) -> list[DeploymentNodeResponse]:
         return [
@@ -171,6 +180,107 @@ class _FakeDeploymentService:
             ),
         )
 
+    async def create_pairing_session(
+        self,
+        *,
+        tenant_id: UUID,
+        payload: NodePairingSessionCreate,
+        actor_subject: str | None,
+    ) -> NodePairingSessionResponse:
+        self.pairing_payload = payload
+        self.tenant_id = tenant_id
+        return NodePairingSessionResponse(
+            id=UUID("00000000-0000-0000-0000-000000000905"),
+            tenant_id=tenant_id,
+            deployment_node_id=None,
+            edge_node_id=payload.edge_node_id,
+            node_kind=payload.node_kind,
+            hostname=payload.hostname,
+            status="pending",
+            expires_at=datetime(2026, 5, 13, 9, 5, tzinfo=UTC),
+            consumed_at=None,
+            claimed_by_supervisor=None,
+            created_by_subject=actor_subject,
+            pairing_code="123456",
+            created_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+        )
+
+    async def get_pairing_session(
+        self,
+        *,
+        tenant_id: UUID,
+        session_id: UUID,
+    ) -> NodePairingSessionResponse:
+        return NodePairingSessionResponse(
+            id=session_id,
+            tenant_id=tenant_id,
+            deployment_node_id=None,
+            edge_node_id=None,
+            node_kind=DeploymentNodeKind.CENTRAL,
+            hostname="vezor-central",
+            status="pending",
+            expires_at=datetime(2026, 5, 13, 9, 5, tzinfo=UTC),
+            consumed_at=None,
+            claimed_by_supervisor=None,
+            created_by_subject="admin-1",
+            pairing_code=None,
+            created_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+        )
+
+    async def claim_pairing_session(
+        self,
+        *,
+        session_id: UUID,
+        payload: NodePairingClaim,
+        tenant_id: UUID | None = None,
+    ) -> NodePairingClaimResponse:
+        self.claim_payload = payload
+        if payload.pairing_code == "wrong-code":
+            raise ValueError("Invalid pairing code.")
+        effective_tenant_id = tenant_id or self.tenant_id or uuid4()
+        return NodePairingClaimResponse(
+            session_id=session_id,
+            credential_id=UUID("00000000-0000-0000-0000-000000000906"),
+            credential_material="node-credential-once",
+            credential_hash="a" * 64,
+            node=DeploymentNodeResponse(
+                id=UUID("00000000-0000-0000-0000-000000000901"),
+                tenant_id=effective_tenant_id,
+                node_kind=DeploymentNodeKind.CENTRAL,
+                edge_node_id=None,
+                supervisor_id=payload.supervisor_id,
+                hostname=payload.hostname,
+                install_status=DeploymentInstallStatus.INSTALLED,
+                credential_status=DeploymentCredentialStatus.ACTIVE,
+                service_manager=None,
+                service_status=None,
+                version=None,
+                os_name=None,
+                host_profile=None,
+                last_service_reported_at=None,
+                diagnostics={},
+                created_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+                updated_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+            ),
+        )
+
+    async def revoke_node_credentials(
+        self,
+        *,
+        tenant_id: UUID,
+        node_id: UUID,
+        actor_subject: str | None,
+    ) -> NodeCredentialRevokeResponse:
+        del tenant_id, actor_subject
+        self.revoked_node_id = node_id
+        return NodeCredentialRevokeResponse(
+            node_id=node_id,
+            revoked_credentials=1,
+            credential_status=DeploymentCredentialStatus.REVOKED,
+        )
+
 
 def _create_app(context: TenantContext, deployment: _FakeDeploymentService) -> FastAPI:
     app = FastAPI()
@@ -248,6 +358,80 @@ async def test_service_report_route_records_report_and_returns_resolved_node_sta
     }
     assert deployment.report_payload is not None
     assert deployment.report_payload.service_manager is DeploymentServiceManager.LAUNCHD
+
+
+@pytest.mark.asyncio
+async def test_pairing_session_routes_create_read_claim_and_revoke_credentials() -> None:
+    context = _tenant_context()
+    deployment = _FakeDeploymentService()
+    app = _create_app(context, deployment)
+    node_id = UUID("00000000-0000-0000-0000-000000000901")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        create_response = await client.post(
+            "/api/v1/deployment/pairing-sessions",
+            headers={"Authorization": "Bearer token"},
+            json={
+                "node_kind": "central",
+                "hostname": "vezor-central",
+                "requested_ttl_seconds": 300,
+            },
+        )
+        session_id = create_response.json()["id"]
+        get_response = await client.get(
+            f"/api/v1/deployment/pairing-sessions/{session_id}",
+            headers={"Authorization": "Bearer token"},
+        )
+        claim_response = await client.post(
+            f"/api/v1/deployment/pairing-sessions/{session_id}/claim",
+            json={
+                "pairing_code": "123456",
+                "supervisor_id": "central-imac-1",
+                "hostname": "vezor-central",
+            },
+        )
+        revoke_response = await client.post(
+            f"/api/v1/deployment/nodes/{node_id}/credentials/revoke",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert create_response.status_code == 201
+    assert create_response.json()["pairing_code"] == "123456"
+    assert get_response.status_code == 200
+    assert get_response.json()["pairing_code"] is None
+    assert claim_response.status_code == 200
+    assert claim_response.json()["credential_material"] == "node-credential-once"
+    assert revoke_response.status_code == 200
+    assert revoke_response.json()["revoked_credentials"] == 1
+    assert deployment.pairing_payload is not None
+    assert deployment.claim_payload is not None
+    assert deployment.revoked_node_id == node_id
+
+
+@pytest.mark.asyncio
+async def test_pairing_claim_route_maps_expected_failures_without_admin_auth() -> None:
+    context = _tenant_context()
+    app = _create_app(context, _FakeDeploymentService())
+    session_id = UUID("00000000-0000-0000-0000-000000000905")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/deployment/pairing-sessions/{session_id}/claim",
+            json={
+                "pairing_code": "wrong-code",
+                "supervisor_id": "central-imac-1",
+                "hostname": "vezor-central",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid pairing code."
 
 
 @pytest.mark.asyncio

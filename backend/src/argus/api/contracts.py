@@ -1376,6 +1376,58 @@ class SupervisorServiceReportResponse(BaseModel):
     node: DeploymentNodeResponse
 
 
+class NodePairingSessionCreate(BaseModel):
+    node_kind: DeploymentNodeKind
+    edge_node_id: UUID | None = None
+    hostname: str = Field(min_length=1, max_length=255)
+    requested_ttl_seconds: int = Field(default=300, ge=60, le=900)
+
+    @model_validator(mode="after")
+    def _validate_node_shape(self) -> NodePairingSessionCreate:
+        if self.node_kind is DeploymentNodeKind.CENTRAL and self.edge_node_id is not None:
+            raise ValueError("central pairing sessions cannot include edge_node_id")
+        if self.node_kind is DeploymentNodeKind.EDGE and self.edge_node_id is None:
+            raise ValueError("edge pairing sessions require edge_node_id")
+        return self
+
+
+class NodePairingSessionResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    deployment_node_id: UUID | None = None
+    edge_node_id: UUID | None = None
+    node_kind: DeploymentNodeKind
+    hostname: str | None = None
+    status: str
+    expires_at: datetime
+    consumed_at: datetime | None = None
+    claimed_by_supervisor: str | None = None
+    created_by_subject: str | None = None
+    pairing_code: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class NodePairingClaim(BaseModel):
+    pairing_code: str = Field(min_length=4, max_length=128)
+    supervisor_id: str = Field(min_length=1, max_length=128)
+    hostname: str = Field(min_length=1, max_length=255)
+
+
+class NodePairingClaimResponse(BaseModel):
+    session_id: UUID
+    credential_id: UUID
+    credential_material: str
+    credential_hash: str
+    node: DeploymentNodeResponse
+
+
+class NodeCredentialRevokeResponse(BaseModel):
+    node_id: UUID
+    revoked_credentials: int = Field(ge=0)
+    credential_status: DeploymentCredentialStatus
+
+
 class WorkerModelAdmissionRequest(BaseModel):
     camera_id: UUID
     edge_node_id: UUID | None = None

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 
 from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
@@ -27,7 +27,7 @@ from argus.api.contracts import (
     WorkerModelAdmissionResponse,
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
-from argus.core.security import AuthenticatedUser, require
+from argus.core.security import AuthenticatedUser, enforce_role, require
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
 
@@ -37,10 +37,51 @@ TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 
 
+async def get_supervisor_or_admin_tenant_context(
+    request: Request,
+    services: ServicesDependency,
+    x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
+    supervisor_id: str | None = None,
+) -> TenantContext:
+    token = _bearer_token(request.headers.get("Authorization"))
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token.",
+        )
+    try:
+        user = await request.app.state.security.authenticate_request(request)
+    except HTTPException as exc:
+        if exc.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+    else:
+        enforce_role(user, RoleEnum.ADMIN)
+        return await services.tenancy.resolve_context(
+            user=user,
+            explicit_tenant_id=_parse_optional_uuid(x_tenant_id),
+        )
+
+    try:
+        return await services.deployment.authenticate_supervisor_credential(
+            credential_material=token,
+            supervisor_id=supervisor_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid supervisor credential.",
+        ) from exc
+
+
+SupervisorOrAdminTenantDependency = Annotated[
+    TenantContext,
+    Depends(get_supervisor_or_admin_tenant_context),
+]
+
+
 @router.get("/fleet", response_model=FleetOverviewResponse)
 async def get_fleet_overview(
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> FleetOverviewResponse:
     return await services.operations.get_fleet_overview(tenant_context)
@@ -100,8 +141,7 @@ async def create_worker_assignment(
 )
 async def record_worker_runtime_report(
     payload: SupervisorRuntimeReportCreate,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> SupervisorRuntimeReportResponse:
     return await services.operations.record_worker_runtime_report(
@@ -131,8 +171,7 @@ async def create_lifecycle_request(
 async def poll_supervisor_lifecycle_requests(
     supervisor_id: str,
     payload: SupervisorPollRequest,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> SupervisorPollResponse:
     return await services.operations.poll_supervisor_lifecycle_requests(
@@ -149,10 +188,10 @@ async def poll_supervisor_lifecycle_requests(
 async def claim_lifecycle_request(
     request_id: UUID,
     payload: LifecycleRequestClaim,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> OperationsLifecycleRequestResponse:
+    _assert_supervisor_identity(tenant_context, payload.supervisor_id)
     return await services.operations.claim_lifecycle_request(
         tenant_context,
         request_id,
@@ -167,10 +206,10 @@ async def claim_lifecycle_request(
 async def complete_lifecycle_request(
     request_id: UUID,
     payload: LifecycleRequestCompletion,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> OperationsLifecycleRequestResponse:
+    _assert_supervisor_identity(tenant_context, payload.supervisor_id)
     return await services.operations.complete_lifecycle_request(
         tenant_context,
         request_id,
@@ -186,8 +225,7 @@ async def complete_lifecycle_request(
 async def record_hardware_report(
     supervisor_id: str,
     payload: EdgeNodeHardwareReportCreate,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> EdgeNodeHardwareReportResponse:
     return await services.operations.record_hardware_report(
@@ -236,8 +274,7 @@ async def get_latest_edge_hardware_report(
 async def evaluate_worker_model_admission(
     camera_id: UUID,
     payload: WorkerModelAdmissionRequest,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> WorkerModelAdmissionResponse:
     return await services.operations.evaluate_worker_model_admission(
@@ -245,3 +282,34 @@ async def evaluate_worker_model_admission(
         camera_id,
         payload,
     )
+
+
+def _bearer_token(authorization_header: str | None) -> str | None:
+    if authorization_header is None:
+        return None
+    scheme, _, token = authorization_header.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
+def _parse_optional_uuid(raw_value: str | None) -> UUID | None:
+    if raw_value is None:
+        return None
+    try:
+        return UUID(raw_value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Tenant-ID must be a UUID.",
+        ) from exc
+
+
+def _assert_supervisor_identity(tenant_context: TenantContext, supervisor_id: str) -> None:
+    if tenant_context.user.claims.get("auth_type") != "supervisor_node_credential":
+        return
+    if tenant_context.user.subject != f"supervisor:{supervisor_id}":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential cannot act for another supervisor.",
+        )

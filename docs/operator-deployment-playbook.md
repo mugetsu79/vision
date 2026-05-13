@@ -194,6 +194,30 @@ rotated through the Deployment/Operations control plane. Direct child process
 mode remains for local development, deterministic smoke tests, and break-glass
 support only.
 
+### Node Pairing And Credential Lifecycle
+
+Installable supervisors are admitted through short-lived pairing sessions
+created from the Deployment/Operations control plane. A pairing session is
+scoped to one central node or one known edge node, stores only a hash of the
+one-time pairing code, and returns node credential material only during the
+claim response. The backend stores the credential hash and credential lifecycle
+events, not reusable plaintext credential material.
+
+The installed supervisor reads its API URL, supervisor id, role, optional edge
+node id, and credential store path from the local product config file. The
+pairing claim writes the returned credential into the node-local credential
+store with owner-only permissions. Service templates reference that local
+credential boundary; they do not require an operator to paste a bearer token
+into a unit file, launch daemon, Compose file, or long-running terminal.
+
+Credential rotation uses the same bounded path: create or rotate a scoped node
+credential, write it through the local credential store, and let the supervisor
+reload or restart under its service manager. Revocation marks all active
+credentials for the deployment node as revoked, appends a credential event, and
+causes future supervisor authentication with that material to fail. Password
+grant and static bearer runner modes remain development or break-glass flows,
+not the normal product operating model.
+
 Start and restart also require model admission. The supervisor reports hardware
 capability and recent performance samples. The backend records a model-admission
 decision for each worker, and the Operations UI disables production Start and

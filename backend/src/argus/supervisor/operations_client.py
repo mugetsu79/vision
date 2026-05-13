@@ -24,6 +24,7 @@ from argus.api.contracts import (
 )
 from argus.compat import UTC
 from argus.models.enums import DetectorCapability, OperationsLifecycleStatus, WorkerRuntimeState
+from argus.supervisor.credential_store import SupervisorCredentialStore
 
 BearerTokenProvider = Callable[[], str | Awaitable[str]]
 
@@ -120,14 +121,16 @@ class SupervisorOperationsClient:
         supervisor_id: str,
         bearer_token: str | None = None,
         token_provider: BearerTokenProvider | None = None,
+        credential_store: SupervisorCredentialStore | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        if not bearer_token and token_provider is None:
-            raise ValueError("bearer_token or token_provider is required.")
+        if not bearer_token and token_provider is None and credential_store is None:
+            raise ValueError("bearer_token, token_provider, or credential_store is required.")
         self.api_base_url = api_base_url.rstrip("/")
         self.supervisor_id = supervisor_id
         self.bearer_token = bearer_token
         self.token_provider = token_provider
+        self.credential_store = credential_store
         self.http_client = http_client
         self._owns_client = http_client is None
 
@@ -289,7 +292,8 @@ class SupervisorOperationsClient:
 
     async def _bearer_token(self) -> str:
         if self.token_provider is None:
-            token = self.bearer_token
+            token = self.credential_store.load() if self.credential_store is not None else None
+            token = token or self.bearer_token
         else:
             provided = self.token_provider()
             token = await provided if inspect.isawaitable(provided) else provided

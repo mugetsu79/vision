@@ -43,6 +43,52 @@ def test_parse_args_accepts_refreshable_token_credentials_without_static_bearer(
     assert config.token_username == "admin-dev"
 
 
+def test_parse_args_product_config_uses_credential_store_without_static_bearer(tmp_path) -> None:
+    config_path = tmp_path / "supervisor.json"
+    credential_path = tmp_path / "supervisor.credential"
+    credential_path.write_text("node-credential-secret", encoding="utf-8")
+    config_path.write_text(
+        """
+{
+  "supervisor_id": "central-imac",
+  "role": "central",
+  "api_base_url": "http://127.0.0.1:8000",
+  "credential_store_path": "supervisor.credential"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = parse_args(["--config", str(config_path), "--once"])
+
+    assert config.bearer_token is None
+    assert config.token_password is None
+    assert config.credential_store_path == credential_path
+    assert config.supervisor_id == "central-imac"
+
+
+def test_parse_args_labels_password_grant_as_dev_only() -> None:
+    config = parse_args(
+        [
+            "--supervisor-id",
+            "central-imac",
+            "--role",
+            "central",
+            "--api-base-url",
+            "http://127.0.0.1:8000",
+            "--token-url",
+            "http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token",
+            "--token-username",
+            "admin-dev",
+            "--token-password",
+            "argus-admin-pass",
+        ]
+    )
+
+    assert config.product_mode is False
+    assert config.auth_mode == "password_grant_dev"
+
+
 @pytest.mark.asyncio
 async def test_runner_posts_hardware_report_before_polling() -> None:
     operations = _FakeOperations(requests=[])

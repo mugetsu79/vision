@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
@@ -10,12 +12,26 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
     DeploymentNodeResponse,
+    NodeCredentialRevokeResponse,
+    NodePairingClaim,
+    NodePairingClaimResponse,
+    NodePairingSessionCreate,
+    NodePairingSessionResponse,
     SupervisorServiceReportCreate,
     SupervisorServiceReportResponse,
+    TenantContext,
 )
 from argus.compat import UTC
-from argus.models.enums import DeploymentInstallStatus
-from argus.models.tables import DeploymentNode, SupervisorServiceStatusReport
+from argus.core.security import AuthenticatedUser
+from argus.models.enums import DeploymentCredentialStatus, DeploymentInstallStatus, RoleEnum
+from argus.models.tables import (
+    DeploymentCredentialEvent,
+    DeploymentNode,
+    NodePairingSession,
+    SupervisorNodeCredential,
+    SupervisorServiceStatusReport,
+    Tenant,
+)
 
 SERVICE_REPORT_STALE_AFTER = timedelta(minutes=5)
 _SECRET_KEY_PARTS = (
@@ -140,6 +156,284 @@ class DeploymentNodeService:
         node_response = deployment_node_response(node, now=now)
         return supervisor_service_report_response(report, node=node_response)
 
+    async def create_pairing_session(
+        self,
+        *,
+        tenant_id: UUID,
+        payload: NodePairingSessionCreate,
+        actor_subject: str | None,
+    ) -> NodePairingSessionResponse:
+        now = self.now_factory()
+        code = _new_pairing_code()
+        row = NodePairingSession(
+            tenant_id=tenant_id,
+            deployment_node_id=None,
+            edge_node_id=payload.edge_node_id,
+            node_kind=payload.node_kind,
+            hostname=payload.hostname,
+            pairing_code_hash=_hash_secret(code),
+            status="pending",
+            expires_at=now + timedelta(seconds=payload.requested_ttl_seconds),
+            consumed_at=None,
+            claimed_by_supervisor=None,
+            created_by_subject=actor_subject,
+        )
+        _ensure_identity_and_timestamps(row, now=now)
+        async with self.session_factory() as session:
+            await self._validate_edge_node_scope(
+                session=session,
+                tenant_id=tenant_id,
+                edge_node_id=payload.edge_node_id,
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return pairing_session_response(row, now=now, pairing_code=code)
+
+    async def get_pairing_session(
+        self,
+        *,
+        tenant_id: UUID,
+        session_id: UUID,
+    ) -> NodePairingSessionResponse:
+        now = self.now_factory()
+        async with self.session_factory() as session:
+            row = await self._load_pairing_session(
+                session=session,
+                tenant_id=tenant_id,
+                session_id=session_id,
+            )
+        return pairing_session_response(row, now=now, pairing_code=None)
+
+    async def claim_pairing_session(
+        self,
+        *,
+        tenant_id: UUID | None = None,
+        session_id: UUID,
+        payload: NodePairingClaim,
+    ) -> NodePairingClaimResponse:
+        now = self.now_factory()
+        async with self.session_factory() as session:
+            pairing = await self._load_pairing_session(
+                session=session,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                for_update=True,
+            )
+            effective_tenant_id = pairing.tenant_id
+            if pairing.status == "consumed":
+                msg = "Pairing session is already consumed."
+                raise ValueError(msg)
+            if pairing.expires_at < now:
+                pairing.status = "expired"
+                await session.commit()
+                msg = "Pairing session expired."
+                raise ValueError(msg)
+            if not secrets.compare_digest(
+                pairing.pairing_code_hash,
+                _hash_secret(payload.pairing_code),
+            ):
+                msg = "Invalid pairing code."
+                raise ValueError(msg)
+
+            node = await self._load_node_by_supervisor(
+                session=session,
+                tenant_id=effective_tenant_id,
+                supervisor_id=payload.supervisor_id,
+            )
+            if node is None:
+                node = DeploymentNode(
+                    tenant_id=effective_tenant_id,
+                    edge_node_id=pairing.edge_node_id,
+                    supervisor_id=payload.supervisor_id,
+                    node_kind=pairing.node_kind,
+                    hostname=payload.hostname,
+                    install_status=DeploymentInstallStatus.INSTALLED,
+                    credential_status=DeploymentCredentialStatus.ACTIVE,
+                    service_manager=None,
+                    service_status=None,
+                    version=None,
+                    os_name=None,
+                    host_profile=None,
+                    last_service_reported_at=None,
+                    diagnostics={},
+                )
+                _ensure_identity_and_timestamps(node, now=now)
+                session.add(node)
+                await _flush_if_available(session)
+            else:
+                node.edge_node_id = pairing.edge_node_id
+                node.node_kind = pairing.node_kind
+                node.hostname = payload.hostname
+                node.install_status = DeploymentInstallStatus.INSTALLED
+                node.credential_status = DeploymentCredentialStatus.ACTIVE
+                node.updated_at = now
+
+            credential_material = _new_credential_material()
+            credential = SupervisorNodeCredential(
+                tenant_id=effective_tenant_id,
+                deployment_node_id=node.id,
+                supervisor_id=payload.supervisor_id,
+                credential_hash=_hash_secret(credential_material),
+                encrypted_credential=None,
+                status=DeploymentCredentialStatus.ACTIVE,
+                issued_at=now,
+                expires_at=None,
+                revoked_at=None,
+            )
+            _ensure_identity_and_timestamps(credential, now=now)
+            session.add(credential)
+            pairing.deployment_node_id = node.id
+            pairing.status = "consumed"
+            pairing.consumed_at = now
+            pairing.claimed_by_supervisor = payload.supervisor_id
+            pairing.updated_at = now
+            session.add(
+                _credential_event(
+                    tenant_id=effective_tenant_id,
+                    deployment_node_id=node.id,
+                    credential_id=credential.id,
+                    event_type="credential.issued",
+                    actor_subject=payload.supervisor_id,
+                    occurred_at=now,
+                )
+            )
+            await session.commit()
+            await session.refresh(node)
+            await session.refresh(credential)
+
+        return NodePairingClaimResponse(
+            session_id=session_id,
+            credential_id=credential.id,
+            credential_material=credential_material,
+            credential_hash=credential.credential_hash,
+            node=deployment_node_response(node, now=now),
+        )
+
+    async def revoke_node_credentials(
+        self,
+        *,
+        tenant_id: UUID,
+        node_id: UUID,
+        actor_subject: str | None,
+    ) -> NodeCredentialRevokeResponse:
+        now = self.now_factory()
+        async with self.session_factory() as session:
+            node = await self._load_node_by_id(
+                session=session,
+                tenant_id=tenant_id,
+                node_id=node_id,
+            )
+            statement = (
+                select(SupervisorNodeCredential)
+                .where(SupervisorNodeCredential.tenant_id == tenant_id)
+                .where(SupervisorNodeCredential.deployment_node_id == node_id)
+            )
+            credentials = list((await session.execute(statement)).scalars().all())
+            revoked = 0
+            for credential in credentials:
+                if not isinstance(credential, SupervisorNodeCredential):
+                    continue
+                if credential.status is DeploymentCredentialStatus.REVOKED:
+                    continue
+                credential.status = DeploymentCredentialStatus.REVOKED
+                credential.revoked_at = now
+                credential.updated_at = now
+                revoked += 1
+                session.add(
+                    _credential_event(
+                        tenant_id=tenant_id,
+                        deployment_node_id=node_id,
+                        credential_id=credential.id,
+                        event_type="credential.revoked",
+                        actor_subject=actor_subject,
+                        occurred_at=now,
+                    )
+                )
+            node.credential_status = DeploymentCredentialStatus.REVOKED
+            node.install_status = DeploymentInstallStatus.REVOKED
+            node.updated_at = now
+            await session.commit()
+            await session.refresh(node)
+        return NodeCredentialRevokeResponse(
+            node_id=node_id,
+            revoked_credentials=revoked,
+            credential_status=DeploymentCredentialStatus.REVOKED,
+        )
+
+    async def validate_supervisor_credential(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        credential_material: str,
+    ) -> bool:
+        credential_hash = _hash_secret(credential_material)
+        async with self.session_factory() as session:
+            statement = (
+                select(SupervisorNodeCredential)
+                .where(SupervisorNodeCredential.tenant_id == tenant_id)
+                .where(SupervisorNodeCredential.supervisor_id == supervisor_id)
+            )
+            rows = list((await session.execute(statement)).scalars().all())
+        return any(
+            isinstance(row, SupervisorNodeCredential)
+            and row.credential_hash == credential_hash
+            and row.status is DeploymentCredentialStatus.ACTIVE
+            for row in rows
+        )
+
+    async def authenticate_supervisor_credential(
+        self,
+        *,
+        credential_material: str,
+        supervisor_id: str | None = None,
+    ) -> TenantContext:
+        credential_hash = _hash_secret(credential_material)
+        async with self.session_factory() as session:
+            statement = (
+                select(SupervisorNodeCredential)
+                .where(SupervisorNodeCredential.credential_hash == credential_hash)
+                .where(SupervisorNodeCredential.status == DeploymentCredentialStatus.ACTIVE)
+            )
+            if supervisor_id is not None:
+                statement = statement.where(SupervisorNodeCredential.supervisor_id == supervisor_id)
+            credentials = list((await session.execute(statement)).scalars().all())
+            for credential in credentials:
+                if not isinstance(credential, SupervisorNodeCredential):
+                    continue
+                if credential.status is not DeploymentCredentialStatus.ACTIVE:
+                    continue
+                if not secrets.compare_digest(credential.credential_hash, credential_hash):
+                    continue
+                node = await session.get(DeploymentNode, credential.deployment_node_id)
+                if not isinstance(node, DeploymentNode):
+                    continue
+                if node.credential_status is not DeploymentCredentialStatus.ACTIVE:
+                    continue
+                tenant = await session.get(Tenant, credential.tenant_id)
+                if not isinstance(tenant, Tenant):
+                    continue
+                return TenantContext(
+                    tenant_id=tenant.id,
+                    tenant_slug=tenant.slug,
+                    user=AuthenticatedUser(
+                        subject=f"supervisor:{credential.supervisor_id}",
+                        email=None,
+                        role=RoleEnum.OPERATOR,
+                        issuer="vezor-node-credential",
+                        realm=tenant.slug,
+                        is_superadmin=False,
+                        tenant_context=str(tenant.id),
+                        claims={
+                            "auth_type": "supervisor_node_credential",
+                            "deployment_node_id": str(node.id),
+                        },
+                    ),
+                )
+        msg = "Invalid supervisor credential."
+        raise ValueError(msg)
+
     async def _load_node_by_supervisor(
         self,
         *,
@@ -153,6 +447,42 @@ class DeploymentNodeService:
         )
         row = (await session.execute(statement)).scalar_one_or_none()
         return row if isinstance(row, DeploymentNode) else None
+
+    async def _load_node_by_id(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_id: UUID,
+        node_id: UUID,
+    ) -> DeploymentNode:
+        statement = select(DeploymentNode).where(
+            DeploymentNode.tenant_id == tenant_id,
+            DeploymentNode.id == node_id,
+        )
+        row = (await session.execute(statement)).scalar_one_or_none()
+        if isinstance(row, DeploymentNode):
+            return row
+        msg = "Deployment node not found."
+        raise ValueError(msg)
+
+    async def _load_pairing_session(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_id: UUID | None,
+        session_id: UUID,
+        for_update: bool = False,
+    ) -> NodePairingSession:
+        statement = select(NodePairingSession).where(NodePairingSession.id == session_id)
+        if tenant_id is not None:
+            statement = statement.where(NodePairingSession.tenant_id == tenant_id)
+        if for_update:
+            statement = statement.with_for_update()
+        row = (await session.execute(statement)).scalar_one_or_none()
+        if isinstance(row, NodePairingSession):
+            return row
+        msg = "Pairing session not found."
+        raise ValueError(msg)
 
     async def _validate_edge_node_scope(
         self,
@@ -233,6 +563,30 @@ def supervisor_service_report_response(
     )
 
 
+def pairing_session_response(
+    row: NodePairingSession,
+    *,
+    now: datetime,
+    pairing_code: str | None,
+) -> NodePairingSessionResponse:
+    return NodePairingSessionResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        deployment_node_id=row.deployment_node_id,
+        edge_node_id=row.edge_node_id,
+        node_kind=row.node_kind,
+        hostname=getattr(row, "hostname", None),
+        status=_pairing_status(row, now),
+        expires_at=row.expires_at,
+        consumed_at=row.consumed_at,
+        claimed_by_supervisor=row.claimed_by_supervisor,
+        created_by_subject=row.created_by_subject,
+        pairing_code=pairing_code,
+        created_at=_coerce_datetime(row.created_at, fallback=now),
+        updated_at=_coerce_datetime(row.updated_at, fallback=now),
+    )
+
+
 def redact_diagnostics(value: Any) -> Any:
     if isinstance(value, dict):
         redacted: dict[str, Any] = {}
@@ -268,7 +622,13 @@ def _is_secret_key(key: str) -> bool:
 
 
 def _ensure_identity_and_timestamps(
-    row: DeploymentNode | SupervisorServiceStatusReport,
+    row: (
+        DeploymentNode
+        | SupervisorServiceStatusReport
+        | NodePairingSession
+        | SupervisorNodeCredential
+        | DeploymentCredentialEvent
+    ),
     *,
     now: datetime,
 ) -> None:
@@ -276,8 +636,49 @@ def _ensure_identity_and_timestamps(
         row.id = uuid4()
     if row.created_at is None:
         row.created_at = now
-    if isinstance(row, DeploymentNode) and row.updated_at is None:
-        row.updated_at = now
+    if isinstance(row, (DeploymentNode, NodePairingSession, SupervisorNodeCredential)):
+        if row.updated_at is None:
+            row.updated_at = now
+
+
+def _credential_event(
+    *,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    credential_id: UUID | None,
+    event_type: str,
+    actor_subject: str | None,
+    occurred_at: datetime,
+) -> DeploymentCredentialEvent:
+    row = DeploymentCredentialEvent(
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+        credential_id=credential_id,
+        event_type=event_type,
+        actor_subject=actor_subject,
+        occurred_at=occurred_at,
+        event_metadata={},
+    )
+    _ensure_identity_and_timestamps(row, now=occurred_at)
+    return row
+
+
+def _pairing_status(row: NodePairingSession, now: datetime) -> str:
+    if row.status == "pending" and row.expires_at < now:
+        return "expired"
+    return row.status
+
+
+def _new_pairing_code() -> str:
+    return secrets.token_urlsafe(6)
+
+
+def _new_credential_material() -> str:
+    return f"vzcred_{secrets.token_urlsafe(32)}"
+
+
+def _hash_secret(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _coerce_datetime(value: object, *, fallback: datetime) -> datetime:
