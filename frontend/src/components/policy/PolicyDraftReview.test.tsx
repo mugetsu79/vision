@@ -155,8 +155,7 @@ function draft(status: PolicyDraft["status"] = "draft"): PolicyDraft {
     applied_by_subject: status === "applied" ? "admin-1" : null,
     created_at: "2026-05-12T10:00:00Z",
     updated_at: "2026-05-12T10:00:00Z",
-    decided_at:
-      status === "draft" ? null : "2026-05-12T10:05:00Z",
+    decided_at: status === "draft" ? null : "2026-05-12T10:05:00Z",
     applied_at: status === "applied" ? "2026-05-12T10:10:00Z" : null,
   };
 }
@@ -196,7 +195,10 @@ describe("PolicyDraftReview", () => {
       const url = new URL(request.url);
       requests.push(`${request.method} ${url.pathname}`);
 
-      if (url.pathname === "/api/v1/policy-drafts" && request.method === "POST") {
+      if (
+        url.pathname === "/api/v1/policy-drafts" &&
+        request.method === "POST"
+      ) {
         createPayload = (await request.json()) as Record<string, unknown>;
         return jsonResponse(draft(), 201);
       }
@@ -234,28 +236,31 @@ describe("PolicyDraftReview", () => {
     const user = userEvent.setup();
     const requests: string[] = [];
 
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation((input) => {
       const request = input as Request;
       const url = new URL(request.url);
       requests.push(`${request.method} ${url.pathname}`);
 
-      if (url.pathname === "/api/v1/policy-drafts" && request.method === "POST") {
-        return jsonResponse(draft(), 201);
+      if (
+        url.pathname === "/api/v1/policy-drafts" &&
+        request.method === "POST"
+      ) {
+        return Promise.resolve(jsonResponse(draft(), 201));
       }
       if (
         url.pathname === "/api/v1/policy-drafts/draft-1/approve" &&
         request.method === "POST"
       ) {
-        return jsonResponse(draft("approved"));
+        return Promise.resolve(jsonResponse(draft("approved")));
       }
       if (
         url.pathname === "/api/v1/policy-drafts/draft-1/apply" &&
         request.method === "POST"
       ) {
-        return jsonResponse(draft("applied"));
+        return Promise.resolve(jsonResponse(draft("applied")));
       }
 
-      throw new Error(`Unexpected request to ${url.pathname}`);
+      return Promise.reject(new Error(`Unexpected request to ${url.pathname}`));
     });
 
     renderPanel();
@@ -268,7 +273,9 @@ describe("PolicyDraftReview", () => {
     await waitFor(() => {
       expect(screen.getByText("approved")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("button", { name: /apply approved draft/i }));
+    await user.click(
+      screen.getByRole("button", { name: /apply approved draft/i }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText("applied")).toBeInTheDocument();
@@ -283,21 +290,24 @@ describe("PolicyDraftReview", () => {
   test("rejects a draft and disables decision buttons", async () => {
     const user = userEvent.setup();
 
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation((input) => {
       const request = input as Request;
       const url = new URL(request.url);
 
-      if (url.pathname === "/api/v1/policy-drafts" && request.method === "POST") {
-        return jsonResponse(draft(), 201);
+      if (
+        url.pathname === "/api/v1/policy-drafts" &&
+        request.method === "POST"
+      ) {
+        return Promise.resolve(jsonResponse(draft(), 201));
       }
       if (
         url.pathname === "/api/v1/policy-drafts/draft-1/reject" &&
         request.method === "POST"
       ) {
-        return jsonResponse(draft("rejected"));
+        return Promise.resolve(jsonResponse(draft("rejected")));
       }
 
-      throw new Error(`Unexpected request to ${url.pathname}`);
+      return Promise.reject(new Error(`Unexpected request to ${url.pathname}`));
     });
 
     renderPanel();
@@ -310,8 +320,12 @@ describe("PolicyDraftReview", () => {
     await waitFor(() => {
       expect(screen.getByText("rejected")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: /approve draft/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /reject draft/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /approve draft/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /reject draft/i }),
+    ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: /apply approved draft/i }),
     ).toBeDisabled();
@@ -320,15 +334,18 @@ describe("PolicyDraftReview", () => {
   test("clears the loaded draft when the selected camera changes", async () => {
     const user = userEvent.setup();
 
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation((input) => {
       const request = input as Request;
       const url = new URL(request.url);
 
-      if (url.pathname === "/api/v1/policy-drafts" && request.method === "POST") {
-        return jsonResponse(draft(), 201);
+      if (
+        url.pathname === "/api/v1/policy-drafts" &&
+        request.method === "POST"
+      ) {
+        return Promise.resolve(jsonResponse(draft(), 201));
       }
 
-      throw new Error(`Unexpected request to ${url.pathname}`);
+      return Promise.reject(new Error(`Unexpected request to ${url.pathname}`));
     });
 
     const { rerender } = render(
@@ -354,7 +371,9 @@ describe("PolicyDraftReview", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: /policy drafts for warehouse camera/i }),
+      screen.getByRole("heading", {
+        name: /policy drafts for warehouse camera/i,
+      }),
     ).toBeInTheDocument();
     expect(screen.getByText("No policy draft selected")).toBeInTheDocument();
     expect(screen.queryByText("Scene contract")).not.toBeInTheDocument();

@@ -7,7 +7,7 @@ import { UserMenu } from "@/components/layout/UserMenu";
 import {
   prefetchWorkspaceRoute,
   workspaceNavGroups,
-} from "@/components/layout/TopNav";
+} from "@/components/layout/workspace-nav";
 import { cn } from "@/lib/utils";
 
 export function AppContextRail() {

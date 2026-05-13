@@ -1,6 +1,15 @@
-import { expect, test, type Page, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Page,
+  type APIRequestContext,
+} from "@playwright/test";
 
-function workspaceLink(page: Page, group: "Intelligence" | "Control", name: string) {
+function workspaceLink(
+  page: Page,
+  group: "Intelligence" | "Control",
+  name: string,
+) {
   return page
     .getByRole("navigation", { name: group })
     .getByRole("link", { name });
@@ -19,7 +28,10 @@ async function readAccessToken(page: Page) {
       }
 
       const parsed = JSON.parse(rawValue) as { access_token?: unknown };
-      if (typeof parsed.access_token === "string" && parsed.access_token.length > 0) {
+      if (
+        typeof parsed.access_token === "string" &&
+        parsed.access_token.length > 0
+      ) {
         return parsed.access_token;
       }
     }
@@ -84,24 +96,40 @@ test("real login creates a site and camera through the prompt 7 flows", async ({
   await page.getByRole("button", { name: "Add site" }).click();
   await page.getByLabel("Site name").fill(siteName);
   await page.getByLabel("Time zone").fill("Europe/Zurich");
+  const createSiteResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url() === "http://127.0.0.1:8000/api/v1/sites" &&
+      response.request().method() === "POST",
+    { timeout: 60_000 },
+  );
   await page.getByRole("button", { name: "Save site" }).click();
-  await expect(page.getByRole("cell", { name: siteName })).toBeVisible();
+  const createSiteResponse = await createSiteResponsePromise;
+  expect(createSiteResponse.ok()).toBeTruthy();
+  await expect(page.getByRole("heading", { name: siteName })).toBeVisible();
 
   await workspaceLink(page, "Control", "Scenes").click();
   const sceneWorkspace = page.getByTestId("scene-setup-workspace");
   await sceneWorkspace.getByRole("button", { name: "Add scene" }).click();
   await sceneWorkspace.getByLabel("Camera name").fill(cameraName);
-  await sceneWorkspace.getByLabel("Site", { exact: true }).selectOption({ label: siteName });
+  await sceneWorkspace
+    .getByLabel("Site", { exact: true })
+    .selectOption({ label: siteName });
   await sceneWorkspace.getByLabel("RTSP URL").fill(rtspUrl);
   await sceneWorkspace.getByRole("button", { name: "Next" }).click();
   await sceneWorkspace.getByLabel("Primary model").selectOption(modelId);
   await sceneWorkspace.getByRole("button", { name: "Next" }).click();
-  await sceneWorkspace.getByLabel("Browser delivery profile").selectOption("720p10");
+  await sceneWorkspace
+    .getByLabel("Browser delivery profile")
+    .selectOption("720p10");
   await sceneWorkspace.getByRole("button", { name: "Next" }).click();
 
   for (let count = 0; count < 4; count += 1) {
-    await sceneWorkspace.getByRole("button", { name: "Add source point" }).click();
-    await sceneWorkspace.getByRole("button", { name: "Add destination point" }).click();
+    await sceneWorkspace
+      .getByRole("button", { name: "Add source point" })
+      .click();
+    await sceneWorkspace
+      .getByRole("button", { name: "Add destination point" })
+      .click();
   }
 
   await sceneWorkspace.getByLabel("Reference distance (m)").fill("12.5");

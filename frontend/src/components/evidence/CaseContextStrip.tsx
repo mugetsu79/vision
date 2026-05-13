@@ -6,7 +6,7 @@ import {
   evidenceStorageLabel,
   hashPrefix,
   primaryClipArtifact,
-} from "./AccountabilityStrip";
+} from "./evidence-artifacts";
 import { describeEvidenceState } from "./evidence-signals";
 
 export function CaseContextStrip({ incident }: { incident: Incident }) {
@@ -41,7 +41,9 @@ export function CaseContextStrip({ incident }: { incident: Incident }) {
         <ContextCell
           label="Evidence clip"
           value={evidenceStorageLabel(incident)}
-          detail={artifact ? artifactStatusLabel(artifact.status) : "No artifact"}
+          detail={
+            artifact ? artifactStatusLabel(artifact.status) : "No artifact"
+          }
         />
         <ContextCell
           label="Ledger"

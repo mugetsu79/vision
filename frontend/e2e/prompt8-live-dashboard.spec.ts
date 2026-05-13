@@ -1,13 +1,22 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-function workspaceLink(page: Page, group: "Intelligence" | "Control", name: string) {
+function workspaceLink(
+  page: Page,
+  group: "Intelligence" | "Control",
+  name: string,
+) {
   return page
     .getByRole("navigation", { name: group })
     .getByRole("link", { name });
 }
 
-function cameraPayload(id: string, name: string, profile: string, mode: string) {
+function cameraPayload(
+  id: string,
+  name: string,
+  profile: string,
+  mode: string,
+) {
   return {
     id,
     site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -81,14 +90,20 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
 
     CanvasRenderingContext2D.prototype.fillText = function (...args) {
       const text = String(args[0] ?? "");
-      (this as CanvasRenderingContext2D & { __argusLabels?: string[] }).__argusLabels ??= [];
-      (this as CanvasRenderingContext2D & { __argusLabels?: string[] }).__argusLabels?.push(text);
+      (
+        this as CanvasRenderingContext2D & { __argusLabels?: string[] }
+      ).__argusLabels ??= [];
+      (
+        this as CanvasRenderingContext2D & { __argusLabels?: string[] }
+      ).__argusLabels?.push(text);
       instrumentedWindow.__argusCanvasContexts.add(this);
       return originalFillText.apply(this, args);
     };
 
     CanvasRenderingContext2D.prototype.clearRect = function (...args) {
-      (this as CanvasRenderingContext2D & { __argusLabels?: string[] }).__argusLabels = [];
+      (
+        this as CanvasRenderingContext2D & { __argusLabels?: string[] }
+      ).__argusLabels = [];
       instrumentedWindow.__argusCanvasContexts.add(this);
       return originalClearRect.apply(this, args);
     };
@@ -281,7 +296,9 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
   await expect(page.getByText("bus")).toBeVisible();
   await expect(page.getByText(/telemetry live/i).first()).toBeVisible();
 
-  await page.getByRole("textbox", { name: /ask vezor/i }).fill("only show cars");
+  await page
+    .getByRole("textbox", { name: /ask vezor/i })
+    .fill("only show cars");
   await page.getByRole("button", { name: "Apply" }).click();
 
   await expect(page.getByText("query-rules-v1").first()).toBeVisible();
@@ -291,21 +308,24 @@ test("dashboard shows two live tiles and removes bus overlays after a cars-only 
   await expect
     .poll(
       async () =>
-        page.evaluate(() =>
-          (
-            window as Window & {
-              __getArgusCanvasLabels?: () => string[];
-            }
-          )
-            .__getArgusCanvasLabels?.()
-            .some((label) => /bus/i.test(label)) ?? false,
+        page.evaluate(
+          () =>
+            (
+              window as Window & {
+                __getArgusCanvasLabels?: () => string[];
+              }
+            )
+              .__getArgusCanvasLabels?.()
+              .some((label) => /bus/i.test(label)) ?? false,
         ),
       { timeout: 2_000 },
     )
     .toBe(false);
 });
 
-test("visiting /dashboard renders the OmniSight overview and keeps Live available", async ({ page }) => {
+test("visiting /dashboard renders the OmniSight overview and keeps Live available", async ({
+  page,
+}) => {
   await page.goto("/signin");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.locator("#username").fill("admin-dev");
@@ -317,12 +337,16 @@ test("visiting /dashboard renders the OmniSight overview and keeps Live availabl
   await expect(page).toHaveURL(/\/dashboard$/);
 
   await expect(page.getByTestId("omnisight-overview")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "OmniSight Overview" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "OmniSight Overview" }),
+  ).toBeVisible();
   await expect(workspaceLink(page, "Intelligence", "Dashboard")).toBeVisible();
   await expect(workspaceLink(page, "Intelligence", "Live")).toBeVisible();
 });
 
-test("live sparkline renders with seeded data and does not reset on history round-trip", async ({ page }) => {
+test("live telemetry terrain renders with seeded data and does not reset on history round-trip", async ({
+  page,
+}) => {
   await page.route("**/api/v1/cameras", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -341,8 +365,17 @@ test("live sparkline renders with seeded data and does not reset on history roun
           attribute_rules: [],
           zones: [],
           homography: null,
-          privacy: { blur_faces: false, blur_plates: false, method: "gaussian", strength: 7 },
-          browser_delivery: { default_profile: "720p10", allow_native_on_demand: true, profiles: [] },
+          privacy: {
+            blur_faces: false,
+            blur_plates: false,
+            method: "gaussian",
+            strength: 7,
+          },
+          browser_delivery: {
+            default_profile: "720p10",
+            allow_native_on_demand: true,
+            profiles: [],
+          },
           frame_skip: 1,
           fps_cap: 25,
           created_at: "2026-04-24T10:00:00Z",
@@ -359,7 +392,7 @@ test("live sparkline renders with seeded data and does not reset on history roun
       rows.push({
         bucket: new Date(start + i * 60 * 1000).toISOString(),
         values: { person: (i % 5) + 1, car: i % 3 },
-        total_count: ((i % 5) + 1) + (i % 3),
+        total_count: (i % 5) + 1 + (i % 3),
       });
     }
     await route.fulfill({
@@ -382,12 +415,12 @@ test("live sparkline renders with seeded data and does not reset on history roun
   await page.locator("#kc-login").click();
 
   await expect(page).toHaveURL(/\/live$/);
-  await expect(page.getByLabel(/person sparkline/i)).toBeVisible();
-  await expect(page.getByLabel(/car sparkline/i)).toBeVisible();
+  await expect(page.getByLabel(/person signal terrain/i)).toBeVisible();
+  await expect(page.getByText("car held")).toBeVisible();
 
   await workspaceLink(page, "Intelligence", "Patterns").click();
   await expect(page).toHaveURL(/\/history/);
   await workspaceLink(page, "Intelligence", "Live").click();
   await expect(page).toHaveURL(/\/live$/);
-  await expect(page.getByLabel(/person sparkline/i)).toBeVisible();
+  await expect(page.getByLabel(/person signal terrain/i)).toBeVisible();
 });

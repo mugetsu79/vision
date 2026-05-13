@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { workspaceNavGroups } from "@/components/layout/TopNav";
+import { workspaceNavGroups } from "@/components/layout/workspace-nav";
 import { DeploymentPage } from "@/pages/Deployment";
 
 const deploymentMocks = vi.hoisted(() => ({

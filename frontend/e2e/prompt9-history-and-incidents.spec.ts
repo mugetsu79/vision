@@ -101,7 +101,9 @@ test("history renders quickly, CSV export works, and incidents cover review flow
 
     const from = new Date(url.searchParams.get("from") ?? "");
     const to = new Date(url.searchParams.get("to") ?? "");
-    const hours = Math.round((to.getTime() - from.getTime()) / (60 * 60 * 1000));
+    const hours = Math.round(
+      (to.getTime() - from.getTime()) / (60 * 60 * 1000),
+    );
     expect(hours).toBeLessThanOrEqual(25);
 
     await route.fulfill({
@@ -210,26 +212,36 @@ test("history renders quickly, CSV export works, and incidents cover review flow
   // Warm the dev server route chunk before measuring the history render budget.
   await workspaceLink(page, "Patterns").click();
   await expect(page).toHaveURL(/\/history(?:\?|$)/);
-  await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "History trend chart" }),
+  ).toBeVisible();
   await workspaceLink(page, "Live").click();
   await expect(page).toHaveURL(/\/live$/);
 
   await page.evaluate(() => {
-    (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart = performance.now();
+    (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart =
+      performance.now();
   });
   await workspaceLink(page, "Patterns").click();
   await expect(page).toHaveURL(/\/history(?:\?|$)/);
-  await expect(page.getByRole("img", { name: "History trend chart" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /bucket review/i })).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "History trend chart" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /bucket review/i }),
+  ).toBeVisible();
   const historyRenderMs = await page.evaluate(() => {
-    const startedAt = (window as Window & { __argusHistoryStart?: number }).__argusHistoryStart;
+    const startedAt = (window as Window & { __argusHistoryStart?: number })
+      .__argusHistoryStart;
     if (typeof startedAt !== "number") {
       throw new Error("Missing history render start mark.");
     }
     return performance.now() - startedAt;
   });
   expect(historyRenderMs).toBeLessThan(500);
-  const reviewBucket = page.getByRole("button", { name: /review first bucket/i });
+  const reviewBucket = page.getByRole("button", {
+    name: /review first bucket/i,
+  });
   await reviewBucket.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByText(/visible samples/i)).toBeVisible();
@@ -250,7 +262,9 @@ test("history renders quickly, CSV export works, and incidents cover review flow
   await workspaceLink(page, "Evidence").click();
   await expect(page).toHaveURL(/\/incidents$/);
   await expect.poll(() => incidentReviewStatuses[0]).toBe("pending");
-  await expect(page.getByRole("heading", { name: "Review Queue" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Review Queue" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("complementary", { name: "Facts" }),
   ).toBeVisible();
@@ -259,16 +273,24 @@ test("history renders quickly, CSV export works, and incidents cover review flow
   await expect(evidence.getByRole("link", { name: "Open clip" })).toBeVisible();
 
   await evidence.getByRole("button", { name: "Review" }).click();
-  await expect.poll(() => patchBodies[0]).toEqual({ review_status: "reviewed" });
+  await expect
+    .poll(() => patchBodies[0])
+    .toEqual({ review_status: "reviewed" });
   await expect(page.getByText(/no evidence records match/i)).toBeVisible({
     timeout: 20_000,
   });
 
   await page.getByLabel("Review status").selectOption("reviewed");
   await expect.poll(() => incidentReviewStatuses.at(-1)).toBe("reviewed");
-  const reviewedEvidence = page.getByRole("region", { name: /selected evidence/i });
-  await expect(reviewedEvidence.getByRole("heading", { name: "Forklift Gate" })).toBeVisible();
-  await expect(reviewedEvidence.getByRole("button", { name: "Reopen" })).toBeVisible();
+  const reviewedEvidence = page.getByRole("region", {
+    name: /selected evidence/i,
+  });
+  await expect(
+    reviewedEvidence.getByRole("heading", { name: "Forklift Gate" }),
+  ).toBeVisible();
+  await expect(
+    reviewedEvidence.getByRole("button", { name: "Reopen" }),
+  ).toBeVisible();
 });
 
 test("incidents render signed snapshot previews", async ({ page }) => {
@@ -284,6 +306,14 @@ test("incidents render signed snapshot previews", async ({ page }) => {
     const reviewStatus = url.searchParams.get("review_status");
 
     expect(request.method()).toBe("GET");
+    if (url.pathname.endsWith("/cross-camera-threads")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      });
+      return;
+    }
+
     expect(url.pathname).toBe("/api/v1/incidents");
     expect([null, "pending", "reviewed"]).toContain(reviewStatus);
 
@@ -297,7 +327,8 @@ test("incidents render signed snapshot previews", async ({ page }) => {
           ts: "2026-04-18T10:15:00Z",
           type: "ppe-missing",
           payload: { hard_hat: false, severity: "high" },
-          snapshot_url: "https://minio.local/signed/incidents/forklift-gate.jpg",
+          snapshot_url:
+            "https://minio.local/signed/incidents/forklift-gate.jpg",
           clip_url: "https://minio.local/signed/incidents/forklift-gate.mjpeg",
           storage_bytes: 2097152,
           review_status: "pending",
@@ -335,9 +366,7 @@ test("history filter state survives navigation via URL", async ({ page }) => {
       body: JSON.stringify({
         from: "2026-04-23T00:00:00Z",
         to: "2026-04-23T23:00:00Z",
-        classes: [
-          { class_name: "car", event_count: 40, has_speed_data: true },
-        ],
+        classes: [{ class_name: "car", event_count: 40, has_speed_data: true }],
       }),
     }),
   );

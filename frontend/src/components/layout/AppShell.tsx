@@ -3,7 +3,7 @@ import { useState, type PropsWithChildren } from "react";
 import { OmniSightField } from "@/components/brand/OmniSightField";
 import { AppContextRail } from "@/components/layout/AppContextRail";
 import { AppIconRail } from "@/components/layout/AppIconRail";
-import { useWorkspaceRouteWarmup } from "@/components/layout/TopNav";
+import { useWorkspaceRouteWarmup } from "@/components/layout/workspace-nav";
 import { WorkspaceTransition } from "@/components/layout/WorkspaceTransition";
 import { cn } from "@/lib/utils";
 

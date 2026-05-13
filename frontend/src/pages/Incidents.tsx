@@ -11,7 +11,7 @@ import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel
 import {
   evidenceClipHref,
   evidenceSnapshotHref,
-} from "@/components/evidence/AccountabilityStrip";
+} from "@/components/evidence/evidence-artifacts";
 import {
   describeEvidenceState,
   incidentTypeAccent,
@@ -743,7 +743,7 @@ function cameraNameFor(
   );
 }
 
-export function storageLabel(storageBytes: number) {
+function storageLabel(storageBytes: number) {
   if (storageBytes <= 0) {
     return "No clip storage";
   }
@@ -751,7 +751,7 @@ export function storageLabel(storageBytes: number) {
   return `${(storageBytes / (1024 * 1024)).toFixed(1)} MB secured`;
 }
 
-export function formatIncidentTime(timestamp: string) {
+function formatIncidentTime(timestamp: string) {
   return new Date(timestamp).toLocaleString("en-GB", {
     year: "numeric",
     month: "short",

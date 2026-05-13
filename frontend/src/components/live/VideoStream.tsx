@@ -10,7 +10,13 @@ import {
 import { buildApiUrl } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth-store";
 
-type StreamTransport = "connecting" | "standby" | "webrtc" | "hls" | "mjpeg" | "error";
+type StreamTransport =
+  | "connecting"
+  | "standby"
+  | "webrtc"
+  | "hls"
+  | "mjpeg"
+  | "error";
 
 const HLS_STARTUP_TIMEOUT_MS = 4_000;
 const HLS_RETRY_DELAY_MS = 1_000;
@@ -58,11 +64,17 @@ export function VideoStream({
   const runtimeHints = useMemo(() => getStreamRuntimeHints(), []);
   const [transport, setTransport] = useState<StreamTransport>("connecting");
   const [webrtcFailed, setWebrtcFailed] = useState(false);
-  const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === "undefined");
-  const [isPageVisible, setIsPageVisible] = useState(() => document.visibilityState !== "hidden");
+  const [isVisible, setIsVisible] = useState(
+    () => typeof IntersectionObserver === "undefined",
+  );
+  const [isPageVisible, setIsPageVisible] = useState(
+    () => document.visibilityState !== "hidden",
+  );
   const [firstFrameMs, setFirstFrameMs] = useState<number | null>(null);
   const [hlsRetryToken, setHlsRetryToken] = useState(0);
-  const [sessionToken, setSessionToken] = useState(() => nextStreamSessionToken());
+  const [sessionToken, setSessionToken] = useState(() =>
+    nextStreamSessionToken(),
+  );
 
   const clearReconnectTimer = useEffectEvent(() => {
     if (reconnectTimerRef.current !== null) {
@@ -85,41 +97,42 @@ export function VideoStream({
 
   const requestSessionRestart = useEffectEvent(
     (mode: "backoff" | "immediate" | "recovery" = "backoff") => {
-    if (!accessToken) {
-      setTransport("error");
-      return;
-    }
+      if (!accessToken) {
+        setTransport("error");
+        return;
+      }
 
-    if (mode === "immediate") {
-      reconnectAttemptRef.current = 0;
-      restartSession();
-      return;
-    }
-
-    if (reconnectTimerRef.current !== null) {
-      return;
-    }
-
-    if (mode === "recovery") {
-      reconnectTimerRef.current = window.setTimeout(() => {
-        reconnectTimerRef.current = null;
+      if (mode === "immediate") {
         reconnectAttemptRef.current = 0;
         restartSession();
-      }, HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS);
-      return;
-    }
+        return;
+      }
 
-    const delay = Math.min(
-      STREAM_RECONNECT_BASE_DELAY_MS * (2 ** reconnectAttemptRef.current),
-      STREAM_RECONNECT_MAX_DELAY_MS,
-    );
-    setTransport("standby");
-    reconnectTimerRef.current = window.setTimeout(() => {
-      reconnectTimerRef.current = null;
-      reconnectAttemptRef.current += 1;
-      restartSession();
-    }, delay);
-  });
+      if (reconnectTimerRef.current !== null) {
+        return;
+      }
+
+      if (mode === "recovery") {
+        reconnectTimerRef.current = window.setTimeout(() => {
+          reconnectTimerRef.current = null;
+          reconnectAttemptRef.current = 0;
+          restartSession();
+        }, HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS);
+        return;
+      }
+
+      const delay = Math.min(
+        STREAM_RECONNECT_BASE_DELAY_MS * 2 ** reconnectAttemptRef.current,
+        STREAM_RECONNECT_MAX_DELAY_MS,
+      );
+      setTransport("standby");
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        reconnectAttemptRef.current += 1;
+        restartSession();
+      }, delay);
+    },
+  );
 
   const hlsUrl = useMemo(
     () =>
@@ -151,17 +164,20 @@ export function VideoStream({
       clearReconnectTimer();
       reconnectAttemptRef.current = 0;
       firstFrameSentRef.current = true;
-      const durationMs = Math.max(0, Math.round(performance.now() - playbackStartedAtRef.current));
+      const durationMs = Math.max(
+        0,
+        Math.round(performance.now() - playbackStartedAtRef.current),
+      );
       setFirstFrameMs(durationMs);
       window.dispatchEvent(
         new CustomEvent("argus:stream-first-frame", {
-        detail: {
-          cameraId,
-          defaultProfile,
-          deliveryMode,
-          durationMs,
-          transport: activeTransport,
-        },
+          detail: {
+            cameraId,
+            defaultProfile,
+            deliveryMode,
+            durationMs,
+            transport: activeTransport,
+          },
         }),
       );
     },
@@ -175,6 +191,7 @@ export function VideoStream({
     return () => {
       clearReconnectTimer();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- React 19 effect events are intentionally non-reactive.
   }, [accessToken, cameraId, tenantId]);
 
   useEffect(() => {
@@ -286,6 +303,7 @@ export function VideoStream({
       }
       stopWebRtc?.();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- React 19 effect events are intentionally non-reactive.
   }, [accessToken, cameraId, sessionToken, streamReady, tenantId]);
 
   useEffect(() => {
@@ -368,7 +386,9 @@ export function VideoStream({
         return;
       }
 
-      const release = acquireHlsPlaybackSlot(runtimeHints.maxConcurrentHlsSessions);
+      const release = acquireHlsPlaybackSlot(
+        runtimeHints.maxConcurrentHlsSessions,
+      );
       if (!release) {
         waitForSlot();
         return;
@@ -409,6 +429,7 @@ export function VideoStream({
       destroyHls?.();
       releaseSlot?.();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- React 19 effect events are intentionally non-reactive.
   }, [
     accessToken,
     cameraName,
@@ -455,6 +476,7 @@ export function VideoStream({
       imageElement.removeEventListener("load", handleLoad);
       imageElement.removeEventListener("error", handleError);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- React 19 effect events are intentionally non-reactive.
   }, [emitFirstFrameMetric, transport]);
 
   useEffect(() => {
@@ -464,8 +486,12 @@ export function VideoStream({
     }
 
     let staleTimer: number | null = null;
-    const parsedHeartbeatTs = heartbeatTs ? Date.parse(heartbeatTs) : Number.NaN;
-    const nextStatus: "unknown" | "fresh" | "stale" = Number.isNaN(parsedHeartbeatTs)
+    const parsedHeartbeatTs = heartbeatTs
+      ? Date.parse(heartbeatTs)
+      : Number.NaN;
+    const nextStatus: "unknown" | "fresh" | "stale" = Number.isNaN(
+      parsedHeartbeatTs,
+    )
       ? "unknown"
       : Date.now() - parsedHeartbeatTs <= HEARTBEAT_STALE_AFTER_MS
         ? "fresh"
@@ -477,7 +503,11 @@ export function VideoStream({
       (previousStatus === "unknown" || previousStatus === "stale") &&
       nextStatus === "fresh";
 
-    if (recoveredFromUnavailable && transport !== "connecting" && transport !== "webrtc") {
+    if (
+      recoveredFromUnavailable &&
+      transport !== "connecting" &&
+      transport !== "webrtc"
+    ) {
       requestSessionRestart("recovery");
     }
 
@@ -500,6 +530,7 @@ export function VideoStream({
         window.clearTimeout(staleTimer);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- React 19 effect events are intentionally non-reactive.
   }, [accessToken, heartbeatTs, transport]);
 
   return (
@@ -515,7 +546,9 @@ export function VideoStream({
         ref={videoRef}
         aria-label={`${cameraName} live video`}
         autoPlay
-        className={transport === "mjpeg" ? "hidden" : "h-full w-full object-cover"}
+        className={
+          transport === "mjpeg" ? "hidden" : "h-full w-full object-cover"
+        }
         muted
         playsInline
       />
@@ -607,7 +640,11 @@ async function startWebRtc({
       return;
     }
 
-    const closedConnectionStates = new Set(["closed", "disconnected", "failed"]);
+    const closedConnectionStates = new Set([
+      "closed",
+      "disconnected",
+      "failed",
+    ]);
     if (
       closedConnectionStates.has(peerConnection.connectionState) ||
       closedConnectionStates.has(peerConnection.iceConnectionState)
@@ -654,7 +691,6 @@ async function startWebRtc({
       type: "answer",
       sdp: payload.sdp_answer,
     });
-
   } catch (error) {
     stop();
     throw error;

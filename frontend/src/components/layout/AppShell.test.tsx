@@ -30,7 +30,7 @@ import { oidcManager } from "@/lib/auth";
 import {
   type WorkspaceNavItem,
   workspaceNavGroups,
-} from "@/components/layout/TopNav";
+} from "@/components/layout/workspace-nav";
 import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();

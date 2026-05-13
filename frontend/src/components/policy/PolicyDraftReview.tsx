@@ -43,7 +43,10 @@ export function PolicyDraftReview({ camera, onClose }: PolicyDraftReviewProps) {
     applyDraft.isPending;
   const canDecide = activeDraft?.status === "draft" && !busy;
   const canApply = activeDraft?.status === "approved" && !busy;
-  const metadataRows = useMemo(() => draftMetadataRows(activeDraft), [activeDraft]);
+  const metadataRows = useMemo(
+    () => draftMetadataRows(activeDraft),
+    [activeDraft],
+  );
 
   useEffect(() => {
     setPrompt("");
@@ -60,7 +63,11 @@ export function PolicyDraftReview({ camera, onClose }: PolicyDraftReviewProps) {
       });
       setDraft(created ?? null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to create policy draft.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Failed to create policy draft.",
+      );
     }
   }
 
@@ -73,7 +80,11 @@ export function PolicyDraftReview({ camera, onClose }: PolicyDraftReviewProps) {
       const approved = await approveDraft.mutateAsync(activeDraft.id);
       setDraft(approved ?? activeDraft);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to approve policy draft.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Failed to approve policy draft.",
+      );
     }
   }
 
@@ -86,7 +97,11 @@ export function PolicyDraftReview({ camera, onClose }: PolicyDraftReviewProps) {
       const rejected = await rejectDraft.mutateAsync(activeDraft.id);
       setDraft(rejected ?? activeDraft);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to reject policy draft.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Failed to reject policy draft.",
+      );
     }
   }
 
@@ -99,7 +114,11 @@ export function PolicyDraftReview({ camera, onClose }: PolicyDraftReviewProps) {
       const applied = await applyDraft.mutateAsync(activeDraft.id);
       setDraft(applied ?? activeDraft);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to apply policy draft.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Failed to apply policy draft.",
+      );
     }
   }
 
@@ -141,7 +160,10 @@ export function PolicyDraftReview({ camera, onClose }: PolicyDraftReviewProps) {
             }
           }}
         >
-          <label className="block text-sm font-semibold text-[#dce7f8]" htmlFor="policy-intent">
+          <label
+            className="block text-sm font-semibold text-[#dce7f8]"
+            htmlFor="policy-intent"
+          >
             Policy intent
           </label>
           <textarea
@@ -199,15 +221,22 @@ export function PolicyDraftReview({ camera, onClose }: PolicyDraftReviewProps) {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button onClick={handleApprove} disabled={!canDecide}>
+                <Button
+                  onClick={() => void handleApprove()}
+                  disabled={!canDecide}
+                >
                   <CheckCircle2 aria-hidden="true" className="mr-2 h-4 w-4" />
                   Approve draft
                 </Button>
-                <Button variant="ghost" onClick={handleReject} disabled={!canDecide}>
+                <Button
+                  variant="ghost"
+                  onClick={() => void handleReject()}
+                  disabled={!canDecide}
+                >
                   <XCircle aria-hidden="true" className="mr-2 h-4 w-4" />
                   Reject draft
                 </Button>
-                <Button onClick={handleApply} disabled={!canApply}>
+                <Button onClick={() => void handleApply()} disabled={!canApply}>
                   <Play aria-hidden="true" className="mr-2 h-4 w-4" />
                   Apply approved draft
                 </Button>
@@ -272,11 +301,31 @@ function draftMetadataRows(draft: PolicyDraft | null) {
     return [];
   }
   return [
-    { label: "Provider", value: String(draft.metadata?.llm_provider ?? "local") },
-    { label: "Model", value: String(draft.metadata?.llm_model ?? "fallback") },
+    {
+      label: "Provider",
+      value: metadataValue(draft.metadata?.llm_provider, "local"),
+    },
+    {
+      label: "Model",
+      value: metadataValue(draft.metadata?.llm_model, "fallback"),
+    },
     {
       label: "Profile hash",
-      value: String(draft.metadata?.llm_profile_hash ?? "not selected"),
+      value: metadataValue(draft.metadata?.llm_profile_hash, "not selected"),
     },
   ];
+}
+
+function metadataValue(value: unknown, fallback: string): string {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+  return fallback;
 }
