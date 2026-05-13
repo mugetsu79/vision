@@ -2753,7 +2753,9 @@ async def test_engine_logs_capture_wait_percentiles_and_spike_warning(
 
     assert len(summary_records) == 1
     summary = summary_records[0]
-    assert "capture_wait_p95_ms=" in summary.message
+    assert "capture_wait_p95_ms=" not in summary.message
+    assert "capture_wait" in summary.stage_p95_ms
+    assert "capture_wait" in summary.stage_p99_ms
     assert summary.capture_wait_p95_ms == pytest.approx(269.5)
     assert summary.capture_wait_p99_ms == pytest.approx(301.9)
     assert len(warning_records) == 1

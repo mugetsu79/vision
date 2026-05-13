@@ -1573,12 +1573,6 @@ class InferenceEngine:
         capture_wait_p99_ms = _duration_to_ms(
             self._timing_summary.percentile("capture_wait", 99.0)
         )
-        message_suffix = ""
-        if capture_wait_p95_ms is not None and capture_wait_p99_ms is not None:
-            message_suffix = (
-                f" capture_wait_p95_ms={capture_wait_p95_ms:.1f}"
-                f" capture_wait_p99_ms={capture_wait_p99_ms:.1f}"
-            )
         extra = {
             "camera_id": str(self.config.camera_id),
             "frame_count": frame_count,
@@ -1592,14 +1586,13 @@ class InferenceEngine:
         logger.info(
             "Inference stage timing summary "
             "camera_id=%s frame_count=%s stage_avg_ms={%s} stage_max_ms={%s} "
-            "stage_p95_ms={%s} stage_p99_ms={%s}%s",
+            "stage_p95_ms={%s} stage_p99_ms={%s}",
             str(self.config.camera_id),
             frame_count,
             _format_stage_timings_ms(stage_avg_ms),
             _format_stage_timings_ms(stage_max_ms),
             _format_stage_timings_ms(stage_p95_ms),
             _format_stage_timings_ms(stage_p99_ms),
-            message_suffix,
             extra=extra,
         )
         capture_wait_max_s = self._timing_summary.stage_maximums.get("capture_wait")
