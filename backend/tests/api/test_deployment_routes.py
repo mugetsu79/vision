@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import (
     DeploymentNodeResponse,
+    DeploymentSupportBundleResponse,
     NodeCredentialRevokeResponse,
     NodePairingClaim,
     NodePairingClaimResponse,
@@ -313,6 +314,23 @@ class _FakeDeploymentService:
             credential_status=DeploymentCredentialStatus.REVOKED,
         )
 
+    async def get_support_bundle(
+        self,
+        *,
+        tenant_id: UUID,
+        node_id: UUID,
+    ) -> DeploymentSupportBundleResponse:
+        return DeploymentSupportBundleResponse(
+            node=(await self.list_nodes(tenant_id=tenant_id))[0],
+            service_reports=[],
+            lifecycle_summary={"by_status": {"completed": 1}},
+            runtime_summary={"by_state": {"running": 1}},
+            hardware_summary={"latest_reported_at": "2026-05-13T09:00:00Z"},
+            model_admission_summary={"by_status": {"recommended": 1}},
+            diagnostics={"node": {"authorization": "[redacted]", "storage": "ok"}},
+            generated_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+        )
+
 
 def _create_app(context: TenantContext, deployment: _FakeDeploymentService) -> FastAPI:
     app = FastAPI()
@@ -498,6 +516,29 @@ async def test_pairing_claim_route_maps_expected_failures_without_admin_auth() -
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid pairing code."
+
+
+@pytest.mark.asyncio
+async def test_support_bundle_route_returns_redacted_diagnostics() -> None:
+    context = _tenant_context()
+    app = _create_app(context, _FakeDeploymentService())
+    node_id = UUID("00000000-0000-0000-0000-000000000901")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            f"/api/v1/deployment/nodes/{node_id}/support-bundle",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["node"]["id"] == str(node_id)
+    assert body["diagnostics"]["node"]["authorization"] == "[redacted]"
+    assert body["lifecycle_summary"]["by_status"] == {"completed": 1}
+    assert body["model_admission_summary"]["by_status"] == {"recommended": 1}
 
 
 @pytest.mark.asyncio

@@ -536,9 +536,13 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
     expect(within(sceneMatrix).getByText(/ffffffffffff/i)).toBeInTheDocument();
     const memoryPanel = screen.getByTestId("operational-memory-panel");
-    expect(within(memoryPanel).getByText(/observed patterns/i)).toBeInTheDocument();
     expect(
-      within(memoryPanel).getByText(/observed pattern: 3 incidents in one zone/i),
+      within(memoryPanel).getByText(/observed patterns/i),
+    ).toBeInTheDocument();
+    expect(
+      within(memoryPanel).getByText(
+        /observed pattern: 3 incidents in one zone/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByTestId("edge-fleet-grid")).toBeInTheDocument();
     expect(screen.getByTestId("worker-rail")).toBeInTheDocument();
@@ -575,7 +579,12 @@ describe("SettingsPage operations workbench", () => {
       within(screen.getByTestId("worker-rail")).getByText("Lobby"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/argus.inference.engine --camera-id/i),
+      screen.queryByText(/argus.inference.engine --camera-id/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText(
+        /installable supervisors own production worker launch/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getAllByText("jetson-1").length).toBeGreaterThan(0);
     expect(
@@ -615,16 +624,24 @@ describe("SettingsPage operations workbench", () => {
     );
     expect(supervisorControls.length).toBeGreaterThan(0);
     expect(
-      screen.getAllByRole("button", { name: /^start$/i }).some((button) => !button.hasAttribute("disabled")),
+      screen
+        .getAllByRole("button", { name: /^start$/i })
+        .some((button) => !button.hasAttribute("disabled")),
     ).toBe(true);
     expect(
-      screen.getAllByRole("button", { name: /^stop$/i }).some((button) => !button.hasAttribute("disabled")),
+      screen
+        .getAllByRole("button", { name: /^stop$/i })
+        .some((button) => !button.hasAttribute("disabled")),
     ).toBe(true);
     expect(
-      screen.getAllByRole("button", { name: /^restart$/i }).some((button) => !button.hasAttribute("disabled")),
+      screen
+        .getAllByRole("button", { name: /^restart$/i })
+        .some((button) => !button.hasAttribute("disabled")),
     ).toBe(true);
     expect(
-      screen.getAllByRole("button", { name: /^drain$/i }).some((button) => !button.hasAttribute("disabled")),
+      screen
+        .getAllByRole("button", { name: /^drain$/i })
+        .some((button) => !button.hasAttribute("disabled")),
     ).toBe(true);
     expect(
       within(screen.getByTestId("worker-rail")).getByText(/3 restarts/i),
@@ -678,7 +695,10 @@ describe("SettingsPage operations workbench", () => {
     );
 
     expect(await screen.findByText(/edge_secret_once/i)).toBeInTheDocument();
-    expect(screen.getByText(/shown once/i)).toBeInTheDocument();
-    expect(screen.getByText(/docker compose/i)).toBeInTheDocument();
+    expect(screen.getByText(/one-time material/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/legacy lab bootstrap material/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/docker compose/i)).not.toBeInTheDocument();
   });
 });

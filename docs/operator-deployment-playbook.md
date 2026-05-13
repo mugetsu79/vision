@@ -13,6 +13,8 @@ The current product includes the operator workflows needed for a serious pilot:
 - Live wall with source-aware browser delivery
 - metric-aware History with exports
 - Fleet and Operations workbench at `/settings`
+- first-run Deployment workbench at `/deployment` for install health, node
+  pairing, credential status, and redacted support bundles
 - Evidence Desk incident review queue at `/incidents`
 - central and edge worker configuration paths
 - model catalog presets and registration helper
@@ -26,17 +28,18 @@ The current product includes the operator workflows needed for a serious pilot:
   Intelligence -> Evidence
 - supervisor lifecycle request contracts, claim/complete transitions, and
   hardware model-admission reporting in Control -> Operations
+- deployment-node service reports, one-time pairing sessions, node credentials,
+  and credential audit events in Control -> Deployment
 - RTSP and edge USB/UVC camera source configuration
 - Jetson edge compose stack and preflight tooling
 
 The supervisor lifecycle MVP is now present as API contracts, database records,
-UI admission status, a reconciler library, and a runnable child-process
-supervisor for iMac and Jetson pilot use. Local development can still use manual
-terminal workers. The next planned implementation band, Band 7.5, turns that
-runner into an installable macOS/Linux supervisor product with UI-managed
-first-run setup, short-lived node pairing, platform credential storage, service
-health, diagnostics, and no normal copied-token terminal workflow after
-installation.
+UI admission status, a reconciler library, a runnable child-process supervisor,
+and an installable-node control plane. Local development can still use manual
+terminal workers, but product operation is moving to install-once
+macOS/Linux/container supervisor services, short-lived node pairing, platform
+credential storage, service health reports, diagnostics, and no normal
+copied-token terminal workflow after installation.
 
 ## Dev Versus Production
 
@@ -45,7 +48,8 @@ Do not confuse the local dev stack with production.
 ### Development
 
 - one workstation can run the full stack with `make dev-up`
-- workers are started manually from Operations copy buttons or lab guide commands
+- workers can be started manually from lab guide commands when no supervisor is
+  installed
 - local seeded credentials such as `admin-dev` are acceptable only inside the dev stack
 - stop means `Ctrl-C` or `docker compose stop`
 
@@ -127,6 +131,7 @@ Then open:
 
 - [http://127.0.0.1:3000](http://127.0.0.1:3000) for the frontend
 - [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings) for the Operations workbench
+- [http://127.0.0.1:3000/deployment](http://127.0.0.1:3000/deployment) for install health, pairing, and support bundles
 - [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz) for backend health
 - [http://127.0.0.1:8080](http://127.0.0.1:8080) for Keycloak
 - [http://127.0.0.1:9001](http://127.0.0.1:9001) for MinIO console
@@ -160,7 +165,10 @@ Do not treat it as the final production topology for a real multi-site rollout.
 
 ### Worker lifecycle model
 
-The lab UI can show desired worker ownership, runtime freshness, delivery diagnostics, and copyable local-dev worker commands from the Operations page. Those shell commands are a development bridge for workstations where no supervisor is running yet.
+The lab UI can show desired worker ownership, runtime freshness, delivery
+diagnostics, and production admission. Manual shell commands remain a
+development bridge documented in lab guides for workstations where no
+supervisor is running yet.
 
 Production lifecycle controls should not shell out from the browser or API container. Start, stop, restart, and drain should write desired state or send a constrained lifecycle request; a central or edge supervisor then owns the actual process reconciliation and reports runtime truth back through heartbeats.
 
@@ -190,14 +198,14 @@ Supported ownership shapes:
 
 None of the service templates embeds a long-lived bearer token. Product
 credentials are paired, stored behind the node-local credential boundary, and
-rotated through the Deployment/Operations control plane. Direct child process
+rotated through Control -> Deployment. Direct child process
 mode remains for local development, deterministic smoke tests, and break-glass
 support only.
 
 ### Node Pairing And Credential Lifecycle
 
 Installable supervisors are admitted through short-lived pairing sessions
-created from the Deployment/Operations control plane. A pairing session is
+created from Control -> Deployment. A pairing session is
 scoped to one central node or one known edge node, stores only a hash of the
 one-time pairing code, and returns node credential material only during the
 claim response. The backend stores the credential hash and credential lifecycle
@@ -224,6 +232,33 @@ decision for each worker, and the Operations UI disables production Start and
 Restart when admission is `unknown` or `unsupported`. Manual iMac lab workers
 are explicitly labeled as a production-admission bypass because the operator is
 starting the process directly from a terminal.
+
+### First-Run Deployment UI And Diagnostics
+
+After the supervisor package or service files are installed on a node, normal
+setup moves to Control -> Deployment:
+
+1. create a short-lived pairing session for the central node or selected edge
+   node
+2. claim the session from the installed supervisor so the credential is written
+   into the local credential store
+3. verify the node row reports the expected OS, service manager, version,
+   heartbeat, install status, and credential status
+4. inspect the support bundle for service reports, lifecycle and runtime
+   summaries, hardware/model-admission summaries, config references, selected
+   log excerpts, and redacted diagnostics
+
+The support bundle must redact bearer tokens, passwords, secrets, pairing
+codes, and credential material. It is an operator diagnostic artifact, not a
+remote-shell channel.
+
+To verify restart behavior after a host reboot, reboot the node through the
+normal OS mechanism, then return to Control -> Deployment and confirm the
+service manager still reports the supervisor as running with a fresh heartbeat.
+On Linux this proves the `systemd` unit is enabled and its restart policy works.
+On macOS this proves the `launchd` daemon loaded at boot. For production
+Compose/appliance mode, confirm the supervisor container is healthy after Docker
+starts and that the Deployment row receives a new service report.
 
 ### iMac + Jetson pilot interpretation
 

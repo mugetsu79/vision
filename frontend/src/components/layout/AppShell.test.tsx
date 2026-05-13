@@ -108,6 +108,9 @@ describe("AppShell", () => {
       within(controlNav).getByRole("link", { name: "Operations" }),
     ).toBeInTheDocument();
     expect(
+      within(controlNav).getByRole("link", { name: "Deployment" }),
+    ).toBeInTheDocument();
+    expect(
       within(controlNav).getByRole("link", { name: "Sites" }),
     ).toBeInTheDocument();
     expect(
@@ -130,6 +133,12 @@ describe("AppShell", () => {
       expect.objectContaining({
         label: "Operations",
         to: "/settings",
+      }),
+    );
+    expect(allItems).toContainEqual(
+      expect.objectContaining({
+        label: "Deployment",
+        to: "/deployment",
       }),
     );
   });
@@ -223,6 +232,9 @@ describe("AppShell", () => {
     ).toBeInTheDocument();
     expect(
       within(primaryWorkspaceNav).getByRole("link", { name: "Patterns" }),
+    ).toBeInTheDocument();
+    expect(
+      within(primaryWorkspaceNav).getByRole("link", { name: "Deployment" }),
     ).toBeInTheDocument();
     expect(
       within(primaryWorkspaceNav).queryByRole("link", { name: "Cameras" }),

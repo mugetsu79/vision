@@ -1576,6 +1576,29 @@ class OperationsLifecycleRequestResponse(BaseModel):
     updated_at: datetime
 
 
+class DeploymentSupportBundleResponse(BaseModel):
+    node: DeploymentNodeResponse
+    service_reports: list[SupervisorServiceReportResponse] = Field(default_factory=list)
+    recent_lifecycle_requests: list[OperationsLifecycleRequestResponse] = Field(
+        default_factory=list
+    )
+    recent_runtime_reports: list[SupervisorRuntimeReportResponse] = Field(
+        default_factory=list
+    )
+    hardware_reports: list[EdgeNodeHardwareReportResponse] = Field(default_factory=list)
+    model_admission_reports: list[WorkerModelAdmissionResponse] = Field(
+        default_factory=list
+    )
+    lifecycle_summary: dict[str, Any] = Field(default_factory=dict)
+    runtime_summary: dict[str, Any] = Field(default_factory=dict)
+    hardware_summary: dict[str, Any] = Field(default_factory=dict)
+    model_admission_summary: dict[str, Any] = Field(default_factory=dict)
+    config_references: dict[str, Any] = Field(default_factory=dict)
+    selected_log_excerpts: list[dict[str, Any]] = Field(default_factory=list)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    generated_at: datetime
+
+
 class FleetCameraWorkerSummary(BaseModel):
     camera_id: UUID
     camera_name: str

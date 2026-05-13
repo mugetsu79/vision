@@ -51,8 +51,10 @@ Use this lab to prove the product workflow:
 Before production, replace:
 
 - iMac dev compose with a Linux `amd64` master deployment
-- copied worker commands with supervisor-managed workers
-- local dev tokens with scoped production credentials
+- copied worker commands with installed supervisor services paired from Control
+  -> Deployment
+- local dev tokens with scoped node credentials stored behind the platform
+  credential boundary
 - ad-hoc terminal monitoring with central metrics, logs, alerts, and backup procedures
 
 ## 1. Before You Start
@@ -97,7 +99,9 @@ After you finish:
 - you can create a site
 - you can create cameras
 - you can run inference workers
-- you can inspect worker state and copy local worker commands from **Operations** at `/settings`
+- you can inspect install health and support bundles from **Deployment** at
+  `/deployment`
+- you can inspect worker state from **Operations** at `/settings`
 - you can view live telemetry
 - you can confirm history and Evidence Desk incident review
 - you can compare `central` processing against `edge` processing
@@ -109,6 +113,9 @@ After you finish:
 - This guide assumes you are doing a **functional test with 2 cameras**, not a scale test.
 - The Jetson portion is the more realistic Vezor architecture test.
 - Local worker commands in this guide are a dev bridge. Production start, stop, restart, and drain should be handled by a supervisor reconciler, with the Operations UI changing desired state or sending constrained lifecycle requests rather than shelling out from the API.
+- Installed supervisors should be paired from Control -> Deployment with
+  short-lived one-time material. After installation, normal operation should not
+  require pasted bearer tokens or foreground terminal supervisor processes.
 - The current Evidence Desk primarily reviews incident clips. Snapshot URLs are supported by the API/UI but current capture can legitimately produce clip-only incidents.
 
 ### 1.4 A few words explained in plain language
@@ -835,9 +842,11 @@ If the response says `Token verification failed`, generate a fresh `TOKEN` in th
 
 Open a **new Terminal window or tab** on the iMac.
 
-Preferred local-dev path: open **Operations** at [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings) and copy the command from the camera's worker card. The copied command fetches a fresh local dev token before setting `ARGUS_API_BEARER_TOKEN`.
+This is a local-dev lab path, not the installed product path. Production workers
+should be launched by the paired supervisor service after the node is installed
+and visible in Control -> Deployment.
 
-The explicit command below is the same idea written out for this lab guide:
+The explicit command below fetches a fresh local dev token for this terminal:
 
 Run:
 
@@ -1638,6 +1647,7 @@ The whole lab is a success only if all of the following are true:
 Most likely causes:
 
 - the token expired
+- the installed supervisor credential was revoked or never paired
 - the camera ID is wrong
 - the model path in the model record is wrong
 - the RTSP URL is wrong or unreachable
@@ -1645,6 +1655,8 @@ Most likely causes:
 What to do:
 
 1. get a fresh token
+   - for installed supervisors, re-pair the node from Control -> Deployment
+     instead of pasting a new bearer token into a service definition
 2. confirm the camera ID again
 3. confirm the model path is:
    - the full iMac path for the selected iMac model, for example `$HOME/vision/models/yolo26n.onnx`

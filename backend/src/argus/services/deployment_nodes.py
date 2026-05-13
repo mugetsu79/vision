@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -12,14 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
     DeploymentNodeResponse,
+    DeploymentSupportBundleResponse,
     NodeCredentialRevokeResponse,
     NodePairingClaim,
     NodePairingClaimResponse,
     NodePairingSessionCreate,
     NodePairingSessionResponse,
+    OperationsLifecycleRequestResponse,
+    SupervisorRuntimeReportResponse,
     SupervisorServiceReportCreate,
     SupervisorServiceReportResponse,
     TenantContext,
+    WorkerModelAdmissionResponse,
 )
 from argus.compat import UTC
 from argus.core.security import AuthenticatedUser
@@ -27,10 +32,20 @@ from argus.models.enums import DeploymentCredentialStatus, DeploymentInstallStat
 from argus.models.tables import (
     DeploymentCredentialEvent,
     DeploymentNode,
+    EdgeNodeHardwareReport,
     NodePairingSession,
+    OperationsLifecycleRequest,
     SupervisorNodeCredential,
     SupervisorServiceStatusReport,
     Tenant,
+    WorkerModelAdmissionReport,
+    WorkerRuntimeReport,
+)
+from argus.services.supervisor_operations import (
+    edge_node_hardware_report_response,
+    operations_lifecycle_request_response,
+    supervisor_runtime_report_response,
+    worker_model_admission_response,
 )
 
 SERVICE_REPORT_STALE_AFTER = timedelta(minutes=5)
@@ -45,6 +60,12 @@ _SECRET_KEY_PARTS = (
     "password",
     "secret",
     "token",
+)
+_BEARER_TOKEN_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_CREDENTIAL_RE = re.compile(r"\bvzcred_[A-Za-z0-9._~+/=-]+")
+_KEY_VALUE_SECRET_RE = re.compile(
+    r"\b(token|secret|password|credential|authorization|bearer)=\S+",
+    re.IGNORECASE,
 )
 
 
@@ -207,6 +228,117 @@ class DeploymentNodeService:
                 session_id=session_id,
             )
         return pairing_session_response(row, now=now, pairing_code=None)
+
+    async def get_support_bundle(
+        self,
+        *,
+        tenant_id: UUID,
+        node_id: UUID,
+    ) -> DeploymentSupportBundleResponse:
+        now = self.now_factory()
+        async with self.session_factory() as session:
+            node = await self._load_node_by_id(
+                session=session,
+                tenant_id=tenant_id,
+                node_id=node_id,
+            )
+            service_reports = await _query_rows(
+                session=session,
+                model=SupervisorServiceStatusReport,
+                tenant_id=tenant_id,
+                deployment_node_id=node.id,
+            )
+            lifecycle_requests = await _query_rows(
+                session=session,
+                model=OperationsLifecycleRequest,
+                tenant_id=tenant_id,
+                edge_node_id=node.edge_node_id,
+            )
+            runtime_reports = await _query_rows(
+                session=session,
+                model=WorkerRuntimeReport,
+                tenant_id=tenant_id,
+                edge_node_id=node.edge_node_id,
+            )
+            hardware_reports = await _query_rows(
+                session=session,
+                model=EdgeNodeHardwareReport,
+                tenant_id=tenant_id,
+                edge_node_id=node.edge_node_id,
+                supervisor_id=node.supervisor_id,
+            )
+            model_admissions = await _query_rows(
+                session=session,
+                model=WorkerModelAdmissionReport,
+                tenant_id=tenant_id,
+                edge_node_id=node.edge_node_id,
+            )
+
+        node_response = deployment_node_response(node, now=now).model_copy(
+            update={"diagnostics": redact_diagnostics(dict(node.diagnostics))}
+        )
+        return DeploymentSupportBundleResponse(
+            node=node_response,
+            service_reports=[
+                _redacted_service_report_response(report, node=node_response)
+                for report in service_reports
+                if isinstance(report, SupervisorServiceStatusReport)
+            ],
+            recent_lifecycle_requests=[
+                _redacted_lifecycle_response(row)
+                for row in _recent_rows(
+                    lifecycle_requests,
+                    model=OperationsLifecycleRequest,
+                    timestamp_attr="requested_at",
+                )
+            ],
+            recent_runtime_reports=[
+                _redacted_runtime_response(row)
+                for row in _recent_rows(
+                    runtime_reports,
+                    model=WorkerRuntimeReport,
+                    timestamp_attr="heartbeat_at",
+                )
+            ],
+            hardware_reports=[
+                edge_node_hardware_report_response(row)
+                for row in _recent_rows(
+                    hardware_reports,
+                    model=EdgeNodeHardwareReport,
+                    timestamp_attr="reported_at",
+                )
+            ],
+            model_admission_reports=[
+                _redacted_model_admission_response(row)
+                for row in _recent_rows(
+                    model_admissions,
+                    model=WorkerModelAdmissionReport,
+                    timestamp_attr="evaluated_at",
+                )
+            ],
+            lifecycle_summary=_lifecycle_summary(lifecycle_requests),
+            runtime_summary=_runtime_summary(runtime_reports),
+            hardware_summary=_hardware_summary(hardware_reports),
+            model_admission_summary=_model_admission_summary(model_admissions),
+            config_references=_config_references(
+                runtime_reports=runtime_reports,
+                hardware_reports=hardware_reports,
+                model_admissions=model_admissions,
+            ),
+            selected_log_excerpts=_selected_log_excerpts(
+                node=node,
+                service_reports=service_reports,
+            ),
+            diagnostics={
+                "node": redact_diagnostics(dict(node.diagnostics)),
+                "service_reports": [
+                    redact_diagnostics(dict(report.diagnostics))
+                    for report in service_reports
+                    if isinstance(report, SupervisorServiceStatusReport)
+                ],
+            },
+            generated_at=now,
+        )
 
     async def claim_pairing_session(
         self,
@@ -631,7 +763,167 @@ def redact_diagnostics(value: Any) -> Any:
         return redacted
     if isinstance(value, list):
         return [redact_diagnostics(item) for item in value]
+    if isinstance(value, str):
+        return _redact_text(value)
     return value
+
+
+def _redacted_service_report_response(
+    row: SupervisorServiceStatusReport,
+    *,
+    node: DeploymentNodeResponse,
+) -> SupervisorServiceReportResponse:
+    response = supervisor_service_report_response(row, node=node)
+    return response.model_copy(
+        update={"diagnostics": redact_diagnostics(response.diagnostics)}
+    )
+
+
+def _redacted_lifecycle_response(
+    row: OperationsLifecycleRequest,
+) -> OperationsLifecycleRequestResponse:
+    response = operations_lifecycle_request_response(row)
+    return response.model_copy(
+        update={"request_payload": redact_diagnostics(response.request_payload)}
+    )
+
+
+def _redacted_runtime_response(row: WorkerRuntimeReport) -> SupervisorRuntimeReportResponse:
+    response = supervisor_runtime_report_response(row)
+    return response.model_copy(update={"last_error": redact_diagnostics(response.last_error)})
+
+
+def _redacted_model_admission_response(
+    row: WorkerModelAdmissionReport,
+) -> WorkerModelAdmissionResponse:
+    response = worker_model_admission_response(row)
+    return response.model_copy(
+        update={
+            "constraints": redact_diagnostics(response.constraints),
+            "stream_profile": redact_diagnostics(response.stream_profile),
+        }
+    )
+
+
+def _lifecycle_summary(rows: list[object]) -> dict[str, object]:
+    lifecycle_rows = [row for row in rows if isinstance(row, OperationsLifecycleRequest)]
+    latest = max(
+        (row.requested_at for row in lifecycle_rows),
+        default=None,
+    )
+    return {
+        "total": len(lifecycle_rows),
+        "by_status": _count_by(lifecycle_rows, "status"),
+        "latest_requested_at": latest,
+    }
+
+
+def _runtime_summary(rows: list[object]) -> dict[str, object]:
+    runtime_rows = [row for row in rows if isinstance(row, WorkerRuntimeReport)]
+    latest = max((row.heartbeat_at for row in runtime_rows), default=None)
+    return {
+        "total": len(runtime_rows),
+        "by_state": _count_by(runtime_rows, "runtime_state"),
+        "latest_heartbeat_at": latest,
+    }
+
+
+def _hardware_summary(rows: list[object]) -> dict[str, object]:
+    hardware_rows = [row for row in rows if isinstance(row, EdgeNodeHardwareReport)]
+    latest = max(hardware_rows, key=lambda row: row.reported_at, default=None)
+    return {
+        "total": len(hardware_rows),
+        "latest_reported_at": latest.reported_at if latest is not None else None,
+        "host_profile": latest.host_profile if latest is not None else None,
+        "accelerators": list(latest.accelerators) if latest is not None else [],
+    }
+
+
+def _model_admission_summary(rows: list[object]) -> dict[str, object]:
+    admission_rows = [row for row in rows if isinstance(row, WorkerModelAdmissionReport)]
+    latest = max((row.evaluated_at for row in admission_rows), default=None)
+    return {
+        "total": len(admission_rows),
+        "by_status": _count_by(admission_rows, "status"),
+        "latest_evaluated_at": latest,
+    }
+
+
+def _config_references(
+    *,
+    runtime_reports: list[object],
+    hardware_reports: list[object],
+    model_admissions: list[object],
+) -> dict[str, object]:
+    runtime_rows = [row for row in runtime_reports if isinstance(row, WorkerRuntimeReport)]
+    hardware_rows = [
+        row for row in hardware_reports if isinstance(row, EdgeNodeHardwareReport)
+    ]
+    admission_rows = [
+        row for row in model_admissions if isinstance(row, WorkerModelAdmissionReport)
+    ]
+    return {
+        "scene_contract_hashes": _sorted_values(
+            row.scene_contract_hash for row in runtime_rows
+        ),
+        "runtime_artifact_ids": _sorted_values(
+            [
+                *(row.runtime_artifact_id for row in runtime_rows),
+                *(row.runtime_artifact_id for row in admission_rows),
+            ]
+        ),
+        "runtime_selection_profile_ids": _sorted_values(
+            row.runtime_selection_profile_id for row in admission_rows
+        ),
+        "hardware_report_hashes": _sorted_values(row.report_hash for row in hardware_rows),
+        "hardware_report_ids": _sorted_values(
+            row.hardware_report_id for row in admission_rows
+        ),
+    }
+
+
+def _selected_log_excerpts(
+    *,
+    node: DeploymentNode,
+    service_reports: list[object],
+) -> list[dict[str, Any]]:
+    excerpts: list[dict[str, Any]] = []
+    for source, diagnostics in [
+        ("node", dict(node.diagnostics)),
+        *[
+            (f"service_report:{report.supervisor_id}", dict(report.diagnostics))
+            for report in service_reports
+            if isinstance(report, SupervisorServiceStatusReport)
+        ],
+    ]:
+        for key in ("log_excerpt", "log_excerpts", "logs", "service_logs"):
+            if key not in diagnostics:
+                continue
+            for excerpt in _coerce_log_excerpts(diagnostics[key]):
+                excerpts.append(
+                    {
+                        "source": source,
+                        "excerpt": redact_diagnostics(excerpt),
+                    }
+                )
+    return excerpts[:10]
+
+
+def _coerce_log_excerpts(value: object) -> list[object]:
+    if isinstance(value, list):
+        return value[:10]
+    if isinstance(value, (str, dict)):
+        return [value]
+    return []
+
+
+def _count_by(rows: list[object], attribute: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = getattr(row, attribute, "unknown")
+        key = getattr(value, "value", str(value))
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _fresh_install_status(
@@ -651,6 +943,34 @@ def _fresh_install_status(
 def _is_secret_key(key: str) -> bool:
     normalized = key.lower().replace("-", "_")
     return any(part in normalized for part in _SECRET_KEY_PARTS)
+
+
+def _redact_text(value: str) -> str:
+    redacted = _BEARER_TOKEN_RE.sub("Bearer [redacted]", value)
+    redacted = _CREDENTIAL_RE.sub("[redacted]", redacted)
+    return _KEY_VALUE_SECRET_RE.sub(lambda match: f"{match.group(1)}=[redacted]", redacted)
+
+
+def _recent_rows(
+    rows: list[object],
+    *,
+    model: type[object],
+    timestamp_attr: str,
+    limit: int = 5,
+) -> list[object]:
+    matching_rows = [row for row in rows if isinstance(row, model)]
+    return sorted(
+        matching_rows,
+        key=lambda row: _coerce_datetime(
+            getattr(row, timestamp_attr, None),
+            fallback=datetime.min.replace(tzinfo=UTC),
+        ),
+        reverse=True,
+    )[:limit]
+
+
+def _sorted_values(values: object) -> list[str]:
+    return sorted({str(value) for value in values if value is not None})
 
 
 def _ensure_identity_and_timestamps(
@@ -715,6 +1035,30 @@ def _hash_secret(value: str) -> str:
 
 def _coerce_datetime(value: object, *, fallback: datetime) -> datetime:
     return value if isinstance(value, datetime) else fallback
+
+
+async def _query_rows(
+    *,
+    session: AsyncSession,
+    model: type[object],
+    tenant_id: UUID,
+    deployment_node_id: UUID | None = None,
+    edge_node_id: UUID | None = None,
+    supervisor_id: str | None = None,
+) -> list[object]:
+    statement = select(model).where(model.tenant_id == tenant_id)  # type: ignore[attr-defined]
+    if deployment_node_id is not None:
+        statement = statement.where(  # type: ignore[attr-defined]
+            model.deployment_node_id == deployment_node_id
+        )
+    if hasattr(model, "edge_node_id"):
+        if edge_node_id is None:
+            statement = statement.where(model.edge_node_id.is_(None))  # type: ignore[attr-defined]
+        else:
+            statement = statement.where(model.edge_node_id == edge_node_id)  # type: ignore[attr-defined]
+    if supervisor_id is not None and hasattr(model, "supervisor_id"):
+        statement = statement.where(model.supervisor_id == supervisor_id)  # type: ignore[attr-defined]
+    return list((await session.execute(statement)).scalars().all())
 
 
 async def _flush_if_available(session: object) -> None:

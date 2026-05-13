@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   MapPinned,
   Radio,
+  ServerCog,
   Settings2,
   ShieldAlert,
   Video,
@@ -33,30 +34,34 @@ export const workspaceNavGroups = omniNavGroups.map((group) => ({
       item.to === "/dashboard"
         ? LayoutDashboard
         : item.to === "/live"
-        ? Radio
-        : item.to === "/history"
-          ? Clock3
-          : item.to === "/incidents"
-            ? ShieldAlert
-            : item.to === "/sites"
-              ? MapPinned
-              : item.to === "/cameras"
-                ? Video
-                : Settings2,
+          ? Radio
+          : item.to === "/history"
+            ? Clock3
+            : item.to === "/incidents"
+              ? ShieldAlert
+              : item.to === "/deployment"
+                ? ServerCog
+                : item.to === "/sites"
+                  ? MapPinned
+                  : item.to === "/cameras"
+                    ? Video
+                    : Settings2,
   })),
 })) as readonly WorkspaceNavGroup[];
 
 async function prefetchHistoryQuery(queryClient: QueryClient) {
-  const { createDefaultHistoryFilters, historySeriesQueryOptions } = await import(
-    "@/hooks/use-history"
-  );
+  const { createDefaultHistoryFilters, historySeriesQueryOptions } =
+    await import("@/hooks/use-history");
 
   await queryClient.prefetchQuery(
     historySeriesQueryOptions(createDefaultHistoryFilters()),
   );
 }
 
-export function prefetchWorkspaceRoute(route: string, queryClient?: QueryClient) {
+export function prefetchWorkspaceRoute(
+  route: string,
+  queryClient?: QueryClient,
+) {
   if (route === "/dashboard") {
     void import("@/pages/Dashboard");
   }
@@ -72,6 +77,10 @@ export function prefetchWorkspaceRoute(route: string, queryClient?: QueryClient)
 
   if (route === "/incidents") {
     void import("@/pages/Incidents");
+  }
+
+  if (route === "/deployment") {
+    void import("@/pages/Deployment");
   }
 }
 

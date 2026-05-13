@@ -44,6 +44,7 @@ export const omniNavGroups = [
   {
     label: "Control",
     items: [
+      { label: "Deployment", to: "/deployment" },
       { label: "Sites", to: "/sites" },
       { label: "Scenes", to: "/cameras" },
       { label: "Operations", to: "/settings" },

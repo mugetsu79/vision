@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import {
+  ArrowRight,
   Copy,
   Cpu,
   RefreshCw,
@@ -125,7 +127,7 @@ export function SettingsPage() {
       <WorkspaceBand
         eyebrow="Operations"
         title={omniLabels.operationsTitle}
-        description="Monitor planned workers, runtime reports, bootstrap material, and stream diagnostics for the fleet."
+        description="Monitor planned workers, runtime reports, lifecycle requests, and stream diagnostics for the fleet."
         actions={
           <Button type="button" onClick={() => void fleet.refetch()}>
             <RefreshCw className="mr-2 size-4" />
@@ -135,6 +137,30 @@ export function SettingsPage() {
       />
 
       <SceneIntelligenceMatrix rows={sceneHealthRows} />
+
+      <WorkspaceSurface className="px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Server className="size-5 text-[#8fd3ff]" />
+            <div>
+              <h2 className="text-base font-semibold text-[#f4f8ff]">
+                System setup
+              </h2>
+              <p className="mt-1 text-sm text-[#93a7c5]">
+                Installable supervisors, node pairing, credentials, service
+                health, and support bundles live in Deployment.
+              </p>
+            </div>
+          </div>
+          <Link
+            className="inline-flex items-center justify-center rounded-full border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,#161c26,#0d121a)] px-4 py-2.5 text-sm font-medium text-[var(--vz-text-primary)] shadow-[var(--vz-elev-1)] transition duration-200 hover:border-[color:var(--vz-hair-focus)]"
+            to="/deployment"
+          >
+            Open Deployment
+            <ArrowRight className="ml-2 size-4" />
+          </Link>
+        </div>
+      </WorkspaceSurface>
 
       <OperationalMemoryPanel
         patterns={operationalMemory.data ?? []}
@@ -224,9 +250,9 @@ export function SettingsPage() {
               {modeCopy}
             </h2>
             <p className="mt-1 text-sm text-[#93a7c5]">
-              Start and stop are owned by the local terminal in dev, and by a
-              supervisor in production. The UI changes planned state and shows
-              diagnostics.
+              Production worker launch is owned by installed supervisor
+              services. Terminal commands are limited to local development,
+              installer smoke tests, and break-glass support.
             </p>
           </div>
         </div>
@@ -290,9 +316,12 @@ export function SettingsPage() {
             </Button>
             {bootstrapResult ? (
               <div className="rounded-[1rem] border border-amber-300/30 bg-amber-950/30 p-3 text-sm text-amber-100">
-                <p className="font-semibold">Secrets are shown once.</p>
+                <p className="font-semibold">Legacy lab bootstrap material.</p>
+                <p className="mt-1 text-amber-100/80">
+                  Production nodes should be paired from Deployment; this
+                  one-time material remains for lab and break-glass workflows.
+                </p>
                 <CommandBlock text={bootstrapResult.api_key} />
-                <CommandBlock text={bootstrapResult.dev_compose_command} />
               </div>
             ) : null}
           </div>
@@ -357,7 +386,11 @@ export function SettingsPage() {
                   <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
                 ) : null}
                 {worker.dev_run_command ? (
-                  <CommandBlock text={worker.dev_run_command} />
+                  <p className="mt-3 rounded-[0.75rem] border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100">
+                    Installable supervisors own production worker launch. Manual
+                    terminal commands live in local lab and break-glass
+                    documentation.
+                  </p>
                 ) : null}
               </div>
             );

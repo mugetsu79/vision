@@ -21,10 +21,13 @@ from argus.models.tables import (
     DeploymentCredentialEvent,
     DeploymentNode,
     EdgeNode,
+    EdgeNodeHardwareReport,
     NodePairingSession,
+    OperationsLifecycleRequest,
     Site,
     SupervisorNodeCredential,
     Tenant,
+    WorkerModelAdmissionReport,
     WorkerRuntimeReport,
 )
 from argus.services.deployment_nodes import DeploymentNodeService
@@ -425,6 +428,127 @@ async def test_node_credential_service_report_cannot_change_node_shape() -> None
                 heartbeat_at=now,
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_support_bundle_redacts_diagnostics_and_summarizes_node_context() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    service = DeploymentNodeService(_MemorySessionFactory())
+    now = datetime(2026, 5, 13, 9, 30, tzinfo=UTC)
+    node = await service.record_service_report(
+        tenant_id=tenant_id,
+        supervisor_id="central-imac-1",
+        payload=SupervisorServiceReportCreate(
+            node_kind=DeploymentNodeKind.CENTRAL,
+            hostname="vezor-central",
+            service_manager=DeploymentServiceManager.LAUNCHD,
+            service_status="running",
+            install_status=DeploymentInstallStatus.HEALTHY,
+            credential_status=DeploymentCredentialStatus.ACTIVE,
+            version="0.21.0",
+            os_name="darwin",
+            host_profile="macos-arm64-apple",
+            heartbeat_at=now,
+            diagnostics={
+                "storage": "ok",
+                "authorization": "Bearer raw-token",
+                "log_excerpt": "worker recovered after Bearer raw-token",
+                "nested": {"credential": "vzcred_raw-secret", "status": "ok"},
+            },
+        ),
+    )
+    session = service.session_factory.session
+    session.add(
+        OperationsLifecycleRequest(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=None,
+            assignment_id=None,
+            action="start",
+            status="completed",
+            requested_by_subject="operator-1",
+            requested_at=now,
+            request_payload={"model": "YOLO26n", "bearer": "raw-token"},
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    session.add(
+        WorkerRuntimeReport(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=None,
+            assignment_id=None,
+            heartbeat_at=now,
+            runtime_state=WorkerRuntimeState.RUNNING,
+            restart_count=1,
+            last_error="recovered with credential=vzcred_raw-secret",
+            runtime_artifact_id=None,
+            scene_contract_hash=None,
+            created_at=now,
+        )
+    )
+    session.add(
+        EdgeNodeHardwareReport(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            edge_node_id=None,
+            supervisor_id="central-imac-1",
+            reported_at=now,
+            host_profile="macos-arm64-apple",
+            os_name="darwin",
+            machine_arch="arm64",
+            accelerators=["coreml"],
+            provider_capabilities={"CoreMLExecutionProvider": True},
+            observed_performance=[],
+            report_hash="b" * 64,
+            created_at=now,
+        )
+    )
+    session.add(
+        WorkerModelAdmissionReport(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=None,
+            assignment_id=None,
+            hardware_report_id=None,
+            model_id=uuid4(),
+            model_name="YOLO26n COCO",
+            model_capability="fixed_vocab",
+            stream_profile={"width": 1280, "height": 720, "fps": 10},
+            status="recommended",
+            selected_backend="CoreMLExecutionProvider",
+            rationale="CoreML fits.",
+            constraints={"credential": "secret"},
+            evaluated_at=now,
+            created_at=now,
+        )
+    )
+
+    bundle = await service.get_support_bundle(tenant_id=tenant_id, node_id=node.node.id)
+    serialized = bundle.model_dump(mode="json")
+
+    assert bundle.node.id == node.node.id
+    assert bundle.lifecycle_summary["by_status"] == {"completed": 1}
+    assert bundle.runtime_summary["by_state"] == {"running": 1}
+    assert bundle.hardware_summary["latest_reported_at"] == now
+    assert bundle.model_admission_summary["by_status"] == {"recommended": 1}
+    assert len(bundle.recent_lifecycle_requests) == 1
+    assert len(bundle.recent_runtime_reports) == 1
+    assert len(bundle.hardware_reports) == 1
+    assert len(bundle.model_admission_reports) == 1
+    assert bundle.diagnostics["node"]["authorization"] == "[redacted]"
+    assert bundle.diagnostics["node"]["nested"]["credential"] == "[redacted]"
+    assert bundle.recent_lifecycle_requests[0].request_payload["bearer"] == "[redacted]"
+    assert bundle.recent_runtime_reports[0].last_error == "recovered with credential=[redacted]"
+    assert bundle.model_admission_reports[0].constraints["credential"] == "[redacted]"
+    assert bundle.selected_log_excerpts[0]["excerpt"] == "worker recovered after Bearer [redacted]"
+    assert "raw-token" not in str(serialized)
+    assert "vzcred_raw-secret" not in str(serialized)
 
 
 @pytest.mark.asyncio

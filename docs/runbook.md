@@ -9,17 +9,20 @@ See also:
 
 The Operations workbench currently lives at `/settings` in the frontend. It is
 the operator-facing view for fleet state, camera worker ownership, delivery
-diagnostics, edge bootstrap material, hardware/model admission, and copyable
-local-dev worker commands.
+diagnostics, hardware/model admission, and lifecycle requests.
 
-The final-product deployment path is now specified as Band 7.5 in
+The first-run deployment workbench lives at `/deployment` in the frontend. It
+owns install health, central/edge node rows, service-manager reports, one-time
+pairing sessions, credential status, and redacted support bundles.
+
+The final-product deployment path is specified as Band 7.5 in
 `docs/superpowers/specs/2026-05-13-installable-supervisor-and-first-run-productization-design.md`
 and
 `docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md`.
-That band adds a dedicated Control -> Deployment surface, UI-created node
-pairing sessions, platform credential storage, and macOS/Linux service wrappers
-so normal operation after installation does not require foreground terminal
-commands or copied bearer tokens.
+That band establishes the dedicated Control -> Deployment surface, UI-created
+node pairing sessions, platform credential storage, and macOS/Linux service
+wrappers so normal operation after installation does not require foreground
+terminal commands or copied bearer tokens.
 
 The first service-wrapper templates live in `infra/install/`:
 
@@ -40,10 +43,10 @@ operation is UI intent plus node-local supervisor reconciliation.
 ### Node Pairing And Credentials
 
 Normal installed operation uses a node credential store, not a copied bearer
-token. Create a pairing session from the Deployment/Operations control plane
-for either a central supervisor or a specific edge node. The returned pairing
-code is short-lived and one-time use. The backend persists only its hash and
-emits credential material only in the successful claim response.
+token. Create a pairing session from Control -> Deployment for either a central
+supervisor or a specific edge node. The returned pairing code is short-lived and
+one-time use. The backend persists only its hash and emits credential material
+only in the successful claim response.
 
 The supervisor product config should contain stable identity and local storage
 paths, for example:
@@ -61,15 +64,16 @@ paths, for example:
 The pairing claim writes the credential to that local store with owner-only
 permissions. Service units, launch daemons, and production Compose services
 reference the config and credential location; they do not embed access tokens.
-Revoking node credentials from Operations marks all active credentials for that
-node as revoked, records a credential event, and blocks future supervisor
+Revoking node credentials marks all active credentials for that node as revoked,
+records a credential event, and blocks future supervisor
 authentication with the old material.
 
 Local development can still start workers from a shell, or run the pilot
 supervisor when you want Operations lifecycle buttons to reconcile a direct
-child worker process. Use the Operations copy button, supervisor command, or lab
-guide commands so the token fetch, API URL, database URL, NATS URL, and MinIO
-settings stay in sync with the current dev stack.
+child worker process. Use lab guide commands or a break-glass supervisor command
+so the token fetch, API URL, database URL, NATS URL, and MinIO settings stay in
+sync with the current dev stack. Do not treat those commands as the production
+setup path.
 
 Production start, stop, restart, and drain actions must be supervisor-backed. The intended path is: UI action -> backend desired-state or lifecycle request -> central or edge supervisor reconciles the worker process on the correct node -> worker heartbeat/runtime reports truth back to Operations. The API must not become a generic remote shell.
 
@@ -79,6 +83,26 @@ samples. The backend records a model-admission decision for the worker. The UI
 is an early explanation layer, and the supervisor is the final enforcement gate.
 Manual iMac workers are labeled as a production-admission bypass because the
 operator starts those processes directly from a shell.
+
+### Deployment Diagnostics And Reboot Checks
+
+Use Control -> Deployment before declaring a node healthy:
+
+1. confirm the central and edge node rows show the expected service manager
+   (`systemd`, `launchd`, or production Compose), version, heartbeat, install
+   status, and credential status
+2. open the node support bundle and confirm it includes service reports,
+   lifecycle/runtime summaries, hardware/model-admission summaries, config
+   references, selected log excerpts, and diagnostics
+3. confirm the bundle redacts bearer tokens, passwords, secrets, pairing codes,
+   and credential material
+4. reboot the host or restart Docker, then verify the Deployment row receives a
+   fresh service report without starting a foreground terminal supervisor
+
+For Linux this validates the enabled `systemd` unit. For macOS this validates
+the `launchd` daemon. For production Compose/appliance deployments this
+validates the restart policy, healthcheck, mounted config, and mounted
+credential directory.
 
 ## Production Topology
 
@@ -114,7 +138,7 @@ Before calling a deployment production-ready, verify that the following are impl
 - durable service wrappers around the Vezor supervisor for central and edge
   workers, such as systemd, launchd, or a production container profile
 - UI-managed first-run setup and node pairing through short-lived one-time
-  material
+  material for every production node
 - node-bound supervisor credentials with rotation, revocation, and no long-lived
   bearer tokens embedded in service definitions
 - per-worker heartbeat with camera id, status, freshness, restart count, and last error
@@ -127,7 +151,11 @@ Before calling a deployment production-ready, verify that the following are impl
 - log and metric collection from both master and edge nodes
 - soak testing for the first site before adding more cameras
 
-The current Operations page should render unknown runtime precision honestly as `not_reported`, `unknown`, `stale`, or `offline`. Do not treat missing heartbeat detail as proof that a worker is running.
+The current Operations page should render unknown runtime precision honestly as
+`not_reported`, `unknown`, `stale`, or `offline`. Deployment node status should
+come from supervisor service reports, not from inference-worker runtime
+inference. Do not treat missing heartbeat detail as proof that a worker is
+running.
 
 ## Supervisor Hardware Admission
 
@@ -344,11 +372,10 @@ profile requires an API key that has not been stored.
 ### Development Migration Notes
 
 The accountable evidence, configuration, runtime passport, per-worker incident
-rule runway, and supervisor hardware admission runway currently migrate through
-Alembic head `0023_supervisor_reconciler`. The next planned schema task is
-Task 21D, which will add `0024_installable_supervisor_productization` for
-deployment nodes, supervisor service reports, pairing sessions, node
-credentials, and credential audit events.
+rule runway, supervisor hardware admission runway, and installable supervisor
+data contract now migrate through Alembic head. The installable-supervisor
+tables include deployment nodes, supervisor service reports, pairing sessions,
+node credentials, credential audit events, and pairing hostname support.
 
 After pulling the current development branch, refresh the dev database with:
 

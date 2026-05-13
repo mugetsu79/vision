@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from argus.api.contracts import (
     DeploymentNodeResponse,
+    DeploymentSupportBundleResponse,
     NodeCredentialRevokeResponse,
     NodePairingClaim,
     NodePairingClaimResponse,
@@ -113,6 +114,25 @@ async def revoke_node_credentials(
             tenant_id=tenant_context.tenant_id,
             node_id=node_id,
             actor_subject=current_user.subject,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.get(
+    "/nodes/{node_id}/support-bundle",
+    response_model=DeploymentSupportBundleResponse,
+)
+async def get_node_support_bundle(
+    node_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> DeploymentSupportBundleResponse:
+    try:
+        return await services.deployment.get_support_bundle(
+            tenant_id=tenant_context.tenant_id,
+            node_id=node_id,
         )
     except ValueError as exc:
         raise _deployment_http_error(exc) from exc

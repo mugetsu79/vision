@@ -335,6 +335,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/deployment/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Deployment Nodes */
+        get: operations["list_deployment_nodes_api_v1_deployment_nodes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/pairing-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Pairing Session */
+        post: operations["create_pairing_session_api_v1_deployment_pairing_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/pairing-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Pairing Session */
+        get: operations["get_pairing_session_api_v1_deployment_pairing_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/pairing-sessions/{session_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim Pairing Session */
+        post: operations["claim_pairing_session_api_v1_deployment_pairing_sessions__session_id__claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/credentials/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Node Credentials */
+        post: operations["revoke_node_credentials_api_v1_deployment_nodes__node_id__credentials_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/support-bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Node Support Bundle */
+        get: operations["get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/supervisors/{supervisor_id}/service-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Supervisor Service Report */
+        post: operations["record_supervisor_service_report_api_v1_deployment_supervisors__supervisor_id__service_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/models": {
         parameters: {
             query?: never;
@@ -1448,6 +1567,120 @@ export interface components {
             thread_hash: string;
             /** Created At */
             created_at?: string | null;
+        };
+        /**
+         * DeploymentCredentialStatus
+         * @enum {string}
+         */
+        DeploymentCredentialStatus: "missing" | "pending" | "active" | "expired" | "revoked";
+        /**
+         * DeploymentInstallStatus
+         * @enum {string}
+         */
+        DeploymentInstallStatus: "not_installed" | "pairing_pending" | "installed" | "healthy" | "degraded" | "offline" | "revoked";
+        /**
+         * DeploymentNodeKind
+         * @enum {string}
+         */
+        DeploymentNodeKind: "central" | "edge";
+        /** DeploymentNodeResponse */
+        DeploymentNodeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Supervisor Id */
+            supervisor_id: string;
+            /** Hostname */
+            hostname: string;
+            install_status: components["schemas"]["DeploymentInstallStatus"];
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+            service_manager?: components["schemas"]["DeploymentServiceManager"] | null;
+            /** Service Status */
+            service_status?: string | null;
+            /** Version */
+            version?: string | null;
+            /** Os Name */
+            os_name?: string | null;
+            /** Host Profile */
+            host_profile?: string | null;
+            /** Last Service Reported At */
+            last_service_reported_at?: string | null;
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * DeploymentServiceManager
+         * @enum {string}
+         */
+        DeploymentServiceManager: "systemd" | "launchd" | "compose" | "direct_child" | "unknown";
+        /** DeploymentSupportBundleResponse */
+        DeploymentSupportBundleResponse: {
+            node: components["schemas"]["DeploymentNodeResponse"];
+            /** Service Reports */
+            service_reports?: components["schemas"]["SupervisorServiceReportResponse"][];
+            /** Recent Lifecycle Requests */
+            recent_lifecycle_requests?: components["schemas"]["OperationsLifecycleRequestResponse"][];
+            /** Recent Runtime Reports */
+            recent_runtime_reports?: components["schemas"]["SupervisorRuntimeReportResponse"][];
+            /** Hardware Reports */
+            hardware_reports?: components["schemas"]["EdgeNodeHardwareReportResponse"][];
+            /** Model Admission Reports */
+            model_admission_reports?: components["schemas"]["WorkerModelAdmissionResponse"][];
+            /** Lifecycle Summary */
+            lifecycle_summary?: {
+                [key: string]: unknown;
+            };
+            /** Runtime Summary */
+            runtime_summary?: {
+                [key: string]: unknown;
+            };
+            /** Hardware Summary */
+            hardware_summary?: {
+                [key: string]: unknown;
+            };
+            /** Model Admission Summary */
+            model_admission_summary?: {
+                [key: string]: unknown;
+            };
+            /** Config References */
+            config_references?: {
+                [key: string]: unknown;
+            };
+            /** Selected Log Excerpts */
+            selected_log_excerpts?: {
+                [key: string]: unknown;
+            }[];
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
         };
         /** DetectionRegion */
         DetectionRegion: {
@@ -2612,6 +2845,102 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** NodeCredentialRevokeResponse */
+        NodeCredentialRevokeResponse: {
+            /**
+             * Node Id
+             * Format: uuid
+             */
+            node_id: string;
+            /** Revoked Credentials */
+            revoked_credentials: number;
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+        };
+        /** NodePairingClaim */
+        NodePairingClaim: {
+            /** Pairing Code */
+            pairing_code: string;
+            /** Supervisor Id */
+            supervisor_id: string;
+            /** Hostname */
+            hostname: string;
+        };
+        /** NodePairingClaimResponse */
+        NodePairingClaimResponse: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Credential Id
+             * Format: uuid
+             */
+            credential_id: string;
+            /** Credential Material */
+            credential_material: string;
+            /** Credential Hash */
+            credential_hash: string;
+            node: components["schemas"]["DeploymentNodeResponse"];
+        };
+        /** NodePairingSessionCreate */
+        NodePairingSessionCreate: {
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Hostname */
+            hostname: string;
+            /**
+             * Requested Ttl Seconds
+             * @default 300
+             */
+            requested_ttl_seconds: number;
+        };
+        /** NodePairingSessionResponse */
+        NodePairingSessionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Deployment Node Id */
+            deployment_node_id?: string | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Hostname */
+            hostname?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Consumed At */
+            consumed_at?: string | null;
+            /** Claimed By Supervisor */
+            claimed_by_supervisor?: string | null;
+            /** Created By Subject */
+            created_by_subject?: string | null;
+            /** Pairing Code */
+            pairing_code?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** OperationalMemoryPatternResponse */
         OperationalMemoryPatternResponse: {
             /**
@@ -3658,6 +3987,85 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** SupervisorServiceReportCreate */
+        SupervisorServiceReportCreate: {
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Hostname */
+            hostname: string;
+            service_manager: components["schemas"]["DeploymentServiceManager"];
+            /** Service Status */
+            service_status: string;
+            install_status: components["schemas"]["DeploymentInstallStatus"];
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+            /** Version */
+            version?: string | null;
+            /** Os Name */
+            os_name: string;
+            /** Host Profile */
+            host_profile: string;
+            /**
+             * Heartbeat At
+             * Format: date-time
+             */
+            heartbeat_at: string;
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+        };
+        /** SupervisorServiceReportResponse */
+        SupervisorServiceReportResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Deployment Node Id
+             * Format: uuid
+             */
+            deployment_node_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Supervisor Id */
+            supervisor_id: string;
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Hostname */
+            hostname: string;
+            service_manager: components["schemas"]["DeploymentServiceManager"];
+            /** Service Status */
+            service_status: string;
+            install_status: components["schemas"]["DeploymentInstallStatus"];
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+            /** Version */
+            version?: string | null;
+            /** Os Name */
+            os_name: string;
+            /** Host Profile */
+            host_profile: string;
+            /**
+             * Heartbeat At
+             * Format: date-time
+             */
+            heartbeat_at: string;
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            node: components["schemas"]["DeploymentNodeResponse"];
         };
         /** TelemetryEnvelope */
         TelemetryEnvelope: {
@@ -5158,6 +5566,243 @@ export interface operations {
             };
         };
     };
+    list_deployment_nodes_api_v1_deployment_nodes_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentNodeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_pairing_session_api_v1_deployment_pairing_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodePairingSessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodePairingSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pairing_session_api_v1_deployment_pairing_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodePairingSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_pairing_session_api_v1_deployment_pairing_sessions__session_id__claim_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodePairingClaim"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodePairingClaimResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_node_credentials_api_v1_deployment_nodes__node_id__credentials_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeCredentialRevokeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSupportBundleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_supervisor_service_report_api_v1_deployment_supervisors__supervisor_id__service_reports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorServiceReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupervisorServiceReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_models_api_v1_models_get: {
         parameters: {
             query?: never;
@@ -5505,7 +6150,9 @@ export interface operations {
     };
     get_fleet_overview_api_v1_operations_fleet_get: {
         parameters: {
-            query?: never;
+            query?: {
+                supervisor_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
@@ -5642,7 +6289,9 @@ export interface operations {
     };
     record_worker_runtime_report_api_v1_operations_runtime_reports_post: {
         parameters: {
-            query?: never;
+            query?: {
+                supervisor_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
@@ -5717,7 +6366,7 @@ export interface operations {
                 "X-Tenant-ID"?: string | null;
             };
             path: {
-                supervisor_id: string;
+                supervisor_id: string | null;
             };
             cookie?: never;
         };
@@ -5749,7 +6398,9 @@ export interface operations {
     };
     claim_lifecycle_request_api_v1_operations_lifecycle_requests__request_id__claim_post: {
         parameters: {
-            query?: never;
+            query?: {
+                supervisor_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
@@ -5786,7 +6437,9 @@ export interface operations {
     };
     complete_lifecycle_request_api_v1_operations_lifecycle_requests__request_id__complete_post: {
         parameters: {
-            query?: never;
+            query?: {
+                supervisor_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
@@ -5828,7 +6481,7 @@ export interface operations {
                 "X-Tenant-ID"?: string | null;
             };
             path: {
-                supervisor_id: string;
+                supervisor_id: string | null;
             };
             cookie?: never;
         };
@@ -5926,7 +6579,9 @@ export interface operations {
     };
     evaluate_worker_model_admission_api_v1_operations_workers__camera_id__model_admission_evaluate_post: {
         parameters: {
-            query?: never;
+            query?: {
+                supervisor_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
