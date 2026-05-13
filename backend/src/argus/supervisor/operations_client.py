@@ -19,6 +19,8 @@ from argus.api.contracts import (
     SupervisorPollResponse,
     SupervisorRuntimeReportCreate,
     SupervisorRuntimeReportResponse,
+    SupervisorServiceReportCreate,
+    SupervisorServiceReportResponse,
     WorkerModelAdmissionRequest,
     WorkerModelAdmissionResponse,
 )
@@ -148,6 +150,17 @@ class SupervisorOperationsClient:
             json=report.model_dump(mode="json"),
         )
         return EdgeNodeHardwareReportResponse.model_validate(body)
+
+    async def record_service_report(
+        self,
+        report: SupervisorServiceReportCreate,
+    ) -> SupervisorServiceReportResponse:
+        body = await self._request(
+            "POST",
+            f"/api/v1/deployment/supervisors/{self.supervisor_id}/service-reports",
+            json=report.model_dump(mode="json"),
+        )
+        return SupervisorServiceReportResponse.model_validate(body)
 
     async def fetch_fleet_overview(self) -> FleetOverviewResponse:
         body = await self._request("GET", "/api/v1/operations/fleet")

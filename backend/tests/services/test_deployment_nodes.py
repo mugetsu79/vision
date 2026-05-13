@@ -381,6 +381,53 @@ async def test_revoking_node_credential_appends_event_and_disables_validation() 
 
 
 @pytest.mark.asyncio
+async def test_node_credential_service_report_cannot_change_node_shape() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    now = datetime(2026, 5, 13, 9, 15, tzinfo=UTC)
+    session_factory = _MemorySessionFactory()
+    _seed_edge_node_scope(session_factory, tenant_id=tenant_id, edge_node_id=edge_node_id)
+    service = DeploymentNodeService(session_factory, now_factory=lambda: now)
+    created = await service.create_pairing_session(
+        tenant_id=tenant_id,
+        payload=NodePairingSessionCreate(
+            node_kind=DeploymentNodeKind.CENTRAL,
+            hostname="vezor-central",
+            requested_ttl_seconds=300,
+        ),
+        actor_subject="admin-1",
+    )
+    claimed = await service.claim_pairing_session(
+        session_id=created.id,
+        payload=NodePairingClaim(
+            pairing_code=created.pairing_code,
+            supervisor_id="central-imac-1",
+            hostname="vezor-central",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="credential is not scoped"):
+        await service.record_service_report(
+            tenant_id=tenant_id,
+            supervisor_id="central-imac-1",
+            authenticated_node_id=claimed.node.id,
+            payload=SupervisorServiceReportCreate(
+                node_kind=DeploymentNodeKind.EDGE,
+                edge_node_id=edge_node_id,
+                hostname="orin-nano-01",
+                service_manager=DeploymentServiceManager.SYSTEMD,
+                service_status="running",
+                install_status=DeploymentInstallStatus.HEALTHY,
+                credential_status=DeploymentCredentialStatus.ACTIVE,
+                version="0.21.0",
+                os_name="linux",
+                host_profile="linux-aarch64-nvidia-jetson",
+                heartbeat_at=now,
+            ),
+        )
+
+
+@pytest.mark.asyncio
 async def test_edge_service_reports_must_reference_edge_node_in_tenant_scope() -> None:
     tenant_id = uuid4()
     other_tenant_id = uuid4()

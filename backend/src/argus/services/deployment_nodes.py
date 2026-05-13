@@ -79,6 +79,7 @@ class DeploymentNodeService:
         tenant_id: UUID,
         supervisor_id: str,
         payload: SupervisorServiceReportCreate,
+        authenticated_node_id: UUID | None = None,
     ) -> SupervisorServiceReportResponse:
         now = self.now_factory()
         diagnostics = redact_diagnostics(payload.diagnostics)
@@ -90,10 +91,12 @@ class DeploymentNodeService:
                 tenant_id=tenant_id,
                 edge_node_id=payload.edge_node_id,
             )
-            node = await self._load_node_by_supervisor(
+            node = await self._load_node_for_service_report(
                 session=session,
                 tenant_id=tenant_id,
                 supervisor_id=supervisor_id,
+                payload=payload,
+                authenticated_node_id=authenticated_node_id,
             )
             if node is None:
                 node = DeploymentNode(
@@ -447,6 +450,35 @@ class DeploymentNodeService:
         )
         row = (await session.execute(statement)).scalar_one_or_none()
         return row if isinstance(row, DeploymentNode) else None
+
+    async def _load_node_for_service_report(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_id: UUID,
+        supervisor_id: str,
+        payload: SupervisorServiceReportCreate,
+        authenticated_node_id: UUID | None,
+    ) -> DeploymentNode | None:
+        if authenticated_node_id is None:
+            return await self._load_node_by_supervisor(
+                session=session,
+                tenant_id=tenant_id,
+                supervisor_id=supervisor_id,
+            )
+        node = await self._load_node_by_id(
+            session=session,
+            tenant_id=tenant_id,
+            node_id=authenticated_node_id,
+        )
+        if (
+            node.supervisor_id != supervisor_id
+            or node.node_kind is not payload.node_kind
+            or node.edge_node_id != payload.edge_node_id
+        ):
+            msg = "Supervisor credential is not scoped to this service report."
+            raise ValueError(msg)
+        return node
 
     async def _load_node_by_id(
         self,

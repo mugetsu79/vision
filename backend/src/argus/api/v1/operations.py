@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
@@ -26,8 +26,12 @@ from argus.api.contracts import (
     WorkerModelAdmissionRequest,
     WorkerModelAdmissionResponse,
 )
-from argus.api.dependencies import get_app_services, get_tenant_context
-from argus.core.security import AuthenticatedUser, enforce_role, require
+from argus.api.dependencies import (
+    SupervisorOrAdminTenantDependency,
+    get_app_services,
+    get_tenant_context,
+)
+from argus.core.security import AuthenticatedUser, require
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
 
@@ -35,48 +39,6 @@ router = APIRouter(prefix="/api/v1/operations", tags=["operations"])
 AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
-
-
-async def get_supervisor_or_admin_tenant_context(
-    request: Request,
-    services: ServicesDependency,
-    x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
-    supervisor_id: str | None = None,
-) -> TenantContext:
-    token = _bearer_token(request.headers.get("Authorization"))
-    if token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token.",
-        )
-    try:
-        user = await request.app.state.security.authenticate_request(request)
-    except HTTPException as exc:
-        if exc.status_code != status.HTTP_401_UNAUTHORIZED:
-            raise
-    else:
-        enforce_role(user, RoleEnum.ADMIN)
-        return await services.tenancy.resolve_context(
-            user=user,
-            explicit_tenant_id=_parse_optional_uuid(x_tenant_id),
-        )
-
-    try:
-        return await services.deployment.authenticate_supervisor_credential(
-            credential_material=token,
-            supervisor_id=supervisor_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid supervisor credential.",
-        ) from exc
-
-
-SupervisorOrAdminTenantDependency = Annotated[
-    TenantContext,
-    Depends(get_supervisor_or_admin_tenant_context),
-]
 
 
 @router.get("/fleet", response_model=FleetOverviewResponse)
@@ -282,27 +244,6 @@ async def evaluate_worker_model_admission(
         camera_id,
         payload,
     )
-
-
-def _bearer_token(authorization_header: str | None) -> str | None:
-    if authorization_header is None:
-        return None
-    scheme, _, token = authorization_header.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    return token.strip()
-
-
-def _parse_optional_uuid(raw_value: str | None) -> UUID | None:
-    if raw_value is None:
-        return None
-    try:
-        return UUID(raw_value)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X-Tenant-ID must be a UUID.",
-        ) from exc
 
 
 def _assert_supervisor_identity(tenant_context: TenantContext, supervisor_id: str) -> None:

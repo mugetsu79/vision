@@ -7,14 +7,25 @@ import pytest
 
 from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
+    FleetCameraWorkerSummary,
+    FleetOverviewResponse,
+    FleetSummary,
     HardwarePerformanceSample,
     OperationsLifecycleRequestResponse,
+    SupervisorServiceReportCreate,
+    WorkerAssignmentResponse,
+    WorkerDesiredState,
     WorkerModelAdmissionResponse,
+    WorkerRuntimeStatus,
 )
 from argus.models.enums import (
+    DeploymentCredentialStatus,
+    DeploymentInstallStatus,
+    DeploymentServiceManager,
     ModelAdmissionStatus,
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
+    ProcessingMode,
 )
 from argus.supervisor.process_adapter import WorkerProcessResult
 from argus.supervisor.runner import SupervisorRunner, parse_args
@@ -90,7 +101,7 @@ def test_parse_args_labels_password_grant_as_dev_only() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runner_posts_hardware_report_before_polling() -> None:
+async def test_runner_posts_service_and_hardware_reports_before_polling() -> None:
     operations = _FakeOperations(requests=[])
     runner = SupervisorRunner(
         supervisor_id="central-imac",
@@ -105,7 +116,10 @@ async def test_runner_posts_hardware_report_before_polling() -> None:
     processed = await runner.run_once()
 
     assert processed == 0
-    assert operations.events == ["hardware", "poll"]
+    assert operations.events == ["service", "hardware", "poll"]
+    assert operations.service_reports[0].service_manager is DeploymentServiceManager.DIRECT_CHILD
+    assert operations.service_reports[0].install_status is DeploymentInstallStatus.HEALTHY
+    assert operations.service_reports[0].credential_status is DeploymentCredentialStatus.ACTIVE
     assert operations.hardware_reports[0].host_profile == "macos-x86_64-intel"
     assert operations.hardware_reports[0].observed_performance == []
 
@@ -189,6 +203,40 @@ async def test_runner_allows_supported_start_and_records_runtime_report() -> Non
     assert operations.completions[0]["status"] is OperationsLifecycleStatus.COMPLETED
 
 
+@pytest.mark.asyncio
+async def test_runner_recovers_desired_worker_from_fleet_after_restart() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.OFFLINE,
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    operations = _FakeOperations(
+        requests=[],
+        fleet=_fleet_overview(worker),
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    adapter = _FakeProcessAdapter()
+    runner = SupervisorRunner(
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+    )
+
+    processed = await runner.run_once()
+
+    assert processed == 1
+    assert adapter.calls == [("start", worker.camera_id)]
+    assert operations.runtime_reports[0]["camera_id"] == worker.camera_id
+
+
 def _lifecycle_request(action: OperationsLifecycleAction) -> OperationsLifecycleRequestResponse:
     return OperationsLifecycleRequestResponse(
         id=uuid4(),
@@ -244,20 +292,27 @@ class _FakeOperations:
         *,
         requests: list[OperationsLifecycleRequestResponse],
         admission_status: ModelAdmissionStatus = ModelAdmissionStatus.RECOMMENDED,
+        fleet: FleetOverviewResponse | None = None,
     ) -> None:
         self.requests = requests
         self.admission_status = admission_status
+        self.fleet = fleet
         self.events: list[str] = []
+        self.service_reports: list[SupervisorServiceReportCreate] = []
         self.hardware_reports: list[EdgeNodeHardwareReportCreate] = []
         self.completions: list[dict[str, object]] = []
         self.runtime_reports: list[dict[str, object]] = []
+
+    async def record_service_report(self, report: SupervisorServiceReportCreate) -> None:
+        self.events.append("service")
+        self.service_reports.append(report)
 
     async def record_hardware_report(self, report: EdgeNodeHardwareReportCreate) -> None:
         self.events.append("hardware")
         self.hardware_reports.append(report)
 
-    async def fetch_fleet_overview(self) -> object:
-        return object()
+    async def fetch_fleet_overview(self) -> FleetOverviewResponse | None:
+        return self.fleet
 
     async def poll_lifecycle_requests(
         self,
@@ -350,13 +405,16 @@ class _FakeOperations:
 class _FakeProcessAdapter:
     def __init__(self) -> None:
         self.calls: list[tuple[str, UUID]] = []
+        self.running: set[UUID] = set()
 
     async def start(self, camera_id: UUID) -> WorkerProcessResult:
         self.calls.append(("start", camera_id))
+        self.running.add(camera_id)
         return WorkerProcessResult(runtime_state="running")
 
     async def stop(self, camera_id: UUID) -> WorkerProcessResult:
         self.calls.append(("stop", camera_id))
+        self.running.discard(camera_id)
         return WorkerProcessResult(runtime_state="stopped")
 
     async def restart(self, camera_id: UUID) -> WorkerProcessResult:
@@ -365,4 +423,94 @@ class _FakeProcessAdapter:
 
     async def drain(self, camera_id: UUID) -> WorkerProcessResult:
         self.calls.append(("drain", camera_id))
+        self.running.discard(camera_id)
         return WorkerProcessResult(runtime_state="stopped")
+
+    def is_running(self, camera_id: UUID) -> bool:
+        return camera_id in self.running
+
+
+def _fleet_worker(
+    *,
+    tenant_id: UUID,
+    edge_node_id: UUID | None,
+    desired_state: WorkerDesiredState,
+    runtime_status: WorkerRuntimeStatus,
+    admission_status: ModelAdmissionStatus,
+) -> FleetCameraWorkerSummary:
+    camera_id = uuid4()
+    assignment_id = uuid4()
+    return FleetCameraWorkerSummary(
+        camera_id=camera_id,
+        camera_name="Dock Camera",
+        site_id=uuid4(),
+        node_id=edge_node_id,
+        processing_mode=ProcessingMode.EDGE if edge_node_id is not None else ProcessingMode.CENTRAL,
+        desired_state=desired_state,
+        runtime_status=runtime_status,
+        lifecycle_owner="edge_supervisor" if edge_node_id is not None else "central_supervisor",
+        assignment=WorkerAssignmentResponse(
+            id=assignment_id,
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            desired_state=desired_state,
+            active=True,
+            supersedes_assignment_id=None,
+            assigned_by_subject="operator-1",
+            created_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        ),
+        latest_model_admission=_admission_response(
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment_id,
+            status=admission_status,
+        ),
+    )
+
+
+def _fleet_overview(worker: FleetCameraWorkerSummary) -> FleetOverviewResponse:
+    return FleetOverviewResponse(
+        mode="supervised",
+        generated_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        summary=FleetSummary(
+            desired_workers=1,
+            running_workers=0,
+            stale_nodes=0,
+            offline_nodes=0,
+            native_unavailable_cameras=0,
+        ),
+        nodes=[],
+        camera_workers=[worker],
+        delivery_diagnostics=[],
+    )
+
+
+def _admission_response(
+    *,
+    tenant_id: UUID,
+    camera_id: UUID,
+    edge_node_id: UUID | None,
+    assignment_id: UUID,
+    status: ModelAdmissionStatus,
+) -> WorkerModelAdmissionResponse:
+    return WorkerModelAdmissionResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=camera_id,
+        edge_node_id=edge_node_id,
+        assignment_id=assignment_id,
+        hardware_report_id=uuid4(),
+        model_id=uuid4(),
+        model_name="YOLO26n COCO",
+        model_capability="fixed_vocab",
+        stream_profile={"width": 1280, "height": 720, "fps": 10},
+        status=status,
+        selected_backend="CoreMLExecutionProvider",
+        rationale=f"{status.value} in test",
+        constraints={},
+        evaluated_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        created_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+    )

@@ -35,6 +35,7 @@ async def test_start_uses_structured_default_worker_argv_and_env() -> None:
     result = await adapter.start(camera_id)
 
     assert result.runtime_state == "running"
+    assert adapter.is_running(camera_id)
     assert calls[0][0] == (
         sys.executable,
         "-m",
@@ -89,6 +90,7 @@ async def test_stop_terminates_tracked_process_and_reports_stopped() -> None:
     result = await adapter.stop(camera_id)
 
     assert result.runtime_state == "stopped"
+    assert not adapter.is_running(camera_id)
     assert process.terminate_called is True
     assert process.kill_called is False
 

@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -14,6 +15,13 @@ from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
     FleetOverviewResponse,
     HardwarePerformanceSample,
+    SupervisorServiceReportCreate,
+)
+from argus.models.enums import (
+    DeploymentCredentialStatus,
+    DeploymentInstallStatus,
+    DeploymentNodeKind,
+    DeploymentServiceManager,
 )
 from argus.supervisor.credential_store import FileCredentialStore
 from argus.supervisor.hardware_probe import HostCapabilityProbe
@@ -68,6 +76,9 @@ class RunnerConfig:
     tenant_id: UUID = _NIL_TENANT_ID
     product_mode: bool = False
     auth_mode: str = "static_bearer_dev"
+    service_manager: DeploymentServiceManager = DeploymentServiceManager.DIRECT_CHILD
+    supervisor_version: str | None = None
+    hostname: str | None = None
 
 
 class SupervisorRunner:
@@ -82,12 +93,25 @@ class SupervisorRunner:
         process_adapter: object,
         tenant_id: UUID = _NIL_TENANT_ID,
         limit: int = 10,
+        service_manager: DeploymentServiceManager = DeploymentServiceManager.DIRECT_CHILD,
+        supervisor_version: str | None = None,
+        hostname: str | None = None,
+        product_mode: bool = False,
+        auth_mode: str = "static_bearer_dev",
     ) -> None:
         self.supervisor_id = supervisor_id
         self.edge_node_id = edge_node_id
+        self.node_kind = (
+            DeploymentNodeKind.EDGE if edge_node_id is not None else DeploymentNodeKind.CENTRAL
+        )
         self.hardware_probe = hardware_probe
         self.metrics_probe = metrics_probe
         self.operations = operations
+        self.service_manager = service_manager
+        self.supervisor_version = supervisor_version
+        self.hostname = hostname or platform.node() or supervisor_id
+        self.product_mode = product_mode
+        self.auth_mode = auth_mode
         self.reconciler = SupervisorReconciler(
             operations=operations,  # type: ignore[arg-type]
             process_adapter=process_adapter,  # type: ignore[arg-type]
@@ -105,6 +129,7 @@ class SupervisorRunner:
             edge_node_id=self.edge_node_id,
             observed_performance=observed_performance,
         )
+        await self._record_service_report(report)
         await self.operations.record_hardware_report(report)  # type: ignore[attr-defined]
         LOGGER.info(
             "Supervisor hardware report posted supervisor_id=%s edge_node_id=%s "
@@ -114,7 +139,37 @@ class SupervisorRunner:
             report.host_profile,
             len(report.observed_performance),
         )
-        return await self.reconciler.reconcile_once()
+        return await self.reconciler.reconcile_once(fleet=fleet)
+
+    async def _record_service_report(self, report: EdgeNodeHardwareReportCreate) -> None:
+        recorder = getattr(self.operations, "record_service_report", None)
+        if recorder is None:
+            return
+        payload = SupervisorServiceReportCreate(
+            node_kind=self.node_kind,
+            edge_node_id=self.edge_node_id,
+            hostname=self.hostname,
+            service_manager=self.service_manager,
+            service_status="running",
+            install_status=DeploymentInstallStatus.HEALTHY,
+            credential_status=DeploymentCredentialStatus.ACTIVE,
+            version=self.supervisor_version,
+            os_name=report.os_name,
+            host_profile=report.host_profile,
+            heartbeat_at=report.reported_at,
+            diagnostics={
+                "auth_mode": self.auth_mode,
+                "product_mode": self.product_mode,
+            },
+        )
+        await recorder(payload)
+        LOGGER.info(
+            "Supervisor service report posted supervisor_id=%s edge_node_id=%s "
+            "service_manager=%s",
+            self.supervisor_id,
+            self.edge_node_id,
+            self.service_manager.value,
+        )
 
     async def run_forever(
         self,
@@ -188,6 +243,11 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
             )
         ),
         tenant_id=config.tenant_id,
+        service_manager=config.service_manager,
+        supervisor_version=config.supervisor_version,
+        hostname=config.hostname,
+        product_mode=config.product_mode,
+        auth_mode=config.auth_mode,
     )
 
 
@@ -255,6 +315,7 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         once=args.once,
         product_mode=False,
         auth_mode="password_grant_dev" if has_refreshable_token else "static_bearer_dev",
+        service_manager=DeploymentServiceManager.DIRECT_CHILD,
     )
 
 
@@ -304,6 +365,9 @@ def _parse_config_file(args: argparse.Namespace, parser: argparse.ArgumentParser
         once=args.once or bool(payload.get("once", False)),
         product_mode=True,
         auth_mode="credential_store",
+        service_manager=_service_manager(payload.get("service_manager")),
+        supervisor_version=_optional_string(payload.get("version")),
+        hostname=_optional_string(payload.get("hostname")),
     )
 
 
@@ -352,6 +416,16 @@ def _config_path(
     if not path.is_absolute():
         path = base_dir / path
     return path.resolve()
+
+
+def _service_manager(value: object) -> DeploymentServiceManager:
+    text = _optional_string(value)
+    if text is None:
+        return DeploymentServiceManager.UNKNOWN
+    try:
+        return DeploymentServiceManager(text)
+    except ValueError:
+        return DeploymentServiceManager.UNKNOWN
 
 
 async def async_main(argv: list[str] | None = None) -> int:

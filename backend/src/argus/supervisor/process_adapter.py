@@ -17,6 +17,8 @@ class WorkerProcessResult:
 
 
 class WorkerProcessAdapter(Protocol):
+    def is_running(self, camera_id: UUID) -> bool: ...
+
     async def start(self, camera_id: UUID) -> WorkerProcessResult: ...
 
     async def stop(self, camera_id: UUID) -> WorkerProcessResult: ...
@@ -54,6 +56,10 @@ class LocalWorkerProcessAdapter:
         self._subprocess_exec = subprocess_exec or asyncio.create_subprocess_exec
         self._processes: dict[UUID, object] = {}
         self.accepting_new_work = True
+
+    def is_running(self, camera_id: UUID) -> bool:
+        process = self._processes.get(camera_id)
+        return process is not None and _returncode(process) is None
 
     async def start(self, camera_id: UUID) -> WorkerProcessResult:
         if not self.accepting_new_work:

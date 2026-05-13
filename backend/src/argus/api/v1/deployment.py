@@ -16,7 +16,11 @@ from argus.api.contracts import (
     SupervisorServiceReportResponse,
     TenantContext,
 )
-from argus.api.dependencies import get_app_services, get_tenant_context
+from argus.api.dependencies import (
+    SupervisorOrAdminTenantDependency,
+    get_app_services,
+    get_tenant_context,
+)
 from argus.core.security import AuthenticatedUser, require
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
@@ -122,15 +126,18 @@ async def revoke_node_credentials(
 async def record_supervisor_service_report(
     supervisor_id: str,
     payload: SupervisorServiceReportCreate,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> SupervisorServiceReportResponse:
-    return await services.deployment.record_service_report(
-        tenant_id=tenant_context.tenant_id,
-        supervisor_id=supervisor_id,
-        payload=payload,
-    )
+    try:
+        return await services.deployment.record_service_report(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            payload=payload,
+            authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
 
 
 def _deployment_http_error(exc: ValueError) -> HTTPException:
@@ -141,3 +148,15 @@ def _deployment_http_error(exc: ValueError) -> HTTPException:
     if "already consumed" in normalized or "expired" in normalized:
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+def _authenticated_deployment_node_id(tenant_context: TenantContext) -> UUID | None:
+    if tenant_context.user.claims.get("auth_type") != "supervisor_node_credential":
+        return None
+    raw_node_id = tenant_context.user.claims.get("deployment_node_id")
+    if not isinstance(raw_node_id, str):
+        return None
+    try:
+        return UUID(raw_node_id)
+    except ValueError:
+        return None

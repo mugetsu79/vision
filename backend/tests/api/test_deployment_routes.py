@@ -69,10 +69,16 @@ class _FakeSecurity:
         self.user = user
 
     async def authenticate_request(self, request) -> AuthenticatedUser:  # noqa: ANN001
-        if request.headers.get("Authorization") is None:
+        authorization = request.headers.get("Authorization")
+        if authorization is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Missing bearer token.",
+            )
+        if authorization == "Bearer node-credential":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token issuer is not trusted.",
             )
         return self.user
 
@@ -84,6 +90,30 @@ class _FakeDeploymentService:
         self.claim_payload: NodePairingClaim | None = None
         self.revoked_node_id: UUID | None = None
         self.tenant_id: UUID | None = None
+
+    async def authenticate_supervisor_credential(
+        self,
+        *,
+        credential_material: str,
+        supervisor_id: str | None = None,
+    ) -> TenantContext:
+        if credential_material != "node-credential" or supervisor_id != "central-imac-1":
+            raise ValueError("Invalid supervisor credential.")
+        tenant_id = self.tenant_id or uuid4()
+        return TenantContext(
+            tenant_id=tenant_id,
+            tenant_slug="argus-dev",
+            user=AuthenticatedUser(
+                subject="supervisor:central-imac-1",
+                email=None,
+                role=RoleEnum.OPERATOR,
+                issuer="vezor-node-credential",
+                realm="argus-dev",
+                is_superadmin=False,
+                tenant_context=str(tenant_id),
+                claims={"auth_type": "supervisor_node_credential"},
+            ),
+        )
 
     async def list_nodes(self, *, tenant_id: UUID) -> list[DeploymentNodeResponse]:
         return [
@@ -133,7 +163,9 @@ class _FakeDeploymentService:
         tenant_id: UUID,
         supervisor_id: str,
         payload: SupervisorServiceReportCreate,
+        authenticated_node_id: UUID | None = None,
     ) -> SupervisorServiceReportResponse:
+        del authenticated_node_id
         self.report_payload = payload
         return SupervisorServiceReportResponse(
             id=UUID("00000000-0000-0000-0000-000000000904"),
@@ -358,6 +390,40 @@ async def test_service_report_route_records_report_and_returns_resolved_node_sta
     }
     assert deployment.report_payload is not None
     assert deployment.report_payload.service_manager is DeploymentServiceManager.LAUNCHD
+
+
+@pytest.mark.asyncio
+async def test_service_report_route_accepts_node_credential_without_admin_jwt() -> None:
+    context = _tenant_context()
+    deployment = _FakeDeploymentService()
+    app = _create_app(context, deployment)
+    heartbeat_at = datetime(2026, 5, 13, 9, 0, tzinfo=UTC)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/deployment/supervisors/central-imac-1/service-reports",
+            headers={"Authorization": "Bearer node-credential"},
+            json={
+                "node_kind": "central",
+                "hostname": "vezor-central",
+                "service_manager": "launchd",
+                "service_status": "running",
+                "install_status": "healthy",
+                "credential_status": "active",
+                "version": "0.21.0",
+                "os_name": "darwin",
+                "host_profile": "macos-arm64-apple",
+                "heartbeat_at": heartbeat_at.isoformat(),
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json()["supervisor_id"] == "central-imac-1"
+    assert deployment.report_payload is not None
+    assert deployment.report_payload.credential_status is DeploymentCredentialStatus.ACTIVE
 
 
 @pytest.mark.asyncio
