@@ -6,6 +6,7 @@ import contextlib
 import inspect
 import logging
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -26,6 +27,7 @@ from argus.api.contracts import (
     TriggerRuleSummary,
     WorkerEvidenceStorageSettings,
     WorkerIncidentRule,
+    WorkerIncidentRulePredicate,
     WorkerPrivacyPolicySettings,
     WorkerRuntimeSelectionSettings,
 )
@@ -60,6 +62,7 @@ from argus.inference.publisher import (
 from argus.models.enums import (
     CameraSourceKind,
     DetectorCapability,
+    IncidentRuleSeverity,
     ProcessingMode,
     RuleAction,
     RuntimeArtifactKind,
@@ -96,7 +99,7 @@ from argus.vision.detector_factory import build_detector as _build_detector
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
 from argus.vision.profiles import resolve_scene_vision_profile
-from argus.vision.rules import RuleDefinition, RuleEngine
+from argus.vision.rules import RuleDefinition, RuleEngine, RuleEventRecord, RuleStore
 from argus.vision.runtime import (
     RuntimeExecutionPolicy,
     import_onnxruntime,
@@ -375,7 +378,7 @@ class RuleEvaluator(Protocol):
         camera_id: UUID,
         detections: list[Detection],
         ts: datetime,
-    ) -> list[object]: ...
+    ) -> list[RuleEventRecord]: ...
 
 
 class EventSubscriber(Protocol):
@@ -1494,31 +1497,35 @@ class InferenceEngine:
                 cv2.LINE_AA,
             )
 
-    def _rule_events_to_incidents(self, events: list[object]) -> list[IncidentTriggeredEvent]:
+    def _rule_events_to_incidents(
+        self,
+        events: Iterable[RuleEventRecord],
+    ) -> list[IncidentTriggeredEvent]:
         incidents: list[IncidentTriggeredEvent] = []
         for event in events:
-            action = getattr(event, "action", None)
+            action = event.action
             if action is None:
                 continue
             action_value = action.value if hasattr(action, "value") else str(action)
             if action is RuleAction.COUNT or action_value == RuleAction.COUNT.value:
                 continue
-            ts = getattr(event, "ts", datetime.now(tz=UTC))
-            incident_type = getattr(event, "incident_type", None) or action_value
+            incident_type = event.incident_type or action_value
             trigger_rule = TriggerRuleSummary(
                 id=event.rule_id,
-                name=getattr(event, "name", "rule-triggered"),
+                name=event.name,
                 incident_type=incident_type,
-                severity=getattr(event, "severity", "warning") or "warning",
+                severity=IncidentRuleSeverity(
+                    event.severity or IncidentRuleSeverity.WARNING.value
+                ),
                 action=RuleAction(action_value),
-                cooldown_seconds=int(getattr(event, "cooldown_seconds", 0) or 0),
-                predicate=getattr(event, "predicate", {}) or {},
-                rule_hash=getattr(event, "rule_hash", None),
+                cooldown_seconds=event.cooldown_seconds,
+                predicate=WorkerIncidentRulePredicate.model_validate(event.predicate),
+                rule_hash=event.rule_hash,
             )
             incidents.append(
                 IncidentTriggeredEvent(
                     camera_id=self.config.camera_id,
-                    ts=ts,
+                    ts=event.ts,
                     type=f"rule.{incident_type}",
                     payload={
                         "name": trigger_rule.name,
@@ -1690,7 +1697,7 @@ async def build_runtime_engine(
     tracking_store: TrackingStore | None = None,
     count_event_store: CountEventStoreProtocol | None = None,
     rule_engine: RuleEvaluator | None = None,
-    rule_event_store: object | None = None,
+    rule_event_store: RuleStore | None = None,
     incident_capture: IncidentClipCaptureService | None = None,
 ) -> InferenceEngine:
     token_issuer = MediaMTXTokenIssuer.from_settings(settings)
@@ -1871,7 +1878,7 @@ async def build_runtime_engine(
         max_queue_size=settings.telemetry_publish_queue_size,
         shutdown_timeout_seconds=settings.telemetry_publish_shutdown_timeout_seconds,
     )
-    resolved_rule_engine = rule_engine or RuleEngine(
+    resolved_rule_engine: RuleEvaluator = rule_engine or RuleEngine(
         rules=_rule_definitions_from_worker_rules(config.incident_rules),
         publisher=events_client,
         store=rule_event_store or _NoopRuleEventStore(),
@@ -2126,7 +2133,7 @@ class _NoopRuleEngine:
         camera_id: UUID,
         detections: list[Detection],
         ts: datetime,
-    ) -> list[object]:
+    ) -> list[RuleEventRecord]:
         return []
 
 

@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -61,6 +61,7 @@ from argus.services.supervisor_operations import (
 )
 
 SERVICE_REPORT_STALE_AFTER = timedelta(minutes=5)
+ModelT = TypeVar("ModelT")
 _SECRET_KEY_PARTS = (
     "api_key",
     "authorization",
@@ -1138,7 +1139,7 @@ def _redacted_model_admission_response(
     )
 
 
-def _lifecycle_summary(rows: list[object]) -> dict[str, object]:
+def _lifecycle_summary(rows: Iterable[object]) -> dict[str, object]:
     lifecycle_rows = [row for row in rows if isinstance(row, OperationsLifecycleRequest)]
     latest = max(
         (row.requested_at for row in lifecycle_rows),
@@ -1151,7 +1152,7 @@ def _lifecycle_summary(rows: list[object]) -> dict[str, object]:
     }
 
 
-def _runtime_summary(rows: list[object]) -> dict[str, object]:
+def _runtime_summary(rows: Iterable[object]) -> dict[str, object]:
     runtime_rows = [row for row in rows if isinstance(row, WorkerRuntimeReport)]
     latest = max((row.heartbeat_at for row in runtime_rows), default=None)
     return {
@@ -1161,7 +1162,7 @@ def _runtime_summary(rows: list[object]) -> dict[str, object]:
     }
 
 
-def _hardware_summary(rows: list[object]) -> dict[str, object]:
+def _hardware_summary(rows: Iterable[object]) -> dict[str, object]:
     hardware_rows = [row for row in rows if isinstance(row, EdgeNodeHardwareReport)]
     latest = max(hardware_rows, key=lambda row: row.reported_at, default=None)
     return {
@@ -1172,7 +1173,7 @@ def _hardware_summary(rows: list[object]) -> dict[str, object]:
     }
 
 
-def _model_admission_summary(rows: list[object]) -> dict[str, object]:
+def _model_admission_summary(rows: Iterable[object]) -> dict[str, object]:
     admission_rows = [row for row in rows if isinstance(row, WorkerModelAdmissionReport)]
     latest = max((row.evaluated_at for row in admission_rows), default=None)
     return {
@@ -1184,9 +1185,9 @@ def _model_admission_summary(rows: list[object]) -> dict[str, object]:
 
 def _config_references(
     *,
-    runtime_reports: list[object],
-    hardware_reports: list[object],
-    model_admissions: list[object],
+    runtime_reports: Iterable[object],
+    hardware_reports: Iterable[object],
+    model_admissions: Iterable[object],
 ) -> dict[str, object]:
     runtime_rows = [row for row in runtime_reports if isinstance(row, WorkerRuntimeReport)]
     hardware_rows = [
@@ -1218,7 +1219,7 @@ def _config_references(
 def _selected_log_excerpts(
     *,
     node: DeploymentNode,
-    service_reports: list[object],
+    service_reports: Iterable[object],
 ) -> list[dict[str, Any]]:
     excerpts: list[dict[str, Any]] = []
     for source, diagnostics in [
@@ -1250,7 +1251,7 @@ def _coerce_log_excerpts(value: object) -> list[object]:
     return []
 
 
-def _count_by(rows: list[object], attribute: str) -> dict[str, int]:
+def _count_by(rows: Iterable[object], attribute: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     for row in rows:
         value = getattr(row, attribute, "unknown")
@@ -1284,13 +1285,13 @@ def _redact_text(value: str) -> str:
     return _KEY_VALUE_SECRET_RE.sub(lambda match: f"{match.group(1)}=[redacted]", redacted)
 
 
-def _recent_rows(
-    rows: list[object],
+def _recent_rows(  # noqa: UP047
+    rows: Iterable[object],
     *,
-    model: type[object],
+    model: type[ModelT],
     timestamp_attr: str,
     limit: int = 5,
-) -> list[object]:
+) -> list[ModelT]:
     matching_rows = [row for row in rows if isinstance(row, model)]
     return sorted(
         matching_rows,
@@ -1302,7 +1303,7 @@ def _recent_rows(
     )[:limit]
 
 
-def _sorted_values(values: object) -> list[str]:
+def _sorted_values(values: Iterable[object]) -> list[str]:
     return sorted({str(value) for value in values if value is not None})
 
 
@@ -1311,12 +1312,13 @@ def _ensure_identity_and_timestamps(
     *,
     now: datetime,
 ) -> None:
-    if getattr(row, "id", None) is None:
-        row.id = uuid4()  # type: ignore[attr-defined]
-    if hasattr(row, "created_at") and getattr(row, "created_at", None) is None:
-        row.created_at = now  # type: ignore[attr-defined]
-    if hasattr(row, "updated_at") and getattr(row, "updated_at", None) is None:
-        row.updated_at = now  # type: ignore[attr-defined]
+    row_any = cast(Any, row)
+    if getattr(row_any, "id", None) is None:
+        row_any.id = uuid4()
+    if hasattr(row_any, "created_at") and getattr(row_any, "created_at", None) is None:
+        row_any.created_at = now
+    if hasattr(row_any, "updated_at") and getattr(row_any, "updated_at", None) is None:
+        row_any.updated_at = now
 
 
 def _credential_event(
@@ -1415,28 +1417,27 @@ def _coerce_datetime(value: object, *, fallback: datetime) -> datetime:
     return value if isinstance(value, datetime) else fallback
 
 
-async def _query_rows(
+async def _query_rows(  # noqa: UP047
     *,
     session: AsyncSession,
-    model: type[object],
+    model: type[ModelT],
     tenant_id: UUID,
     deployment_node_id: UUID | None = None,
     edge_node_id: UUID | None = None,
     supervisor_id: str | None = None,
-) -> list[object]:
-    statement = select(model).where(model.tenant_id == tenant_id)  # type: ignore[attr-defined]
+) -> list[ModelT]:
+    model_columns = cast(Any, model)
+    statement = select(model).where(model_columns.tenant_id == tenant_id)
     if deployment_node_id is not None:
-        statement = statement.where(  # type: ignore[attr-defined]
-            model.deployment_node_id == deployment_node_id
-        )
+        statement = statement.where(model_columns.deployment_node_id == deployment_node_id)
     if hasattr(model, "edge_node_id"):
         if edge_node_id is None:
-            statement = statement.where(model.edge_node_id.is_(None))  # type: ignore[attr-defined]
+            statement = statement.where(model_columns.edge_node_id.is_(None))
         else:
-            statement = statement.where(model.edge_node_id == edge_node_id)  # type: ignore[attr-defined]
+            statement = statement.where(model_columns.edge_node_id == edge_node_id)
     if supervisor_id is not None and hasattr(model, "supervisor_id"):
-        statement = statement.where(model.supervisor_id == supervisor_id)  # type: ignore[attr-defined]
-    return list((await session.execute(statement)).scalars().all())
+        statement = statement.where(model_columns.supervisor_id == supervisor_id)
+    return cast(list[ModelT], list((await session.execute(statement)).scalars().all()))
 
 
 async def _flush_if_available(session: object) -> None:

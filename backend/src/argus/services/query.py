@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol, cast
@@ -459,7 +459,7 @@ async def _resolve_classes_with_context(
     tenant_context: TenantContext,
     camera_ids: list[UUID],
 ) -> object:
-    method = parser.resolve_classes
+    method = cast(Callable[..., Awaitable[object]], parser.resolve_classes)
     parameters = inspect.signature(method).parameters
     supports_context = (
         "tenant_context" in parameters

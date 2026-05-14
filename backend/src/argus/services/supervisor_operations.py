@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
     EdgeNodeHardwareReportResponse,
+    HardwarePerformanceSample,
     OperationsLifecycleRequestCreate,
     OperationsLifecycleRequestResponse,
     OperationsModeProfileConfig,
@@ -21,6 +22,7 @@ from argus.api.contracts import (
     SupervisorRuntimeReportResponse,
     WorkerAssignmentCreate,
     WorkerAssignmentResponse,
+    WorkerDesiredState,
     WorkerModelAdmissionRequest,
     WorkerModelAdmissionResponse,
     WorkerRuntimeStatus,
@@ -575,7 +577,7 @@ def worker_assignment_response(row: WorkerAssignment) -> WorkerAssignmentRespons
         tenant_id=row.tenant_id,
         camera_id=row.camera_id,
         edge_node_id=row.edge_node_id,
-        desired_state=row.desired_state,
+        desired_state=WorkerDesiredState(row.desired_state),
         active=row.active,
         supersedes_assignment_id=row.supersedes_assignment_id,
         assigned_by_subject=row.assigned_by_subject,
@@ -647,11 +649,23 @@ def edge_node_hardware_report_response(
         provider_capabilities={
             str(key): bool(value) for key, value in dict(row.provider_capabilities).items()
         },
-        observed_performance=list(row.observed_performance),
+        observed_performance=_hardware_performance_samples(row.observed_performance),
         thermal_state=row.thermal_state,
         report_hash=row.report_hash,
         created_at=row.created_at,
     )
+
+
+def _hardware_performance_samples(values: object) -> list[HardwarePerformanceSample]:
+    if not isinstance(values, list):
+        return []
+    samples: list[HardwarePerformanceSample] = []
+    for value in values:
+        if isinstance(value, HardwarePerformanceSample):
+            samples.append(value)
+        elif isinstance(value, dict):
+            samples.append(HardwarePerformanceSample.model_validate(value))
+    return samples
 
 
 def worker_model_admission_response(

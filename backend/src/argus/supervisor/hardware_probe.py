@@ -7,12 +7,14 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TypeVar
 from uuid import UUID
 
 from argus.api.contracts import EdgeNodeHardwareReportCreate, HardwarePerformanceSample
 from argus.compat import UTC
 
 ProviderGetter = Callable[[], Sequence[str]]
+T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +158,7 @@ class HostCapabilityProbe:
 
 def _default_provider_getter() -> Sequence[str]:
     try:
-        import onnxruntime as ort  # type: ignore[import-not-found]
+        import onnxruntime as ort  # type: ignore[import-untyped]
     except Exception:
         return []
     try:
@@ -165,7 +167,7 @@ def _default_provider_getter() -> Sequence[str]:
         return []
 
 
-def _safe_call(callback: Callable[[], object]) -> object | None:
+def _safe_call(callback: Callable[[], T]) -> T | None:  # noqa: UP047
     try:
         return callback()
     except Exception:
@@ -186,8 +188,10 @@ def _lower_or_unknown(value: object | None, fallback: str) -> str:
 
 
 def _positive_int(value: object | None) -> int | None:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return None
     try:
-        number = int(value)  # type: ignore[arg-type]
+        number = int(value)
     except (TypeError, ValueError):
         return None
     return number if number > 0 else None

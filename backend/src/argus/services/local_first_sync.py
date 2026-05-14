@@ -9,7 +9,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from argus.api.contracts import EvidenceRecordingPolicy, WorkerEvidenceStorageSettings
+from argus.api.contracts import (
+    EvidenceRecordingPolicy,
+    EvidenceStorageProfile,
+    WorkerEvidenceStorageSettings,
+)
 from argus.compat import UTC
 from argus.core.config import Settings
 from argus.models.enums import (
@@ -273,7 +277,9 @@ class LocalFirstEvidenceSyncService:
         }:
             raise ValueError("Local-first sync remote profile must resolve to remote storage.")
         scope = EvidenceStorageScope(profile.storage_scope)
-        storage_profile = "cloud" if scope is EvidenceStorageScope.CLOUD else "central"
+        storage_profile: EvidenceStorageProfile = (
+            "cloud" if scope is EvidenceStorageScope.CLOUD else "central"
+        )
         route = resolve_evidence_storage_route(
             self.settings,
             recording_policy=EvidenceRecordingPolicy(

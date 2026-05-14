@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from typing import cast
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from argus.api.contracts import RuntimeArtifactSoakRunCreate, RuntimeArtifactSoakRunResponse
+from argus.api.contracts import (
+    RuntimeArtifactSoakRunCreate,
+    RuntimeArtifactSoakRunResponse,
+    RuntimeBackend,
+)
 from argus.models.enums import OperatorConfigProfileKind
 from argus.models.tables import (
     EdgeNodeHardwareReport,
@@ -301,7 +306,7 @@ def runtime_soak_run_response(run: RuntimeArtifactSoakRun) -> RuntimeArtifactSoa
         camera_id=run.camera_id,
         runtime_artifact_id=run.runtime_artifact_id,
         runtime_kind=run.runtime_kind,
-        runtime_backend=run.runtime_backend,
+        runtime_backend=cast(RuntimeBackend, run.runtime_backend),
         model_id=run.model_id,
         model_name=run.model_name,
         model_capability=run.model_capability,

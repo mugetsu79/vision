@@ -6,9 +6,10 @@ import json
 import logging
 import os
 import platform
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import UUID
 
 from argus.api.contracts import (
@@ -25,7 +26,7 @@ from argus.models.enums import (
 )
 from argus.supervisor.credential_store import FileCredentialStore
 from argus.supervisor.hardware_probe import HostCapabilityProbe
-from argus.supervisor.metrics_probe import WorkerMetricsContext, WorkerMetricsProbe
+from argus.supervisor.metrics_probe import MetricsSnapshot, WorkerMetricsContext, WorkerMetricsProbe
 from argus.supervisor.operations_client import (
     BearerTokenProvider,
     PasswordGrantTokenProvider,
@@ -50,8 +51,8 @@ class HardwareProbe(Protocol):
 class MetricsProbe(Protocol):
     async def build_performance_samples(
         self,
-        worker_contexts: object,
-        previous_snapshot: object | None = None,
+        worker_contexts: Iterable[WorkerMetricsContext],
+        previous_snapshot: MetricsSnapshot | None = None,
     ) -> list[HardwarePerformanceSample]: ...
 
 
@@ -193,7 +194,7 @@ class SupervisorRunner:
         if fetch is None:
             return None
         try:
-            return await fetch()
+            return cast(FleetOverviewResponse, await fetch())
         except Exception as exc:
             LOGGER.warning("Supervisor fleet overview fetch failed: %s", exc)
             return None
@@ -225,9 +226,7 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
         token_provider=token_provider,
         credential_store=credential_store,
     )
-    worker_token_provider = token_provider or (
-        credential_store.load if credential_store is not None else None
-    )
+    worker_token_provider = token_provider or _credential_store_token_provider(credential_store)
     return SupervisorRunner(
         supervisor_id=config.supervisor_id,
         edge_node_id=config.edge_node_id,
@@ -455,6 +454,18 @@ def _build_token_provider(config: RunnerConfig) -> BearerTokenProvider | None:
     )
 
 
+def _credential_store_token_provider(
+    credential_store: FileCredentialStore | None,
+) -> BearerTokenProvider | None:
+    if credential_store is None:
+        return None
+
+    def load_credential() -> str:
+        return credential_store.load() or ""
+
+    return load_credential
+
+
 def main() -> None:
     raise SystemExit(asyncio.run(async_main()))
 
@@ -493,8 +504,10 @@ def _worker_contexts_from_fleet(
 
 
 def _positive_int(value: object, fallback: int) -> int:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return fallback
     try:
-        number = int(value)  # type: ignore[arg-type]
+        number = int(value)
     except (TypeError, ValueError):
         return fallback
     return number if number > 0 else fallback

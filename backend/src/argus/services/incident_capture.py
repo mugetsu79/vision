@@ -446,6 +446,7 @@ class IncidentClipCaptureService:
                                 event=pending.event,
                                 status_override=storage_route.status_override,
                             )
+                            snapshot_status = snapshot_artifact["status"]
                             artifact_payloads.append(snapshot_artifact)
                             ledger_payloads.append(
                                 _snapshot_ledger_payload(
@@ -455,7 +456,14 @@ class IncidentClipCaptureService:
                                         "object_key": stored_snapshot.object_key,
                                         "sha256": stored_snapshot.sha256,
                                         "size_bytes": stored_snapshot.size_bytes,
-                                        "status": snapshot_artifact["status"].value,
+                                        "status": (
+                                            snapshot_status.value
+                                            if isinstance(
+                                                snapshot_status,
+                                                EvidenceArtifactStatus,
+                                            )
+                                            else str(snapshot_status)
+                                        ),
                                         "storage_provider": stored_snapshot.provider.value,
                                         "storage_scope": stored_snapshot.scope.value,
                                     },

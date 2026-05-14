@@ -202,7 +202,7 @@ class OperationsModeProfileConfig(BaseModel):
     restart_policy: Literal["never", "on_failure", "always"] = "on_failure"
 
 
-_OPERATOR_CONFIG_MODELS = {
+_OPERATOR_CONFIG_MODELS: dict[OperatorConfigProfileKind, type[BaseModel]] = {
     OperatorConfigProfileKind.EVIDENCE_STORAGE: EvidenceStorageProfileConfig,
     OperatorConfigProfileKind.STREAM_DELIVERY: StreamDeliveryProfileConfig,
     OperatorConfigProfileKind.RUNTIME_SELECTION: RuntimeSelectionProfileConfig,

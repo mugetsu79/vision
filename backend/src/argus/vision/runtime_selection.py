@@ -26,12 +26,23 @@ RuntimeArtifactPreference = Literal["tensorrt_first", "onnx_first", "dynamic_fir
 
 
 class RuntimeSelectionPolicy(Protocol):
-    profile_id: UUID | None
-    profile_name: str | None
-    profile_hash: str | None
-    preferred_backend: str | None
-    artifact_preference: RuntimeArtifactPreference
-    fallback_allowed: bool
+    @property
+    def profile_id(self) -> UUID | None: ...
+
+    @property
+    def profile_name(self) -> str | None: ...
+
+    @property
+    def profile_hash(self) -> str | None: ...
+
+    @property
+    def preferred_backend(self) -> str | None: ...
+
+    @property
+    def artifact_preference(self) -> RuntimeArtifactPreference: ...
+
+    @property
+    def fallback_allowed(self) -> bool: ...
 
 
 class RuntimeSelectionError(RuntimeError):

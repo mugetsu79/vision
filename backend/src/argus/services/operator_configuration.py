@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
+    EvidenceStorageConfigProvider,
     LLMProviderProfileConfig,
     OperationsModeProfileConfig,
     OperatorConfigBindingRequest,
@@ -467,6 +468,7 @@ class OperatorConfigurationService:
         profile_id: UUID | None = None,
     ) -> WorkerEvidenceStorageSettings:
         async with self.session_factory() as session:
+            profile: OperatorConfigProfile | None
             if profile_id is not None:
                 profile = await self._get_profile(session, tenant_context.tenant_id, profile_id)
                 if (
@@ -506,15 +508,22 @@ class OperatorConfigurationService:
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="Evidence storage profile could not be resolved.",
                     )
+            assert profile is not None
             secrets = await self._load_decrypted_secrets(session, profile.id)
         config = dict(profile.config)
+        provider_raw = str(config.get("provider", EvidenceStorageProvider.MINIO.value))
+        provider: EvidenceStorageConfigProvider = (
+            "local_first"
+            if provider_raw == "local_first"
+            else EvidenceStorageProvider(provider_raw)
+        )
         return WorkerEvidenceStorageSettings(
             profile_id=profile.id,
             profile_name=profile.name,
             profile_hash=profile.config_hash,
-            provider=str(config.get("provider", EvidenceStorageProvider.MINIO.value)),
+            provider=provider,
             storage_scope=EvidenceStorageScope(
-                config.get("storage_scope", EvidenceStorageScope.CENTRAL.value)
+                str(config.get("storage_scope", EvidenceStorageScope.CENTRAL.value))
             ),
             config=config,
             secrets=secrets,

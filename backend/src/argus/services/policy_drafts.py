@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -418,9 +418,18 @@ class PolicyDraftService:
                 camera_state=camera_state,
             )
             if applied.status is PolicyDraftStatus.APPLIED:
-                camera.runtime_vocabulary = camera_state["runtime_vocabulary"]
-                camera.evidence_recording_policy = camera_state.get("recording_policy")
-                camera.detection_regions = camera_state.get("detection_regions") or []
+                camera.runtime_vocabulary = cast(
+                    list[str],
+                    camera_state["runtime_vocabulary"],
+                )
+                camera.evidence_recording_policy = cast(
+                    dict[str, Any] | None,
+                    camera_state.get("recording_policy"),
+                )
+                camera.detection_regions = cast(
+                    list[dict[str, Any]],
+                    camera_state.get("detection_regions") or [],
+                )
             await session.commit()
 
     async def _record_transition(

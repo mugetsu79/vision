@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Protocol, cast
 from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.models.tables import RuleEvent
+
+
+class _EventWithTimestamp(Protocol):
+    ts: object
 
 
 class SQLRuleEventStore:
@@ -37,7 +41,7 @@ def _event_uuid(event: BaseModel, field_name: str) -> UUID:
 
 
 def _event_ts(event: BaseModel) -> datetime:
-    value: Any = event.ts
+    value = cast(_EventWithTimestamp, event).ts
     if isinstance(value, datetime):
         return value
     return datetime.fromisoformat(str(value))

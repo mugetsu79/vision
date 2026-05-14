@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
     OperatorConfigProfileResponse,
+    OperatorSecretState,
     ResolvedOperatorConfigEntryResponse,
     ResolvedOperatorConfigResponse,
     TenantContext,
@@ -226,38 +227,46 @@ class RuntimeConfigurationService:
         winner_scope_key: str,
     ) -> ResolvedOperatorConfigEntryResponse:
         secrets = await self._load_secrets(session, profile.id)
-        base = {
-            "kind": profile.kind,
-            "profile_id": profile.id,
-            "profile_name": profile.name,
-            "profile_slug": profile.slug,
-            "profile_hash": profile.config_hash,
-            "winner_scope": winner_scope,
-            "winner_scope_key": winner_scope_key,
-            "validation_status": profile.validation_status,
-            "secret_state": {secret.key: "present" for secret in secrets},
-            "config": dict(profile.config),
+        secret_state: dict[str, OperatorSecretState] = {
+            secret.key: "present" for secret in secrets
         }
+        base = ResolvedOperatorConfigEntryResponse(
+            kind=profile.kind,
+            profile_id=profile.id,
+            profile_name=profile.name,
+            profile_slug=profile.slug,
+            profile_hash=profile.config_hash,
+            winner_scope=winner_scope,
+            winner_scope_key=winner_scope_key,
+            validation_status=profile.validation_status,
+            secret_state=secret_state,
+            config=dict(profile.config),
+        )
         if not profile.enabled:
-            return ResolvedOperatorConfigEntryResponse(
-                **base,
-                resolution_status="unresolved",
-                applies_to_runtime=False,
-                operator_message=f"Selected {winner_scope.value} profile is disabled.",
+            return base.model_copy(
+                update={
+                    "resolution_status": "unresolved",
+                    "applies_to_runtime": False,
+                    "operator_message": f"Selected {winner_scope.value} profile is disabled.",
+                }
             )
         if profile.validation_status is OperatorConfigValidationStatus.INVALID:
             message = profile.validation_message or "Profile validation failed."
-            return ResolvedOperatorConfigEntryResponse(
-                **base,
-                resolution_status="unresolved",
-                applies_to_runtime=False,
-                operator_message=f"Selected {winner_scope.value} profile is invalid: {message}",
+            return base.model_copy(
+                update={
+                    "resolution_status": "unresolved",
+                    "applies_to_runtime": False,
+                    "operator_message": (
+                        f"Selected {winner_scope.value} profile is invalid: {message}"
+                    ),
+                }
             )
-        return ResolvedOperatorConfigEntryResponse(
-            **base,
-            resolution_status="resolved",
-            applies_to_runtime=True,
-            operator_message=None,
+        return base.model_copy(
+            update={
+                "resolution_status": "resolved",
+                "applies_to_runtime": True,
+                "operator_message": None,
+            }
         )
 
     async def _seed_if_empty(

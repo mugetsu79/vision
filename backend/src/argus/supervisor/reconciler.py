@@ -10,6 +10,7 @@ from argus.api.contracts import (
     FleetOverviewResponse,
     OperationsLifecycleRequestResponse,
     WorkerDesiredState,
+    WorkerModelAdmissionResponse,
 )
 from argus.compat import UTC
 from argus.models.enums import (
@@ -52,7 +53,7 @@ class SupervisorOperationsClient(Protocol):
         *,
         tenant_id: UUID,
         request: OperationsLifecycleRequestResponse,
-    ): ...
+    ) -> WorkerModelAdmissionResponse: ...
 
     async def complete_lifecycle_request(
         self,

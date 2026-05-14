@@ -9,6 +9,7 @@ import logging
 import math
 import secrets
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -150,6 +151,7 @@ from argus.models.enums import (
     RuntimeArtifactScope,
     RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
+    SupervisorMode,
 )
 from argus.models.tables import (
     APIKey,
@@ -158,6 +160,7 @@ from argus.models.tables import (
     CameraVocabularySnapshot,
     DetectionRule,
     EdgeNode,
+    EdgeNodeHardwareReport,
     EvidenceArtifact,
     EvidenceLedgerEntry,
     Incident,
@@ -802,8 +805,8 @@ class CameraService:
             selection_report=_runtime_selection_report_payload(
                 cast(dict[str, object], runtime_selection_payload)
             ),
-            scene_vocabulary_hash=cast(dict[str, object], runtime_vocabulary_payload).get(
-                "hash"
+            scene_vocabulary_hash=_string_or_none(
+                cast(dict[str, object], runtime_vocabulary_payload).get("hash")
             ),
         )
         runtime_passport_snapshot = await RuntimePassportService(
@@ -1594,7 +1597,7 @@ class OperationsService:
                 central_hardware_report=central_hardware_report,
             )
             if assignment is not None:
-                desired = assignment.desired_state
+                desired = WorkerDesiredState(assignment.desired_state)
             if runtime_report is not None and supervisor_service is not None:
                 runtime = supervisor_service.runtime_status_for_report(
                     runtime_report,
@@ -1683,7 +1686,9 @@ class OperationsService:
                         else None
                     ),
                     supervisor_mode=(
-                        controls.supervisor_mode if controls is not None else "disabled"
+                        controls.supervisor_mode
+                        if controls is not None
+                        else SupervisorMode.DISABLED
                     ),
                     restart_policy=(
                         controls.restart_policy if controls is not None else "never"
@@ -3340,7 +3345,7 @@ def _trigger_rule_from_payload(payload: dict[str, object] | None) -> TriggerRule
         return None
 
 
-def _uuid_list(values: list[object] | None) -> list[UUID]:
+def _uuid_list(values: Sequence[object] | None) -> list[UUID]:
     parsed: list[UUID] = []
     for value in values or []:
         try:
@@ -4132,9 +4137,9 @@ def _fleet_worker_hardware_report(
     *,
     camera: Camera,
     assigned_edge_node_id: UUID | None,
-    hardware_report_by_edge_node: dict[UUID, object],
-    central_hardware_report: object | None,
-) -> object | None:
+    hardware_report_by_edge_node: Mapping[UUID, EdgeNodeHardwareReport],
+    central_hardware_report: EdgeNodeHardwareReport | None,
+) -> EdgeNodeHardwareReport | None:
     if assigned_edge_node_id is not None:
         return hardware_report_by_edge_node.get(assigned_edge_node_id)
     if camera.processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}:
