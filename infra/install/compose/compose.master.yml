@@ -17,6 +17,7 @@ secrets:
 services:
   postgres:
     image: ${VEZOR_POSTGRES_IMAGE:?set VEZOR_POSTGRES_IMAGE}
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${VEZOR_POSTGRES_DB:-argus}

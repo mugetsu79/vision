@@ -1195,6 +1195,12 @@ TimescaleDB PostgreSQL image because the migrations create Timescale extensions,
 hypertables, and aggregates. Pull the latest branch and rerun the installer; the
 dev manifest now uses `timescale/timescaledb:latest-pg16`.
 
+If the PostgreSQL log says `extension "timescaledb" must be preloaded`, the data
+directory was created before the TimescaleDB preload setting was enforced. Pull
+the latest branch and rerun the installer; the master compose profile now starts
+PostgreSQL with `shared_preload_libraries=timescaledb`, so upgraded data
+directories do not need manual `postgresql.conf` edits.
+
 ### Keycloak restarts on first boot
 
 If `docker logs vezor-master-keycloak-1` repeatedly says the `--optimized` flag

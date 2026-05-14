@@ -78,6 +78,12 @@ def test_linux_master_nats_healthcheck_uses_nats_server_binary() -> None:
     assert 'test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]' not in compose
 
 
+def test_linux_master_postgres_preloads_timescaledb_for_existing_volumes() -> None:
+    compose = _read(MASTER_COMPOSE)
+
+    assert 'command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]' in compose
+
+
 def test_linux_master_keycloak_first_boot_does_not_use_optimized_mode() -> None:
     compose = _read(MASTER_COMPOSE)
 
