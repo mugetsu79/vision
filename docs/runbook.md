@@ -49,6 +49,24 @@ The backend may render or validate these artifacts, but it must not install,
 start, or shell into a node. Installation is a bootstrap responsibility; daily
 operation is UI intent plus node-local supervisor reconciliation.
 
+### Local Vezorctl Utility
+
+Installed packages include `vezorctl` for local host operations:
+
+- `vezorctl status --json` reads local config and service status
+- `vezorctl pair --api-url ... --session-id ... --pairing-code ...` claims a
+  Control -> Deployment pairing session and writes the node credential with
+  owner-only permissions
+- `vezorctl bootstrap-master --api-url ... --rotate-local-token --json` rotates
+  the short-lived local master bootstrap token
+- `vezorctl support-bundle --redact --json` prints local diagnostics with
+  token-like values redacted
+- `vezorctl doctor --json` reports local installer prerequisites
+
+`vezorctl` runs on the host being installed or serviced. It may call the Vezor
+API for explicit pairing/bootstrap endpoints, but it must not be exposed as a
+remote command executor through the backend or browser.
+
 ### Node Pairing And Credentials
 
 Normal installed operation uses a node credential store, not a copied bearer
