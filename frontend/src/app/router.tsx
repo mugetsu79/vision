@@ -4,6 +4,7 @@ import { AppProviders } from "@/app/providers";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthCallbackPage } from "@/pages/AuthCallback";
+import { FirstRunPage } from "@/pages/FirstRun";
 import { SignInPage } from "@/pages/SignIn";
 
 const shellLayoutElement = (
@@ -21,6 +22,14 @@ export const router = createBrowserRouter(
       element: (
         <AppProviders>
           <SignInPage />
+        </AppProviders>
+      ),
+    },
+    {
+      path: "/first-run",
+      element: (
+        <AppProviders>
+          <FirstRunPage />
         </AppProviders>
       ),
     },

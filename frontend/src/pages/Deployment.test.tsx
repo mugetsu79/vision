@@ -175,8 +175,8 @@ describe("DeploymentPage", () => {
     ).toBeInTheDocument();
     expect(within(workspace).getByText("central-imac")).toBeInTheDocument();
     expect(within(workspace).getByText("orin-nano-01")).toBeInTheDocument();
-    expect(within(workspace).getByText(/launchd/i)).toBeInTheDocument();
-    expect(within(workspace).getByText(/systemd/i)).toBeInTheDocument();
+    expect(within(workspace).getAllByText(/launchd/i).length).toBeGreaterThan(0);
+    expect(within(workspace).getAllByText(/systemd/i).length).toBeGreaterThan(0);
     expect(
       within(workspace).getByText(/macos-arm64-apple/i),
     ).toBeInTheDocument();
@@ -188,6 +188,26 @@ describe("DeploymentPage", () => {
     expect(
       within(workspace).getAllByText(/13 May 2026/i).length,
     ).toBeGreaterThan(0);
+  });
+
+  test("shows installer package guidance for master and Jetson targets", () => {
+    render(<DeploymentPage />);
+
+    const workspace = screen.getByTestId("deployment-workspace");
+    expect(within(workspace).getByText(/macOS master/i)).toBeInTheDocument();
+    expect(within(workspace).getByText(/Linux master/i)).toBeInTheDocument();
+    expect(within(workspace).getByText(/Jetson edge/i)).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/installer\/macos\/install-master\.sh/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/installer\/linux\/install-master\.sh/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/installer\/linux\/install-edge\.sh/i),
+    ).toBeInTheDocument();
+    expect(within(workspace).queryByText(/ARGUS_API_BEARER_TOKEN/i)).not.toBeInTheDocument();
+    expect(within(workspace).queryByText(/docker compose up/i)).not.toBeInTheDocument();
   });
 
   test("creates one-time central pairing material without a copied token flow", async () => {

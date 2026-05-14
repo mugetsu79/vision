@@ -1,10 +1,14 @@
 import { useState } from "react";
 import {
   AlertTriangle,
+  Cpu,
+  Download,
   KeyRound,
+  Laptop,
   PackageCheck,
   RefreshCw,
   RotateCcw,
+  Server,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -25,6 +29,30 @@ import {
   type NodeCredentialRotateResponse,
   type NodePairingSessionResponse,
 } from "@/hooks/use-deployment";
+
+const installerTargets = [
+  {
+    title: "macOS master",
+    platform: "Portable pilot master",
+    command: "installer/macos/install-master.sh",
+    detail: "Creates the local launchd service and opens first-run setup.",
+    icon: Laptop,
+  },
+  {
+    title: "Linux master",
+    platform: "Production master",
+    command: "installer/linux/install-master.sh",
+    detail: "Installs the systemd-owned master appliance on the host.",
+    icon: Server,
+  },
+  {
+    title: "Jetson edge",
+    platform: "Edge appliance",
+    command: "installer/linux/install-edge.sh",
+    detail: "Runs Jetson preflight, claims pairing, and starts edge service.",
+    icon: Cpu,
+  },
+] as const;
 
 export function DeploymentPage() {
   const nodes = useDeploymentNodes();
@@ -97,6 +125,8 @@ export function DeploymentPage() {
 
       {pairing ? <PairingNotice pairing={pairing} /> : null}
       {rotation ? <CredentialRotationNotice rotation={rotation} /> : null}
+
+      <InstallerTargets />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <WorkspaceSurface className="p-4">
@@ -192,6 +222,37 @@ export function DeploymentPage() {
         />
       </section>
     </div>
+  );
+}
+
+function InstallerTargets() {
+  return (
+    <WorkspaceSurface className="p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#f4f8ff]">
+        <Download className="size-4" />
+        <h2>Installer packages</h2>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        {installerTargets.map(({ title, platform, command, detail, icon: Icon }) => (
+          <article
+            key={title}
+            className="rounded-[0.75rem] border border-white/10 bg-white/[0.025] p-3"
+          >
+            <div className="flex items-start gap-3">
+              <Icon className="mt-0.5 size-4 text-[#79d6ff]" />
+              <div>
+                <h3 className="text-sm font-semibold text-[#f4f8ff]">{title}</h3>
+                <p className="mt-1 text-xs text-[#93a7c5]">{platform}</p>
+              </div>
+            </div>
+            <code className="mt-3 block overflow-auto rounded-[0.5rem] bg-black/35 px-2 py-2 text-xs text-[#d8e2f2]">
+              {command}
+            </code>
+            <p className="mt-2 text-xs leading-5 text-[#93a7c5]">{detail}</p>
+          </article>
+        ))}
+      </div>
+    </WorkspaceSurface>
   );
 }
 

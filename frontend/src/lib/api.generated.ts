@@ -335,6 +335,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/deployment/bootstrap/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Master Bootstrap Status */
+        get: operations["get_master_bootstrap_status_api_v1_deployment_bootstrap_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/bootstrap/rotate-local-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Local Bootstrap Token */
+        post: operations["rotate_local_bootstrap_token_api_v1_deployment_bootstrap_rotate_local_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/bootstrap/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Master Bootstrap */
+        post: operations["complete_master_bootstrap_api_v1_deployment_bootstrap_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/deployment/nodes": {
         parameters: {
             query?: never;
@@ -552,6 +603,24 @@ export interface paths {
         put?: never;
         /** Validate Runtime Artifact */
         post: operations["validate_runtime_artifact_api_v1_models__model_id__runtime_artifacts__artifact_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runtime-artifacts/soak-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runtime Artifact Soak Runs */
+        get: operations["list_runtime_artifact_soak_runs_api_v1_runtime_artifacts_soak_runs_get"];
+        put?: never;
+        /** Create Runtime Artifact Soak Run */
+        post: operations["create_runtime_artifact_soak_run_api_v1_runtime_artifacts_soak_runs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2688,6 +2757,66 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** MasterBootstrapComplete */
+        MasterBootstrapComplete: {
+            /** Bootstrap Token */
+            bootstrap_token: string;
+            /** Tenant Name */
+            tenant_name: string;
+            /** Tenant Slug */
+            tenant_slug?: string | null;
+            /** Admin Email */
+            admin_email: string;
+            /** Admin Password */
+            admin_password: string;
+            /** Central Node Name */
+            central_node_name: string;
+            /** Central Supervisor Id */
+            central_supervisor_id?: string | null;
+        };
+        /** MasterBootstrapCompleteResponse */
+        MasterBootstrapCompleteResponse: {
+            /** First Run Required */
+            first_run_required: boolean;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Tenant Slug */
+            tenant_slug: string;
+            /** Admin Subject */
+            admin_subject: string;
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            central_node: components["schemas"]["DeploymentNodeResponse"];
+        };
+        /** MasterBootstrapRotateResponse */
+        MasterBootstrapRotateResponse: {
+            /** Bootstrap Token */
+            bootstrap_token: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** MasterBootstrapStatusResponse */
+        MasterBootstrapStatusResponse: {
+            /** First Run Required */
+            first_run_required: boolean;
+            /** Has Active Local Token */
+            has_active_local_token: boolean;
+            /** Active Token Expires At */
+            active_token_expires_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Tenant Slug */
+            tenant_slug?: string | null;
+        };
         /**
          * ModelAdmissionStatus
          * @enum {string}
@@ -3692,6 +3821,114 @@ export interface components {
          * @enum {string}
          */
         RuntimeArtifactScope: "model" | "scene";
+        /** RuntimeArtifactSoakRunCreate */
+        RuntimeArtifactSoakRunCreate: {
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /**
+             * Runtime Artifact Id
+             * Format: uuid
+             */
+            runtime_artifact_id: string;
+            /** Operations Assignment Id */
+            operations_assignment_id?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /** Hardware Report Id */
+            hardware_report_id?: string | null;
+            /** Model Admission Report Id */
+            model_admission_report_id?: string | null;
+            status: components["schemas"]["RuntimeArtifactSoakStatus"];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Metrics */
+            metrics?: {
+                [key: string]: unknown;
+            };
+            /** Fallback Reason */
+            fallback_reason?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** RuntimeArtifactSoakRunResponse */
+        RuntimeArtifactSoakRunResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Camera Id */
+            camera_id?: string | null;
+            /**
+             * Runtime Artifact Id
+             * Format: uuid
+             */
+            runtime_artifact_id: string;
+            runtime_kind: components["schemas"]["RuntimeArtifactKind"];
+            /**
+             * Runtime Backend
+             * @enum {string}
+             */
+            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
+            /** Model Id */
+            model_id?: string | null;
+            /** Model Name */
+            model_name?: string | null;
+            model_capability?: components["schemas"]["DetectorCapability"] | null;
+            /** Target Profile */
+            target_profile: string;
+            status: components["schemas"]["RuntimeArtifactSoakStatus"];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Metrics */
+            metrics?: {
+                [key: string]: unknown;
+            };
+            /** Fallback Reason */
+            fallback_reason?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Operations Assignment Id */
+            operations_assignment_id?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /** Runtime Selection Profile Hash */
+            runtime_selection_profile_hash?: string | null;
+            /** Hardware Report Id */
+            hardware_report_id?: string | null;
+            /** Model Admission Report Id */
+            model_admission_report_id?: string | null;
+            hardware_admission_status?: components["schemas"]["ModelAdmissionStatus"] | null;
+            /** Model Recommendation Rationale */
+            model_recommendation_rationale?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * RuntimeArtifactSoakStatus
+         * @enum {string}
+         */
+        RuntimeArtifactSoakStatus: "passed" | "failed";
         /** RuntimeArtifactUpdate */
         RuntimeArtifactUpdate: {
             validation_status?: components["schemas"]["RuntimeArtifactValidationStatus"] | null;
@@ -5628,6 +5865,79 @@ export interface operations {
             };
         };
     };
+    get_master_bootstrap_status_api_v1_deployment_bootstrap_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterBootstrapStatusResponse"];
+                };
+            };
+        };
+    };
+    rotate_local_bootstrap_token_api_v1_deployment_bootstrap_rotate_local_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterBootstrapRotateResponse"];
+                };
+            };
+        };
+    };
+    complete_master_bootstrap_api_v1_deployment_bootstrap_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MasterBootstrapComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterBootstrapCompleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_deployment_nodes_api_v1_deployment_nodes_get: {
         parameters: {
             query?: never;
@@ -6107,6 +6417,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuntimeArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runtime_artifact_soak_runs_api_v1_runtime_artifacts_soak_runs_get: {
+        parameters: {
+            query?: {
+                runtime_artifact_id?: string | null;
+                edge_node_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactSoakRunResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_runtime_artifact_soak_run_api_v1_runtime_artifacts_soak_runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeArtifactSoakRunCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactSoakRunResponse"];
                 };
             };
             /** @description Validation Error */
