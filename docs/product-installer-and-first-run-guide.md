@@ -339,7 +339,7 @@ after the ONNX model is registered and after the Jetson target profile is known.
 
 ## Prepare The Branch Checkout
 
-On every host being validated from source:
+On every master host being validated from source:
 
 ```bash
 cd "$HOME"
@@ -370,6 +370,9 @@ test -x /opt/vezor/current/bin/vezorctl
 
 If they are not present, update `/opt/vezor/current` to the latest
 `codex/omnisight-installer` branch and rerun `make verify-installers`.
+
+For a Jetson with only the operating system installed, use the dedicated
+Jetson bootstrap section below before trying `cd /opt/vezor/current`.
 
 ## Install A macOS Master
 
@@ -569,7 +572,129 @@ Return to Control -> Deployment and confirm:
 
 ## Install And Pair The Jetson Edge
 
-On the Jetson, run preflight:
+### Bootstrap A Bare Jetson OS
+
+Use this when the Jetson has JetPack/Ubuntu installed but no Vezor checkout,
+no `/opt/vezor/current`, and no service yet.
+
+First confirm the base OS is a JetPack 6.x image and the network works:
+
+```bash
+uname -m
+cat /etc/nv_tegra_release 2>/dev/null || true
+ping -c 3 MASTER_HOST_OR_IP
+```
+
+`uname -m` must be `aarch64`. If the Jetson is not on JetPack 6.x, install or
+upgrade JetPack first, then return here.
+
+Install the host tools used by the installer and preflight:
+
+```bash
+sudo apt update
+sudo apt install -y \
+  ca-certificates \
+  curl \
+  ffmpeg \
+  git \
+  gstreamer1.0-libav \
+  gstreamer1.0-plugins-bad \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-ugly \
+  gstreamer1.0-tools \
+  make \
+  python3 \
+  python3-pip \
+  python3-venv \
+  rsync
+```
+
+Install Docker, Docker Compose v2, and the NVIDIA container runtime if they are
+not already present:
+
+```bash
+sudo apt install -y docker.io docker-compose-plugin nvidia-container-toolkit
+sudo systemctl enable --now docker
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+sudo usermod -aG docker "$USER"
+```
+
+If `apt` cannot find `nvidia-container-toolkit`, the JetPack/NVIDIA package
+repositories are not configured correctly. Fix the JetPack installation before
+continuing.
+
+Log out and back in, or reboot, so the Docker group change applies. Then verify:
+
+```bash
+docker info >/dev/null
+docker compose version
+nvidia-ctk --version
+```
+
+Install `uv` for the branch installer tooling:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv python install 3.12
+```
+
+Clone and expose the checkout as `/opt/vezor/current`:
+
+```bash
+cd "$HOME"
+if [ ! -d "$HOME/vision/.git" ]; then
+  git clone https://github.com/mugetsu79/vision.git
+fi
+cd "$HOME/vision"
+git fetch origin
+git switch codex/omnisight-installer
+git pull --ff-only origin codex/omnisight-installer
+uv sync --project installer
+
+sudo mkdir -p /opt/vezor
+sudo ln -sfn "$HOME/vision" /opt/vezor/current
+```
+
+Confirm the Jetson now has the expected entrypoints:
+
+```bash
+test -x /opt/vezor/current/bin/vezor-edge && echo "vezor-edge OK"
+test -x /opt/vezor/current/bin/vezorctl && echo "vezorctl OK"
+```
+
+Run the installer validation gate on the Jetson checkout:
+
+```bash
+cd /opt/vezor/current
+make verify-installers
+```
+
+Create the model directory and copy model files from the master or your export
+machine. From the machine that already has the models:
+
+```bash
+rsync -av /var/lib/vezor/models/ JETSON_HOST_OR_IP:/tmp/vezor-models/
+```
+
+Then on the Jetson:
+
+```bash
+sudo install -d -m 0755 /var/lib/vezor/models
+sudo rsync -av /tmp/vezor-models/ /var/lib/vezor/models/
+sudo chmod -R a+rX /var/lib/vezor/models
+ls -lh /var/lib/vezor/models
+```
+
+At minimum, the Jetson should have:
+
+```text
+/var/lib/vezor/models/yolo26n.onnx
+```
+
+Now run preflight:
 
 ```bash
 cd /opt/vezor/current

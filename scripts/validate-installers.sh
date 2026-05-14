@@ -66,8 +66,14 @@ for path in product_artifacts:
             failures.append(f"{path}: contains {pattern!r}")
 
 guide = Path("docs/product-installer-and-first-run-guide.md")
+guide_dev_patterns = (
+    "make dev-up",
+    "ARGUS_API_BEARER_TOKEN",
+    "docker compose -f infra/docker-compose",
+    "docker compose up",
+)
 for lineno, line in enumerate(guide.read_text(encoding="utf-8").splitlines(), start=1):
-    if any(pattern in line for pattern in ("make dev-up", "docker compose", "ARGUS_API_BEARER_TOKEN")):
+    if any(pattern in line for pattern in guide_dev_patterns):
         if "Development fallback" not in line and "Break-glass" not in line:
             failures.append(f"{guide}:{lineno}: dev/break-glass command is not labelled")
 

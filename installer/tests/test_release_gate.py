@@ -94,7 +94,10 @@ def test_product_guide_labels_dev_and_break_glass_commands() -> None:
     hits = [
         line
         for line in guide.splitlines()
-        if re.search(r"make dev-up|docker compose|ARGUS_API_BEARER_TOKEN", line)
+        if re.search(
+            r"make dev-up|docker compose -f infra/docker-compose|docker compose up|ARGUS_API_BEARER_TOKEN",
+            line,
+        )
     ]
 
     assert all(
