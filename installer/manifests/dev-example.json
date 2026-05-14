@@ -1,0 +1,65 @@
+{
+  "version": "dev-local",
+  "release_channel": "dev",
+  "images": {
+    "backend": {
+      "reference": "ghcr.io/vezor/backend:dev"
+    },
+    "frontend": {
+      "reference": "ghcr.io/vezor/frontend:dev"
+    },
+    "postgres": {
+      "reference": "postgres:16"
+    },
+    "redis": {
+      "reference": "redis:7"
+    },
+    "nats": {
+      "reference": "nats:2"
+    },
+    "minio": {
+      "reference": "minio/minio:dev"
+    },
+    "mediamtx": {
+      "reference": "bluenviron/mediamtx:latest"
+    },
+    "keycloak": {
+      "reference": "quay.io/keycloak/keycloak:latest"
+    },
+    "supervisor": {
+      "reference": "ghcr.io/vezor/supervisor:dev"
+    },
+    "edge-worker": {
+      "reference": "ghcr.io/vezor/edge-worker:dev"
+    }
+  },
+  "package_targets": [
+    {
+      "name": "linux-master",
+      "os": "linux",
+      "role": "master",
+      "architectures": ["amd64"],
+      "ports": [80, 443, 8000, 8080, 9000]
+    },
+    {
+      "name": "macos-master",
+      "os": "darwin",
+      "role": "master",
+      "architectures": ["arm64", "amd64"],
+      "ports": [3000, 8000, 8080, 9000]
+    },
+    {
+      "name": "jetson-edge",
+      "os": "linux",
+      "role": "edge",
+      "architectures": ["arm64"],
+      "ports": [8554, 9108]
+    }
+  ],
+  "minimum_versions": {
+    "python": "3.12",
+    "container_engine": "24.0",
+    "compose": "2.24",
+    "jetpack": "6.0"
+  }
+}
