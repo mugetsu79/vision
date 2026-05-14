@@ -4,7 +4,7 @@ This is the operator-ready deployment guide for Vezor.
 
 Use it when you want to decide what to deploy, where to deploy it, and in what order to validate it.
 
-For the shorter decision guide, use [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md). For the portable MacBook Pro + Jetson field demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md). For the next no-console installer band, use [2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md).
+For the shorter decision guide, use [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md). For the product installer and first-run path, use [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). For the portable MacBook Pro + Jetson field demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md). For the no-console installer design, use [2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md).
 
 ## Current Implementation Snapshot
 
@@ -63,7 +63,10 @@ development fallback or break-glass material only.
 
 ### Production
 
-- the master runs on Linux `amd64`, preferably through Helm/k3s or an equivalent supervised service platform
+- the master runs on Linux `amd64`, preferably through the Linux master
+  installer or a later Helm/k3s production platform
+- the MacBook Pro installer path is a portable pilot/demo master when no Linux
+  master is available
 - Jetson edge nodes run a small edge stack near the cameras
 - all worker processes are owned by a local supervisor, not the browser or API container
 - central and edge supervisors are installed as durable macOS/Linux services or
@@ -716,6 +719,17 @@ If you are choosing today, I recommend this progression:
 That path gives the best ratio of learning to operational risk.
 
 ## Canonical Commands
+
+### Product installer path
+
+Use [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md) for the normal installed flow:
+
+1. install Linux master or macOS master locally
+2. complete `/first-run`
+3. pair central and Jetson edge nodes from Control -> Deployment
+4. validate lifecycle from Control -> Operations
+5. run reboot, support bundle, credential rotation, upgrade, and uninstall
+   checks
 
 ### Development fallback: local/dev control plane
 

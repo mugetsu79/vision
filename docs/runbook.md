@@ -4,6 +4,7 @@ See also:
 
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
+- [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md)
 - [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md)
 - [2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md)
 
@@ -29,6 +30,10 @@ tokens.
 
 The first service-wrapper templates live in `infra/install/`:
 
+- `infra/install/systemd/vezor-master.service` and
+  `installer/linux/install-master.sh` for the Linux master appliance.
+- `infra/install/launchd/com.vezor.master.plist` and
+  `installer/macos/install-master.sh` for the macOS portable master appliance.
 - `infra/install/systemd/vezor-supervisor.service` for Linux central and edge
   nodes. It runs as the `vezor` user, restarts on failure, declares state/log
   directories, and references credential material instead of embedding it.
@@ -48,6 +53,10 @@ The first service-wrapper templates live in `infra/install/`:
 The backend may render or validate these artifacts, but it must not install,
 start, or shell into a node. Installation is a bootstrap responsibility; daily
 operation is UI intent plus node-local supervisor reconciliation.
+
+For step-by-step installation, first-run, pairing, reboot validation, support
+bundle, upgrade, and uninstall instructions, use
+`docs/product-installer-and-first-run-guide.md`.
 
 ### Local Vezorctl Utility
 
@@ -166,14 +175,14 @@ backups, TLS, real OIDC configuration, and supervisor-owned workers.
 
 ## Current Production Gaps
 
-Before calling a deployment production-ready, verify that the following are implemented or supplied by the deployment platform:
+Before calling a deployment production-ready, verify that the following are implemented, field-tested, or supplied by the deployment platform:
 
-- durable service wrappers around the Vezor supervisor for central and edge
-  workers, such as systemd, launchd, or a production container profile
+- durable service wrappers around the master and Vezor supervisor for central
+  and edge workers, such as systemd, launchd, or a production container profile
 - UI-managed first-run setup and node pairing through short-lived one-time
-  material for every production node
+  material for every production node, validated on the target hosts
 - node-bound supervisor credentials with rotation, revocation, and no long-lived
-  bearer tokens embedded in service definitions
+  bearer tokens embedded in service definitions, validated through reboot
 - credential rotation runbook tested for central and edge supervisors, including
   local credential-store pickup after the one-time response
 - per-worker heartbeat with camera id, status, freshness, restart count, and last error

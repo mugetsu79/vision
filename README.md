@@ -12,7 +12,7 @@ Vezor separates **native ingest for analytics** from **browser delivery for oper
 
 The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, and support bundles. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
 
-The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, and the Evidence Desk incident review queue. The remaining production gap is packaging and hardening: the supervisor contracts and service templates exist, but a final installer, backup/restore posture, TLS/OIDC production configuration, and deferred Task 24 DeepStream work are still outside the portable demo path.
+The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, and the Evidence Desk incident review queue. The installer branch adds local macOS master, Linux master, and Jetson edge package artifacts plus first-run bootstrap. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, and deferred Task 24 DeepStream work are still outside the portable demo path.
 
 ## What’s In This Repo
 
@@ -49,7 +49,22 @@ building the edge image when validating Jetson GPU providers:
 export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 ```
 
-## Quick Start
+## Installer Quick Start
+
+For product-mode validation, start with [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). It covers:
+
+- Linux master installer
+- macOS master installer for the portable MacBook Pro pilot path
+- Jetson edge installer
+- first-run bootstrap
+- node pairing and credential rotation
+- UI lifecycle, reboot, support bundle, upgrade, and uninstall checks
+
+The installer path may use containers under the hood, but normal product
+operation should not require `make dev-up`, pasted bearer tokens, or foreground
+supervisor terminals after installation.
+
+## Development Quick Start
 
 These steps bring up the local development stack.
 
@@ -135,6 +150,7 @@ Start here if you are new to the repo:
 - [docs/runbook.md](/Users/yann.moren/vision/docs/runbook.md): operations starting point
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance
+- [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md): product installer and no-console first-run guide
 - [docs/macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md): portable demo install guide for an Apple Silicon MacBook Pro master and Jetson edge node
 - [docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md): planned product installer band for macOS master, Linux master, and Jetson edge no-console operation
 - [docs/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/docs/imac-master-orin-lab-test-guide.md): step-by-step lab guide for a 2019 iMac master and Jetson Orin Nano edge test
@@ -195,7 +211,7 @@ In production, deploy Vezor as:
   - TLS/OIDC for operators
   - scoped edge credentials, not copied local dev tokens
 
-The MacBook Pro + Jetson and iMac + Jetson paths documented in the lab guides are valuable pilot topologies: a macOS workstation can act as a temporary master while the Jetson validates edge inference. For production, replace the macOS dev stack with a Linux master deployment and replace copied worker commands with supervisor-managed workers.
+The MacBook Pro + Jetson and iMac + Jetson paths documented in the lab guides are valuable pilot topologies: a macOS workstation can act as a temporary master while the Jetson validates edge inference. For production, replace the macOS pilot master with a Linux master deployment and keep copied worker commands limited to development fallback or break-glass support.
 
 ## Hardware Guidance
 

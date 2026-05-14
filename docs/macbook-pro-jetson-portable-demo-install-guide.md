@@ -9,9 +9,10 @@ Use this guide when you want to carry Vezor as a portable demonstration system:
   edge path is stable
 
 This is the recommended path when you do not have a Linux master available yet.
-It is a serious pilot/demo topology, not the final production topology. Task 24
-DeepStream is intentionally deferred; keep WebGL and DeepStream off for this
-validation path.
+Use the macOS master installer on the MacBook when validating the installer
+branch; keep the Docker dev commands in this guide as development fallback and
+break-glass material only. Task 24 DeepStream is intentionally deferred; keep
+WebGL and DeepStream off for this validation path.
 
 ## What This Setup Proves
 
@@ -29,8 +30,8 @@ This portable setup proves:
 
 This setup does not prove:
 
-- Linux master production readiness
-- packaged installer readiness
+- Linux master field readiness
+- signed final package readiness
 - long-term backup/restore policy
 - multi-site scale
 - DeepStream/NvDCF behavior
@@ -41,7 +42,7 @@ This setup does not prove:
 ```text
 Operator browser on MacBook
   -> http://127.0.0.1:3000 frontend
-  -> MacBook Docker dev stack
+  -> MacBook installed master appliance
        backend, Postgres, Keycloak, Redis, NATS, MinIO, MediaMTX,
        observability, optional central worker
   -> LAN / travel router
@@ -66,19 +67,18 @@ The codebase now has the control-plane pieces needed for this demo:
 - hardware report and model admission records
 - runtime artifact and runtime soak records
 
-The current demo still uses Docker Compose and some local-dev commands. Copied
-bearer tokens are acceptable for setup, smoke tests, and break-glass use in this
-portable guide. Normal installed operation should move to paired node
-credentials and local credential stores. The checked-in service templates under
-`infra/install/` are templates; they are not a complete `.pkg`, `.deb`, or Helm
-installer yet. The planned installer band is documented in
-[2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md)
-and
-[2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md](/Users/yann.moren/vision/docs/superpowers/plans/2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md).
-On the installer branch, the macOS master package artifacts start at
-`installer/macos/install-master.sh` and
-`infra/install/launchd/com.vezor.master.plist`; the Docker commands below remain
-the current manual fallback until the full installer band is validated.
+The installer branch includes macOS master, Linux master, and Jetson edge
+package artifacts. Use
+[product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md)
+as the primary path for the portable kit:
+
+- MacBook Pro: `installer/macos/install-master.sh`
+- Jetson: `installer/linux/install-edge.sh`
+- UI: `/first-run`, then Control -> Deployment, then Control -> Operations
+
+Copied bearer tokens and hand-run Docker Compose remain acceptable for setup
+smoke tests, old lab fallback, and break-glass support in this portable guide.
+They are not the normal installed product path.
 
 ## Before You Leave For The Demo
 
@@ -111,7 +111,7 @@ Fill these values in before starting commands:
 
 | Item | Value |
 |---|---|
-| Branch or tag | `codex/omnisight-ui-spec-implementation` or release tag |
+| Branch or tag | `codex/omnisight-installer` or release tag |
 | MacBook LAN IP | |
 | Jetson LAN IP | |
 | Site name | `Portable Demo Site` |
@@ -148,8 +148,11 @@ cd "$HOME"
 git clone https://github.com/mugetsu79/vision.git
 cd "$HOME/vision"
 git fetch origin
-git switch codex/omnisight-ui-spec-implementation
-git pull --ff-only origin codex/omnisight-ui-spec-implementation
+git switch codex/omnisight-installer
+git pull --ff-only origin codex/omnisight-installer
+python3 -m uv sync --project installer
+sudo mkdir -p /opt/vezor
+sudo ln -sfn "$HOME/vision" /opt/vezor/current
 ```
 
 Put model files under the checkout:
@@ -196,6 +199,28 @@ Keep the MacBook awake:
 4. If macOS Firewall is enabled, allow Docker and terminal traffic or turn the
    firewall off for the closed demo LAN.
 
+For installer-managed validation, run the macOS master installer now:
+
+```bash
+cd /opt/vezor/current
+sudo installer/macos/install-master.sh \
+  --version "portable-demo" \
+  --manifest installer/manifests/dev-example.json \
+  --public-url "http://127.0.0.1:3000"
+```
+
+Then generate the first-run token locally and complete `/first-run`:
+
+```bash
+/opt/vezor/current/installer/.venv/bin/vezorctl bootstrap-master \
+  --api-url http://127.0.0.1:8000 \
+  --rotate-local-token \
+  --json
+```
+
+The Docker dev stack commands in the following sections are retained as
+development fallback if the branch installer is not being validated.
+
 The Jetson must reach these MacBook ports:
 
 | Port | Purpose |
@@ -222,8 +247,11 @@ cd "$HOME"
 git clone https://github.com/mugetsu79/vision.git
 cd "$HOME/vision"
 git fetch origin
-git switch codex/omnisight-ui-spec-implementation
-git pull --ff-only origin codex/omnisight-ui-spec-implementation
+git switch codex/omnisight-installer
+git pull --ff-only origin codex/omnisight-installer
+python3 -m uv sync --project installer
+sudo mkdir -p /opt/vezor
+sudo ln -sfn "$HOME/vision" /opt/vezor/current
 ```
 
 Copy the same model files to the Jetson:
@@ -264,6 +292,13 @@ hostname -I
 Write the value into the worksheet as `JETSON_IP`.
 
 ## 3. Start The MacBook Control Plane
+
+Preferred installer path: the MacBook control plane is started by
+`com.vezor.master` after `installer/macos/install-master.sh` completes. Use
+Control -> Deployment for pairing and status.
+
+Development fallback: use the commands below only when intentionally running
+the old Docker dev topology.
 
 On the MacBook:
 

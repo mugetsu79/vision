@@ -4,7 +4,7 @@ This document explains how to choose between `central`, `edge`, and `hybrid` cam
 
 It is the short decision document.
 
-For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md). For the portable MacBook Pro + Jetson demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md).
+For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md). For product installer and first-run instructions, use [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). For the portable MacBook Pro + Jetson demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md).
 
 ## Current Implementation Posture
 
@@ -20,10 +20,11 @@ contracts, persistent assignments, hardware/model admission, lifecycle request
 claim/complete flows, a runnable child-process supervisor for macOS and Jetson
 pilot validation, Deployment UI service status, one-time node pairing,
 node-bound credentials, credential rotation/revocation contracts, service
-health reports, and support bundle diagnostics. The remaining final-product
-layer is packaging and field hardening: one-command installers, production
-backup/restore, TLS/OIDC production configuration, and long-run hardware soak
-evidence.
+health reports, support bundle diagnostics, and installer artifacts for macOS
+master, Linux master, and Jetson edge. The remaining final-product layer is
+field hardening: signed packages, production backup/restore, TLS/OIDC
+production configuration, pinned production manifests, and long-run hardware
+soak evidence.
 
 Raw TensorRT `.engine` files are now modeled as target-specific runtime artifacts, not normal camera model choices. Fixed-vocab production testing should still register portable ONNX model rows first, then attach validated `.engine` artifacts for compatible Jetson/NVIDIA targets. Stable open-vocab scenes can now register compiled scene artifacts keyed by camera, vocabulary hash, source model hash, and target profile. Runtime soak records are modeled in the API/UI, but real Track A/B Jetson evidence must be recorded before Task 24 / DeepStream is opened unless the risk is explicitly accepted.
 
@@ -127,9 +128,11 @@ Use an Apple Silicon MacBook Pro or the older 2019 iMac as a temporary master
 and the Jetson Orin Nano as a real edge node. This validates the two-node
 product workflow:
 
-- the macOS workstation hosts the dev control plane
+- the macOS workstation hosts the installer-managed portable master, or the dev
+  control plane as a development fallback
 - Jetson runs edge inference
-- the edge worker connects to the MacBook/iMac API, Postgres, MinIO, and NATS listeners through explicit exported environment variables
+- the Jetson edge node pairs from Control -> Deployment, with explicit exported
+  environment variables retained only for development fallback
 - Operations shows the intended central/edge split
 - History and Evidence Desk prove that events and clips return to the master
 
