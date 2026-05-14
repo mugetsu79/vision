@@ -17,6 +17,7 @@ from argus.api.v1 import (
     policy_drafts,
     query,
     runtime_artifacts,
+    runtime_soak,
     sites,
     streams,
     system,
@@ -31,6 +32,7 @@ router.include_router(configuration.router)
 router.include_router(deployment.router)
 router.include_router(models.router)
 router.include_router(runtime_artifacts.router)
+router.include_router(runtime_soak.router)
 router.include_router(model_catalog.router)
 router.include_router(edge.router)
 router.include_router(operations.router)

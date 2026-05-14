@@ -1604,9 +1604,67 @@ and metrics window:
 
 Treat a runtime as validated only when the worker log shows the expected
 selected backend or fallback reason, Live continues rendering, and metrics stay
-stable long enough to compare steady-state frame and stage duration.
+stable long enough to compare steady-state frame and stage duration. Also prove
+rollback by disabling or invalidating the artifact and confirming the worker
+returns to the canonical ONNX or dynamic `.pt` runtime without losing evidence
+review.
 
-### 3.14 Test B is a pass only if all of these are true
+### 3.14 Record the runtime artifact soak run
+
+After the physical Jetson run has actually completed, record the control-plane
+evidence. Do not create this record as a substitute for the run. The soak record
+links the selected runtime artifact to the edge node, worker assignment,
+runtime-selection profile, latest hardware report, and model admission report.
+
+Use the normal admin-authenticated API path. A copied bearer token is acceptable
+for this lab smoke test only; installed product operation should use the
+paired supervisor service and normal admin sign-in instead of pasted tokens.
+
+```bash
+curl -s -X POST "$ARGUS_API_BASE_URL/api/v1/runtime-artifacts/soak-runs" \
+  -H "Authorization: Bearer $ARGUS_API_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"edge_node_id\": \"$EDGE_NODE_ID\",
+    \"runtime_artifact_id\": \"$ARTIFACT_ID\",
+    \"operations_assignment_id\": \"$WORKER_ASSIGNMENT_ID\",
+    \"runtime_selection_profile_id\": \"$RUNTIME_SELECTION_PROFILE_ID\",
+    \"hardware_report_id\": \"$HARDWARE_REPORT_ID\",
+    \"model_admission_report_id\": \"$MODEL_ADMISSION_REPORT_ID\",
+    \"status\": \"passed\",
+    \"started_at\": \"$SOAK_STARTED_AT\",
+    \"ended_at\": \"$SOAK_ENDED_AT\",
+    \"metrics\": {
+      \"duration_minutes\": 60,
+      \"fps_p50\": 10.0,
+      \"worker_restarts\": 0,
+      \"evidence_clip_reviewed\": true,
+      \"credential_rotation_checked\": true
+    },
+    \"fallback_reason\": null,
+    \"notes\": \"YOLO26n TensorRT Track A/B Jetson soak passed.\"
+  }"
+```
+
+For fallback validation, keep `status` truthful. A fallback can still be a
+passed soak if the worker stayed healthy and the expected fallback was visible:
+
+```json
+{
+  "fallback_reason": "Compiled TensorRT scene artifact was unavailable; ONNX fallback selected.",
+  "metrics": {
+    "fallback_backend": "onnxruntime",
+    "evidence_clip_reviewed": true,
+    "worker_restarts": 0
+  }
+}
+```
+
+Task 24 / DeepStream stays closed until this API has recorded passing first-site
+Track A/B Jetson evidence for the fixed-vocab TensorRT artifact and the
+compiled open-vocab scene artifact, or until the risk is explicitly accepted.
+
+### 3.15 Test B is a pass only if all of these are true
 
 - the iMac control plane stays healthy
 - camera 1 still works in `central` mode
@@ -1615,8 +1673,10 @@ stable long enough to compare steady-state frame and stage duration.
 - Live still shows both cameras, including camera 2 video relayed from Jetson MediaMTX
 - History and Evidence Desk still work
 - Operations shows the central/edge split and does not invent unknown worker state
+- `/api/v1/runtime-artifacts/soak-runs` contains the matching soak record for
+  the artifact and edge node
 
-### 3.15 Production readiness gap
+### 3.16 Production readiness gap
 
 This lab is clean only when the product workflow works. Production readiness still needs:
 

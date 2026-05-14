@@ -42,6 +42,7 @@ from argus.models.enums import (
     RuntimeArtifactKind,
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
+    RuntimeArtifactSoakStatus,
     RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
     SupervisorMode,
@@ -375,6 +376,59 @@ class RuntimeArtifactResponse(RuntimeArtifactBase):
     model_id: UUID
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class RuntimeArtifactSoakRunCreate(BaseModel):
+    edge_node_id: UUID | None = None
+    runtime_artifact_id: UUID
+    operations_assignment_id: UUID | None = None
+    runtime_selection_profile_id: UUID | None = None
+    hardware_report_id: UUID | None = None
+    model_admission_report_id: UUID | None = None
+    status: RuntimeArtifactSoakStatus
+    started_at: datetime
+    ended_at: datetime | None = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    fallback_reason: str | None = None
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_time_window(self) -> RuntimeArtifactSoakRunCreate:
+        if self.ended_at is not None and self.ended_at < self.started_at:
+            raise ValueError("ended_at must be after started_at.")
+        return self
+
+
+class RuntimeArtifactSoakRunResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    edge_node_id: UUID | None = None
+    camera_id: UUID | None = None
+    runtime_artifact_id: UUID
+    runtime_kind: RuntimeArtifactKind
+    runtime_backend: RuntimeBackend
+    model_id: UUID | None = None
+    model_name: str | None = None
+    model_capability: DetectorCapability | None = None
+    target_profile: str
+    status: RuntimeArtifactSoakStatus
+    started_at: datetime
+    ended_at: datetime | None = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    fallback_reason: str | None = None
+    notes: str | None = None
+    operations_assignment_id: UUID | None = None
+    runtime_selection_profile_id: UUID | None = None
+    runtime_selection_profile_hash: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+    )
+    hardware_report_id: UUID | None = None
+    model_admission_report_id: UUID | None = None
+    hardware_admission_status: ModelAdmissionStatus | None = None
+    model_recommendation_rationale: str | None = None
+    created_at: datetime
 
 
 class ModelCatalogRegistrationState(StrEnum):

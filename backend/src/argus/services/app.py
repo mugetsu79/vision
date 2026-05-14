@@ -201,6 +201,7 @@ from argus.services.runtime_artifacts import (
     artifact_matches_camera_vocabulary,
 )
 from argus.services.runtime_passports import RuntimePassportService, build_runtime_passport
+from argus.services.runtime_soak import RuntimeSoakService
 from argus.services.scene_contracts import SceneContractService, build_scene_contract
 from argus.services.supervisor_operations import (
     REPORT_STALE_AFTER,
@@ -284,6 +285,7 @@ class AppServices:
     cameras: CameraService
     models: ModelService
     runtime_artifacts: RuntimeArtifactService
+    runtime_soak: RuntimeSoakService
     privacy_manifests: PrivacyManifestService
     scene_contracts: SceneContractService
     incident_rules: IncidentRuleService
@@ -4071,6 +4073,7 @@ def build_app_services(
         cameras=camera_service,
         models=ModelService(db.session_factory, audit_logger),
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
+        runtime_soak=RuntimeSoakService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
         scene_contracts=SceneContractService(db.session_factory),
         incident_rules=incident_rule_service,

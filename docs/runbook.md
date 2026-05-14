@@ -544,7 +544,7 @@ Fixed-vocab ONNX models use ONNX Runtime. Provider selection can choose TensorRT
 
 Open-vocab models use the Ultralytics adapter and are marked experimental until validated on the target central GPU and Jetson runtime. The supported first-pass formats are `.pt` model files for YOLOE and YOLO-World. Dynamic `.pt` open vocab remains the discovery and fallback mode for changing vocabularies.
 
-Raw TensorRT `.engine` files must not be registered as primary camera models. Keep ONNX as the canonical fixed-vocab model row, attach target-specific validated TensorRT engines as runtime artifacts, and use scene-scoped compiled open-vocab artifacts only when the saved vocabulary hash matches. The runtime artifact lane is implemented; the next active implementation stage is accountable scene intelligence and evidence recording.
+Raw TensorRT `.engine` files must not be registered as primary camera models. Keep ONNX as the canonical fixed-vocab model row, attach target-specific validated TensorRT engines as runtime artifacts, and use scene-scoped compiled open-vocab artifacts only when the saved vocabulary hash matches. The runtime artifact lane is implemented, but Track C / DeepStream stays gated until passing first-site Track A/B Jetson soak records exist.
 
 ### Fixed-Vocab Runtime Artifact Registration
 
@@ -652,6 +652,52 @@ Operations shows model runtime artifact counts and the best valid target. The
 Cameras setup flow shows whether the selected model has a compiled artifact,
 whether it is stale for the current vocabulary, or whether the worker will use
 the dynamic/fallback runtime.
+
+### Runtime Artifact Soak Gate
+
+After a physical Linux master + Jetson edge run completes, record the result in
+the backend:
+
+Before recording `passed`, verify the Linux master came up from migrations,
+the Jetson supervisor/worker recovered from a restart, Live and Evidence Desk
+showed reviewable media, credential rotation did not strand the node, and
+rollback to the canonical ONNX or dynamic `.pt` runtime was observed.
+
+```bash
+curl -s -X POST "$ARGUS_API_BASE_URL/api/v1/runtime-artifacts/soak-runs" \
+  -H "Authorization: Bearer $ARGUS_API_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"edge_node_id\": \"$EDGE_NODE_ID\",
+    \"runtime_artifact_id\": \"$ARTIFACT_ID\",
+    \"operations_assignment_id\": \"$WORKER_ASSIGNMENT_ID\",
+    \"runtime_selection_profile_id\": \"$RUNTIME_SELECTION_PROFILE_ID\",
+    \"hardware_report_id\": \"$HARDWARE_REPORT_ID\",
+    \"model_admission_report_id\": \"$MODEL_ADMISSION_REPORT_ID\",
+    \"status\": \"passed\",
+    \"started_at\": \"$SOAK_STARTED_AT\",
+    \"ended_at\": \"$SOAK_ENDED_AT\",
+    \"metrics\": {
+      \"duration_minutes\": 60,
+      \"fps_p50\": 10.0,
+      \"worker_restarts\": 0,
+      \"evidence_clip_reviewed\": true,
+      \"credential_rotation_checked\": true
+    },
+    \"notes\": \"First-site Jetson runtime artifact soak passed.\"
+  }"
+```
+
+The API snapshots the artifact kind/backend/target profile, runtime-selection
+profile hash, hardware report id, model admission status, and model admission
+rationale into `runtime_artifact_soak_runs`. Use `status=failed` when the run
+does not meet the pass criteria. Use `fallback_reason` when the optimized
+artifact was missing, stale, target-mismatched, or vocabulary-mismatched and the
+worker intentionally continued on a fallback runtime.
+
+Do not open DeepStream work until soak records show passing first-site evidence
+for both the fixed-vocab TensorRT lane and the compiled open-vocab scene lane,
+or the risk is explicitly accepted.
 
 ### Scene Vision Profiles
 

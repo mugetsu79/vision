@@ -52,6 +52,7 @@ from argus.models.enums import (
     RuntimeArtifactKind,
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
+    RuntimeArtifactSoakStatus,
     RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
     TrackerType,
@@ -849,6 +850,89 @@ class WorkerModelAdmissionReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     rationale: Mapped[str] = mapped_column(Text, nullable=False)
     constraints: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RuntimeArtifactSoakRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "runtime_artifact_soak_runs"
+    __table_args__ = (
+        Index("ix_runtime_soak_edge_started", "edge_node_id", "started_at"),
+        Index("ix_runtime_soak_artifact_started", "runtime_artifact_id", "started_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    edge_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_nodes.id"),
+        nullable=True,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    runtime_artifact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("model_runtime_artifacts.id"),
+        nullable=False,
+    )
+    runtime_kind: Mapped[RuntimeArtifactKind] = mapped_column(
+        enum_column(RuntimeArtifactKind, "runtime_artifact_kind_enum"),
+        nullable=False,
+    )
+    runtime_backend: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=True,
+    )
+    model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    model_capability: Mapped[DetectorCapability | None] = mapped_column(
+        enum_column(DetectorCapability, "admission_detector_capability_enum"),
+        nullable=True,
+    )
+    target_profile: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[RuntimeArtifactSoakStatus] = mapped_column(
+        enum_column(RuntimeArtifactSoakStatus, "runtime_artifact_soak_status_enum"),
+        nullable=False,
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metrics: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    operations_assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("worker_assignments.id"),
+        nullable=True,
+    )
+    runtime_selection_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_config_profiles.id"),
+        nullable=True,
+    )
+    runtime_selection_profile_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    hardware_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("edge_node_hardware_reports.id"),
+        nullable=True,
+    )
+    model_admission_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("worker_model_admission_reports.id"),
+        nullable=True,
+    )
+    hardware_admission_status: Mapped[ModelAdmissionStatus | None] = mapped_column(
+        enum_column(ModelAdmissionStatus, "model_admission_status_enum"),
+        nullable=True,
+    )
+    model_recommendation_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class DeploymentNode(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):

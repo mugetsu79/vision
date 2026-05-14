@@ -341,6 +341,35 @@ as:
 /models/yolo26n.onnx
 ```
 
+## Runtime Artifact Soak Records
+
+Validated runtime artifacts are not fleet-safe until their target hardware run
+is recorded. After the Linux master + Jetson edge soak completes, create a soak
+record through:
+
+```text
+POST /api/v1/runtime-artifacts/soak-runs
+```
+
+The record should include:
+
+- `runtime_artifact_id` and `target_profile` from the selected artifact
+- `edge_node_id` for the Jetson that ran the worker
+- `operations_assignment_id` from the active worker assignment
+- `runtime_selection_profile_id`; the API stores the selected profile hash
+- `hardware_report_id` from the latest supervisor hardware report
+- `model_admission_report_id`; the API stores admission status and rationale
+- metrics from the same steady window used for A/B comparison
+- `fallback_reason` when the optimized artifact was unavailable or intentionally
+  bypassed
+
+Keep ONNX as the canonical model row. A passing soak record proves that the
+target-specific artifact was selected, stayed healthy, and produced reviewable
+evidence on that hardware. It does not replace runtime validation on a new
+Jetson profile, a new model hash, or a changed open-vocab scene vocabulary.
+DeepStream remains gated until these Track A/B soak records exist or the risk
+is explicitly accepted.
+
 ## What Not To Do
 
 - Do not register `.engine` files as primary camera models.

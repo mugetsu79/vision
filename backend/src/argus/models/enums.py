@@ -59,6 +59,11 @@ class RuntimeArtifactValidationStatus(StrEnum):
     TARGET_MISMATCH = "target_mismatch"
 
 
+class RuntimeArtifactSoakStatus(StrEnum):
+    PASSED = "passed"
+    FAILED = "failed"
+
+
 class RuntimeVocabularySource(StrEnum):
     DEFAULT = "default"
     QUERY = "query"
