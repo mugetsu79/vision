@@ -13,6 +13,10 @@ bash -n installer/linux/uninstall.sh
 bash -n installer/macos/install-master.sh
 bash -n installer/macos/uninstall.sh
 bash -n scripts/jetson-preflight.sh
+bash -n bin/vezor-appliance
+bash -n bin/vezor-master
+bash -n bin/vezor-edge
+bash -n bin/vezorctl
 
 echo "==> manifest validation"
 python3 -m uv run --project installer python - <<'PY'
@@ -36,6 +40,10 @@ product_artifacts = [
     Path("infra/install/systemd/vezor-master.service"),
     Path("infra/install/systemd/vezor-edge.service"),
     Path("infra/install/launchd/com.vezor.master.plist"),
+    Path("bin/vezor-appliance"),
+    Path("bin/vezor-master"),
+    Path("bin/vezor-edge"),
+    Path("bin/vezorctl"),
     Path("installer/linux/install-master.sh"),
     Path("installer/linux/install-edge.sh"),
     Path("installer/linux/uninstall.sh"),

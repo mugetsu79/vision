@@ -14,9 +14,9 @@ branch; keep the Docker dev commands in this guide as development fallback and
 break-glass material only. Task 24 DeepStream is intentionally deferred; keep
 WebGL and DeepStream off for this validation path.
 
-For the installer-specific companion guide, including Linux master install
-steps and package-wrapper caveats, see
-[omnisight-installer-macbook-pro-jetson-install-guide.md](/Users/yann.moren/vision/docs/omnisight-installer-macbook-pro-jetson-install-guide.md).
+For the canonical installer-managed MacBook Pro/Linux master + Jetson guide,
+including package wrapper checks, see
+[product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md).
 
 ## What This Setup Proves
 
@@ -426,7 +426,7 @@ sudo installer/macos/install-master.sh \
 Then generate the first-run token locally and complete `/first-run`:
 
 ```bash
-/opt/vezor/current/installer/.venv/bin/vezorctl bootstrap-master \
+/opt/vezor/current/bin/vezorctl bootstrap-master \
   --api-url http://127.0.0.1:8000 \
   --rotate-local-token \
   --json

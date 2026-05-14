@@ -49,6 +49,11 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "x86_64" in script
     assert "/Applications/Docker.app" in script
     assert "launchctl bootstrap system" in script
+    assert "$CONFIG_DIR/master.env" in script
+    assert "$CONFIG_DIR/supervisor.json" in script
+    assert "$CONFIG_DIR/secrets/postgres_password" in script
+    assert "$CONFIG_DIR/nats/nats.conf" in script
+    assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
 
 
 def test_macos_installer_exposes_safe_install_options() -> None:
@@ -65,6 +70,7 @@ def test_macos_installer_exposes_safe_install_options() -> None:
 
     assert "first-run" in script
     assert "/etc/vezor/master.json" in script
+    assert "manifest_image_ref backend" in script
 
 
 def test_macos_uninstall_preserves_data_unless_explicitly_confirmed() -> None:

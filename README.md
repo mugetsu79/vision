@@ -150,7 +150,7 @@ Start here if you are new to the repo:
 - [docs/runbook.md](/Users/yann.moren/vision/docs/runbook.md): operations starting point
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance
-- [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md): product installer and no-console first-run guide
+- [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md): canonical installer-managed setup guide for MacBook Pro/Linux master, Jetson edge, models, first-run, pairing, validation, and operations
 - [docs/macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md): portable demo install guide for an Apple Silicon MacBook Pro master and Jetson edge node
 - [docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md): planned product installer band for macOS master, Linux master, and Jetson edge no-console operation
 - [docs/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/docs/imac-master-orin-lab-test-guide.md): step-by-step lab guide for a 2019 iMac master and Jetson Orin Nano edge test

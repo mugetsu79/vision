@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  vezor-appliance ROLE COMMAND [--config PATH] [compose arguments...]
+
+Roles:
+  master
+  edge
+
+Commands:
+  up        Start the appliance compose profile in the background.
+  down      Stop the appliance compose profile.
+  restart   Stop, then start the appliance compose profile.
+  status    Show compose service status.
+  ps        Alias for status.
+  logs      Show compose logs.
+  config    Render compose configuration.
+  pull      Pull configured images.
+
+Environment:
+  VEZOR_CONTAINER_ENGINE     docker or podman. Defaults to config or docker.
+  VEZOR_MASTER_COMPOSE       Override master compose file.
+  VEZOR_EDGE_COMPOSE         Override edge compose file.
+  VEZOR_MASTER_ENV_FILE      Override master env file. Default: /etc/vezor/master.env.
+  VEZOR_EDGE_ENV_FILE        Override edge env file. Default: /etc/vezor/edge.env.
+USAGE
+}
+
+if [[ $# -lt 2 ]]; then
+  usage >&2
+  exit 2
+fi
+
+ROLE="$1"
+COMMAND="$2"
+shift 2
+
+case "$ROLE" in
+  master)
+    DEFAULT_CONFIG="/etc/vezor/master.json"
+    DEFAULT_COMPOSE="$ROOT_DIR/infra/install/compose/compose.master.yml"
+    COMPOSE_ENV_VAR="VEZOR_MASTER_COMPOSE"
+    ENV_FILE="${VEZOR_MASTER_ENV_FILE:-/etc/vezor/master.env}"
+    ;;
+  edge)
+    DEFAULT_CONFIG="/etc/vezor/edge.json"
+    DEFAULT_COMPOSE="$ROOT_DIR/infra/install/compose/compose.supervisor.yml"
+    COMPOSE_ENV_VAR="VEZOR_EDGE_COMPOSE"
+    ENV_FILE="${VEZOR_EDGE_ENV_FILE:-/etc/vezor/edge.env}"
+    ;;
+  *)
+    echo "Unknown role: $ROLE" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+CONFIG_PATH="$DEFAULT_CONFIG"
+EXTRA_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)
+      CONFIG_PATH="${2:?--config requires a path}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      EXTRA_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+json_config_value() {
+  local key="$1"
+  local fallback="$2"
+
+  if [[ ! -f "$CONFIG_PATH" ]] || ! command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "$fallback"
+    return 0
+  fi
+
+  python3 - "$CONFIG_PATH" "$key" "$fallback" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+fallback = sys.argv[3]
+
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print(fallback)
+    raise SystemExit(0)
+
+value = payload.get(key) if isinstance(payload, dict) else None
+print(value if isinstance(value, str) and value else fallback)
+PY
+}
+
+env_override="${!COMPOSE_ENV_VAR:-}"
+COMPOSE_FILE="${env_override:-$(json_config_value compose_file "$DEFAULT_COMPOSE")}"
+CONTAINER_ENGINE="${VEZOR_CONTAINER_ENGINE:-$(json_config_value container_engine "")}"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+if [[ -z "$CONTAINER_ENGINE" ]]; then
+  if command -v docker >/dev/null 2>&1; then
+    CONTAINER_ENGINE="docker"
+  elif command -v podman >/dev/null 2>&1; then
+    CONTAINER_ENGINE="podman"
+  else
+    echo "Docker or Podman is required to operate the Vezor appliance." >&2
+    exit 127
+  fi
+fi
+
+compose_command() {
+  case "$CONTAINER_ENGINE" in
+    docker)
+      if ! command -v docker >/dev/null 2>&1; then
+        echo "Docker is configured but the docker command is missing." >&2
+        exit 127
+      fi
+      docker compose "$@"
+      ;;
+    podman)
+      if command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
+        podman compose "$@"
+      elif command -v podman-compose >/dev/null 2>&1; then
+        podman-compose "$@"
+      else
+        echo "Podman is configured but podman compose/podman-compose is missing." >&2
+        exit 127
+      fi
+      ;;
+    *)
+      echo "Unsupported container engine: $CONTAINER_ENGINE" >&2
+      exit 2
+      ;;
+  esac
+}
+
+run_compose() {
+  compose_command -f "$COMPOSE_FILE" "$@"
+}
+
+case "$COMMAND" in
+  up)
+    run_compose up -d --remove-orphans "${EXTRA_ARGS[@]}"
+    ;;
+  down)
+    run_compose down "${EXTRA_ARGS[@]}"
+    ;;
+  restart)
+    run_compose down "${EXTRA_ARGS[@]}"
+    run_compose up -d --remove-orphans
+    ;;
+  status|ps)
+    run_compose ps "${EXTRA_ARGS[@]}"
+    ;;
+  logs)
+    run_compose logs "${EXTRA_ARGS[@]}"
+    ;;
+  config)
+    run_compose config "${EXTRA_ARGS[@]}"
+    ;;
+  pull)
+    run_compose pull "${EXTRA_ARGS[@]}"
+    ;;
+  -h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

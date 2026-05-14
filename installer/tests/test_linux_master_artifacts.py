@@ -84,6 +84,12 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "systemctl enable vezor-master.service" in script
     assert "systemctl start vezor-master.service" in script
     assert "first-run" in script
+    assert "$CONFIG_DIR/master.env" in script
+    assert "$CONFIG_DIR/supervisor.json" in script
+    assert "$CONFIG_DIR/secrets/postgres_password" in script
+    assert "$CONFIG_DIR/nats/nats.conf" in script
+    assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
+    assert "manifest_image_ref backend" in script
 
 
 def test_linux_uninstall_preserves_data_unless_explicitly_confirmed() -> None:

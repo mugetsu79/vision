@@ -42,6 +42,10 @@ def test_edge_install_script_accepts_pairing_and_unpaired_modes() -> None:
     assert "scripts/jetson-preflight.sh --installer --json" in script
     assert "/etc/vezor/edge.json" in script
     assert "/etc/vezor/supervisor.json" in script
+    assert "$CONFIG_DIR/edge.env" in script
+    assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
+    assert "--supervisor-id" in script
+    assert "--credential-path /run/vezor/credentials/supervisor.credential" in script
     assert "systemctl enable vezor-edge.service" in script
     assert "systemctl start vezor-edge.service" in script
 

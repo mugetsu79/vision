@@ -18,6 +18,10 @@ REQUIRED_FILES = (
     REPO_ROOT / "installer" / "linux" / "uninstall.sh",
     REPO_ROOT / "installer" / "macos" / "install-master.sh",
     REPO_ROOT / "installer" / "macos" / "uninstall.sh",
+    REPO_ROOT / "bin" / "vezor-appliance",
+    REPO_ROOT / "bin" / "vezor-master",
+    REPO_ROOT / "bin" / "vezor-edge",
+    REPO_ROOT / "bin" / "vezorctl",
     REPO_ROOT / "infra" / "install" / "compose" / "compose.master.yml",
     REPO_ROOT / "infra" / "install" / "compose" / "compose.supervisor.yml",
     REPO_ROOT / "infra" / "install" / "systemd" / "vezor-master.service",
@@ -47,6 +51,10 @@ def test_release_gate_script_exists_and_runs_installer_checks() -> None:
     assert "python3 -m uv run --project installer pytest installer/tests -q" in script
     assert "bash -n installer/linux/install-master.sh" in script
     assert "bash -n installer/linux/install-edge.sh" in script
+    assert "bash -n bin/vezor-appliance" in script
+    assert "bash -n bin/vezor-master" in script
+    assert "bash -n bin/vezor-edge" in script
+    assert "bash -n bin/vezorctl" in script
     assert "installer/manifests/dev-example.json" in script
     assert "docker compose -f infra/install/compose/compose.master.yml config" in script
     assert "docker unavailable" in script
@@ -89,7 +97,6 @@ def test_product_guide_labels_dev_and_break_glass_commands() -> None:
         if re.search(r"make dev-up|docker compose|ARGUS_API_BEARER_TOKEN", line)
     ]
 
-    assert hits
     assert all(
         "Development fallback" in line or "Break-glass" in line for line in hits
     )

@@ -113,8 +113,27 @@ if [[ -x "$RELEASE_DIR/scripts/jetson-preflight.sh" ]]; then
   (cd "$RELEASE_DIR" && scripts/jetson-preflight.sh --installer --json)
 fi
 
-run install -d -m 0755 "$CONFIG_DIR" "$CONFIG_DIR/secrets" "$DATA_DIR" /var/log/vezor /run/vezor
+run install -d -m 0755 \
+  "$CONFIG_DIR" \
+  "$CONFIG_DIR/secrets" \
+  "$CONFIG_DIR/mediamtx" \
+  "$DATA_DIR" \
+  /var/log/vezor \
+  /run/vezor \
+  /run/vezor/credentials
 run install -d -m 0755 "$MODEL_DIR" "$DATA_DIR/edge" "$DATA_DIR/mediamtx"
+
+run install -m 0644 "$RELEASE_DIR/infra/mediamtx/mediamtx.yml" "$CONFIG_DIR/mediamtx/mediamtx.yml"
+
+EDGE_ENV="$CONFIG_DIR/edge.env"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "[dry-run] write $EDGE_ENV"
+else
+  cat > "$EDGE_ENV" <<ENV
+VEZOR_MEDIAMTX_IMAGE=bluenviron/mediamtx:latest
+VEZOR_SUPERVISOR_IMAGE=ghcr.io/vezor/supervisor:dev
+ENV
+fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $EDGE_CONFIG"
@@ -148,7 +167,11 @@ if [[ "$UNPAIRED" -eq 0 ]]; then
   run /opt/vezor/current/bin/vezorctl pair \
     --api-url "$API_URL" \
     --session-id "$SESSION_ID" \
-    --pairing-code "$PAIRING_CODE"
+    --pairing-code "$PAIRING_CODE" \
+    --supervisor-id "$EDGE_NAME" \
+    --hostname "$(hostname)" \
+    --config "$SUPERVISOR_CONFIG" \
+    --credential-path /run/vezor/credentials/supervisor.credential
 fi
 
 run install -m 0644 \

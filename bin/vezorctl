@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VENV_CTL="$ROOT_DIR/installer/.venv/bin/vezorctl"
+
+if [[ -x "$VENV_CTL" ]]; then
+  exec "$VENV_CTL" "$@"
+fi
+
+if command -v uv >/dev/null 2>&1; then
+  exec uv run --project "$ROOT_DIR/installer" vezorctl "$@"
+fi
+
+if command -v python3 >/dev/null 2>&1 && python3 -m uv --version >/dev/null 2>&1; then
+  exec python3 -m uv run --project "$ROOT_DIR/installer" vezorctl "$@"
+fi
+
+cat >&2 <<EOF
+vezorctl is not installed for this checkout.
+
+Install or expose uv, then run:
+  python3 -m uv sync --project "$ROOT_DIR/installer"
+
+After that, retry:
+  $ROOT_DIR/bin/vezorctl $*
+EOF
+exit 127
