@@ -9,7 +9,7 @@
       "reference": "vezor/frontend:portable-demo"
     },
     "postgres": {
-      "reference": "postgres:16"
+      "reference": "timescale/timescaledb:latest-pg16"
     },
     "redis": {
       "reference": "redis:7"

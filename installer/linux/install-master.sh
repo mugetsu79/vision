@@ -236,7 +236,7 @@ if [[ -n "$MANIFEST" && ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
-POSTGRES_IMAGE="$(manifest_image_ref postgres postgres:16)"
+POSTGRES_IMAGE="$(manifest_image_ref postgres timescale/timescaledb:latest-pg16)"
 REDIS_IMAGE="$(manifest_image_ref redis redis:7)"
 NATS_IMAGE="$(manifest_image_ref nats nats:2)"
 MINIO_IMAGE="$(manifest_image_ref minio minio/minio:latest)"

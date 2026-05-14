@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+import argus.supervisor.runner as runner_module
 from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
     FleetCameraWorkerSummary,
@@ -78,6 +79,26 @@ def test_parse_args_product_config_uses_credential_store_without_static_bearer(t
     assert config.supervisor_id == "central-imac"
 
 
+def test_parse_args_product_healthcheck_accepts_config_without_token_file(tmp_path) -> None:
+    config_path = tmp_path / "supervisor.json"
+    config_path.write_text(
+        """
+{
+  "supervisor_id": "central-imac",
+  "role": "central",
+  "api_base_url": "http://127.0.0.1:8000",
+  "credential_store_path": "supervisor.credential"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = parse_args(["--healthcheck", "--config", str(config_path)])
+
+    assert config.healthcheck is True
+    assert config.credential_store_path == tmp_path / "supervisor.credential"
+
+
 def test_parse_args_labels_password_grant_as_dev_only() -> None:
     config = parse_args(
         [
@@ -122,6 +143,57 @@ async def test_runner_posts_service_and_hardware_reports_before_polling() -> Non
     assert operations.service_reports[0].credential_status is DeploymentCredentialStatus.ACTIVE
     assert operations.hardware_reports[0].host_profile == "macos-x86_64-intel"
     assert operations.hardware_reports[0].observed_performance == []
+
+
+@pytest.mark.asyncio
+async def test_runner_stays_alive_when_api_credentials_are_not_ready() -> None:
+    runner = SupervisorRunner(
+        supervisor_id="central-imac",
+        edge_node_id=None,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=_UnavailableOperations(),
+        process_adapter=_FakeProcessAdapter(),
+        tenant_id=uuid4(),
+    )
+
+    processed = await runner.run_once()
+
+    assert processed == 0
+
+
+@pytest.mark.asyncio
+async def test_run_forever_keeps_polling_when_api_credentials_are_not_ready(monkeypatch) -> None:
+    class StopLoop(Exception):
+        pass
+
+    sleep_calls = 0
+
+    async def stop_after_second_sleep(seconds: float) -> None:
+        del seconds
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls == 2:
+            raise StopLoop
+
+    monkeypatch.setattr(runner_module.asyncio, "sleep", stop_after_second_sleep)
+    runner = SupervisorRunner(
+        supervisor_id="central-imac",
+        edge_node_id=None,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=_UnavailableOperations(),
+        process_adapter=_FakeProcessAdapter(),
+        tenant_id=uuid4(),
+    )
+
+    with pytest.raises(StopLoop):
+        await runner.run_forever(
+            hardware_report_interval_seconds=60.0,
+            poll_interval_seconds=5.0,
+        )
+
+    assert sleep_calls == 2
 
 
 @pytest.mark.asyncio
@@ -400,6 +472,30 @@ class _FakeOperations:
                 "last_error": last_error,
             }
         )
+
+
+class _UnavailableOperations:
+    async def record_service_report(self, report: SupervisorServiceReportCreate) -> None:
+        del report
+        raise RuntimeError("Supervisor API bearer token is not configured.")
+
+    async def record_hardware_report(self, report: EdgeNodeHardwareReportCreate) -> None:
+        del report
+        raise RuntimeError("Supervisor API bearer token is not configured.")
+
+    async def fetch_fleet_overview(self) -> FleetOverviewResponse | None:
+        raise RuntimeError("Supervisor API bearer token is not configured.")
+
+    async def poll_lifecycle_requests(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        edge_node_id: UUID | None,
+        limit: int,
+    ) -> list[OperationsLifecycleRequestResponse]:
+        del tenant_id, supervisor_id, edge_node_id, limit
+        raise RuntimeError("Supervisor API bearer token is not configured.")
 
 
 class _FakeProcessAdapter:

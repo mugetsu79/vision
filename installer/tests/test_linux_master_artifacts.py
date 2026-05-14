@@ -81,8 +81,29 @@ def test_linux_master_nats_healthcheck_uses_nats_server_binary() -> None:
 def test_linux_master_keycloak_first_boot_does_not_use_optimized_mode() -> None:
     compose = _read(MASTER_COMPOSE)
 
-    assert 'command: ["start"]' in compose
+    assert 'exec /opt/keycloak/bin/kc.sh start' in compose
     assert 'command: ["start", "--optimized"]' not in compose
+
+
+def test_linux_master_keycloak_exports_secret_files_before_start() -> None:
+    compose = _read(MASTER_COMPOSE)
+
+    assert 'entrypoint: ["/bin/sh", "-c"]' in compose
+    assert 'KC_BOOTSTRAP_ADMIN_USERNAME="$(cat /run/secrets/keycloak_admin_username)"' in compose
+    assert 'KC_BOOTSTRAP_ADMIN_PASSWORD="$(cat /run/secrets/keycloak_admin_password)"' in compose
+    assert 'KC_DB_PASSWORD="$(cat /run/secrets/postgres_password)"' in compose
+    assert "KC_DB_PASSWORD_FILE" not in compose
+    assert "KC_BOOTSTRAP_ADMIN_USERNAME_FILE" not in compose
+    assert "KC_BOOTSTRAP_ADMIN_PASSWORD_FILE" not in compose
+
+
+def test_linux_master_keycloak_has_container_native_healthcheck() -> None:
+    compose = _read(MASTER_COMPOSE)
+
+    assert "timeout 3 bash -c '</dev/tcp/127.0.0.1/8080'" in compose
+    assert "start_period: 30s" in compose
+    assert "retries: 30" in compose
+    assert "keycloak:\n        condition: service_healthy" in compose
 
 
 def test_linux_master_compose_uses_installer_runtime_entrypoints() -> None:
@@ -136,6 +157,7 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert 'chmod 0644 "$MASTER_ENV"' in script
     assert 'old_umask="$(umask)"' in script
     assert "manifest_image_ref backend" in script
+    assert "timescale/timescaledb:latest-pg16" in script
 
 
 def test_linux_dev_installer_builds_local_master_images_before_systemd_start() -> None:

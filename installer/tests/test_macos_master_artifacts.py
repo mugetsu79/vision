@@ -136,6 +136,7 @@ def test_macos_installer_exposes_safe_install_options() -> None:
     assert "first-run" in script
     assert "/etc/vezor/master.json" in script
     assert "manifest_image_ref backend" in script
+    assert "timescale/timescaledb:latest-pg16" in script
 
 
 def test_macos_dev_installer_builds_local_master_images_before_launchd_start() -> None:

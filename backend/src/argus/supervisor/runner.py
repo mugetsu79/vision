@@ -80,6 +80,7 @@ class RunnerConfig:
     service_manager: DeploymentServiceManager = DeploymentServiceManager.DIRECT_CHILD
     supervisor_version: str | None = None
     hostname: str | None = None
+    healthcheck: bool = False
 
 
 class SupervisorRunner:
@@ -131,7 +132,11 @@ class SupervisorRunner:
             observed_performance=observed_performance,
         )
         await self._record_service_report(report)
-        await self.operations.record_hardware_report(report)  # type: ignore[attr-defined]
+        try:
+            await self.operations.record_hardware_report(report)  # type: ignore[attr-defined]
+        except Exception as exc:
+            LOGGER.warning("Supervisor hardware report post failed: %s", exc)
+            return 0
         LOGGER.info(
             "Supervisor hardware report posted supervisor_id=%s edge_node_id=%s "
             "host_profile=%s performance_samples=%s",
@@ -140,7 +145,7 @@ class SupervisorRunner:
             report.host_profile,
             len(report.observed_performance),
         )
-        return await self.reconciler.reconcile_once(fleet=fleet)
+        return await self._reconcile_once(fleet=fleet)
 
     async def _record_service_report(self, report: EdgeNodeHardwareReportCreate) -> None:
         recorder = getattr(self.operations, "record_service_report", None)
@@ -163,7 +168,11 @@ class SupervisorRunner:
                 "product_mode": self.product_mode,
             },
         )
-        await recorder(payload)
+        try:
+            await recorder(payload)
+        except Exception as exc:
+            LOGGER.warning("Supervisor service report post failed: %s", exc)
+            return
         LOGGER.info(
             "Supervisor service report posted supervisor_id=%s edge_node_id=%s "
             "service_manager=%s",
@@ -186,7 +195,7 @@ class SupervisorRunner:
                 await self.run_once()
                 next_hardware_report_after = now + hardware_report_interval_seconds
             else:
-                await self.reconciler.reconcile_once()
+                await self._reconcile_once()
             await asyncio.sleep(poll_interval_seconds)
 
     async def _fetch_fleet_overview(self) -> FleetOverviewResponse | None:
@@ -198,6 +207,13 @@ class SupervisorRunner:
         except Exception as exc:
             LOGGER.warning("Supervisor fleet overview fetch failed: %s", exc)
             return None
+
+    async def _reconcile_once(self, *, fleet: FleetOverviewResponse | None = None) -> int:
+        try:
+            return await self.reconciler.reconcile_once(fleet=fleet)
+        except Exception as exc:
+            LOGGER.warning("Supervisor reconciliation failed: %s", exc)
+            return 0
 
     async def _performance_samples(
         self,
@@ -274,6 +290,7 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
     parser.add_argument("--hardware-report-interval-seconds", type=float, default=60.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--healthcheck", action="store_true")
     args = parser.parse_args(argv)
 
     if args.config:
@@ -315,6 +332,7 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         product_mode=False,
         auth_mode="password_grant_dev" if has_refreshable_token else "static_bearer_dev",
         service_manager=DeploymentServiceManager.DIRECT_CHILD,
+        healthcheck=args.healthcheck,
     )
 
 
@@ -367,6 +385,7 @@ def _parse_config_file(args: argparse.Namespace, parser: argparse.ArgumentParser
         service_manager=_service_manager(payload.get("service_manager")),
         supervisor_version=_optional_string(payload.get("version")),
         hostname=_optional_string(payload.get("hostname")),
+        healthcheck=args.healthcheck,
     )
 
 
@@ -430,6 +449,8 @@ def _service_manager(value: object) -> DeploymentServiceManager:
 async def async_main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     config = parse_args(argv)
+    if config.healthcheck:
+        return 0
     runner = build_runner(config)
     if config.once:
         await runner.run_once()

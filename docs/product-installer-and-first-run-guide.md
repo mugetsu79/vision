@@ -1176,12 +1176,46 @@ official NATS image does not include `wget`, `curl`, or a shell. Pull the latest
 `codex/omnisight-installer` branch and rerun the installer if the health log
 mentions `exec: "wget": executable file not found`.
 
+### Backend is unhealthy during Alembic migrations
+
+Inspect the backend log:
+
+```bash
+docker logs vezor-master-backend-1 --tail 120
+```
+
+If Alembic is trying to connect to `localhost:5432` from inside the backend
+container, the backend image is too old to read `/run/secrets/ARGUS_DB_URL`.
+Pull the latest `codex/omnisight-installer` branch and rerun the installer so
+the local backend image is rebuilt.
+
+If the log says `extension "timescaledb" is not available`, the master was
+started with a plain PostgreSQL image. The installable master must use a
+TimescaleDB PostgreSQL image because the migrations create Timescale extensions,
+hypertables, and aggregates. Pull the latest branch and rerun the installer; the
+dev manifest now uses `timescale/timescaledb:latest-pg16`.
+
 ### Keycloak restarts on first boot
 
 If `docker logs vezor-master-keycloak-1` repeatedly says the `--optimized` flag
 was used on the first server start, pull the latest `codex/omnisight-installer`
 branch and rerun the installer. First boot must use `start`; optimized mode is
 only valid after a Keycloak build step.
+
+If the log says PostgreSQL requested SCRAM authentication but no password was
+provided, the Keycloak container is too old or using stale compose config that
+expects `KC_DB_PASSWORD_FILE`. Pull the latest branch and rerun the installer;
+Keycloak now exports the mounted secret file into `KC_DB_PASSWORD` before
+starting.
+
+### Supervisor is unhealthy before first-run pairing
+
+Before first-run completes, the installed supervisor may not have a node
+credential yet. It should stay alive and report healthy while waiting for the
+credential store to be populated by first-run/pairing. If the health log says
+`unrecognized arguments: --healthcheck` or the supervisor restarts because
+`Supervisor API bearer token is not configured`, pull the latest branch and
+rerun the installer.
 
 ### The Jetson says the TensorRT engine is invalid
 

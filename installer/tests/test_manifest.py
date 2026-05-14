@@ -154,3 +154,4 @@ def test_dev_example_manifest_uses_local_buildable_master_images() -> None:
     assert manifest.images["supervisor"].reference == "vezor/backend:portable-demo"
     assert manifest.images["edge-worker"].reference == "vezor/edge-worker:portable-demo"
     assert manifest.images["minio"].reference == "minio/minio:latest"
+    assert manifest.images["postgres"].reference == "timescale/timescaledb:latest-pg16"

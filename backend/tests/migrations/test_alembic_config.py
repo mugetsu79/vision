@@ -22,10 +22,29 @@ def test_configure_database_url_uses_argus_db_url(monkeypatch) -> None:
     assert config.get_main_option("sqlalchemy.url") == database_url
 
 
+def test_configure_database_url_uses_docker_secret_file(monkeypatch, tmp_path) -> None:
+    config = Config()
+    config.set_main_option("sqlalchemy.url", "postgresql+asyncpg://argus:argus@localhost:5432/argus")
+    secrets_dir = tmp_path / "secrets"
+    secrets_dir.mkdir()
+    (secrets_dir / "ARGUS_DB_URL").write_text(
+        "postgresql+asyncpg://argus:secret@postgres:5432/argus\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("ARGUS_DB_URL", raising=False)
+    monkeypatch.setenv("ARGUS_SECRETS_DIR", str(secrets_dir))
+
+    database_url = configure_database_url(config)
+
+    assert database_url == "postgresql+asyncpg://argus:secret@postgres:5432/argus"
+    assert config.get_main_option("sqlalchemy.url") == database_url
+
+
 def test_configure_database_url_keeps_existing_value(monkeypatch) -> None:
     config = Config()
     config.set_main_option("sqlalchemy.url", "postgresql+asyncpg://argus:argus@localhost:5432/argus")
     monkeypatch.delenv("ARGUS_DB_URL", raising=False)
+    monkeypatch.delenv("ARGUS_SECRETS_DIR", raising=False)
 
     database_url = configure_database_url(config)
 
