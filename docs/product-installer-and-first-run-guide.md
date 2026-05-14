@@ -191,11 +191,11 @@ Register it as:
 /models/yolo26n.onnx
 ```
 
-Add open-vocab `.pt` models and TensorRT `.engine` artifacts only after the
-first fixed-vocab Jetson camera works through Live, History, Evidence, and
-Operations.
+Add open-vocab `.pt` models only after the first fixed-vocab camera works
+through Live, History, Evidence, and Operations. Target-specific runtime
+artifacts are covered with the node installation that owns them.
 
-### Supported Files
+### Supported Source Files
 
 | File in `/var/lib/vezor/models` | Capability | Use |
 |---|---|---|
@@ -207,7 +207,6 @@ Operations.
 | `yoloe-26n-seg.pt` | open vocab | preferred experimental open-vocab source |
 | `yoloe-26s-seg.pt` | open vocab | higher quality open-vocab source |
 | `yolov8s-worldv2.pt` | open vocab | smaller open-vocab fallback |
-| `yolo26n.jetson.fp16.engine` | TensorRT artifact | attach to ONNX row, never primary model |
 
 ### Where To Get The Models
 
@@ -219,12 +218,6 @@ Use official Ultralytics weights and exports:
   `https://docs.ultralytics.com/models/yoloe/`
 - YOLO-World docs:
   `https://docs.ultralytics.com/models/yolo-world/`
-- TensorRT docs:
-  `https://docs.nvidia.com/deeplearning/tensorrt/latest/reference/command-line-programs.html`
-- JetPack docs:
-  `https://docs.nvidia.com/jetson/jetpack/install-setup/`
-- Docker Desktop for Mac:
-  `https://docs.docker.com/desktop/setup/install/mac-install/`
 
 Prepare an export environment on the machine that has internet:
 
@@ -284,58 +277,13 @@ except Exception as exc:
 PY
 ```
 
-Copy the files to each installed host:
+Copy the exported files to the master host:
 
 ```bash
 sudo install -d -m 0755 /var/lib/vezor/models
 sudo rsync -av "$HOME/vezor-model-export/models/" /var/lib/vezor/models/
 sudo chmod -R a+rX /var/lib/vezor/models
 ```
-
-For the portable kit, copy the same directory to the Jetson:
-
-```bash
-rsync -av "$HOME/vezor-model-export/models/" jetson-portable-1:/tmp/vezor-models/
-ssh jetson-portable-1 'sudo install -d -m 0755 /var/lib/vezor/models && sudo rsync -av /tmp/vezor-models/ /var/lib/vezor/models/ && sudo chmod -R a+rX /var/lib/vezor/models'
-```
-
-### TensorRT Engine Rules
-
-Build `.engine` files on the Jetson that will run them, or on an identical
-JetPack/TensorRT/CUDA stack. Engines are not portable like ONNX.
-
-On the Jetson:
-
-```bash
-cd /var/lib/vezor
-python3 -m venv model-export
-source model-export/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "ultralytics>=8.0"
-python - <<'PY'
-from pathlib import Path
-from ultralytics import YOLO
-
-model = YOLO("/var/lib/vezor/models/yolo26n.onnx")
-output = Path(model.export(format="engine", imgsz=640, half=True, device=0))
-target = Path("/var/lib/vezor/models/yolo26n.jetson.fp16.engine")
-output.replace(target)
-print(f"wrote {target}")
-PY
-```
-
-If Ultralytics export fails but TensorRT tools are installed:
-
-```bash
-trtexec \
-  --onnx=/var/lib/vezor/models/yolo26n.onnx \
-  --saveEngine=/var/lib/vezor/models/yolo26n.jetson.fp16.engine \
-  --fp16 \
-  --shapes=images:1x3x640x640
-```
-
-Do not select the `.engine` in scene setup. Register it as a runtime artifact
-after the ONNX model is registered and after the Jetson target profile is known.
 
 ## Prepare The Branch Checkout
 
@@ -577,6 +525,13 @@ Return to Control -> Deployment and confirm:
 Use this when the Jetson has JetPack/Ubuntu installed but no Vezor checkout,
 no `/opt/vezor/current`, and no service yet.
 
+Reference docs:
+
+- NVIDIA JetPack installation:
+  `https://docs.nvidia.com/jetson/jetpack/install-setup/`
+- NVIDIA TensorRT command-line tools:
+  `https://docs.nvidia.com/deeplearning/tensorrt/latest/reference/command-line-programs.html`
+
 First confirm the base OS is a JetPack 6.x image and the network works:
 
 ```bash
@@ -694,6 +649,11 @@ At minimum, the Jetson should have:
 /var/lib/vezor/models/yolo26n.onnx
 ```
 
+Do not copy a TensorRT `.engine` from the MacBook to the Jetson. TensorRT
+engines are tied to the Jetson hardware, JetPack, TensorRT, CUDA, and driver
+stack. Build them on the Jetson that will run them, or on an identical Jetson
+stack.
+
 Now run preflight:
 
 ```bash
@@ -740,6 +700,115 @@ Back in Control -> Deployment, confirm:
 - credential status is active
 - hardware report arrives
 - model admission can evaluate the Jetson camera
+
+### Optional: Build A Jetson TensorRT Engine
+
+Skip this until the basic ONNX path is stable. The camera still selects the
+ONNX model row. The `.engine` is attached later as a target-specific runtime
+artifact and must never be selected as the primary scene model.
+
+Build the engine on the Jetson:
+
+```bash
+cd /var/lib/vezor
+python3 -m venv model-export
+source model-export/bin/activate
+python -m pip install --upgrade pip
+python -m pip install "ultralytics>=8.0"
+python - <<'PY'
+from pathlib import Path
+from ultralytics import YOLO
+
+model = YOLO("/var/lib/vezor/models/yolo26n.onnx")
+output = Path(model.export(format="engine", imgsz=640, half=True, device=0))
+target = Path("/var/lib/vezor/models/yolo26n.jetson.fp16.engine")
+output.replace(target)
+print(f"wrote {target}")
+PY
+```
+
+If Ultralytics export fails but TensorRT tools are installed:
+
+```bash
+trtexec \
+  --onnx=/var/lib/vezor/models/yolo26n.onnx \
+  --saveEngine=/var/lib/vezor/models/yolo26n.jetson.fp16.engine \
+  --fp16 \
+  --shapes=images:1x3x640x640
+```
+
+### Optional: Register Jetson Runtime Artifact And Soak Evidence
+
+Only do this after the basic ONNX path is stable through camera setup, Live,
+History, Evidence, and Operations.
+
+Attach the Jetson TensorRT engine to the ONNX model row:
+
+```bash
+cd /opt/vezor/current/backend
+python3 -m uv run python -m argus.scripts.build_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
+  --model-id "$MODEL_ID" \
+  --source-model /var/lib/vezor/models/yolo26n.onnx \
+  --prebuilt-engine /var/lib/vezor/models/yolo26n.jetson.fp16.engine \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --class person --class car --class bus --class truck \
+  --input-width 640 --input-height 640
+```
+
+Validate on the same Jetson:
+
+```bash
+python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
+  --api-base-url "$ARGUS_API_BASE_URL" \
+  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
+  --model-id "$MODEL_ID" \
+  --artifact-id "$ARTIFACT_ID" \
+  --artifact-path /var/lib/vezor/models/yolo26n.jetson.fp16.engine \
+  --expected-sha256 "$ARTIFACT_SHA256" \
+  --target-profile linux-aarch64-nvidia-jetson \
+  --host-profile linux-aarch64-nvidia-jetson
+```
+
+Then run a real soak before recording a pass:
+
+- at least one Jetson camera
+- real camera source
+- stable worker lifecycle
+- Live visible
+- telemetry present
+- one evidence clip reviewed
+- no repeated worker crashes
+- no credential/service regression
+
+Record the soak only after the run happened:
+
+```bash
+curl -s -X POST "$ARGUS_API_BASE_URL/api/v1/runtime-artifacts/soak-runs" \
+  -H "Authorization: Bearer $VEZOR_ADMIN_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"edge_node_id\": \"$EDGE_NODE_ID\",
+    \"runtime_artifact_id\": \"$ARTIFACT_ID\",
+    \"operations_assignment_id\": \"$WORKER_ASSIGNMENT_ID\",
+    \"runtime_selection_profile_id\": \"$RUNTIME_SELECTION_PROFILE_ID\",
+    \"hardware_report_id\": \"$HARDWARE_REPORT_ID\",
+    \"model_admission_report_id\": \"$MODEL_ADMISSION_REPORT_ID\",
+    \"status\": \"passed\",
+    \"started_at\": \"$SOAK_STARTED_AT\",
+    \"ended_at\": \"$SOAK_ENDED_AT\",
+    \"metrics\": {
+      \"duration_minutes\": 60,
+      \"worker_restarts\": 0,
+      \"evidence_clip_reviewed\": true
+    },
+    \"notes\": \"Installer-managed MacBook/Linux master plus Jetson edge soak passed.\"
+  }"
+```
+
+Do not start Task 24 / DeepStream until Track A/B Jetson soak evidence exists
+or the risk is explicitly accepted.
 
 ## Configure Cameras From The UI
 
@@ -887,78 +956,6 @@ systemctl status vezor-edge.service
 
 A reboot test passes only when the system returns without copied bearer tokens
 or foreground terminal supervisors.
-
-## Runtime Artifacts And Soak Evidence
-
-Only do this after the basic ONNX path is stable.
-
-Attach a Jetson TensorRT engine to the ONNX model row:
-
-```bash
-cd /opt/vezor/current/backend
-python3 -m uv run python -m argus.scripts.build_runtime_artifact \
-  --api-base-url "$ARGUS_API_BASE_URL" \
-  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
-  --model-id "$MODEL_ID" \
-  --source-model /var/lib/vezor/models/yolo26n.onnx \
-  --prebuilt-engine /var/lib/vezor/models/yolo26n.jetson.fp16.engine \
-  --target-profile linux-aarch64-nvidia-jetson \
-  --class person --class car --class bus --class truck \
-  --input-width 640 --input-height 640
-```
-
-Validate on the same Jetson:
-
-```bash
-python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
-  --api-base-url "$ARGUS_API_BASE_URL" \
-  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
-  --model-id "$MODEL_ID" \
-  --artifact-id "$ARTIFACT_ID" \
-  --artifact-path /var/lib/vezor/models/yolo26n.jetson.fp16.engine \
-  --expected-sha256 "$ARTIFACT_SHA256" \
-  --target-profile linux-aarch64-nvidia-jetson \
-  --host-profile linux-aarch64-nvidia-jetson
-```
-
-Then run a real soak before recording a pass:
-
-- at least one Jetson camera
-- real camera source
-- stable worker lifecycle
-- Live visible
-- telemetry present
-- one evidence clip reviewed
-- no repeated worker crashes
-- no credential/service regression
-
-Record the soak only after the run happened:
-
-```bash
-curl -s -X POST "$ARGUS_API_BASE_URL/api/v1/runtime-artifacts/soak-runs" \
-  -H "Authorization: Bearer $VEZOR_ADMIN_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"edge_node_id\": \"$EDGE_NODE_ID\",
-    \"runtime_artifact_id\": \"$ARTIFACT_ID\",
-    \"operations_assignment_id\": \"$WORKER_ASSIGNMENT_ID\",
-    \"runtime_selection_profile_id\": \"$RUNTIME_SELECTION_PROFILE_ID\",
-    \"hardware_report_id\": \"$HARDWARE_REPORT_ID\",
-    \"model_admission_report_id\": \"$MODEL_ADMISSION_REPORT_ID\",
-    \"status\": \"passed\",
-    \"started_at\": \"$SOAK_STARTED_AT\",
-    \"ended_at\": \"$SOAK_ENDED_AT\",
-    \"metrics\": {
-      \"duration_minutes\": 60,
-      \"worker_restarts\": 0,
-      \"evidence_clip_reviewed\": true
-    },
-    \"notes\": \"Installer-managed MacBook/Linux master plus Jetson edge soak passed.\"
-  }"
-```
-
-Do not start Task 24 / DeepStream until Track A/B Jetson soak evidence exists
-or the risk is explicitly accepted.
 
 ## Support Bundle And Diagnostics
 
