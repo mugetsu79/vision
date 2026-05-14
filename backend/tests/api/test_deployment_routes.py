@@ -26,6 +26,7 @@ from argus.api.contracts import (
     TenantContext,
 )
 from argus.api.v1 import router
+from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
 from argus.models.enums import (
     DeploymentCredentialStatus,
@@ -441,6 +442,7 @@ class _FakeDeploymentService:
 def _create_app(context: TenantContext, deployment: _FakeDeploymentService) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
+    app.state.settings = Settings(_env_file=None)
     app.state.services = SimpleNamespace(
         tenancy=_FakeTenancyService(context),
         deployment=deployment,
@@ -482,6 +484,37 @@ async def test_bootstrap_rotate_route_returns_one_time_local_token() -> None:
     assert response.status_code == 201
     assert response.json()["bootstrap_token"] == "vzboot_local_once"
     assert deployment.bootstrap_rotate_actor_subject == "local-bootstrap"
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_rotate_route_accepts_docker_desktop_host_gateway() -> None:
+    context = _tenant_context()
+    deployment = _FakeDeploymentService()
+    app = _create_app(context, deployment)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, client=("192.168.65.1", 54123)),
+        base_url="http://127.0.0.1:8000",
+    ) as client:
+        response = await client.post("/api/v1/deployment/bootstrap/rotate-local-token")
+
+    assert response.status_code == 201
+    assert response.json()["bootstrap_token"] == "vzboot_local_once"
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_rotate_route_rejects_unconfigured_lan_client() -> None:
+    context = _tenant_context()
+    deployment = _FakeDeploymentService()
+    app = _create_app(context, deployment)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, client=("192.168.1.40", 54123)),
+        base_url="http://127.0.0.1:8000",
+    ) as client:
+        response = await client.post("/api/v1/deployment/bootstrap/rotate-local-token")
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

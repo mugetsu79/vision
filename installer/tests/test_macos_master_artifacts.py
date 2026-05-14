@@ -31,6 +31,8 @@ def test_macos_master_plist_is_launchd_owned_appliance() -> None:
     assert "<key>RunAtLoad</key>" in plist
     assert "<key>KeepAlive</key>" in plist
     assert "<string>/var/log/vezor/master.log</string>" in plist
+    assert "<key>PATH</key>" in plist
+    assert "/Applications/Docker.app/Contents/Resources/bin" in plist
 
 
 def test_macos_master_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
@@ -57,6 +59,8 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert "  /run/vezor" not in script
+    assert 'chmod 0644 "$MASTER_ENV"' in script
+    assert 'old_umask="$(umask)"' in script
 
 
 def test_macos_installer_exposes_safe_install_options() -> None:

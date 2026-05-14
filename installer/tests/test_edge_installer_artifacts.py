@@ -46,6 +46,8 @@ def test_edge_install_script_accepts_pairing_and_unpaired_modes() -> None:
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert 'chmod 0644 "$EDGE_ENV"' in script
+    assert 'old_umask="$(umask)"' in script
     assert "--supervisor-id" in script
     assert '--credential-path "$DATA_DIR/credentials/supervisor.credential"' in script
     assert "systemctl enable vezor-edge.service" in script

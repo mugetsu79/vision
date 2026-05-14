@@ -133,12 +133,14 @@ VEZOR_MEDIAMTX_IMAGE=bluenviron/mediamtx:latest
 VEZOR_SUPERVISOR_IMAGE=ghcr.io/vezor/supervisor:dev
 VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
 ENV
+  chmod 0644 "$EDGE_ENV"
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $EDGE_CONFIG"
   echo "[dry-run] write $SUPERVISOR_CONFIG"
 else
+  old_umask="$(umask)"
   umask 027
   cat > "$EDGE_CONFIG" <<JSON
 {
@@ -161,6 +163,7 @@ JSON
   "version": "edge-installer"
 }
 JSON
+  umask "$old_umask"
 fi
 
 if [[ "$UNPAIRED" -eq 0 ]]; then

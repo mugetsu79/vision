@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
 
 usage() {
   cat <<'USAGE'
@@ -39,6 +40,11 @@ fi
 ROLE="$1"
 COMMAND="$2"
 shift 2
+
+if [[ "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]; then
+  usage
+  exit 0
+fi
 
 case "$ROLE" in
   master)

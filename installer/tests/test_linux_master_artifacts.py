@@ -95,6 +95,8 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert 'chmod 0644 "$MASTER_ENV"' in script
+    assert 'old_umask="$(umask)"' in script
     assert "manifest_image_ref backend" in script
 
 

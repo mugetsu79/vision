@@ -101,11 +101,14 @@ write_secret_if_missing() {
     return 0
   fi
 
+  local old_umask
+  old_umask="$(umask)"
   umask 077
   if [[ -z "$value" ]]; then
     value="$(random_secret)"
   fi
   printf '%s\n' "$value" > "$path"
+  umask "$old_umask"
 }
 
 manifest_image_ref() {
@@ -203,12 +206,14 @@ VEZOR_PUBLIC_FRONTEND_URL=$PUBLIC_URL
 VEZOR_PUBLIC_API_BASE_URL=${PUBLIC_URL%:*}:8000
 VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/vezor
 ENV
+  chmod 0644 "$MASTER_ENV"
 fi
 
 MASTER_CONFIG="$CONFIG_DIR/master.json"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $MASTER_CONFIG"
 else
+  old_umask="$(umask)"
   umask 027
   cat > "$MASTER_CONFIG" <<JSON
 {
@@ -221,12 +226,14 @@ else
   "compose_file": "/opt/vezor/current/infra/install/compose/compose.master.yml"
 }
 JSON
+  umask "$old_umask"
 fi
 
 SUPERVISOR_CONFIG="$CONFIG_DIR/supervisor.json"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $SUPERVISOR_CONFIG"
 else
+  old_umask="$(umask)"
   umask 027
   cat > "$SUPERVISOR_CONFIG" <<JSON
 {
@@ -238,6 +245,7 @@ else
   "version": "${VERSION:-unversioned}"
 }
 JSON
+  umask "$old_umask"
 fi
 
 run install -m 0644 \

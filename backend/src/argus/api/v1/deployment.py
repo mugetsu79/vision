@@ -232,7 +232,13 @@ def _deployment_http_error(exc: ValueError) -> HTTPException:
 
 def _require_local_bootstrap_request(request: Request) -> None:
     host = request.client.host if request.client is not None else ""
-    if host in {"127.0.0.1", "::1", "localhost", "testclient", "test"}:
+    settings = getattr(request.app.state, "settings", None)
+    allowed_hosts = (
+        settings.local_bootstrap_allowed_client_hosts
+        if settings is not None
+        else ("127.0.0.1", "::1", "localhost", "testclient", "test")
+    )
+    if host in allowed_hosts:
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
