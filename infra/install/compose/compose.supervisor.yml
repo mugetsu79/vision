@@ -17,12 +17,26 @@ services:
     image: ${VEZOR_SUPERVISOR_IMAGE:?set VEZOR_SUPERVISOR_IMAGE}
     container_name: vezor-supervisor
     restart: unless-stopped
+    entrypoint: ["/app/.venv/bin/python", "-m", "argus.supervisor.runner"]
     command:
-      - python
-      - -m
-      - argus.supervisor.runner
       - --config
       - /etc/vezor/supervisor.json
+    environment:
+      ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
+      ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      ARGUS_MEDIAMTX_WEBRTC_BASE_URL: http://mediamtx:8889
+      ARGUS_MEDIAMTX_HLS_BASE_URL: http://mediamtx:8888
+      ARGUS_MEDIAMTX_MJPEG_BASE_URL: http://mediamtx:8888
+      ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889
+      ARGUS_ENABLE_WORKER_METRICS_SERVER: "true"
+      ARGUS_WORKER_METRICS_PORT: "9108"
+      ARGUS_PUBLISH_PROFILE: jetson-nano
+      ARGUS_JETSON_RTSP_PROTOCOLS: ${ARGUS_JETSON_RTSP_PROTOCOLS:-tcp}
+      ARGUS_JETSON_RTSP_LATENCY_MS: ${ARGUS_JETSON_RTSP_LATENCY_MS:-200}
+      ARGUS_JETSON_RTSP_DROP_ON_LATENCY: ${ARGUS_JETSON_RTSP_DROP_ON_LATENCY:-true}
+      YOLO_CONFIG_DIR: /tmp
+    ports:
+      - "${VEZOR_WORKER_METRICS_BIND:-127.0.0.1}:9108:9108"
     volumes:
       - /etc/vezor/edge.json:/etc/vezor/edge.json:ro
       - /etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro
@@ -31,8 +45,12 @@ services:
       - /var/log/vezor:/var/log/vezor
     depends_on:
       - mediamtx
+    runtime: ${VEZOR_NVIDIA_RUNTIME:-nvidia}
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 508:* rmw"
     healthcheck:
-      test: ["CMD", "python", "-m", "argus.supervisor.runner", "--healthcheck", "--config", "/etc/vezor/supervisor.json"]
+      test: ["CMD", "/app/.venv/bin/python", "-m", "argus.supervisor.runner", "--healthcheck", "--config", "/etc/vezor/supervisor.json"]
       interval: 30s
       timeout: 5s
       retries: 3

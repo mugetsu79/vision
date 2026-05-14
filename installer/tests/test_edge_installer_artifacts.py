@@ -33,12 +33,25 @@ def test_edge_systemd_service_is_restartable_appliance_wrapper() -> None:
     assert "LogsDirectory=vezor" in service
 
 
-def test_edge_install_script_accepts_pairing_and_unpaired_modes() -> None:
+def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> None:
     script = _read(INSTALL_SCRIPT)
 
-    for option in ("--api-url", "--pairing-code", "--session-id", "--unpaired"):
+    for option in (
+        "--api-url",
+        "--pairing-code",
+        "--session-id",
+        "--unpaired",
+        "--manifest",
+        "--version",
+        "--jetson-ort-wheel-url",
+    ):
         assert option in script
 
+    assert "manifest_image_ref edge-worker" in script
+    assert "manifest_image_ref mediamtx" in script
+    assert "build_local_edge_image" in script
+    assert "/opt/vezor/current/backend/Dockerfile.edge" in script
+    assert "JETSON_ORT_WHEEL_URL" in script
     assert "scripts/jetson-preflight.sh --installer --json" in script
     assert "/etc/vezor/edge.json" in script
     assert "/etc/vezor/supervisor.json" in script
@@ -70,6 +83,13 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
     assert "  vezor-supervisor:" in compose
     assert "${VEZOR_SUPERVISOR_IMAGE:?set VEZOR_SUPERVISOR_IMAGE}" in compose
     assert "${VEZOR_MEDIAMTX_IMAGE:?set VEZOR_MEDIAMTX_IMAGE}" in compose
+    assert 'entrypoint: ["/app/.venv/bin/python", "-m", "argus.supervisor.runner"]' in compose
+    assert "      - --config" in compose
+    assert "ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997" in compose
+    assert "ARGUS_ENABLE_WORKER_METRICS_SERVER: \"true\"" in compose
+    assert "ARGUS_PUBLISH_PROFILE: jetson-nano" in compose
+    assert 'runtime: ${VEZOR_NVIDIA_RUNTIME:-nvidia}' in compose
+    assert '"${VEZOR_WORKER_METRICS_BIND:-127.0.0.1}:9108:9108"' in compose
     assert "/etc/vezor/edge.json:/etc/vezor/edge.json:ro" in compose
     assert "/etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro" in compose
     assert (

@@ -740,6 +740,8 @@ On the Jetson:
 MASTER_API_URL="http://MASTER_HOST_OR_IP:8000"
 
 sudo ./installer/linux/install-edge.sh \
+  --version "portable-demo" \
+  --manifest installer/manifests/dev-example.json \
   --api-url "$MASTER_API_URL" \
   --session-id "PAIRING_SESSION_ID" \
   --pairing-code "PAIRING_CODE" \
@@ -749,7 +751,15 @@ sudo ./installer/linux/install-edge.sh \
 
 The edge installer writes `/etc/vezor/edge.json`,
 `/etc/vezor/supervisor.json`, `/etc/vezor/edge.env`, MediaMTX config, and the
-claimed supervisor credential, then starts `vezor-edge.service`.
+claimed supervisor credential. When the manifest release channel is `dev`, it
+also builds the local Jetson edge image from `backend/Dockerfile.edge` before
+starting `vezor-edge.service`; this avoids depending on unpublished
+`ghcr.io/vezor/*:dev` images during branch testing. If you need the accelerated
+Jetson ONNX Runtime wheel during that local image build, add:
+
+```bash
+--jetson-ort-wheel-url "https://.../onnxruntime_gpu-...-linux_aarch64.whl"
+```
 
 Validate:
 
