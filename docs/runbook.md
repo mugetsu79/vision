@@ -58,6 +58,19 @@ For step-by-step installation, first-run, pairing, reboot validation, support
 bundle, upgrade, and uninstall instructions, use
 `docs/product-installer-and-first-run-guide.md`.
 
+Before publishing or field-testing an installer build, run:
+
+```bash
+make verify-installers
+```
+
+The gate runs the installer pytest suite, shell syntax checks, release manifest
+validation, product service secret scans, product-guide dev/break-glass label
+checks, and Compose render validation when Docker is available. If Docker is
+not installed or the Compose plugin is unavailable, the Compose render is
+skipped with a clear `docker unavailable` message; DeepStream files are not part
+of this installer gate.
+
 ### Local Vezorctl Utility
 
 Installed packages include `vezorctl` for local host operations:

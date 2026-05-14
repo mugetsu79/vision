@@ -126,7 +126,7 @@ services:
       - -lc
       - alembic upgrade head && uvicorn argus.main:app --host 0.0.0.0 --port 8000
     env_file:
-      - /etc/vezor/master.env
+      - ${VEZOR_MASTER_ENV_FILE:-/etc/vezor/master.env}
     environment:
       ARGUS_DB_URL: postgresql+asyncpg://${VEZOR_POSTGRES_USER:-argus}:$${VEZOR_POSTGRES_PASSWORD}@postgres:5432/${VEZOR_POSTGRES_DB:-argus}
       ARGUS_REDIS_URL: redis://redis:6379/0
