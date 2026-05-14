@@ -4,7 +4,7 @@ This is the operator-ready deployment guide for Vezor.
 
 Use it when you want to decide what to deploy, where to deploy it, and in what order to validate it.
 
-For the shorter decision guide, use [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md).
+For the shorter decision guide, use [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md). For the portable MacBook Pro + Jetson field demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md).
 
 ## Current Implementation Snapshot
 
@@ -36,7 +36,7 @@ The current product includes the operator workflows needed for a serious pilot:
 The supervisor lifecycle MVP is now present as API contracts, database records,
 UI admission status, a reconciler library, a runnable child-process supervisor,
 and an installable-node control plane. Local development can still use manual
-terminal workers, but product operation is moving to install-once
+terminal workers, but installed product operation should use install-once
 macOS/Linux/container supervisor services, short-lived node pairing, platform
 credential storage, service health reports, diagnostics, and no normal
 copied-token terminal workflow after installation.
@@ -66,7 +66,7 @@ Do not confuse the local dev stack with production.
 - edge and central supervisor credentials are scoped, rotated, revocable, and
   provisioned through one-time pairing or credential rotation, not copied from
   local dev tokens
-- the current iMac + Jetson lab should set the edge worker's `ARGUS_NATS_URL` directly to the iMac NATS listener; the NATS leaf shape is the production target once supervisor bootstrap owns credentials and routing
+- the current MacBook/iMac + Jetson lab should set the edge worker's `ARGUS_NATS_URL` directly to the macOS master NATS listener; the NATS leaf shape is the production target once supervisor bootstrap owns credentials and routing
 
 Production topology:
 
@@ -233,7 +233,7 @@ break-glass flows, not the normal product operating model.
 Start and restart also require model admission. The supervisor reports hardware
 capability and recent performance samples. The backend records a model-admission
 decision for each worker, and the Operations UI disables production Start and
-Restart when admission is `unknown` or `unsupported`. Manual iMac lab workers
+Restart when admission is `unknown` or `unsupported`. Manual macOS lab workers
 are explicitly labeled as a production-admission bypass because the operator is
 starting the process directly from a terminal.
 
@@ -264,16 +264,20 @@ On macOS this proves the `launchd` daemon loaded at boot. For production
 Compose/appliance mode, confirm the supervisor container is healthy after Docker
 starts and that the Deployment row receives a new service report.
 
-### iMac + Jetson pilot interpretation
+### MacBook Pro Or iMac + Jetson Pilot Interpretation
 
-When the iMac is used as the master and the Jetson is used as edge, treat the result as a pilot proving the product flow:
+When a MacBook Pro or iMac is used as the master and the Jetson is used as
+edge, treat the result as a pilot proving the product flow:
 
-- sign in and configure the site on the iMac
-- run central camera workers on the iMac for comparison
+- sign in and configure the site on the macOS master
+- run central camera workers on the macOS master for comparison
 - move one camera to Jetson edge mode
 - confirm Live, History, Operations, and Evidence Desk all continue to work
 
-That setup answers whether the product behaves correctly on the intended split architecture. It does not answer final production availability, backup, TLS, secret rotation, or supervisor lifecycle questions. Those belong to the Linux master production deployment.
+That setup answers whether the product behaves correctly on the intended split
+architecture. It does not answer final production availability, backup, TLS, or
+packaged installer questions. Those belong to the Linux master production
+deployment.
 
 ## 2. First Production Site
 
@@ -439,13 +443,13 @@ capability on startup, scrapes worker metrics when configured, evaluates
 admission before Start/Restart, and owns only direct child worker processes. Do
 not invent a browser/API shell bridge as a shortcut.
 
-iMac central smoke command:
+macOS central smoke command:
 
 ```bash
 cd /Users/yann.moren/vision/backend
 TOKEN="PUT_FRESH_ADMIN_OR_SUPERVISOR_TOKEN_HERE"
 python3 -m uv run python -m argus.supervisor.runner \
-  --supervisor-id central-imac \
+  --supervisor-id central-macos \
   --role central \
   --api-base-url http://127.0.0.1:8000 \
   --bearer-token "$TOKEN" \
@@ -459,7 +463,7 @@ Jetson edge smoke command:
 cd "$HOME/vision"
 export ARGUS_SUPERVISOR_ID="jetson-lab-1"
 export ARGUS_EDGE_NODE_ID="PUT_EDGE_NODE_UUID_HERE"
-export ARGUS_API_BASE_URL="http://PUT_IMAC_IP_HERE:8000"
+export ARGUS_API_BASE_URL="http://PUT_MACBOOK_OR_IMAC_IP_HERE:8000"
 export ARGUS_API_BEARER_TOKEN="$JETSON_TOKEN"
 docker compose -f infra/docker-compose.edge.yml --profile supervisor \
   up -d --no-build mediamtx nats-leaf otel-collector supervisor
@@ -495,7 +499,7 @@ Interpret admission statuses this way:
 
 Examples:
 
-- macOS iMac with CoreML and a fixed-vocab YOLO26n model should normally be
+- macOS with CoreML and a fixed-vocab YOLO26n model should normally be
   `recommended` or `supported` when CoreML is reported.
 - Jetson with a validated TensorRT artifact should prefer the TensorRT runtime
   and report `recommended` after p95 fits the stream frame budget.

@@ -4,6 +4,7 @@ See also:
 
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
+- [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md)
 
 ## Worker Lifecycle, Deployment, And Operations
 
@@ -15,14 +16,15 @@ The first-run deployment workbench lives at `/deployment` in the frontend. It
 owns install health, central/edge node rows, service-manager reports, one-time
 pairing sessions, credential status, and redacted support bundles.
 
-The final-product deployment path is specified as Band 7.5 in
+The final-product deployment path is documented as Band 7.5 in
 `docs/superpowers/specs/2026-05-13-installable-supervisor-and-first-run-productization-design.md`
 and
 `docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md`.
-That band establishes the dedicated Control -> Deployment surface, UI-created
-node pairing sessions, platform credential storage, and macOS/Linux service
-wrappers so normal operation after installation does not require foreground
-terminal commands or copied bearer tokens.
+The current implementation includes the dedicated Control -> Deployment
+surface, UI-created node pairing sessions, platform credential storage
+contracts, and macOS/Linux service-wrapper templates so normal operation after
+installation does not require foreground terminal commands or copied bearer
+tokens.
 
 The first service-wrapper templates live in `infra/install/`:
 
@@ -53,7 +55,7 @@ paths, for example:
 
 ```json
 {
-  "supervisor_id": "central-imac-1",
+  "supervisor_id": "central-macos-1",
   "role": "central",
   "api_base_url": "https://vezor.example.com",
   "credential_store_path": "/var/lib/vezor/supervisor/credential.json",
@@ -85,8 +87,8 @@ Start and restart also pass through hardware admission. A supervisor reports its
 host profile, accelerator/provider availability, and recent p95/p99 performance
 samples. The backend records a model-admission decision for the worker. The UI
 is an early explanation layer, and the supervisor is the final enforcement gate.
-Manual iMac workers are labeled as a production-admission bypass because the
-operator starts those processes directly from a shell.
+Manual macOS pilot workers are labeled as a production-admission bypass because
+the operator starts those processes directly from a shell.
 
 ### Deployment Diagnostics And Reboot Checks
 
@@ -133,7 +135,9 @@ Run production as:
   - OTEL collector
 - Tailscale or WireGuard between HQ and sites
 
-An iMac can be used as a lab or pilot master, especially with a Jetson edge node, but production should move the master role to Linux with backups, TLS, real OIDC configuration, and supervisor-owned workers.
+A MacBook Pro or iMac can be used as a lab or pilot master, especially with a
+Jetson edge node, but production should move the master role to Linux with
+backups, TLS, real OIDC configuration, and supervisor-owned workers.
 
 ## Current Production Gaps
 
@@ -526,7 +530,13 @@ was built without `JETSON_ORT_WHEEL_URL`. The FFmpeg encoder check should exit
 successfully; if it fails, the edge image cannot publish processed annotated or
 reduced streams.
 
-This Compose path is appropriate for lab and pilot bring-up. In the current iMac + Jetson lab, set `ARGUS_NATS_URL` directly to the master NATS listener, for example `nats://192.168.1.20:4222`. In production, the same edge responsibilities should be run under a supervisor so they restart after reboot, report per-worker status, and can receive constrained lifecycle requests from the control plane. The NATS leaf topology remains the intended hardened production shape once bootstrap and credentials are supervisor-managed.
+This Compose path is appropriate for lab and pilot bring-up. In the current
+MacBook/iMac + Jetson lab, set `ARGUS_NATS_URL` directly to the master NATS
+listener, for example `nats://192.168.1.20:4222`. In production, the same edge
+responsibilities should be run under a supervisor so they restart after reboot,
+report per-worker status, and can receive constrained lifecycle requests from
+the control plane. The NATS leaf topology remains the intended hardened
+production shape once bootstrap and credentials are supervisor-managed.
 
 ## Model Metadata And Scope
 

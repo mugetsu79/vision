@@ -36,8 +36,8 @@ together the lab guide and runbook.
 
 ## One-Time Setup
 
-Run these from the iMac or master machine unless a section explicitly says
-Jetson.
+Run these from the MacBook Pro, iMac, or master machine unless a section
+explicitly says Jetson.
 
 ```bash
 cd /Users/yann.moren/vision
@@ -317,16 +317,16 @@ What good looks like:
 
 ## Jetson Path Notes
 
-For the iMac master + Jetson edge lab, the Jetson worker container sees model
-files at `/models/<filename>`. You may need a second registered model row for
-the same ONNX file with a container-visible path:
+For the MacBook/iMac master + Jetson edge lab, the Jetson worker container sees
+model files at `/models/<filename>`. You may need a second registered model row
+for the same ONNX file with a container-visible path:
 
 ```bash
 EDGE_MODEL_PATH="/models/yolo26n.onnx"
 ```
 
-The iMac backend can validate that path because the dev backend container also
-bind-mounts the checkout model directory at `/models`.
+The macOS master backend can validate that path because the dev backend
+container also bind-mounts the checkout model directory at `/models`.
 
 Use host paths for commands run on the host, such as:
 

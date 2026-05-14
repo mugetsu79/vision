@@ -10,9 +10,9 @@ The project supports three processing modes:
 
 Vezor separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, or `540p5`.
 
-The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, and edge bootstrap material. In local development, workers are still launched from copyable commands because there is no local supervisor process yet. In production, Start/Stop/Restart controls should go through a central or edge supervisor that reconciles desired state and reports actual runtime state back to the control plane.
+The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, and support bundles. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
 
-The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, and the Evidence Desk incident review queue. The main production gap is lifecycle automation: a production supervisor or edge agent still needs to own worker start/stop/restart/drain and report per-worker runtime truth.
+The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, and the Evidence Desk incident review queue. The remaining production gap is packaging and hardening: the supervisor contracts and service templates exist, but a final installer, backup/restore posture, TLS/OIDC production configuration, and deferred Task 24 DeepStream work are still outside the portable demo path.
 
 ## What’s In This Repo
 
@@ -107,9 +107,9 @@ The dev stack starts platform services, not per-camera inference workers. To run
 3. Run that command in a terminal on the machine that should own the worker.
 4. Stop the worker with `Ctrl-C`.
 
-Those commands fetch a local development bearer token and set `ARGUS_API_BEARER_TOKEN="$TOKEN"` for you. They are a development bridge, not the production control model.
+Those commands fetch a local development bearer token and set `ARGUS_API_BEARER_TOKEN="$TOKEN"` for you. They are a development bridge and portable-demo break-glass path, not the production control model.
 
-In production, UI lifecycle controls should update desired state or send a constrained lifecycle request. A central or edge supervisor should start, stop, restart, monitor, and report worker runtime state. The backend API should not become a generic remote shell runner.
+In installed operation, UI lifecycle controls should update desired state or send a constrained lifecycle request. A central or edge supervisor should start, stop, restart, monitor, and report worker runtime state. The backend API should not become a generic remote shell runner, and long-running services should not depend on pasted bearer tokens.
 
 ## Common Commands
 
@@ -135,6 +135,7 @@ Start here if you are new to the repo:
 - [docs/runbook.md](/Users/yann.moren/vision/docs/runbook.md): operations starting point
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance
+- [docs/macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md): portable demo install guide for an Apple Silicon MacBook Pro master and Jetson edge node
 - [docs/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/docs/imac-master-orin-lab-test-guide.md): step-by-step lab guide for a 2019 iMac master and Jetson Orin Nano edge test
 
 ## Deployment Modes
@@ -193,7 +194,7 @@ In production, deploy Vezor as:
   - TLS/OIDC for operators
   - scoped edge credentials, not copied local dev tokens
 
-The iMac + Jetson path documented in the lab guide is a valuable pilot topology: the iMac can act as a temporary master while the Jetson validates edge inference. For production, replace the iMac dev stack with a Linux master deployment and replace copied worker commands with supervisor-managed workers.
+The MacBook Pro + Jetson and iMac + Jetson paths documented in the lab guides are valuable pilot topologies: a macOS workstation can act as a temporary master while the Jetson validates edge inference. For production, replace the macOS dev stack with a Linux master deployment and replace copied worker commands with supervisor-managed workers.
 
 ## Hardware Guidance
 
@@ -206,8 +207,8 @@ The iMac + Jetson path documented in the lab guide is a valuable pilot topology:
 ### Good lab / pilot setups
 
 - macOS workstation for local bring-up and UI/API validation
-- iMac as a pilot master node
-- iMac master + Jetson edge as a realistic two-node evaluation setup
+- Apple Silicon MacBook Pro or iMac as a pilot master node
+- MacBook Pro or iMac master + Jetson edge as a realistic two-node evaluation setup
 
 ### Important note
 

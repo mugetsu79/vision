@@ -4,7 +4,7 @@ This document explains how to choose between `central`, `edge`, and `hybrid` cam
 
 It is the short decision document.
 
-For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md).
+For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md). For the portable MacBook Pro + Jetson demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md).
 
 ## Current Implementation Posture
 
@@ -15,15 +15,17 @@ The strongest production-ready paths are still:
 - `central` with a Linux `amd64` master node
 - `edge` with Jetson Orin Nano Super 8 GB inference nodes
 
-The supervisor lifecycle MVP now includes operations contracts, persistent
-assignments, hardware/model admission, lifecycle request claim/complete flows,
-and a runnable child-process supervisor for iMac and Jetson pilot validation.
-The main missing final-product layer is installable supervisor productization:
-macOS/Linux service ownership, UI-managed first-run setup, one-time node
-pairing, node-bound credentials, service health, diagnostics, and no normal
-copied-token terminal workflow after installation.
+The supervisor lifecycle and installable-node MVP now includes operations
+contracts, persistent assignments, hardware/model admission, lifecycle request
+claim/complete flows, a runnable child-process supervisor for macOS and Jetson
+pilot validation, Deployment UI service status, one-time node pairing,
+node-bound credentials, credential rotation/revocation contracts, service
+health reports, and support bundle diagnostics. The remaining final-product
+layer is packaging and field hardening: one-command installers, production
+backup/restore, TLS/OIDC production configuration, and long-run hardware soak
+evidence.
 
-Raw TensorRT `.engine` files are now modeled as target-specific runtime artifacts, not normal camera model choices. Fixed-vocab production testing should still register portable ONNX model rows first, then attach validated `.engine` artifacts for compatible Jetson/NVIDIA targets. Stable open-vocab scenes can now register compiled scene artifacts keyed by camera, vocabulary hash, source model hash, and target profile. The next active implementation stage is Band 7.5: installable supervisor and first-run productization before credential rotation and Jetson runtime soak.
+Raw TensorRT `.engine` files are now modeled as target-specific runtime artifacts, not normal camera model choices. Fixed-vocab production testing should still register portable ONNX model rows first, then attach validated `.engine` artifacts for compatible Jetson/NVIDIA targets. Stable open-vocab scenes can now register compiled scene artifacts keyed by camera, vocabulary hash, source model hash, and target profile. Runtime soak records are modeled in the API/UI, but real Track A/B Jetson evidence must be recorded before Task 24 / DeepStream is opened unless the risk is explicitly accepted.
 
 ## Core Terms
 
@@ -114,22 +116,25 @@ This is correct for:
 
 - UI/API development
 - model and camera setup validation
-- iMac functional testing
+- macOS functional testing
 - short lab demos
 
 It is not the production lifecycle model.
 
-### iMac + Jetson Pilot
+### MacBook Pro Or iMac + Jetson Pilot
 
-Use the 2019 iMac as a temporary master and the Jetson Orin Nano as a real edge node. This validates the two-node product workflow:
+Use an Apple Silicon MacBook Pro or the older 2019 iMac as a temporary master
+and the Jetson Orin Nano as a real edge node. This validates the two-node
+product workflow:
 
-- iMac hosts the dev control plane
+- the macOS workstation hosts the dev control plane
 - Jetson runs edge inference
-- the edge worker connects to the iMac API, Postgres, MinIO, and NATS listeners through explicit exported environment variables
+- the edge worker connects to the MacBook/iMac API, Postgres, MinIO, and NATS listeners through explicit exported environment variables
 - Operations shows the intended central/edge split
 - History and Evidence Desk prove that events and clips return to the master
 
-This is a strong pilot topology, but the iMac remains a lab master. It should not be treated as the long-term production HQ node.
+This is a strong pilot topology, but the macOS workstation remains a lab
+master. It should not be treated as the long-term production HQ node.
 
 ### Production
 
@@ -218,9 +223,9 @@ For most real deployments:
 2. move bandwidth-sensitive or privacy-sensitive cameras to `edge`
 3. introduce `hybrid` only when the central second-stage analytics justify the added complexity
 
-For the specific iMac + Jetson evaluation path:
+For the specific MacBook Pro/iMac + Jetson evaluation path:
 
-1. validate the iMac-only dev stack
+1. validate the macOS-only dev stack
 2. move one camera to the Jetson edge node
 3. confirm Live, History, Operations, and Evidence Desk all work across the split
 4. translate the master side to Linux production before treating the setup as customer-ready
@@ -228,5 +233,6 @@ For the specific iMac + Jetson evaluation path:
 ## Related Documents
 
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
+- [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
 - [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md)

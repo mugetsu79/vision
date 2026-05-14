@@ -2,6 +2,9 @@
 
 Date: 2026-04-19
 
+For the current portable field-demo path with an Apple Silicon MacBook Pro
+master, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md). This document remains the detailed 2019 iMac lab guide and historical comparison path.
+
 This guide is written for a first lab rollout of Vezor on:
 
 - a **2019 iMac i9 with Radeon 580 8 GB** as the Vezor master node
@@ -20,6 +23,7 @@ The goal is not to prove final production performance. The goal is to prove that
 Related documents:
 
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
+- [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md)
 - [model-loading-and-configuration-guide.md](/Users/yann.moren/vision/docs/model-loading-and-configuration-guide.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
