@@ -9,6 +9,7 @@ const deploymentMocks = vi.hoisted(() => ({
   createPairing: vi.fn(),
   rotateCredential: vi.fn(),
   refetchNodes: vi.fn(),
+  nodes: [] as unknown[],
 }));
 
 const deploymentNodes = [
@@ -96,7 +97,7 @@ const supportBundle = {
 
 vi.mock("@/hooks/use-deployment", () => ({
   useDeploymentNodes: () => ({
-    data: deploymentNodes,
+    data: deploymentMocks.nodes,
     isLoading: false,
     isError: false,
     refetch: deploymentMocks.refetchNodes,
@@ -119,6 +120,7 @@ vi.mock("@/hooks/use-deployment", () => ({
 describe("DeploymentPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    deploymentMocks.nodes = deploymentNodes;
     deploymentMocks.createPairing.mockReset();
     deploymentMocks.rotateCredential.mockReset();
     deploymentMocks.refetchNodes.mockReset();
@@ -175,8 +177,12 @@ describe("DeploymentPage", () => {
     ).toBeInTheDocument();
     expect(within(workspace).getByText("central-imac")).toBeInTheDocument();
     expect(within(workspace).getByText("orin-nano-01")).toBeInTheDocument();
-    expect(within(workspace).getAllByText(/launchd/i).length).toBeGreaterThan(0);
-    expect(within(workspace).getAllByText(/systemd/i).length).toBeGreaterThan(0);
+    expect(within(workspace).getAllByText(/launchd/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(within(workspace).getAllByText(/systemd/i).length).toBeGreaterThan(
+      0,
+    );
     expect(
       within(workspace).getByText(/macos-arm64-apple/i),
     ).toBeInTheDocument();
@@ -206,8 +212,33 @@ describe("DeploymentPage", () => {
     expect(
       within(workspace).getByText(/installer\/linux\/install-edge\.sh/i),
     ).toBeInTheDocument();
-    expect(within(workspace).queryByText(/ARGUS_API_BEARER_TOKEN/i)).not.toBeInTheDocument();
-    expect(within(workspace).queryByText(/docker compose up/i)).not.toBeInTheDocument();
+    expect(
+      within(workspace).queryByText(/ARGUS_API_BEARER_TOKEN/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(workspace).queryByText(/docker compose up/i),
+    ).not.toBeInTheDocument();
+  });
+
+  test("shows a first deployment empty state instead of a load failure", () => {
+    deploymentMocks.nodes = [];
+
+    render(<DeploymentPage />);
+
+    const workspace = screen.getByTestId("deployment-workspace");
+    expect(
+      within(workspace).getByRole("heading", { name: /no deployment yet/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/pair the master supervisor/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getAllByRole("button", { name: /pair central/i })
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(workspace).queryByText(/failed to load deployment/i),
+    ).not.toBeInTheDocument();
   });
 
   test("creates one-time central pairing material without a copied token flow", async () => {

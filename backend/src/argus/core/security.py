@@ -80,7 +80,8 @@ class JwksCache:
             return cached.value
 
         discovery_document = await self.get_discovery_document(issuer)
-        response = await self.http_client.get(str(discovery_document["jwks_uri"]))
+        jwks_uri = self._resolve_jwks_uri(str(discovery_document["jwks_uri"]))
+        response = await self.http_client.get(jwks_uri)
         response.raise_for_status()
         payload = dict(response.json())
         self._jwks_cache[issuer] = _CachedValue(
@@ -88,6 +89,16 @@ class JwksCache:
             expires_at=now + timedelta(seconds=self.settings.keycloak_jwks_cache_ttl_seconds),
         )
         return payload
+
+    def _resolve_jwks_uri(self, jwks_uri: str) -> str:
+        internal_realms_base_url = self.settings.keycloak_realms_base_url.rstrip("/")
+        for realms_base_url in self.settings.keycloak_trusted_realms_base_urls:
+            trusted_realms_base_url = realms_base_url.rstrip("/")
+            if jwks_uri == trusted_realms_base_url or jwks_uri.startswith(
+                f"{trusted_realms_base_url}/",
+            ):
+                return f"{internal_realms_base_url}{jwks_uri[len(trusted_realms_base_url) :]}"
+        return jwks_uri
 
 
 class SecurityService:
@@ -146,7 +157,13 @@ class SecurityService:
                 detail="Token issuer is not trusted.",
             )
 
-        jwks = await self.jwks_cache.get_jwks(self._resolve_internal_issuer(issuer))
+        try:
+            jwks = await self.jwks_cache.get_jwks(self._resolve_internal_issuer(issuer))
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unable to resolve signing key.",
+            ) from exc
         key_id = unverified_header.get("kid")
         matching_key = next(
             (candidate for candidate in jwks.get("keys", []) if candidate.get("kid") == key_id),
@@ -182,8 +199,7 @@ class SecurityService:
         role = max(roles, key=lambda candidate: ROLE_RANK[candidate])
         realm = issuer.rstrip("/").rsplit("/", 1)[-1]
         is_superadmin = (
-            realm == self.settings.keycloak_platform_realm
-            and role == RoleEnum.SUPERADMIN
+            realm == self.settings.keycloak_platform_realm and role == RoleEnum.SUPERADMIN
         )
 
         return AuthenticatedUser(

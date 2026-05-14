@@ -61,8 +61,9 @@ export function DeploymentPage() {
   const [pairing, setPairing] = useState<NodePairingSessionResponse | null>(
     null,
   );
-  const [rotation, setRotation] =
-    useState<NodeCredentialRotateResponse | null>(null);
+  const [rotation, setRotation] = useState<NodeCredentialRotateResponse | null>(
+    null,
+  );
   const [bundleNodeId, setBundleNodeId] = useState<string | null>(null);
   const supportBundle = useDeploymentSupportBundle(bundleNodeId);
 
@@ -134,86 +135,90 @@ export function DeploymentPage() {
             <PackageCheck className="size-4" />
             <h2>Deployment nodes</h2>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-y-2 text-sm">
-              <thead className="text-left text-[11px] uppercase tracking-[0.14em] text-[#7894bd]">
-                <tr>
-                  <th className="px-3 py-2">Node</th>
-                  <th className="px-3 py-2">Service</th>
-                  <th className="px-3 py-2">Install</th>
-                  <th className="px-3 py-2">Credential</th>
-                  <th className="px-3 py-2">Heartbeat</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {nodes.data.map((node) => (
-                  <tr key={node.id} className="bg-white/[0.025]">
-                    <td className="rounded-l-[0.75rem] border-y border-l border-white/10 px-3 py-3">
-                      <p className="font-medium text-[#f4f8ff]">
-                        {node.hostname}
-                      </p>
-                      <p className="mt-1 text-xs text-[#93a7c5]">
-                        {node.node_kind} - {node.supervisor_id}
-                      </p>
-                      <p className="mt-1 text-xs text-[#93a7c5]">
-                        {node.host_profile ??
-                          node.os_name ??
-                          "host profile not reported"}
-                      </p>
-                    </td>
-                    <td className="border-y border-white/10 px-3 py-3 text-[#d8e2f2]">
-                      {node.service_manager ?? "not reported"}
-                      <p className="mt-1 text-xs text-[#93a7c5]">
-                        {node.service_status ?? "service unknown"}
-                      </p>
-                    </td>
-                    <td className="border-y border-white/10 px-3 py-3">
-                      <StatusToneBadge tone={statusTone(node.install_status)}>
-                        {node.install_status}
-                      </StatusToneBadge>
-                    </td>
-                    <td className="border-y border-white/10 px-3 py-3">
-                      <StatusToneBadge
-                        tone={statusTone(node.credential_status)}
-                      >
-                        {node.credential_status}
-                      </StatusToneBadge>
-                    </td>
-                    <td className="border-y border-white/10 px-3 py-3 text-[#d8e2f2]">
-                      {formatDate(node.last_service_reported_at)}
-                    </td>
-                    <td className="rounded-r-[0.75rem] border-y border-r border-white/10 px-3 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          onClick={() => void handlePairNode(node)}
-                        >
-                          <KeyRound className="mr-2 size-4" />
-                          Pair
-                        </Button>
-                        <Button
-                          type="button"
-                          disabled={rotateCredential.isPending}
-                          onClick={() => void handleRotateNode(node)}
-                        >
-                          <RotateCcw className="mr-2 size-4" />
-                          Rotate credential
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => setBundleNodeId(node.id)}
-                        >
-                          <Wrench className="mr-2 size-4" />
-                          Support bundle
-                        </Button>
-                      </div>
-                    </td>
+          {nodes.data.length === 0 ? (
+            <DeploymentEmptyState onPairCentral={() => void handlePairNode()} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-2 text-sm">
+                <thead className="text-left text-[11px] uppercase tracking-[0.14em] text-[#7894bd]">
+                  <tr>
+                    <th className="px-3 py-2">Node</th>
+                    <th className="px-3 py-2">Service</th>
+                    <th className="px-3 py-2">Install</th>
+                    <th className="px-3 py-2">Credential</th>
+                    <th className="px-3 py-2">Heartbeat</th>
+                    <th className="px-3 py-2">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {nodes.data.map((node) => (
+                    <tr key={node.id} className="bg-white/[0.025]">
+                      <td className="rounded-l-[0.75rem] border-y border-l border-white/10 px-3 py-3">
+                        <p className="font-medium text-[#f4f8ff]">
+                          {node.hostname}
+                        </p>
+                        <p className="mt-1 text-xs text-[#93a7c5]">
+                          {node.node_kind} - {node.supervisor_id}
+                        </p>
+                        <p className="mt-1 text-xs text-[#93a7c5]">
+                          {node.host_profile ??
+                            node.os_name ??
+                            "host profile not reported"}
+                        </p>
+                      </td>
+                      <td className="border-y border-white/10 px-3 py-3 text-[#d8e2f2]">
+                        {node.service_manager ?? "not reported"}
+                        <p className="mt-1 text-xs text-[#93a7c5]">
+                          {node.service_status ?? "service unknown"}
+                        </p>
+                      </td>
+                      <td className="border-y border-white/10 px-3 py-3">
+                        <StatusToneBadge tone={statusTone(node.install_status)}>
+                          {node.install_status}
+                        </StatusToneBadge>
+                      </td>
+                      <td className="border-y border-white/10 px-3 py-3">
+                        <StatusToneBadge
+                          tone={statusTone(node.credential_status)}
+                        >
+                          {node.credential_status}
+                        </StatusToneBadge>
+                      </td>
+                      <td className="border-y border-white/10 px-3 py-3 text-[#d8e2f2]">
+                        {formatDate(node.last_service_reported_at)}
+                      </td>
+                      <td className="rounded-r-[0.75rem] border-y border-r border-white/10 px-3 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => void handlePairNode(node)}
+                          >
+                            <KeyRound className="mr-2 size-4" />
+                            Pair
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={rotateCredential.isPending}
+                            onClick={() => void handleRotateNode(node)}
+                          >
+                            <RotateCcw className="mr-2 size-4" />
+                            Rotate credential
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => setBundleNodeId(node.id)}
+                          >
+                            <Wrench className="mr-2 size-4" />
+                            Support bundle
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </WorkspaceSurface>
 
         <SupportBundlePanel
@@ -221,6 +226,28 @@ export function DeploymentPage() {
           loading={supportBundle.isLoading || supportBundle.isFetching}
         />
       </section>
+    </div>
+  );
+}
+
+function DeploymentEmptyState({
+  onPairCentral,
+}: {
+  onPairCentral: () => void;
+}) {
+  return (
+    <div className="rounded-[0.75rem] border border-dashed border-white/15 bg-white/[0.025] p-5">
+      <h3 className="text-base font-semibold text-[#f4f8ff]">
+        No deployment yet
+      </h3>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-[#93a7c5]">
+        Pair the master supervisor first, then add Jetson edge supervisors when
+        the camera locations are ready.
+      </p>
+      <Button type="button" className="mt-4" onClick={onPairCentral}>
+        <KeyRound className="mr-2 size-4" />
+        Pair central
+      </Button>
     </div>
   );
 }
@@ -233,24 +260,28 @@ function InstallerTargets() {
         <h2>Installer packages</h2>
       </div>
       <div className="grid gap-3 lg:grid-cols-3">
-        {installerTargets.map(({ title, platform, command, detail, icon: Icon }) => (
-          <article
-            key={title}
-            className="rounded-[0.75rem] border border-white/10 bg-white/[0.025] p-3"
-          >
-            <div className="flex items-start gap-3">
-              <Icon className="mt-0.5 size-4 text-[#79d6ff]" />
-              <div>
-                <h3 className="text-sm font-semibold text-[#f4f8ff]">{title}</h3>
-                <p className="mt-1 text-xs text-[#93a7c5]">{platform}</p>
+        {installerTargets.map(
+          ({ title, platform, command, detail, icon: Icon }) => (
+            <article
+              key={title}
+              className="rounded-[0.75rem] border border-white/10 bg-white/[0.025] p-3"
+            >
+              <div className="flex items-start gap-3">
+                <Icon className="mt-0.5 size-4 text-[#79d6ff]" />
+                <div>
+                  <h3 className="text-sm font-semibold text-[#f4f8ff]">
+                    {title}
+                  </h3>
+                  <p className="mt-1 text-xs text-[#93a7c5]">{platform}</p>
+                </div>
               </div>
-            </div>
-            <code className="mt-3 block overflow-auto rounded-[0.5rem] bg-black/35 px-2 py-2 text-xs text-[#d8e2f2]">
-              {command}
-            </code>
-            <p className="mt-2 text-xs leading-5 text-[#93a7c5]">{detail}</p>
-          </article>
-        ))}
+              <code className="mt-3 block overflow-auto rounded-[0.5rem] bg-black/35 px-2 py-2 text-xs text-[#d8e2f2]">
+                {command}
+              </code>
+              <p className="mt-2 text-xs leading-5 text-[#93a7c5]">{detail}</p>
+            </article>
+          ),
+        )}
       </div>
     </WorkspaceSurface>
   );

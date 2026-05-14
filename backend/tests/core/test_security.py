@@ -29,7 +29,12 @@ def _b64url_uint(value: int) -> str:
     return base64.urlsafe_b64encode(value.to_bytes(byte_length, "big")).rstrip(b"=").decode("utf-8")
 
 
-def _build_security_transport(jwks_by_issuer: dict[str, dict[str, object]]):
+def _build_security_transport(
+    jwks_by_issuer: dict[str, dict[str, object]],
+    jwks_uri_by_issuer: dict[str, str] | None = None,
+):
+    jwks_uri_by_issuer = jwks_uri_by_issuer or {}
+
     async def handler(request: Request) -> Response:
         for issuer, jwks in jwks_by_issuer.items():
             discovery_url = f"{issuer}/.well-known/openid-configuration"
@@ -38,7 +43,10 @@ def _build_security_transport(jwks_by_issuer: dict[str, dict[str, object]]):
             if str(request.url) == discovery_url:
                 return Response(
                     200,
-                    json={"issuer": issuer, "jwks_uri": jwks_url},
+                    json={
+                        "issuer": issuer,
+                        "jwks_uri": jwks_uri_by_issuer.get(issuer, jwks_url),
+                    },
                 )
 
             if str(request.url) == jwks_url:
@@ -190,6 +198,77 @@ async def test_tenant_and_platform_admin_tokens_authorize_routes() -> None:
     assert platform_response.json()["is_superadmin"] is True
     assert edge_missing_key.status_code == 401
     assert edge_with_key.status_code == 200
+
+    await security_service.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_facing_keycloak_jwks_uri_resolves_to_internal_realm_base() -> None:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    public_numbers = public_key.public_numbers()
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    internal_issuer = "http://keycloak:8080/realms/argus-dev"
+    public_issuer = "http://127.0.0.1:8080/realms/argus-dev"
+    public_jwks_url = f"{public_issuer}/protocol/openid-connect/certs"
+    internal_jwks_url = f"{internal_issuer}/protocol/openid-connect/certs"
+    requested_urls: list[str] = []
+    jwks = {
+        "keys": [
+            {
+                "kty": "RSA",
+                "kid": "test-kid",
+                "use": "sig",
+                "alg": "RS256",
+                "n": _b64url_uint(public_numbers.n),
+                "e": _b64url_uint(public_numbers.e),
+            }
+        ]
+    }
+
+    async def handler(request: Request) -> Response:
+        requested_urls.append(str(request.url))
+        if str(request.url) == f"{internal_issuer}/.well-known/openid-configuration":
+            return Response(
+                200,
+                json={"issuer": public_issuer, "jwks_uri": public_jwks_url},
+            )
+        if str(request.url) == internal_jwks_url:
+            return Response(200, json=jwks)
+        if str(request.url) == public_jwks_url:
+            return Response(502)
+        return Response(404)
+
+    settings = Settings(
+        _env_file=None,
+        keycloak_server_url="http://keycloak:8080",
+        keycloak_public_server_url="http://127.0.0.1:8080",
+        rtsp_encryption_key="argus-dev-rtsp-key",
+        enable_startup_services=False,
+    )
+    security_service = SecurityService.from_settings(settings, transport=handler)
+    token = _build_token(
+        private_key_pem=private_key_pem,
+        issuer=public_issuer,
+        subject="installer-user",
+        email="installer@example.com",
+        roles=["admin"],
+    )
+
+    user = await security_service.validate_token(token)
+
+    assert user.subject == "installer-user"
+    assert internal_jwks_url in requested_urls
+    assert public_jwks_url not in requested_urls
 
     await security_service.close()
 

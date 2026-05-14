@@ -123,6 +123,8 @@ export function SettingsPage() {
       id: node.id as string,
       hostname: node.hostname,
     }));
+  const needsOperationsSetup =
+    sites.length === 0 || cameras.length === 0 || fleet.data.nodes.length === 0;
 
   return (
     <div data-testid="operations-workspace" className="space-y-5 p-4 sm:p-6">
@@ -137,6 +139,8 @@ export function SettingsPage() {
           </Button>
         }
       />
+
+      {needsOperationsSetup ? <OperationsSetupEmptyState /> : null}
 
       <SceneIntelligenceMatrix rows={sceneHealthRows} />
 
@@ -265,27 +269,33 @@ export function SettingsPage() {
       <section className="grid gap-4 xl:grid-cols-2">
         <Panel title="Nodes" icon={<Server className="size-4" />}>
           <div className="flex flex-col gap-3">
-            {fleet.data.nodes.map((node) => (
-              <div
-                key={node.id ?? "central"}
-                className="rounded-[1rem] border border-white/10 p-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-[#f4f8ff]">
-                      {node.hostname}
-                    </p>
-                    <p className="mt-1 text-xs text-[#93a7c5]">
-                      {node.kind} - {node.assigned_camera_ids?.length ?? 0}{" "}
-                      assigned scenes
-                    </p>
+            {fleet.data.nodes.length === 0 ? (
+              <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+                No deployment nodes yet.
+              </p>
+            ) : (
+              fleet.data.nodes.map((node) => (
+                <div
+                  key={node.id ?? "central"}
+                  className="rounded-[1rem] border border-white/10 p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-[#f4f8ff]">
+                        {node.hostname}
+                      </p>
+                      <p className="mt-1 text-xs text-[#93a7c5]">
+                        {node.kind} - {node.assigned_camera_ids?.length ?? 0}{" "}
+                        assigned scenes
+                      </p>
+                    </div>
+                    <StatusToneBadge tone={statusTone(node.status)}>
+                      {node.status}
+                    </StatusToneBadge>
                   </div>
-                  <StatusToneBadge tone={statusTone(node.status)}>
-                    {node.status}
-                  </StatusToneBadge>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Panel>
 
@@ -348,67 +358,77 @@ export function SettingsPage() {
         testId="worker-rail"
       >
         <div className="flex flex-col gap-3">
-          {fleet.data.camera_workers.map((worker) => {
-            const camera = camerasById.get(worker.camera_id);
+          {fleet.data.camera_workers.length === 0 ? (
+            <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+              No scene workers yet.
+            </p>
+          ) : (
+            fleet.data.camera_workers.map((worker) => {
+              const camera = camerasById.get(worker.camera_id);
 
-            return (
-              <div
-                key={worker.camera_id}
-                className="rounded-[1rem] border border-white/10 p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-[#f4f8ff]">
-                      {worker.camera_name}
+              return (
+                <div
+                  key={worker.camera_id}
+                  className="rounded-[1rem] border border-white/10 p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-[#f4f8ff]">
+                        {worker.camera_name}
+                      </p>
+                      <p className="mt-1 text-xs text-[#93a7c5]">
+                        {worker.processing_mode} - {worker.lifecycle_owner}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <StatusToneBadge tone={statusTone(worker.desired_state)}>
+                        {worker.desired_state}
+                      </StatusToneBadge>
+                      <StatusToneBadge tone={statusTone(worker.runtime_status)}>
+                        {worker.runtime_status}
+                      </StatusToneBadge>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#93a7c5]">
+                    <p>
+                      <span className="font-semibold text-[#d8e2f2]">
+                        Source
+                      </span>{" "}
+                      {formatCameraSource(camera)}
                     </p>
-                    <p className="mt-1 text-xs text-[#93a7c5]">
-                      {worker.processing_mode} - {worker.lifecycle_owner}
+                    <p>
+                      <span className="font-semibold text-[#d8e2f2]">
+                        Recording
+                      </span>{" "}
+                      {formatRecordingPolicy(camera)}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <StatusToneBadge tone={statusTone(worker.desired_state)}>
-                      {worker.desired_state}
-                    </StatusToneBadge>
-                    <StatusToneBadge tone={statusTone(worker.runtime_status)}>
-                      {worker.runtime_status}
-                    </StatusToneBadge>
-                  </div>
+                  <RuntimePassportPanel
+                    summary={worker.runtime_passport}
+                    compact
+                  />
+                  <HardwareAdmissionPanel worker={worker} />
+                  <RuleRuntimePanel summary={worker.rule_runtime} />
+                  <SupervisorLifecycleControls
+                    worker={worker}
+                    edgeNodes={edgeNodes}
+                  />
+                  {worker.detail ? (
+                    <p className="mt-2 text-sm text-[#93a7c5]">
+                      {worker.detail}
+                    </p>
+                  ) : null}
+                  {worker.dev_run_command ? (
+                    <p className="mt-3 rounded-[0.75rem] border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100">
+                      Installable supervisors own production worker launch.
+                      Manual terminal commands live in local lab and break-glass
+                      documentation.
+                    </p>
+                  ) : null}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#93a7c5]">
-                  <p>
-                    <span className="font-semibold text-[#d8e2f2]">Source</span>{" "}
-                    {formatCameraSource(camera)}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-[#d8e2f2]">
-                      Recording
-                    </span>{" "}
-                    {formatRecordingPolicy(camera)}
-                  </p>
-                </div>
-                <RuntimePassportPanel
-                  summary={worker.runtime_passport}
-                  compact
-                />
-                <HardwareAdmissionPanel worker={worker} />
-                <RuleRuntimePanel summary={worker.rule_runtime} />
-                <SupervisorLifecycleControls
-                  worker={worker}
-                  edgeNodes={edgeNodes}
-                />
-                {worker.detail ? (
-                  <p className="mt-2 text-sm text-[#93a7c5]">{worker.detail}</p>
-                ) : null}
-                {worker.dev_run_command ? (
-                  <p className="mt-3 rounded-[0.75rem] border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100">
-                    Installable supervisors own production worker launch. Manual
-                    terminal commands live in local lab and break-glass
-                    documentation.
-                  </p>
-                ) : null}
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </Panel>
 
@@ -418,33 +438,39 @@ export function SettingsPage() {
         testId="stream-diagnostics-rail"
       >
         <div className="flex flex-col gap-3">
-          {fleet.data.delivery_diagnostics.map((diagnostic) => (
-            <div
-              key={diagnostic.camera_id}
-              className="rounded-[1rem] border border-white/10 p-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium text-[#f4f8ff]">
-                    {diagnostic.camera_name} scene delivery
-                  </p>
-                  <p className="mt-1 text-xs text-[#93a7c5]">
-                    {formatSource(diagnostic.source_capability)} -{" "}
-                    {diagnostic.default_profile}
-                  </p>
+          {fleet.data.delivery_diagnostics.length === 0 ? (
+            <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+              No stream diagnostics yet.
+            </p>
+          ) : (
+            fleet.data.delivery_diagnostics.map((diagnostic) => (
+              <div
+                key={diagnostic.camera_id}
+                className="rounded-[1rem] border border-white/10 p-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-[#f4f8ff]">
+                      {diagnostic.camera_name} scene delivery
+                    </p>
+                    <p className="mt-1 text-xs text-[#93a7c5]">
+                      {formatSource(diagnostic.source_capability)} -{" "}
+                      {diagnostic.default_profile}
+                    </p>
+                  </div>
+                  <StatusToneBadge tone="muted">
+                    {diagnostic.selected_stream_mode}
+                  </StatusToneBadge>
                 </div>
-                <StatusToneBadge tone="muted">
-                  {diagnostic.selected_stream_mode}
-                </StatusToneBadge>
+                {diagnostic.native_status?.available === false ? (
+                  <p className="mt-2 text-sm text-amber-100">
+                    Direct stream unavailable:{" "}
+                    {formatReason(diagnostic.native_status?.reason)}
+                  </p>
+                ) : null}
               </div>
-              {diagnostic.native_status?.available === false ? (
-                <p className="mt-2 text-sm text-amber-100">
-                  Direct stream unavailable:{" "}
-                  {formatReason(diagnostic.native_status?.reason)}
-                </p>
-              ) : null}
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </Panel>
     </div>
@@ -504,6 +530,39 @@ function SummaryTile({ label, value }: { label: string; value: number }) {
       <p className="text-xs text-[#93a7c5]">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-[#f4f8ff]">{value}</p>
     </div>
+  );
+}
+
+function OperationsSetupEmptyState() {
+  const actions = [
+    { label: "Open Sites", to: "/sites" },
+    { label: "Open Scenes", to: "/cameras" },
+    { label: "Open Deployment", to: "/deployment" },
+  ];
+
+  return (
+    <WorkspaceSurface className="p-5">
+      <h2 className="text-base font-semibold text-[#f4f8ff]">
+        Configure Sites, Scenes, and Deployment
+      </h2>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-[#93a7c5]">
+        Add the location first, attach scene cameras, then pair the installed
+        master or Jetson supervisors so Operations has live worker and service
+        status to display.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {actions.map((action) => (
+          <Link
+            key={action.to}
+            className="inline-flex items-center justify-center rounded-full border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,#161c26,#0d121a)] px-4 py-2.5 text-sm font-medium text-[var(--vz-text-primary)] shadow-[var(--vz-elev-1)] transition duration-200 hover:border-[color:var(--vz-hair-focus)]"
+            to={action.to}
+          >
+            {action.label}
+            <ArrowRight className="ml-2 size-4" />
+          </Link>
+        ))}
+      </div>
+    </WorkspaceSurface>
   );
 }
 

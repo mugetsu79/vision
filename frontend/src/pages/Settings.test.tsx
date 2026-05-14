@@ -2,7 +2,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+const settingsMocks = vi.hoisted(() => ({
+  fleetOverview: null as unknown,
+  cameras: null as unknown,
+  sites: null as unknown,
+  models: null as unknown,
+  memoryPatterns: null as unknown,
+}));
 
 const fleetOverview = {
   mode: "manual_dev",
@@ -227,14 +235,14 @@ const fleetOverview = {
 
 vi.mock("@/hooks/use-operations", () => ({
   useFleetOverview: () => ({
-    data: fleetOverview,
+    data: settingsMocks.fleetOverview ?? fleetOverview,
     isLoading: false,
     isError: false,
     error: null,
     refetch: vi.fn(),
   }),
   useOperationalMemoryPatterns: () => ({
-    data: [
+    data: settingsMocks.memoryPatterns ?? [
       {
         id: "00000000-0000-0000-0000-000000000901",
         tenant_id: "tenant-1",
@@ -288,7 +296,7 @@ vi.mock("@/hooks/use-operations", () => ({
 
 vi.mock("@/hooks/use-cameras", () => ({
   useCameras: () => ({
-    data: [
+    data: settingsMocks.cameras ?? [
       {
         id: "00000000-0000-0000-0000-000000000101",
         site_id: "00000000-0000-0000-0000-000000000301",
@@ -357,7 +365,7 @@ vi.mock("@/hooks/use-cameras", () => ({
 
 vi.mock("@/hooks/use-sites", () => ({
   useSites: () => ({
-    data: [
+    data: settingsMocks.sites ?? [
       {
         id: "00000000-0000-0000-0000-000000000301",
         tenant_id: "tenant-1",
@@ -374,7 +382,7 @@ vi.mock("@/hooks/use-sites", () => ({
 
 vi.mock("@/hooks/use-models", () => ({
   useModels: () => ({
-    data: [
+    data: settingsMocks.models ?? [
       {
         id: "00000000-0000-0000-0000-000000000001",
         name: "YOLO26n",
@@ -512,6 +520,14 @@ function renderPage() {
 }
 
 describe("SettingsPage operations workbench", () => {
+  beforeEach(() => {
+    settingsMocks.fleetOverview = null;
+    settingsMocks.cameras = null;
+    settingsMocks.sites = null;
+    settingsMocks.models = null;
+    settingsMocks.memoryPatterns = null;
+  });
+
   test("renders fleet operations instead of placeholder copy", () => {
     renderPage();
 
@@ -573,6 +589,56 @@ describe("SettingsPage operations workbench", () => {
     expect(
       screen.queryByText(/prompt 7 uses this route/i),
     ).not.toBeInTheDocument();
+  });
+
+  test("guides a fresh tenant to configure sites, scenes, and deployment", () => {
+    settingsMocks.fleetOverview = {
+      ...fleetOverview,
+      mode: "supervised",
+      summary: {
+        desired_workers: 0,
+        running_workers: 0,
+        stale_nodes: 0,
+        offline_nodes: 0,
+        native_unavailable_cameras: 0,
+      },
+      nodes: [],
+      camera_workers: [],
+      delivery_diagnostics: [],
+    };
+    settingsMocks.cameras = [];
+    settingsMocks.sites = [];
+    settingsMocks.models = [];
+    settingsMocks.memoryPatterns = [];
+
+    renderPage();
+
+    const workspace = screen.getByTestId("operations-workspace");
+    expect(
+      within(workspace).getByRole("heading", {
+        name: /configure sites, scenes, and deployment/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).queryByText(/failed to load fleet operations/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(workspace).getByRole("link", { name: /open sites/i }),
+    ).toHaveAttribute("href", "/sites");
+    expect(
+      within(workspace).getByRole("link", { name: /open scenes/i }),
+    ).toHaveAttribute("href", "/cameras");
+    expect(
+      within(workspace)
+        .getAllByRole("link", { name: /open deployment/i })
+        .some((link) => link.getAttribute("href") === "/deployment"),
+    ).toBe(true);
+    expect(
+      within(workspace).getByText(/no deployment nodes yet/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/no scene workers yet/i),
+    ).toBeInTheDocument();
   });
 
   test("shows worker lifecycle and delivery diagnostics", () => {
