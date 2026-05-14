@@ -420,6 +420,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/deployment/nodes/{node_id}/credentials/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Node Credentials */
+        post: operations["rotate_node_credentials_api_v1_deployment_nodes__node_id__credentials_rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/deployment/nodes/{node_id}/support-bundle": {
         parameters: {
             query?: never;
@@ -807,6 +824,23 @@ export interface paths {
         get: operations["get_latest_edge_hardware_report_api_v1_operations_edge_nodes__edge_node_id__hardware_reports_latest_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Edge Node Credentials */
+        post: operations["rotate_edge_node_credentials_api_v1_operations_edge_nodes__edge_node_id__credentials_rotate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2856,6 +2890,29 @@ export interface components {
             revoked_credentials: number;
             credential_status: components["schemas"]["DeploymentCredentialStatus"];
         };
+        /** NodeCredentialRotateResponse */
+        NodeCredentialRotateResponse: {
+            /**
+             * Node Id
+             * Format: uuid
+             */
+            node_id: string;
+            /**
+             * Credential Id
+             * Format: uuid
+             */
+            credential_id: string;
+            /** Credential Material */
+            credential_material: string;
+            /** Credential Hash */
+            credential_hash: string;
+            /** Credential Version */
+            credential_version: number;
+            /** Revoked Credentials */
+            revoked_credentials: number;
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+            node: components["schemas"]["DeploymentNodeResponse"];
+        };
         /** NodePairingClaim */
         NodePairingClaim: {
             /** Pairing Code */
@@ -2881,6 +2938,11 @@ export interface components {
             credential_material: string;
             /** Credential Hash */
             credential_hash: string;
+            /**
+             * Credential Version
+             * @default 1
+             */
+            credential_version: number;
             node: components["schemas"]["DeploymentNodeResponse"];
         };
         /** NodePairingSessionCreate */
@@ -5733,6 +5795,39 @@ export interface operations {
             };
         };
     };
+    rotate_node_credentials_api_v1_deployment_nodes__node_id__credentials_rotate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeCredentialRotateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get: {
         parameters: {
             query?: never;
@@ -6564,6 +6659,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_edge_node_credentials_api_v1_operations_edge_nodes__edge_node_id__credentials_rotate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                edge_node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeCredentialRotateResponse"];
                 };
             };
             /** @description Validation Error */

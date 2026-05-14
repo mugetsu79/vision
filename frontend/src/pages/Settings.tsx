@@ -148,7 +148,9 @@ export function SettingsPage() {
               </h2>
               <p className="mt-1 text-sm text-[#93a7c5]">
                 Installable supervisors, node pairing, credentials, service
-                health, and support bundles live in Deployment.
+                health, and support bundles live in Deployment. Rotated
+                credentials must be picked up by connected supervisors before
+                polling resumes.
               </p>
             </div>
           </div>

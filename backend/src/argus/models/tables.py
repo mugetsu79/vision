@@ -1013,6 +1013,7 @@ class SupervisorNodeCredential(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMix
     supervisor_id: Mapped[str] = mapped_column(String(128), nullable=False)
     credential_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     encrypted_credential: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credential_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[DeploymentCredentialStatus] = mapped_column(
         enum_column(DeploymentCredentialStatus, "supervisor_credential_status_enum"),
         nullable=False,

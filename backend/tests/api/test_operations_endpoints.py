@@ -19,6 +19,7 @@ from argus.api.contracts import (
     HardwarePerformanceSample,
     LifecycleRequestClaim,
     LifecycleRequestCompletion,
+    NodeCredentialRotateResponse,
     OperationalMemoryPatternResponse,
     OperationsLifecycleRequestCreate,
     OperationsLifecycleRequestResponse,
@@ -86,6 +87,7 @@ class _FakeDeploymentService:
         self.context = context
         self.credential_material: str | None = None
         self.supervisor_id: str | None = None
+        self.revoked_credentials: set[str] = set()
 
     async def authenticate_supervisor_credential(
         self,
@@ -95,7 +97,10 @@ class _FakeDeploymentService:
     ) -> TenantContext:
         self.credential_material = credential_material
         self.supervisor_id = supervisor_id
-        if credential_material != "node-credential":
+        if (
+            credential_material in self.revoked_credentials
+            or credential_material != "node-credential"
+        ):
             raise ValueError("Invalid supervisor credential.")
         return TenantContext(
             tenant_id=self.context.tenant_id,
@@ -124,6 +129,8 @@ class _FakeOperationsService:
         self.completion_payload: LifecycleRequestCompletion | None = None
         self.hardware_payload: EdgeNodeHardwareReportCreate | None = None
         self.admission_payload: WorkerModelAdmissionRequest | None = None
+        self.rotated_edge_node_id: UUID | None = None
+        self.deployment: _FakeDeploymentService | None = None
 
     async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
         return FleetOverviewResponse(
@@ -452,6 +459,43 @@ class _FakeOperationsService:
             created_at=datetime(2026, 5, 13, 8, 6, tzinfo=UTC),
         )
 
+    async def rotate_edge_node_credentials(
+        self,
+        tenant_context: TenantContext,
+        edge_node_id: UUID,
+    ) -> NodeCredentialRotateResponse:
+        self.rotated_edge_node_id = edge_node_id
+        if self.deployment is not None:
+            self.deployment.revoked_credentials.add("node-credential")
+        return NodeCredentialRotateResponse(
+            node_id=UUID("00000000-0000-0000-0000-000000000817"),
+            credential_id=UUID("00000000-0000-0000-0000-000000000818"),
+            credential_material="vzcred_edge_rotated_once",
+            credential_hash="c" * 64,
+            credential_version=2,
+            revoked_credentials=1,
+            credential_status="active",
+            node={
+                "id": "00000000-0000-0000-0000-000000000817",
+                "tenant_id": str(tenant_context.tenant_id),
+                "node_kind": "edge",
+                "edge_node_id": str(edge_node_id),
+                "supervisor_id": "edge-supervisor-1",
+                "hostname": "edge-supervisor",
+                "install_status": "installed",
+                "credential_status": "active",
+                "service_manager": None,
+                "service_status": None,
+                "version": None,
+                "os_name": None,
+                "host_profile": None,
+                "last_service_reported_at": None,
+                "diagnostics": {},
+                "created_at": "2026-05-13T08:06:00Z",
+                "updated_at": "2026-05-13T08:07:00Z",
+            },
+        )
+
 
 def _hardware_payload(edge_node_id: UUID | None) -> EdgeNodeHardwareReportCreate:
     return EdgeNodeHardwareReportCreate(
@@ -511,11 +555,13 @@ def _hardware_report_response(
 
 def _create_app(context: TenantContext, operations: _FakeOperationsService) -> FastAPI:
     app = FastAPI()
+    deployment = _FakeDeploymentService(context)
+    operations.deployment = deployment
     app.include_router(router)
     app.state.services = SimpleNamespace(
         tenancy=_FakeTenancyService(context),
         operations=operations,
-        deployment=_FakeDeploymentService(context),
+        deployment=deployment,
     )
     app.state.security = _FakeSecurity(context.user)
     return app
@@ -747,6 +793,36 @@ async def test_supervisor_operations_accept_node_credential_without_admin_jwt() 
     assert response.json()["supervisor_id"] == "edge-supervisor-1"
     assert app.state.services.deployment.credential_material == "node-credential"
     assert app.state.services.deployment.supervisor_id == "edge-supervisor-1"
+
+
+@pytest.mark.asyncio
+async def test_edge_credential_rotation_returns_one_time_material_and_revokes_old_poll() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    edge_node_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        rotate_response = await client.post(
+            f"/api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate",
+            headers={"Authorization": "Bearer token"},
+        )
+        poll_response = await client.post(
+            "/api/v1/operations/supervisors/edge-supervisor-1/poll",
+            headers={"Authorization": "Bearer node-credential"},
+            json={"edge_node_id": str(edge_node_id), "limit": 5},
+        )
+
+    assert rotate_response.status_code == 200
+    body = rotate_response.json()
+    assert body["credential_material"] == "vzcred_edge_rotated_once"
+    assert body["credential_version"] == 2
+    assert "bearer" not in str(body).lower()
+    assert operations.rotated_edge_node_id == edge_node_id
+    assert poll_response.status_code == 401
 
 
 @pytest.mark.asyncio

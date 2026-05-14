@@ -1419,6 +1419,7 @@ class NodePairingClaimResponse(BaseModel):
     credential_id: UUID
     credential_material: str
     credential_hash: str
+    credential_version: int = Field(default=1, ge=1)
     node: DeploymentNodeResponse
 
 
@@ -1426,6 +1427,17 @@ class NodeCredentialRevokeResponse(BaseModel):
     node_id: UUID
     revoked_credentials: int = Field(ge=0)
     credential_status: DeploymentCredentialStatus
+
+
+class NodeCredentialRotateResponse(BaseModel):
+    node_id: UUID
+    credential_id: UUID
+    credential_material: str
+    credential_hash: str
+    credential_version: int = Field(ge=1)
+    revoked_credentials: int = Field(ge=0)
+    credential_status: DeploymentCredentialStatus
+    node: DeploymentNodeResponse
 
 
 class WorkerModelAdmissionRequest(BaseModel):

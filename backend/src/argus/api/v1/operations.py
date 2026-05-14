@@ -13,6 +13,7 @@ from argus.api.contracts import (
     FleetOverviewResponse,
     LifecycleRequestClaim,
     LifecycleRequestCompletion,
+    NodeCredentialRotateResponse,
     OperationalMemoryPatternResponse,
     OperationsLifecycleRequestCreate,
     OperationsLifecycleRequestResponse,
@@ -224,6 +225,22 @@ async def get_latest_edge_hardware_report(
     services: ServicesDependency,
 ) -> EdgeNodeHardwareReportResponse | None:
     return await services.operations.latest_hardware_report_for_edge_node(
+        tenant_context,
+        edge_node_id,
+    )
+
+
+@router.post(
+    "/edge-nodes/{edge_node_id}/credentials/rotate",
+    response_model=NodeCredentialRotateResponse,
+)
+async def rotate_edge_node_credentials(
+    edge_node_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> NodeCredentialRotateResponse:
+    return await services.operations.rotate_edge_node_credentials(
         tenant_context,
         edge_node_id,
     )

@@ -389,6 +389,100 @@ async def test_revoking_node_credential_appends_event_and_disables_validation() 
 
 
 @pytest.mark.asyncio
+async def test_rotating_edge_node_credentials_revokes_old_material_and_returns_new_once() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    now = datetime(2026, 5, 13, 9, 45, tzinfo=UTC)
+    session_factory = _MemorySessionFactory()
+    _seed_edge_node_scope(session_factory, tenant_id=tenant_id, edge_node_id=edge_node_id)
+    session_factory.session.add(Tenant(id=tenant_id, name="Argus Dev", slug="argus-dev"))
+    service = DeploymentNodeService(session_factory, now_factory=lambda: now)
+    created = await service.create_pairing_session(
+        tenant_id=tenant_id,
+        payload=NodePairingSessionCreate(
+            node_kind=DeploymentNodeKind.EDGE,
+            edge_node_id=edge_node_id,
+            hostname="orin-nano-01",
+            requested_ttl_seconds=300,
+        ),
+        actor_subject="admin-1",
+    )
+    claimed = await service.claim_pairing_session(
+        tenant_id=tenant_id,
+        session_id=created.id,
+        payload=NodePairingClaim(
+            pairing_code=created.pairing_code,
+            supervisor_id="edge-orin-1",
+            hostname="orin-nano-01",
+        ),
+    )
+
+    rotated = await service.rotate_edge_node_credentials(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        actor_subject="admin-1",
+    )
+
+    assert rotated.node_id == claimed.node.id
+    assert rotated.credential_material.startswith("vzcred_")
+    assert rotated.credential_material != claimed.credential_material
+    assert rotated.credential_hash != rotated.credential_material
+    assert rotated.credential_version == claimed.credential_version + 1
+    assert rotated.revoked_credentials == 1
+    assert not await service.validate_supervisor_credential(
+        tenant_id=tenant_id,
+        supervisor_id="edge-orin-1",
+        credential_material=claimed.credential_material,
+    )
+    assert await service.validate_supervisor_credential(
+        tenant_id=tenant_id,
+        supervisor_id="edge-orin-1",
+        credential_material=rotated.credential_material,
+    )
+    with pytest.raises(ValueError, match="Invalid supervisor credential"):
+        await service.authenticate_supervisor_credential(
+            credential_material=claimed.credential_material,
+            supervisor_id="edge-orin-1",
+        )
+    tenant_context = await service.authenticate_supervisor_credential(
+        credential_material=rotated.credential_material,
+        supervisor_id="edge-orin-1",
+    )
+    assert tenant_context.user.subject == "supervisor:edge-orin-1"
+    assert not any(
+        getattr(row, "credential_material", None) == rotated.credential_material
+        for row in service.session_factory.session.rows
+    )
+    credential_rows = [
+        row
+        for row in service.session_factory.session.rows
+        if isinstance(row, SupervisorNodeCredential)
+    ]
+    assert [row.credential_version for row in credential_rows] == [1, 2]
+    assert credential_rows[0].status is DeploymentCredentialStatus.REVOKED
+    assert credential_rows[1].status is DeploymentCredentialStatus.ACTIVE
+    events = [
+        row
+        for row in service.session_factory.session.rows
+        if isinstance(row, DeploymentCredentialEvent)
+    ]
+    assert [event.event_type for event in events] == [
+        "credential.issued",
+        "credential.revoked",
+        "credential.issued",
+        "credential.rotated",
+    ]
+    assert events[-1].event_metadata["credential_version"] == 2
+    assert rotated.credential_material not in str(
+        [
+            row
+            for row in service.session_factory.session.rows
+            if row is not rotated
+        ]
+    )
+
+
+@pytest.mark.asyncio
 async def test_node_credential_service_report_cannot_change_node_shape() -> None:
     tenant_id = uuid4()
     edge_node_id = uuid4()
@@ -630,6 +724,8 @@ class _MemorySession:
         supervisor_id = params.get("supervisor_id_1")
         deployment_node_id = params.get("deployment_node_id_1") or session_id
         edge_node_id = params.get("id_1")
+        deployment_edge_node_id = params.get("edge_node_id_1")
+        credential_hash = params.get("credential_hash_1")
         entities = {description.get("entity") for description in statement.column_descriptions}
         model_entities = {entity for entity in entities if isinstance(entity, type)}
         if EdgeNode in entities:
@@ -664,6 +760,18 @@ class _MemorySession:
                 row
                 for row in rows
                 if getattr(row, "deployment_node_id", None) == deployment_node_id
+            ]
+        if deployment_edge_node_id is not None and DeploymentNode in entities:
+            rows = [
+                row
+                for row in rows
+                if getattr(row, "edge_node_id", None) == deployment_edge_node_id
+            ]
+        if credential_hash is not None and SupervisorNodeCredential in entities:
+            rows = [
+                row
+                for row in rows
+                if getattr(row, "credential_hash", None) == credential_hash
             ]
         if deployment_node_id is not None and DeploymentCredentialEvent in entities:
             rows = [

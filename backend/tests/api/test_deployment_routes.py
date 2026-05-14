@@ -12,6 +12,7 @@ from argus.api.contracts import (
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
     NodeCredentialRevokeResponse,
+    NodeCredentialRotateResponse,
     NodePairingClaim,
     NodePairingClaimResponse,
     NodePairingSessionCreate,
@@ -90,6 +91,7 @@ class _FakeDeploymentService:
         self.pairing_payload: NodePairingSessionCreate | None = None
         self.claim_payload: NodePairingClaim | None = None
         self.revoked_node_id: UUID | None = None
+        self.rotated_node_id: UUID | None = None
         self.tenant_id: UUID | None = None
 
     async def authenticate_supervisor_credential(
@@ -314,6 +316,44 @@ class _FakeDeploymentService:
             credential_status=DeploymentCredentialStatus.REVOKED,
         )
 
+    async def rotate_node_credentials(
+        self,
+        *,
+        tenant_id: UUID,
+        node_id: UUID,
+        actor_subject: str | None,
+    ) -> NodeCredentialRotateResponse:
+        del tenant_id, actor_subject
+        self.rotated_node_id = node_id
+        return NodeCredentialRotateResponse(
+            node_id=node_id,
+            credential_id=UUID("00000000-0000-0000-0000-000000000907"),
+            credential_material="vzcred_rotated_once",
+            credential_hash="b" * 64,
+            credential_version=2,
+            revoked_credentials=1,
+            credential_status=DeploymentCredentialStatus.ACTIVE,
+            node=DeploymentNodeResponse(
+                id=node_id,
+                tenant_id=self.tenant_id or uuid4(),
+                node_kind=DeploymentNodeKind.CENTRAL,
+                edge_node_id=None,
+                supervisor_id="central-imac-1",
+                hostname="vezor-central",
+                install_status=DeploymentInstallStatus.INSTALLED,
+                credential_status=DeploymentCredentialStatus.ACTIVE,
+                service_manager=None,
+                service_status=None,
+                version=None,
+                os_name=None,
+                host_profile=None,
+                last_service_reported_at=None,
+                diagnostics={},
+                created_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+                updated_at=datetime(2026, 5, 13, 9, 1, tzinfo=UTC),
+            ),
+        )
+
     async def get_support_bundle(
         self,
         *,
@@ -481,6 +521,10 @@ async def test_pairing_session_routes_create_read_claim_and_revoke_credentials()
             f"/api/v1/deployment/nodes/{node_id}/credentials/revoke",
             headers={"Authorization": "Bearer token"},
         )
+        rotate_response = await client.post(
+            f"/api/v1/deployment/nodes/{node_id}/credentials/rotate",
+            headers={"Authorization": "Bearer token"},
+        )
 
     assert create_response.status_code == 201
     assert create_response.json()["pairing_code"] == "123456"
@@ -490,9 +534,13 @@ async def test_pairing_session_routes_create_read_claim_and_revoke_credentials()
     assert claim_response.json()["credential_material"] == "node-credential-once"
     assert revoke_response.status_code == 200
     assert revoke_response.json()["revoked_credentials"] == 1
+    assert rotate_response.status_code == 200
+    assert rotate_response.json()["credential_material"] == "vzcred_rotated_once"
+    assert rotate_response.json()["credential_version"] == 2
     assert deployment.pairing_payload is not None
     assert deployment.claim_payload is not None
     assert deployment.revoked_node_id == node_id
+    assert deployment.rotated_node_id == node_id
 
 
 @pytest.mark.asyncio

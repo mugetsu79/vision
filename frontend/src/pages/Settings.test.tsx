@@ -557,6 +557,9 @@ describe("SettingsPage operations workbench", () => {
     expect(screen.queryByText(/assigned cameras/i)).not.toBeInTheDocument();
     expect(screen.getByText(/scene workers/i)).toBeInTheDocument();
     expect(screen.getByText(/manual dev mode/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/rotated credentials must be picked up/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/planned workers/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/direct streams unavailable/i)).toBeInTheDocument();
     expect(

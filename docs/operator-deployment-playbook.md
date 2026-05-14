@@ -218,13 +218,17 @@ store with owner-only permissions. Service templates reference that local
 credential boundary; they do not require an operator to paste a bearer token
 into a unit file, launch daemon, Compose file, or long-running terminal.
 
-Credential rotation uses the same bounded path: create or rotate a scoped node
-credential, write it through the local credential store, and let the supervisor
-reload or restart under its service manager. Revocation marks all active
-credentials for the deployment node as revoked, appends a credential event, and
-causes future supervisor authentication with that material to fail. Password
-grant and static bearer runner modes remain development or break-glass flows,
-not the normal product operating model.
+Credential rotation uses the same bounded path. Control -> Deployment calls the
+node credential rotation endpoint, the backend revokes every prior credential
+for that deployment node, creates the next credential version, and returns the
+new secret material only in that response. The operator must write the returned
+material through the node-local credential store and let the supervisor reload
+or restart under its service manager; old connected supervisors receive
+authentication failures until they pick up the rotated credential. Revocation
+marks all active credentials for the deployment node as revoked, appends a
+credential event, and causes future supervisor authentication with that material
+to fail. Password grant and static bearer runner modes remain development or
+break-glass flows, not the normal product operating model.
 
 Start and restart also require model admission. The supervisor reports hardware
 capability and recent performance samples. The backend records a model-admission
@@ -357,6 +361,8 @@ Before calling a site production-ready, the deployment needs:
 - UI-created one-time pairing material for central and edge nodes
 - node-bound credentials that are scoped, rotated, revocable, and not embedded
   as long-lived bearer tokens in service files
+- credential rotation tested end to end, including credential-store pickup on
+  central and edge supervisor services
 - worker heartbeat with per-camera runtime state
 - hardware capability reports from every central and edge supervisor
 - model admission reports before production Start or Restart

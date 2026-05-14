@@ -7,6 +7,7 @@ import { DeploymentPage } from "@/pages/Deployment";
 
 const deploymentMocks = vi.hoisted(() => ({
   createPairing: vi.fn(),
+  rotateCredential: vi.fn(),
   refetchNodes: vi.fn(),
 }));
 
@@ -109,11 +110,17 @@ vi.mock("@/hooks/use-deployment", () => ({
     mutateAsync: deploymentMocks.createPairing,
     isPending: false,
   }),
+  useRotateNodeCredential: () => ({
+    mutateAsync: deploymentMocks.rotateCredential,
+    isPending: false,
+  }),
 }));
 
 describe("DeploymentPage", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     deploymentMocks.createPairing.mockReset();
+    deploymentMocks.rotateCredential.mockReset();
     deploymentMocks.refetchNodes.mockReset();
     deploymentMocks.createPairing.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000401",
@@ -130,6 +137,17 @@ describe("DeploymentPage", () => {
       pairing_code: "pair-once",
       created_at: "2026-05-13T08:32:00Z",
       updated_at: "2026-05-13T08:32:00Z",
+    });
+    deploymentMocks.rotateCredential.mockResolvedValue({
+      node_id: "00000000-0000-0000-0000-000000000102",
+      credential_id: "00000000-0000-0000-0000-000000000402",
+      credential_material: "vzcred_rotated_once",
+      credential_hash:
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      credential_version: 2,
+      revoked_credentials: 1,
+      credential_status: "active",
+      node: deploymentNodes[1],
     });
   });
 
@@ -188,6 +206,28 @@ describe("DeploymentPage", () => {
       await screen.findByText(/pairing material shown once/i),
     ).toBeInTheDocument();
     expect(screen.getByText("pair-once")).toBeInTheDocument();
+    expect(screen.queryByText(/bearer/i)).not.toBeInTheDocument();
+  });
+
+  test("rotates node credentials with a one-time pickup warning", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<DeploymentPage />);
+
+    await user.click(
+      screen.getAllByRole("button", { name: /rotate credential/i })[1],
+    );
+
+    expect(deploymentMocks.rotateCredential).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000102",
+    );
+    expect(
+      await screen.findByText(/credential material shown once/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("vzcred_rotated_once")).toBeInTheDocument();
+    expect(
+      screen.getByText(/connected supervisors must pick up/i),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/bearer/i)).not.toBeInTheDocument();
   });
 

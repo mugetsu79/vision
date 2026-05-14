@@ -76,6 +76,7 @@ from argus.api.contracts import (
     ModelResponse,
     ModelUpdate,
     NativeAvailability,
+    NodeCredentialRotateResponse,
     OperationalMemoryPatternResponse,
     OperationsLifecycleRequestCreate,
     OperationsLifecycleRequestResponse,
@@ -1445,12 +1446,14 @@ class OperationsService:
         settings: Settings,
         edge_service: EdgeService | None = None,
         supervisor_operations: SupervisorOperationsService | None = None,
+        deployment_nodes: DeploymentNodeService | None = None,
         runtime_configuration: Any | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
         self.edge_service = edge_service
         self.supervisor_operations = supervisor_operations
+        self.deployment_nodes = deployment_nodes
         self.runtime_configuration = runtime_configuration
 
     async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
@@ -1900,6 +1903,17 @@ class OperationsService:
         row = rows.get(edge_node_id)
         return edge_node_hardware_report_response(row) if row is not None else None
 
+    async def rotate_edge_node_credentials(
+        self,
+        tenant_context: TenantContext,
+        edge_node_id: UUID,
+    ) -> NodeCredentialRotateResponse:
+        return await self._deployment_nodes().rotate_edge_node_credentials(
+            tenant_id=tenant_context.tenant_id,
+            edge_node_id=edge_node_id,
+            actor_subject=tenant_context.user.subject,
+        )
+
     async def evaluate_worker_model_admission(
         self,
         tenant_context: TenantContext,
@@ -1938,6 +1952,11 @@ class OperationsService:
         if self.supervisor_operations is None:
             self.supervisor_operations = SupervisorOperationsService(self.session_factory)
         return self.supervisor_operations
+
+    def _deployment_nodes(self) -> DeploymentNodeService:
+        if self.deployment_nodes is None:
+            self.deployment_nodes = DeploymentNodeService(self.session_factory)
+        return self.deployment_nodes
 
 
 class HistoryService:
@@ -4075,6 +4094,7 @@ def build_app_services(
             settings,
             edge_service=edge_service,
             supervisor_operations=supervisor_operations,
+            deployment_nodes=deployment_nodes,
             runtime_configuration=configuration_service.runtime_configuration,
         ),
         history=HistoryService(db.session_factory),

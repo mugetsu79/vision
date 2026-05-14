@@ -15,6 +15,7 @@ from argus.api.contracts import (
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
     NodeCredentialRevokeResponse,
+    NodeCredentialRotateResponse,
     NodePairingClaim,
     NodePairingClaimResponse,
     NodePairingSessionCreate,
@@ -411,6 +412,7 @@ class DeploymentNodeService:
                 supervisor_id=payload.supervisor_id,
                 credential_hash=_hash_secret(credential_material),
                 encrypted_credential=None,
+                credential_version=1,
                 status=DeploymentCredentialStatus.ACTIVE,
                 issued_at=now,
                 expires_at=None,
@@ -443,7 +445,136 @@ class DeploymentNodeService:
             credential_id=credential.id,
             credential_material=credential_material,
             credential_hash=credential.credential_hash,
+            credential_version=credential.credential_version,
             node=deployment_node_response(node, now=now),
+        )
+
+    async def rotate_edge_node_credentials(
+        self,
+        *,
+        tenant_id: UUID,
+        edge_node_id: UUID,
+        actor_subject: str | None,
+    ) -> NodeCredentialRotateResponse:
+        now = self.now_factory()
+        async with self.session_factory() as session:
+            node = await self._load_node_by_edge_node(
+                session=session,
+                tenant_id=tenant_id,
+                edge_node_id=edge_node_id,
+            )
+        return await self.rotate_node_credentials(
+            tenant_id=tenant_id,
+            node_id=node.id,
+            actor_subject=actor_subject,
+            now=now,
+        )
+
+    async def rotate_node_credentials(
+        self,
+        *,
+        tenant_id: UUID,
+        node_id: UUID,
+        actor_subject: str | None,
+        now: datetime | None = None,
+    ) -> NodeCredentialRotateResponse:
+        rotation_time = now or self.now_factory()
+        async with self.session_factory() as session:
+            node = await self._load_node_by_id(
+                session=session,
+                tenant_id=tenant_id,
+                node_id=node_id,
+            )
+            credentials = await self._load_credentials_for_node(
+                session=session,
+                tenant_id=tenant_id,
+                node_id=node.id,
+            )
+            revoked = 0
+            next_version = _next_credential_version(credentials)
+            for credential in credentials:
+                if credential.status is DeploymentCredentialStatus.REVOKED:
+                    continue
+                credential.status = DeploymentCredentialStatus.REVOKED
+                credential.revoked_at = rotation_time
+                credential.updated_at = rotation_time
+                revoked += 1
+                session.add(
+                    _credential_event(
+                        tenant_id=tenant_id,
+                        deployment_node_id=node.id,
+                        credential_id=credential.id,
+                        event_type="credential.revoked",
+                        actor_subject=actor_subject,
+                        occurred_at=rotation_time,
+                        metadata={
+                            "reason": "rotation",
+                            "replaced_by_credential_version": next_version,
+                        },
+                    )
+                )
+
+            credential_material = _new_credential_material()
+            credential = SupervisorNodeCredential(
+                tenant_id=tenant_id,
+                deployment_node_id=node.id,
+                supervisor_id=node.supervisor_id,
+                credential_hash=_hash_secret(credential_material),
+                encrypted_credential=None,
+                credential_version=next_version,
+                status=DeploymentCredentialStatus.ACTIVE,
+                issued_at=rotation_time,
+                expires_at=None,
+                revoked_at=None,
+            )
+            _ensure_identity_and_timestamps(credential, now=rotation_time)
+            session.add(credential)
+            await _flush_if_available(session)
+            node.credential_status = DeploymentCredentialStatus.ACTIVE
+            if node.install_status is DeploymentInstallStatus.REVOKED:
+                node.install_status = DeploymentInstallStatus.INSTALLED
+            node.updated_at = rotation_time
+            session.add(
+                _credential_event(
+                    tenant_id=tenant_id,
+                    deployment_node_id=node.id,
+                    credential_id=credential.id,
+                    event_type="credential.issued",
+                    actor_subject=actor_subject,
+                    occurred_at=rotation_time,
+                    metadata={
+                        "reason": "rotation",
+                        "credential_version": next_version,
+                    },
+                )
+            )
+            session.add(
+                _credential_event(
+                    tenant_id=tenant_id,
+                    deployment_node_id=node.id,
+                    credential_id=credential.id,
+                    event_type="credential.rotated",
+                    actor_subject=actor_subject,
+                    occurred_at=rotation_time,
+                    metadata={
+                        "credential_version": next_version,
+                        "revoked_credentials": revoked,
+                    },
+                )
+            )
+            await session.commit()
+            await session.refresh(node)
+            await session.refresh(credential)
+
+        return NodeCredentialRotateResponse(
+            node_id=node.id,
+            credential_id=credential.id,
+            credential_material=credential_material,
+            credential_hash=credential.credential_hash,
+            credential_version=credential.credential_version,
+            revoked_credentials=revoked,
+            credential_status=DeploymentCredentialStatus.ACTIVE,
+            node=deployment_node_response(node, now=rotation_time),
         )
 
     async def revoke_node_credentials(
@@ -629,6 +760,42 @@ class DeploymentNodeService:
             return row
         msg = "Deployment node not found."
         raise ValueError(msg)
+
+    async def _load_node_by_edge_node(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_id: UUID,
+        edge_node_id: UUID,
+    ) -> DeploymentNode:
+        statement = (
+            select(DeploymentNode)
+            .where(DeploymentNode.tenant_id == tenant_id)
+            .where(DeploymentNode.edge_node_id == edge_node_id)
+        )
+        row = (await session.execute(statement)).scalar_one_or_none()
+        if isinstance(row, DeploymentNode):
+            return row
+        msg = "Deployment node not found."
+        raise ValueError(msg)
+
+    async def _load_credentials_for_node(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_id: UUID,
+        node_id: UUID,
+    ) -> list[SupervisorNodeCredential]:
+        statement = (
+            select(SupervisorNodeCredential)
+            .where(SupervisorNodeCredential.tenant_id == tenant_id)
+            .where(SupervisorNodeCredential.deployment_node_id == node_id)
+        )
+        return [
+            row
+            for row in (await session.execute(statement)).scalars().all()
+            if isinstance(row, SupervisorNodeCredential)
+        ]
 
     async def _load_pairing_session(
         self,
@@ -1002,6 +1169,7 @@ def _credential_event(
     event_type: str,
     actor_subject: str | None,
     occurred_at: datetime,
+    metadata: dict[str, object] | None = None,
 ) -> DeploymentCredentialEvent:
     row = DeploymentCredentialEvent(
         tenant_id=tenant_id,
@@ -1010,10 +1178,17 @@ def _credential_event(
         event_type=event_type,
         actor_subject=actor_subject,
         occurred_at=occurred_at,
-        event_metadata={},
+        event_metadata=metadata or {},
     )
     _ensure_identity_and_timestamps(row, now=occurred_at)
     return row
+
+
+def _next_credential_version(credentials: list[SupervisorNodeCredential]) -> int:
+    return (
+        max((credential.credential_version or 1 for credential in credentials), default=0)
+        + 1
+    )
 
 
 def _pairing_status(row: NodePairingSession, now: datetime) -> str:

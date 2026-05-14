@@ -1,8 +1,10 @@
 import { useState } from "react";
 import {
+  AlertTriangle,
   KeyRound,
   PackageCheck,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -17,17 +19,22 @@ import {
   useCreatePairingSession,
   useDeploymentNodes,
   useDeploymentSupportBundle,
+  useRotateNodeCredential,
   type DeploymentNode,
   type DeploymentSupportBundle,
+  type NodeCredentialRotateResponse,
   type NodePairingSessionResponse,
 } from "@/hooks/use-deployment";
 
 export function DeploymentPage() {
   const nodes = useDeploymentNodes();
   const createPairing = useCreatePairingSession();
+  const rotateCredential = useRotateNodeCredential();
   const [pairing, setPairing] = useState<NodePairingSessionResponse | null>(
     null,
   );
+  const [rotation, setRotation] =
+    useState<NodeCredentialRotateResponse | null>(null);
   const [bundleNodeId, setBundleNodeId] = useState<string | null>(null);
   const supportBundle = useDeploymentSupportBundle(bundleNodeId);
 
@@ -39,6 +46,17 @@ export function DeploymentPage() {
       requested_ttl_seconds: 300,
     });
     setPairing(result);
+  }
+
+  async function handleRotateNode(node: DeploymentNode) {
+    const confirmed = window.confirm(
+      `Rotate credentials for ${node.hostname}? Connected supervisors must pick up the new credential before they can poll or report again.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+    const result = await rotateCredential.mutateAsync(node.id);
+    setRotation(result);
   }
 
   if (nodes.isLoading) {
@@ -78,6 +96,7 @@ export function DeploymentPage() {
       />
 
       {pairing ? <PairingNotice pairing={pairing} /> : null}
+      {rotation ? <CredentialRotationNotice rotation={rotation} /> : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <WorkspaceSurface className="p-4">
@@ -145,6 +164,14 @@ export function DeploymentPage() {
                         </Button>
                         <Button
                           type="button"
+                          disabled={rotateCredential.isPending}
+                          onClick={() => void handleRotateNode(node)}
+                        >
+                          <RotateCcw className="mr-2 size-4" />
+                          Rotate credential
+                        </Button>
+                        <Button
+                          type="button"
                           onClick={() => setBundleNodeId(node.id)}
                         >
                           <Wrench className="mr-2 size-4" />
@@ -165,6 +192,37 @@ export function DeploymentPage() {
         />
       </section>
     </div>
+  );
+}
+
+function CredentialRotationNotice({
+  rotation,
+}: {
+  rotation: NodeCredentialRotateResponse;
+}) {
+  return (
+    <WorkspaceSurface className="border-[rgba(245,196,106,0.28)] bg-[rgba(42,31,10,0.72)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-100">
+            <AlertTriangle className="size-4" />
+            <h2>Credential material shown once</h2>
+          </div>
+          <p className="mt-2 text-sm text-amber-100/80">
+            Connected supervisors must pick up this rotated credential before
+            they can poll lifecycle requests or report service health again.
+          </p>
+          <p className="mt-1 text-xs text-amber-100/70">
+            Version {rotation.credential_version}; revoked{" "}
+            {rotation.revoked_credentials} old{" "}
+            {rotation.revoked_credentials === 1 ? "credential" : "credentials"}.
+          </p>
+        </div>
+        <code className="max-w-full overflow-auto rounded-[0.6rem] border border-amber-200/30 bg-black/35 px-3 py-2 text-sm font-semibold text-amber-50">
+          {rotation.credential_material}
+        </code>
+      </div>
+    </WorkspaceSurface>
   );
 }
 

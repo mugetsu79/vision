@@ -64,9 +64,13 @@ paths, for example:
 The pairing claim writes the credential to that local store with owner-only
 permissions. Service units, launch daemons, and production Compose services
 reference the config and credential location; they do not embed access tokens.
-Revoking node credentials marks all active credentials for that node as revoked,
-records a credential event, and blocks future supervisor
-authentication with the old material.
+Rotating node credentials from Control -> Deployment revokes the old credential
+version, creates the next node credential version, and returns the replacement
+material only once. Write that material through the local credential store and
+reload or restart the supervisor service; connected supervisors cannot poll or
+report with the old material after rotation. Revoking node credentials marks all
+active credentials for that node as revoked, records a credential event, and
+blocks future supervisor authentication with the old material.
 
 Local development can still start workers from a shell, or run the pilot
 supervisor when you want Operations lifecycle buttons to reconcile a direct
@@ -141,6 +145,8 @@ Before calling a deployment production-ready, verify that the following are impl
   material for every production node
 - node-bound supervisor credentials with rotation, revocation, and no long-lived
   bearer tokens embedded in service definitions
+- credential rotation runbook tested for central and edge supervisors, including
+  local credential-store pickup after the one-time response
 - per-worker heartbeat with camera id, status, freshness, restart count, and last error
 - regular hardware capability/performance reports from each supervisor
 - model-admission checks before production Start or Restart

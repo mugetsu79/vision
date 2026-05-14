@@ -9,6 +9,7 @@ from argus.api.contracts import (
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
     NodeCredentialRevokeResponse,
+    NodeCredentialRotateResponse,
     NodePairingClaim,
     NodePairingClaimResponse,
     NodePairingSessionCreate,
@@ -111,6 +112,26 @@ async def revoke_node_credentials(
 ) -> NodeCredentialRevokeResponse:
     try:
         return await services.deployment.revoke_node_credentials(
+            tenant_id=tenant_context.tenant_id,
+            node_id=node_id,
+            actor_subject=current_user.subject,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.post(
+    "/nodes/{node_id}/credentials/rotate",
+    response_model=NodeCredentialRotateResponse,
+)
+async def rotate_node_credentials(
+    node_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> NodeCredentialRotateResponse:
+    try:
+        return await services.deployment.rotate_node_credentials(
             tenant_id=tenant_context.tenant_id,
             node_id=node_id,
             actor_subject=current_user.subject,
