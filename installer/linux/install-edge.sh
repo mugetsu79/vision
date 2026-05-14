@@ -119,9 +119,8 @@ run install -d -m 0755 \
   "$CONFIG_DIR/mediamtx" \
   "$DATA_DIR" \
   /var/log/vezor \
-  /run/vezor \
-  /run/vezor/credentials
-run install -d -m 0755 "$MODEL_DIR" "$DATA_DIR/edge" "$DATA_DIR/mediamtx"
+  /run/vezor
+run install -d -m 0755 "$MODEL_DIR" "$DATA_DIR/edge" "$DATA_DIR/mediamtx" "$DATA_DIR/credentials"
 
 run install -m 0644 "$RELEASE_DIR/infra/mediamtx/mediamtx.yml" "$CONFIG_DIR/mediamtx/mediamtx.yml"
 
@@ -132,6 +131,7 @@ else
   cat > "$EDGE_ENV" <<ENV
 VEZOR_MEDIAMTX_IMAGE=bluenviron/mediamtx:latest
 VEZOR_SUPERVISOR_IMAGE=ghcr.io/vezor/supervisor:dev
+VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
 ENV
 fi
 
@@ -171,7 +171,7 @@ if [[ "$UNPAIRED" -eq 0 ]]; then
     --supervisor-id "$EDGE_NAME" \
     --hostname "$(hostname)" \
     --config "$SUPERVISOR_CONFIG" \
-    --credential-path /run/vezor/credentials/supervisor.credential
+    --credential-path "$DATA_DIR/credentials/supervisor.credential"
 fi
 
 run install -m 0644 \

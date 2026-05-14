@@ -44,8 +44,10 @@ def test_edge_install_script_accepts_pairing_and_unpaired_modes() -> None:
     assert "/etc/vezor/supervisor.json" in script
     assert "$CONFIG_DIR/edge.env" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
+    assert "$DATA_DIR/credentials" in script
+    assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert "--supervisor-id" in script
-    assert "--credential-path /run/vezor/credentials/supervisor.credential" in script
+    assert '--credential-path "$DATA_DIR/credentials/supervisor.credential"' in script
     assert "systemctl enable vezor-edge.service" in script
     assert "systemctl start vezor-edge.service" in script
 
@@ -68,7 +70,10 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
     assert "${VEZOR_MEDIAMTX_IMAGE:?set VEZOR_MEDIAMTX_IMAGE}" in compose
     assert "/etc/vezor/edge.json:/etc/vezor/edge.json:ro" in compose
     assert "/etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro" in compose
-    assert "/run/vezor/credentials:/run/vezor/credentials:ro" in compose
+    assert (
+        "${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}"
+        ":/run/vezor/credentials:ro"
+    ) in compose
 
 
 def test_jetson_preflight_supports_installer_json_mode() -> None:

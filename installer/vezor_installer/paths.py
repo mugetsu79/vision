@@ -14,5 +14,5 @@ LAUNCHD_DAEMON_DIR = Path("/Library/LaunchDaemons")
 MASTER_CONFIG = CONFIG_DIR / "master.json"
 EDGE_CONFIG = CONFIG_DIR / "edge.json"
 SUPERVISOR_CONFIG = CONFIG_DIR / "supervisor.json"
-SUPERVISOR_CREDENTIAL = CONFIG_DIR / "supervisor.credential"
+SUPERVISOR_CREDENTIAL = DATA_DIR / "credentials" / "supervisor.credential"
 BOOTSTRAP_DIR = DATA_DIR / "bootstrap"

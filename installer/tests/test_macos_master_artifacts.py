@@ -54,6 +54,9 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "$CONFIG_DIR/secrets/postgres_password" in script
     assert "$CONFIG_DIR/nats/nats.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
+    assert "$DATA_DIR/credentials" in script
+    assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert "  /run/vezor" not in script
 
 
 def test_macos_installer_exposes_safe_install_options() -> None:

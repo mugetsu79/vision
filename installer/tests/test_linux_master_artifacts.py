@@ -56,6 +56,10 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "/var/lib/vezor/minio:/data" in compose
     assert "/etc/vezor/master.json:/etc/vezor/master.json:ro" in compose
     assert "/etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro" in compose
+    assert (
+        "${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}"
+        ":/run/vezor/credentials:ro"
+    ) in compose
 
 
 def test_linux_master_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
@@ -89,6 +93,8 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "$CONFIG_DIR/secrets/postgres_password" in script
     assert "$CONFIG_DIR/nats/nats.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
+    assert "$DATA_DIR/credentials" in script
+    assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert "manifest_image_ref backend" in script
 
 

@@ -494,8 +494,11 @@ On the master host:
   --pairing-code "PAIRING_CODE" \
   --supervisor-id "central-master-1" \
   --hostname "$(hostname)" \
-  --credential-path /run/vezor/credentials/supervisor.credential
+  --credential-path /var/lib/vezor/credentials/supervisor.credential
 ```
+
+The host stores the credential under `/var/lib/vezor/credentials`; the product
+containers see that same directory mounted read-only as `/run/vezor/credentials`.
 
 Restart the master service:
 

@@ -163,9 +163,7 @@ run install -d -m 0755 \
   "$CONFIG_DIR/nats" \
   "$CONFIG_DIR/mediamtx" \
   "$DATA_DIR" \
-  /var/log/vezor \
-  /run/vezor \
-  /run/vezor/credentials
+  /var/log/vezor
 run install -d -m 0755 \
   "$DATA_DIR/postgres" \
   "$DATA_DIR/redis" \
@@ -173,6 +171,7 @@ run install -d -m 0755 \
   "$DATA_DIR/minio" \
   "$DATA_DIR/mediamtx" \
   "$DATA_DIR/models" \
+  "$DATA_DIR/credentials" \
   "$DATA_DIR/evidence" \
   "$DATA_DIR/bootstrap"
 
@@ -199,6 +198,7 @@ VEZOR_MEDIAMTX_IMAGE=$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)
 VEZOR_BACKEND_IMAGE=$(manifest_image_ref backend ghcr.io/vezor/backend:dev)
 VEZOR_FRONTEND_IMAGE=$(manifest_image_ref frontend ghcr.io/vezor/frontend:dev)
 VEZOR_SUPERVISOR_IMAGE=$(manifest_image_ref supervisor ghcr.io/vezor/supervisor:dev)
+VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
 VEZOR_PUBLIC_FRONTEND_URL=$PUBLIC_URL
 VEZOR_PUBLIC_API_BASE_URL=${PUBLIC_URL%:*}:8000
 VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/vezor
