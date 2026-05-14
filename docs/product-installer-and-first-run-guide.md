@@ -371,7 +371,12 @@ secrets, NATS config, MediaMTX config, and central supervisor config under
 `/etc/vezor`, builds the dev images when using the dev manifest, starts the
 containers synchronously, then registers `com.vezor.master` through launchd for
 future boots. On macOS the secret files are kept at `root:staff 0640` so Docker
-Desktop can mount them into the appliance containers.
+Desktop can mount them into the appliance containers. The installer also
+repairs Docker-writable state directories such as `/var/lib/vezor/postgres`,
+`/var/lib/vezor/redis`, `/var/lib/vezor/nats`, and `/var/lib/vezor/minio` so
+they are owned by the invoking macOS console user. This is required because
+Docker Desktop containers cannot reliably initialize databases, object storage,
+or JetStream state under root-owned macOS bind mounts.
 
 Validate service state:
 
@@ -1138,6 +1143,22 @@ The host stores:
 
 Fix the model row if it points to `$HOME/vision/models/...` in an installed
 deployment.
+
+### macOS install stops on an unhealthy Postgres container
+
+If the installer prints `dependency failed to start: container
+vezor-master-postgres-1 is unhealthy`, inspect the container log:
+
+```bash
+docker logs vezor-master-postgres-1 --tail 80
+```
+
+When the log contains `chmod` or `chown` permission errors under
+`/var/lib/postgresql/data`, the host data directory was prepared in a way Docker
+Desktop cannot write through. Pull the latest `codex/omnisight-installer`
+branch and rerun the macOS installer. The installer stops the partial appliance
+and repairs ownership for the Docker-writable state directories automatically.
+Do not replace this with a development-stack compose flow.
 
 ### The Jetson says the TensorRT engine is invalid
 

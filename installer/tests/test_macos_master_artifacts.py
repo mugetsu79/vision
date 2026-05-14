@@ -84,6 +84,32 @@ def test_macos_installer_makes_secrets_readable_by_docker_desktop() -> None:
     assert 'prepare_secret_for_docker_desktop "$path"' in script
 
 
+def test_macos_installer_repairs_docker_desktop_writable_state_directories() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "docker_desktop_host_user" in script
+    assert '${SUDO_USER:-}' in script
+    assert 'stat -f "%Su" /dev/console' in script
+    assert "prepare_data_dir_for_docker_desktop" in script
+    assert 'chown -R "$owner:$group" "$path"' in script
+    assert 'chmod -R u+rwX "$path"' in script
+    assert "Docker Desktop-writable data permissions" in script
+
+    for data_path in (
+        "$DATA_DIR/postgres",
+        "$DATA_DIR/redis",
+        "$DATA_DIR/nats",
+        "$DATA_DIR/minio",
+        "$DATA_DIR/mediamtx",
+        "$DATA_DIR/credentials",
+        "$DATA_DIR/evidence",
+        "$DATA_DIR/bootstrap",
+    ):
+        assert f'  "{data_path}" \\' in script
+
+    assert 'prepare_data_dir_for_docker_desktop "$docker_data_dir"' in script
+
+
 def test_macos_installer_exposes_safe_install_options() -> None:
     script = _read(INSTALL_SCRIPT)
 

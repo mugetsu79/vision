@@ -109,6 +109,42 @@ prepare_secret_for_docker_desktop() {
   chmod 0640 "$path"
 }
 
+docker_desktop_host_user() {
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER:-}" != "root" ]]; then
+    printf '%s\n' "$SUDO_USER"
+    return 0
+  fi
+
+  stat -f "%Su" /dev/console
+}
+
+docker_desktop_host_group() {
+  local owner="$1"
+
+  id -gn "$owner" 2>/dev/null || printf 'staff\n'
+}
+
+prepare_data_dir_for_docker_desktop() {
+  local path="$1"
+  local owner
+  local group
+
+  owner="$(docker_desktop_host_user)"
+  if [[ -z "$owner" || "$owner" == "root" ]]; then
+    echo "Unable to determine the macOS console user for Docker Desktop data directory ownership." >&2
+    exit 1
+  fi
+  group="$(docker_desktop_host_group "$owner")"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] set Docker Desktop-writable data permissions $path for $owner:$group"
+    return 0
+  fi
+
+  chown -R "$owner:$group" "$path"
+  chmod -R u+rwX "$path"
+}
+
 write_secret_if_missing() {
   local path="$1"
   local value="${2:-}"
@@ -293,7 +329,8 @@ run install -d -m 0755 \
   "$CONFIG_DIR/nats" \
   "$CONFIG_DIR/mediamtx" \
   "$DATA_DIR" \
-  /var/log/vezor
+  /var/log/vezor \
+  /var/log/vezor/backend
 run install -d -m 0755 \
   "$DATA_DIR/postgres" \
   "$DATA_DIR/redis" \
@@ -304,6 +341,20 @@ run install -d -m 0755 \
   "$DATA_DIR/credentials" \
   "$DATA_DIR/evidence" \
   "$DATA_DIR/bootstrap"
+
+for docker_data_dir in \
+  "$DATA_DIR/postgres" \
+  "$DATA_DIR/redis" \
+  "$DATA_DIR/nats" \
+  "$DATA_DIR/minio" \
+  "$DATA_DIR/mediamtx" \
+  "$DATA_DIR/credentials" \
+  "$DATA_DIR/evidence" \
+  "$DATA_DIR/bootstrap" \
+  /var/log/vezor/backend
+do
+  prepare_data_dir_for_docker_desktop "$docker_data_dir"
+done
 
 write_secret_if_missing "$CONFIG_DIR/secrets/postgres_password"
 write_backend_db_url_secret
