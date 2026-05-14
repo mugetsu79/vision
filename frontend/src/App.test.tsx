@@ -21,6 +21,13 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
+vi.mock("@/hooks/use-bootstrap", () => ({
+  useBootstrapStatus: () => ({
+    data: { first_run_required: false },
+    isLoading: false,
+  }),
+}));
+
 describe("App", () => {
   test("renders the branded sign-in entry point for anonymous users", async () => {
     vi.resetModules();

@@ -12,6 +12,13 @@ vi.mock("@/lib/auth", () => ({
   },
 }));
 
+vi.mock("@/hooks/use-bootstrap", () => ({
+  useBootstrapStatus: () => ({
+    data: { first_run_required: false },
+    isLoading: false,
+  }),
+}));
+
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuthStore } from "@/stores/auth-store";
 

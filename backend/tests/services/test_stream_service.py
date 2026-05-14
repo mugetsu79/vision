@@ -32,11 +32,29 @@ class _DummyNegotiator:
         return None
 
 
+class _DummyScalars:
+    def all(self) -> list[object]:
+        return []
+
+
+class _DummyResult:
+    def scalars(self) -> _DummyScalars:
+        return _DummyScalars()
+
+
+class _DummySession:
+    async def execute(self, query: object) -> _DummyResult:
+        return _DummyResult()
+
+    async def get(self, model: object, key: object) -> None:
+        return None
+
+
 class _DummySessionFactory:
     def __call__(self):
         @asynccontextmanager
         async def _session_context():
-            yield object()
+            yield _DummySession()
 
         return _session_context()
 

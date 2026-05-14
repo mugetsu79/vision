@@ -6,7 +6,7 @@ services:
       args:
         JETSON_ORT_WHEEL_URL: ${JETSON_ORT_WHEEL_URL:-}
     image: ghcr.io/mugetsu79/vision/argus-edge:${ARGUS_EDGE_TAG:-local}
-    command: ["--camera-id", "${ARGUS_EDGE_CAMERA_ID:-}"]
+    command: ["--camera-id", "${ARGUS_EDGE_CAMERA_ID:?Set ARGUS_EDGE_CAMERA_ID to the camera id assigned to this edge worker}"]
     environment:
       ARGUS_API_BASE_URL: "${ARGUS_API_BASE_URL:?Set ARGUS_API_BASE_URL to the iMac/master API URL, for example http://192.168.1.20:8000}"
       ARGUS_API_BEARER_TOKEN: "${ARGUS_API_BEARER_TOKEN:?Set ARGUS_API_BEARER_TOKEN to a fresh access token for the master API}"
