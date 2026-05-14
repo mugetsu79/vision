@@ -1,0 +1,24 @@
+[Unit]
+Description=Vezor Master Appliance
+Documentation=file:/opt/vezor/current/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/vezor/current
+Environment=VEZOR_MASTER_CONFIG=/etc/vezor/master.json
+Environment=VEZOR_MASTER_COMPOSE=/opt/vezor/current/infra/install/compose/compose.master.yml
+ExecStart=/opt/vezor/current/bin/vezor-master up --config /etc/vezor/master.json
+ExecStop=/opt/vezor/current/bin/vezor-master down --config /etc/vezor/master.json
+TimeoutStartSec=300
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=10s
+StateDirectory=vezor
+LogsDirectory=vezor
+RuntimeDirectory=vezor
+
+[Install]
+WantedBy=multi-user.target
