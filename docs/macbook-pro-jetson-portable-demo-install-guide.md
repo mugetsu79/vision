@@ -14,6 +14,10 @@ branch; keep the Docker dev commands in this guide as development fallback and
 break-glass material only. Task 24 DeepStream is intentionally deferred; keep
 WebGL and DeepStream off for this validation path.
 
+For the installer-specific companion guide, including Linux master install
+steps and package-wrapper caveats, see
+[omnisight-installer-macbook-pro-jetson-install-guide.md](/Users/yann.moren/vision/docs/omnisight-installer-macbook-pro-jetson-install-guide.md).
+
 ## What This Setup Proves
 
 This portable setup proves:
@@ -121,6 +125,216 @@ Fill these values in before starting commands:
 | Primary model filename | `yolo26n.onnx` |
 | Open-vocab model filename | `yoloe-26n-seg.pt` |
 | Jetson supervisor id | `jetson-portable-1` |
+
+## Model Files And Formats
+
+Do this before installing or starting services. The demo is much easier when
+the MacBook and Jetson already have the same model inventory and you have
+verified the exact paths each runtime will see.
+
+### What Vezor Expects
+
+| File | Required | Runtime role | Register as camera model? |
+|---|---:|---|---|
+| `models/yolo26n.onnx` | yes | fixed-vocab COCO detector | yes |
+| `models/yolo26s.onnx` | optional | higher-quality fixed-vocab COCO detector | yes |
+| `models/yolo11n.onnx` | optional | stable fixed-vocab fallback | yes |
+| `models/yolo11s.onnx` | optional | stable balanced fallback | yes |
+| `models/yolo12n.onnx` | optional | older lab compatibility fallback | yes |
+| `models/yoloe-26n-seg.pt` | optional | open-vocab discovery model | yes |
+| `models/yoloe-26s-seg.pt` | optional | higher-quality open-vocab discovery model | yes |
+| `models/yolov8s-worldv2.pt` | optional | smaller open-vocab fallback | yes |
+| `models/yolo26n.jetson.fp16.engine` | optional | Jetson TensorRT runtime artifact | no |
+
+Register portable camera models first: ONNX for fixed vocabulary and `.pt` for
+open vocabulary. A TensorRT `.engine` is not a normal camera model. It is a
+target-specific runtime artifact attached to an ONNX model after the ONNX row
+exists.
+
+### Where To Get The Weights
+
+Use official Ultralytics weight names and let the `ultralytics` package
+download them, or download the same files from the Ultralytics model pages and
+place them under `models/`.
+
+Reference pages:
+
+- Ultralytics export guide:
+  `https://docs.ultralytics.com/modes/export/`
+- Ultralytics YOLOE guide:
+  `https://docs.ultralytics.com/models/yoloe/`
+- Ultralytics YOLO-World guide:
+  `https://docs.ultralytics.com/models/yolo-world/`
+- NVIDIA TensorRT command-line tools:
+  `https://docs.nvidia.com/deeplearning/tensorrt/latest/reference/command-line-programs.html`
+- NVIDIA JetPack installation:
+  `https://docs.nvidia.com/jetson/jetpack/install-setup/`
+
+Use a local Python environment with Ultralytics installed. For a quick export
+workspace on the MacBook:
+
+```bash
+cd "$HOME/vision"
+mkdir -p models
+python3 -m venv .venv-model-export
+source .venv-model-export/bin/activate
+python -m pip install --upgrade pip
+python -m pip install "ultralytics>=8.0" onnx onnxruntime onnxsim
+```
+
+If your backend `.venv` already has the vision/model-metadata dependencies, you
+can use that instead:
+
+```bash
+cd "$HOME/vision/backend"
+python3 -m uv sync --group runtime --group dev --group model-metadata --group vision
+```
+
+### Produce Fixed-Vocab ONNX Models
+
+Run these commands from the checkout root on the MacBook. The first command in
+each block downloads the official `.pt` file if it is not already cached; the
+export command writes the ONNX model that Vezor should register.
+
+```bash
+cd "$HOME/vision"
+python - <<'PY'
+from pathlib import Path
+from ultralytics import YOLO
+
+Path("models").mkdir(exist_ok=True)
+for name in ("yolo26n", "yolo26s", "yolo11n", "yolo11s", "yolo12n"):
+    try:
+        model = YOLO(f"{name}.pt")
+        output = Path(model.export(format="onnx", imgsz=640, simplify=True, opset=17))
+        target = Path("models") / f"{name}.onnx"
+        output.replace(target)
+        print(f"wrote {target}")
+    except Exception as exc:
+        print(f"skipped {name}: {exc}")
+PY
+```
+
+At minimum, confirm:
+
+```bash
+ls -lh "$HOME/vision/models/yolo26n.onnx"
+```
+
+Use `yolo26n.onnx` for the first Jetson camera because it is the smallest and
+most forgiving path. Move to `yolo26s.onnx` only after the first camera is
+stable.
+
+### Download Open-Vocab PT Models
+
+Open-vocab models remain `.pt` in the current path because Vezor uses them for
+dynamic runtime vocabulary while you are still choosing terms. Keep the
+original `.pt` files:
+
+```bash
+cd "$HOME/vision"
+python - <<'PY'
+from pathlib import Path
+from shutil import copy2
+from ultralytics import YOLO, YOLOWorld
+
+Path("models").mkdir(exist_ok=True)
+
+for name in ("yoloe-26n-seg.pt", "yoloe-26s-seg.pt"):
+    try:
+        YOLO(name)
+        copy2(name, Path("models") / name)
+        print(f"wrote models/{name}")
+    except Exception as exc:
+        print(f"skipped {name}: {exc}")
+
+try:
+    YOLOWorld("yolov8s-worldv2.pt")
+    copy2("yolov8s-worldv2.pt", "models/yolov8s-worldv2.pt")
+    print("wrote models/yolov8s-worldv2.pt")
+except Exception as exc:
+    print(f"skipped yolov8s-worldv2.pt: {exc}")
+PY
+```
+
+Open-vocab is optional for the portable demo. If you need the most reliable
+demo, use fixed-vocab ONNX first and add open-vocab only after Live, History,
+Evidence, and Operations are stable.
+
+### Produce A Jetson TensorRT Engine
+
+Build TensorRT engines on the Jetson that will run them, or on an identical
+JetPack/TensorRT/CUDA stack. Do not build an engine on the MacBook and expect
+it to run on the Jetson.
+
+First copy the ONNX source to the Jetson:
+
+```bash
+rsync -av "$HOME/vision/models/yolo26n.onnx" jetson-portable-1:"$HOME/vision/models/"
+```
+
+Then on the Jetson, use one of these paths.
+
+Ultralytics export:
+
+```bash
+cd "$HOME/vision"
+source .venv-model-export/bin/activate 2>/dev/null || true
+python - <<'PY'
+from pathlib import Path
+from ultralytics import YOLO
+
+model = YOLO("models/yolo26n.onnx")
+output = Path(model.export(format="engine", imgsz=640, half=True, device=0))
+target = Path("models/yolo26n.jetson.fp16.engine")
+output.replace(target)
+print(f"wrote {target}")
+PY
+```
+
+TensorRT `trtexec` fallback:
+
+```bash
+trtexec \
+  --onnx="$HOME/vision/models/yolo26n.onnx" \
+  --saveEngine="$HOME/vision/models/yolo26n.jetson.fp16.engine" \
+  --fp16 \
+  --shapes=images:1x3x640x640
+```
+
+After building, keep all three files if you plan to validate runtime artifacts:
+
+```text
+$HOME/vision/models/yolo26n.onnx
+$HOME/vision/models/yolo26n.pt
+$HOME/vision/models/yolo26n.jetson.fp16.engine
+```
+
+The camera still selects the ONNX model row. The `.engine` is registered later
+as a runtime artifact and selected only when the target profile, validation
+status, and model admission allow it.
+
+### Copy Models To Both Machines
+
+For the manual dev path, both machines use the checkout `models/` directory:
+
+```bash
+cd "$HOME/vision"
+rsync -av models/ jetson-portable-1:"$HOME/vision/models/"
+```
+
+For the installer path, copy the same files into the product data directory on
+each host:
+
+```bash
+sudo install -d -m 0755 /var/lib/vezor/models
+sudo rsync -av "$HOME/vision/models/" /var/lib/vezor/models/
+sudo chmod -R a+rX /var/lib/vezor/models
+```
+
+The installed backend and supervisor containers see those files as
+`/models/<filename>`. Register installed-product model rows with `/models/...`
+paths, not `$HOME/vision/models/...` paths.
 
 ## 1. Prepare The MacBook
 

@@ -6,6 +6,10 @@ Use this guide for the installer-managed product path on:
 - a macOS master for portable MacBook Pro pilot and demo systems
 - a Jetson Orin edge node for site-local inference
 
+For the full MacBook Pro/Linux master + Jetson installer checklist, model
+download/export steps, and current branch-validation caveats, use
+[omnisight-installer-macbook-pro-jetson-install-guide.md](/Users/yann.moren/vision/docs/omnisight-installer-macbook-pro-jetson-install-guide.md).
+
 The normal installed product flow is:
 
 1. install the local service package on each host
