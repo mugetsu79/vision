@@ -97,13 +97,41 @@ PY
   exit 1
 }
 
+prepare_secret_for_docker_desktop() {
+  local path="$1"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] set Docker Desktop-readable secret permissions $path"
+    return 0
+  fi
+
+  chgrp staff "$path"
+  chmod 0640 "$path"
+}
+
 write_secret_if_missing() {
   local path="$1"
   local value="${2:-}"
 
   if [[ -f "$path" ]]; then
+    prepare_secret_for_docker_desktop "$path"
     return 0
   fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] write secret $path"
+    return 0
+  fi
+
+  if [[ -z "$value" ]]; then
+    value="$(random_secret)"
+  fi
+  write_secret "$path" "$value"
+}
+
+write_secret() {
+  local path="$1"
+  local value="$2"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "[dry-run] write secret $path"
@@ -113,11 +141,23 @@ write_secret_if_missing() {
   local old_umask
   old_umask="$(umask)"
   umask 077
-  if [[ -z "$value" ]]; then
-    value="$(random_secret)"
-  fi
   printf '%s\n' "$value" > "$path"
   umask "$old_umask"
+  prepare_secret_for_docker_desktop "$path"
+}
+
+write_backend_db_url_secret() {
+  local postgres_password
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    postgres_password="dry-run-postgres-password"
+  else
+    postgres_password="$(tr -d '\r\n' < "$CONFIG_DIR/secrets/postgres_password")"
+  fi
+
+  write_secret \
+    "$CONFIG_DIR/secrets/backend_db_url" \
+    "postgresql+asyncpg://${VEZOR_POSTGRES_USER:-argus}:${postgres_password}@postgres:5432/${VEZOR_POSTGRES_DB:-argus}"
 }
 
 manifest_image_ref() {
@@ -172,6 +212,11 @@ build_local_master_images() {
     run docker tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"
   fi
   run docker build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE" /opt/vezor/current/frontend
+}
+
+start_local_master_containers() {
+  echo "Starting local Vezor master containers..."
+  run /opt/vezor/current/bin/vezor-master up --config "$MASTER_CONFIG"
 }
 
 stop_existing_master() {
@@ -261,6 +306,7 @@ run install -d -m 0755 \
   "$DATA_DIR/bootstrap"
 
 write_secret_if_missing "$CONFIG_DIR/secrets/postgres_password"
+write_backend_db_url_secret
 write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_user" "vezor-minio"
 write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_password"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_username" "admin"
@@ -333,6 +379,7 @@ JSON
 fi
 
 build_local_master_images
+start_local_master_containers
 
 run install -m 0644 \
   /opt/vezor/current/infra/install/launchd/com.vezor.master.plist \

@@ -360,14 +360,18 @@ Expected high-level output:
 ```text
 Building local Vezor master images for dev manifest...
 ...
+Starting local Vezor master containers...
+...
 Vezor macOS master install complete.
 Open the first-run UI: http://127.0.0.1:3000/first-run
 ```
 
 The installer creates the local service config, image env file, generated
 secrets, NATS config, MediaMTX config, and central supervisor config under
-`/etc/vezor`, builds the dev images when using the dev manifest, then starts
-`com.vezor.master` through launchd.
+`/etc/vezor`, builds the dev images when using the dev manifest, starts the
+containers synchronously, then registers `com.vezor.master` through launchd for
+future boots. On macOS the secret files are kept at `root:staff 0640` so Docker
+Desktop can mount them into the appliance containers.
 
 Validate service state:
 
@@ -391,6 +395,10 @@ tail -160 /var/log/vezor/master.log
 `pull access denied` or `403 Forbidden` for `ghcr.io/vezor/*` means the install
 tree is stale; pull the latest `codex/omnisight-installer` branch and rerun the
 installer so the dev manifest uses locally built images.
+
+`invalid mount config ... /private/etc/vezor/secrets/... permission denied`
+also means the install tree is stale; the current macOS installer repairs
+existing secret file ownership and mode before starting containers.
 
 Open:
 

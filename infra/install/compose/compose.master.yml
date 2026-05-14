@@ -3,6 +3,8 @@ name: vezor-master
 secrets:
   postgres_password:
     file: /etc/vezor/secrets/postgres_password
+  backend_db_url:
+    file: /etc/vezor/secrets/backend_db_url
   minio_root_user:
     file: /etc/vezor/secrets/minio_root_user
   minio_root_password:
@@ -128,7 +130,6 @@ services:
     env_file:
       - ${VEZOR_MASTER_ENV_FILE:-/etc/vezor/master.env}
     environment:
-      ARGUS_DB_URL: postgresql+asyncpg://${VEZOR_POSTGRES_USER:-argus}:$${VEZOR_POSTGRES_PASSWORD}@postgres:5432/${VEZOR_POSTGRES_DB:-argus}
       ARGUS_REDIS_URL: redis://redis:6379/0
       ARGUS_NATS_URL: nats://nats:4222
       ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
@@ -152,6 +153,12 @@ services:
       - /var/lib/vezor/evidence:/var/lib/vezor/evidence
       - /var/log/vezor/backend:/var/log/vezor/backend
     secrets:
+      - source: backend_db_url
+        target: ARGUS_DB_URL
+      - source: minio_root_user
+        target: ARGUS_MINIO_ACCESS_KEY
+      - source: minio_root_password
+        target: ARGUS_MINIO_SECRET_KEY
       - source: keycloak_admin_username
         target: ARGUS_KEYCLOAK_ADMIN_USERNAME
       - source: keycloak_admin_password

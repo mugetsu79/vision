@@ -62,6 +62,11 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     ) in compose
     assert "ARGUS_KEYCLOAK_ISSUER" in compose
     assert "ARGUS_KEYCLOAK_FRONTEND_CLIENT_ID" in compose
+    assert "backend_db_url:" in compose
+    assert "target: ARGUS_DB_URL" in compose
+    assert "target: ARGUS_MINIO_ACCESS_KEY" in compose
+    assert "target: ARGUS_MINIO_SECRET_KEY" in compose
+    assert "ARGUS_DB_URL: postgresql" not in compose
     assert "target: ARGUS_KEYCLOAK_ADMIN_USERNAME" in compose
     assert "target: ARGUS_KEYCLOAK_ADMIN_PASSWORD" in compose
 
@@ -105,6 +110,8 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "$CONFIG_DIR/master.env" in script
     assert "$CONFIG_DIR/supervisor.json" in script
     assert "$CONFIG_DIR/secrets/postgres_password" in script
+    assert "$CONFIG_DIR/secrets/backend_db_url" in script
+    assert "write_backend_db_url_secret" in script
     assert "$CONFIG_DIR/nats/nats.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script

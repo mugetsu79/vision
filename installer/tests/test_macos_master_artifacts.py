@@ -61,6 +61,8 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "$CONFIG_DIR/master.env" in script
     assert "$CONFIG_DIR/supervisor.json" in script
     assert "$CONFIG_DIR/secrets/postgres_password" in script
+    assert "$CONFIG_DIR/secrets/backend_db_url" in script
+    assert "write_backend_db_url_secret" in script
     assert "$CONFIG_DIR/nats/nats.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
@@ -71,6 +73,15 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "  /run/vezor" not in script
     assert 'chmod 0644 "$MASTER_ENV"' in script
     assert 'old_umask="$(umask)"' in script
+
+
+def test_macos_installer_makes_secrets_readable_by_docker_desktop() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "prepare_secret_for_docker_desktop" in script
+    assert 'chgrp staff "$path"' in script
+    assert 'chmod 0640 "$path"' in script
+    assert 'prepare_secret_for_docker_desktop "$path"' in script
 
 
 def test_macos_installer_exposes_safe_install_options() -> None:
@@ -100,6 +111,14 @@ def test_macos_dev_installer_builds_local_master_images_before_launchd_start() -
     assert 'docker build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE"' in script
     assert 'docker tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"' in script
     assert "build_local_master_images" in script.split("run launchctl bootstrap system")[0]
+
+
+def test_macos_installer_starts_master_synchronously_before_launchd_registration() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "start_local_master_containers" in script
+    assert 'run /opt/vezor/current/bin/vezor-master up --config "$MASTER_CONFIG"' in script
+    assert "start_local_master_containers" in script.split("run launchctl bootstrap system")[0]
 
 
 def test_macos_uninstall_preserves_data_unless_explicitly_confirmed() -> None:

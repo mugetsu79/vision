@@ -111,14 +111,40 @@ write_secret_if_missing() {
     return 0
   fi
 
-  local old_umask
-  old_umask="$(umask)"
-  umask 077
   if [[ -z "$value" ]]; then
     value="$(random_secret)"
   fi
+  write_secret "$path" "$value"
+}
+
+write_secret() {
+  local path="$1"
+  local value="$2"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] write secret $path"
+    return 0
+  fi
+
+  local old_umask
+  old_umask="$(umask)"
+  umask 077
   printf '%s\n' "$value" > "$path"
   umask "$old_umask"
+}
+
+write_backend_db_url_secret() {
+  local postgres_password
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    postgres_password="dry-run-postgres-password"
+  else
+    postgres_password="$(tr -d '\r\n' < "$CONFIG_DIR/secrets/postgres_password")"
+  fi
+
+  write_secret \
+    "$CONFIG_DIR/secrets/backend_db_url" \
+    "postgresql+asyncpg://${VEZOR_POSTGRES_USER:-argus}:${postgres_password}@postgres:5432/${VEZOR_POSTGRES_DB:-argus}"
 }
 
 manifest_image_ref() {
@@ -240,6 +266,7 @@ run install -d -m 0755 \
   "$DATA_DIR/bootstrap"
 
 write_secret_if_missing "$CONFIG_DIR/secrets/postgres_password"
+write_backend_db_url_secret
 write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_user" "vezor-minio"
 write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_password"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_username" "admin"
