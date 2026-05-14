@@ -333,7 +333,7 @@ installing so ports `3000`, `8000`, `8080`, `8554`, `8888`, `8889`, and `9000`
 belong to the installed appliance:
 
 ```bash
-docker compose -f infra/docker-compose.dev.yml down  # Development fallback cleanup
+echo "Development fallback cleanup" && docker compose -f infra/docker-compose.dev.yml down
 ```
 
 The macOS installer now refuses to continue when those ports are already

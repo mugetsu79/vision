@@ -150,9 +150,11 @@ stop_existing_master() {
 
 check_port_available() {
   local port="$1"
+  local port_owner=""
   if command -v lsof >/dev/null 2>&1 \
-    && lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    && port_owner="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null)"; then
     echo "Port $port is already in use." >&2
+    printf '%s\n' "$port_owner" >&2
     echo "Stop any development stack or other service using port $port, then rerun the installer." >&2
     exit 1
   fi
