@@ -11,6 +11,10 @@ from httpx import ASGITransport, AsyncClient
 from argus.api.contracts import (
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
+    MasterBootstrapComplete,
+    MasterBootstrapCompleteResponse,
+    MasterBootstrapRotateResponse,
+    MasterBootstrapStatusResponse,
     NodeCredentialRevokeResponse,
     NodeCredentialRotateResponse,
     NodePairingClaim,
@@ -82,6 +86,11 @@ class _FakeSecurity:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token issuer is not trusted.",
             )
+        if authorization == "Bearer vzboot_local_once":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Bootstrap tokens are not admin bearer tokens.",
+            )
         return self.user
 
 
@@ -93,6 +102,63 @@ class _FakeDeploymentService:
         self.revoked_node_id: UUID | None = None
         self.rotated_node_id: UUID | None = None
         self.tenant_id: UUID | None = None
+        self.bootstrap_complete_payload: MasterBootstrapComplete | None = None
+        self.bootstrap_rotate_actor_subject: str | None = None
+
+    async def get_master_bootstrap_status(self) -> MasterBootstrapStatusResponse:
+        return MasterBootstrapStatusResponse(
+            first_run_required=True,
+            has_active_local_token=True,
+            active_token_expires_at=datetime(2026, 5, 13, 9, 5, tzinfo=UTC),
+            completed_at=None,
+            tenant_slug=None,
+        )
+
+    async def rotate_local_bootstrap_token(
+        self,
+        *,
+        actor_subject: str | None,
+    ) -> MasterBootstrapRotateResponse:
+        self.bootstrap_rotate_actor_subject = actor_subject
+        return MasterBootstrapRotateResponse(
+            bootstrap_token="vzboot_local_once",
+            expires_at=datetime(2026, 5, 13, 9, 5, tzinfo=UTC),
+        )
+
+    async def complete_master_bootstrap(
+        self,
+        payload: MasterBootstrapComplete,
+    ) -> MasterBootstrapCompleteResponse:
+        self.bootstrap_complete_payload = payload
+        if payload.bootstrap_token != "vzboot_local_once":
+            raise ValueError("Invalid bootstrap token.")
+        tenant_id = UUID("00000000-0000-0000-0000-000000000920")
+        return MasterBootstrapCompleteResponse(
+            first_run_required=False,
+            tenant_id=tenant_id,
+            tenant_slug=payload.tenant_slug or "vezor-pilot",
+            admin_subject=f"bootstrap:{payload.admin_email}",
+            completed_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+            central_node=DeploymentNodeResponse(
+                id=UUID("00000000-0000-0000-0000-000000000921"),
+                tenant_id=tenant_id,
+                node_kind=DeploymentNodeKind.CENTRAL,
+                edge_node_id=None,
+                supervisor_id=payload.central_supervisor_id or "central-master",
+                hostname=payload.central_node_name,
+                install_status=DeploymentInstallStatus.INSTALLED,
+                credential_status=DeploymentCredentialStatus.MISSING,
+                service_manager=None,
+                service_status=None,
+                version=None,
+                os_name=None,
+                host_profile=None,
+                last_service_reported_at=None,
+                diagnostics={},
+                created_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+                updated_at=datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+            ),
+        )
 
     async def authenticate_supervisor_credential(
         self,
@@ -381,6 +447,91 @@ def _create_app(context: TenantContext, deployment: _FakeDeploymentService) -> F
     )
     app.state.security = _FakeSecurity(context.user)
     return app
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_status_route_is_unauthenticated_and_redacted() -> None:
+    context = _tenant_context()
+    app = _create_app(context, _FakeDeploymentService())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/deployment/bootstrap/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["first_run_required"] is True
+    assert body["has_active_local_token"] is True
+    assert "vzboot_" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_rotate_route_returns_one_time_local_token() -> None:
+    context = _tenant_context()
+    deployment = _FakeDeploymentService()
+    app = _create_app(context, deployment)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post("/api/v1/deployment/bootstrap/rotate-local-token")
+
+    assert response.status_code == 201
+    assert response.json()["bootstrap_token"] == "vzboot_local_once"
+    assert deployment.bootstrap_rotate_actor_subject == "local-bootstrap"
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_complete_route_consumes_local_token_without_admin_jwt() -> None:
+    context = _tenant_context()
+    deployment = _FakeDeploymentService()
+    app = _create_app(context, deployment)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/deployment/bootstrap/complete",
+            json={
+                "bootstrap_token": "vzboot_local_once",
+                "tenant_name": "Vezor Pilot",
+                "tenant_slug": "vezor-pilot",
+                "admin_email": "admin@vezor.local",
+                "admin_password": "not-returned",
+                "central_node_name": "macbook-pro-master",
+                "central_supervisor_id": "central-master",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["first_run_required"] is False
+    assert body["tenant_slug"] == "vezor-pilot"
+    assert body["central_node"]["supervisor_id"] == "central-master"
+    assert "not-returned" not in response.text
+    assert "vzboot_local_once" not in response.text
+    assert deployment.bootstrap_complete_payload is not None
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_token_cannot_call_normal_admin_routes() -> None:
+    context = _tenant_context()
+    app = _create_app(context, _FakeDeploymentService())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/api/v1/deployment/nodes",
+            headers={"Authorization": "Bearer vzboot_local_once"},
+        )
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

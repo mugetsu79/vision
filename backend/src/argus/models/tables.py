@@ -1077,6 +1077,26 @@ class NodePairingSession(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Ba
     created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
+class MasterBootstrapSession(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "master_bootstrap_sessions"
+    __table_args__ = (
+        Index("ix_master_bootstrap_status", "status", "expires_at"),
+        Index("ix_master_bootstrap_tenant", "tenant_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    consumed_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class SupervisorNodeCredential(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "supervisor_node_credentials"
     __table_args__ = (

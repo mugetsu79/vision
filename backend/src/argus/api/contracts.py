@@ -1494,6 +1494,53 @@ class NodeCredentialRotateResponse(BaseModel):
     node: DeploymentNodeResponse
 
 
+class MasterBootstrapStatusResponse(BaseModel):
+    first_run_required: bool
+    has_active_local_token: bool
+    active_token_expires_at: datetime | None = None
+    completed_at: datetime | None = None
+    tenant_slug: str | None = None
+
+
+class MasterBootstrapRotateResponse(BaseModel):
+    bootstrap_token: str
+    expires_at: datetime
+
+
+class MasterBootstrapComplete(BaseModel):
+    bootstrap_token: str = Field(min_length=8, max_length=256)
+    tenant_name: str = Field(min_length=1, max_length=255)
+    tenant_slug: str | None = Field(default=None, min_length=1, max_length=255)
+    admin_email: str = Field(min_length=3, max_length=320)
+    admin_password: str = Field(min_length=8, max_length=256)
+    central_node_name: str = Field(min_length=1, max_length=255)
+    central_supervisor_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @field_validator("tenant_slug")
+    @classmethod
+    def _normalize_tenant_slug(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower().replace("_", "-").replace(" ", "-")
+        if not normalized:
+            return None
+        return normalized
+
+    @field_validator("admin_email")
+    @classmethod
+    def _normalize_admin_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class MasterBootstrapCompleteResponse(BaseModel):
+    first_run_required: bool
+    tenant_id: UUID
+    tenant_slug: str
+    admin_subject: str
+    completed_at: datetime
+    central_node: DeploymentNodeResponse
+
+
 class WorkerModelAdmissionRequest(BaseModel):
     camera_id: UUID
     edge_node_id: UUID | None = None

@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from argus.api.contracts import (
+    MasterBootstrapComplete,
     NodePairingClaim,
     NodePairingSessionCreate,
     SupervisorServiceReportCreate,
@@ -15,6 +16,7 @@ from argus.models.enums import (
     DeploymentInstallStatus,
     DeploymentNodeKind,
     DeploymentServiceManager,
+    RoleEnum,
     WorkerRuntimeState,
 )
 from argus.models.tables import (
@@ -22,15 +24,125 @@ from argus.models.tables import (
     DeploymentNode,
     EdgeNode,
     EdgeNodeHardwareReport,
+    MasterBootstrapSession,
     NodePairingSession,
     OperationsLifecycleRequest,
     Site,
     SupervisorNodeCredential,
     Tenant,
+    User,
     WorkerModelAdmissionReport,
     WorkerRuntimeReport,
 )
 from argus.services.deployment_nodes import DeploymentNodeService
+
+
+@pytest.mark.asyncio
+async def test_fresh_master_bootstrap_status_requires_first_run_without_exposing_token() -> None:
+    now = datetime(2026, 5, 14, 8, 0, tzinfo=UTC)
+    service = DeploymentNodeService(_MemorySessionFactory(), now_factory=lambda: now)
+
+    status = await service.get_master_bootstrap_status()
+
+    assert status.first_run_required is True
+    assert status.has_active_local_token is False
+    assert status.active_token_expires_at is None
+    assert "vzboot_" not in str(status.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_rotating_master_bootstrap_token_stores_only_hash() -> None:
+    now = datetime(2026, 5, 14, 8, 5, tzinfo=UTC)
+    service = DeploymentNodeService(_MemorySessionFactory(), now_factory=lambda: now)
+
+    rotated = await service.rotate_local_bootstrap_token(actor_subject="local-installer")
+    status = await service.get_master_bootstrap_status()
+    sessions = [
+        row
+        for row in service.session_factory.session.rows
+        if isinstance(row, MasterBootstrapSession)
+    ]
+
+    assert rotated.bootstrap_token.startswith("vzboot_")
+    assert rotated.expires_at > now
+    assert status.has_active_local_token is True
+    assert status.active_token_expires_at == rotated.expires_at
+    assert sessions[0].token_hash != rotated.bootstrap_token
+    assert sessions[0].status == "pending"
+    assert not any(
+        getattr(row, "bootstrap_token", None) == rotated.bootstrap_token
+        for row in service.session_factory.session.rows
+    )
+
+
+@pytest.mark.asyncio
+async def test_master_bootstrap_complete_creates_initial_tenant_admin_node() -> None:
+    now = datetime(2026, 5, 14, 8, 10, tzinfo=UTC)
+    service = DeploymentNodeService(_MemorySessionFactory(), now_factory=lambda: now)
+    rotated = await service.rotate_local_bootstrap_token(actor_subject="local-installer")
+
+    completed = await service.complete_master_bootstrap(
+        MasterBootstrapComplete(
+            bootstrap_token=rotated.bootstrap_token,
+            tenant_name="Vezor Pilot",
+            tenant_slug="vezor-pilot",
+            admin_email="admin@vezor.local",
+            admin_password="not-persisted-password",
+            central_node_name="macbook-pro-master",
+            central_supervisor_id="central-macbook-pro",
+        )
+    )
+
+    rows = service.session_factory.session.rows
+    tenants = [row for row in rows if isinstance(row, Tenant)]
+    users = [row for row in rows if isinstance(row, User)]
+    nodes = [row for row in rows if isinstance(row, DeploymentNode)]
+    sessions = [row for row in rows if isinstance(row, MasterBootstrapSession)]
+    serialized_rows = str([row.__dict__ for row in rows])
+
+    assert completed.first_run_required is False
+    assert completed.tenant_slug == "vezor-pilot"
+    assert completed.admin_subject == "bootstrap:admin@vezor.local"
+    assert completed.central_node.supervisor_id == "central-macbook-pro"
+    assert tenants[0].name == "Vezor Pilot"
+    assert users[0].email == "admin@vezor.local"
+    assert users[0].role is RoleEnum.ADMIN
+    assert nodes[0].node_kind is DeploymentNodeKind.CENTRAL
+    assert nodes[0].install_status is DeploymentInstallStatus.INSTALLED
+    assert sessions[0].status == "consumed"
+    assert sessions[0].tenant_id == tenants[0].id
+    assert sessions[0].consumed_at == now
+    assert rotated.bootstrap_token not in serialized_rows
+    assert "not-persisted-password" not in serialized_rows
+
+    with pytest.raises(ValueError, match="already consumed|Invalid bootstrap token"):
+        await service.complete_master_bootstrap(
+            MasterBootstrapComplete(
+                bootstrap_token=rotated.bootstrap_token,
+                tenant_name="Vezor Pilot",
+                tenant_slug="vezor-pilot",
+                admin_email="admin@vezor.local",
+                admin_password="not-persisted-password",
+                central_node_name="macbook-pro-master",
+                central_supervisor_id="central-macbook-pro",
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_master_bootstrap_complete_rejects_missing_or_wrong_token() -> None:
+    service = DeploymentNodeService(_MemorySessionFactory())
+
+    with pytest.raises(ValueError, match="Invalid bootstrap token"):
+        await service.complete_master_bootstrap(
+            MasterBootstrapComplete(
+                bootstrap_token="vzboot_wrong",
+                tenant_name="Vezor Pilot",
+                admin_email="admin@vezor.local",
+                admin_password="not-persisted-password",
+                central_node_name="macbook-pro-master",
+            )
+        )
 
 
 @pytest.mark.asyncio

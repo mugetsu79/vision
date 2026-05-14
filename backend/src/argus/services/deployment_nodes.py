@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from argus.api.contracts import (
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
+    MasterBootstrapComplete,
+    MasterBootstrapCompleteResponse,
+    MasterBootstrapRotateResponse,
+    MasterBootstrapStatusResponse,
     NodeCredentialRevokeResponse,
     NodeCredentialRotateResponse,
     NodePairingClaim,
@@ -29,16 +33,23 @@ from argus.api.contracts import (
 )
 from argus.compat import UTC
 from argus.core.security import AuthenticatedUser
-from argus.models.enums import DeploymentCredentialStatus, DeploymentInstallStatus, RoleEnum
+from argus.models.enums import (
+    DeploymentCredentialStatus,
+    DeploymentInstallStatus,
+    DeploymentNodeKind,
+    RoleEnum,
+)
 from argus.models.tables import (
     DeploymentCredentialEvent,
     DeploymentNode,
     EdgeNodeHardwareReport,
+    MasterBootstrapSession,
     NodePairingSession,
     OperationsLifecycleRequest,
     SupervisorNodeCredential,
     SupervisorServiceStatusReport,
     Tenant,
+    User,
     WorkerModelAdmissionReport,
     WorkerRuntimeReport,
 )
@@ -79,6 +90,150 @@ class DeploymentNodeService:
     ) -> None:
         self.session_factory = session_factory
         self.now_factory = now_factory or (lambda: datetime.now(tz=UTC))
+
+    async def get_master_bootstrap_status(self) -> MasterBootstrapStatusResponse:
+        now = self.now_factory()
+        async with self.session_factory() as session:
+            tenants = await self._list_rows(session=session, model=Tenant)
+            users = await self._list_rows(session=session, model=User)
+            sessions = await self._list_rows(session=session, model=MasterBootstrapSession)
+
+        first_run_required = not tenants or not users
+        active_session = _latest_active_bootstrap_session(sessions, now=now)
+        completed_session = _latest_consumed_bootstrap_session(sessions)
+        tenant = next((row for row in tenants if isinstance(row, Tenant)), None)
+        return MasterBootstrapStatusResponse(
+            first_run_required=first_run_required,
+            has_active_local_token=active_session is not None,
+            active_token_expires_at=(
+                active_session.expires_at if active_session is not None else None
+            ),
+            completed_at=(
+                completed_session.consumed_at if completed_session is not None else None
+            ),
+            tenant_slug=tenant.slug if tenant is not None else None,
+        )
+
+    async def rotate_local_bootstrap_token(
+        self,
+        *,
+        actor_subject: str | None,
+    ) -> MasterBootstrapRotateResponse:
+        now = self.now_factory()
+        bootstrap_token = _new_bootstrap_token()
+        expires_at = now + timedelta(minutes=15)
+        async with self.session_factory() as session:
+            sessions = await self._list_rows(session=session, model=MasterBootstrapSession)
+            for row in sessions:
+                if not isinstance(row, MasterBootstrapSession):
+                    continue
+                if row.status == "pending" and row.expires_at >= now:
+                    row.status = "revoked"
+                    row.updated_at = now
+            session_row = MasterBootstrapSession(
+                tenant_id=None,
+                token_hash=_hash_secret(bootstrap_token),
+                status="pending",
+                expires_at=expires_at,
+                consumed_at=None,
+                created_by_subject=actor_subject,
+                consumed_by_subject=None,
+            )
+            _ensure_identity_and_timestamps(session_row, now=now)
+            session.add(session_row)
+            await session.commit()
+            await session.refresh(session_row)
+        return MasterBootstrapRotateResponse(
+            bootstrap_token=bootstrap_token,
+            expires_at=session_row.expires_at,
+        )
+
+    async def complete_master_bootstrap(
+        self,
+        payload: MasterBootstrapComplete,
+    ) -> MasterBootstrapCompleteResponse:
+        now = self.now_factory()
+        token_hash = _hash_secret(payload.bootstrap_token)
+        async with self.session_factory() as session:
+            sessions = await self._list_rows(session=session, model=MasterBootstrapSession)
+            matching_sessions = [
+                row
+                for row in sessions
+                if isinstance(row, MasterBootstrapSession) and row.token_hash == token_hash
+            ]
+            if any(row.status == "consumed" for row in matching_sessions):
+                msg = "Bootstrap token is already consumed."
+                raise ValueError(msg)
+            session_row = next(
+                (row for row in matching_sessions if row.status == "pending"),
+                None,
+            )
+            if session_row is None:
+                msg = "Invalid bootstrap token."
+                raise ValueError(msg)
+            if session_row.expires_at < now:
+                session_row.status = "expired"
+                session_row.updated_at = now
+                await session.commit()
+                msg = "Bootstrap token expired."
+                raise ValueError(msg)
+
+            tenant_slug = payload.tenant_slug or _slugify(payload.tenant_name)
+            tenant = Tenant(name=payload.tenant_name, slug=tenant_slug)
+            _ensure_identity_and_timestamps(tenant, now=now)
+            session.add(tenant)
+            await _flush_if_available(session)
+
+            admin_subject = f"bootstrap:{payload.admin_email}"
+            user = User(
+                tenant_id=tenant.id,
+                email=payload.admin_email,
+                oidc_sub=admin_subject,
+                role=RoleEnum.ADMIN,
+            )
+            _ensure_identity_and_timestamps(user, now=now)
+            session.add(user)
+
+            supervisor_id = payload.central_supervisor_id or _slugify(
+                payload.central_node_name
+            )
+            node = DeploymentNode(
+                tenant_id=tenant.id,
+                edge_node_id=None,
+                supervisor_id=supervisor_id,
+                node_kind=DeploymentNodeKind.CENTRAL,
+                hostname=payload.central_node_name,
+                install_status=DeploymentInstallStatus.INSTALLED,
+                credential_status=DeploymentCredentialStatus.MISSING,
+                service_manager=None,
+                service_status=None,
+                version=None,
+                os_name=None,
+                host_profile=None,
+                last_service_reported_at=None,
+                diagnostics={},
+            )
+            _ensure_identity_and_timestamps(node, now=now)
+            session.add(node)
+            await _flush_if_available(session)
+
+            session_row.tenant_id = tenant.id
+            session_row.status = "consumed"
+            session_row.consumed_at = now
+            session_row.consumed_by_subject = admin_subject
+            session_row.updated_at = now
+            await session.commit()
+            await session.refresh(tenant)
+            await session.refresh(node)
+
+        return MasterBootstrapCompleteResponse(
+            first_run_required=False,
+            tenant_id=tenant.id,
+            tenant_slug=tenant.slug,
+            admin_subject=admin_subject,
+            completed_at=now,
+            central_node=deployment_node_response(node, now=now),
+        )
 
     async def list_nodes(self, *, tenant_id: UUID) -> list[DeploymentNodeResponse]:
         now = self.now_factory()
@@ -650,6 +805,16 @@ class DeploymentNodeService:
             for row in rows
         )
 
+    async def _list_rows(
+        self,
+        *,
+        session: AsyncSession,
+        model: type[object],
+    ) -> list[object]:
+        statement = select(model)
+        rows = list((await session.execute(statement)).scalars().all())
+        return [row for row in rows if isinstance(row, model)]
+
     async def authenticate_supervisor_credential(
         self,
         *,
@@ -1142,23 +1307,16 @@ def _sorted_values(values: object) -> list[str]:
 
 
 def _ensure_identity_and_timestamps(
-    row: (
-        DeploymentNode
-        | SupervisorServiceStatusReport
-        | NodePairingSession
-        | SupervisorNodeCredential
-        | DeploymentCredentialEvent
-    ),
+    row: object,
     *,
     now: datetime,
 ) -> None:
-    if row.id is None:
-        row.id = uuid4()
-    if row.created_at is None:
-        row.created_at = now
-    if isinstance(row, (DeploymentNode, NodePairingSession, SupervisorNodeCredential)):
-        if row.updated_at is None:
-            row.updated_at = now
+    if getattr(row, "id", None) is None:
+        row.id = uuid4()  # type: ignore[attr-defined]
+    if hasattr(row, "created_at") and getattr(row, "created_at", None) is None:
+        row.created_at = now  # type: ignore[attr-defined]
+    if hasattr(row, "updated_at") and getattr(row, "updated_at", None) is None:
+        row.updated_at = now  # type: ignore[attr-defined]
 
 
 def _credential_event(
@@ -1201,12 +1359,56 @@ def _new_pairing_code() -> str:
     return secrets.token_urlsafe(6)
 
 
+def _new_bootstrap_token() -> str:
+    return f"vzboot_{secrets.token_urlsafe(24)}"
+
+
 def _new_credential_material() -> str:
     return f"vzcred_{secrets.token_urlsafe(32)}"
 
 
 def _hash_secret(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    return slug or "vezor"
+
+
+def _latest_active_bootstrap_session(
+    rows: list[object],
+    *,
+    now: datetime,
+) -> MasterBootstrapSession | None:
+    pending = [
+        row
+        for row in rows
+        if isinstance(row, MasterBootstrapSession)
+        and row.status == "pending"
+        and row.expires_at >= now
+    ]
+    return max(
+        pending,
+        key=lambda row: _coerce_datetime(row.created_at, fallback=datetime.min.replace(tzinfo=UTC)),
+        default=None,
+    )
+
+
+def _latest_consumed_bootstrap_session(rows: list[object]) -> MasterBootstrapSession | None:
+    consumed = [
+        row
+        for row in rows
+        if isinstance(row, MasterBootstrapSession) and row.status == "consumed"
+    ]
+    return max(
+        consumed,
+        key=lambda row: _coerce_datetime(
+            row.consumed_at,
+            fallback=datetime.min.replace(tzinfo=UTC),
+        ),
+        default=None,
+    )
 
 
 def _coerce_datetime(value: object, *, fallback: datetime) -> datetime:

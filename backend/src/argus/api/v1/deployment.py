@@ -3,11 +3,15 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from argus.api.contracts import (
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
+    MasterBootstrapComplete,
+    MasterBootstrapCompleteResponse,
+    MasterBootstrapRotateResponse,
+    MasterBootstrapStatusResponse,
     NodeCredentialRevokeResponse,
     NodeCredentialRotateResponse,
     NodePairingClaim,
@@ -31,6 +35,41 @@ router = APIRouter(prefix="/api/v1/deployment", tags=["deployment"])
 AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
+
+
+@router.get("/bootstrap/status", response_model=MasterBootstrapStatusResponse)
+async def get_master_bootstrap_status(
+    services: ServicesDependency,
+) -> MasterBootstrapStatusResponse:
+    return await services.deployment.get_master_bootstrap_status()
+
+
+@router.post(
+    "/bootstrap/rotate-local-token",
+    response_model=MasterBootstrapRotateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def rotate_local_bootstrap_token(
+    request: Request,
+    services: ServicesDependency,
+) -> MasterBootstrapRotateResponse:
+    _require_local_bootstrap_request(request)
+    return await services.deployment.rotate_local_bootstrap_token(
+        actor_subject="local-bootstrap",
+    )
+
+
+@router.post("/bootstrap/complete", response_model=MasterBootstrapCompleteResponse)
+async def complete_master_bootstrap(
+    payload: MasterBootstrapComplete,
+    request: Request,
+    services: ServicesDependency,
+) -> MasterBootstrapCompleteResponse:
+    _require_local_bootstrap_request(request)
+    try:
+        return await services.deployment.complete_master_bootstrap(payload)
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
 
 
 @router.get("/nodes", response_model=list[DeploymentNodeResponse])
@@ -189,6 +228,16 @@ def _deployment_http_error(exc: ValueError) -> HTTPException:
     if "already consumed" in normalized or "expired" in normalized:
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+def _require_local_bootstrap_request(request: Request) -> None:
+    host = request.client.host if request.client is not None else ""
+    if host in {"127.0.0.1", "::1", "localhost", "testclient", "test"}:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Bootstrap token rotation is only available from the local host.",
+    )
 
 
 def _authenticated_deployment_node_id(tenant_context: TenantContext) -> UUID | None:
