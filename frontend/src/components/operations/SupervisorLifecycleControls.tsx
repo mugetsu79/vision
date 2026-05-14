@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react";
-import { Play, RefreshCw, RotateCcw, Square, Unplug } from "lucide-react";
+import {
+  ArrowRight,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Square,
+  Unplug,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -37,6 +44,7 @@ export function SupervisorLifecycleControls({
   const runtimeReport = worker.runtime_report ?? null;
   const latestRequest = worker.latest_lifecycle_request ?? null;
   const lifecycleDisabledReason = lifecycleReason(worker);
+  const needsDeploymentSetup = shouldOpenDeployment(worker);
   const selectedDesiredState = targetNodeId ? "supervised" : "manual";
 
   const targetChanged = targetNodeId !== (worker.node_id ?? "");
@@ -54,7 +62,9 @@ export function SupervisorLifecycleControls({
     [edgeNodes, worker.node_hostname, worker.node_id],
   );
 
-  async function createRequest(action: (typeof lifecycleButtons)[number]["action"]) {
+  async function createRequest(
+    action: (typeof lifecycleButtons)[number]["action"],
+  ) {
     await lifecycle.mutateAsync({
       camera_id: worker.camera_id,
       edge_node_id: worker.node_id ?? undefined,
@@ -137,6 +147,22 @@ export function SupervisorLifecycleControls({
         </Button>
       </div>
 
+      {needsDeploymentSetup ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[0.75rem] border border-sky-300/20 bg-sky-950/20 px-3 py-2">
+          <p className="text-xs text-sky-100">
+            Install or pair an eligible supervisor node before production
+            lifecycle actions are available.
+          </p>
+          <a
+            href="/deployment"
+            className="inline-flex items-center text-xs font-semibold text-sky-100 hover:text-white"
+          >
+            Open Deployment
+            <ArrowRight className="ml-1.5 size-3.5" />
+          </a>
+        </div>
+      ) : null}
+
       <dl className="mt-3 grid gap-2 text-xs md:grid-cols-2">
         <LifecycleFact
           label="Heartbeat"
@@ -205,6 +231,18 @@ function lifecycleReason(worker: Worker): string {
     return worker.detail ?? "Supervisor has not reported healthy runtime state.";
   }
   return worker.detail ?? "Supervisor lifecycle requests are available.";
+}
+
+function shouldOpenDeployment(worker: Worker): boolean {
+  if (worker.lifecycle_owner === "manual_dev") {
+    return false;
+  }
+  if (!worker.node_id) {
+    return true;
+  }
+  const noLifecycleActions =
+    (worker.allowed_lifecycle_actions ?? []).length === 0;
+  return worker.supervisor_mode === "disabled" && noLifecycleActions;
 }
 
 function admissionAllowsAction(

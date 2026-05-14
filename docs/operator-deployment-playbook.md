@@ -45,6 +45,14 @@ copied-token terminal workflow after installation.
 
 Do not confuse the local dev stack with production.
 
+Normal installed operation begins in Control -> Deployment. Operators install
+the macOS master, Linux master, or Jetson edge service locally, pair the node
+from the UI, and then use Control -> Operations for lifecycle requests. If a
+camera has no eligible installed supervisor, Operations should send the
+operator back to Deployment to install or pair one. Copied bearer-token
+commands, foreground supervisor runners, and ad hoc Docker commands are
+development fallback or break-glass material only.
+
 ### Development
 
 - one workstation can run the full stack with `make dev-up`
@@ -443,7 +451,7 @@ capability on startup, scrapes worker metrics when configured, evaluates
 admission before Start/Restart, and owns only direct child worker processes. Do
 not invent a browser/API shell bridge as a shortcut.
 
-macOS central smoke command:
+Development fallback / break-glass macOS central smoke command:
 
 ```bash
 cd /Users/yann.moren/vision/backend
@@ -457,7 +465,7 @@ python3 -m uv run python -m argus.supervisor.runner \
   --once
 ```
 
-Jetson edge smoke command:
+Development fallback / break-glass Jetson edge smoke command:
 
 ```bash
 cd "$HOME/vision"
@@ -709,7 +717,7 @@ That path gives the best ratio of learning to operational risk.
 
 ## Canonical Commands
 
-### Local/dev control plane
+### Development fallback: local/dev control plane
 
 ```bash
 make dev-up
@@ -718,13 +726,13 @@ docker compose -f infra/docker-compose.dev.yml exec backend \
 corepack pnpm --dir frontend generate:api
 ```
 
-### Local/dev shutdown
+### Development fallback: local/dev shutdown
 
 ```bash
 make dev-down
 ```
 
-### Edge single-node bring-up
+### Development fallback: edge single-node bring-up
 
 Before starting Jetson edge:
 

@@ -697,11 +697,15 @@ describe("SettingsPage operations workbench", () => {
       screen.getByRole("button", { name: /generate bootstrap/i }),
     );
 
-    expect(await screen.findByText(/edge_secret_once/i)).toBeInTheDocument();
     expect(screen.getByText(/one-time material/i)).toBeInTheDocument();
     expect(
       screen.getByText(/legacy lab bootstrap material/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/edge_secret_once/i)).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /show break-glass material/i }),
+    );
     expect(screen.queryByText(/docker compose/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/edge_secret_once/i)).toBeInTheDocument();
   });
 });

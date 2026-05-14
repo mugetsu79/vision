@@ -62,6 +62,7 @@ export function SettingsPage() {
   const [version, setVersion] = useState("0.1.0");
   const [bootstrapResult, setBootstrapResult] =
     useState<FleetBootstrapResponse | null>(null);
+  const [showBreakGlassMaterial, setShowBreakGlassMaterial] = useState(false);
   const firstSiteId = fleet.data?.camera_workers[0]?.site_id;
   const camerasById = useMemo(
     () => new Map(cameras.map((camera) => [camera.id, camera])),
@@ -92,6 +93,7 @@ export function SettingsPage() {
       version: version.trim(),
     });
     setBootstrapResult(result);
+    setShowBreakGlassMaterial(false);
   }
 
   if (fleet.isLoading) {
@@ -323,7 +325,17 @@ export function SettingsPage() {
                   Production nodes should be paired from Deployment; this
                   one-time material remains for lab and break-glass workflows.
                 </p>
-                <CommandBlock text={bootstrapResult.api_key} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-3 border-amber-200/30 text-amber-100 hover:border-amber-200/60 hover:text-white"
+                  onClick={() => setShowBreakGlassMaterial(true)}
+                >
+                  Show break-glass material
+                </Button>
+                {showBreakGlassMaterial ? (
+                  <CommandBlock text={bootstrapResult.api_key} />
+                ) : null}
               </div>
             ) : null}
           </div>

@@ -190,6 +190,31 @@ describe("SupervisorLifecycleControls", () => {
     expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
   });
 
+  test("directs missing installed supervisor state to Deployment pairing", () => {
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker({
+          node_id: null,
+          node_hostname: null,
+          lifecycle_owner: "edge_supervisor",
+          supervisor_mode: "disabled",
+          allowed_lifecycle_actions: [],
+          dev_run_command:
+            "ARGUS_API_BEARER_TOKEN=raw-token docker compose up worker",
+          detail: "No installed supervisor has claimed this camera.",
+        })}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    const panel = screen.getByTestId("supervisor-lifecycle-controls");
+    expect(
+      within(panel).getByRole("link", { name: /open deployment/i }),
+    ).toHaveAttribute("href", "/deployment");
+    expect(within(panel).queryByText(/ARGUS_API_BEARER_TOKEN/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/docker compose/i)).not.toBeInTheDocument();
+  });
+
   test("blocks start and restart when model admission is unsupported", async () => {
     const user = userEvent.setup();
     render(
