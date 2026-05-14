@@ -71,6 +71,20 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "target: ARGUS_KEYCLOAK_ADMIN_PASSWORD" in compose
 
 
+def test_linux_master_nats_healthcheck_uses_nats_server_binary() -> None:
+    compose = _read(MASTER_COMPOSE)
+
+    assert 'test: ["CMD", "/nats-server", "-t", "-c", "/etc/nats/nats.conf"]' in compose
+    assert 'test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]' not in compose
+
+
+def test_linux_master_keycloak_first_boot_does_not_use_optimized_mode() -> None:
+    compose = _read(MASTER_COMPOSE)
+
+    assert 'command: ["start"]' in compose
+    assert 'command: ["start", "--optimized"]' not in compose
+
+
 def test_linux_master_compose_uses_installer_runtime_entrypoints() -> None:
     compose = _read(MASTER_COMPOSE)
 

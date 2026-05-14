@@ -84,6 +84,17 @@ def test_macos_installer_makes_secrets_readable_by_docker_desktop() -> None:
     assert 'prepare_secret_for_docker_desktop "$path"' in script
 
 
+def test_macos_installer_makes_bound_config_files_readable_by_docker_desktop() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "prepare_config_for_docker_desktop" in script
+    assert 'echo "[dry-run] set Docker Desktop-readable config permissions $path"' in script
+    assert 'chgrp staff "$path"' in script
+    assert 'chmod 0640 "$path"' in script
+    assert 'prepare_config_for_docker_desktop "$MASTER_CONFIG"' in script
+    assert 'prepare_config_for_docker_desktop "$SUPERVISOR_CONFIG"' in script
+
+
 def test_macos_installer_repairs_docker_desktop_writable_state_directories() -> None:
     script = _read(INSTALL_SCRIPT)
 

@@ -59,7 +59,7 @@ services:
       - /etc/vezor/nats/nats.conf:/etc/nats/nats.conf:ro
       - /var/lib/vezor/nats:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]
+      test: ["CMD", "/nats-server", "-t", "-c", "/etc/nats/nats.conf"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -87,7 +87,7 @@ services:
 
   keycloak:
     image: ${VEZOR_KEYCLOAK_IMAGE:?set VEZOR_KEYCLOAK_IMAGE}
-    command: ["start", "--optimized"]
+    command: ["start"]
     restart: unless-stopped
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME_FILE: /run/secrets/keycloak_admin_username

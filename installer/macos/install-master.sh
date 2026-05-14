@@ -109,6 +109,18 @@ prepare_secret_for_docker_desktop() {
   chmod 0640 "$path"
 }
 
+prepare_config_for_docker_desktop() {
+  local path="$1"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] set Docker Desktop-readable config permissions $path"
+    return 0
+  fi
+
+  chgrp staff "$path"
+  chmod 0640 "$path"
+}
+
 docker_desktop_host_user() {
   if [[ -n "${SUDO_USER:-}" && "${SUDO_USER:-}" != "root" ]]; then
     printf '%s\n' "$SUDO_USER"
@@ -409,6 +421,7 @@ else
 JSON
   umask "$old_umask"
 fi
+prepare_config_for_docker_desktop "$MASTER_CONFIG"
 
 SUPERVISOR_CONFIG="$CONFIG_DIR/supervisor.json"
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -428,6 +441,7 @@ else
 JSON
   umask "$old_umask"
 fi
+prepare_config_for_docker_desktop "$SUPERVISOR_CONFIG"
 
 build_local_master_images
 start_local_master_containers

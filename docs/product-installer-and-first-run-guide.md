@@ -376,7 +376,9 @@ repairs Docker-writable state directories such as `/var/lib/vezor/postgres`,
 `/var/lib/vezor/redis`, `/var/lib/vezor/nats`, and `/var/lib/vezor/minio` so
 they are owned by the invoking macOS console user. This is required because
 Docker Desktop containers cannot reliably initialize databases, object storage,
-or JetStream state under root-owned macOS bind mounts.
+or JetStream state under root-owned macOS bind mounts. Bound appliance config
+files such as `/etc/vezor/master.json` and `/etc/vezor/supervisor.json` are also
+made Docker-readable.
 
 Validate service state:
 
@@ -1159,6 +1161,27 @@ Desktop cannot write through. Pull the latest `codex/omnisight-installer`
 branch and rerun the macOS installer. The installer stops the partial appliance
 and repairs ownership for the Docker-writable state directories automatically.
 Do not replace this with a development-stack compose flow.
+
+### macOS install stops on an unhealthy NATS container
+
+If the NATS log says `Server is ready` but Docker still reports
+`vezor-master-nats-1 is unhealthy`, inspect the container health log:
+
+```bash
+docker inspect -f '{{json .State.Health}}' vezor-master-nats-1
+```
+
+The installable compose healthcheck must use `/nats-server` directly because the
+official NATS image does not include `wget`, `curl`, or a shell. Pull the latest
+`codex/omnisight-installer` branch and rerun the installer if the health log
+mentions `exec: "wget": executable file not found`.
+
+### Keycloak restarts on first boot
+
+If `docker logs vezor-master-keycloak-1` repeatedly says the `--optimized` flag
+was used on the first server start, pull the latest `codex/omnisight-installer`
+branch and rerun the installer. First boot must use `start`; optimized mode is
+only valid after a Keycloak build step.
 
 ### The Jetson says the TensorRT engine is invalid
 
