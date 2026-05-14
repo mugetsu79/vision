@@ -417,7 +417,7 @@ For installer-managed validation, run the macOS master installer now:
 
 ```bash
 cd /opt/vezor/current
-sudo installer/macos/install-master.sh \
+sudo ./installer/macos/install-master.sh \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --public-url "http://127.0.0.1:3000"

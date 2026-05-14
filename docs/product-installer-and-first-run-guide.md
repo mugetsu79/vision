@@ -330,7 +330,7 @@ On the MacBook:
 
 ```bash
 cd /opt/vezor/current
-sudo installer/macos/install-master.sh \
+sudo ./installer/macos/install-master.sh \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --public-url "http://127.0.0.1:3000" \
@@ -362,7 +362,7 @@ On the Linux master:
 
 ```bash
 cd /opt/vezor/current
-sudo installer/linux/install-master.sh \
+sudo ./installer/linux/install-master.sh \
   --version "pilot-2026-05" \
   --manifest installer/manifests/dev-example.json \
   --public-url "http://MASTER_HOST_OR_IP:3000" \
@@ -674,7 +674,7 @@ On the Jetson:
 ```bash
 MASTER_API_URL="http://MASTER_HOST_OR_IP:8000"
 
-sudo installer/linux/install-edge.sh \
+sudo ./installer/linux/install-edge.sh \
   --api-url "$MASTER_API_URL" \
   --session-id "PAIRING_SESSION_ID" \
   --pairing-code "PAIRING_CODE" \
@@ -1017,22 +1017,22 @@ Linux master:
 
 ```bash
 cd /opt/vezor/current
-sudo installer/linux/uninstall.sh
+sudo ./installer/linux/uninstall.sh
 ```
 
 macOS master:
 
 ```bash
 cd /opt/vezor/current
-sudo installer/macos/uninstall.sh
+sudo ./installer/macos/uninstall.sh
 ```
 
 Default uninstall preserves `/var/lib/vezor` and `/etc/vezor`. To delete data,
 you must provide the confirmation string:
 
 ```bash
-sudo installer/linux/uninstall.sh --purge-data delete-vezor-data
-sudo installer/macos/uninstall.sh --purge-data delete-vezor-data
+sudo ./installer/linux/uninstall.sh --purge-data delete-vezor-data
+sudo ./installer/macos/uninstall.sh --purge-data delete-vezor-data
 ```
 
 For a Jetson edge branch install:

@@ -18,6 +18,21 @@ bash -n bin/vezor-master
 bash -n bin/vezor-edge
 bash -n bin/vezorctl
 
+echo "==> installer executable bits"
+for executable in \
+  installer/linux/install-master.sh \
+  installer/linux/install-edge.sh \
+  installer/linux/uninstall.sh \
+  installer/macos/install-master.sh \
+  installer/macos/uninstall.sh \
+  bin/vezor-appliance \
+  bin/vezor-master \
+  bin/vezor-edge \
+  bin/vezorctl
+do
+  test -x "$executable"
+done
+
 echo "==> manifest validation"
 python3 -m uv run --project installer python - <<'PY'
 import json

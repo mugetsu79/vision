@@ -31,6 +31,13 @@ REQUIRED_FILES = (
 )
 
 PRODUCT_ARTIFACTS = tuple(path for path in REQUIRED_FILES if path.suffix != ".md")
+EXECUTABLE_INSTALLER_SCRIPTS = (
+    REPO_ROOT / "installer" / "linux" / "install-master.sh",
+    REPO_ROOT / "installer" / "linux" / "install-edge.sh",
+    REPO_ROOT / "installer" / "linux" / "uninstall.sh",
+    REPO_ROOT / "installer" / "macos" / "install-master.sh",
+    REPO_ROOT / "installer" / "macos" / "uninstall.sh",
+)
 DEV_ONLY_PATTERNS = (
     "ARGUS_API_BEARER_TOKEN",
     "Bearer ",
@@ -55,6 +62,7 @@ def test_release_gate_script_exists_and_runs_installer_checks() -> None:
     assert "bash -n bin/vezor-master" in script
     assert "bash -n bin/vezor-edge" in script
     assert "bash -n bin/vezorctl" in script
+    assert 'test -x "$executable"' in script
     assert "installer/manifests/dev-example.json" in script
     assert "docker compose -f infra/install/compose/compose.master.yml config" in script
     assert "docker unavailable" in script
@@ -73,6 +81,16 @@ def test_release_gate_required_files_exist_without_deepstream_dependency() -> No
     assert missing == []
     assert not any("deepstream" in str(path).lower() for path in REQUIRED_FILES)
     assert "deepstream" not in _read(VALIDATE_SCRIPT).lower()
+
+
+def test_installer_shell_scripts_are_directly_executable() -> None:
+    not_executable = [
+        str(path.relative_to(REPO_ROOT))
+        for path in EXECUTABLE_INSTALLER_SCRIPTS
+        if not path.stat().st_mode & 0o111
+    ]
+
+    assert not_executable == []
 
 
 def test_release_gate_manifest_validation_passes() -> None:
