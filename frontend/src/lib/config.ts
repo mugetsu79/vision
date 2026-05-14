@@ -7,19 +7,46 @@ type FrontendEnvKey =
 
 type FrontendRuntimeEnv = Readonly<Partial<Record<FrontendEnvKey, string | undefined>>>;
 
+declare global {
+  interface Window {
+    __VEZOR_CONFIG__?: FrontendRuntimeEnv;
+  }
+}
+
 interface FrontendLocationLike {
   origin: string;
   protocol: string;
   hostname: string;
 }
 
-const runtimeEnv: FrontendRuntimeEnv = {
+const buildTimeEnv: FrontendRuntimeEnv = {
   VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
   VITE_OIDC_AUTHORITY: import.meta.env.VITE_OIDC_AUTHORITY,
   VITE_OIDC_CLIENT_ID: import.meta.env.VITE_OIDC_CLIENT_ID,
   VITE_OIDC_REDIRECT_URI: import.meta.env.VITE_OIDC_REDIRECT_URI,
   VITE_OIDC_POST_LOGOUT_REDIRECT_URI: import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
 };
+
+const injectedRuntimeEnv =
+  typeof window === "undefined" ? undefined : window.__VEZOR_CONFIG__;
+
+export function mergeFrontendRuntimeEnv(
+  buildEnv: FrontendRuntimeEnv,
+  injectedEnv: FrontendRuntimeEnv | undefined,
+): FrontendRuntimeEnv {
+  return {
+    VITE_API_BASE_URL: injectedEnv?.VITE_API_BASE_URL || buildEnv.VITE_API_BASE_URL,
+    VITE_OIDC_AUTHORITY: injectedEnv?.VITE_OIDC_AUTHORITY || buildEnv.VITE_OIDC_AUTHORITY,
+    VITE_OIDC_CLIENT_ID: injectedEnv?.VITE_OIDC_CLIENT_ID || buildEnv.VITE_OIDC_CLIENT_ID,
+    VITE_OIDC_REDIRECT_URI:
+      injectedEnv?.VITE_OIDC_REDIRECT_URI || buildEnv.VITE_OIDC_REDIRECT_URI,
+    VITE_OIDC_POST_LOGOUT_REDIRECT_URI:
+      injectedEnv?.VITE_OIDC_POST_LOGOUT_REDIRECT_URI ||
+      buildEnv.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
+  };
+}
+
+const runtimeEnv = mergeFrontendRuntimeEnv(buildTimeEnv, injectedRuntimeEnv);
 
 const runtimeLocation =
   typeof window === "undefined"

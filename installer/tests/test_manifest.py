@@ -143,3 +143,14 @@ def test_dev_example_manifest_is_valid() -> None:
 
     assert manifest.release_channel == "dev"
     assert manifest.target_names == {"linux-master", "macos-master", "jetson-edge"}
+
+
+def test_dev_example_manifest_uses_local_buildable_master_images() -> None:
+    path = Path(__file__).parents[1] / "manifests" / "dev-example.json"
+    manifest = Manifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    assert manifest.images["backend"].reference == "vezor/backend:portable-demo"
+    assert manifest.images["frontend"].reference == "vezor/frontend:portable-demo"
+    assert manifest.images["supervisor"].reference == "vezor/backend:portable-demo"
+    assert manifest.images["edge-worker"].reference == "vezor/edge-worker:portable-demo"
+    assert manifest.images["minio"].reference == "minio/minio:latest"

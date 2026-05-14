@@ -3,10 +3,10 @@
   "release_channel": "dev",
   "images": {
     "backend": {
-      "reference": "ghcr.io/vezor/backend:dev"
+      "reference": "vezor/backend:portable-demo"
     },
     "frontend": {
-      "reference": "ghcr.io/vezor/frontend:dev"
+      "reference": "vezor/frontend:portable-demo"
     },
     "postgres": {
       "reference": "postgres:16"
@@ -18,7 +18,7 @@
       "reference": "nats:2"
     },
     "minio": {
-      "reference": "minio/minio:dev"
+      "reference": "minio/minio:latest"
     },
     "mediamtx": {
       "reference": "bluenviron/mediamtx:latest"
@@ -27,10 +27,10 @@
       "reference": "quay.io/keycloak/keycloak:latest"
     },
     "supervisor": {
-      "reference": "ghcr.io/vezor/supervisor:dev"
+      "reference": "vezor/backend:portable-demo"
     },
     "edge-worker": {
-      "reference": "ghcr.io/vezor/edge-worker:dev"
+      "reference": "vezor/edge-worker:portable-demo"
     }
   },
   "package_targets": [

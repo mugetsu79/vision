@@ -66,6 +66,16 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "target: ARGUS_KEYCLOAK_ADMIN_PASSWORD" in compose
 
 
+def test_linux_master_compose_uses_installer_runtime_entrypoints() -> None:
+    compose = _read(MASTER_COMPOSE)
+
+    assert "      - -lc" not in compose
+    assert "      - -c" in compose
+    assert "/app/.venv/bin/alembic upgrade head && /app/.venv/bin/uvicorn" in compose
+    assert "      - /app/.venv/bin/python" in compose
+    assert '["CMD", "/app/.venv/bin/python", "-m", "argus.supervisor.runner"' in compose
+
+
 def test_linux_master_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
     combined = "\n".join(
         _read(path)
@@ -105,6 +115,18 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert 'chmod 0644 "$MASTER_ENV"' in script
     assert 'old_umask="$(umask)"' in script
     assert "manifest_image_ref backend" in script
+
+
+def test_linux_dev_installer_builds_local_master_images_before_systemd_start() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "manifest_release_channel" in script
+    assert "build_local_master_images" in script
+    assert '[[ "$(manifest_release_channel)" != "dev" ]]' in script
+    assert '$CONTAINER_ENGINE build -f /opt/vezor/current/backend/Dockerfile -t "$BACKEND_IMAGE"' in script
+    assert '$CONTAINER_ENGINE build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE"' in script
+    assert '$CONTAINER_ENGINE tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"' in script
+    assert "build_local_master_images" in script.split("run systemctl daemon-reload")[0]
 
 
 def test_linux_uninstall_preserves_data_unless_explicitly_confirmed() -> None:

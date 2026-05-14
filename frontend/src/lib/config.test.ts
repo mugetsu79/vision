@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { resolveFrontendConfig } from "@/lib/config";
+import { mergeFrontendRuntimeEnv, resolveFrontendConfig } from "@/lib/config";
 
 describe("resolveFrontendConfig", () => {
   test("derives local development defaults when Vite env vars are absent", () => {
@@ -47,5 +47,32 @@ describe("resolveFrontendConfig", () => {
         false,
       ),
     ).toThrow(/VITE_API_BASE_URL/);
+  });
+
+  test("prefers injected appliance runtime config over build-time env vars", () => {
+    expect(
+      mergeFrontendRuntimeEnv(
+        {
+          VITE_API_BASE_URL: "http://build-time:8000",
+          VITE_OIDC_AUTHORITY: undefined,
+          VITE_OIDC_CLIENT_ID: undefined,
+          VITE_OIDC_REDIRECT_URI: undefined,
+          VITE_OIDC_POST_LOGOUT_REDIRECT_URI: undefined,
+        },
+        {
+          VITE_API_BASE_URL: "http://runtime:8000",
+          VITE_OIDC_AUTHORITY: "http://runtime:8080/realms/argus-dev",
+          VITE_OIDC_CLIENT_ID: "argus-frontend",
+          VITE_OIDC_REDIRECT_URI: "http://runtime:3000/auth/callback",
+          VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "http://runtime:3000/signin",
+        },
+      ),
+    ).toEqual({
+      VITE_API_BASE_URL: "http://runtime:8000",
+      VITE_OIDC_AUTHORITY: "http://runtime:8080/realms/argus-dev",
+      VITE_OIDC_CLIENT_ID: "argus-frontend",
+      VITE_OIDC_REDIRECT_URI: "http://runtime:3000/auth/callback",
+      VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "http://runtime:3000/signin",
+    });
   });
 });

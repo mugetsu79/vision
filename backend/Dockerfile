@@ -17,14 +17,19 @@ COPY src ./src
 RUN pip install --no-cache-dir uv \
     && uv sync --locked --no-dev --group runtime --group llm --group model-metadata
 
-FROM gcr.io/distroless/python3-debian12:nonroot AS central-runtime
+FROM python:${PYTHON_VERSION}-slim-bookworm AS central-runtime
 
-ENV PYTHONPATH=/app/src
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app/src
 
 WORKDIR /app
 
-COPY --from=central-builder --chown=nonroot:nonroot /app /app
+COPY --from=central-builder /app /app
 
 EXPOSE 8000
 
-ENTRYPOINT ["/app/.venv/bin/uvicorn", "argus.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "argus.main:app", "--host", "0.0.0.0", "--port", "8000"]

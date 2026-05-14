@@ -28,6 +28,11 @@ The package may use Docker or Podman under the hood, but the operator should
 not run `make dev-up`, hand-run Compose, or paste bearer tokens for normal
 operation.
 
+When the selected manifest has `release_channel: "dev"`, the master installer
+builds the local backend and frontend appliance images from the installed
+source tree before starting the service. Pilot and stable manifests are
+expected to reference prebuilt immutable image digests instead.
+
 ## macOS Master Artifact
 
 The macOS master path is a launchd-owned portable appliance for MacBook Pro
@@ -41,3 +46,7 @@ pilot and demo systems:
 
 This path may use Docker Desktop as the local appliance runtime in v1, but the
 operator should not hand-run Compose after installation.
+
+When using `installer/manifests/dev-example.json`, the macOS installer builds
+local `vezor/backend:portable-demo` and `vezor/frontend:portable-demo` images
+before launchd starts `com.vezor.master`.

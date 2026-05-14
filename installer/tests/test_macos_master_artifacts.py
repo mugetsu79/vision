@@ -90,6 +90,18 @@ def test_macos_installer_exposes_safe_install_options() -> None:
     assert "manifest_image_ref backend" in script
 
 
+def test_macos_dev_installer_builds_local_master_images_before_launchd_start() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "manifest_release_channel" in script
+    assert "build_local_master_images" in script
+    assert '[[ "$(manifest_release_channel)" != "dev" ]]' in script
+    assert 'docker build -f /opt/vezor/current/backend/Dockerfile -t "$BACKEND_IMAGE"' in script
+    assert 'docker build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE"' in script
+    assert 'docker tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"' in script
+    assert "build_local_master_images" in script.split("run launchctl bootstrap system")[0]
+
+
 def test_macos_uninstall_preserves_data_unless_explicitly_confirmed() -> None:
     script = _read(UNINSTALL_SCRIPT)
 

@@ -144,6 +144,36 @@ print(reference if isinstance(reference, str) and reference else fallback)
 PY
 }
 
+manifest_release_channel() {
+  if [[ -z "$MANIFEST" ]]; then
+    printf 'dev\n'
+    return 0
+  fi
+
+  python3 - "$MANIFEST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+release_channel = manifest.get("release_channel")
+print(release_channel if isinstance(release_channel, str) else "")
+PY
+}
+
+build_local_master_images() {
+  if [[ "$(manifest_release_channel)" != "dev" ]]; then
+    return 0
+  fi
+
+  echo "Building local Vezor master images for dev manifest..."
+  run $CONTAINER_ENGINE build -f /opt/vezor/current/backend/Dockerfile -t "$BACKEND_IMAGE" /opt/vezor/current/backend
+  if [[ "$SUPERVISOR_IMAGE" != "$BACKEND_IMAGE" ]]; then
+    run $CONTAINER_ENGINE tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"
+  fi
+  run $CONTAINER_ENGINE build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE" /opt/vezor/current/frontend
+}
+
 require_linux() {
   if [[ "$(uname -s)" != "Linux" ]]; then
     echo "This installer target is Linux master. Detected: $(uname -s)" >&2
@@ -180,6 +210,16 @@ if [[ -n "$MANIFEST" && ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
+POSTGRES_IMAGE="$(manifest_image_ref postgres postgres:16)"
+REDIS_IMAGE="$(manifest_image_ref redis redis:7)"
+NATS_IMAGE="$(manifest_image_ref nats nats:2)"
+MINIO_IMAGE="$(manifest_image_ref minio minio/minio:latest)"
+KEYCLOAK_IMAGE="$(manifest_image_ref keycloak quay.io/keycloak/keycloak:latest)"
+MEDIAMTX_IMAGE="$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)"
+BACKEND_IMAGE="$(manifest_image_ref backend vezor/backend:portable-demo)"
+FRONTEND_IMAGE="$(manifest_image_ref frontend vezor/frontend:portable-demo)"
+SUPERVISOR_IMAGE="$(manifest_image_ref supervisor "$BACKEND_IMAGE")"
+
 run install -d -m 0755 \
   "$CONFIG_DIR" \
   "$CONFIG_DIR/secrets" \
@@ -213,15 +253,15 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $MASTER_ENV"
 else
   cat > "$MASTER_ENV" <<ENV
-VEZOR_POSTGRES_IMAGE=$(manifest_image_ref postgres postgres:16)
-VEZOR_REDIS_IMAGE=$(manifest_image_ref redis redis:7)
-VEZOR_NATS_IMAGE=$(manifest_image_ref nats nats:2)
-VEZOR_MINIO_IMAGE=$(manifest_image_ref minio minio/minio:latest)
-VEZOR_KEYCLOAK_IMAGE=$(manifest_image_ref keycloak quay.io/keycloak/keycloak:latest)
-VEZOR_MEDIAMTX_IMAGE=$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)
-VEZOR_BACKEND_IMAGE=$(manifest_image_ref backend ghcr.io/vezor/backend:dev)
-VEZOR_FRONTEND_IMAGE=$(manifest_image_ref frontend ghcr.io/vezor/frontend:dev)
-VEZOR_SUPERVISOR_IMAGE=$(manifest_image_ref supervisor ghcr.io/vezor/supervisor:dev)
+VEZOR_POSTGRES_IMAGE=$POSTGRES_IMAGE
+VEZOR_REDIS_IMAGE=$REDIS_IMAGE
+VEZOR_NATS_IMAGE=$NATS_IMAGE
+VEZOR_MINIO_IMAGE=$MINIO_IMAGE
+VEZOR_KEYCLOAK_IMAGE=$KEYCLOAK_IMAGE
+VEZOR_MEDIAMTX_IMAGE=$MEDIAMTX_IMAGE
+VEZOR_BACKEND_IMAGE=$BACKEND_IMAGE
+VEZOR_FRONTEND_IMAGE=$FRONTEND_IMAGE
+VEZOR_SUPERVISOR_IMAGE=$SUPERVISOR_IMAGE
 VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
 VEZOR_PUBLIC_FRONTEND_URL=$PUBLIC_URL
 VEZOR_PUBLIC_API_BASE_URL=${PUBLIC_URL%:*}:8000
@@ -270,6 +310,8 @@ else
 JSON
   umask "$old_umask"
 fi
+
+build_local_master_images
 
 run install -m 0644 \
   /opt/vezor/current/infra/install/systemd/vezor-master.service \

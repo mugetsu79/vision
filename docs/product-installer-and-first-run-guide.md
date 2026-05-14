@@ -340,6 +340,12 @@ The macOS installer now refuses to continue when those ports are already
 occupied by another service. That is intentional; otherwise the browser may
 open an old development backend and skip first-run.
 
+When using `installer/manifests/dev-example.json`, the installer builds the
+local master images from `/opt/vezor/current/backend` and
+`/opt/vezor/current/frontend` before launchd starts the appliance. This avoids
+pulling private or unpublished development images. The first run can take
+several minutes because Docker has to build the backend and frontend images.
+
 ```bash
 cd /opt/vezor/current
 sudo ./installer/macos/install-master.sh \
@@ -349,9 +355,19 @@ sudo ./installer/macos/install-master.sh \
   --data-dir /var/lib/vezor
 ```
 
+Expected high-level output:
+
+```text
+Building local Vezor master images for dev manifest...
+...
+Vezor macOS master install complete.
+Open the first-run UI: http://127.0.0.1:3000/first-run
+```
+
 The installer creates the local service config, image env file, generated
 secrets, NATS config, MediaMTX config, and central supervisor config under
-`/etc/vezor`, then starts `com.vezor.master` through launchd.
+`/etc/vezor`, builds the dev images when using the dev manifest, then starts
+`com.vezor.master` through launchd.
 
 Validate service state:
 
@@ -365,6 +381,17 @@ The `docker ps` output must show `vezor-master` containers. If it only shows
 `infra-*` containers, you are still talking to the development stack, not the
 installed master.
 
+If `docker ps --filter name=vezor-master` is empty, inspect the service logs:
+
+```bash
+tail -160 /var/log/vezor/master.err.log
+tail -160 /var/log/vezor/master.log
+```
+
+`pull access denied` or `403 Forbidden` for `ghcr.io/vezor/*` means the install
+tree is stale; pull the latest `codex/omnisight-installer` branch and rerun the
+installer so the dev manifest uses locally built images.
+
 Open:
 
 ```text
@@ -376,6 +403,9 @@ http://127.0.0.1:3000/first-run
 Use this for production-like validation.
 
 On the Linux master:
+
+When using `installer/manifests/dev-example.json`, the Linux installer also
+builds the local master images before systemd starts the appliance.
 
 ```bash
 cd /opt/vezor/current
