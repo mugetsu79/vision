@@ -3,6 +3,35 @@
 set -euo pipefail
 
 failures=0
+installer_mode=0
+json_mode=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --installer)
+      installer_mode=1
+      ;;
+    --json)
+      json_mode=1
+      ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage: scripts/jetson-preflight.sh [--installer] [--json]
+
+Checks Jetson runtime prerequisites for Vezor edge operation.
+
+Options:
+  --installer   Include installer-specific port and device checks.
+  --json        Emit a compact JSON summary after the normal check output.
+USAGE
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\n' "$arg" >&2
+      exit 2
+      ;;
+  esac
+done
 
 pass() {
   printf 'PASS %s\n' "$1"
@@ -53,6 +82,16 @@ check_gst_element() {
     pass "$description"
   else
     fail "$description"
+  fi
+}
+
+check_port_available() {
+  local port="$1"
+
+  if command -v ss >/dev/null 2>&1 && ss -ltn "( sport = :$port )" | grep -q ":$port"; then
+    fail "installer port $port is already in use"
+  else
+    pass "installer port $port is available"
   fi
 }
 
@@ -136,9 +175,27 @@ else
   fail "nvidia-ctk is missing"
 fi
 
+if [[ "$installer_mode" -eq 1 ]]; then
+  for port in 8554 8888 8889 9108; do
+    check_port_available "$port"
+  done
+
+  if compgen -G "/dev/video*" >/dev/null; then
+    pass "USB/UVC video device is present"
+  else
+    pass "no USB/UVC video device is attached"
+  fi
+fi
+
 if [[ "$failures" -gt 0 ]]; then
+  if [[ "$json_mode" -eq 1 ]]; then
+    printf '{"status":"failed","installer_mode":%s,"failures":%d}\n' "$installer_mode" "$failures"
+  fi
   printf '\nJetson preflight failed with %d issue(s).\n' "$failures" >&2
   exit 1
 fi
 
+if [[ "$json_mode" -eq 1 ]]; then
+  printf '{"status":"passed","installer_mode":%s,"failures":0}\n' "$installer_mode"
+fi
 printf '\nJetson preflight passed.\n'

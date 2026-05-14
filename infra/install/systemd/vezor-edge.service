@@ -1,0 +1,25 @@
+[Unit]
+Description=Vezor Edge Appliance
+Documentation=file:/opt/vezor/current/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/vezor/current
+Environment=VEZOR_EDGE_CONFIG=/etc/vezor/edge.json
+Environment=VEZOR_SUPERVISOR_CONFIG=/etc/vezor/supervisor.json
+Environment=VEZOR_EDGE_COMPOSE=/opt/vezor/current/infra/install/compose/compose.supervisor.yml
+ExecStart=/opt/vezor/current/bin/vezor-edge up --config /etc/vezor/edge.json
+ExecStop=/opt/vezor/current/bin/vezor-edge down --config /etc/vezor/edge.json
+TimeoutStartSec=180
+TimeoutStopSec=90
+Restart=on-failure
+RestartSec=10s
+StateDirectory=vezor
+LogsDirectory=vezor
+RuntimeDirectory=vezor
+
+[Install]
+WantedBy=multi-user.target

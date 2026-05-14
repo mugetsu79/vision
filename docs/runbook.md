@@ -38,6 +38,12 @@ The first service-wrapper templates live in `infra/install/`:
 - `infra/install/compose/compose.supervisor.yml` for production container or
   appliance-style deployments. It uses a restart policy, a healthcheck, mounted
   config, and mounted credentials.
+- `infra/install/systemd/vezor-edge.service` and
+  `installer/linux/install-edge.sh` for the Jetson edge appliance. The
+  installer runs `scripts/jetson-preflight.sh --installer --json`, writes
+  `/etc/vezor/edge.json` and `/etc/vezor/supervisor.json`, claims a short-lived
+  pairing session when supplied, and enables the `vezor-edge.service` systemd
+  unit.
 
 The backend may render or validate these artifacts, but it must not install,
 start, or shell into a node. Installation is a bootstrap responsibility; daily
@@ -198,22 +204,31 @@ python3 -m uv run python -m argus.supervisor.runner \
   --config /etc/vezor/supervisor.json
 ```
 
-For Jetson edge Compose, export `ARGUS_SUPERVISOR_ID`, `ARGUS_EDGE_NODE_ID`,
-`ARGUS_API_BASE_URL`, and `ARGUS_API_BEARER_TOKEN`, then start the named
-supervisor service:
+For installed Jetson edge nodes, create a one-time edge pairing session in
+Control -> Deployment and run the local edge installer on the Jetson:
 
 ```bash
-docker compose -f infra/docker-compose.edge.yml --profile supervisor \
-  up -d --no-build mediamtx nats-leaf otel-collector supervisor
+sudo /opt/vezor/current/installer/linux/install-edge.sh \
+  --api-url "https://vezor.example.com" \
+  --session-id "<pairing-session-id>" \
+  --pairing-code "<one-time-code>" \
+  --edge-name "jetson-edge-1"
 ```
+
+The installer validates Jetson prerequisites, writes local edge and supervisor
+config, uses `vezorctl pair` to claim node credentials, and starts
+`vezor-edge.service`. The service then owns local MediaMTX and supervisor
+startup through `infra/install/compose/compose.supervisor.yml`; normal operator
+actions remain Control -> Deployment and Control -> Operations actions.
 
 Use `--once` on the Python command for deterministic smoke checks. A first
 hardware-only report can produce `supported`; after worker metrics include
 p95/p99 samples, a matching model should become `recommended` or `degraded`.
-Stop the pilot supervisor with `Ctrl-C` for the direct Python command or
-`docker compose -f infra/docker-compose.edge.yml stop supervisor` for Jetson.
-This MVP owns direct child worker processes only; systemd, Kubernetes, and
-external Docker daemon lifecycle adapters are still future production work.
+Stop the pilot supervisor with `Ctrl-C` for the direct Python command. For
+installed edge nodes, use Control -> Deployment or `systemctl stop
+vezor-edge.service` on the node during maintenance. This MVP owns direct child
+worker processes only; Kubernetes and external Docker daemon lifecycle adapters
+are still future production work.
 The password grant and static bearer arguments are development or break-glass
 authentication modes only; they should not appear in installed service
 definitions.
