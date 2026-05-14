@@ -75,6 +75,10 @@ installer yet. The planned installer band is documented in
 [2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md)
 and
 [2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md](/Users/yann.moren/vision/docs/superpowers/plans/2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md).
+On the installer branch, the macOS master package artifacts start at
+`installer/macos/install-master.sh` and
+`infra/install/launchd/com.vezor.master.plist`; the Docker commands below remain
+the current manual fallback until the full installer band is validated.
 
 ## Before You Leave For The Demo
 

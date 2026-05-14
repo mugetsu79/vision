@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.vezor.master</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/vezor/current/bin/vezor-master</string>
+    <string>up</string>
+    <string>--config</string>
+    <string>/etc/vezor/master.json</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/opt/vezor/current</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/var/log/vezor/master.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/vezor/master.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>VEZOR_MASTER_CONFIG</key>
+    <string>/etc/vezor/master.json</string>
+  </dict>
+</dict>
+</plist>

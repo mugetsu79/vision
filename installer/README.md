@@ -27,3 +27,17 @@ The Linux master path is a systemd-owned appliance:
 The package may use Docker or Podman under the hood, but the operator should
 not run `make dev-up`, hand-run Compose, or paste bearer tokens for normal
 operation.
+
+## macOS Master Artifact
+
+The macOS master path is a launchd-owned portable appliance for MacBook Pro
+pilot and demo systems:
+
+- `infra/install/launchd/com.vezor.master.plist` owns the master service.
+- `installer/macos/install-master.sh` validates macOS, writes
+  `/etc/vezor/master.json`, installs the LaunchDaemon, and starts it.
+- `installer/macos/uninstall.sh` unloads launchd services while preserving data
+  unless the operator explicitly confirms `delete-vezor-data`.
+
+This path may use Docker Desktop as the local appliance runtime in v1, but the
+operator should not hand-run Compose after installation.
