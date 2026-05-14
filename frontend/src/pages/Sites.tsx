@@ -9,7 +9,7 @@ import { SiteDialog } from "@/components/sites/SiteDialog";
 import { Button } from "@/components/ui/button";
 import { productBrand } from "@/brand/product";
 import { useCameras } from "@/hooks/use-cameras";
-import { useCreateSite, useSites } from "@/hooks/use-sites";
+import { useCreateSite, useDeleteSite, useSites, type Site } from "@/hooks/use-sites";
 
 export function SitesPage() {
   return (
@@ -25,12 +25,21 @@ function SitesContent() {
   const { data: sites = [], isLoading } = useSites();
   const { data: cameras = [] } = useCameras();
   const createSite = useCreateSite();
+  const deleteSite = useDeleteSite();
   const sceneCountBySite = new Map<string, number>();
   for (const camera of cameras) {
     sceneCountBySite.set(
       camera.site_id,
       (sceneCountBySite.get(camera.site_id) ?? 0) + 1,
     );
+  }
+
+  async function handleDeleteSite(site: Site) {
+    if (!window.confirm(`Delete ${site.name}? This cannot be undone.`)) {
+      return;
+    }
+
+    await deleteSite.mutateAsync(site.id);
   }
 
   return (
@@ -95,6 +104,16 @@ function SitesContent() {
                     {site.description}
                   </p>
                 ) : null}
+                <div className="mt-4 flex justify-end">
+                  <button
+                    className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={deleteSite.isPending}
+                    type="button"
+                    onClick={() => void handleDeleteSite(site)}
+                  >
+                    Delete
+                  </button>
+                </div>
               </WorkspaceSurface>
             );
           })}

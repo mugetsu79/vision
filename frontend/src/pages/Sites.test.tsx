@@ -94,6 +94,22 @@ function mockSitesApi({
       return jsonResponse(createdSite, 201);
     }
 
+    if (url.pathname.startsWith("/api/v1/sites/") && request.method === "DELETE") {
+      const siteId = url.pathname.split("/").pop();
+      currentSites = currentSites.filter((site) => {
+        if (
+          typeof site === "object" &&
+          site !== null &&
+          "id" in site &&
+          typeof site.id === "string"
+        ) {
+          return site.id !== siteId;
+        }
+        return true;
+      });
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+
     if (url.pathname === "/api/v1/sites") {
       return jsonResponse(currentSites);
     }
@@ -231,5 +247,45 @@ describe("SitesPage", () => {
     });
 
     expect(fetchMock).toHaveBeenCalled();
+  });
+
+  test("deletes a site from its location card after confirmation", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = mockSitesApi({
+      sites: [hqSite, depotSite],
+      cameras: [dockScene, yardScene],
+    });
+
+    renderSitesPage();
+
+    const grid = await screen.findByTestId("site-context-grid");
+    const hqCard = within(grid)
+      .getByRole("heading", { name: "HQ" })
+      .closest("section");
+
+    expect(hqCard).not.toBeNull();
+    await user.click(
+      within(hqCard as HTMLElement).getByRole("button", { name: /delete/i }),
+    );
+
+    await waitFor(() =>
+      expect(within(grid).queryByRole("heading", { name: "HQ" })).not.toBeInTheDocument(),
+    );
+    expect(confirmSpy).toHaveBeenCalledWith("Delete HQ? This cannot be undone.");
+
+    const siteDeleteRequest = fetchMock.mock.calls
+      .map((call) => call[0])
+      .find(
+        (request) =>
+          request instanceof Request &&
+          request.method === "DELETE" &&
+          new URL(request.url).pathname === `/api/v1/sites/${hqSite.id}`,
+      );
+
+    expect(siteDeleteRequest).toBeInstanceOf(Request);
+    expect(
+      within(grid).getByRole("heading", { name: "Depot" }),
+    ).toBeInTheDocument();
   });
 });

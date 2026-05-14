@@ -41,3 +41,22 @@ export function useCreateSite() {
     },
   });
 }
+
+export function useDeleteSite() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (siteId: string) => {
+      const { error } = await apiClient.DELETE("/api/v1/sites/{site_id}", {
+        params: { path: { site_id: siteId } },
+      });
+
+      if (error) {
+        throw toApiError(error, "Failed to delete site.");
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+  });
+}
