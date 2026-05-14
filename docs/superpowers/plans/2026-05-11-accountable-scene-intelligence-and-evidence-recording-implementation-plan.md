@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, per-worker incident rules, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, installable first-run productization, Jetson runtime soak, and gated DeepStream.
+**Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, per-worker incident rules, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, installable first-run productization, product installer packaging, Jetson runtime soak, and gated DeepStream.
 
 **Architecture:** Land immutable scene/privacy snapshots, first-class evidence artifacts, and incident-scoped ledger entries first, then add a UI-managed configuration control plane before introducing more runtime behavior. The worker continues to emit short event clips; storage becomes provider-aware and the per-camera recording policy selects a UI-managed runtime route so edge local, central MinIO, S3-compatible/cloud, and local-first deployments share one review contract. Before Operational Memory starts, per-worker incident rules must become UI/API-managed scene policy that production workers load and report. Later tasks must derive runtime, policy, memory, cross-camera, and supervisor views from the same contract, artifact, ledger, configuration-profile, rule, hardware-admission, runtime-report, install-state, and node-credential data instead of adding parallel case-history systems. The backend and browser remain a control plane; durable macOS/Linux supervisor services own local process reconciliation after a one-time install and UI-managed pairing flow.
 
@@ -12,6 +12,7 @@
 
 - `/Users/yann.moren/vision/docs/superpowers/specs/2026-05-11-accountable-scene-intelligence-and-evidence-recording-design.md`
 - `/Users/yann.moren/vision/docs/superpowers/specs/2026-05-13-installable-supervisor-and-first-run-productization-design.md`
+- `/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md`
 
 ---
 
@@ -27,10 +28,11 @@ Execute one task at a time. After each task:
 Do not stage unrelated untracked scratch files. Keep WebGL off. Execute the
 tasks in order. Runtime Passport, per-worker incident rules, Operational
 Memory, Prompt-To-Policy, Identity-Light Cross-Camera Intelligence,
-Fleet/Operations hardening, installable first-run productization, and runtime
-soak are now part of this plan after the accountable evidence foundation. Track
-C / DeepStream remains a late gated task and must not start until the runtime
-soak task proves Track A/B readiness on target Jetson hardware.
+Fleet/Operations hardening, installable first-run productization, product
+installer packaging, and runtime soak are now part of this plan after the
+accountable evidence foundation. Track C / DeepStream remains a late gated task
+and must not start until the runtime soak task proves Track A/B readiness on
+target Jetson hardware and the user accepts any remaining installer risk.
 
 After Task 13C, no new operator-facing product behavior may rely only on
 environment variables, command-line flags, or hand-edited backend files. A task
@@ -359,14 +361,41 @@ Validation goal:
 Band gate: record actual hardware soak evidence before opening the DeepStream
 lane.
 
+### Band 8.5: Product Installer And No-Console First Run
+
+Tasks: `23A-23J`
+
+Detailed plan:
+
+```text
+docs/superpowers/plans/2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md
+```
+
+Validation goal:
+
+- macOS master installs as a launchd-owned portable appliance for MacBook Pro
+  pilot/demo operation
+- Linux master installs as a systemd-owned production appliance
+- Jetson edge installs as a systemd-owned edge appliance
+- first-run bootstrap creates the initial admin/tenant from local one-time
+  bootstrap material
+- edge pairing uses Control -> Deployment and local node credential storage
+- Operations lifecycle buttons work without copied bearer tokens, foreground
+  supervisor terminals, or manual Docker development commands
+- product service files and installer artifacts do not embed long-lived secrets
+
+Band gate: normal installed operation is UI-managed. The only command-line use
+left in the product path is local package install, local package status,
+support diagnostics, and break-glass recovery.
+
 ### Band 9: DeepStream Gate
 
 Task: `24`
 
 Validation goal:
 
-- DeepStream starts only after Band 8 passes, unless the user explicitly accepts
-  the risk
+- DeepStream starts only after Bands 8 and 8.5 pass, unless the user explicitly
+  accepts the risk
 - DeepStream metadata maps into the existing track lifecycle
 - Operations reports DeepStream pipeline health
 - fallback to non-DeepStream runtimes remains available

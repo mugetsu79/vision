@@ -4,7 +4,7 @@ This is the operator-ready deployment guide for Vezor.
 
 Use it when you want to decide what to deploy, where to deploy it, and in what order to validate it.
 
-For the shorter decision guide, use [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md). For the portable MacBook Pro + Jetson field demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md).
+For the shorter decision guide, use [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md). For the portable MacBook Pro + Jetson field demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md). For the next no-console installer band, use [2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md).
 
 ## Current Implementation Snapshot
 

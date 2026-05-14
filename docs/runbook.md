@@ -5,6 +5,7 @@ See also:
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 - [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md)
+- [2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md)
 
 ## Worker Lifecycle, Deployment, And Operations
 

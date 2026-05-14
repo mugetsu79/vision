@@ -71,7 +71,10 @@ bearer tokens are acceptable for setup, smoke tests, and break-glass use in this
 portable guide. Normal installed operation should move to paired node
 credentials and local credential stores. The checked-in service templates under
 `infra/install/` are templates; they are not a complete `.pkg`, `.deb`, or Helm
-installer yet.
+installer yet. The planned installer band is documented in
+[2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md)
+and
+[2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md](/Users/yann.moren/vision/docs/superpowers/plans/2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md).
 
 ## Before You Leave For The Demo
 
