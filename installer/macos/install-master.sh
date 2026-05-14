@@ -134,6 +134,30 @@ print(reference if isinstance(reference, str) and reference else fallback)
 PY
 }
 
+stop_existing_master() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] stop existing com.vezor.master launchd job"
+    echo "[dry-run] stop existing Vezor master containers"
+    return 0
+  fi
+
+  launchctl bootout system "$PLIST_PATH" 2>/dev/null || true
+  if [[ -x /opt/vezor/current/bin/vezor-master && -f "$DEFAULT_MASTER_CONFIG" ]]; then
+    /opt/vezor/current/bin/vezor-master down \
+      --config "$DEFAULT_MASTER_CONFIG" >/dev/null 2>&1 || true
+  fi
+}
+
+check_port_available() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1 \
+    && lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "Port $port is already in use." >&2
+    echo "Stop any development stack or other service using port $port, then rerun the installer." >&2
+    exit 1
+  fi
+}
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This installer target is macOS master. Detected: $(uname -s)" >&2
   exit 1
@@ -159,6 +183,12 @@ if [[ -n "$MANIFEST" && ! -f "$MANIFEST" ]]; then
   echo "Manifest not found: $MANIFEST" >&2
   exit 1
 fi
+
+stop_existing_master
+
+for port in 3000 8000 8080 8554 8888 8889 9000; do
+  check_port_available "$port"
+done
 
 run install -d -m 0755 \
   "$CONFIG_DIR" \
@@ -254,9 +284,6 @@ run install -m 0644 \
   /opt/vezor/current/infra/install/launchd/com.vezor.master.plist \
   "$PLIST_PATH"
 
-if [[ "$DRY_RUN" -eq 0 ]]; then
-  launchctl bootout system "$PLIST_PATH" 2>/dev/null || true
-fi
 run launchctl bootstrap system "$PLIST_PATH"
 run launchctl enable system/com.vezor.master
 

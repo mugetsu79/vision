@@ -328,6 +328,18 @@ Use this for the portable MacBook Pro pilot.
 
 On the MacBook:
 
+If you previously ran the development stack on the same Mac, stop it before
+installing so ports `3000`, `8000`, `8080`, `8554`, `8888`, `8889`, and `9000`
+belong to the installed appliance:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml down  # Development fallback cleanup
+```
+
+The macOS installer now refuses to continue when those ports are already
+occupied by another service. That is intentional; otherwise the browser may
+open an old development backend and skip first-run.
+
 ```bash
 cd /opt/vezor/current
 sudo ./installer/macos/install-master.sh \
@@ -346,7 +358,12 @@ Validate service state:
 ```bash
 sudo launchctl print system/com.vezor.master
 curl -fsS http://127.0.0.1:8000/healthz
+docker ps --filter name=vezor-master
 ```
+
+The `docker ps` output must show `vezor-master` containers. If it only shows
+`infra-*` containers, you are still talking to the development stack, not the
+installed master.
 
 Open:
 
@@ -1004,11 +1021,14 @@ sudo systemctl start vezor-master.service
 macOS:
 
 ```bash
-sudo launchctl bootout system /Library/LaunchDaemons/com.vezor.master.plist
 cd /opt/vezor/current
 git fetch origin
 git pull --ff-only origin codex/omnisight-installer
-sudo launchctl bootstrap system /Library/LaunchDaemons/com.vezor.master.plist
+sudo ./installer/macos/install-master.sh \
+  --version "portable-demo" \
+  --manifest installer/manifests/dev-example.json \
+  --public-url "http://127.0.0.1:3000" \
+  --data-dir /var/lib/vezor
 ```
 
 Final packages should use signed package upgrades with rollback metadata

@@ -45,11 +45,32 @@ def test_appliance_driver_supports_service_required_commands() -> None:
     assert 'DEFAULT_CONFIG="/etc/vezor/master.json"' in driver
     assert 'DEFAULT_CONFIG="/etc/vezor/edge.json"' in driver
     assert 'run_compose up -d --remove-orphans' in driver
-    assert 'run_compose down "${EXTRA_ARGS[@]}"' in driver
+    assert 'run_compose_with_extra_args down' in driver
     assert "VEZOR_MASTER_ENV_FILE" in driver
     assert "VEZOR_EDGE_ENV_FILE" in driver
     assert "/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin" in driver
     assert 'if [[ "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]' in driver
+
+
+def test_appliance_driver_handles_empty_extra_args_under_macos_bash() -> None:
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(REPO_ROOT / "bin" / "vezor-appliance"),
+            "master",
+            "status",
+            "--config",
+            "/tmp/vezor-missing-config.json",
+        ],
+        check=False,
+        capture_output=True,
+        env={"PATH": "/usr/bin:/bin", "VEZOR_CONTAINER_ENGINE": "unsupported"},
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "unbound variable" not in result.stderr
+    assert "Unsupported container engine: unsupported" in result.stderr
 
 
 def test_vezorctl_wrapper_uses_installer_tooling_without_static_tokens() -> None:

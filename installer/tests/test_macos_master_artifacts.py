@@ -30,6 +30,8 @@ def test_macos_master_plist_is_launchd_owned_appliance() -> None:
     assert "<string>/etc/vezor/master.json</string>" in plist
     assert "<key>RunAtLoad</key>" in plist
     assert "<key>KeepAlive</key>" in plist
+    assert "<key>SuccessfulExit</key>" in plist
+    assert "<false/>" in plist
     assert "<string>/var/log/vezor/master.log</string>" in plist
     assert "<key>PATH</key>" in plist
     assert "/Applications/Docker.app/Contents/Resources/bin" in plist
@@ -50,6 +52,10 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "arm64" in script
     assert "x86_64" in script
     assert "/Applications/Docker.app" in script
+    assert "check_port_available" in script
+    assert "for port in 3000 8000 8080 8554 8888 8889 9000" in script
+    assert 'lsof -nP -iTCP:"$port" -sTCP:LISTEN -t' in script
+    assert "stop_existing_master" in script
     assert "launchctl bootstrap system" in script
     assert "$CONFIG_DIR/master.env" in script
     assert "$CONFIG_DIR/supervisor.json" in script

@@ -168,28 +168,36 @@ run_compose() {
   compose_command -f "$COMPOSE_FILE" "$@"
 }
 
+run_compose_with_extra_args() {
+  set +u
+  run_compose "$@" "${EXTRA_ARGS[@]}"
+  local status=$?
+  set -u
+  return "$status"
+}
+
 case "$COMMAND" in
   up)
-    run_compose up -d --remove-orphans "${EXTRA_ARGS[@]}"
+    run_compose_with_extra_args up -d --remove-orphans
     ;;
   down)
-    run_compose down "${EXTRA_ARGS[@]}"
+    run_compose_with_extra_args down
     ;;
   restart)
-    run_compose down "${EXTRA_ARGS[@]}"
+    run_compose_with_extra_args down
     run_compose up -d --remove-orphans
     ;;
   status|ps)
-    run_compose ps "${EXTRA_ARGS[@]}"
+    run_compose_with_extra_args ps
     ;;
   logs)
-    run_compose logs "${EXTRA_ARGS[@]}"
+    run_compose_with_extra_args logs
     ;;
   config)
-    run_compose config "${EXTRA_ARGS[@]}"
+    run_compose_with_extra_args config
     ;;
   pull)
-    run_compose pull "${EXTRA_ARGS[@]}"
+    run_compose_with_extra_args pull
     ;;
   -h|--help)
     usage
