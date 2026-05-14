@@ -142,6 +142,10 @@ services:
       ARGUS_KEYCLOAK_SERVER_URL: http://keycloak:8080
       ARGUS_KEYCLOAK_PUBLIC_SERVER_URL: http://127.0.0.1:8080
       ARGUS_KEYCLOAK_ISSUER: http://keycloak:8080/realms/argus-dev
+      ARGUS_KEYCLOAK_ADMIN_USERNAME: admin
+      ARGUS_KEYCLOAK_ADMIN_PASSWORD: admin
+      ARGUS_KEYCLOAK_FRONTEND_CLIENT_ID: argus-frontend
+      ARGUS_KEYCLOAK_FRONTEND_URL: http://localhost:3000
     ports:
       - "8000:8000"
     volumes:

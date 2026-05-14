@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     keycloak_issuer: str = "http://localhost:8080/realms/argus-dev"
     keycloak_platform_realm: str = "platform-admin"
     keycloak_jwks_cache_ttl_seconds: int = 3600
+    keycloak_admin_username: str | None = None
+    keycloak_admin_password: SecretStr | None = None
+    keycloak_frontend_client_id: str = "argus-frontend"
+    keycloak_frontend_url: str = "http://localhost:3000"
 
     rtsp_encryption_key: SecretStr = SecretStr("argus-dev-rtsp-key")
     config_encryption_key: SecretStr = SecretStr("argus-dev-config-key")
@@ -138,6 +142,10 @@ class Settings(BaseSettings):
     @property
     def platform_admin_issuer(self) -> str:
         return f"{self.keycloak_realms_base_url}/{self.keycloak_platform_realm}"
+
+    @property
+    def keycloak_bootstrap_realm(self) -> str:
+        return self.keycloak_issuer.rstrip("/").rsplit("/", 1)[-1]
 
 
 settings = Settings()

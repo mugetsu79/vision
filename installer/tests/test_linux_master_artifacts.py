@@ -60,6 +60,10 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
         "${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}"
         ":/run/vezor/credentials:ro"
     ) in compose
+    assert "ARGUS_KEYCLOAK_ISSUER" in compose
+    assert "ARGUS_KEYCLOAK_FRONTEND_CLIENT_ID" in compose
+    assert "target: ARGUS_KEYCLOAK_ADMIN_USERNAME" in compose
+    assert "target: ARGUS_KEYCLOAK_ADMIN_PASSWORD" in compose
 
 
 def test_linux_master_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
@@ -95,6 +99,9 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert "VEZOR_PUBLIC_KEYCLOAK_URL=" in script
+    assert "VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev" in script
+    assert "VEZOR_OIDC_CLIENT_ID=argus-frontend" in script
     assert 'chmod 0644 "$MASTER_ENV"' in script
     assert 'old_umask="$(umask)"' in script
     assert "manifest_image_ref backend" in script

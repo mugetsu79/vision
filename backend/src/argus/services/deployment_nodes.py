@@ -5,7 +5,7 @@ import re
 import secrets
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
-from typing import Any, TypeVar, cast
+from typing import Any, Protocol, TypeVar, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -82,15 +82,34 @@ _KEY_VALUE_SECRET_RE = re.compile(
 )
 
 
+class BootstrapIdentityProvisioner(Protocol):
+    async def provision_tenant_admin(
+        self,
+        *,
+        tenant_id: UUID,
+        tenant_name: str,
+        tenant_slug: str,
+        admin_email: str,
+        admin_password: str,
+    ) -> str: ...
+
+
 class DeploymentNodeService:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
         *,
         now_factory: Callable[[], datetime] | None = None,
+        identity_provisioner: BootstrapIdentityProvisioner | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.now_factory = now_factory or (lambda: datetime.now(tz=UTC))
+        self.identity_provisioner = identity_provisioner
+
+    async def close(self) -> None:
+        close = getattr(self.identity_provisioner, "close", None)
+        if callable(close):
+            await close()
 
     async def get_master_bootstrap_status(self) -> MasterBootstrapStatusResponse:
         now = self.now_factory()
@@ -99,7 +118,13 @@ class DeploymentNodeService:
             users = await self._list_rows(session=session, model=User)
             sessions = await self._list_rows(session=session, model=MasterBootstrapSession)
 
-        first_run_required = not tenants or not users
+        first_run_required = (
+            not tenants
+            or not users
+            or (
+                self.identity_provisioner is not None and _placeholder_admin_user(users) is not None
+            )
+        )
         active_session = _latest_active_bootstrap_session(sessions, now=now)
         completed_session = _latest_consumed_bootstrap_session(sessions)
         tenant = next((row for row in tenants if isinstance(row, Tenant)), None)
@@ -109,9 +134,7 @@ class DeploymentNodeService:
             active_token_expires_at=(
                 active_session.expires_at if active_session is not None else None
             ),
-            completed_at=(
-                completed_session.consumed_at if completed_session is not None else None
-            ),
+            completed_at=(completed_session.consumed_at if completed_session is not None else None),
             tenant_slug=tenant.slug if tenant is not None else None,
         )
 
@@ -179,44 +202,98 @@ class DeploymentNodeService:
                 msg = "Bootstrap token expired."
                 raise ValueError(msg)
 
-            tenant_slug = payload.tenant_slug or _slugify(payload.tenant_name)
-            tenant = Tenant(name=payload.tenant_name, slug=tenant_slug)
-            _ensure_identity_and_timestamps(tenant, now=now)
-            session.add(tenant)
-            await _flush_if_available(session)
+            existing_tenants = await self._list_rows(session=session, model=Tenant)
+            existing_users = await self._list_rows(session=session, model=User)
+            existing_nodes = await self._list_rows(session=session, model=DeploymentNode)
+            placeholder_user = _placeholder_admin_user(existing_users)
+            existing_tenant = next(
+                (row for row in existing_tenants if isinstance(row, Tenant)),
+                None,
+            )
+            repair_placeholder_identity = (
+                self.identity_provisioner is not None
+                and existing_tenant is not None
+                and placeholder_user is not None
+            )
+            if existing_tenant is not None and existing_users and not repair_placeholder_identity:
+                msg = "Master bootstrap is already complete."
+                raise ValueError(msg)
 
-            admin_subject = f"bootstrap:{payload.admin_email}"
-            user = User(
-                tenant_id=tenant.id,
-                email=payload.admin_email,
-                oidc_sub=admin_subject,
-                role=RoleEnum.ADMIN,
-            )
-            _ensure_identity_and_timestamps(user, now=now)
-            session.add(user)
+            tenant: Tenant
+            if repair_placeholder_identity:
+                if existing_tenant is None or placeholder_user is None:
+                    msg = "Bootstrap identity repair state is inconsistent."
+                    raise ValueError(msg)
+                tenant = existing_tenant
+                tenant_slug = tenant.slug
+            else:
+                tenant_slug = payload.tenant_slug or _slugify(payload.tenant_name)
+                tenant = Tenant(name=payload.tenant_name, slug=tenant_slug)
+                _ensure_identity_and_timestamps(tenant, now=now)
+                session.add(tenant)
+                await _flush_if_available(session)
 
-            supervisor_id = payload.central_supervisor_id or _slugify(
-                payload.central_node_name
+            if self.identity_provisioner is None:
+                admin_subject = f"bootstrap:{payload.admin_email}"
+            else:
+                admin_subject = await self.identity_provisioner.provision_tenant_admin(
+                    tenant_id=tenant.id,
+                    tenant_name=tenant.name,
+                    tenant_slug=tenant_slug,
+                    admin_email=payload.admin_email,
+                    admin_password=payload.admin_password,
+                )
+
+            if repair_placeholder_identity:
+                if placeholder_user is None:
+                    msg = "Bootstrap identity repair user is missing."
+                    raise ValueError(msg)
+                user = placeholder_user
+                user.email = payload.admin_email
+                user.oidc_sub = admin_subject
+                user.role = RoleEnum.ADMIN
+                cast(Any, user).updated_at = now
+            else:
+                user = User(
+                    tenant_id=tenant.id,
+                    email=payload.admin_email,
+                    oidc_sub=admin_subject,
+                    role=RoleEnum.ADMIN,
+                )
+                _ensure_identity_and_timestamps(user, now=now)
+                session.add(user)
+
+            node = next(
+                (
+                    row
+                    for row in existing_nodes
+                    if isinstance(row, DeploymentNode)
+                    and row.node_kind is DeploymentNodeKind.CENTRAL
+                    and row.tenant_id == tenant.id
+                ),
+                None,
             )
-            node = DeploymentNode(
-                tenant_id=tenant.id,
-                edge_node_id=None,
-                supervisor_id=supervisor_id,
-                node_kind=DeploymentNodeKind.CENTRAL,
-                hostname=payload.central_node_name,
-                install_status=DeploymentInstallStatus.INSTALLED,
-                credential_status=DeploymentCredentialStatus.MISSING,
-                service_manager=None,
-                service_status=None,
-                version=None,
-                os_name=None,
-                host_profile=None,
-                last_service_reported_at=None,
-                diagnostics={},
-            )
-            _ensure_identity_and_timestamps(node, now=now)
-            session.add(node)
-            await _flush_if_available(session)
+            if node is None:
+                supervisor_id = payload.central_supervisor_id or _slugify(payload.central_node_name)
+                node = DeploymentNode(
+                    tenant_id=tenant.id,
+                    edge_node_id=None,
+                    supervisor_id=supervisor_id,
+                    node_kind=DeploymentNodeKind.CENTRAL,
+                    hostname=payload.central_node_name,
+                    install_status=DeploymentInstallStatus.INSTALLED,
+                    credential_status=DeploymentCredentialStatus.MISSING,
+                    service_manager=None,
+                    service_status=None,
+                    version=None,
+                    os_name=None,
+                    host_profile=None,
+                    last_service_reported_at=None,
+                    diagnostics={},
+                )
+                _ensure_identity_and_timestamps(node, now=now)
+                session.add(node)
+                await _flush_if_available(session)
 
             session_row.tenant_id = tenant.id
             session_row.status = "consumed"
@@ -1108,9 +1185,7 @@ def _redacted_service_report_response(
     node: DeploymentNodeResponse,
 ) -> SupervisorServiceReportResponse:
     response = supervisor_service_report_response(row, node=node)
-    return response.model_copy(
-        update={"diagnostics": redact_diagnostics(response.diagnostics)}
-    )
+    return response.model_copy(update={"diagnostics": redact_diagnostics(response.diagnostics)})
 
 
 def _redacted_lifecycle_response(
@@ -1190,16 +1265,12 @@ def _config_references(
     model_admissions: Iterable[object],
 ) -> dict[str, object]:
     runtime_rows = [row for row in runtime_reports if isinstance(row, WorkerRuntimeReport)]
-    hardware_rows = [
-        row for row in hardware_reports if isinstance(row, EdgeNodeHardwareReport)
-    ]
+    hardware_rows = [row for row in hardware_reports if isinstance(row, EdgeNodeHardwareReport)]
     admission_rows = [
         row for row in model_admissions if isinstance(row, WorkerModelAdmissionReport)
     ]
     return {
-        "scene_contract_hashes": _sorted_values(
-            row.scene_contract_hash for row in runtime_rows
-        ),
+        "scene_contract_hashes": _sorted_values(row.scene_contract_hash for row in runtime_rows),
         "runtime_artifact_ids": _sorted_values(
             [
                 *(row.runtime_artifact_id for row in runtime_rows),
@@ -1210,9 +1281,7 @@ def _config_references(
             row.runtime_selection_profile_id for row in admission_rows
         ),
         "hardware_report_hashes": _sorted_values(row.report_hash for row in hardware_rows),
-        "hardware_report_ids": _sorted_values(
-            row.hardware_report_id for row in admission_rows
-        ),
+        "hardware_report_ids": _sorted_values(row.hardware_report_id for row in admission_rows),
     }
 
 
@@ -1345,10 +1414,7 @@ def _credential_event(
 
 
 def _next_credential_version(credentials: list[SupervisorNodeCredential]) -> int:
-    return (
-        max((credential.credential_version or 1 for credential in credentials), default=0)
-        + 1
-    )
+    return max((credential.credential_version or 1 for credential in credentials), default=0) + 1
 
 
 def _pairing_status(row: NodePairingSession, now: datetime) -> str:
@@ -1399,9 +1465,7 @@ def _latest_active_bootstrap_session(
 
 def _latest_consumed_bootstrap_session(rows: list[object]) -> MasterBootstrapSession | None:
     consumed = [
-        row
-        for row in rows
-        if isinstance(row, MasterBootstrapSession) and row.status == "consumed"
+        row for row in rows if isinstance(row, MasterBootstrapSession) and row.status == "consumed"
     ]
     return max(
         consumed,
@@ -1410,6 +1474,19 @@ def _latest_consumed_bootstrap_session(rows: list[object]) -> MasterBootstrapSes
             fallback=datetime.min.replace(tzinfo=UTC),
         ),
         default=None,
+    )
+
+
+def _placeholder_admin_user(rows: list[object]) -> User | None:
+    return next(
+        (
+            row
+            for row in rows
+            if isinstance(row, User)
+            and row.role == RoleEnum.ADMIN
+            and row.oidc_sub.startswith("bootstrap:")
+        ),
+        None,
     )
 
 

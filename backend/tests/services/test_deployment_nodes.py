@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -127,6 +128,102 @@ async def test_master_bootstrap_complete_creates_initial_tenant_admin_node() -> 
                 central_supervisor_id="central-macbook-pro",
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_master_bootstrap_complete_provisions_oidc_admin_identity() -> None:
+    now = datetime(2026, 5, 14, 8, 10, tzinfo=UTC)
+    provisioner = _RecordingIdentityProvisioner(subject="keycloak-user-123")
+    service = DeploymentNodeService(
+        _MemorySessionFactory(),
+        now_factory=lambda: now,
+        identity_provisioner=provisioner,
+    )
+    rotated = await service.rotate_local_bootstrap_token(actor_subject="local-installer")
+
+    completed = await service.complete_master_bootstrap(
+        MasterBootstrapComplete(
+            bootstrap_token=rotated.bootstrap_token,
+            tenant_name="Vezor Pilot",
+            tenant_slug="vezor-pilot",
+            admin_email="admin@vezor.local",
+            admin_password="not-persisted-password",
+            central_node_name="macbook-pro-master",
+        )
+    )
+
+    rows = service.session_factory.session.rows
+    users = [row for row in rows if isinstance(row, User)]
+    serialized_rows = str([row.__dict__ for row in rows])
+
+    assert completed.admin_subject == "keycloak-user-123"
+    assert users[0].oidc_sub == "keycloak-user-123"
+    assert provisioner.calls == [
+        {
+            "tenant_id": users[0].tenant_id,
+            "tenant_name": "Vezor Pilot",
+            "tenant_slug": "vezor-pilot",
+            "admin_email": "admin@vezor.local",
+            "admin_password": "not-persisted-password",
+        }
+    ]
+    assert "not-persisted-password" not in serialized_rows
+
+
+@pytest.mark.asyncio
+async def test_master_bootstrap_repairs_preexisting_placeholder_admin_identity() -> None:
+    now = datetime(2026, 5, 14, 8, 10, tzinfo=UTC)
+    session_factory = _MemorySessionFactory()
+    service_without_identity = DeploymentNodeService(
+        session_factory,
+        now_factory=lambda: now,
+    )
+    initial = await service_without_identity.rotate_local_bootstrap_token(
+        actor_subject="local-installer"
+    )
+    await service_without_identity.complete_master_bootstrap(
+        MasterBootstrapComplete(
+            bootstrap_token=initial.bootstrap_token,
+            tenant_name="Vezor Pilot",
+            tenant_slug="vezor-pilot",
+            admin_email="admin@vezor.local",
+            admin_password="old-password",
+            central_node_name="macbook-pro-master",
+        )
+    )
+
+    provisioner = _RecordingIdentityProvisioner(subject="keycloak-user-456")
+    service = DeploymentNodeService(
+        session_factory,
+        now_factory=lambda: now,
+        identity_provisioner=provisioner,
+    )
+    status = await service.get_master_bootstrap_status()
+    rotated = await service.rotate_local_bootstrap_token(actor_subject="local-repair")
+
+    repaired = await service.complete_master_bootstrap(
+        MasterBootstrapComplete(
+            bootstrap_token=rotated.bootstrap_token,
+            tenant_name="Vezor Pilot",
+            tenant_slug="vezor-pilot",
+            admin_email="admin@vezor.local",
+            admin_password="new-password",
+            central_node_name="macbook-pro-master",
+        )
+    )
+
+    rows = service.session_factory.session.rows
+    tenants = [row for row in rows if isinstance(row, Tenant)]
+    users = [row for row in rows if isinstance(row, User)]
+    nodes = [row for row in rows if isinstance(row, DeploymentNode)]
+
+    assert status.first_run_required is True
+    assert repaired.admin_subject == "keycloak-user-456"
+    assert len(tenants) == 1
+    assert len(users) == 1
+    assert len(nodes) == 1
+    assert users[0].oidc_sub == "keycloak-user-456"
+    assert provisioner.calls[0]["admin_password"] == "new-password"
 
 
 @pytest.mark.asyncio
@@ -343,9 +440,7 @@ async def test_pairing_session_stores_only_hash_and_claim_returns_credential_onc
         actor_subject="admin-1",
     )
     stored_sessions = [
-        row
-        for row in service.session_factory.session.rows
-        if isinstance(row, NodePairingSession)
+        row for row in service.session_factory.session.rows if isinstance(row, NodePairingSession)
     ]
     claimed = await service.claim_pairing_session(
         tenant_id=tenant_id,
@@ -379,8 +474,7 @@ async def test_pairing_session_stores_only_hash_and_claim_returns_credential_onc
     assert credential_rows[0].encrypted_credential is None
     assert credential_rows[0].status is DeploymentCredentialStatus.ACTIVE
     assert any(
-        SupervisorNodeCredential in snapshot
-        and DeploymentCredentialEvent not in snapshot
+        SupervisorNodeCredential in snapshot and DeploymentCredentialEvent not in snapshot
         for snapshot in service.session_factory.session.flush_snapshots
     )
 
@@ -586,11 +680,7 @@ async def test_rotating_edge_node_credentials_revokes_old_material_and_returns_n
     ]
     assert events[-1].event_metadata["credential_version"] == 2
     assert rotated.credential_material not in str(
-        [
-            row
-            for row in service.session_factory.session.rows
-            if row is not rotated
-        ]
+        [row for row in service.session_factory.session.rows if row is not rotated]
     )
 
 
@@ -859,9 +949,7 @@ class _MemorySession:
             rows = [row for row in rows if getattr(row, "tenant_id", None) == tenant_id]
         if model_entities:
             rows = [
-                row
-                for row in rows
-                if any(isinstance(row, entity) for entity in model_entities)
+                row for row in rows if any(isinstance(row, entity) for entity in model_entities)
             ]
         if session_id is not None and (
             DeploymentNode in entities or NodePairingSession in entities
@@ -875,16 +963,10 @@ class _MemorySession:
             ]
         if deployment_edge_node_id is not None and DeploymentNode in entities:
             rows = [
-                row
-                for row in rows
-                if getattr(row, "edge_node_id", None) == deployment_edge_node_id
+                row for row in rows if getattr(row, "edge_node_id", None) == deployment_edge_node_id
             ]
         if credential_hash is not None and SupervisorNodeCredential in entities:
-            rows = [
-                row
-                for row in rows
-                if getattr(row, "credential_hash", None) == credential_hash
-            ]
+            rows = [row for row in rows if getattr(row, "credential_hash", None) == credential_hash]
         if deployment_node_id is not None and DeploymentCredentialEvent in entities:
             rows = [
                 row
@@ -892,9 +974,7 @@ class _MemorySession:
                 if getattr(row, "deployment_node_id", None) == deployment_node_id
             ]
         if supervisor_id is not None:
-            rows = [
-                row for row in rows if getattr(row, "supervisor_id", None) == supervisor_id
-            ]
+            rows = [row for row in rows if getattr(row, "supervisor_id", None) == supervisor_id]
         return _Result(rows)
 
     def add(self, row: object) -> None:
@@ -945,3 +1025,29 @@ def _seed_edge_node_scope(
             version="0.21.0",
         )
     )
+
+
+class _RecordingIdentityProvisioner:
+    def __init__(self, *, subject: str) -> None:
+        self.subject = subject
+        self.calls: list[dict[str, Any]] = []
+
+    async def provision_tenant_admin(
+        self,
+        *,
+        tenant_id: UUID,
+        tenant_name: str,
+        tenant_slug: str,
+        admin_email: str,
+        admin_password: str,
+    ) -> str:
+        self.calls.append(
+            {
+                "tenant_id": tenant_id,
+                "tenant_name": tenant_name,
+                "tenant_slug": tenant_slug,
+                "admin_email": admin_email,
+                "admin_password": admin_password,
+            }
+        )
+        return self.subject

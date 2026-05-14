@@ -190,6 +190,7 @@ from argus.services.cross_camera_threads import (
 from argus.services.deployment_nodes import DeploymentNodeService
 from argus.services.evidence_ledger import EvidenceLedgerService
 from argus.services.evidence_storage import resolve_local_evidence_path
+from argus.services.identity_bootstrap import keycloak_bootstrap_provisioner_from_settings
 from argus.services.incident_rules import IncidentRuleService
 from argus.services.local_first_sync import LocalFirstEvidenceSyncService
 from argus.services.model_admission import evaluate_worker_model_admission
@@ -306,6 +307,7 @@ class AppServices:
 
     async def close(self) -> None:
         await self.streams.close()
+        await self.deployment.close()
 
 
 class DatabaseAuditLogger:
@@ -462,9 +464,7 @@ class SiteService:
     async def list_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
         async with self.session_factory() as session:
             statement = (
-                select(Site)
-                .where(Site.tenant_id == tenant_context.tenant_id)
-                .order_by(Site.name)
+                select(Site).where(Site.tenant_id == tenant_context.tenant_id).order_by(Site.name)
             )
             sites = (await session.execute(statement)).scalars().all()
         return [_site_to_response(site) for site in sites]
@@ -648,8 +648,10 @@ class CameraService:
         site_id: UUID | None = None,
     ) -> list[CameraResponse]:
         async with self.session_factory() as session:
-            statement = select(Camera).join(Site, Site.id == Camera.site_id).where(
-                Site.tenant_id == tenant_context.tenant_id
+            statement = (
+                select(Camera)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
             )
             if site_id is not None:
                 statement = statement.where(Camera.site_id == site_id)
@@ -742,9 +744,7 @@ class CameraService:
             camera_id=camera.id,
             deployment_mode=camera.processing_mode.value,
             recording_policy=recording_policy,
-            allow_plaintext_plates=bool(
-                getattr(tenant, "anpr_store_plaintext", False)
-            ),
+            allow_plaintext_plates=bool(getattr(tenant, "anpr_store_plaintext", False)),
             plaintext_justification=getattr(tenant, "anpr_plaintext_justification", None),
             privacy_policy=base_config.privacy_policy,
         )
@@ -778,13 +778,10 @@ class CameraService:
             privacy_manifest_hash=privacy_snapshot.manifest_hash,
             privacy_policy=_privacy_policy_contract_payload(base_config.privacy_policy),
             incident_rules=[
-                _incident_rule_contract_payload(rule)
-                for rule in base_config.incident_rules
+                _incident_rule_contract_payload(rule) for rule in base_config.incident_rules
             ],
         )
-        contract_snapshot = await SceneContractService(
-            self.session_factory
-        ).get_or_create_snapshot(
+        contract_snapshot = await SceneContractService(self.session_factory).get_or_create_snapshot(
             tenant_id=tenant_context.tenant_id,
             camera_id=camera.id,
             contract=scene_contract,
@@ -1248,18 +1245,17 @@ class CameraService:
                 recording_policy = update_data.pop("recording_policy")
                 if recording_policy is not None:
                     update_data["evidence_recording_policy"] = (
-                        EvidenceRecordingPolicy.model_validate(
-                            recording_policy
-                        ).model_dump(mode="json")
+                        EvidenceRecordingPolicy.model_validate(recording_policy).model_dump(
+                            mode="json"
+                        )
                     )
             _validate_effective_camera_motion_metrics(camera, update_data)
 
             for field_name, value in update_data.items():
                 setattr(camera, field_name, value)
 
-            if (
-                _model_capability(primary_model) is DetectorCapability.OPEN_VOCAB
-                and (runtime_vocabulary_was_provided or primary_model_changed)
+            if _model_capability(primary_model) is DetectorCapability.OPEN_VOCAB and (
+                runtime_vocabulary_was_provided or primary_model_changed
             ):
                 _record_camera_vocabulary_snapshot(
                     session=session,
@@ -1306,16 +1302,12 @@ class CameraService:
             privacy=_worker_privacy_settings(camera.privacy),
             stream=_resolve_worker_stream_settings(
                 browser_delivery=BrowserDeliverySettings.model_validate(
-                    camera.browser_delivery
-                    or BrowserDeliverySettings().model_dump(mode="python")
+                    camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
                 ),
                 fps_cap=int(camera.fps_cap or 25),
             ),
             attribute_rules=list(camera.attribute_rules),
-            incident_rules=[
-                _incident_rule_to_worker_rule(rule)
-                for rule in incident_rules
-            ],
+            incident_rules=[_incident_rule_to_worker_rule(rule) for rule in incident_rules],
             zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
             vision_profile=SceneVisionProfile.model_validate(camera.vision_profile or {}),
             detection_regions=[
@@ -1523,16 +1515,12 @@ class OperationsService:
                     edge_node_ids=edge_ids,
                 )
             )
-            central_hardware_report = (
-                await supervisor_service.latest_hardware_report_for_central(
-                    tenant_id=tenant_context.tenant_id,
-                )
+            central_hardware_report = await supervisor_service.latest_hardware_report_for_central(
+                tenant_id=tenant_context.tenant_id,
             )
-            model_admission_by_camera = (
-                await supervisor_service.latest_model_admissions_by_camera(
-                    tenant_id=tenant_context.tenant_id,
-                    camera_ids=camera_ids,
-                )
+            model_admission_by_camera = await supervisor_service.latest_model_admissions_by_camera(
+                tenant_id=tenant_context.tenant_id,
+                camera_ids=camera_ids,
             )
 
         edge_by_id = {edge.id: edge for edge, _site in edge_rows}
@@ -1661,9 +1649,7 @@ class OperationsService:
                         latest_rule_events_by_camera.get(camera.id),
                     ),
                     assignment=(
-                        worker_assignment_response(assignment)
-                        if assignment is not None
-                        else None
+                        worker_assignment_response(assignment) if assignment is not None else None
                     ),
                     runtime_report=(
                         supervisor_runtime_report_response(runtime_report)
@@ -1690,9 +1676,7 @@ class OperationsService:
                         if controls is not None
                         else SupervisorMode.DISABLED
                     ),
-                    restart_policy=(
-                        controls.restart_policy if controls is not None else "never"
-                    ),
+                    restart_policy=(controls.restart_policy if controls is not None else "never"),
                     allowed_lifecycle_actions=(
                         controls.allowed_actions if controls is not None else []
                     ),
@@ -2119,9 +2103,7 @@ class HistoryService:
                         speed_p95.setdefault(bucket, {})[class_name] = float(p95)
                     speed_samples.setdefault(bucket, {})[class_name] = sample_count
                 if speed_threshold is not None and row.get("over_threshold_count") is not None:
-                    violations.setdefault(bucket, {})[class_name] = int(
-                        row["over_threshold_count"]
-                    )
+                    violations.setdefault(bucket, {})[class_name] = int(row["over_threshold_count"])
 
         if class_names:
             selected_classes = list(class_names)
@@ -2347,7 +2329,7 @@ class HistoryService:
                 FROM count_events
                 WHERE ts >= :starts_at
                   AND ts < :ends_at
-                  {' '.join(filters)}
+                  {" ".join(filters)}
                 GROUP BY 1, 2, 3
                 ORDER BY 1 ASC, 3 ASC, 2 ASC
                 """
@@ -2365,7 +2347,7 @@ class HistoryService:
                   FROM tracking_events
                   WHERE ts >= :starts_at
                     AND ts < :ends_at
-                    {' '.join(filters)}
+                    {" ".join(filters)}
                   GROUP BY 1, 2, 3, 4
                 )
                 SELECT
@@ -2379,9 +2361,7 @@ class HistoryService:
                 """
             )
         else:
-            count_expr = (
-                "count(*)::bigint"
-            )
+            count_expr = "count(*)::bigint"
             statement = text(
                 f"""
                 SELECT
@@ -2392,7 +2372,7 @@ class HistoryService:
                 FROM tracking_events
                 WHERE ts >= :starts_at
                   AND ts < :ends_at
-                  {' '.join(filters)}
+                  {" ".join(filters)}
                 GROUP BY 1, 2, 3
                   ORDER BY 1 ASC, 3 ASC, 2 ASC
                 """
@@ -2443,7 +2423,7 @@ class HistoryService:
             FROM {view_name}
             WHERE bucket >= :starts_at
               AND bucket < :ends_at
-              {' '.join(filters)}
+              {" ".join(filters)}
             GROUP BY 1, 2
             ORDER BY 1 ASC, 2 ASC
             """
@@ -2495,7 +2475,7 @@ class HistoryService:
                   FROM tracking_events
                   WHERE ts >= :starts_at
                     AND ts < :ends_at
-                    {' '.join(filters)}
+                    {" ".join(filters)}
                   GROUP BY 1, 2, 3, 4
                 ),
                 occupancy_by_camera AS (
@@ -2526,7 +2506,7 @@ class HistoryService:
                 FROM tracking_events
                 WHERE ts >= :starts_at
                   AND ts < :ends_at
-                  {' '.join(filters)}
+                  {" ".join(filters)}
                 GROUP BY 1, 2
                 ORDER BY 1 ASC, 2 ASC
                 """
@@ -2573,7 +2553,7 @@ class HistoryService:
             FROM count_events
             WHERE ts >= :starts_at
               AND ts < :ends_at
-              {' '.join(filters)}
+              {" ".join(filters)}
             GROUP BY 1, 2
             ORDER BY 1 ASC, 2 ASC
             """
@@ -2613,9 +2593,7 @@ class HistoryService:
             filters.append("AND class_name IN :class_names")
             parameters["class_names"] = class_names
 
-        count_expr = (
-            "count(*)::bigint"
-        )
+        count_expr = "count(*)::bigint"
         threshold_expr = (
             "count(*) FILTER (WHERE speed_kph IS NOT NULL AND speed_kph > :speed_threshold)::bigint"
             if speed_threshold is not None
@@ -2637,7 +2615,7 @@ class HistoryService:
                   FROM tracking_events
                   WHERE ts >= :starts_at
                     AND ts < :ends_at
-                    {' '.join(filters)}
+                    {" ".join(filters)}
                   GROUP BY 1, 2, 3, 4
                 ),
                 occupancy_by_camera AS (
@@ -2663,7 +2641,7 @@ class HistoryService:
                   FROM tracking_events
                   WHERE ts >= :starts_at
                     AND ts < :ends_at
-                    {' '.join(filters)}
+                    {" ".join(filters)}
                   GROUP BY 1, 2
                 )
                 SELECT
@@ -2704,7 +2682,7 @@ class HistoryService:
                 FROM tracking_events
                 WHERE ts >= :starts_at
                   AND ts < :ends_at
-                  {' '.join(filters)}
+                  {" ".join(filters)}
                 GROUP BY 1, 2
                 ORDER BY 1 ASC, 2 ASC
                 """
@@ -2766,7 +2744,7 @@ class HistoryService:
             FROM count_events
             WHERE ts >= :starts_at
               AND ts < :ends_at
-              {' '.join(filters)}
+              {" ".join(filters)}
             GROUP BY 1, 2
             ORDER BY 1 ASC, 2 ASC
             """
@@ -2813,7 +2791,7 @@ class HistoryService:
             FROM tracking_events
             WHERE ts >= :starts_at
               AND ts < :ends_at
-              {' '.join(filters)}
+              {" ".join(filters)}
             GROUP BY class_name
             ORDER BY event_count DESC, class_name ASC
             """
@@ -2852,7 +2830,7 @@ class HistoryService:
             FROM count_events
             WHERE ts >= :starts_at
               AND ts < :ends_at
-              {' '.join(filters)}
+              {" ".join(filters)}
             GROUP BY class_name
             ORDER BY event_count DESC, class_name ASC
             """
@@ -2890,7 +2868,7 @@ class HistoryService:
             FROM count_events
             WHERE ts >= :starts_at
               AND ts < :ends_at
-              {' '.join(filters)}
+              {" ".join(filters)}
             GROUP BY boundary_id
             ORDER BY boundary_id ASC
             """
@@ -3240,8 +3218,7 @@ class IncidentService:
         )
         occurred_at = (
             incident.reviewed_at
-            if review_status == IncidentReviewStatus.REVIEWED
-            and incident.reviewed_at is not None
+            if review_status == IncidentReviewStatus.REVIEWED and incident.reviewed_at is not None
             else datetime.now(tz=UTC)
         )
         await self.evidence_ledger.append_entry(
@@ -3367,8 +3344,7 @@ async def _load_runtime_passports_by_incident_ids(
         .where(Incident.id.in_(incident_ids))
     )
     return {
-        incident_id: snapshot
-        for snapshot, incident_id in (await session.execute(statement)).all()
+        incident_id: snapshot for snapshot, incident_id in (await session.execute(statement)).all()
     }
 
 
@@ -3410,9 +3386,7 @@ async def _load_enabled_incident_rules_by_camera_ids(
             DetectionRule.name,
         )
     )
-    rules_by_camera: dict[UUID, list[DetectionRule]] = {
-        camera_id: [] for camera_id in camera_ids
-    }
+    rules_by_camera: dict[UUID, list[DetectionRule]] = {camera_id: [] for camera_id in camera_ids}
     for rule in (await session.execute(statement)).scalars().all():
         rules_by_camera.setdefault(rule.camera_id, []).append(rule)
     return rules_by_camera
@@ -3460,9 +3434,7 @@ def _effective_incident_rule_hash(rules: list[DetectionRule]) -> str | None:
     ]
     if len(ordered_hashes) == 1:
         return ordered_hashes[0]
-    encoded = json.dumps(ordered_hashes, separators=(",", ":"), sort_keys=True).encode(
-        "utf-8"
-    )
+    encoded = json.dumps(ordered_hashes, separators=(",", ":"), sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -3626,9 +3598,7 @@ def _runtime_passport_summary(
         selected_backend=_string_or_none(selected_runtime.get("backend")),
         model_hash=_string_or_none(model.get("sha256")),
         runtime_artifact_id=_uuid_or_none(selected_runtime.get("runtime_artifact_id")),
-        runtime_artifact_hash=_string_or_none(
-            selected_runtime.get("runtime_artifact_hash")
-        ),
+        runtime_artifact_hash=_string_or_none(selected_runtime.get("runtime_artifact_hash")),
         target_profile=_string_or_none(selected_runtime.get("target_profile")),
         precision=_string_or_none(selected_runtime.get("precision")),
         validated_at=_datetime_or_none(selected_runtime.get("validated_at")),
@@ -3911,10 +3881,7 @@ class StreamService:
         camera: Camera,
         access: StreamAccess,
     ) -> None:
-        if (
-            camera.edge_node_id is None
-            and camera.processing_mode is not ProcessingMode.EDGE
-        ):
+        if camera.edge_node_id is None and camera.processing_mode is not ProcessingMode.EDGE:
             return
         edge_rtsp_base = self._edge_mediamtx_rtsp_base_url(camera.edge_node_id)
         if edge_rtsp_base is None:
@@ -4063,7 +4030,10 @@ def build_app_services(
     )
     evidence_ledger = EvidenceLedgerService(db.session_factory)
     supervisor_operations = SupervisorOperationsService(db.session_factory)
-    deployment_nodes = DeploymentNodeService(db.session_factory)
+    deployment_nodes = DeploymentNodeService(
+        db.session_factory,
+        identity_provisioner=keycloak_bootstrap_provisioner_from_settings(settings),
+    )
     camera_service = CameraService(
         db.session_factory,
         settings,
@@ -4249,7 +4219,7 @@ def _local_dev_token_command() -> str:
         "'grant_type=password&client_id=argus-cli&username=admin-dev&password=argus-admin-pass' "
         "\\\n"
         "    http://127.0.0.1:8080/realms/argus-dev/protocol/openid-connect/token |\n"
-        '  python3 -c \'import json,sys; print(json.load(sys.stdin)["access_token"])\'\n'
+        "  python3 -c 'import json,sys; print(json.load(sys.stdin)[\"access_token\"])'\n"
         ')"'
     )
 
@@ -4373,8 +4343,7 @@ def _site_to_response(site: Site) -> SiteResponse:
     geo_point = None
     if site.geo_point is not None:
         geo_point = {
-            str(key): float(cast(int | float | str, value))
-            for key, value in site.geo_point.items()
+            str(key): float(cast(int | float | str, value)) for key, value in site.geo_point.items()
         }
     return SiteResponse(
         id=site.id,
@@ -4529,11 +4498,7 @@ def _validate_active_classes_subset(
         )
     allowed_classes = set(primary_model_classes)
     invalid_classes = sorted(
-        {
-            class_name
-            for class_name in active_classes
-            if class_name not in allowed_classes
-        }
+        {class_name for class_name in active_classes if class_name not in allowed_classes}
     )
     if invalid_classes:
         raise HTTPException(
@@ -4564,8 +4529,7 @@ def _runtime_vocabulary_state_from_camera(camera: Camera) -> RuntimeVocabularySt
     return RuntimeVocabularyState(
         terms=list(getattr(camera, "runtime_vocabulary", None) or []),
         source=(
-            getattr(camera, "runtime_vocabulary_source", None)
-            or RuntimeVocabularySource.DEFAULT
+            getattr(camera, "runtime_vocabulary_source", None) or RuntimeVocabularySource.DEFAULT
         ),
         version=int(getattr(camera, "runtime_vocabulary_version", None) or 0),
         updated_at=getattr(camera, "runtime_vocabulary_updated_at", None),
@@ -4891,9 +4855,7 @@ def _camera_to_worker_config(
             runtime_vocabulary=_runtime_vocabulary_state_from_camera(camera),
         ),
         secondary_model=(
-            _model_to_worker_settings(secondary_model)
-            if secondary_model is not None
-            else None
+            _model_to_worker_settings(secondary_model) if secondary_model is not None else None
         ),
         tracker=WorkerTrackerSettings(
             tracker_type=camera.tracker_type,
@@ -4906,8 +4868,7 @@ def _camera_to_worker_config(
         runtime_selection=runtime_selection or WorkerRuntimeSelectionSettings(),
         runtime_capability=_worker_runtime_capability(primary_model),
         runtime_artifacts=[
-            _runtime_artifact_to_worker_payload(artifact)
-            for artifact in (runtime_artifacts or [])
+            _runtime_artifact_to_worker_payload(artifact) for artifact in (runtime_artifacts or [])
         ],
         attribute_rules=list(camera.attribute_rules),
         incident_rules=[
@@ -5053,11 +5014,7 @@ def _mask_camera_source_url(camera: Camera) -> str:
 def _camera_source_contract_payload(camera: Camera, rtsp_url: str) -> dict[str, object]:
     source_kind = _source_kind_from_camera(camera)
     source_config = dict(camera.source_config or {})
-    source_uri = str(
-        source_config.get("redacted_uri")
-        or source_config.get("uri")
-        or rtsp_url
-    )
+    source_uri = str(source_config.get("redacted_uri") or source_config.get("uri") or rtsp_url)
     redacted_uri = (
         source_uri
         if source_uri in {"usb://***", "csi://***"}
@@ -5282,9 +5239,7 @@ def _worker_runtime_capability(model: Model) -> WorkerRuntimeCapability:
     execution_profiles = capability_config.get("execution_profiles")
     return WorkerRuntimeCapability(
         execution_profiles=(
-            list(execution_profiles)
-            if isinstance(execution_profiles, list)
-            else []
+            list(execution_profiles) if isinstance(execution_profiles, list) else []
         ),
         detector_capabilities=[_model_capability(model)],
         hot_runtime_vocabulary_updates=bool(
@@ -5323,9 +5278,7 @@ def derive_browser_profiles(source: SourceCapability | None) -> DerivedBrowserPr
         ):
             allowed.append(candidate)
             continue
-        unsupported.append(
-            candidate.model_copy(update={"reason": "source_resolution_too_small"})
-        )
+        unsupported.append(candidate.model_copy(update={"reason": "source_resolution_too_small"}))
     return DerivedBrowserProfiles(allowed=allowed, unsupported=unsupported)
 
 
@@ -5450,8 +5403,7 @@ def _build_source_aware_browser_delivery(
         public_base_url=requested.public_base_url,
         edge_override_url=requested.edge_override_url,
         profiles=[
-            profile.model_dump(exclude_none=True, mode="python")
-            for profile in decorated_allowed
+            profile.model_dump(exclude_none=True, mode="python") for profile in decorated_allowed
         ],
         unsupported_profiles=[
             profile.model_dump(exclude_none=True, mode="python")
@@ -5638,9 +5590,7 @@ def _resolve_worker_stream_settings(
             width=int(target_width) if target_width is not None else None,
             height=int(target_height) if target_height is not None else None,
             fps=(
-                min(max(1, fps_cap), int(target_fps))
-                if target_fps is not None
-                else max(1, fps_cap)
+                min(max(1, fps_cap), int(target_fps)) if target_fps is not None else max(1, fps_cap)
             ),
         )
     return WorkerStreamSettings(
@@ -5719,9 +5669,7 @@ def _worker_zone_payload(zone: dict[str, object]) -> dict[str, object]:
     frame_size_payload = zone.get("frame_size")
     points_normalized = zone.get("points_normalized")
     payload = {
-        key: value
-        for key, value in zone.items()
-        if key not in {"frame_size", "points_normalized"}
+        key: value for key, value in zone.items() if key not in {"frame_size", "points_normalized"}
     }
     if frame_size_payload is None or not isinstance(points_normalized, list):
         return payload
@@ -5921,8 +5869,7 @@ def _serialize_parquet(rows: list[HistoryPoint]) -> bytes:
         {
             "bucket": [row.bucket.isoformat() for row in rows],
             "camera_id": [
-                str(row.camera_id) if row.camera_id is not None else None
-                for row in rows
+                str(row.camera_id) if row.camera_id is not None else None for row in rows
             ],
             "class_name": [row.class_name for row in rows],
             "event_count": [row.event_count for row in rows],
@@ -6012,10 +5959,9 @@ def _history_window_aligned_to_granularity(
     ends_at: datetime,
     granularity: str,
 ) -> bool:
-    return (
-        _align_history_bucket_start(starts_at, granularity) == starts_at.astimezone(UTC)
-        and _align_history_bucket_start(ends_at, granularity) == ends_at.astimezone(UTC)
-    )
+    return _align_history_bucket_start(starts_at, granularity) == starts_at.astimezone(
+        UTC
+    ) and _align_history_bucket_start(ends_at, granularity) == ends_at.astimezone(UTC)
 
 
 def _history_bucket_range(

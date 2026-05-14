@@ -18,6 +18,10 @@ def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:
         "argus-secret-key",
         encoding="utf-8",
     )
+    (secrets_dir / "ARGUS_KEYCLOAK_ADMIN_PASSWORD").write_text(
+        "keycloak-admin-secret",
+        encoding="utf-8",
+    )
 
     monkeypatch.setenv(
         "ARGUS_DB_URL",
@@ -25,6 +29,7 @@ def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:
     )
     monkeypatch.setenv("ARGUS_NATS_URL", "nats://nats.internal:4222")
     monkeypatch.setenv("ARGUS_LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("ARGUS_KEYCLOAK_ADMIN_USERNAME", "admin")
     monkeypatch.setenv(
         "ARGUS_KEYCLOAK_PUBLIC_SERVER_URL",
         "https://auth.argus.example",
@@ -36,6 +41,9 @@ def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:
     assert settings.nats_url == "nats://nats.internal:4222"
     assert settings.llm_provider == "ollama"
     assert settings.rtsp_encryption_key.get_secret_value() == "argus-secret-key"
+    assert settings.keycloak_admin_username == "admin"
+    assert settings.keycloak_admin_password is not None
+    assert settings.keycloak_admin_password.get_secret_value() == "keycloak-admin-secret"
     assert settings.keycloak_trusted_realms_base_urls == (
         "http://localhost:8080/realms",
         "http://127.0.0.1:8080/realms",

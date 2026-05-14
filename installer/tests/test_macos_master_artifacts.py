@@ -58,6 +58,9 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert "VEZOR_PUBLIC_KEYCLOAK_URL=" in script
+    assert "VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev" in script
+    assert "VEZOR_OIDC_CLIENT_ID=argus-frontend" in script
     assert "  /run/vezor" not in script
     assert 'chmod 0644 "$MASTER_ENV"' in script
     assert 'old_umask="$(umask)"' in script
