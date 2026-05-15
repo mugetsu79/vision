@@ -10,6 +10,9 @@ PYTHON_310_ASSERTION = (
 JETSON_ORT_INSTALL_COMMAND = (
     '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "$JETSON_ORT_WHEEL_URL"'
 )
+CPU_ORT_INSTALL_COMMAND = (
+    '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "onnxruntime>=1.20"'
+)
 
 
 def test_edge_dockerfile_uses_system_python_310_virtualenv() -> None:
@@ -28,8 +31,13 @@ def test_edge_dockerfile_installs_jetson_onnxruntime_wheel_after_base_deps() -> 
     assert "requirements-edge.txt" in dockerfile
     assert 'uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python"' in dockerfile
     assert "--no-cache -r requirements-edge.txt" in dockerfile
+    assert 'ARG ALLOW_CPU_ONNX_RUNTIME="0"' in dockerfile
     assert 'if [ -n "$JETSON_ORT_WHEEL_URL" ]' in dockerfile
     assert JETSON_ORT_INSTALL_COMMAND in dockerfile
+    assert 'elif [ "$ALLOW_CPU_ONNX_RUNTIME" = "1" ]' in dockerfile
+    assert CPU_ORT_INSTALL_COMMAND in dockerfile
+    assert "JETSON_ORT_WHEEL_URL is required" in dockerfile
+    assert "exit 1" in dockerfile
 
 
 def test_edge_dockerfile_installs_gstreamer_rtsp_sink_plugin() -> None:

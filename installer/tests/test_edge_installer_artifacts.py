@@ -44,6 +44,7 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
         "--manifest",
         "--version",
         "--jetson-ort-wheel-url",
+        "--allow-cpu-onnx-runtime",
     ):
         assert option in script
 
@@ -52,6 +53,9 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "build_local_edge_image" in script
     assert "/opt/vezor/current/backend/Dockerfile.edge" in script
     assert "JETSON_ORT_WHEEL_URL" in script
+    assert "ALLOW_CPU_ONNX_RUNTIME" in script
+    assert "Jetson ONNX Runtime GPU wheel is required" in script
+    assert "--build-arg \"ALLOW_CPU_ONNX_RUNTIME=$ALLOW_CPU_ONNX_RUNTIME\"" in script
     assert "scripts/jetson-preflight.sh --installer --json" in script
     assert "/etc/vezor/edge.json" in script
     assert "/etc/vezor/supervisor.json" in script

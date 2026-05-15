@@ -893,6 +893,7 @@ On the Jetson:
 
 ```bash
 MASTER_API_URL="http://MASTER_HOST_OR_IP:8000"
+JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 
 sudo ./installer/linux/install-edge.sh \
   --version "portable-demo" \
@@ -901,7 +902,8 @@ sudo ./installer/linux/install-edge.sh \
   --session-id "PAIRING_SESSION_ID" \
   --pairing-code "PAIRING_CODE" \
   --edge-name "jetson-portable-1" \
-  --model-dir /var/lib/vezor/models
+  --model-dir /var/lib/vezor/models \
+  --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
 ```
 
 The edge installer writes `/etc/vezor/edge.json`,
@@ -909,12 +911,14 @@ The edge installer writes `/etc/vezor/edge.json`,
 claimed supervisor credential. When the manifest release channel is `dev`, it
 also builds the local Jetson edge image from `backend/Dockerfile.edge` before
 starting `vezor-edge.service`; this avoids depending on unpublished
-`ghcr.io/vezor/*:dev` images during branch testing. If you need the accelerated
-Jetson ONNX Runtime wheel during that local image build, add:
+`ghcr.io/vezor/*:dev` images during branch testing.
 
-```bash
---jetson-ort-wheel-url "https://.../onnxruntime_gpu-...-linux_aarch64.whl"
-```
+The Jetson ONNX Runtime GPU wheel is required for the portable product path.
+For the current JetPack 6 / Python 3.10 installer image, use a compatible
+`cp310` Linux `aarch64` wheel such as the URL above. The installer only allows a
+CPU ONNX Runtime fallback when you explicitly pass
+`--allow-cpu-onnx-runtime`; treat that as a diagnostic escape hatch, not as a
+demo or production mode.
 
 Validate:
 

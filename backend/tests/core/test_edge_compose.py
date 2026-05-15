@@ -19,6 +19,7 @@ def test_edge_compose_passes_jetson_ort_wheel_build_arg() -> None:
     compose = EDGE_COMPOSE_PATH.read_text(encoding="utf-8")
 
     assert "JETSON_ORT_WHEEL_URL: ${JETSON_ORT_WHEEL_URL:-}" in compose
+    assert "ALLOW_CPU_ONNX_RUNTIME: ${ALLOW_CPU_ONNX_RUNTIME:-0}" in compose
 
 
 def test_edge_compose_forwards_jetson_rtsp_tuning_environment() -> None:

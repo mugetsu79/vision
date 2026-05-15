@@ -1328,8 +1328,8 @@ On the Jetson:
 ```bash
 cd "$HOME/vision"
 
-# Set this when you want TensorRT/CUDA ONNX Runtime providers in the Jetson
-# edge image. If it is unset, CPU ONNX Runtime fallback remains expected.
+# Required for the Jetson edge image. CPU ONNX Runtime fallback now requires
+# an explicit ALLOW_CPU_ONNX_RUNTIME=1 diagnostic override.
 export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 
 # Compose interpolates the full service even for build-only and image-check
@@ -1438,8 +1438,8 @@ What good looks like:
 - Jetson MediaMTX can reach `/.well-known/argus/mediamtx/jwks.json` on the iMac
   through `ARGUS_API_BASE_URL`, which lets the iMac relay read its RTSP path
 - on current `main`, `/app/.venv/bin/python` should report Python 3.10 inside the Jetson worker image
-- if `JETSON_ORT_WHEEL_URL` is set to a compatible cp310 Jetson ONNX Runtime GPU wheel, `onnxruntime.get_available_providers()` should include `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`
-- if `JETSON_ORT_WHEEL_URL` is unset, `CPUExecutionProvider` remains expected
+- with a compatible cp310 Jetson ONNX Runtime GPU wheel, `onnxruntime.get_available_providers()` should include `TensorrtExecutionProvider` or at least `CUDAExecutionProvider`
+- if `CPUExecutionProvider` is the only provider, the image was built with the explicit CPU diagnostic override and is not the product/demo runtime path
 - the FFmpeg/libx264 encoder check should exit successfully; Orin Nano has no NVENC, so processed annotated/reduced profiles use software H.264 publish on the edge
 
 ### 3.9 Confirm camera 2 is now working from the Jetson
@@ -1493,10 +1493,10 @@ docker compose -f infra/docker-compose.edge.yml run --rm --no-deps \
   -c "import sys, onnxruntime as ort; print(sys.version); print(ort.__version__); print(ort.get_available_providers())"
 ```
 
-On current `main`, Python should report `3.10.x`. If `JETSON_ORT_WHEEL_URL` was
-unset during the image build, CPU-only providers are expected. If you exported a
-compatible Jetson cp310 accelerated wheel before the build, expect
-`TensorrtExecutionProvider` or at least `CUDAExecutionProvider`.
+On current `main`, Python should report `3.10.x`. With the required compatible
+Jetson cp310 accelerated wheel, expect `TensorrtExecutionProvider` or at least
+`CUDAExecutionProvider`. CPU-only providers mean the image was built with the
+explicit CPU diagnostic override and should not be used for the product demo.
 
 ### 3.11 Optional: validate a fixed-vocab Jetson runtime artifact
 

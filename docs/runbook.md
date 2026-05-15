@@ -516,8 +516,8 @@ The current edge Compose path is Jetson-specific:
 - `infra/docker-compose.edge.yml` builds `backend/Dockerfile.edge`
 - that image uses the Jetson base image's system Python 3.10 virtualenv
 - the Python 3.10 runtime is intentional because the accelerated Jetson ONNX Runtime wheels available for this lab are `cp310`
-- `JETSON_ORT_WHEEL_URL` is passed as a build argument and should point to the Jetson accelerated `onnxruntime-gpu` wheel when testing CUDA/TensorRT providers
-- if `JETSON_ORT_WHEEL_URL` is unset, the image falls back to CPU ONNX Runtime and `CPUExecutionProvider` remains expected
+- `JETSON_ORT_WHEEL_URL` is passed as a build argument and should point to the Jetson accelerated `onnxruntime-gpu` wheel
+- if `JETSON_ORT_WHEEL_URL` is unset, the image build fails unless `ALLOW_CPU_ONNX_RUNTIME=1` is explicitly set for CPU-only diagnostics
 - processed annotated/reduced profiles publish through FFmpeg/libx264 on Orin Nano because the device has NVDEC but no NVENC
 
 For the current JetPack 6 / Python 3.10 lab path:
@@ -545,7 +545,7 @@ For a single-node edge deployment:
    - `ARGUS_NATS_URL`
    - `ARGUS_MINIO_ENDPOINT`
    - `ARGUS_EDGE_CAMERA_ID`
-3. If validating Jetson acceleration, export `JETSON_ORT_WHEEL_URL` before building the image:
+3. Export the required Jetson GPU ONNX Runtime wheel before building the image:
    `export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"`
 4. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
 5. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d --build`.
@@ -581,10 +581,12 @@ docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml run --r
   -lc 'ffmpeg -hide_banner -encoders | grep -q libx264'
 ```
 
-Python should report `3.10.x`. CPU-only ONNX Runtime providers mean the image
-was built without `JETSON_ORT_WHEEL_URL`. The FFmpeg encoder check should exit
-successfully; if it fails, the edge image cannot publish processed annotated or
-reduced streams.
+Python should report `3.10.x`. ONNX Runtime providers should include
+`TensorrtExecutionProvider` or at least `CUDAExecutionProvider` for the Jetson
+product path. CPU-only ONNX Runtime providers mean the image was built with the
+explicit `ALLOW_CPU_ONNX_RUNTIME=1` diagnostic override. The FFmpeg encoder
+check should exit successfully; if it fails, the edge image cannot publish
+processed annotated or reduced streams.
 
 This Compose path is appropriate for lab and pilot bring-up. In the current
 MacBook/iMac + Jetson lab, set `ARGUS_NATS_URL` directly to the master NATS

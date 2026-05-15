@@ -9,6 +9,7 @@ MODEL_DIR="/var/lib/vezor/models"
 VERSION=""
 MANIFEST=""
 JETSON_ORT_WHEEL_URL="${JETSON_ORT_WHEEL_URL:-}"
+ALLOW_CPU_ONNX_RUNTIME="${VEZOR_ALLOW_CPU_ONNX_RUNTIME:-0}"
 CONFIG_DIR="/etc/vezor"
 EDGE_CONFIG="/etc/vezor/edge.json"
 SUPERVISOR_CONFIG="/etc/vezor/supervisor.json"
@@ -32,7 +33,9 @@ Options:
   --version VERSION      Release version to record in supervisor config.
   --manifest PATH        Release manifest path. Dev manifests build a local edge image.
   --jetson-ort-wheel-url URL
-                         Optional Jetson ONNX Runtime GPU wheel URL for local dev builds.
+                         Required Jetson ONNX Runtime GPU wheel URL for local dev builds.
+  --allow-cpu-onnx-runtime
+                         Diagnostic only: allow CPU ONNX Runtime when no Jetson GPU wheel is set.
   --dry-run              Print actions without changing the host.
   -h, --help             Show this help.
 USAGE
@@ -75,6 +78,10 @@ while [[ $# -gt 0 ]]; do
     --jetson-ort-wheel-url)
       JETSON_ORT_WHEEL_URL="${2:?--jetson-ort-wheel-url requires a value}"
       shift 2
+      ;;
+    --allow-cpu-onnx-runtime)
+      ALLOW_CPU_ONNX_RUNTIME=1
+      shift
       ;;
     --dry-run)
       DRY_RUN=1
@@ -158,10 +165,17 @@ build_local_edge_image() {
   fi
 
   require_command "$CONTAINER_ENGINE"
+  if [[ -z "$JETSON_ORT_WHEEL_URL" && "$ALLOW_CPU_ONNX_RUNTIME" != "1" ]]; then
+    echo "Jetson ONNX Runtime GPU wheel is required for dev manifest edge builds." >&2
+    echo "Pass --jetson-ort-wheel-url with the Jetson cp310 linux_aarch64 GPU wheel." >&2
+    echo "Use --allow-cpu-onnx-runtime only for CPU-only diagnostics, not product demos." >&2
+    exit 2
+  fi
   echo "Building local Vezor Jetson edge image for dev manifest..."
   run "$CONTAINER_ENGINE" build \
     -f /opt/vezor/current/backend/Dockerfile.edge \
     --build-arg "JETSON_ORT_WHEEL_URL=$JETSON_ORT_WHEEL_URL" \
+    --build-arg "ALLOW_CPU_ONNX_RUNTIME=$ALLOW_CPU_ONNX_RUNTIME" \
     -t "$EDGE_WORKER_IMAGE" \
     /opt/vezor/current/backend
 }

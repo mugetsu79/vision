@@ -873,9 +873,9 @@ export ARGUS_MINIO_ACCESS_KEY="argus"
 export ARGUS_MINIO_SECRET_KEY="argus-dev-secret"
 export ARGUS_EDGE_CAMERA_ID="$ARGUS_EDGE_CAMERA_ID"
 
-# Optional accelerated Jetson ONNX Runtime wheel.
-# Leave unset if you prefer CPU fallback for the first bring-up.
-export JETSON_ORT_WHEEL_URL="${JETSON_ORT_WHEEL_URL:-}"
+# Required accelerated Jetson ONNX Runtime wheel for the product/demo path.
+# CPU ONNX Runtime fallback now requires an explicit diagnostic override.
+export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 ```
 
 Build and inspect the edge image:
