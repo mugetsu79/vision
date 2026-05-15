@@ -189,6 +189,28 @@ detect_public_stream_host() {
   hostname -f 2>/dev/null || hostname
 }
 
+existing_supervisor_config_value() {
+  local key="$1"
+  if [[ ! -f "$SUPERVISOR_CONFIG" ]]; then
+    return 0
+  fi
+
+  python3 - "$SUPERVISOR_CONFIG" "$key" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+payload = json.loads(path.read_text(encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit(0)
+value = payload.get(key)
+if isinstance(value, str):
+    print(value)
+PY
+}
+
 build_local_edge_image() {
   if [[ "$(manifest_release_channel)" != "dev" ]]; then
     return 0
@@ -267,6 +289,17 @@ if command -v curl >/dev/null 2>&1 && [[ -n "$API_URL" ]]; then
   curl -fsS "$API_URL/healthz" >/dev/null
 fi
 
+CONFIG_EDGE_NODE_ID="$(existing_supervisor_config_value edge_node_id)"
+CONFIG_HOSTNAME="$(existing_supervisor_config_value hostname)"
+if [[ -z "$CONFIG_HOSTNAME" ]]; then
+  CONFIG_HOSTNAME="$(hostname)"
+fi
+if [[ "$UNPAIRED" -eq 1 && -z "$CONFIG_EDGE_NODE_ID" ]]; then
+  echo "Unpaired edge update requires an existing paired supervisor config with edge_node_id." >&2
+  echo "Create a fresh Pair Jetson edge session and rerun without --unpaired." >&2
+  exit 2
+fi
+
 stop_existing_edge_appliance
 
 if [[ -x "$RELEASE_DIR/scripts/jetson-preflight.sh" ]]; then
@@ -313,18 +346,50 @@ else
   "compose_file": "/opt/vezor/current/infra/install/compose/compose.supervisor.yml"
 }
 JSON
-  cat > "$SUPERVISOR_CONFIG" <<JSON
-{
-  "supervisor_id": "$EDGE_NAME",
-  "role": "edge",
-  "api_base_url": "$API_URL",
-  "credential_store_path": "/run/vezor/credentials/supervisor.credential",
-  "worker_metrics_url": "http://127.0.0.1:9108/metrics",
-  "public_mediamtx_rtsp_url": "$PUBLIC_MEDIAMTX_RTSP_URL",
-  "service_manager": "systemd",
-  "version": "${VERSION:-edge-installer}"
-}
-JSON
+  CONFIG_EDGE_NODE_ID="$CONFIG_EDGE_NODE_ID" \
+  CONFIG_HOSTNAME="$CONFIG_HOSTNAME" \
+  EDGE_NAME="$EDGE_NAME" \
+  API_URL="$API_URL" \
+  PUBLIC_MEDIAMTX_RTSP_URL="$PUBLIC_MEDIAMTX_RTSP_URL" \
+  VERSION="${VERSION:-edge-installer}" \
+  python3 - "$SUPERVISOR_CONFIG" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = {}
+if path.exists():
+    existing = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(existing, dict):
+        payload.update(existing)
+
+payload.update(
+    {
+        "supervisor_id": os.environ["EDGE_NAME"],
+        "role": "edge",
+        "api_base_url": os.environ["API_URL"],
+        "credential_store_path": "/run/vezor/credentials/supervisor.credential",
+        "worker_metrics_url": "http://127.0.0.1:9108/metrics",
+        "public_mediamtx_rtsp_url": os.environ["PUBLIC_MEDIAMTX_RTSP_URL"],
+        "service_manager": "systemd",
+        "version": os.environ["VERSION"],
+    }
+)
+
+edge_node_id = os.environ.get("CONFIG_EDGE_NODE_ID", "").strip()
+if edge_node_id:
+    payload["edge_node_id"] = edge_node_id
+else:
+    payload.pop("edge_node_id", None)
+
+hostname = os.environ.get("CONFIG_HOSTNAME", "").strip()
+if hostname:
+    payload["hostname"] = hostname
+
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
   chmod 0644 "$EDGE_CONFIG" "$SUPERVISOR_CONFIG"
   umask "$old_umask"
 fi

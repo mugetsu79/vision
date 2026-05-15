@@ -58,7 +58,12 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "ALLOW_CPU_ONNX_RUNTIME" in script
     assert "PUBLIC_MEDIAMTX_RTSP_URL" in script
     assert "detect_public_stream_host" in script
-    assert '"public_mediamtx_rtsp_url": "$PUBLIC_MEDIAMTX_RTSP_URL"' in script
+    assert "existing_supervisor_config_value" in script
+    assert "CONFIG_EDGE_NODE_ID" in script
+    assert "Unpaired edge update requires an existing paired supervisor config" in script
+    assert '"public_mediamtx_rtsp_url"' in script
+    assert '"edge_node_id"' in script
+    assert '"hostname"' in script
     assert "Jetson ONNX Runtime GPU wheel is required" in script
     assert "--build-arg \"ALLOW_CPU_ONNX_RUNTIME=$ALLOW_CPU_ONNX_RUNTIME\"" in script
     assert "scripts/jetson-preflight.sh --installer --json" in script

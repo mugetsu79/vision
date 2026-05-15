@@ -1605,7 +1605,9 @@ Check:
 If the portable network changed, rerun the edge installer with
 `--unpaired --public-stream-host JETSON_NEW_IP_OR_HOSTNAME` so the existing
 credential is preserved and the supervisor reports the new stream relay base
-URL.
+URL. Use `--unpaired` only after one successful paired install has written
+`edge_node_id` into `/etc/vezor/supervisor.json`; the installer refuses
+unpaired updates when that paired identity is missing.
 
 ### The edge node cannot pair
 
@@ -1640,9 +1642,9 @@ and the credential file should be owned by container UID `10001` with mode
 `0600`. If the log says `edge supervisor config requires edge_node_id`, or if a
 normal `vezorctl status --json` cannot read `/etc/vezor/supervisor.json`, pull
 the latest branch, create a fresh Pair Jetson edge session, and rerun the edge
-installer. The updated installer writes the claimed `edge_node_id`, fixes config
-permissions, and makes the credential readable only to the non-root supervisor
-container user.
+installer without `--unpaired`. A current installer preserves the claimed
+`edge_node_id` during later unpaired updates, fixes config permissions, and
+makes the credential readable only to the non-root supervisor container user.
 
 If a rerun fails preflight because ports `8554`, `8888`, or `8889` are already
 in use, the previous edge MediaMTX container is still running. Pull the latest
