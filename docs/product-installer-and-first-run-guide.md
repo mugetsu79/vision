@@ -607,6 +607,12 @@ Register the default fixed-vocab model:
 register_model yolo26n-coco-onnx /models/yolo26n.onnx
 ```
 
+A successful registration prints a JSON model response that includes an `id`,
+`name`, `path`, `sha256`, and `size_bytes`. If the command prints nothing, the
+installed backend image is too old for this guide; pull this branch, rerun the
+master installer so the backend image is rebuilt, and run the registration
+command again.
+
 Optional fixed-vocab models:
 
 ```bash
@@ -632,6 +638,13 @@ Confirm the UI sees the models:
 2. Create a temporary scene.
 3. Confirm the primary model dropdown includes the registered model.
 4. Cancel or delete the temporary scene if it was only a check.
+
+You can also confirm the installed database has model rows:
+
+```bash
+docker exec vezor-master-postgres-1 sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select name, version, path from models order by name, version;"'
+```
 
 ## Pair The Central Supervisor
 

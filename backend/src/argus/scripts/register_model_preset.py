@@ -63,3 +63,7 @@ def main() -> None:
     )
     response.raise_for_status()
     print(json.dumps(response.json(), indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
