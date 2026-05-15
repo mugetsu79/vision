@@ -52,6 +52,7 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
 
     assert "manifest_image_ref edge-worker" in script
     assert "manifest_image_ref mediamtx" in script
+    assert "manifest_image_ref nats" in script
     assert "build_local_edge_image" in script
     assert "/opt/vezor/current/backend/Dockerfile.edge" in script
     assert "JETSON_ORT_WHEEL_URL" in script
@@ -70,12 +71,19 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "/etc/vezor/edge.json" in script
     assert "/etc/vezor/supervisor.json" in script
     assert "$CONFIG_DIR/edge.env" in script
+    assert "$CONFIG_DIR/nats" in script
+    assert "$CONFIG_DIR/nats/leaf.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
+    assert "write edge NATS leaf config" in script
+    assert "master_nats_leaf_url" in script
     assert "write edge MediaMTX config" in script
     assert ".well-known/argus/mediamtx/jwks.json" in script
     assert "f\"authJWTJWKS: {api_url}/.well-known/argus/mediamtx/jwks.json\"" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert "VEZOR_NATS_IMAGE=$NATS_IMAGE" in script
+    assert "ARGUS_NATS_URL=nats://nats-leaf:4222" in script
+    assert "VEZOR_NATS_LEAF_REMOTE_URL=$MASTER_NATS_LEAF_URL" in script
     assert 'chmod 0644 "$EDGE_ENV"' in script
     assert 'chmod 0644 "$EDGE_CONFIG" "$SUPERVISOR_CONFIG"' in script
     assert 'chown 10001:10001 "$DATA_DIR/credentials/supervisor.credential"' in script
@@ -119,12 +127,18 @@ def test_edge_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
 def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -> None:
     compose = _read(SUPERVISOR_COMPOSE)
 
+    assert "  nats-leaf:" in compose
     assert "  mediamtx:" in compose
     assert "  vezor-supervisor:" in compose
     assert "${VEZOR_SUPERVISOR_IMAGE:?set VEZOR_SUPERVISOR_IMAGE}" in compose
     assert "${VEZOR_MEDIAMTX_IMAGE:?set VEZOR_MEDIAMTX_IMAGE}" in compose
+    assert "${VEZOR_NATS_IMAGE:?set VEZOR_NATS_IMAGE}" in compose
+    assert 'command: ["-js", "-c", "/etc/nats/nats.conf"]' in compose
+    assert "/etc/vezor/nats/leaf.conf:/etc/nats/nats.conf:ro" in compose
+    assert "/var/lib/vezor/nats:/data" in compose
     assert 'entrypoint: ["/app/.venv/bin/python", "-m", "argus.supervisor.runner"]' in compose
     assert "      - --config" in compose
+    assert "ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}" in compose
     assert "ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997" in compose
     assert "ARGUS_ENABLE_WORKER_METRICS_SERVER: \"true\"" in compose
     assert "ARGUS_PUBLISH_PROFILE: jetson-nano" in compose
@@ -136,6 +150,7 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
         "${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}"
         ":/run/vezor/credentials:ro"
     ) in compose
+    assert "      - nats-leaf" in compose
 
 
 def test_jetson_preflight_supports_installer_json_mode() -> None:

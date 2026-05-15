@@ -983,13 +983,13 @@ sudo ./installer/linux/install-edge.sh \
 ```
 
 The edge installer writes `/etc/vezor/edge.json`,
-`/etc/vezor/supervisor.json`, `/etc/vezor/edge.env`, MediaMTX config, and the
-claimed supervisor credential. For paired installs, it claims the pairing
-session before the long local image build so the short-lived code is not lost
-while Docker downloads packages. When the manifest release channel is `dev`, it
-also builds the local Jetson edge image from `backend/Dockerfile.edge` before
-starting `vezor-edge.service`; this avoids depending on unpublished
-`ghcr.io/vezor/*:dev` images during branch testing.
+`/etc/vezor/supervisor.json`, `/etc/vezor/edge.env`, MediaMTX config, local
+NATS leaf config, and the claimed supervisor credential. For paired installs,
+it claims the pairing session before the long local image build so the
+short-lived code is not lost while Docker downloads packages. When the manifest
+release channel is `dev`, it also builds the local Jetson edge image from
+`backend/Dockerfile.edge` before starting `vezor-edge.service`; this avoids
+depending on unpublished `ghcr.io/vezor/*:dev` images during branch testing.
 
 `--public-stream-host` should be the Jetson LAN IP or hostname that the master
 can reach. The edge supervisor reports `rtsp://HOST:8554` back to the master so
@@ -1004,6 +1004,13 @@ MediaMTX config pointing at `http://backend:8000`; that hostname only exists
 inside the master compose network and will cause master-to-Jetson stream relay
 requests to fail with `401 Unauthorized`.
 
+The installer also creates a local `vezor-edge-nats-leaf` container. Edge
+workers connect to `nats://nats-leaf:4222` inside the Jetson compose network;
+that leaf node connects back to the master leaf listener at
+`nats://MASTER_HOST_OR_IP:7422`. Do not point edge workers at
+`nats://127.0.0.1:4222`; inside the worker container, `127.0.0.1` is the worker
+container itself and will produce `ConnectionRefusedError`.
+
 The Jetson ONNX Runtime GPU wheel is required for the portable product path.
 For the current JetPack 6 / Python 3.10 installer image, use a compatible
 `cp310` Linux `aarch64` wheel such as the URL above. The installer only allows a
@@ -1016,6 +1023,8 @@ Validate:
 ```bash
 systemctl status vezor-edge.service
 /opt/vezor/current/bin/vezorctl status --json
+docker ps --filter name=vezor
+docker logs --tail 60 vezor-edge-nats-leaf
 ```
 
 Back in Control -> Deployment, confirm:
@@ -1025,6 +1034,8 @@ Back in Control -> Deployment, confirm:
 - credential status is active
 - hardware report arrives
 - model admission can evaluate the Jetson camera
+- `vezor-edge-nats-leaf` is running and does not log repeated master leaf
+  connection failures
 
 ### Optional: Build A Jetson TensorRT Engine
 
@@ -1597,6 +1608,8 @@ static at 640x640.
 Check:
 
 - master can reach `rtsp://JETSON_IP:8554`
+- Jetson local NATS leaf is running and the supervisor/worker environment uses
+  `ARGUS_NATS_URL=nats://nats-leaf:4222`
 - Jetson service is running
 - Jetson MediaMTX is exposing the camera path
 - Jetson MediaMTX is using the master JWKS URL, not
@@ -1609,6 +1622,20 @@ Check:
   selected
 - the browser is using the master frontend URL, not a stale IP from another
   network
+
+Useful checks on the Jetson:
+
+```bash
+docker ps --filter name=vezor
+docker logs --tail 120 vezor-supervisor
+docker logs --tail 80 vezor-edge-nats-leaf
+curl -fsS http://127.0.0.1:9997/v3/paths/list
+```
+
+If `vezor-supervisor` logs `Connect call failed ('127.0.0.1', 4222)`, the edge
+compose environment is stale. Pull the latest `codex/omnisight-installer`
+branch and rerun `install-edge.sh`; the installed worker must inherit
+`ARGUS_NATS_URL=nats://nats-leaf:4222`.
 
 If the portable network changed, rerun the edge installer with
 `--unpaired --public-stream-host JETSON_NEW_IP_OR_HOSTNAME` so the existing

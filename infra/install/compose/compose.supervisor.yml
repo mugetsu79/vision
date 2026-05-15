@@ -1,4 +1,18 @@
 services:
+  nats-leaf:
+    image: ${VEZOR_NATS_IMAGE:?set VEZOR_NATS_IMAGE}
+    container_name: vezor-edge-nats-leaf
+    command: ["-js", "-c", "/etc/nats/nats.conf"]
+    restart: unless-stopped
+    volumes:
+      - /etc/vezor/nats/leaf.conf:/etc/nats/nats.conf:ro
+      - /var/lib/vezor/nats:/data
+    healthcheck:
+      test: ["CMD", "/nats-server", "-t", "-c", "/etc/nats/nats.conf"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   mediamtx:
     image: ${VEZOR_MEDIAMTX_IMAGE:?set VEZOR_MEDIAMTX_IMAGE}
     container_name: vezor-edge-mediamtx
@@ -22,6 +36,7 @@ services:
       - --config
       - /etc/vezor/supervisor.json
     environment:
+      ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}
       ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
       ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
       ARGUS_MEDIAMTX_WEBRTC_BASE_URL: http://mediamtx:8889
@@ -44,6 +59,7 @@ services:
       - /var/lib/vezor:/var/lib/vezor
       - /var/log/vezor:/var/log/vezor
     depends_on:
+      - nats-leaf
       - mediamtx
     runtime: ${VEZOR_NVIDIA_RUNTIME:-nvidia}
     device_cgroup_rules:

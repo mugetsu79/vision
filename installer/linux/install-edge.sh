@@ -12,6 +12,7 @@ JETSON_ORT_WHEEL_URL="${JETSON_ORT_WHEEL_URL:-}"
 ALLOW_CPU_ONNX_RUNTIME="${VEZOR_ALLOW_CPU_ONNX_RUNTIME:-0}"
 PUBLIC_STREAM_HOST="${VEZOR_EDGE_PUBLIC_STREAM_HOST:-}"
 PUBLIC_MEDIAMTX_RTSP_URL="${VEZOR_EDGE_PUBLIC_MEDIAMTX_RTSP_URL:-}"
+MASTER_NATS_LEAF_URL="${VEZOR_MASTER_NATS_LEAF_URL:-}"
 CONFIG_DIR="/etc/vezor"
 EDGE_CONFIG="/etc/vezor/edge.json"
 SUPERVISOR_CONFIG="/etc/vezor/supervisor.json"
@@ -211,6 +212,27 @@ if isinstance(value, str):
 PY
 }
 
+master_nats_leaf_url() {
+  if [[ -n "$MASTER_NATS_LEAF_URL" ]]; then
+    printf '%s\n' "$MASTER_NATS_LEAF_URL"
+    return 0
+  fi
+
+  python3 - "$API_URL" <<'PY'
+import sys
+from urllib.parse import urlparse
+
+api_url = sys.argv[1]
+parsed = urlparse(api_url)
+host = parsed.hostname
+if not host:
+    raise SystemExit("Unable to derive master NATS leaf URL from --api-url.")
+if ":" in host and not host.startswith("["):
+    host = f"[{host}]"
+print(f"nats://{host}:7422")
+PY
+}
+
 build_local_edge_image() {
   if [[ "$(manifest_release_channel)" != "dev" ]]; then
     return 0
@@ -265,6 +287,7 @@ else
 fi
 
 MEDIAMTX_IMAGE="$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)"
+NATS_IMAGE="$(manifest_image_ref nats nats:2)"
 EDGE_WORKER_IMAGE="$(manifest_image_ref edge-worker vezor/edge-worker:portable-demo)"
 if [[ -z "$PUBLIC_MEDIAMTX_RTSP_URL" ]]; then
   PUBLIC_MEDIAMTX_RTSP_URL="rtsp://$(detect_public_stream_host):8554"
@@ -284,6 +307,18 @@ if [[ "$UNPAIRED" -eq 0 && -z "$API_URL" ]]; then
   echo "Paired install requires --api-url." >&2
   exit 2
 fi
+
+CONFIG_API_URL="$(existing_supervisor_config_value api_base_url)"
+if [[ -z "$API_URL" && -n "$CONFIG_API_URL" ]]; then
+  API_URL="$CONFIG_API_URL"
+fi
+
+if [[ -z "$API_URL" ]]; then
+  echo "Edge install requires --api-url or an existing supervisor api_base_url." >&2
+  exit 2
+fi
+
+MASTER_NATS_LEAF_URL="$(master_nats_leaf_url)"
 
 if command -v curl >/dev/null 2>&1 && [[ -n "$API_URL" ]]; then
   curl -fsS "$API_URL/healthz" >/dev/null
@@ -310,10 +345,31 @@ run install -d -m 0755 \
   "$CONFIG_DIR" \
   "$CONFIG_DIR/secrets" \
   "$CONFIG_DIR/mediamtx" \
+  "$CONFIG_DIR/nats" \
   "$DATA_DIR" \
   /var/log/vezor \
   /run/vezor
-run install -d -m 0755 "$MODEL_DIR" "$DATA_DIR/edge" "$DATA_DIR/mediamtx" "$DATA_DIR/credentials"
+run install -d -m 0755 "$MODEL_DIR" "$DATA_DIR/edge" "$DATA_DIR/mediamtx" "$DATA_DIR/nats" "$DATA_DIR/credentials"
+
+NATS_CONFIG="$CONFIG_DIR/nats/leaf.conf"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "[dry-run] write edge NATS leaf config $NATS_CONFIG"
+else
+  MASTER_NATS_LEAF_URL="$MASTER_NATS_LEAF_URL" python3 - "$RELEASE_DIR/infra/nats/leaf.conf" "$NATS_CONFIG" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+remote_url = os.environ["MASTER_NATS_LEAF_URL"]
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+target = source.replace(
+    'urls: ["nats://host.docker.internal:7422"]',
+    f'urls: ["{remote_url}"]',
+)
+Path(sys.argv[2]).write_text(target, encoding="utf-8")
+PY
+  chmod 0644 "$NATS_CONFIG"
+fi
 
 MEDIAMTX_CONFIG="$CONFIG_DIR/mediamtx/mediamtx.yml"
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -340,8 +396,11 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 else
   cat > "$EDGE_ENV" <<ENV
 VEZOR_MEDIAMTX_IMAGE=$MEDIAMTX_IMAGE
+VEZOR_NATS_IMAGE=$NATS_IMAGE
 VEZOR_SUPERVISOR_IMAGE=$EDGE_WORKER_IMAGE
 VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
+ARGUS_NATS_URL=nats://nats-leaf:4222
+VEZOR_NATS_LEAF_REMOTE_URL=$MASTER_NATS_LEAF_URL
 ENV
   chmod 0644 "$EDGE_ENV"
 fi

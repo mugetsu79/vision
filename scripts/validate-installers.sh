@@ -144,6 +144,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   echo "==> compose render: edge"
   env \
     VEZOR_MEDIAMTX_IMAGE=bluenviron/mediamtx:latest \
+    VEZOR_NATS_IMAGE=nats:2 \
     VEZOR_SUPERVISOR_IMAGE=ghcr.io/vezor/supervisor:dev \
     docker compose -f infra/install/compose/compose.supervisor.yml config >/dev/null
 else
