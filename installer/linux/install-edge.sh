@@ -263,7 +263,17 @@ stop_existing_edge_appliance() {
     systemctl stop vezor-edge.service >/dev/null 2>&1 || true
   fi
   if [[ -x "$RELEASE_DIR/bin/vezor-edge" && -f "$EDGE_CONFIG" ]]; then
-    "$RELEASE_DIR/bin/vezor-edge" down --config "$EDGE_CONFIG" >/dev/null 2>&1 || true
+    VEZOR_MEDIAMTX_IMAGE="$MEDIAMTX_IMAGE" \
+    VEZOR_NATS_IMAGE="$NATS_IMAGE" \
+    VEZOR_SUPERVISOR_IMAGE="$EDGE_WORKER_IMAGE" \
+      "$RELEASE_DIR/bin/vezor-edge" down --config "$EDGE_CONFIG" >/dev/null 2>&1 || true
+  fi
+  if command -v "$CONTAINER_ENGINE" >/dev/null 2>&1; then
+    "$CONTAINER_ENGINE" rm -f \
+      vezor-supervisor \
+      vezor-edge-mediamtx \
+      vezor-edge-nats-leaf \
+      >/dev/null 2>&1 || true
   fi
 }
 

@@ -109,7 +109,12 @@ def test_edge_install_script_stops_existing_appliance_before_preflight_ports() -
 
     assert "stop_existing_edge_appliance" in script
     assert "systemctl stop vezor-edge.service" in script
+    assert 'VEZOR_NATS_IMAGE="$NATS_IMAGE"' in script
     assert '"$RELEASE_DIR/bin/vezor-edge" down --config "$EDGE_CONFIG"' in script
+    assert '"$CONTAINER_ENGINE" rm -f' in script
+    assert "vezor-edge-mediamtx" in script
+    assert "vezor-edge-nats-leaf" in script
+    assert "vezor-supervisor" in script
     assert script.index("\nstop_existing_edge_appliance\n") < script.index(
         "scripts/jetson-preflight.sh --installer --json"
     )

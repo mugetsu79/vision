@@ -165,8 +165,24 @@ Fix pushed in `8c37f50e`:
   `nats://MASTER_HOST_OR_IP:7422`
 - `make verify-installers` now renders edge compose with `VEZOR_NATS_IMAGE`
 
-This fix has not yet been validated on the physical Jetson. That is the first
-next step.
+2026-05-16 follow-up: after pulling `8c37f50e` on the Jetson, reinstall could
+still fail preflight with ports `8554`, `8888`, `8889`, and `9108` in use. The
+edge service had been installed before `VEZOR_NATS_IMAGE` existed, so the
+installer's stop-old-stack step could fail to render the new compose file and
+leave stale product-owned containers bound to the ports.
+
+Latest installer fix:
+
+- `installer/linux/install-edge.sh` exports transition-safe compose image
+  variables when it calls `vezor-edge down`
+- the installer removes stale product-owned edge containers
+  (`vezor-supervisor`, `vezor-edge-mediamtx`, `vezor-edge-nats-leaf`) before
+  Jetson preflight
+- `docs/product-installer-and-first-run-guide.md` includes the manual cleanup
+  fallback for Jetsons that hit this state before pulling the fix
+
+This port cleanup fix has not yet been validated on the physical Jetson. That
+is the first next step.
 
 ## Immediate Next Step
 

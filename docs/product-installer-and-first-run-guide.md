@@ -1648,6 +1648,33 @@ compose environment is stale. Pull the latest `codex/omnisight-installer`
 branch and rerun `install-edge.sh`; the installed worker must inherit
 `ARGUS_NATS_URL=nats://nats-leaf:4222`.
 
+### Jetson edge reinstall says installer ports are already in use
+
+The edge installer stops the existing `vezor-edge` appliance before Jetson
+preflight checks ports. During branch upgrades, an older `/etc/vezor/edge.env`
+may be missing new compose variables, which can prevent an old script from
+rendering the new edge compose file during `down`. Pull the latest branch and
+rerun the installer; current installers export transition-safe image variables
+and remove stale product-owned edge containers before preflight.
+
+If you need to clear the stale containers before pulling the fixed installer,
+run this on the Jetson:
+
+```bash
+cd /opt/vezor/current
+
+sudo env \
+  VEZOR_MEDIAMTX_IMAGE=bluenviron/mediamtx:latest \
+  VEZOR_NATS_IMAGE=nats:2 \
+  VEZOR_SUPERVISOR_IMAGE=vezor/edge-worker:portable-demo \
+  /opt/vezor/current/bin/vezor-edge down --config /etc/vezor/edge.json || true
+
+sudo docker rm -f vezor-supervisor vezor-edge-mediamtx vezor-edge-nats-leaf || true
+```
+
+Then rerun `install-edge.sh`. Do not delete `/var/lib/vezor/models` or
+`/var/lib/vezor/credentials` for this case.
+
 If the portable network changed, rerun the edge installer with
 `--unpaired --public-stream-host JETSON_NEW_IP_OR_HOSTNAME` so the existing
 credential is preserved and the supervisor reports the new stream relay base
