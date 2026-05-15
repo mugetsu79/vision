@@ -256,6 +256,9 @@ describe("DeploymentPage", () => {
     expect(
       await screen.findByText(/pairing material shown once/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("00000000-0000-0000-0000-000000000401"),
+    ).toBeInTheDocument();
     expect(screen.getByText("pair-once")).toBeInTheDocument();
     expect(screen.queryByText(/bearer/i)).not.toBeInTheDocument();
   });

@@ -638,7 +638,14 @@ From Control -> Deployment:
 
 1. Create or select the central master node.
 2. Click Pair central.
-3. Copy the pairing session id and one-time pairing code.
+3. Copy both fields from the pairing panel:
+   - `Session ID`
+   - `Pairing code`
+
+The short value such as `wabV2jeN` is only the pairing code. It is not enough
+by itself because `vezorctl pair` also needs the session id. If your UI shows
+only the code, pull the latest `codex/omnisight-installer` branch, rerun the
+master installer to rebuild the frontend, and create a new pairing session.
 
 On the master host:
 

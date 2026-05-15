@@ -328,15 +328,38 @@ function PairingNotice({ pairing }: { pairing: NodePairingSessionResponse }) {
             <h2>Pairing material shown once</h2>
           </div>
           <p className="mt-2 text-sm text-amber-100/80">
-            This code expires shortly and will not be shown again after the
-            session is claimed.
+            Use both values when pairing the supervisor. They expire shortly and
+            will not be shown again after the session is claimed.
           </p>
         </div>
-        <code className="rounded-[0.6rem] border border-amber-200/30 bg-black/35 px-3 py-2 text-sm font-semibold text-amber-50">
-          {pairing.pairing_code ?? "claimed"}
-        </code>
+        <div className="grid min-w-0 gap-2 sm:min-w-[24rem]">
+          <OneTimePairingValue label="Session ID" value={pairing.id} />
+          <OneTimePairingValue
+            label="Pairing code"
+            value={pairing.pairing_code ?? "claimed"}
+          />
+        </div>
       </div>
     </WorkspaceSurface>
+  );
+}
+
+function OneTimePairingValue({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100/70">
+        {label}
+      </p>
+      <code className="block max-w-full overflow-auto rounded-[0.6rem] border border-amber-200/30 bg-black/35 px-3 py-2 text-sm font-semibold text-amber-50">
+        {value}
+      </code>
+    </div>
   );
 }
 
