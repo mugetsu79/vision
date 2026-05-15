@@ -166,6 +166,15 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "timescale/timescaledb:latest-pg16" in script
 
 
+def test_linux_master_installer_preserves_existing_central_supervisor_identity() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "read_existing_supervisor_id" in script
+    assert 'CENTRAL_SUPERVISOR_ID="$(read_existing_supervisor_id "$SUPERVISOR_CONFIG")"' in script
+    assert 'CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-central-master-1}"' in script
+    assert '"supervisor_id": "$CENTRAL_SUPERVISOR_ID"' in script
+
+
 def test_linux_dev_installer_builds_local_master_images_before_systemd_start() -> None:
     script = _read(INSTALL_SCRIPT)
 

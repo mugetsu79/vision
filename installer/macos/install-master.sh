@@ -248,6 +248,25 @@ print(release_channel if isinstance(release_channel, str) else "")
 PY
 }
 
+read_existing_supervisor_id() {
+  local path="$1"
+
+  if [[ ! -f "$path" ]] || ! command -v python3 >/dev/null 2>&1; then
+    return 0
+  fi
+
+  python3 - "$path" <<'PY' 2>/dev/null || true
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+supervisor_id = payload.get("supervisor_id")
+if isinstance(supervisor_id, str) and supervisor_id:
+    print(supervisor_id)
+PY
+}
+
 build_local_master_images() {
   if [[ "$(manifest_release_channel)" != "dev" ]]; then
     return 0
@@ -424,6 +443,8 @@ fi
 prepare_config_for_docker_desktop "$MASTER_CONFIG"
 
 SUPERVISOR_CONFIG="$CONFIG_DIR/supervisor.json"
+CENTRAL_SUPERVISOR_ID="$(read_existing_supervisor_id "$SUPERVISOR_CONFIG")"
+CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-central-master-1}"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $SUPERVISOR_CONFIG"
 else
@@ -431,7 +452,7 @@ else
   umask 027
   cat > "$SUPERVISOR_CONFIG" <<JSON
 {
-  "supervisor_id": "central-master-1",
+  "supervisor_id": "$CENTRAL_SUPERVISOR_ID",
   "role": "central",
   "api_base_url": "http://backend:8000",
   "credential_store_path": "/run/vezor/credentials/supervisor.credential",

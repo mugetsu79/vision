@@ -95,6 +95,15 @@ def test_macos_installer_makes_bound_config_files_readable_by_docker_desktop() -
     assert 'prepare_config_for_docker_desktop "$SUPERVISOR_CONFIG"' in script
 
 
+def test_macos_installer_preserves_existing_central_supervisor_identity() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "read_existing_supervisor_id" in script
+    assert 'CENTRAL_SUPERVISOR_ID="$(read_existing_supervisor_id "$SUPERVISOR_CONFIG")"' in script
+    assert 'CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-central-master-1}"' in script
+    assert '"supervisor_id": "$CENTRAL_SUPERVISOR_ID"' in script
+
+
 def test_macos_installer_repairs_docker_desktop_writable_state_directories() -> None:
     script = _read(INSTALL_SCRIPT)
 
