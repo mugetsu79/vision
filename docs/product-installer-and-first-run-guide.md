@@ -1449,6 +1449,12 @@ installer. The updated installer writes the claimed `edge_node_id`, fixes config
 permissions, and makes the credential readable only to the non-root supervisor
 container user.
 
+If a rerun fails preflight because ports `8554`, `8888`, or `8889` are already
+in use, the previous edge MediaMTX container is still running. Pull the latest
+branch and rerun the installer; the updated installer stops the existing
+`vezor-edge.service` and Compose stack before preflight so the port checks see a
+clean host.
+
 ### A demo network change breaks the kit
 
 Recompute the master and Jetson IPs, update the worksheet, restart services,

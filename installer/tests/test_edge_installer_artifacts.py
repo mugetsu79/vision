@@ -83,6 +83,17 @@ def test_edge_install_script_claims_pairing_before_long_image_build() -> None:
     )
 
 
+def test_edge_install_script_stops_existing_appliance_before_preflight_ports() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "stop_existing_edge_appliance" in script
+    assert "systemctl stop vezor-edge.service" in script
+    assert '"$RELEASE_DIR/bin/vezor-edge" down --config "$EDGE_CONFIG"' in script
+    assert script.index("\nstop_existing_edge_appliance\n") < script.index(
+        "scripts/jetson-preflight.sh --installer --json"
+    )
+
+
 def test_edge_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
     combined = "\n".join(
         _read(path) for path in (EDGE_SERVICE, INSTALL_SCRIPT, PREFLIGHT, SUPERVISOR_COMPOSE)

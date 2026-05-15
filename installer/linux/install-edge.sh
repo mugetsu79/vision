@@ -180,6 +180,19 @@ build_local_edge_image() {
     /opt/vezor/current/backend
 }
 
+stop_existing_edge_appliance() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] stop existing vezor-edge appliance if present"
+    return 0
+  fi
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop vezor-edge.service >/dev/null 2>&1 || true
+  fi
+  if [[ -x "$RELEASE_DIR/bin/vezor-edge" && -f "$EDGE_CONFIG" ]]; then
+    "$RELEASE_DIR/bin/vezor-edge" down --config "$EDGE_CONFIG" >/dev/null 2>&1 || true
+  fi
+}
+
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "This installer target is Linux or Jetson edge. Detected: $(uname -s)" >&2
   exit 1
@@ -220,6 +233,8 @@ fi
 if command -v curl >/dev/null 2>&1 && [[ -n "$API_URL" ]]; then
   curl -fsS "$API_URL/healthz" >/dev/null
 fi
+
+stop_existing_edge_appliance
 
 if [[ -x "$RELEASE_DIR/scripts/jetson-preflight.sh" ]]; then
   (cd "$RELEASE_DIR" && scripts/jetson-preflight.sh --installer --json)
