@@ -73,9 +73,13 @@ function jsonResponse(body: unknown, status = 200) {
 function mockSitesApi({
   sites = [],
   cameras = [],
+  deleteStatus = 204,
+  deleteBody,
 }: {
   sites?: unknown[];
   cameras?: unknown[];
+  deleteStatus?: number;
+  deleteBody?: unknown;
 } = {}) {
   let currentSites = sites;
 
@@ -95,6 +99,9 @@ function mockSitesApi({
     }
 
     if (url.pathname.startsWith("/api/v1/sites/") && request.method === "DELETE") {
+      if (deleteStatus >= 400) {
+        return jsonResponse(deleteBody ?? { detail: "Site is still in use." }, deleteStatus);
+      }
       const siteId = url.pathname.split("/").pop();
       currentSites = currentSites.filter((site) => {
         if (
@@ -266,7 +273,7 @@ describe("SitesPage", () => {
 
     expect(hqCard).not.toBeNull();
     await user.click(
-      within(hqCard as HTMLElement).getByRole("button", { name: /delete/i }),
+      within(hqCard as HTMLElement).getByRole("button", { name: /delete site/i }),
     );
 
     await waitFor(() =>
@@ -287,5 +294,26 @@ describe("SitesPage", () => {
     expect(
       within(grid).getByRole("heading", { name: "Depot" }),
     ).toBeInTheDocument();
+  });
+
+  test("shows backend delete errors when a site is still referenced", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockSitesApi({
+      sites: [hqSite],
+      cameras: [dockScene],
+      deleteStatus: 409,
+      deleteBody: { detail: "Delete cameras and edge nodes before deleting this site." },
+    });
+
+    renderSitesPage();
+
+    const grid = await screen.findByTestId("site-context-grid");
+    await user.click(within(grid).getByRole("button", { name: /delete site/i }));
+
+    expect(
+      await screen.findByText(/delete cameras and edge nodes before deleting this site/i),
+    ).toBeInTheDocument();
+    expect(within(grid).getByRole("heading", { name: "HQ" })).toBeInTheDocument();
   });
 });

@@ -17,6 +17,8 @@ export type NodePairingSessionResponse =
   components["schemas"]["NodePairingSessionResponse"];
 export type NodeCredentialRotateResponse =
   components["schemas"]["NodeCredentialRotateResponse"];
+export type NodeCredentialRevokeResponse =
+  components["schemas"]["NodeCredentialRevokeResponse"];
 
 export function deploymentNodesQueryOptions() {
   return queryOptions({
@@ -98,6 +100,30 @@ export function useRotateNodeCredential() {
       );
       if (error || !data) {
         throw toApiError(error, "Failed to rotate node credential.");
+      }
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["deployment", "nodes"],
+      });
+    },
+  });
+}
+
+export function useRevokeNodeCredential() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (nodeId: string) => {
+      const { data, error } = await apiClient.POST(
+        "/api/v1/deployment/nodes/{node_id}/credentials/revoke",
+        {
+          params: { path: { node_id: nodeId } },
+        },
+      );
+      if (error || !data) {
+        throw toApiError(error, "Failed to unpair node.");
       }
       return data;
     },

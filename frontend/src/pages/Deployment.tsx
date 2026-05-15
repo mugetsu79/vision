@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Server,
   ShieldCheck,
+  Unlink,
   Wrench,
 } from "lucide-react";
 
@@ -25,9 +26,11 @@ import {
   useCreatePairingSession,
   useDeploymentNodes,
   useDeploymentSupportBundle,
+  useRevokeNodeCredential,
   useRotateNodeCredential,
   type DeploymentNode,
   type DeploymentSupportBundle,
+  type NodeCredentialRevokeResponse,
   type NodeCredentialRotateResponse,
   type NodePairingSessionResponse,
 } from "@/hooks/use-deployment";
@@ -64,6 +67,7 @@ export function DeploymentPage() {
   const createEdgeNode = useCreateBootstrapMaterial();
   const createPairing = useCreatePairingSession();
   const rotateCredential = useRotateNodeCredential();
+  const revokeCredential = useRevokeNodeCredential();
   const [edgePairingOpen, setEdgePairingOpen] = useState(false);
   const [edgeSiteId, setEdgeSiteId] = useState("");
   const [edgeHostname, setEdgeHostname] = useState("jetson-portable-1");
@@ -74,6 +78,8 @@ export function DeploymentPage() {
   const [rotation, setRotation] = useState<NodeCredentialRotateResponse | null>(
     null,
   );
+  const [revocation, setRevocation] =
+    useState<NodeCredentialRevokeResponse | null>(null);
   const [bundleNodeId, setBundleNodeId] = useState<string | null>(null);
   const supportBundle = useDeploymentSupportBundle(bundleNodeId);
   const availableSites = sites.data ?? [];
@@ -98,6 +104,19 @@ export function DeploymentPage() {
     }
     const result = await rotateCredential.mutateAsync(node.id);
     setRotation(result);
+    setRevocation(null);
+  }
+
+  async function handleUnpairNode(node: DeploymentNode) {
+    const confirmed = window.confirm(
+      `Unpair ${node.hostname}? This revokes the installed supervisor credential. The node will stop reporting until it is paired again.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+    const result = await revokeCredential.mutateAsync(node.id);
+    setRevocation(result);
+    setRotation(null);
   }
 
   async function handleCreateEdgePairing() {
@@ -178,6 +197,9 @@ export function DeploymentPage() {
 
       {pairing ? <PairingNotice pairing={pairing} /> : null}
       {rotation ? <CredentialRotationNotice rotation={rotation} /> : null}
+      {revocation ? (
+        <CredentialRevocationNotice revocation={revocation} />
+      ) : null}
 
       <InstallerTargets />
 
@@ -255,6 +277,17 @@ export function DeploymentPage() {
                           >
                             <RotateCcw className="mr-2 size-4" />
                             Rotate credential
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={
+                              revokeCredential.isPending ||
+                              node.credential_status === "revoked"
+                            }
+                            onClick={() => void handleUnpairNode(node)}
+                          >
+                            <Unlink className="mr-2 size-4" />
+                            Unpair
                           </Button>
                           <Button
                             type="button"
@@ -470,6 +503,33 @@ function CredentialRotationNotice({
         <code className="max-w-full overflow-auto rounded-[0.6rem] border border-amber-200/30 bg-black/35 px-3 py-2 text-sm font-semibold text-amber-50">
           {rotation.credential_material}
         </code>
+      </div>
+    </WorkspaceSurface>
+  );
+}
+
+function CredentialRevocationNotice({
+  revocation,
+}: {
+  revocation: NodeCredentialRevokeResponse;
+}) {
+  return (
+    <WorkspaceSurface className="border-[#5a2330] bg-[#241118] p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 size-4 text-[#ffc2cd]" />
+        <div>
+          <h2 className="text-sm font-semibold text-[#ffc2cd]">
+            Node unpaired
+          </h2>
+          <p className="mt-2 text-sm text-[#ffc2cd]/80">
+            Credential status is {revocation.credential_status}; revoked{" "}
+            {revocation.revoked_credentials}{" "}
+            {revocation.revoked_credentials === 1
+              ? "credential"
+              : "credentials"}
+            . Pair the node again before expecting service heartbeats.
+          </p>
+        </div>
       </div>
     </WorkspaceSurface>
   );

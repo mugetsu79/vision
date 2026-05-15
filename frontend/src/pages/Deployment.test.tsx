@@ -9,6 +9,7 @@ const deploymentMocks = vi.hoisted(() => ({
   createPairing: vi.fn(),
   createBootstrap: vi.fn(),
   rotateCredential: vi.fn(),
+  revokeCredential: vi.fn(),
   refetchNodes: vi.fn(),
   nodes: [] as unknown[],
   sites: [] as unknown[],
@@ -117,6 +118,10 @@ vi.mock("@/hooks/use-deployment", () => ({
     mutateAsync: deploymentMocks.rotateCredential,
     isPending: false,
   }),
+  useRevokeNodeCredential: () => ({
+    mutateAsync: deploymentMocks.revokeCredential,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/hooks/use-operations", () => ({
@@ -152,6 +157,7 @@ describe("DeploymentPage", () => {
     deploymentMocks.createPairing.mockReset();
     deploymentMocks.createBootstrap.mockReset();
     deploymentMocks.rotateCredential.mockReset();
+    deploymentMocks.revokeCredential.mockReset();
     deploymentMocks.refetchNodes.mockReset();
     deploymentMocks.createPairing.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000401",
@@ -179,6 +185,11 @@ describe("DeploymentPage", () => {
       revoked_credentials: 1,
       credential_status: "active",
       node: deploymentNodes[1],
+    });
+    deploymentMocks.revokeCredential.mockResolvedValue({
+      node_id: "00000000-0000-0000-0000-000000000102",
+      revoked_credentials: 1,
+      credential_status: "revoked",
     });
     deploymentMocks.createBootstrap.mockResolvedValue({
       edge_node_id: "00000000-0000-0000-0000-000000000501",
@@ -366,6 +377,24 @@ describe("DeploymentPage", () => {
     expect(
       screen.getByText(/connected supervisors must pick up/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/bearer/i)).not.toBeInTheDocument();
+  });
+
+  test("unpairs a node by revoking its credential", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<DeploymentPage />);
+
+    await user.click(screen.getAllByRole("button", { name: /unpair/i })[1]);
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Unpair orin-nano-01?"),
+    );
+    expect(deploymentMocks.revokeCredential).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000102",
+    );
+    expect(await screen.findByText(/node unpaired/i)).toBeInTheDocument();
+    expect(screen.getByText(/revoked 1 credential/i)).toBeInTheDocument();
     expect(screen.queryByText(/bearer/i)).not.toBeInTheDocument();
   });
 

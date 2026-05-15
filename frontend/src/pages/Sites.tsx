@@ -9,7 +9,12 @@ import { SiteDialog } from "@/components/sites/SiteDialog";
 import { Button } from "@/components/ui/button";
 import { productBrand } from "@/brand/product";
 import { useCameras } from "@/hooks/use-cameras";
-import { useCreateSite, useDeleteSite, useSites, type Site } from "@/hooks/use-sites";
+import {
+  useCreateSite,
+  useDeleteSite,
+  useSites,
+  type Site,
+} from "@/hooks/use-sites";
 
 export function SitesPage() {
   return (
@@ -22,6 +27,7 @@ export function SitesPage() {
 function SitesContent() {
   const brandName = productBrand.name;
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { data: sites = [], isLoading } = useSites();
   const { data: cameras = [] } = useCameras();
   const createSite = useCreateSite();
@@ -39,7 +45,14 @@ function SitesContent() {
       return;
     }
 
-    await deleteSite.mutateAsync(site.id);
+    setDeleteError(null);
+    try {
+      await deleteSite.mutateAsync(site.id);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Unable to delete site.",
+      );
+    }
   }
 
   return (
@@ -50,6 +63,12 @@ function SitesContent() {
         description={`Sites anchor deployment locations, time zones, scene context, and edge fleet planning across ${brandName}.`}
         actions={<Button onClick={() => setDialogOpen(true)}>Add site</Button>}
       />
+
+      {deleteError ? (
+        <WorkspaceSurface className="border-[#5a2330] bg-[#241118] px-4 py-3 text-sm text-[#ffc2cd]">
+          {deleteError}
+        </WorkspaceSurface>
+      ) : null}
 
       {isLoading ? (
         <p className="text-sm text-[var(--vz-text-secondary)]">
@@ -111,7 +130,7 @@ function SitesContent() {
                     type="button"
                     onClick={() => void handleDeleteSite(site)}
                   >
-                    Delete
+                    Delete site
                   </button>
                 </div>
               </WorkspaceSurface>
