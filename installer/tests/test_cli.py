@@ -115,7 +115,7 @@ def test_pair_claims_session_writes_credential_0600_without_printing_material(
     )
 
     captured = capsys.readouterr()
-    stored = json.loads(credential_path.read_text(encoding="utf-8"))
+    stored = credential_path.read_text(encoding="utf-8").strip()
     assert exit_code == 0
     assert calls == [
         {
@@ -126,10 +126,75 @@ def test_pair_claims_session_writes_credential_0600_without_printing_material(
             "hostname": "orin-nano-01",
         }
     ]
-    assert stored["credential_material"] == "vzcred_should_not_print"
+    assert stored == "vzcred_should_not_print"
+    assert "credential_material" not in credential_path.read_text(encoding="utf-8")
     assert stat.S_IMODE(credential_path.stat().st_mode) == 0o600
     assert "vzcred_should_not_print" not in captured.out
     assert "credential written" in captured.out.lower()
+
+
+def test_pair_updates_local_config_supervisor_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeClient:
+        def __init__(self, api_url: str) -> None:
+            self.api_url = api_url
+
+        def claim_pairing_session(
+            self,
+            *,
+            session_id: str,
+            pairing_code: str,
+            supervisor_id: str,
+            hostname: str,
+        ) -> dict[str, object]:
+            return {
+                "credential_id": "00000000-0000-0000-0000-000000000901",
+                "credential_material": "vzcred_should_not_print",
+                "credential_hash": "a" * 64,
+                "credential_version": 1,
+                "node": {"id": "00000000-0000-0000-0000-000000000902"},
+            }
+
+    monkeypatch.setattr(cli, "InstallerHttpClient", FakeClient)
+    config_path = tmp_path / "supervisor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "supervisor_id": "central-master-1",
+                "role": "central",
+                "api_base_url": "http://backend:8000",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(
+        [
+            "pair",
+            "--api-url",
+            "https://master.example",
+            "--session-id",
+            "00000000-0000-0000-0000-000000000111",
+            "--pairing-code",
+            "123456",
+            "--supervisor-id",
+            "100",
+            "--hostname",
+            "portable-master",
+            "--config",
+            str(config_path),
+            "--credential-path",
+            str(tmp_path / "supervisor.credential"),
+        ]
+    )
+
+    stored_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert stored_config["supervisor_id"] == "100"
+    assert stored_config["role"] == "central"
+    assert stored_config["api_base_url"] == "http://backend:8000"
 
 
 def test_support_bundle_redacts_token_like_values(

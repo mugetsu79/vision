@@ -128,7 +128,7 @@ Fill this in before you start:
 | Master API URL | `http://MASTER_IP:8000` |
 | First admin email | |
 | Tenant name | |
-| Central supervisor id | `central-master-1` |
+| Central supervisor id | value chosen in first-run, for example `100` |
 | Jetson hostname | |
 | Jetson LAN IP | |
 | Jetson edge name | `jetson-portable-1` |
@@ -650,17 +650,57 @@ master installer to rebuild the frontend, and create a new pairing session.
 On the master host:
 
 ```bash
-/opt/vezor/current/bin/vezorctl pair \
+sudo /opt/vezor/current/bin/vezorctl pair \
   --api-url "http://127.0.0.1:8000" \
   --session-id "PAIRING_SESSION_ID" \
   --pairing-code "PAIRING_CODE" \
-  --supervisor-id "central-master-1" \
+  --supervisor-id "CENTRAL_SUPERVISOR_ID_FROM_FIRST_RUN" \
   --hostname "$(hostname)" \
+  --config /etc/vezor/supervisor.json \
   --credential-path /var/lib/vezor/credentials/supervisor.credential
 ```
 
+Use the central supervisor id that first-run created. If you entered `100`
+during first-run, use `--supervisor-id "100"`. Do not use
+`central-master-1` unless that is the id shown for the central node in
+Control -> Deployment.
+
 The host stores the credential under `/var/lib/vezor/credentials`; the product
 containers see that same directory mounted read-only as `/run/vezor/credentials`.
+The credential file must contain only one raw `vzcred_...` value. If an older
+build wrote the full JSON claim response into
+`/var/lib/vezor/credentials/supervisor.credential`, repair it once before
+restart:
+
+```bash
+sudo python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("/var/lib/vezor/credentials/supervisor.credential")
+payload = json.loads(path.read_text(encoding="utf-8"))
+material = payload.get("credential_material")
+if not isinstance(material, str) or not material.startswith("vzcred_"):
+    raise SystemExit("credential file does not contain credential_material")
+path.write_text(material + "\n", encoding="utf-8")
+path.chmod(0o600)
+PY
+```
+
+If `/etc/vezor/supervisor.json` still has the installer default
+`central-master-1` but your central node is `100`, align the config:
+
+```bash
+sudo python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("/etc/vezor/supervisor.json")
+payload = json.loads(path.read_text(encoding="utf-8"))
+payload["supervisor_id"] = "100"
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+```
 
 Restart the master service:
 

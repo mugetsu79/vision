@@ -116,6 +116,7 @@ def _cmd_pair(args: argparse.Namespace) -> int:
         )
     if not hostname:
         raise LocalCliError("Pairing requires --hostname or config hostname.", exit_code=2)
+    _preflight_config_identity_update(args.config, config, str(supervisor_id))
 
     client = InstallerHttpClient(args.api_url)
     response = client.claim_pairing_session(
@@ -127,16 +128,8 @@ def _cmd_pair(args: argparse.Namespace) -> int:
     credential_material = response.get("credential_material")
     if not isinstance(credential_material, str) or not credential_material:
         raise LocalCliError("Pairing response did not include credential material.")
-    _write_credential(
-        args.credential_path,
-        {
-            "credential_material": credential_material,
-            "credential_id": response.get("credential_id"),
-            "credential_hash": response.get("credential_hash"),
-            "credential_version": response.get("credential_version"),
-            "node": response.get("node"),
-        },
-    )
+    _write_credential(args.credential_path, credential_material)
+    _update_config_identity(args.config, config, str(supervisor_id))
     print(f"Credential written to {args.credential_path}.")
     return 0
 
@@ -201,13 +194,39 @@ def _service_state(service: str, state_file: Path | None) -> dict[str, Any]:
     }
 
 
-def _write_credential(path: Path, payload: dict[str, Any]) -> None:
+def _write_credential(path: Path, credential_material: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as credential_file:
-        json.dump(payload, credential_file, indent=2, sort_keys=True)
-        credential_file.write("\n")
+        credential_file.write(f"{credential_material}\n")
     path.chmod(0o600)
+
+
+def _preflight_config_identity_update(
+    path: Path | None,
+    config: dict[str, Any],
+    supervisor_id: str,
+) -> None:
+    if path is None or not path.exists() or config.get("supervisor_id") == supervisor_id:
+        return
+    if not os.access(path, os.W_OK):
+        raise LocalCliError(
+            f"{path} is not writable. Rerun pair with sudo so the local "
+            "supervisor config can be updated to the claimed supervisor id.",
+            exit_code=2,
+        )
+
+
+def _update_config_identity(
+    path: Path | None,
+    config: dict[str, Any],
+    supervisor_id: str,
+) -> None:
+    if path is None or not path.exists() or config.get("supervisor_id") == supervisor_id:
+        return
+    updated_config = dict(config)
+    updated_config["supervisor_id"] = supervisor_id
+    path.write_text(json.dumps(updated_config, indent=2) + "\n", encoding="utf-8")
 
 
 def redact(value: Any) -> Any:
