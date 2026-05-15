@@ -225,6 +225,10 @@ describe("CameraWizard", () => {
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
     await user.selectOptions(screen.getByLabelText(/processing mode/i), "edge");
+    await user.type(
+      screen.getByLabelText(/edge node id/i),
+      "22222222-2222-2222-2222-222222222222",
+    );
     await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
@@ -238,6 +242,35 @@ describe("CameraWizard", () => {
         name: "720p10 edge bandwidth saver",
       }),
     ).toBeInTheDocument();
+  });
+
+  test("submits selected edge node for RTSP edge processing", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/processing mode/i), "edge");
+    await user.type(
+      screen.getByLabelText(/edge node id/i),
+      "22222222-2222-2222-2222-222222222222",
+    );
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /create camera/i }));
+
+    const submittedPayload = onSubmit.mock.calls[0]?.[0] as CreateCameraInput | undefined;
+
+    expect(submittedPayload?.processing_mode).toBe("edge");
+    expect(submittedPayload?.edge_node_id).toBe(
+      "22222222-2222-2222-2222-222222222222",
+    );
   });
 
   test("shows runtime vocabulary editor for open-vocab models", async () => {

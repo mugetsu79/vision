@@ -120,6 +120,12 @@ const DEFAULT_BROWSER_DELIVERY_PROFILES: BrowserDeliveryProfilePayload[] = [
 ];
 
 export type SiteOption = { id: string; name: string };
+export type EdgeNodeOption = {
+  id: string;
+  hostname: string;
+  status?: string | null;
+  siteId?: string | null;
+};
 export type ModelOption = {
   id: string;
   name: string;
@@ -272,6 +278,10 @@ function formatSourceSize(sourceCapability: SourceCapability | null) {
   return `${sourceCapability.width}×${sourceCapability.height}`;
 }
 
+function requiresEdgeNode(data: CameraWizardData) {
+  return data.sourceKind === "usb" || data.processingMode === "edge";
+}
+
 function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
   const browserDeliveryProfiles = normalizeBrowserDeliveryProfiles(
     initialCamera?.browser_delivery?.profiles,
@@ -376,8 +386,15 @@ function buildCameraSource(data: CameraWizardData) {
   };
 }
 
-function edgeNodeIdForSource(data: CameraWizardData) {
-  return data.sourceKind === "usb" ? data.edgeNodeId.trim() || null : null;
+function edgeNodeIdForProcessing(data: CameraWizardData) {
+  if (
+    data.sourceKind === "usb" ||
+    data.processingMode === "edge" ||
+    (data.processingMode === "hybrid" && data.edgeNodeId.trim().length > 0)
+  ) {
+    return data.edgeNodeId.trim() || null;
+  }
+  return null;
 }
 
 function buildRecordingPolicy(data: CameraWizardData): EvidenceRecordingPolicy {
@@ -988,7 +1005,7 @@ function toCreatePayload(
 ): CreateCameraInput {
   const payload: CreateCameraInput = {
     site_id: data.siteId,
-    edge_node_id: edgeNodeIdForSource(data),
+    edge_node_id: edgeNodeIdForProcessing(data),
     name: data.name.trim(),
     rtsp_url: data.sourceKind === "rtsp" ? data.rtspUrl.trim() : null,
     camera_source: buildCameraSource(data),
@@ -1028,7 +1045,7 @@ function toUpdatePayload(
 ): UpdateCameraInput {
   const payload: UpdateCameraInput = {
     site_id: data.siteId,
-    edge_node_id: edgeNodeIdForSource(data),
+    edge_node_id: edgeNodeIdForProcessing(data),
     name: data.name.trim(),
     processing_mode: data.processingMode,
     primary_model_id: data.primaryModelId,
@@ -1068,6 +1085,7 @@ function toUpdatePayload(
 
 export function CameraWizard({
   sites,
+  edgeNodes = [],
   models,
   modelsLoading = false,
   modelsError = null,
@@ -1077,6 +1095,7 @@ export function CameraWizard({
   rtspUrlPlaceholder,
 }: {
   sites: SiteOption[];
+  edgeNodes?: EdgeNodeOption[];
   models: ModelOption[];
   modelsLoading?: boolean;
   modelsError?: string | null;
@@ -1149,7 +1168,7 @@ export function CameraWizard({
               ? buildCameraSource(data)
               : null,
           processing_mode: data.processingMode,
-          edge_node_id: edgeNodeIdForSource(data),
+          edge_node_id: edgeNodeIdForProcessing(data),
           browser_delivery: buildBrowserDelivery(data),
           privacy: {
             blur_faces: data.blurFaces,
@@ -1531,9 +1550,11 @@ export function CameraWizard({
         if (!data.usbUri.trim()) {
           return "USB device URI is required.";
         }
-        if (!data.edgeNodeId.trim()) {
-          return "Edge node ID is required for USB sources.";
-        }
+      }
+      if (requiresEdgeNode(data) && !data.edgeNodeId.trim()) {
+        return data.sourceKind === "usb"
+          ? "Edge node ID is required for USB sources."
+          : "Edge node is required for edge processing.";
       }
     }
 
@@ -1864,6 +1885,33 @@ export function CameraWizard({
                     value={data.rtspUrl}
                     onChange={(event) => updateData("rtspUrl", event.target.value)}
                   />
+                </label>
+              ) : null}
+              {data.sourceKind === "rtsp" && requiresEdgeNode(data) ? (
+                <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                  <span>Edge node</span>
+                  {edgeNodes.length > 0 ? (
+                    <Select
+                      aria-label="Edge node"
+                      value={data.edgeNodeId}
+                      onChange={(event) => updateData("edgeNodeId", event.target.value)}
+                    >
+                      <option value="">Select an edge node</option>
+                      {edgeNodes.map((edgeNode) => (
+                        <option key={edgeNode.id} value={edgeNode.id}>
+                          {edgeNode.hostname}
+                          {edgeNode.status ? ` - ${edgeNode.status}` : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <Input
+                      aria-label="Edge node ID"
+                      placeholder="22222222-2222-2222-2222-222222222222"
+                      value={data.edgeNodeId}
+                      onChange={(event) => updateData("edgeNodeId", event.target.value)}
+                    />
+                  )}
                 </label>
               ) : null}
               {isEditMode && data.sourceKind === "rtsp" ? (

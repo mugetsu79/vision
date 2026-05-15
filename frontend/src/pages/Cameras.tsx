@@ -83,6 +83,18 @@ function CamerasContent() {
     () => deriveSceneReadinessRows({ cameras, fleet: fleet.data }),
     [cameras, fleet.data],
   );
+  const edgeNodeOptions = useMemo(
+    () =>
+      (fleet.data?.nodes ?? [])
+        .filter((node) => node.kind === "edge" && node.id)
+        .map((node) => ({
+          id: node.id as string,
+          hostname: node.hostname,
+          status: node.status,
+          siteId: node.site_id ?? null,
+        })),
+    [fleet.data],
+  );
   const sceneHealthByCamera = useMemo(
     () => new Map(sceneHealthRows.map((row) => [row.cameraId, row])),
     [sceneHealthRows],
@@ -365,6 +377,7 @@ function CamerasContent() {
 
           <CameraWizard
             initialCamera={selectedCamera}
+            edgeNodes={edgeNodeOptions}
             models={wizardModels}
             modelsError={
               modelQueryEmpty && modelsError instanceof Error

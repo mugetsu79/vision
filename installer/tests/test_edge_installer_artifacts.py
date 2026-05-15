@@ -43,6 +43,8 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
         "--unpaired",
         "--manifest",
         "--version",
+        "--public-stream-host",
+        "--public-mediamtx-rtsp-url",
         "--jetson-ort-wheel-url",
         "--allow-cpu-onnx-runtime",
     ):
@@ -54,6 +56,9 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "/opt/vezor/current/backend/Dockerfile.edge" in script
     assert "JETSON_ORT_WHEEL_URL" in script
     assert "ALLOW_CPU_ONNX_RUNTIME" in script
+    assert "PUBLIC_MEDIAMTX_RTSP_URL" in script
+    assert "detect_public_stream_host" in script
+    assert '"public_mediamtx_rtsp_url": "$PUBLIC_MEDIAMTX_RTSP_URL"' in script
     assert "Jetson ONNX Runtime GPU wheel is required" in script
     assert "--build-arg \"ALLOW_CPU_ONNX_RUNTIME=$ALLOW_CPU_ONNX_RUNTIME\"" in script
     assert "scripts/jetson-preflight.sh --installer --json" in script

@@ -65,7 +65,8 @@ def test_parse_args_product_config_uses_credential_store_without_static_bearer(t
   "supervisor_id": "central-imac",
   "role": "central",
   "api_base_url": "http://127.0.0.1:8000",
-  "credential_store_path": "supervisor.credential"
+  "credential_store_path": "supervisor.credential",
+  "public_mediamtx_rtsp_url": "rtsp://edge.local:8554"
 }
 """.strip(),
         encoding="utf-8",
@@ -77,6 +78,7 @@ def test_parse_args_product_config_uses_credential_store_without_static_bearer(t
     assert config.token_password is None
     assert config.credential_store_path == credential_path
     assert config.supervisor_id == "central-imac"
+    assert config.public_mediamtx_rtsp_url == "rtsp://edge.local:8554"
 
 
 def test_parse_args_product_healthcheck_accepts_config_without_token_file(tmp_path) -> None:
@@ -143,6 +145,27 @@ async def test_runner_posts_service_and_hardware_reports_before_polling() -> Non
     assert operations.service_reports[0].credential_status is DeploymentCredentialStatus.ACTIVE
     assert operations.hardware_reports[0].host_profile == "macos-x86_64-intel"
     assert operations.hardware_reports[0].observed_performance == []
+
+
+@pytest.mark.asyncio
+async def test_runner_reports_public_edge_stream_url_for_master_relay() -> None:
+    operations = _FakeOperations(requests=[])
+    runner = SupervisorRunner(
+        supervisor_id="jetson-portable-1",
+        edge_node_id=uuid4(),
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=_FakeProcessAdapter(),
+        tenant_id=uuid4(),
+        public_mediamtx_rtsp_url="rtsp://192.168.1.42:8554",
+    )
+
+    await runner.run_once()
+
+    assert operations.service_reports[0].diagnostics["stream_rtsp_base_url"] == (
+        "rtsp://192.168.1.42:8554"
+    )
 
 
 @pytest.mark.asyncio

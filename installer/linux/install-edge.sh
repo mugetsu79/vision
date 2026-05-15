@@ -10,6 +10,8 @@ VERSION=""
 MANIFEST=""
 JETSON_ORT_WHEEL_URL="${JETSON_ORT_WHEEL_URL:-}"
 ALLOW_CPU_ONNX_RUNTIME="${VEZOR_ALLOW_CPU_ONNX_RUNTIME:-0}"
+PUBLIC_STREAM_HOST="${VEZOR_EDGE_PUBLIC_STREAM_HOST:-}"
+PUBLIC_MEDIAMTX_RTSP_URL="${VEZOR_EDGE_PUBLIC_MEDIAMTX_RTSP_URL:-}"
 CONFIG_DIR="/etc/vezor"
 EDGE_CONFIG="/etc/vezor/edge.json"
 SUPERVISOR_CONFIG="/etc/vezor/supervisor.json"
@@ -30,6 +32,10 @@ Options:
   --unpaired             Install service without claiming a pairing session.
   --edge-name NAME       Local edge node name. Default: jetson-edge.
   --model-dir PATH       Local model directory. Default: /var/lib/vezor/models.
+  --public-stream-host HOST
+                         Host/IP the master can use to read this edge MediaMTX service.
+  --public-mediamtx-rtsp-url URL
+                         Full public RTSP base URL. Defaults to rtsp://HOST:8554.
   --version VERSION      Release version to record in supervisor config.
   --manifest PATH        Release manifest path. Dev manifests build a local edge image.
   --jetson-ort-wheel-url URL
@@ -65,6 +71,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --model-dir)
       MODEL_DIR="${2:?--model-dir requires a value}"
+      shift 2
+      ;;
+    --public-stream-host)
+      PUBLIC_STREAM_HOST="${2:?--public-stream-host requires a value}"
+      shift 2
+      ;;
+    --public-mediamtx-rtsp-url)
+      PUBLIC_MEDIAMTX_RTSP_URL="${2:?--public-mediamtx-rtsp-url requires a value}"
       shift 2
       ;;
     --version)
@@ -159,6 +173,22 @@ print(release_channel if isinstance(release_channel, str) else "")
 PY
 }
 
+detect_public_stream_host() {
+  if [[ -n "$PUBLIC_STREAM_HOST" ]]; then
+    printf '%s\n' "$PUBLIC_STREAM_HOST"
+    return 0
+  fi
+
+  local first_ip
+  first_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  if [[ -n "$first_ip" ]]; then
+    printf '%s\n' "$first_ip"
+    return 0
+  fi
+
+  hostname -f 2>/dev/null || hostname
+}
+
 build_local_edge_image() {
   if [[ "$(manifest_release_channel)" != "dev" ]]; then
     return 0
@@ -214,6 +244,9 @@ fi
 
 MEDIAMTX_IMAGE="$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)"
 EDGE_WORKER_IMAGE="$(manifest_image_ref edge-worker vezor/edge-worker:portable-demo)"
+if [[ -z "$PUBLIC_MEDIAMTX_RTSP_URL" ]]; then
+  PUBLIC_MEDIAMTX_RTSP_URL="rtsp://$(detect_public_stream_host):8554"
+fi
 
 if [[ "$UNPAIRED" -eq 0 && -z "$PAIRING_CODE" ]]; then
   echo "Provide --pairing-code or choose --unpaired for deferred pairing." >&2
@@ -287,6 +320,7 @@ JSON
   "api_base_url": "$API_URL",
   "credential_store_path": "/run/vezor/credentials/supervisor.credential",
   "worker_metrics_url": "http://127.0.0.1:9108/metrics",
+  "public_mediamtx_rtsp_url": "$PUBLIC_MEDIAMTX_RTSP_URL",
   "service_manager": "systemd",
   "version": "${VERSION:-edge-installer}"
 }

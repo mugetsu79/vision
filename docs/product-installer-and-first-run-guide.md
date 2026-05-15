@@ -967,6 +967,7 @@ On the Jetson:
 
 ```bash
 MASTER_API_URL="http://MASTER_HOST_OR_IP:8000"
+JETSON_STREAM_HOST="JETSON_HOST_OR_IP_REACHABLE_FROM_MASTER"
 JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 
 sudo ./installer/linux/install-edge.sh \
@@ -977,6 +978,7 @@ sudo ./installer/linux/install-edge.sh \
   --pairing-code "PAIRING_CODE" \
   --edge-name "jetson-portable-1" \
   --model-dir /var/lib/vezor/models \
+  --public-stream-host "$JETSON_STREAM_HOST" \
   --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
 ```
 
@@ -988,6 +990,13 @@ while Docker downloads packages. When the manifest release channel is `dev`, it
 also builds the local Jetson edge image from `backend/Dockerfile.edge` before
 starting `vezor-edge.service`; this avoids depending on unpublished
 `ghcr.io/vezor/*:dev` images during branch testing.
+
+`--public-stream-host` should be the Jetson LAN IP or hostname that the master
+can reach. The edge supervisor reports `rtsp://HOST:8554` back to the master so
+Live can relay Jetson native and processed streams through the master MediaMTX
+service. If you omit it, the installer uses the first address from
+`hostname -I`; pass it explicitly whenever the portable kit changes networks or
+the Jetson has more than one interface.
 
 The Jetson ONNX Runtime GPU wheel is required for the portable product path.
 For the current JetPack 6 / Python 3.10 installer image, use a compatible
@@ -1228,7 +1237,7 @@ Recommended first setup:
 1. Confirm the site exists, for example `Portable Demo Site`.
 2. Add one Jetson camera.
 3. Set processing mode to `edge`.
-4. Assign the Jetson edge node.
+4. Assign the Jetson edge node in the camera source step.
 5. Use a source the Jetson can open directly:
    - RTSP URL reachable from the Jetson, or
    - USB/UVC if the camera is physically attached to the Jetson.
@@ -1584,10 +1593,19 @@ Check:
 - master can reach `rtsp://JETSON_IP:8554`
 - Jetson service is running
 - Jetson MediaMTX is exposing the camera path
+- the camera setup has the Jetson edge node assigned, not only an Operations
+  worker binding
+- Control -> Deployment shows a fresh Jetson heartbeat with service manager
+  `systemd`
 - stream delivery profile is not forcing a reduced profile while native is
   selected
 - the browser is using the master frontend URL, not a stale IP from another
   network
+
+If the portable network changed, rerun the edge installer with
+`--unpaired --public-stream-host JETSON_NEW_IP_OR_HOSTNAME` so the existing
+credential is preserved and the supervisor reports the new stream relay base
+URL.
 
 ### The edge node cannot pair
 

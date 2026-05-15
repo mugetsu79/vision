@@ -80,6 +80,7 @@ class RunnerConfig:
     service_manager: DeploymentServiceManager = DeploymentServiceManager.DIRECT_CHILD
     supervisor_version: str | None = None
     hostname: str | None = None
+    public_mediamtx_rtsp_url: str | None = None
     healthcheck: bool = False
 
 
@@ -98,6 +99,7 @@ class SupervisorRunner:
         service_manager: DeploymentServiceManager = DeploymentServiceManager.DIRECT_CHILD,
         supervisor_version: str | None = None,
         hostname: str | None = None,
+        public_mediamtx_rtsp_url: str | None = None,
         product_mode: bool = False,
         auth_mode: str = "static_bearer_dev",
     ) -> None:
@@ -112,6 +114,7 @@ class SupervisorRunner:
         self.service_manager = service_manager
         self.supervisor_version = supervisor_version
         self.hostname = hostname or platform.node() or supervisor_id
+        self.public_mediamtx_rtsp_url = public_mediamtx_rtsp_url
         self.product_mode = product_mode
         self.auth_mode = auth_mode
         self.reconciler = SupervisorReconciler(
@@ -166,6 +169,11 @@ class SupervisorRunner:
             diagnostics={
                 "auth_mode": self.auth_mode,
                 "product_mode": self.product_mode,
+                **(
+                    {"stream_rtsp_base_url": self.public_mediamtx_rtsp_url}
+                    if self.public_mediamtx_rtsp_url
+                    else {}
+                ),
             },
         )
         try:
@@ -261,6 +269,7 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
         service_manager=config.service_manager,
         supervisor_version=config.supervisor_version,
         hostname=config.hostname,
+        public_mediamtx_rtsp_url=config.public_mediamtx_rtsp_url,
         product_mode=config.product_mode,
         auth_mode=config.auth_mode,
     )
@@ -287,6 +296,10 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
     )
     parser.add_argument("--token-scope", default=os.getenv("ARGUS_API_TOKEN_SCOPE"))
     parser.add_argument("--worker-metrics-url", default=os.getenv("ARGUS_WORKER_METRICS_URL"))
+    parser.add_argument(
+        "--public-mediamtx-rtsp-url",
+        default=os.getenv("ARGUS_PUBLIC_MEDIAMTX_RTSP_URL"),
+    )
     parser.add_argument("--hardware-report-interval-seconds", type=float, default=60.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--once", action="store_true")
@@ -332,6 +345,7 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         product_mode=False,
         auth_mode="password_grant_dev" if has_refreshable_token else "static_bearer_dev",
         service_manager=DeploymentServiceManager.DIRECT_CHILD,
+        public_mediamtx_rtsp_url=args.public_mediamtx_rtsp_url,
         healthcheck=args.healthcheck,
     )
 
@@ -385,6 +399,7 @@ def _parse_config_file(args: argparse.Namespace, parser: argparse.ArgumentParser
         service_manager=_service_manager(payload.get("service_manager")),
         supervisor_version=_optional_string(payload.get("version")),
         hostname=_optional_string(payload.get("hostname")),
+        public_mediamtx_rtsp_url=_optional_string(payload.get("public_mediamtx_rtsp_url")),
         healthcheck=args.healthcheck,
     )
 

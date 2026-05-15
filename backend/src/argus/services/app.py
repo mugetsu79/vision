@@ -176,8 +176,10 @@ from argus.models.tables import (
     RuntimePassportSnapshot,
     SceneContractSnapshot,
     Site,
+    SupervisorServiceStatusReport,
     Tenant,
     TrackingEvent,
+    WorkerAssignment,
 )
 from argus.services.camera_sources import (
     NormalizedCameraSource,
@@ -3876,6 +3878,21 @@ class StreamService:
     ) -> StreamAccess:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+            effective_edge_node_id = await _effective_stream_edge_node_id(
+                session=session,
+                tenant_id=tenant_context.tenant_id,
+                camera=camera,
+            )
+            reported_edge_rtsp_base_url = None
+            if (
+                effective_edge_node_id is not None
+                and self._edge_mediamtx_rtsp_base_url(effective_edge_node_id) is None
+            ):
+                reported_edge_rtsp_base_url = await _latest_edge_stream_rtsp_base_url(
+                    session=session,
+                    tenant_id=tenant_context.tenant_id,
+                    edge_node_id=effective_edge_node_id,
+                )
         browser_delivery = BrowserDeliverySettings.model_validate(
             camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
         )
@@ -3891,13 +3908,13 @@ class StreamService:
         base_urls = _stream_delivery_base_urls(
             browser_delivery,
             settings=self.settings,
-            edge_node_id=camera.edge_node_id,
+            edge_node_id=effective_edge_node_id,
             processing_mode=camera.processing_mode,
         )
         access = resolve_stream_access(
             camera_id=camera.id,
             processing_mode=camera.processing_mode,
-            edge_node_id=camera.edge_node_id,
+            edge_node_id=effective_edge_node_id,
             stream_kind=stream_settings.kind,
             privacy=camera.privacy,
             rtsp_base_url=base_urls["rtsp"],
@@ -3906,7 +3923,12 @@ class StreamService:
             mjpeg_base_url=base_urls["mjpeg"],
             mjpeg_path_template=self.settings.mediamtx_mjpeg_path_template,
         )
-        await self._ensure_edge_stream_relay(camera=camera, access=access)
+        await self._ensure_edge_stream_relay(
+            camera=camera,
+            access=access,
+            edge_node_id=effective_edge_node_id,
+            reported_edge_rtsp_base_url=reported_edge_rtsp_base_url,
+        )
         return access
 
     async def _resolve_stream_delivery_profile(
@@ -3937,10 +3959,15 @@ class StreamService:
         *,
         camera: Camera,
         access: StreamAccess,
+        edge_node_id: UUID | None,
+        reported_edge_rtsp_base_url: str | None,
     ) -> None:
-        if camera.edge_node_id is None and camera.processing_mode is not ProcessingMode.EDGE:
+        if edge_node_id is None and camera.processing_mode is not ProcessingMode.EDGE:
             return
-        edge_rtsp_base = self._edge_mediamtx_rtsp_base_url(camera.edge_node_id)
+        edge_rtsp_base = self._edge_mediamtx_rtsp_base_url(
+            edge_node_id,
+            reported_base_url=reported_edge_rtsp_base_url,
+        )
         if edge_rtsp_base is None:
             return
         edge_rtsp_base = edge_rtsp_base.rstrip("/")
@@ -3967,12 +3994,18 @@ class StreamService:
             seconds=max(1, int(ttl_seconds * 0.8))
         )
 
-    def _edge_mediamtx_rtsp_base_url(self, edge_node_id: UUID | None) -> str | None:
+    def _edge_mediamtx_rtsp_base_url(
+        self,
+        edge_node_id: UUID | None,
+        *,
+        reported_base_url: str | None = None,
+    ) -> str | None:
         base_urls = self.settings.edge_mediamtx_rtsp_base_urls
         return (
             (base_urls.get(str(edge_node_id)) if edge_node_id is not None else None)
             or base_urls.get("*")
             or base_urls.get("default")
+            or reported_base_url
         )
 
     def _release_video_feed_slot(
@@ -4810,6 +4843,53 @@ async def _resolve_stream_delivery_profile_row(
         ),
         None,
     )
+
+
+async def _effective_stream_edge_node_id(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    camera: Camera,
+) -> UUID | None:
+    if camera.edge_node_id is not None:
+        return camera.edge_node_id
+    statement = (
+        select(WorkerAssignment)
+        .where(WorkerAssignment.tenant_id == tenant_id)
+        .where(WorkerAssignment.camera_id == camera.id)
+        .where(WorkerAssignment.active.is_(True))
+        .order_by(WorkerAssignment.created_at.desc())
+        .limit(1)
+    )
+    rows = list((await session.execute(statement)).scalars().all())
+    assignment = rows[0] if rows else None
+    if not isinstance(assignment, WorkerAssignment):
+        return None
+    return assignment.edge_node_id
+
+
+async def _latest_edge_stream_rtsp_base_url(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    edge_node_id: UUID,
+) -> str | None:
+    statement = (
+        select(SupervisorServiceStatusReport)
+        .where(SupervisorServiceStatusReport.tenant_id == tenant_id)
+        .where(SupervisorServiceStatusReport.edge_node_id == edge_node_id)
+        .order_by(SupervisorServiceStatusReport.heartbeat_at.desc())
+        .limit(1)
+    )
+    rows = list((await session.execute(statement)).scalars().all())
+    report = rows[0] if rows else None
+    diagnostics = getattr(report, "diagnostics", None)
+    if not isinstance(diagnostics, Mapping):
+        return None
+    value = diagnostics.get("stream_rtsp_base_url")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip().rstrip("/")
 
 
 async def _load_operator_profiles(
