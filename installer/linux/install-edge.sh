@@ -315,7 +315,24 @@ run install -d -m 0755 \
   /run/vezor
 run install -d -m 0755 "$MODEL_DIR" "$DATA_DIR/edge" "$DATA_DIR/mediamtx" "$DATA_DIR/credentials"
 
-run install -m 0644 "$RELEASE_DIR/infra/mediamtx/mediamtx.yml" "$CONFIG_DIR/mediamtx/mediamtx.yml"
+MEDIAMTX_CONFIG="$CONFIG_DIR/mediamtx/mediamtx.yml"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "[dry-run] write edge MediaMTX config $MEDIAMTX_CONFIG"
+else
+  API_URL="$API_URL" python3 - "$RELEASE_DIR/infra/mediamtx/mediamtx.yml" "$MEDIAMTX_CONFIG" <<'PY'
+import sys
+from pathlib import Path
+
+api_url = __import__("os").environ["API_URL"].rstrip("/")
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+target = source.replace(
+    "authJWTJWKS: http://backend:8000/.well-known/argus/mediamtx/jwks.json",
+    f"authJWTJWKS: {api_url}/.well-known/argus/mediamtx/jwks.json",
+)
+Path(sys.argv[2]).write_text(target, encoding="utf-8")
+PY
+  chmod 0644 "$MEDIAMTX_CONFIG"
+fi
 
 EDGE_ENV="$CONFIG_DIR/edge.env"
 if [[ "$DRY_RUN" -eq 1 ]]; then

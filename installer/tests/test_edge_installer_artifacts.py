@@ -71,6 +71,9 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "/etc/vezor/supervisor.json" in script
     assert "$CONFIG_DIR/edge.env" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
+    assert "write edge MediaMTX config" in script
+    assert ".well-known/argus/mediamtx/jwks.json" in script
+    assert "f\"authJWTJWKS: {api_url}/.well-known/argus/mediamtx/jwks.json\"" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert 'chmod 0644 "$EDGE_ENV"' in script

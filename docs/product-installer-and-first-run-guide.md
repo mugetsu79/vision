@@ -998,6 +998,12 @@ service. If you omit it, the installer uses the first address from
 `hostname -I`; pass it explicitly whenever the portable kit changes networks or
 the Jetson has more than one interface.
 
+The installer also rewrites the Jetson MediaMTX JWT JWKS endpoint to
+`$MASTER_API_URL/.well-known/argus/mediamtx/jwks.json`. Do not leave the edge
+MediaMTX config pointing at `http://backend:8000`; that hostname only exists
+inside the master compose network and will cause master-to-Jetson stream relay
+requests to fail with `401 Unauthorized`.
+
 The Jetson ONNX Runtime GPU wheel is required for the portable product path.
 For the current JetPack 6 / Python 3.10 installer image, use a compatible
 `cp310` Linux `aarch64` wheel such as the URL above. The installer only allows a
@@ -1593,6 +1599,8 @@ Check:
 - master can reach `rtsp://JETSON_IP:8554`
 - Jetson service is running
 - Jetson MediaMTX is exposing the camera path
+- Jetson MediaMTX is using the master JWKS URL, not
+  `http://backend:8000/.well-known/argus/mediamtx/jwks.json`
 - the camera setup has the Jetson edge node assigned, not only an Operations
   worker binding
 - Control -> Deployment shows a fresh Jetson heartbeat with service manager
