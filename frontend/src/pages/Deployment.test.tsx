@@ -7,9 +7,11 @@ import { DeploymentPage } from "@/pages/Deployment";
 
 const deploymentMocks = vi.hoisted(() => ({
   createPairing: vi.fn(),
+  createBootstrap: vi.fn(),
   rotateCredential: vi.fn(),
   refetchNodes: vi.fn(),
   nodes: [] as unknown[],
+  sites: [] as unknown[],
 }));
 
 const deploymentNodes = [
@@ -117,11 +119,38 @@ vi.mock("@/hooks/use-deployment", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-operations", () => ({
+  useCreateBootstrapMaterial: () => ({
+    mutateAsync: deploymentMocks.createBootstrap,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/hooks/use-sites", () => ({
+  useSites: () => ({
+    data: deploymentMocks.sites,
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 describe("DeploymentPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     deploymentMocks.nodes = deploymentNodes;
+    deploymentMocks.sites = [
+      {
+        id: "00000000-0000-0000-0000-000000000301",
+        name: "Portable Demo Site",
+        description: "Demo floor",
+        tz: "Europe/Zurich",
+        geo_point: null,
+        created_at: "2026-05-13T08:00:00Z",
+        updated_at: "2026-05-13T08:00:00Z",
+      },
+    ];
     deploymentMocks.createPairing.mockReset();
+    deploymentMocks.createBootstrap.mockReset();
     deploymentMocks.rotateCredential.mockReset();
     deploymentMocks.refetchNodes.mockReset();
     deploymentMocks.createPairing.mockResolvedValue({
@@ -150,6 +179,18 @@ describe("DeploymentPage", () => {
       revoked_credentials: 1,
       credential_status: "active",
       node: deploymentNodes[1],
+    });
+    deploymentMocks.createBootstrap.mockResolvedValue({
+      edge_node_id: "00000000-0000-0000-0000-000000000501",
+      api_key: "edge_api_key_not_rendered",
+      nats_nkey_seed: "nats_seed_not_rendered",
+      subjects: ["edge.heartbeat.00000000-0000-0000-0000-000000000501"],
+      mediamtx_url: "rtsp://media.example:8554",
+      mediamtx_username: null,
+      mediamtx_password: null,
+      overlay_network_hints: {},
+      dev_compose_command: "legacy lab command",
+      supervisor_environment: {},
     });
   });
 
@@ -202,7 +243,9 @@ describe("DeploymentPage", () => {
     const workspace = screen.getByTestId("deployment-workspace");
     expect(within(workspace).getByText(/macOS master/i)).toBeInTheDocument();
     expect(within(workspace).getByText(/Linux master/i)).toBeInTheDocument();
-    expect(within(workspace).getByText(/Jetson edge/i)).toBeInTheDocument();
+    expect(within(workspace).getAllByText(/Jetson edge/i).length).toBeGreaterThan(
+      0,
+    );
     expect(
       within(workspace).getByText(/installer\/macos\/install-master\.sh/i),
     ).toBeInTheDocument();
@@ -261,6 +304,47 @@ describe("DeploymentPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("pair-once")).toBeInTheDocument();
     expect(screen.queryByText(/bearer/i)).not.toBeInTheDocument();
+  });
+
+  test("creates a Jetson edge record and pairing session from Deployment", async () => {
+    const user = userEvent.setup();
+    deploymentMocks.createPairing.mockResolvedValueOnce({
+      id: "00000000-0000-0000-0000-000000000601",
+      tenant_id: "00000000-0000-0000-0000-000000000001",
+      deployment_node_id: null,
+      edge_node_id: "00000000-0000-0000-0000-000000000501",
+      node_kind: "edge",
+      hostname: "orin1",
+      status: "pending",
+      expires_at: "2026-05-13T08:37:00Z",
+      consumed_at: null,
+      claimed_by_supervisor: null,
+      created_by_subject: "admin-1",
+      pairing_code: "edge-once",
+      created_at: "2026-05-13T08:32:00Z",
+      updated_at: "2026-05-13T08:32:00Z",
+    });
+    render(<DeploymentPage />);
+
+    await user.click(screen.getByRole("button", { name: /pair jetson edge/i }));
+    await user.clear(screen.getByLabelText(/jetson edge name/i));
+    await user.type(screen.getByLabelText(/jetson edge name/i), "orin1");
+    await user.click(screen.getByRole("button", { name: /create edge pairing/i }));
+
+    expect(deploymentMocks.createBootstrap).toHaveBeenCalledWith({
+      site_id: "00000000-0000-0000-0000-000000000301",
+      hostname: "orin1",
+      version: "portable-demo",
+    });
+    expect(deploymentMocks.createPairing).toHaveBeenCalledWith({
+      node_kind: "edge",
+      edge_node_id: "00000000-0000-0000-0000-000000000501",
+      hostname: "orin1",
+      requested_ttl_seconds: 300,
+    });
+    expect(await screen.findByText("edge-once")).toBeInTheDocument();
+    expect(screen.queryByText(/edge_api_key_not_rendered/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nats_seed_not_rendered/i)).not.toBeInTheDocument();
   });
 
   test("rotates node credentials with a one-time pickup warning", async () => {

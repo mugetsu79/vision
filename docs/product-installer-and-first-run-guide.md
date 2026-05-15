@@ -875,11 +875,19 @@ sudo jetson_clocks
 ./scripts/jetson-preflight.sh --installer --json
 ```
 
-From Control -> Deployment on the master:
+From the master UI:
 
-1. Create or select the Jetson edge node.
-2. Start an edge pairing session for that node.
-3. Copy the session id and one-time pairing code.
+1. Open Control -> Sites.
+2. Create the physical location for the demo, for example
+   `Portable Demo Site`, if it does not exist yet.
+3. Open Control -> Deployment.
+4. Click Pair Jetson edge.
+5. Select the Site, enter the Jetson edge name, and click Create edge pairing.
+6. Copy the session id and one-time pairing code.
+
+The Sites page is the physical location layer. Sites own the time zone and are
+where scenes, cameras, and edge nodes are grouped. For the portable kit, one
+site is enough.
 
 On the Jetson:
 
@@ -1038,7 +1046,7 @@ Use Control -> Scenes.
 
 Recommended first setup:
 
-1. Create one site, for example `Portable Demo Site`.
+1. Confirm the site exists, for example `Portable Demo Site`.
 2. Add one Jetson camera.
 3. Set processing mode to `edge`.
 4. Assign the Jetson edge node.

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   Cpu,
@@ -19,6 +20,7 @@ import {
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   useCreatePairingSession,
   useDeploymentNodes,
@@ -29,6 +31,8 @@ import {
   type NodeCredentialRotateResponse,
   type NodePairingSessionResponse,
 } from "@/hooks/use-deployment";
+import { useCreateBootstrapMaterial } from "@/hooks/use-operations";
+import { useSites, type Site } from "@/hooks/use-sites";
 
 const installerTargets = [
   {
@@ -56,8 +60,14 @@ const installerTargets = [
 
 export function DeploymentPage() {
   const nodes = useDeploymentNodes();
+  const sites = useSites();
+  const createEdgeNode = useCreateBootstrapMaterial();
   const createPairing = useCreatePairingSession();
   const rotateCredential = useRotateNodeCredential();
+  const [edgePairingOpen, setEdgePairingOpen] = useState(false);
+  const [edgeSiteId, setEdgeSiteId] = useState("");
+  const [edgeHostname, setEdgeHostname] = useState("jetson-portable-1");
+  const [edgeVersion, setEdgeVersion] = useState("portable-demo");
   const [pairing, setPairing] = useState<NodePairingSessionResponse | null>(
     null,
   );
@@ -66,6 +76,8 @@ export function DeploymentPage() {
   );
   const [bundleNodeId, setBundleNodeId] = useState<string | null>(null);
   const supportBundle = useDeploymentSupportBundle(bundleNodeId);
+  const availableSites = sites.data ?? [];
+  const selectedEdgeSiteId = edgeSiteId || availableSites[0]?.id || "";
 
   async function handlePairNode(node?: DeploymentNode) {
     const result = await createPairing.mutateAsync({
@@ -86,6 +98,27 @@ export function DeploymentPage() {
     }
     const result = await rotateCredential.mutateAsync(node.id);
     setRotation(result);
+  }
+
+  async function handleCreateEdgePairing() {
+    if (!selectedEdgeSiteId) {
+      return;
+    }
+    const hostname = edgeHostname.trim() || "jetson-portable-1";
+    const version = edgeVersion.trim() || "portable-demo";
+    const edge = await createEdgeNode.mutateAsync({
+      site_id: selectedEdgeSiteId,
+      hostname,
+      version,
+    });
+    const result = await createPairing.mutateAsync({
+      node_kind: "edge",
+      edge_node_id: edge.edge_node_id,
+      hostname,
+      requested_ttl_seconds: 300,
+    });
+    setPairing(result);
+    setEdgePairingOpen(false);
   }
 
   if (nodes.isLoading) {
@@ -120,9 +153,28 @@ export function DeploymentPage() {
               <KeyRound className="mr-2 size-4" />
               Pair central
             </Button>
+            <Button type="button" onClick={() => setEdgePairingOpen(true)}>
+              <Cpu className="mr-2 size-4" />
+              Pair Jetson edge
+            </Button>
           </>
         }
       />
+
+      {edgePairingOpen ? (
+        <EdgePairingPanel
+          sites={availableSites}
+          selectedSiteId={selectedEdgeSiteId}
+          hostname={edgeHostname}
+          version={edgeVersion}
+          busy={createEdgeNode.isPending || createPairing.isPending}
+          onSiteChange={setEdgeSiteId}
+          onHostnameChange={setEdgeHostname}
+          onVersionChange={setEdgeVersion}
+          onCancel={() => setEdgePairingOpen(false)}
+          onCreate={() => void handleCreateEdgePairing()}
+        />
+      ) : null}
 
       {pairing ? <PairingNotice pairing={pairing} /> : null}
       {rotation ? <CredentialRotationNotice rotation={rotation} /> : null}
@@ -227,6 +279,111 @@ export function DeploymentPage() {
         />
       </section>
     </div>
+  );
+}
+
+function EdgePairingPanel({
+  sites,
+  selectedSiteId,
+  hostname,
+  version,
+  busy,
+  onSiteChange,
+  onHostnameChange,
+  onVersionChange,
+  onCancel,
+  onCreate,
+}: {
+  sites: Site[];
+  selectedSiteId: string;
+  hostname: string;
+  version: string;
+  busy: boolean;
+  onSiteChange: (siteId: string) => void;
+  onHostnameChange: (hostname: string) => void;
+  onVersionChange: (version: string) => void;
+  onCancel: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <WorkspaceSurface className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f8ff]">
+            <Cpu className="size-4 text-[#79d6ff]" />
+            <h2>Create Jetson edge pairing</h2>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#93a7c5]">
+            Choose the physical site for this Jetson, then create the one-time
+            pairing material used by the edge installer.
+          </p>
+        </div>
+        <Button type="button" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+
+      {sites.length === 0 ? (
+        <div className="mt-4 rounded-[0.75rem] border border-dashed border-white/15 bg-white/[0.025] p-4">
+          <p className="text-sm font-medium text-[#f4f8ff]">
+            Create a Site before pairing the Jetson.
+          </p>
+          <p className="mt-2 text-sm text-[#93a7c5]">
+            Sites are the physical locations that own scenes, cameras, time
+            zone, and edge node assignment.
+          </p>
+          <Link
+            to="/sites"
+            className="mt-3 inline-flex items-center justify-center rounded-full border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,#161c26,#0d121a)] px-4 py-2.5 text-sm font-medium text-[var(--vz-text-primary)] shadow-[var(--vz-elev-1)] transition hover:border-[color:var(--vz-hair-focus)]"
+          >
+            Open Sites
+          </Link>
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_12rem_auto]">
+          <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
+            Site
+            <select
+              className="min-h-11 rounded-[0.75rem] border border-white/10 bg-black/35 px-3 text-sm text-[#f4f8ff] outline-none transition focus:border-[#79d6ff]"
+              value={selectedSiteId}
+              onChange={(event) => onSiteChange(event.target.value)}
+            >
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
+            Jetson edge name
+            <Input
+              value={hostname}
+              onChange={(event) => onHostnameChange(event.target.value)}
+              placeholder="jetson-portable-1"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
+            Version
+            <Input
+              value={version}
+              onChange={(event) => onVersionChange(event.target.value)}
+              placeholder="portable-demo"
+            />
+          </label>
+          <div className="flex items-end">
+            <Button
+              type="button"
+              disabled={busy || !selectedSiteId || hostname.trim().length === 0}
+              onClick={onCreate}
+            >
+              <KeyRound className="mr-2 size-4" />
+              Create edge pairing
+            </Button>
+          </div>
+        </div>
+      )}
+    </WorkspaceSurface>
   );
 }
 
