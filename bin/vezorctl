@@ -12,15 +12,25 @@ if command -v uv >/dev/null 2>&1; then
   exec uv run --project "$ROOT_DIR/installer" vezorctl "$@"
 fi
 
-if command -v python3 >/dev/null 2>&1 && python3 -m uv --version >/dev/null 2>&1; then
+if command -v python3.12 >/dev/null 2>&1 && python3.12 -m uv --version >/dev/null 2>&1; then
+  exec python3.12 -m uv run --project "$ROOT_DIR/installer" vezorctl "$@"
+fi
+
+if command -v python3 >/dev/null 2>&1 \
+  && python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' \
+  && python3 -m uv --version >/dev/null 2>&1; then
   exec python3 -m uv run --project "$ROOT_DIR/installer" vezorctl "$@"
 fi
 
 cat >&2 <<EOF
 vezorctl is not installed for this checkout.
 
-Install or expose uv, then run:
-  python3 -m uv sync --project "$ROOT_DIR/installer"
+Install or expose uv with Python 3.12, then run:
+  uv python install 3.12
+  uv sync --project "$ROOT_DIR/installer" --python 3.12
+
+If only the Python module is available, use:
+  python3.12 -m uv sync --project "$ROOT_DIR/installer" --python 3.12
 
 After that, retry:
   $ROOT_DIR/bin/vezorctl $*

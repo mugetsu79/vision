@@ -296,7 +296,8 @@ cd "$HOME/vision"
 git fetch origin
 git switch codex/omnisight-installer
 git pull --ff-only origin codex/omnisight-installer
-python3 -m uv sync --project installer
+uv python install 3.12
+uv sync --project installer --python 3.12
 sudo mkdir -p /opt/vezor
 sudo ln -sfn "$HOME/vision" /opt/vezor/current
 ```
@@ -801,6 +802,12 @@ export PATH="$HOME/.local/bin:$PATH"
 uv python install 3.12
 ```
 
+JetPack 6.x normally leaves `/usr/bin/python3` on Python 3.10. That is fine
+for OS utilities, but the Vezor installer tooling requires Python 3.12. Use
+`uv ... --python 3.12` or `python3.12 -m uv ...` for installer commands; do not
+use `python3 -m uv ...` on the Jetson unless `python3 --version` reports
+Python 3.12.
+
 Clone and expose the checkout as `/opt/vezor/current`:
 
 ```bash
@@ -812,7 +819,7 @@ cd "$HOME/vision"
 git fetch origin
 git switch codex/omnisight-installer
 git pull --ff-only origin codex/omnisight-installer
-uv sync --project installer
+uv sync --project installer --python 3.12
 
 sudo mkdir -p /opt/vezor
 sudo ln -sfn "$HOME/vision" /opt/vezor/current
@@ -961,7 +968,7 @@ Attach the Jetson TensorRT engine to the ONNX model row:
 
 ```bash
 cd /opt/vezor/current/backend
-python3 -m uv run python -m argus.scripts.build_runtime_artifact \
+uv run --python 3.12 python -m argus.scripts.build_runtime_artifact \
   --api-base-url "$ARGUS_API_BASE_URL" \
   --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
   --model-id "$MODEL_ID" \
@@ -975,7 +982,7 @@ python3 -m uv run python -m argus.scripts.build_runtime_artifact \
 Validate on the same Jetson:
 
 ```bash
-python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
+uv run --python 3.12 python -m argus.scripts.validate_runtime_artifact \
   --api-base-url "$ARGUS_API_BASE_URL" \
   --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
   --model-id "$MODEL_ID" \

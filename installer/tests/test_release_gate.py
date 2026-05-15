@@ -55,7 +55,10 @@ def _read(path: Path) -> str:
 def test_release_gate_script_exists_and_runs_installer_checks() -> None:
     script = _read(VALIDATE_SCRIPT)
 
-    assert "python3 -m uv run --project installer pytest installer/tests -q" in script
+    assert "run_installer_uv()" in script
+    assert "uv run --project installer" in script
+    assert "python3.12 -m uv run --project installer" in script
+    assert "run_installer_uv pytest installer/tests -q" in script
     assert "bash -n installer/linux/install-master.sh" in script
     assert "bash -n installer/linux/install-edge.sh" in script
     assert "bash -n bin/vezor-appliance" in script

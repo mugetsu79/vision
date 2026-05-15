@@ -3,8 +3,32 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+run_installer_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    uv run --project installer "$@"
+    return 0
+  fi
+
+  if command -v python3.12 >/dev/null 2>&1 \
+    && python3.12 -m uv --version >/dev/null 2>&1; then
+    python3.12 -m uv run --project installer "$@"
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1 \
+    && python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' \
+    && python3 -m uv --version >/dev/null 2>&1; then
+    python3 -m uv run --project installer "$@"
+    return 0
+  fi
+
+  echo "uv with Python 3.12 is required for installer validation." >&2
+  echo "Install uv, then run: uv python install 3.12" >&2
+  exit 127
+}
+
 echo "==> installer pytest"
-python3 -m uv run --project installer pytest installer/tests -q
+run_installer_uv pytest installer/tests -q
 
 echo "==> installer shell syntax"
 bash -n installer/linux/install-master.sh
@@ -34,7 +58,7 @@ do
 done
 
 echo "==> manifest validation"
-python3 -m uv run --project installer python - <<'PY'
+run_installer_uv python - <<'PY'
 import json
 from pathlib import Path
 
@@ -46,7 +70,7 @@ print(f"validated {path}")
 PY
 
 echo "==> product secret scan"
-python3 -m uv run --project installer python - <<'PY'
+run_installer_uv python - <<'PY'
 from pathlib import Path
 
 product_artifacts = [

@@ -78,4 +78,5 @@ def test_vezorctl_wrapper_uses_installer_tooling_without_static_tokens() -> None
 
     assert "installer/.venv/bin/vezorctl" in wrapper
     assert 'uv run --project "$ROOT_DIR/installer" vezorctl "$@"' in wrapper
+    assert 'python3.12 -m uv run --project "$ROOT_DIR/installer" vezorctl "$@"' in wrapper
     assert "ARGUS_API_BEARER_TOKEN" not in wrapper
