@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -6,7 +6,6 @@ import {
   Cpu,
   RefreshCw,
   Server,
-  ShieldAlert,
   TerminalSquare,
 } from "lucide-react";
 
@@ -23,8 +22,7 @@ import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligen
 import { SupervisorLifecycleControls } from "@/components/operations/SupervisorLifecycleControls";
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
+import { omniLabels } from "@/copy/omnisight";
 import { useCameras, type Camera } from "@/hooks/use-cameras";
 import {
   useModels,
@@ -32,9 +30,7 @@ import {
   type RuntimeArtifact,
 } from "@/hooks/use-models";
 import {
-  type FleetBootstrapResponse,
   type FleetOverview,
-  useCreateBootstrapMaterial,
   useFleetOverview,
   useOperationalMemoryPatterns,
 } from "@/hooks/use-operations";
@@ -56,14 +52,7 @@ export function SettingsPage() {
   const runtimeArtifacts = useRuntimeArtifactsByModelId(
     models.map((model) => model.id),
   );
-  const bootstrap = useCreateBootstrapMaterial();
   const operationalMemory = useOperationalMemoryPatterns({ limit: 8 });
-  const [hostname, setHostname] = useState("");
-  const [version, setVersion] = useState("0.1.0");
-  const [bootstrapResult, setBootstrapResult] =
-    useState<FleetBootstrapResponse | null>(null);
-  const [showBreakGlassMaterial, setShowBreakGlassMaterial] = useState(false);
-  const firstSiteId = fleet.data?.camera_workers[0]?.site_id;
   const camerasById = useMemo(
     () => new Map(cameras.map((camera) => [camera.id, camera])),
     [cameras],
@@ -78,23 +67,6 @@ export function SettingsPage() {
     }
     return "Manual dev mode";
   }, [fleet.data?.mode]);
-
-  async function handleBootstrap() {
-    if (
-      !firstSiteId ||
-      hostname.trim().length === 0 ||
-      version.trim().length === 0
-    ) {
-      return;
-    }
-    const result = await bootstrap.mutateAsync({
-      site_id: firstSiteId,
-      hostname: hostname.trim(),
-      version: version.trim(),
-    });
-    setBootstrapResult(result);
-    setShowBreakGlassMaterial(false);
-  }
 
   if (fleet.isLoading) {
     return (
@@ -299,55 +271,20 @@ export function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel
-          title="Bootstrap edge node"
-          icon={<ShieldAlert className="size-4" />}
-        >
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
-              Hostname
-              <Input
-                value={hostname}
-                onChange={(event) => setHostname(event.target.value)}
-                placeholder={omniPlaceExamples.edgeHostname}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
-              Version
-              <Input
-                value={version}
-                onChange={(event) => setVersion(event.target.value)}
-                placeholder="0.1.0"
-              />
-            </label>
-            <Button
-              type="button"
-              disabled={!firstSiteId || bootstrap.isPending}
-              onClick={() => void handleBootstrap()}
+        <Panel title="Node pairing" icon={<Server className="size-4" />}>
+          <div className="flex flex-col gap-3 text-sm text-[#a9b9d3]">
+            <p>
+              Pair Jetson edge nodes and inspect installable supervisor
+              credentials from Deployment. Operations monitors runtime health
+              after nodes are paired.
+            </p>
+            <Link
+              to="/deployment"
+              className="inline-flex w-fit items-center rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-[#d8e2f2] transition hover:border-[#6ec6ff]/60 hover:text-white"
             >
-              <ShieldAlert className="mr-2 size-4" />
-              Generate bootstrap
-            </Button>
-            {bootstrapResult ? (
-              <div className="rounded-[1rem] border border-amber-300/30 bg-amber-950/30 p-3 text-sm text-amber-100">
-                <p className="font-semibold">Legacy lab bootstrap material.</p>
-                <p className="mt-1 text-amber-100/80">
-                  Production nodes should be paired from Deployment; this
-                  one-time material remains for lab and break-glass workflows.
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="mt-3 border-amber-200/30 text-amber-100 hover:border-amber-200/60 hover:text-white"
-                  onClick={() => setShowBreakGlassMaterial(true)}
-                >
-                  Show break-glass material
-                </Button>
-                {showBreakGlassMaterial ? (
-                  <CommandBlock text={bootstrapResult.api_key} />
-                ) : null}
-              </div>
-            ) : null}
+              Open Deployment
+              <ArrowRight className="ml-2 size-4" />
+            </Link>
           </div>
         </Panel>
       </section>
@@ -587,14 +524,6 @@ function Panel({
       </div>
       {children}
     </Surface>
-  );
-}
-
-function CommandBlock({ text }: { text: string }) {
-  return (
-    <pre className="mt-3 overflow-auto rounded-[0.75rem] bg-black/40 p-3 text-xs text-[#d8e2f2]">
-      {text}
-    </pre>
   );
 }
 

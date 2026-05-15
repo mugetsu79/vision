@@ -6,10 +6,18 @@ from uuid import uuid4
 
 import pytest
 
-from argus.api.contracts import FleetBootstrapRequest, TenantContext
+from argus.api.contracts import (
+    DeploymentNodeResponse,
+    FleetBootstrapRequest,
+    TenantContext,
+)
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
 from argus.models.enums import (
+    DeploymentCredentialStatus,
+    DeploymentInstallStatus,
+    DeploymentNodeKind,
+    DeploymentServiceManager,
     IncidentRuleSeverity,
     OperationsLifecycleAction,
     ProcessingMode,
@@ -61,6 +69,14 @@ class _FakeSessionFactory:
         return _FakeSession(self.result_sets)
 
 
+class _FakeDeploymentNodes:
+    def __init__(self, nodes: list[DeploymentNodeResponse]) -> None:
+        self.nodes = nodes
+
+    async def list_nodes(self, *, tenant_id) -> list[DeploymentNodeResponse]:  # noqa: ANN001
+        return self.nodes
+
+
 def _tenant_context(tenant_id) -> TenantContext:  # noqa: ANN001
     return TenantContext(
         tenant_id=tenant_id,
@@ -86,6 +102,36 @@ def _site(tenant_id) -> Site:  # noqa: ANN001
         description=None,
         tz="UTC",
         geo_point=None,
+    )
+
+
+def _deployment_node(
+    tenant_id,
+    *,
+    node_kind: DeploymentNodeKind,
+    supervisor_id: str,
+    hostname: str,
+    edge_node_id=None,  # noqa: ANN001
+    last_service_reported_at: datetime | None,
+) -> DeploymentNodeResponse:
+    return DeploymentNodeResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        node_kind=node_kind,
+        edge_node_id=edge_node_id,
+        supervisor_id=supervisor_id,
+        hostname=hostname,
+        install_status=DeploymentInstallStatus.HEALTHY,
+        credential_status=DeploymentCredentialStatus.ACTIVE,
+        service_manager=DeploymentServiceManager.SYSTEMD,
+        service_status="running",
+        version="portable-demo",
+        os_name="linux",
+        host_profile="linux-aarch64",
+        last_service_reported_at=last_service_reported_at,
+        diagnostics={},
+        created_at=datetime(2026, 5, 15, 12, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 5, 15, 12, 0, tzinfo=UTC),
     )
 
 
@@ -239,6 +285,70 @@ async def test_fleet_overview_maps_edge_heartbeat_status() -> None:
     assert edge_node.status == "stale"
     assert response.camera_workers[0].lifecycle_owner == "edge_supervisor"
     assert response.camera_workers[0].runtime_status == "stale"
+
+
+@pytest.mark.asyncio
+async def test_fleet_overview_uses_deployment_heartbeat_status_and_hides_duplicate_edges() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    now = datetime.now(tz=UTC)
+    stale_time = now - timedelta(hours=3)
+    stale_duplicate_edge = EdgeNode(
+        id=uuid4(),
+        site_id=site.id,
+        hostname="jetson-portable-1",
+        public_key="old-seed",
+        version="portable-demo",
+        last_seen_at=stale_time,
+    )
+    active_edge = EdgeNode(
+        id=uuid4(),
+        site_id=site.id,
+        hostname="jetson-portable-1",
+        public_key="new-seed",
+        version="portable-demo",
+        last_seen_at=stale_time,
+    )
+    deployment_nodes = _FakeDeploymentNodes(
+        [
+            _deployment_node(
+                tenant_id,
+                node_kind=DeploymentNodeKind.CENTRAL,
+                supervisor_id="100",
+                hostname="central-container",
+                last_service_reported_at=now,
+            ),
+            _deployment_node(
+                tenant_id,
+                node_kind=DeploymentNodeKind.EDGE,
+                supervisor_id="jetson-portable-1",
+                hostname="edge-container",
+                edge_node_id=active_edge.id,
+                last_service_reported_at=now,
+            ),
+        ]
+    )
+    session_factory = _FakeSessionFactory(
+        [(stale_duplicate_edge, site), (active_edge, site)],
+        [],
+        [],
+        [],
+        [],
+    )
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        deployment_nodes=deployment_nodes,
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    assert [(node.hostname, node.status) for node in response.nodes] == [
+        ("central", "healthy"),
+        ("jetson-portable-1", "healthy"),
+    ]
+    assert response.summary.offline_nodes == 0
+    assert response.summary.stale_nodes == 0
 
 
 @pytest.mark.asyncio

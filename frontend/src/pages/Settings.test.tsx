@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -753,25 +752,15 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
   });
 
-  test("generates bootstrap material with one-time warning", async () => {
-    const user = userEvent.setup();
+  test("routes node pairing through deployment", () => {
     renderPage();
 
-    await user.type(screen.getByLabelText(/hostname/i), "edge-kit-01");
-    await user.type(screen.getByLabelText(/version/i), "0.1.0");
-    await user.click(
-      screen.getByRole("button", { name: /generate bootstrap/i }),
-    );
-
-    expect(screen.getByText(/one-time material/i)).toBeInTheDocument();
+    expect(screen.getByText(/pair jetson edge nodes/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/legacy lab bootstrap material/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/edge_secret_once/i)).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: /show break-glass material/i }),
-    );
-    expect(screen.queryByText(/docker compose/i)).not.toBeInTheDocument();
-    expect(await screen.findByText(/edge_secret_once/i)).toBeInTheDocument();
+      screen.getAllByRole("link", { name: /open deployment/i }),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByRole("button", { name: /generate bootstrap/i }),
+    ).not.toBeInTheDocument();
   });
 });

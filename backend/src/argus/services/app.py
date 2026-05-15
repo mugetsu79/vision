@@ -38,6 +38,7 @@ from argus.api.contracts import (
     CameraSourceSettings,
     CameraUpdate,
     CrossCameraThreadResponse,
+    DeploymentNodeResponse,
     DerivedBrowserProfiles,
     DetectionRegion,
     EdgeHeartbeatRequest,
@@ -1456,22 +1457,28 @@ class OperationsService:
     async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
         now = datetime.now(tz=UTC)
         async with self.session_factory() as session:
-            edge_rows = (
-                await session.execute(
-                    select(EdgeNode, Site)
-                    .join(Site, Site.id == EdgeNode.site_id)
-                    .where(Site.tenant_id == tenant_context.tenant_id)
-                    .order_by(EdgeNode.hostname)
-                )
-            ).all()
-            camera_rows = (
-                await session.execute(
-                    select(Camera, Site)
-                    .join(Site, Site.id == Camera.site_id)
-                    .where(Site.tenant_id == tenant_context.tenant_id)
-                    .order_by(Camera.name)
-                )
-            ).all()
+            edge_rows = cast(
+                list[tuple[EdgeNode, Site]],
+                (
+                    await session.execute(
+                        select(EdgeNode, Site)
+                        .join(Site, Site.id == EdgeNode.site_id)
+                        .where(Site.tenant_id == tenant_context.tenant_id)
+                        .order_by(EdgeNode.hostname)
+                    )
+                ).all(),
+            )
+            camera_rows = cast(
+                list[tuple[Camera, Site]],
+                (
+                    await session.execute(
+                        select(Camera, Site)
+                        .join(Site, Site.id == Camera.site_id)
+                        .where(Site.tenant_id == tenant_context.tenant_id)
+                        .order_by(Camera.name)
+                    )
+                ).all(),
+            )
             camera_ids = [camera.id for camera, _site in camera_rows]
             runtime_passports_by_camera = await _load_latest_runtime_passports_by_camera_ids(
                 session,
@@ -1485,6 +1492,20 @@ class OperationsService:
                 session,
                 camera_ids,
             )
+
+        deployment_nodes = (
+            await self.deployment_nodes.list_nodes(tenant_id=tenant_context.tenant_id)
+            if self.deployment_nodes is not None
+            else []
+        )
+        deployment_edge_by_edge_id = _latest_deployment_node_by_edge_id(deployment_nodes)
+        claimed_edge_names = {
+            identifier
+            for node in deployment_edge_by_edge_id.values()
+            for identifier in (node.supervisor_id, node.hostname)
+            if identifier
+        }
+        central_deployment_node = _latest_deployment_node_by_kind(deployment_nodes, "central")
 
         assignment_by_camera = {}
         runtime_report_by_camera = {}
@@ -1533,12 +1554,35 @@ class OperationsService:
             if assigned_edge_node_id in assigned_camera_ids:
                 assigned_camera_ids[assigned_edge_node_id].append(camera.id)
 
+        edge_rows = [
+            (edge, site)
+            for edge, site in edge_rows
+            if (
+                edge.id in deployment_edge_by_edge_id
+                or assigned_camera_ids.get(edge.id)
+                or edge.hostname not in claimed_edge_names
+            )
+        ]
+        assigned_camera_ids = {
+            edge.id: assigned_camera_ids.get(edge.id, []) for edge, _site in edge_rows
+        }
+
         nodes: list[FleetNodeSummary] = [
             FleetNodeSummary(
                 id=None,
                 kind="central",
                 hostname="central",
-                status=FleetNodeStatus.UNKNOWN,
+                status=_fleet_deployment_node_status(central_deployment_node, now),
+                version=(
+                    central_deployment_node.version
+                    if central_deployment_node is not None
+                    else None
+                ),
+                last_seen_at=(
+                    central_deployment_node.last_service_reported_at
+                    if central_deployment_node is not None
+                    else None
+                ),
                 assigned_camera_ids=[
                     camera.id
                     for camera, _site in camera_rows
@@ -1548,7 +1592,12 @@ class OperationsService:
             )
         ]
         for edge, site in edge_rows:
-            node_status = _fleet_node_status(edge.last_seen_at, now)
+            deployment_node = deployment_edge_by_edge_id.get(edge.id)
+            node_status = (
+                _fleet_deployment_node_status(deployment_node, now)
+                if deployment_node is not None
+                else _fleet_node_status(edge.last_seen_at, now)
+            )
             nodes.append(
                 FleetNodeSummary(
                     id=edge.id,
@@ -1556,8 +1605,16 @@ class OperationsService:
                     hostname=edge.hostname,
                     site_id=site.id,
                     status=node_status,
-                    version=edge.version,
-                    last_seen_at=edge.last_seen_at,
+                    version=(
+                        deployment_node.version
+                        if deployment_node is not None and deployment_node.version is not None
+                        else edge.version
+                    ),
+                    last_seen_at=(
+                        deployment_node.last_service_reported_at
+                        if deployment_node is not None
+                        else edge.last_seen_at
+                    ),
                     assigned_camera_ids=assigned_camera_ids.get(edge.id, []),
                     reported_camera_count=None,
                 )
@@ -4101,6 +4158,52 @@ def _fleet_node_status(last_seen_at: datetime | None, now: datetime) -> FleetNod
     if age <= timedelta(minutes=15):
         return FleetNodeStatus.STALE
     return FleetNodeStatus.OFFLINE
+
+
+def _fleet_deployment_node_status(
+    node: DeploymentNodeResponse | None,
+    now: datetime,
+) -> FleetNodeStatus:
+    if node is None or node.last_service_reported_at is None:
+        return FleetNodeStatus.UNKNOWN
+    return _fleet_node_status(node.last_service_reported_at, now)
+
+
+def _latest_deployment_node_by_kind(
+    nodes: Sequence[DeploymentNodeResponse],
+    kind: Literal["central", "edge"],
+) -> DeploymentNodeResponse | None:
+    candidates = [node for node in nodes if _enum_value(node.node_kind) == kind]
+    if not candidates:
+        return None
+    return max(candidates, key=_deployment_node_sort_key)
+
+
+def _latest_deployment_node_by_edge_id(
+    nodes: Sequence[DeploymentNodeResponse],
+) -> dict[UUID, DeploymentNodeResponse]:
+    result: dict[UUID, DeploymentNodeResponse] = {}
+    for node in nodes:
+        if _enum_value(node.node_kind) != "edge" or node.edge_node_id is None:
+            continue
+        existing = result.get(node.edge_node_id)
+        if existing is None or _deployment_node_sort_key(node) > _deployment_node_sort_key(
+            existing
+        ):
+            result[node.edge_node_id] = node
+    return result
+
+
+def _deployment_node_sort_key(node: DeploymentNodeResponse) -> tuple[bool, datetime]:
+    return (
+        node.last_service_reported_at is not None,
+        node.last_service_reported_at or datetime.min.replace(tzinfo=UTC),
+    )
+
+
+def _enum_value(value: object) -> str:
+    enum_value = getattr(value, "value", value)
+    return str(enum_value)
 
 
 def _fleet_worker_hardware_report(
