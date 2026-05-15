@@ -483,54 +483,147 @@ Treat this as installer/bootstrap administration, not normal day-to-day
 operation. Once model rows exist, camera setup and worker operation happen from
 the UI.
 
-Use an admin access token for the installed tenant. The exact token command
-depends on the final packaged Keycloak realm/client configuration; for branch
-validation, use the same authenticated admin session or CLI mechanism you use
-for other admin API checks.
+Use a fresh admin access token for the installed tenant. This token is separate
+from the first-run bootstrap token and separate from node pairing codes. It is
+short-lived; if you come back later, generate a new one.
 
-Set:
+The final packaged product should replace this CLI token flow with an
+operator-visible model import path or packaged model bundle.
+
+### One-Time: Enable The Validation CLI Token Client
+
+Run this once on the MacBook master after first-run has created the installed
+tenant realm:
+
+```bash
+sudo -v
+
+export KC_URL="http://127.0.0.1:8080"
+export KC_REALM="argus-dev"
+
+export KC_ADMIN_TOKEN="$(
+  curl -fsS -X POST "$KC_URL/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "grant_type=password" \
+    --data-urlencode "client_id=admin-cli" \
+    --data-urlencode "username=$(sudo cat /etc/vezor/secrets/keycloak_admin_username)" \
+    --data-urlencode "password=$(sudo cat /etc/vezor/secrets/keycloak_admin_password)" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
+
+export ARGUS_CLI_CLIENT_UUID="$(
+  curl -fsS "$KC_URL/admin/realms/$KC_REALM/clients?clientId=argus-cli" \
+    -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+  | python3 -c 'import json,sys; items=json.load(sys.stdin); print(items[0]["id"] if items else "")'
+)"
+
+export ARGUS_CLI_CLIENT_PAYLOAD='{
+  "clientId": "argus-cli",
+  "name": "Vezor CLI bootstrap",
+  "enabled": true,
+  "publicClient": true,
+  "protocol": "openid-connect",
+  "standardFlowEnabled": false,
+  "directAccessGrantsEnabled": true
+}'
+
+if [ -z "$ARGUS_CLI_CLIENT_UUID" ]; then
+  curl -fsS -X POST "$KC_URL/admin/realms/$KC_REALM/clients" \
+    -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$ARGUS_CLI_CLIENT_PAYLOAD"
+else
+  curl -fsS -X PUT "$KC_URL/admin/realms/$KC_REALM/clients/$ARGUS_CLI_CLIENT_UUID" \
+    -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$ARGUS_CLI_CLIENT_PAYLOAD"
+fi
+```
+
+### Each Time: Generate A Fresh Admin Access Token
+
+Run this when you are ready to register models. Use the admin email and password
+you created in first-run:
 
 ```bash
 export ARGUS_API_BASE_URL="http://127.0.0.1:8000"
-export VEZOR_ADMIN_ACCESS_TOKEN="REPLACE_WITH_SHORT_LIVED_ADMIN_ACCESS_TOKEN"
+export KC_URL="http://127.0.0.1:8080"
+export KC_REALM="argus-dev"
+
+printf "Vezor admin email: "
+read VEZOR_ADMIN_USERNAME
+
+printf "Vezor admin password: "
+stty -echo
+read VEZOR_ADMIN_PASSWORD
+stty echo
+echo
+
+export VEZOR_ADMIN_ACCESS_TOKEN="$(
+  curl -fsS -X POST "$KC_URL/realms/$KC_REALM/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "grant_type=password" \
+    --data-urlencode "client_id=argus-cli" \
+    --data-urlencode "username=$VEZOR_ADMIN_USERNAME" \
+    --data-urlencode "password=$VEZOR_ADMIN_PASSWORD" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+)"
+```
+
+If this command fails, confirm the one-time `argus-cli` client setup completed
+and that you are using the first-run admin account, not the Keycloak master
+admin account.
+
+### Register From The Backend Container
+
+Run registration from the backend container. The installed backend container
+sees the model volume at `/models`, while the macOS host sees the same files at
+`/var/lib/vezor/models`.
+
+Define a helper:
+
+```bash
+register_model() {
+  local catalog_id="$1"
+  local artifact_path="$2"
+
+  docker exec \
+    -e ARGUS_API_BASE_URL \
+    -e VEZOR_ADMIN_ACCESS_TOKEN \
+    vezor-master-backend-1 sh -lc '
+    /app/.venv/bin/python -m argus.scripts.register_model_preset \
+      --catalog-id "$1" \
+      --artifact-path "$2" \
+      --api-base-url "$ARGUS_API_BASE_URL" \
+      --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN"
+  ' sh "$catalog_id" "$artifact_path"
+}
 ```
 
 Register the default fixed-vocab model:
 
 ```bash
-cd /opt/vezor/current/backend
-python3 -m uv run python scripts/register_model_preset.py \
-  --catalog-id yolo26n-coco-onnx \
-  --artifact-path /models/yolo26n.onnx \
-  --api-base-url "$ARGUS_API_BASE_URL" \
-  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN"
+register_model yolo26n-coco-onnx /models/yolo26n.onnx
 ```
 
 Optional fixed-vocab models:
 
 ```bash
-python3 -m uv run python scripts/register_model_preset.py \
-  --catalog-id yolo26s-coco-onnx \
-  --artifact-path /models/yolo26s.onnx \
-  --api-base-url "$ARGUS_API_BASE_URL" \
-  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN"
-
-python3 -m uv run python scripts/register_model_preset.py \
-  --catalog-id yolo11n-coco-onnx \
-  --artifact-path /models/yolo11n.onnx \
-  --api-base-url "$ARGUS_API_BASE_URL" \
-  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN"
+register_model yolo26s-coco-onnx /models/yolo26s.onnx
+register_model yolo11n-coco-onnx /models/yolo11n.onnx
 ```
 
 Optional open-vocab model:
 
 ```bash
-python3 -m uv run python scripts/register_model_preset.py \
-  --catalog-id yoloe-26n-open-vocab-pt \
-  --artifact-path /models/yoloe-26n-seg.pt \
-  --api-base-url "$ARGUS_API_BASE_URL" \
-  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN"
+register_model yoloe-26n-open-vocab-pt /models/yoloe-26n-seg.pt
 ```
+
+If registration returns `401`, generate a fresh `VEZOR_ADMIN_ACCESS_TOKEN` and
+retry. If it returns `403`, the account is authenticated but does not have the
+tenant `admin` role. If it says the file is missing, confirm the file exists on
+the host under `/var/lib/vezor/models` and inside the container under
+`/models`.
 
 Confirm the UI sees the models:
 
