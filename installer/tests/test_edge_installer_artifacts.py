@@ -64,6 +64,8 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert 'chmod 0644 "$EDGE_ENV"' in script
+    assert 'chmod 0644 "$EDGE_CONFIG" "$SUPERVISOR_CONFIG"' in script
+    assert 'chown 10001:10001 "$DATA_DIR/credentials/supervisor.credential"' in script
     assert 'old_umask="$(umask)"' in script
     assert "--supervisor-id" in script
     assert '--credential-path "$DATA_DIR/credentials/supervisor.credential"' in script

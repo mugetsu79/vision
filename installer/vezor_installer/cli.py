@@ -116,7 +116,7 @@ def _cmd_pair(args: argparse.Namespace) -> int:
         )
     if not hostname:
         raise LocalCliError("Pairing requires --hostname or config hostname.", exit_code=2)
-    _preflight_config_identity_update(args.config, config, str(supervisor_id))
+    _preflight_config_update(args.config)
 
     client = InstallerHttpClient(args.api_url)
     response = client.claim_pairing_session(
@@ -129,7 +129,7 @@ def _cmd_pair(args: argparse.Namespace) -> int:
     if not isinstance(credential_material, str) or not credential_material:
         raise LocalCliError("Pairing response did not include credential material.")
     _write_credential(args.credential_path, credential_material)
-    _update_config_identity(args.config, config, str(supervisor_id))
+    _update_config_from_pairing_response(args.config, config, str(supervisor_id), response)
     print(f"Credential written to {args.credential_path}.")
     return 0
 
@@ -202,31 +202,38 @@ def _write_credential(path: Path, credential_material: str) -> None:
     path.chmod(0o600)
 
 
-def _preflight_config_identity_update(
-    path: Path | None,
-    config: dict[str, Any],
-    supervisor_id: str,
-) -> None:
-    if path is None or not path.exists() or config.get("supervisor_id") == supervisor_id:
+def _preflight_config_update(path: Path | None) -> None:
+    if path is None or not path.exists():
         return
     if not os.access(path, os.W_OK):
         raise LocalCliError(
             f"{path} is not writable. Rerun pair with sudo so the local "
-            "supervisor config can be updated to the claimed supervisor id.",
+            "supervisor config can be updated with the claimed node identity.",
             exit_code=2,
         )
 
 
-def _update_config_identity(
+def _update_config_from_pairing_response(
     path: Path | None,
     config: dict[str, Any],
     supervisor_id: str,
+    response: dict[str, Any],
 ) -> None:
-    if path is None or not path.exists() or config.get("supervisor_id") == supervisor_id:
+    if path is None or not path.exists():
         return
     updated_config = dict(config)
     updated_config["supervisor_id"] = supervisor_id
-    path.write_text(json.dumps(updated_config, indent=2) + "\n", encoding="utf-8")
+    node = response.get("node")
+    edge_node_id = node.get("edge_node_id") if isinstance(node, dict) else None
+    if updated_config.get("role") == "edge":
+        if not isinstance(edge_node_id, str) or not edge_node_id.strip():
+            raise LocalCliError(
+                "Pairing response did not include edge_node_id for edge supervisor.",
+                exit_code=1,
+            )
+        updated_config["edge_node_id"] = edge_node_id.strip()
+    if updated_config != config:
+        path.write_text(json.dumps(updated_config, indent=2) + "\n", encoding="utf-8")
 
 
 def redact(value: Any) -> Any:

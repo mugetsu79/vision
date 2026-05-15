@@ -1428,6 +1428,27 @@ branch on the Jetson, create a fresh Pair Jetson edge session in the UI, and
 rerun `installer/linux/install-edge.sh` with the new session id, new pairing
 code, and required `--jetson-ort-wheel-url`.
 
+### The edge node pairs but has no heartbeat
+
+`vezor-edge.service` is a systemd oneshot wrapper around Docker Compose, so
+`active (exited)` is normal. Check the containers and supervisor logs:
+
+```bash
+docker ps --filter name=vezor
+docker logs --tail 120 vezor-supervisor
+ls -l /etc/vezor/edge.json /etc/vezor/supervisor.json
+sudo ls -l /var/lib/vezor/credentials/supervisor.credential
+```
+
+The supervisor config should be world-readable because it contains no secret,
+and the credential file should be owned by container UID `10001` with mode
+`0600`. If the log says `edge supervisor config requires edge_node_id`, or if a
+normal `vezorctl status --json` cannot read `/etc/vezor/supervisor.json`, pull
+the latest branch, create a fresh Pair Jetson edge session, and rerun the edge
+installer. The updated installer writes the claimed `edge_node_id`, fixes config
+permissions, and makes the credential readable only to the non-root supervisor
+container user.
+
 ### A demo network change breaks the kit
 
 Recompute the master and Jetson IPs, update the worksheet, restart services,

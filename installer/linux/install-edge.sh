@@ -276,6 +276,7 @@ JSON
   "version": "${VERSION:-edge-installer}"
 }
 JSON
+  chmod 0644 "$EDGE_CONFIG" "$SUPERVISOR_CONFIG"
   umask "$old_umask"
 fi
 
@@ -288,6 +289,13 @@ if [[ "$UNPAIRED" -eq 0 ]]; then
     --hostname "$(hostname)" \
     --config "$SUPERVISOR_CONFIG" \
     --credential-path "$DATA_DIR/credentials/supervisor.credential"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] chown 10001:10001 $DATA_DIR/credentials/supervisor.credential"
+    echo "[dry-run] chmod 0600 $DATA_DIR/credentials/supervisor.credential"
+  elif [[ -f "$DATA_DIR/credentials/supervisor.credential" ]]; then
+    chown 10001:10001 "$DATA_DIR/credentials/supervisor.credential"
+    chmod 0600 "$DATA_DIR/credentials/supervisor.credential"
+  fi
 fi
 
 build_local_edge_image

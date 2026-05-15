@@ -197,6 +197,76 @@ def test_pair_updates_local_config_supervisor_identity(
     assert stored_config["api_base_url"] == "http://backend:8000"
 
 
+def test_pair_updates_edge_config_with_claimed_edge_node_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edge_node_id = "00000000-0000-0000-0000-000000000909"
+
+    class FakeClient:
+        def __init__(self, api_url: str) -> None:
+            self.api_url = api_url
+
+        def claim_pairing_session(
+            self,
+            *,
+            session_id: str,
+            pairing_code: str,
+            supervisor_id: str,
+            hostname: str,
+        ) -> dict[str, object]:
+            return {
+                "credential_id": "00000000-0000-0000-0000-000000000901",
+                "credential_material": "vzcred_should_not_print",
+                "credential_hash": "a" * 64,
+                "credential_version": 1,
+                "node": {
+                    "id": "00000000-0000-0000-0000-000000000902",
+                    "node_kind": "edge",
+                    "edge_node_id": edge_node_id,
+                },
+            }
+
+    monkeypatch.setattr(cli, "InstallerHttpClient", FakeClient)
+    config_path = tmp_path / "supervisor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "supervisor_id": "jetson-portable-1",
+                "role": "edge",
+                "api_base_url": "http://192.168.1.166:8000",
+                "credential_store_path": "/run/vezor/credentials/supervisor.credential",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(
+        [
+            "pair",
+            "--api-url",
+            "https://master.example",
+            "--session-id",
+            "00000000-0000-0000-0000-000000000111",
+            "--pairing-code",
+            "123456",
+            "--supervisor-id",
+            "jetson-portable-1",
+            "--hostname",
+            "orin1",
+            "--config",
+            str(config_path),
+            "--credential-path",
+            str(tmp_path / "supervisor.credential"),
+        ]
+    )
+
+    stored_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert stored_config["supervisor_id"] == "jetson-portable-1"
+    assert stored_config["edge_node_id"] == edge_node_id
+
+
 def test_support_bundle_redacts_token_like_values(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
