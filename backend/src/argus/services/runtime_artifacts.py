@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -17,6 +17,7 @@ from argus.api.contracts import (
     RuntimeArtifactUpdate,
     RuntimeBackend,
 )
+from argus.compat import UTC
 from argus.models.enums import (
     DetectorCapability,
     RuntimeArtifactScope,
