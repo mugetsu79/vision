@@ -1048,24 +1048,66 @@ echo "$MODEL_ID"
 ```
 
 The backend project declares dependencies in groups, so these one-off admin
-script commands add `httpx` explicitly.
+script commands add `httpx` explicitly. Use the registered model row's class
+inventory when attaching a fixed-vocab artifact. Do not pass a reduced class
+subset such as only `person`, `car`, `bus`, and `truck`; the API rejects that
+because the artifact must match the source model inventory exactly.
 
 ```bash
 cd /opt/vezor/current/backend
-uv run --python 3.12 --with httpx python -m argus.scripts.build_runtime_artifact \
-  --api-base-url "$ARGUS_API_BASE_URL" \
-  --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
-  --model-id "$MODEL_ID" \
-  --source-model /var/lib/vezor/models/yolo26n.onnx \
-  --prebuilt-engine /var/lib/vezor/models/yolo26n.jetson.fp16.engine \
-  --target-profile linux-aarch64-nvidia-jetson \
-  --class person --class car --class bus --class truck \
-  --input-width 640 --input-height 640
+uv run --python 3.12 --with httpx python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+import httpx
+
+from argus.scripts.build_runtime_artifact import (
+    build_fixed_vocab_artifact_payload,
+)
+
+api = os.environ["ARGUS_API_BASE_URL"].rstrip("/")
+token = os.environ["VEZOR_ADMIN_ACCESS_TOKEN"]
+model_id = os.environ["MODEL_ID"]
+headers = {"Authorization": f"Bearer {token}"}
+
+models_response = httpx.get(f"{api}/api/v1/models", headers=headers, timeout=30)
+models_response.raise_for_status()
+models = models_response.json()
+model = next(item for item in models if item["id"] == model_id)
+
+payload = build_fixed_vocab_artifact_payload(
+    source_model_path=Path("/var/lib/vezor/models/yolo26n.onnx"),
+    prebuilt_engine_path=Path("/var/lib/vezor/models/yolo26n.jetson.fp16.engine"),
+    classes=list(model["classes"]),
+    input_shape=dict(model["input_shape"]),
+    target_profile="linux-aarch64-nvidia-jetson",
+)
+response = httpx.post(
+    f"{api}/api/v1/models/{model_id}/runtime-artifacts",
+    headers=headers,
+    json=payload,
+    timeout=30,
+)
+if response.is_error:
+    print(response.text)
+response.raise_for_status()
+artifact = response.json()
+print(json.dumps(artifact, indent=2, sort_keys=True))
+Path("/tmp/vezor-runtime-artifact.env").write_text(
+    f"export ARTIFACT_ID='{artifact['id']}'\n"
+    f"export ARTIFACT_SHA256='{artifact['sha256']}'\n",
+    encoding="utf-8",
+)
+print("wrote /tmp/vezor-runtime-artifact.env")
+PY
 ```
 
 Validate on the same Jetson:
 
 ```bash
+source /tmp/vezor-runtime-artifact.env
+
 uv run --python 3.12 --with httpx python -m argus.scripts.validate_runtime_artifact \
   --api-base-url "$ARGUS_API_BASE_URL" \
   --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
