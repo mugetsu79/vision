@@ -1031,9 +1031,28 @@ These scripts only hash files and call the master API; actual TensorRT
 compatibility is proven by `trtexec --loadEngine` and by the worker running the
 camera.
 
+Resolve the real model id from the master API. Do not use the literal
+`THE_YOLO26N_MODEL_ID` placeholder.
+
+```bash
+export MODEL_ID="$(
+  curl -fsS \
+    -H "Authorization: Bearer $VEZOR_ADMIN_ACCESS_TOKEN" \
+    "$ARGUS_API_BASE_URL/api/v1/models" |
+    python3 -c 'import json, sys
+payload = json.load(sys.stdin)
+models = payload.get("items", payload) if isinstance(payload, dict) else payload
+print(next(model["id"] for model in models if model.get("name") == "YOLO26n COCO" or "YOLO26n" in model.get("name", "")))'
+)"
+echo "$MODEL_ID"
+```
+
+The backend project declares dependencies in groups, so these one-off admin
+script commands add `httpx` explicitly.
+
 ```bash
 cd /opt/vezor/current/backend
-uv run --python 3.12 python -m argus.scripts.build_runtime_artifact \
+uv run --python 3.12 --with httpx python -m argus.scripts.build_runtime_artifact \
   --api-base-url "$ARGUS_API_BASE_URL" \
   --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
   --model-id "$MODEL_ID" \
@@ -1047,7 +1066,7 @@ uv run --python 3.12 python -m argus.scripts.build_runtime_artifact \
 Validate on the same Jetson:
 
 ```bash
-uv run --python 3.12 python -m argus.scripts.validate_runtime_artifact \
+uv run --python 3.12 --with httpx python -m argus.scripts.validate_runtime_artifact \
   --api-base-url "$ARGUS_API_BASE_URL" \
   --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN" \
   --model-id "$MODEL_ID" \
