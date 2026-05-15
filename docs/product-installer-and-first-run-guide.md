@@ -1023,6 +1023,14 @@ History, Evidence, and Operations.
 
 Attach the Jetson TensorRT engine to the ONNX model row:
 
+The commands below are admin/control-plane scripts from the backend project.
+They use Python 3.12 because the backend project is pinned to Python 3.12.
+This does not change the Jetson worker runtime: the installed edge worker image
+still uses Python 3.10 so it can load the Jetson `cp310` ONNX Runtime GPU wheel.
+These scripts only hash files and call the master API; actual TensorRT
+compatibility is proven by `trtexec --loadEngine` and by the worker running the
+camera.
+
 ```bash
 cd /opt/vezor/current/backend
 uv run --python 3.12 python -m argus.scripts.build_runtime_artifact \
