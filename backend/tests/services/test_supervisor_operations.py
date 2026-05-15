@@ -173,6 +173,15 @@ def test_resolved_operations_mode_controls_lifecycle_owner_and_actions() -> None
         assigned_edge_node_id=uuid4(),
         supervisor_healthy=True,
     )
+    edge_assigned_central_profile = resolve_worker_operations_controls(
+        {
+            "lifecycle_owner": "central_supervisor",
+            "supervisor_mode": "polling",
+            "restart_policy": "always",
+        },
+        assigned_edge_node_id=uuid4(),
+        supervisor_healthy=True,
+    )
 
     assert manual.lifecycle_owner == "manual"
     assert manual.supervisor_mode is SupervisorMode.DISABLED
@@ -190,6 +199,12 @@ def test_resolved_operations_mode_controls_lifecycle_owner_and_actions() -> None
         OperationsLifecycleAction.RESTART,
         OperationsLifecycleAction.DRAIN,
     ]
+    assert edge_assigned_central_profile.lifecycle_owner == "edge_supervisor"
+    assert edge_assigned_central_profile.detail == (
+        "Assigned edge node overrides central supervisor ownership; "
+        "edge supervisor owns this worker process."
+    )
+    assert OperationsLifecycleAction.START in edge_assigned_central_profile.allowed_actions
 
 
 def test_missing_or_stale_runtime_reports_render_honest_states() -> None:

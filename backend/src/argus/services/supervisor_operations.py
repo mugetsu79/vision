@@ -524,7 +524,13 @@ def resolve_worker_operations_controls(
         if isinstance(config, OperationsModeProfileConfig)
         else OperationsModeProfileConfig.model_validate(config)
     )
-    if profile.lifecycle_owner == "manual":
+    lifecycle_owner = profile.lifecycle_owner
+    edge_assignment_overrode_central = False
+    if assigned_edge_node_id is not None and lifecycle_owner == "central_supervisor":
+        lifecycle_owner = "edge_supervisor"
+        edge_assignment_overrode_central = True
+
+    if lifecycle_owner == "manual":
         return WorkerOperationsControls(
             lifecycle_owner="manual",
             supervisor_mode=SupervisorMode(profile.supervisor_mode),
@@ -535,15 +541,15 @@ def resolve_worker_operations_controls(
     supervisor_mode = SupervisorMode(profile.supervisor_mode)
     if supervisor_mode is SupervisorMode.DISABLED:
         return WorkerOperationsControls(
-            lifecycle_owner=profile.lifecycle_owner,
+            lifecycle_owner=lifecycle_owner,
             supervisor_mode=supervisor_mode,
             restart_policy=profile.restart_policy,
             allowed_actions=[],
             detail="Supervisor mode is disabled.",
         )
-    if profile.lifecycle_owner == "edge_supervisor" and assigned_edge_node_id is None:
+    if lifecycle_owner == "edge_supervisor" and assigned_edge_node_id is None:
         return WorkerOperationsControls(
-            lifecycle_owner=profile.lifecycle_owner,
+            lifecycle_owner=lifecycle_owner,
             supervisor_mode=supervisor_mode,
             restart_policy=profile.restart_policy,
             allowed_actions=[],
@@ -551,14 +557,14 @@ def resolve_worker_operations_controls(
         )
     if not supervisor_healthy:
         return WorkerOperationsControls(
-            lifecycle_owner=profile.lifecycle_owner,
+            lifecycle_owner=lifecycle_owner,
             supervisor_mode=supervisor_mode,
             restart_policy=profile.restart_policy,
             allowed_actions=[],
             detail="Supervisor has not reported healthy runtime state.",
         )
     return WorkerOperationsControls(
-        lifecycle_owner=profile.lifecycle_owner,
+        lifecycle_owner=lifecycle_owner,
         supervisor_mode=supervisor_mode,
         restart_policy=profile.restart_policy,
         allowed_actions=[
@@ -567,7 +573,12 @@ def resolve_worker_operations_controls(
             OperationsLifecycleAction.RESTART,
             OperationsLifecycleAction.DRAIN,
         ],
-        detail=f"{profile.lifecycle_owner.replace('_', ' ').title()} owns this worker process.",
+        detail=(
+            "Assigned edge node overrides central supervisor ownership; "
+            "edge supervisor owns this worker process."
+            if edge_assignment_overrode_central
+            else f"{lifecycle_owner.replace('_', ' ').title()} owns this worker process."
+        ),
     )
 
 

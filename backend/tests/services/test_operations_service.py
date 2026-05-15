@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -288,6 +288,83 @@ async def test_fleet_overview_maps_edge_heartbeat_status() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fleet_overview_edge_assignment_overrides_central_operations_owner() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    edge = EdgeNode(
+        id=uuid4(),
+        site_id=site.id,
+        hostname="jetson-portable-1",
+        public_key="seed",
+        version="portable-demo",
+        last_seen_at=datetime.now(tz=UTC),
+    )
+    camera = Camera(
+        id=uuid4(),
+        site_id=site.id,
+        edge_node_id=edge.id,
+        name="Room1",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        processing_mode=ProcessingMode.EDGE,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={},
+        source_capability=None,
+        frame_skip=1,
+        fps_cap=25,
+    )
+    edge_report = EdgeNodeHardwareReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        edge_node_id=edge.id,
+        supervisor_id="jetson-portable-1",
+        reported_at=datetime.now(tz=UTC),
+        host_profile="linux-aarch64-nvidia-jetson",
+        os_name="linux",
+        machine_arch="aarch64",
+        cpu_model=None,
+        cpu_cores=6,
+        memory_total_mb=7607,
+        accelerators=["cuda", "tensorrt"],
+        provider_capabilities={"TensorrtExecutionProvider": True},
+        observed_performance=[],
+        thermal_state=None,
+        report_hash="c" * 64,
+        created_at=datetime.now(tz=UTC),
+    )
+    session_factory = _FakeSessionFactory([(edge, site)], [(camera, site)], [], [], [])
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        supervisor_operations=_FakeSupervisorOperations(edge_reports={edge.id: edge_report}),
+        runtime_configuration=_FakeRuntimeConfiguration(
+            {
+                "lifecycle_owner": "central_supervisor",
+                "supervisor_mode": "polling",
+                "restart_policy": "on_failure",
+            }
+        ),
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    worker = response.camera_workers[0]
+    assert worker.node_id == edge.id
+    assert worker.lifecycle_owner == "edge_supervisor"
+    assert OperationsLifecycleAction.START in worker.allowed_lifecycle_actions
+    assert worker.detail == (
+        "Assigned edge node overrides central supervisor ownership; "
+        "edge supervisor owns this worker process."
+    )
+
+
+@pytest.mark.asyncio
 async def test_fleet_overview_uses_deployment_heartbeat_status_and_hides_duplicate_edges() -> None:
     tenant_id = uuid4()
     site = _site(tenant_id)
@@ -494,8 +571,14 @@ class _FakeEdgeService:
 
 
 class _FakeSupervisorOperations:
-    def __init__(self, *, central_report: EdgeNodeHardwareReport) -> None:
+    def __init__(
+        self,
+        *,
+        central_report: EdgeNodeHardwareReport | None = None,
+        edge_reports: dict[UUID, EdgeNodeHardwareReport] | None = None,
+    ) -> None:
         self.central_report = central_report
+        self.edge_reports = edge_reports or {}
 
     async def latest_assignments_by_camera(self, **kwargs):  # noqa: ANN003
         del kwargs
@@ -510,8 +593,12 @@ class _FakeSupervisorOperations:
         return {}
 
     async def latest_hardware_reports_by_edge_node(self, **kwargs):  # noqa: ANN003
-        del kwargs
-        return {}
+        edge_node_ids = kwargs.get("edge_node_ids", [])
+        return {
+            edge_node_id: report
+            for edge_node_id, report in self.edge_reports.items()
+            if edge_node_id in edge_node_ids
+        }
 
     async def latest_hardware_report_for_central(self, **kwargs):  # noqa: ANN003
         del kwargs
