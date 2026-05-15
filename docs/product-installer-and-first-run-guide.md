@@ -959,31 +959,61 @@ artifact and must never be selected as the primary scene model.
 Build the engine on the Jetson:
 
 ```bash
-cd /var/lib/vezor
-python3 -m venv model-export
-source model-export/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "ultralytics>=8.0"
-python - <<'PY'
-from pathlib import Path
-from ultralytics import YOLO
-
-model = YOLO("/var/lib/vezor/models/yolo26n.onnx")
-output = Path(model.export(format="engine", imgsz=640, half=True, device=0))
-target = Path("/var/lib/vezor/models/yolo26n.jetson.fp16.engine")
-output.replace(target)
-print(f"wrote {target}")
-PY
+cd /var/lib/vezor/models
+ls -lh yolo26n.onnx
 ```
 
-If Ultralytics export fails but TensorRT tools are installed:
+Install the TensorRT command-line builder if `trtexec` is not available on the
+host. JetPack may include TensorRT runtime libraries without putting `trtexec`
+on the normal shell path.
 
 ```bash
-trtexec \
+command -v trtexec || true
+dpkg -l | grep -Ei 'tensorrt|nvinfer'
+
+sudo apt update
+sudo apt install -y libnvinfer-bin
+
+dpkg -L libnvinfer-bin | grep trtexec
+```
+
+On JetPack 6.2 / TensorRT 10.3 this usually installs:
+
+```text
+/usr/src/tensorrt/bin/trtexec
+```
+
+Build the FP16 engine from the static 640x640 ONNX export:
+
+```bash
+rm -f /var/lib/vezor/models/yolo26n.jetson.fp16.engine
+
+/usr/src/tensorrt/bin/trtexec \
   --onnx=/var/lib/vezor/models/yolo26n.onnx \
   --saveEngine=/var/lib/vezor/models/yolo26n.jetson.fp16.engine \
-  --fp16 \
-  --shapes=images:1x3x640x640
+  --fp16
+```
+
+Do not pass `--shapes=images:1x3x640x640` for the default exported
+`yolo26n.onnx`; it is a static-shape ONNX model and TensorRT will reject
+explicit shape overrides with `Static model does not take explicit shapes`.
+
+A first build can take several minutes while TensorRT profiles tactics. A
+successful run should include lines similar to:
+
+```text
+Engine generation completed
+Created engine with size
+&&&& PASSED TensorRT.trtexec
+```
+
+Verify the engine file and sanity-load it:
+
+```bash
+ls -lh /var/lib/vezor/models/yolo26n.jetson.fp16.engine
+
+/usr/src/tensorrt/bin/trtexec \
+  --loadEngine=/var/lib/vezor/models/yolo26n.jetson.fp16.engine
 ```
 
 ### Optional: Register Jetson Runtime Artifact And Soak Evidence
@@ -1412,6 +1442,10 @@ rerun the installer.
 Rebuild the engine on the same Jetson and same JetPack/TensorRT stack. Then
 rerun `validate_runtime_artifact` and only record a soak pass after validation
 and runtime operation both succeed.
+
+If `trtexec` fails with `Static model does not take explicit shapes`, remove
+the `--shapes=...` argument. The default Vezor `yolo26n.onnx` export is already
+static at 640x640.
 
 ### Live works centrally but not from the Jetson
 
