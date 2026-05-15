@@ -575,6 +575,67 @@ If this command fails, confirm the one-time `argus-cli` client setup completed
 and that you are using the first-run admin account, not the Keycloak master
 admin account.
 
+### Alternative: Copy A Token From The Browser Session
+
+For branch validation, you can also copy the short-lived admin access token
+from the signed-in browser session instead of using the temporary CLI client.
+Use this only for installer/admin validation. Do not paste the token into chat,
+screenshots, docs, tickets, or shell history.
+
+1. Sign in to the installed master UI as the first-run admin account.
+2. Open browser DevTools.
+   - Chrome/Edge: View -> Developer -> Developer Tools, then Console.
+   - Safari: enable Develop menu first, then Develop -> Show JavaScript
+     Console.
+3. Paste this in the Console:
+
+```javascript
+const entry = Object.entries(localStorage).find(
+  ([key]) => key.startsWith("oidc.user:") && key.endsWith(":argus-frontend"),
+);
+
+if (!entry) {
+  throw new Error("No argus-frontend OIDC session found. Sign in first.");
+}
+
+const user = JSON.parse(entry[1]);
+console.log("expires", new Date(user.expires_at * 1000).toLocaleString());
+copy(user.access_token);
+```
+
+The Console printing `undefined` after `copy(user.access_token)` is normal; it
+means the helper copied the token to your clipboard. The important output is
+the `expires` line. If the expiry is close or already past, sign in again and
+repeat the snippet.
+
+On the MacBook host, load the copied token into the current shell:
+
+```bash
+export ARGUS_API_BASE_URL="http://127.0.0.1:8000"
+export VEZOR_ADMIN_ACCESS_TOKEN="$(pbpaste)"
+```
+
+If you copied the token on the MacBook but need to run an admin command from
+the Jetson, paste it into the Jetson shell without echoing it:
+
+```bash
+export ARGUS_API_BASE_URL="http://<macbook-master-ip>:8000"
+read -rsp "Vezor admin access token: " VEZOR_ADMIN_ACCESS_TOKEN
+export VEZOR_ADMIN_ACCESS_TOKEN
+echo
+```
+
+Sanity-check the token before running registration commands:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer $VEZOR_ADMIN_ACCESS_TOKEN" \
+  "$ARGUS_API_BASE_URL/api/v1/models" >/dev/null
+```
+
+If this returns `401`, the browser token expired or was copied from the wrong
+browser profile/session. Sign in again and copy a fresh token.
+
 ### Register From The Backend Container
 
 Run registration from the backend container. The installed backend container
