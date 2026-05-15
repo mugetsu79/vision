@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -61,6 +62,7 @@ class RuntimeArtifactService:
                 camera = await _load_camera(session, payload.camera_id)
                 _validate_camera_uses_model(camera, model_id)
 
+            now = datetime.now(tz=UTC)
             artifact = ModelRuntimeArtifact(
                 model_id=model_id,
                 camera_id=payload.camera_id,
@@ -85,6 +87,8 @@ class RuntimeArtifactService:
                 build_duration_seconds=payload.build_duration_seconds,
                 validation_duration_seconds=payload.validation_duration_seconds,
                 validated_at=payload.validated_at,
+                created_at=now,
+                updated_at=now,
             )
             session.add(artifact)
             await session.commit()
@@ -107,6 +111,7 @@ class RuntimeArtifactService:
                 if value is None and field_name in {"validation_status", "sha256", "size_bytes"}:
                     continue
                 setattr(artifact, field_name, value)
+            artifact.updated_at = datetime.now(tz=UTC)
             await session.commit()
             await session.refresh(artifact)
         return _artifact_to_response(artifact, model=model)
@@ -126,6 +131,7 @@ class RuntimeArtifactService:
             else:
                 artifact.validation_status = RuntimeArtifactValidationStatus.UNVALIDATED
                 artifact.validation_error = "Artifact file is not locally validated."
+            artifact.updated_at = datetime.now(tz=UTC)
             await session.commit()
             await session.refresh(artifact)
         return _artifact_to_response(artifact, model=model)

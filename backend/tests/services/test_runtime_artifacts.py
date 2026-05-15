@@ -157,6 +157,15 @@ class _FakeSession:
         artifacts.append(artifact)
 
     async def commit(self) -> None:
+        artifacts = self.state.get("artifacts", [])
+        assert isinstance(artifacts, list)
+        self.state["artifact_timestamps_at_commit"] = [
+            (
+                getattr(artifact, "created_at", None),
+                getattr(artifact, "updated_at", None),
+            )
+            for artifact in artifacts
+        ]
         self.state["committed"] = True
 
     async def refresh(self, artifact: ModelRuntimeArtifact) -> None:
@@ -316,6 +325,21 @@ async def test_runtime_artifact_service_creates_artifact_for_existing_model() ->
     assert response.scope is RuntimeArtifactScope.MODEL
     assert session_factory.state["committed"] is True
     assert len(session_factory.state["artifacts"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_artifact_service_sets_timestamps_before_insert() -> None:
+    model = _model()
+    session_factory = _FakeSessionFactory(model=model)
+    service = RuntimeArtifactService(session_factory=session_factory)
+
+    await service.create_for_model(model.id, _payload())
+
+    timestamps = session_factory.state["artifact_timestamps_at_commit"]
+    assert timestamps
+    created_at, updated_at = timestamps[0]
+    assert isinstance(created_at, datetime)
+    assert isinstance(updated_at, datetime)
 
 
 @pytest.mark.asyncio
