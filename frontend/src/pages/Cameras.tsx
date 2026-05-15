@@ -28,7 +28,11 @@ import {
   useModelCatalog,
   type ModelCatalogEntry,
 } from "@/hooks/use-model-catalog";
-import { useModels, type Model } from "@/hooks/use-models";
+import {
+  useModels,
+  useRuntimeArtifactsByModelId,
+  type Model,
+} from "@/hooks/use-models";
 import { useFleetOverview } from "@/hooks/use-operations";
 import { useSites } from "@/hooks/use-sites";
 import {
@@ -63,6 +67,9 @@ function CamerasContent() {
     isRefetching: modelsRefreshing,
     refetch: refetchModels,
   } = useModels();
+  const modelRuntimeArtifacts = useRuntimeArtifactsByModelId(
+    models.map((model) => model.id),
+  );
   const createCamera = useCreateCamera();
   const updateCamera = useUpdateCamera();
   const deleteCamera = useDeleteCamera();
@@ -92,12 +99,17 @@ function CamerasContent() {
   const modelQueryEmpty = models.length === 0;
   const wizardModels = useMemo(
     () =>
-      toWizardModelOptions(models, [
-        selectedCamera?.primary_model_id,
-        selectedCamera?.secondary_model_id,
-      ]),
+      toWizardModelOptions(
+        models,
+        [
+          selectedCamera?.primary_model_id,
+          selectedCamera?.secondary_model_id,
+        ],
+        modelRuntimeArtifacts.data ?? {},
+      ),
     [
       models,
+      modelRuntimeArtifacts.data,
       selectedCamera?.primary_model_id,
       selectedCamera?.secondary_model_id,
     ],
@@ -105,6 +117,7 @@ function CamerasContent() {
 
   function openCreateWizard() {
     void refetchModels();
+    void modelRuntimeArtifacts.refetch();
     setSelectedCamera(null);
     setSelectedRulesCameraId(null);
     setSelectedPolicyCameraId(null);
@@ -113,6 +126,7 @@ function CamerasContent() {
 
   function openEditWizard(camera: Camera) {
     void refetchModels();
+    void modelRuntimeArtifacts.refetch();
     setSelectedCamera(camera);
     setSelectedRulesCameraId(null);
     setSelectedPolicyCameraId(null);
@@ -385,6 +399,7 @@ function CamerasContent() {
 function toWizardModelOptions(
   models: Model[],
   pinnedModelIds: Array<string | null | undefined>,
+  runtimeArtifactsByModelId: Record<string, ModelOption["runtime_artifacts"]>,
 ): ModelOption[] {
   const pinnedIds = new Set(
     pinnedModelIds.filter((id): id is string => Boolean(id)),
@@ -399,6 +414,7 @@ function toWizardModelOptions(
       classes: model.classes,
       capability: model.capability,
       capability_config: model.capability_config,
+      runtime_artifacts: runtimeArtifactsByModelId[model.id] ?? [],
     };
     const key = modelOptionKey(option);
     const current = optionsByKey.get(key);

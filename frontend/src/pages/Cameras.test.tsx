@@ -225,6 +225,137 @@ describe("CamerasPage", () => {
     expect(modelRequests).toBeGreaterThanOrEqual(2);
   });
 
+  test("shows valid model runtime artifacts inside scene setup", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "HQ",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "model-1",
+              name: "YOLO26s COCO",
+              version: "2026.1",
+              task: "detect",
+              path: "/models/yolo26s.onnx",
+              format: "onnx",
+              capability: "fixed_vocab",
+              capability_config: {
+                runtime_backend: "onnxruntime",
+                readiness: "ready",
+              },
+              classes: ["person", "car"],
+              input_shape: { width: 640, height: 640 },
+              sha256: "a".repeat(64),
+              size_bytes: 1024,
+              license: "AGPL-3.0",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models/model-1/runtime-artifacts") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "artifact-1",
+              model_id: "model-1",
+              camera_id: null,
+              scope: "model",
+              kind: "tensorrt_engine",
+              capability: "fixed_vocab",
+              runtime_backend: "tensorrt_engine",
+              path: "/var/lib/vezor/models/yolo26s.jetson.fp16.engine",
+              target_profile: "linux-aarch64-nvidia-jetson",
+              precision: "fp16",
+              input_shape: { width: 640, height: 640 },
+              classes: ["person", "car"],
+              vocabulary_hash: null,
+              vocabulary_version: null,
+              source_model_sha256: "a".repeat(64),
+              sha256: "b".repeat(64),
+              size_bytes: 2048,
+              builder: {},
+              runtime_versions: {},
+              validation_status: "valid",
+              validation_error: null,
+              build_duration_seconds: null,
+              validation_duration_seconds: null,
+              validated_at: null,
+              created_at: "2026-05-15T18:00:00Z",
+              updated_at: "2026-05-15T18:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /add scene/i }));
+    await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(
+      screen.getByLabelText(/rtsp url/i),
+      "rtsp://camera.local/live",
+    );
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+
+    expect(
+      await screen.findByText(/TensorRT artifact: valid/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/linux-aarch64-nvidia-jetson - fp16/i),
+    ).toBeInTheDocument();
+  });
+
   test("hides catalog hints once registered models are available", async () => {
     const user = userEvent.setup();
 
