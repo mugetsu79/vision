@@ -908,7 +908,9 @@ sudo ./installer/linux/install-edge.sh \
 
 The edge installer writes `/etc/vezor/edge.json`,
 `/etc/vezor/supervisor.json`, `/etc/vezor/edge.env`, MediaMTX config, and the
-claimed supervisor credential. When the manifest release channel is `dev`, it
+claimed supervisor credential. For paired installs, it claims the pairing
+session before the long local image build so the short-lived code is not lost
+while Docker downloads packages. When the manifest release channel is `dev`, it
 also builds the local Jetson edge image from `backend/Dockerfile.edge` before
 starting `vezor-edge.service`; this avoids depending on unpublished
 `ghcr.io/vezor/*:dev` images during branch testing.
@@ -1418,6 +1420,13 @@ Check:
 - the session id matches the UI row
 - Jetson can reach `http://MASTER_HOST_OR_IP:8000/healthz`
 - the edge install command uses the same master URL shown in the worksheet
+
+If an older installer expired the pairing session after a long Jetson image
+build, that attempt usually built `vezor/edge-worker:portable-demo` but did not
+claim a credential or complete the systemd service install. Pull the latest
+branch on the Jetson, create a fresh Pair Jetson edge session in the UI, and
+rerun `installer/linux/install-edge.sh` with the new session id, new pairing
+code, and required `--jetson-ort-wheel-url`.
 
 ### A demo network change breaks the kit
 

@@ -279,8 +279,6 @@ JSON
   umask "$old_umask"
 fi
 
-build_local_edge_image
-
 if [[ "$UNPAIRED" -eq 0 ]]; then
   run /opt/vezor/current/bin/vezorctl pair \
     --api-url "$API_URL" \
@@ -291,6 +289,8 @@ if [[ "$UNPAIRED" -eq 0 ]]; then
     --config "$SUPERVISOR_CONFIG" \
     --credential-path "$DATA_DIR/credentials/supervisor.credential"
 fi
+
+build_local_edge_image
 
 run install -m 0644 \
   /opt/vezor/current/infra/install/systemd/vezor-edge.service \

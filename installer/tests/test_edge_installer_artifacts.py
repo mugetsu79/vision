@@ -71,6 +71,16 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "systemctl start vezor-edge.service" in script
 
 
+def test_edge_install_script_claims_pairing_before_long_image_build() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "build_local_edge_image" in script
+    assert 'run /opt/vezor/current/bin/vezorctl pair' in script
+    assert script.index('run /opt/vezor/current/bin/vezorctl pair') < script.index(
+        "\nbuild_local_edge_image\n"
+    )
+
+
 def test_edge_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
     combined = "\n".join(
         _read(path) for path in (EDGE_SERVICE, INSTALL_SCRIPT, PREFLIGHT, SUPERVISOR_COMPOSE)
