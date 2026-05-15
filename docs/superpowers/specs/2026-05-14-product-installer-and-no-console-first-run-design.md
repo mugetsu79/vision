@@ -7,6 +7,16 @@ Date: 2026-05-14
 New band to insert after the installable supervisor, credential rotation, and
 runtime soak recording contracts, and before Task 24 / DeepStream.
 
+Implementation status as of 2026-05-15:
+
+- the band is implemented on `codex/omnisight-installer` for branch validation
+- current handoff:
+  `docs/superpowers/status/2026-05-15-next-chat-omnisight-installer-portable-demo-handoff.md`
+- latest checkpoint:
+  `8c37f50e Wire installed edge NATS leaf`
+- remaining proof point: physical Jetson rerun/validation after the installed
+  edge NATS leaf fix, then Live/Evidence/Operations/reboot soak
+
 Suggested band name:
 
 ```text

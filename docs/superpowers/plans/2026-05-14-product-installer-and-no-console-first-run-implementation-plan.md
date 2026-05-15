@@ -2,6 +2,55 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## Current Status As Of 2026-05-15
+
+This band has been implemented on branch `codex/omnisight-installer` as the
+installer-managed validation path. The checkbox steps below remain as the
+original execution plan, but the active continuation state is now captured in:
+
+```text
+docs/superpowers/status/2026-05-15-next-chat-omnisight-installer-portable-demo-handoff.md
+```
+
+Latest pushed checkpoint at this status update:
+
+```text
+8c37f50e Wire installed edge NATS leaf
+```
+
+Implemented since this plan was written:
+
+- macOS master installer and launchd appliance wrapper
+- Linux master installer and systemd appliance wrapper
+- Jetson edge installer and systemd appliance wrapper
+- `vezor-master`, `vezor-edge`, and `vezorctl` package wrappers
+- product master and edge Compose profiles
+- first-run bootstrap UI/API
+- central and Jetson pairing flows
+- raw supervisor credential storage and redacted support bundles
+- Deployment unpair action and Sites delete action
+- model registration and runtime artifact validation guide paths
+- local installed Jetson NATS leaf service for worker event publication
+
+Current validation checkpoint:
+
+```bash
+make verify-installers
+```
+
+passed with installer tests, shell syntax, manifest validation, product secret
+scan, and master/edge Compose rendering.
+
+Remaining hardware validation:
+
+- rerun the Jetson edge installer after `8c37f50e`
+- confirm `vezor-edge-nats-leaf` runs and no worker logs point at
+  `127.0.0.1:4222`
+- confirm Jetson-owned camera Live video and telemetry
+- create/review one evidence clip
+- run reboot/restart validation
+- record Track A/B Jetson soak evidence before opening Task 24 / DeepStream
+
 **Goal:** Replace Docker development commands and foreground supervisor terminals with product installers and UI-managed first-run/lifecycle operation for macOS master, Linux master, and Jetson edge nodes.
 
 **Architecture:** Build an OS-service-owned appliance layer around the existing Deployment, pairing, credential, supervisor, Operations, and runtime contracts. Installers run locally on each host and own privileged setup; the Vezor UI remains a control plane for first-run setup, pairing, health, lifecycle, diagnostics, and credentials.
@@ -132,7 +181,7 @@ Commit:
 ```bash
 git add installer/pyproject.toml installer/README.md installer/vezor_installer installer/tests/test_manifest.py installer/manifests/dev-example.json
 git commit -m "feat(installer): add release manifest contract"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23B: Linux Master Appliance Installer
@@ -231,7 +280,7 @@ Commit:
 ```bash
 git add infra/install/compose/compose.master.yml infra/install/systemd/vezor-master.service installer/linux/install-master.sh installer/linux/uninstall.sh installer/tests/test_linux_master_artifacts.py installer/README.md
 git commit -m "feat(installer): add Linux master package artifacts"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23C: macOS Master Installer
@@ -315,7 +364,7 @@ Commit:
 ```bash
 git add infra/install/launchd/com.vezor.master.plist installer/macos/install-master.sh installer/macos/uninstall.sh installer/tests/test_macos_master_artifacts.py installer/README.md docs/macbook-pro-jetson-portable-demo-install-guide.md
 git commit -m "feat(installer): add macOS master package artifacts"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23D: Jetson Edge Installer
@@ -388,7 +437,7 @@ Commit:
 ```bash
 git add infra/install/systemd/vezor-edge.service installer/linux/install-edge.sh installer/tests/test_edge_installer_artifacts.py scripts/jetson-preflight.sh infra/install/compose/compose.supervisor.yml docs/runbook.md
 git commit -m "feat(installer): add Jetson edge installer"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23E: Master First-Run Bootstrap Backend
@@ -464,7 +513,7 @@ Commit:
 ```bash
 git add backend/src/argus/migrations/versions/0028_master_first_run_bootstrap.py backend/src/argus/models/tables.py backend/src/argus/api/contracts.py backend/src/argus/api/v1/deployment.py backend/src/argus/services/deployment_nodes.py backend/src/argus/services/app.py backend/tests/api/test_deployment_routes.py backend/tests/services/test_deployment_nodes.py
 git commit -m "feat(deployment): add master first-run bootstrap"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23F: First-Run UI And Deployment Installer Surface
@@ -551,7 +600,7 @@ Commit:
 ```bash
 git add frontend/src/hooks/use-bootstrap.ts frontend/src/pages/FirstRun.tsx frontend/src/pages/FirstRun.test.tsx frontend/src/app/router.tsx frontend/src/pages/Deployment.tsx frontend/src/pages/Deployment.test.tsx frontend/src/lib/api.generated.ts
 git commit -m "feat(deployment): add first-run bootstrap UI"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23G: Local `vezorctl` Pairing, Status, And Support CLI
@@ -618,7 +667,7 @@ Commit:
 ```bash
 git add installer/vezor_installer/cli.py installer/vezor_installer/http.py installer/tests/test_cli.py installer/pyproject.toml docs/runbook.md
 git commit -m "feat(installer): add local vezorctl utility"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23H: Hide Dev Worker Commands From Normal Product Operation
@@ -678,7 +727,7 @@ Commit:
 ```bash
 git add frontend/src/pages/Settings.tsx frontend/src/pages/Settings.test.tsx frontend/src/components/operations/SupervisorLifecycleControls.tsx frontend/src/components/operations/SupervisorLifecycleControls.test.tsx docs/operator-deployment-playbook.md
 git commit -m "fix(operations): reserve dev commands for break-glass"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23I: Installer Documentation And Runbooks
@@ -736,7 +785,7 @@ Commit:
 ```bash
 git add README.md docs/product-installer-and-first-run-guide.md docs/runbook.md docs/operator-deployment-playbook.md docs/macbook-pro-jetson-portable-demo-install-guide.md docs/deployment-modes-and-matrix.md
 git commit -m "docs(installer): add product first-run guide"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Task 23J: Installer Validation Harness And Release Gate
@@ -805,7 +854,7 @@ Commit:
 ```bash
 git add scripts/validate-installers.sh installer/tests/test_release_gate.py Makefile docs/runbook.md
 git commit -m "test(installer): add installer release gate"
-git push origin codex/omnisight-ui-spec-implementation
+git push origin codex/omnisight-installer
 ```
 
 ## Final Verification For The Band

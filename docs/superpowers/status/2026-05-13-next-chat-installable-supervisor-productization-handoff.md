@@ -2,6 +2,11 @@
 
 Date: 2026-05-13
 
+> Superseded for the current installer validation thread. Continue from
+> `docs/superpowers/status/2026-05-15-next-chat-omnisight-installer-portable-demo-handoff.md`
+> on branch `codex/omnisight-installer`. This older handoff remains useful
+> historical context for the Task 21D-21H implementation runway only.
+
 Purpose: paste this document into a fresh chat to continue from the current
 `codex/omnisight-ui-spec-implementation` branch. The accountable scene,
 Evidence, UI-managed configuration, runtime passport, per-worker incident rule,

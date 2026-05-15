@@ -52,6 +52,17 @@ templates, Compose appliance profiles, first-run APIs, node pairing, credential
 storage, service status contracts, support bundle redaction, and UI surfaces.
 It is not yet a signed final package.
 
+Latest status checkpoint for branch validation:
+
+```text
+8c37f50e Wire installed edge NATS leaf
+```
+
+That checkpoint adds the installed Jetson `vezor-edge-nats-leaf` service and
+wires edge workers to `nats://nats-leaf:4222`. If Jetson worker logs show
+`Connect call failed ('127.0.0.1', 4222)`, update the branch and rerun the edge
+installer; the edge compose environment is stale.
+
 For branch validation from a checkout, `/opt/vezor/current` must be this branch
 at a commit that includes the package wrapper commands:
 

@@ -1,5 +1,11 @@
 # Vezor Portable Demo Guide: MacBook Pro Master And Jetson Edge
 
+> Status: legacy manual/dev fallback. For the current installer-managed branch
+> validation path, use
+> [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md)
+> as the single source of truth. The current next-chat handoff is
+> [2026-05-15-next-chat-omnisight-installer-portable-demo-handoff.md](/Users/yann.moren/vision/docs/superpowers/status/2026-05-15-next-chat-omnisight-installer-portable-demo-handoff.md).
+
 Use this guide when you want to carry Vezor as a portable demonstration system:
 
 - an Apple Silicon MacBook Pro, such as an M4 Pro, as the temporary master
@@ -273,34 +279,28 @@ First copy the ONNX source to the Jetson:
 rsync -av "$HOME/vision/models/yolo26n.onnx" jetson-portable-1:"$HOME/vision/models/"
 ```
 
-Then on the Jetson, use one of these paths.
-
-Ultralytics export:
+Then on the Jetson, prefer TensorRT `trtexec`. Install the command-line builder
+if JetPack only installed the TensorRT runtime libraries:
 
 ```bash
-cd "$HOME/vision"
-source .venv-model-export/bin/activate 2>/dev/null || true
-python - <<'PY'
-from pathlib import Path
-from ultralytics import YOLO
-
-model = YOLO("models/yolo26n.onnx")
-output = Path(model.export(format="engine", imgsz=640, half=True, device=0))
-target = Path("models/yolo26n.jetson.fp16.engine")
-output.replace(target)
-print(f"wrote {target}")
-PY
+command -v trtexec || true
+sudo apt update
+sudo apt install -y libnvinfer-bin
+dpkg -L libnvinfer-bin | grep trtexec
 ```
 
-TensorRT `trtexec` fallback:
+Build the engine:
 
 ```bash
-trtexec \
+/usr/src/tensorrt/bin/trtexec \
   --onnx="$HOME/vision/models/yolo26n.onnx" \
   --saveEngine="$HOME/vision/models/yolo26n.jetson.fp16.engine" \
-  --fp16 \
-  --shapes=images:1x3x640x640
+  --fp16
 ```
+
+Do not pass `--shapes=images:1x3x640x640` for the default Vezor
+`yolo26n.onnx` export. It is already static at 640x640 and TensorRT rejects
+explicit shape overrides for that export.
 
 After building, keep all three files if you plan to validate runtime artifacts:
 
