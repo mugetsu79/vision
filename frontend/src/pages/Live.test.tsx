@@ -412,7 +412,7 @@ describe("LivePage", () => {
     await waitFor(() => expect(screen.queryByText("bus")).not.toBeInTheDocument());
   });
 
-  test("does not count held tracks as visible now when a frame arrives without tracks", async () => {
+  test("keeps visible copy stable when a frame arrives without tracks", async () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
         JSON.stringify([
@@ -522,7 +522,8 @@ describe("LivePage", () => {
       expect(lastCanvasProps?.frame?.ts).toBe("2026-05-09T08:00:01.000Z");
       expect(lastCanvasProps?.tracks).toEqual([]);
     });
-    expect(screen.getByText("0 visible now")).toBeInTheDocument();
+    expect(screen.getByText("1 visible now")).toBeInTheDocument();
+    expect(screen.queryByText("0 visible now")).not.toBeInTheDocument();
   });
 
   test("shows why native is unavailable for a camera", async () => {

@@ -18,6 +18,7 @@ codex/omnisight-installer
 Latest pushed branch tip at this handoff includes:
 
 ```text
+61229ea3 docs(handoff): refresh live tile ux runway
 dbd80171 docs: plan live tile and graph ux polish
 89639fc1 fix(streams): restart publisher on fps profile changes
 30245aae fix(streams): separate live renditions from overlays
@@ -119,6 +120,11 @@ dbd80171 docs: plan live tile and graph ux polish
 Relevant verification from the current branch history:
 
 ```text
+Visible-count stability:
+- corepack pnpm --dir frontend exec vitest run src/pages/Live.test.tsx -t "keeps visible copy stable"
+- corepack pnpm --dir frontend exec vitest run src/pages/Live.test.tsx
+- corepack pnpm --dir frontend exec vitest run src/lib/live-signal-stability.test.ts src/hooks/use-stable-signal-frame.test.tsx src/pages/Live.test.tsx
+
 Browser delivery / overlay separation:
 - frontend focused tests passed before 30245aae was committed
 
@@ -172,19 +178,36 @@ Validated by the user during the session:
 - TensorRT engines for YOLO26n and YOLO26s were built on Jetson and registered
   as valid runtime artifacts
 
-## Current Live Issue And Latest Fix
+## Current Live Runtime Status And Latest Fix
 
 2026-05-16 current user-observed state:
 
 - Annotated live video now draws detection boxes.
 - Native passthrough and annotated profiles can be switched from Live.
-- Reduced resolution / reduced FPS renditions update the selected profile label,
-  but the user observed the video still looking like the previous annotated
-  stream. The latest pushed fix `89639fc1` restarts the live publisher when FPS
-  or resolution settings change; this should be pulled and validated on both
-  MacBook and Jetson before treating reduced renditions as solved.
+- Reduced resolution / reduced FPS renditions restart the live publisher after
+  `89639fc1`, and the Live tile label can switch between native, annotated, and
+  reduced renditions.
+- A post-install Jetson review found that annotated / `720p25` video still looks
+  below 25fps. The supplied logs show `total` around 67-72ms/frame, so the
+  processed annotated stream is currently inference-loop bound at roughly
+  14-15fps. `720p25` is a target/cap for the publisher, not a guarantee that the
+  worker can generate 25 annotated frames per second.
+- The same logs show recurring RTSP capture wait spikes: average capture wait is
+  around 42-47ms, but p99/max regularly reaches roughly 560-590ms. Stream publish
+  time is low, so this is not primarily a browser or MediaMTX rendering issue.
+- The on-video `visible now` copy was flapping because `478abe25` changed the
+  Live tile to use `stableSignal.counts.liveTotal`, bypassing the existing held
+  track stabilizer. Restore that copy to `stableSignal.counts.total` so brief
+  empty telemetry frames stay stable during the 1.2s hold window. The matching
+  Live page regression test should be named `keeps visible copy stable when a
+  frame arrives without tracks`.
+- Before starting the UI/UX polish, keep the runtime distinction clear: real
+  25fps burned-in annotation needs either faster inference/capture, optimized
+  runtime artifacts, or a larger architecture change that publishes video at a
+  separate cadence with the latest boxes. The current profiles should be treated
+  as max/target renditions, not measured throughput.
 - The next product work requested by the user is the approved Live tile and
-  History pattern graph UX polish, not DeepStream.
+  History pattern graph UX polish, once this runtime review is settled.
 
 The current implementation target is:
 
