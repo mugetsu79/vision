@@ -1350,6 +1350,62 @@ async def test_worker_config_rejects_privacy_policy_storage_residency_mismatch()
     assert "Privacy policy residency" in str(exc_info.value.detail)
 
 
+@pytest.mark.asyncio
+async def test_worker_config_allows_privacy_storage_mismatch_when_recording_disabled() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+        evidence_recording_policy={
+            "enabled": False,
+            "snapshot_enabled": False,
+            "storage_profile": "edge_local",
+            "storage_profile_id": str(uuid4()),
+        },
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        evidence_storage=WorkerEvidenceStorageSettings(
+            profile_id=uuid4(),
+            profile_name="Edge local",
+            profile_hash="e" * 64,
+            provider="local_filesystem",
+            storage_scope="edge",
+            config={"provider": "local_filesystem", "storage_scope": "edge"},
+            secrets={},
+        ),
+        privacy_policy=WorkerPrivacyPolicySettings(
+            profile_id=uuid4(),
+            profile_name="Default central privacy",
+            profile_hash="f" * 64,
+            retention_days=30,
+            storage_quota_bytes=10_000,
+            plaintext_plate_storage="blocked",
+            residency="central",
+        ),
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert config.recording_policy.enabled is False
+    assert config.recording_policy.snapshot_enabled is False
+    assert config.evidence_storage is not None
+    assert config.evidence_storage.storage_scope == "edge"
+    assert config.privacy_policy is not None
+    assert config.privacy_policy.residency == "central"
+
+
 def test_central_native_browser_delivery_without_privacy_keeps_passthrough_stream() -> None:
     camera = Camera(
         id=uuid4(),

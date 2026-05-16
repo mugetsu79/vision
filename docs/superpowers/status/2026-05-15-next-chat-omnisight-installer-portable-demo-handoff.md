@@ -204,6 +204,29 @@ while preserving viewer rejection.
 This worker-config credential fix must be pulled on the MacBook master and the
 master installer rerun before revalidating the Jetson stream.
 
+2026-05-16 disabled-recording follow-up: after the credential fix was present
+on the MacBook master, the Jetson worker reached the worker-config route but
+received:
+
+```text
+GET /api/v1/cameras/be93bed8-ee2d-4aea-b8bf-e1133e16653e/worker-config "HTTP/1.1 422 Unprocessable Entity"
+```
+
+The live response body was:
+
+```text
+Privacy policy residency does not match evidence storage residency: 'central' != 'edge'.
+```
+
+Root cause: the camera had evidence recording and snapshots disabled, but still
+carried an edge-local evidence storage profile from setup. Worker-config
+validated privacy/storage residency even though no evidence artifact would be
+written, blocking live startup on an unused storage profile.
+
+Fix: skip privacy/storage residency enforcement when evidence recording is
+disabled. Keep the existing 422 guard for enabled evidence capture where
+artifacts may actually be written.
+
 ## Immediate Next Step
 
 On the Jetson, pull latest and rerun the edge installer as an unpaired update:

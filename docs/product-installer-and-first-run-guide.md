@@ -1660,6 +1660,19 @@ the latest `codex/omnisight-installer` branch on the master, rerun the master
 installer so the backend image includes the route fix, then rerun the Jetson
 edge installer as an unpaired update.
 
+If the same endpoint returns:
+
+```text
+GET /api/v1/cameras/<camera-id>/worker-config "HTTP/1.1 422 Unprocessable Entity"
+Privacy policy residency does not match evidence storage residency
+```
+
+and the camera's evidence recording is disabled, the master backend image is
+older than the disabled-recording residency fix. Pull the latest
+`codex/omnisight-installer` branch on the master and rerun the master installer
+so the backend image no longer blocks live workers on an unused evidence storage
+profile.
+
 ### Jetson edge reinstall says installer ports are already in use
 
 The edge installer stops the existing `vezor-edge` appliance before Jetson

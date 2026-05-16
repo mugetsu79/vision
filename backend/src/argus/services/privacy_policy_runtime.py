@@ -65,6 +65,8 @@ def validate_privacy_policy_residency(
 ) -> None:
     if privacy_policy is None:
         return
+    if not recording_policy.enabled:
+        return
     expected = privacy_policy.residency
     actual = _storage_residency(
         evidence_storage=evidence_storage,
