@@ -1,6 +1,7 @@
 # Next Chat Handoff: OmniSight Installer Portable Demo
 
 Date: 2026-05-15
+Last updated: 2026-05-16
 
 Purpose: paste this document into a fresh chat to continue the installer-managed
 MacBook Pro master plus Jetson edge validation from the current branch. Do not
@@ -17,14 +18,25 @@ codex/omnisight-installer
 Latest pushed branch tip at this handoff includes:
 
 ```text
-Worker-config supervisor credential route fix
-07b958c9 fix(installer): clear stale edge containers before preflight
-8c37f50e Wire installed edge NATS leaf
+dbd80171 docs: plan live tile and graph ux polish
+89639fc1 fix(streams): restart publisher on fps profile changes
+30245aae fix(streams): separate live renditions from overlays
+dabc832a fix(edge): make supervisor lifecycle deterministic
+478abe25 fix(edge): keep live telemetry current
+b6070eaa fix(inference): draw boxes on annotated streams
 ```
 
 Recent relevant checkpoints:
 
 ```text
+dbd80171 docs: plan live tile and graph ux polish
+89639fc1 fix(streams): restart publisher on fps profile changes
+30245aae fix(streams): separate live renditions from overlays
+dabc832a fix(edge): make supervisor lifecycle deterministic
+478abe25 fix(edge): keep live telemetry current
+b6070eaa fix(inference): draw boxes on annotated streams
+68a7761d fix(edge): coalesce live telemetry batches
+957207f0 fix(edge): skip local persistence stores
 c30f4c6f docs(installer): record live stream validation
 49a4cbba fix(workers): allow disabled recording storage mismatch
 34ea9272 fix(workers): allow supervisor credentials for worker config
@@ -84,29 +96,44 @@ The current product-installer implementation plan is:
 docs/superpowers/plans/2026-05-14-product-installer-and-no-console-first-run-implementation-plan.md
 ```
 
-## Verification At Handoff
-
-Last local validation after the installed edge NATS leaf fix:
-
-```bash
-make verify-installers
-```
-
-Result:
+The next approved UI/UX implementation is documented here:
 
 ```text
-59 installer tests passed
-shell syntax passed
-manifest validation passed
-product secret scan passed
-master compose render passed
-edge compose render passed
-installer validation passed
+docs/superpowers/specs/2026-05-16-live-tile-and-pattern-graph-ux-design.md
+docs/superpowers/plans/2026-05-16-live-tile-and-pattern-graph-ux-implementation-plan.md
 ```
 
-Full repo lint/test was not rerun for this handoff-only doc update. Earlier
+This UI/UX work has not been implemented yet. The spec and plan were written,
+committed, and pushed in `dbd80171`; the next chat should execute the plan.
+
+## Verification At Handoff
+
+Last local validation relevant to the current pushed branch:
+
+```text
+dbd80171 docs: plan live tile and graph ux polish
+89639fc1 fix(streams): restart publisher on fps profile changes
+30245aae fix(streams): separate live renditions from overlays
+```
+
+Relevant verification from the current branch history:
+
+```text
+Browser delivery / overlay separation:
+- frontend focused tests passed before 30245aae was committed
+
+FPS profile publisher restart:
+- frontend focused tests passed before 89639fc1 was committed
+
+Live tile and graph UX polish:
+- docs-only spec and plan update in dbd80171
+- no frontend implementation has started yet
+```
+
+Full repo lint/test was not rerun for the docs-only planning commits. Earlier
 full lint had known backend strict mypy debt outside the installer release-gate
-surface.
+surface. The next chat must run focused tests for each implementation task
+before moving on to the next task.
 
 ## What Is Working
 
@@ -146,6 +173,26 @@ Validated by the user during the session:
   as valid runtime artifacts
 
 ## Current Live Issue And Latest Fix
+
+2026-05-16 current user-observed state:
+
+- Annotated live video now draws detection boxes.
+- Native passthrough and annotated profiles can be switched from Live.
+- Reduced resolution / reduced FPS renditions update the selected profile label,
+  but the user observed the video still looking like the previous annotated
+  stream. The latest pushed fix `89639fc1` restarts the live publisher when FPS
+  or resolution settings change; this should be pulled and validated on both
+  MacBook and Jetson before treating reduced renditions as solved.
+- The next product work requested by the user is the approved Live tile and
+  History pattern graph UX polish, not DeepStream.
+
+The current implementation target is:
+
+```text
+docs/superpowers/plans/2026-05-16-live-tile-and-pattern-graph-ux-implementation-plan.md
+```
+
+Older operational history follows for context.
 
 The last observed Jetson failure before this handoff:
 
@@ -324,6 +371,43 @@ python3 -m uv run --project backend ruff check backend/src/argus/vision/tracker.
 
 ## Immediate Next Step
 
+Implement the approved Live tile and Pattern graph UX polish task-by-task:
+
+```text
+docs/superpowers/specs/2026-05-16-live-tile-and-pattern-graph-ux-design.md
+docs/superpowers/plans/2026-05-16-live-tile-and-pattern-graph-ux-implementation-plan.md
+```
+
+Required methodology for the next chat:
+
+1. Read this handoff, the approved spec, and the implementation plan before
+   editing files.
+2. Stay on `codex/omnisight-installer` and start from a clean understanding of
+   `git status -sb`; unrelated untracked files are expected and must remain
+   untouched.
+3. Execute the plan one task at a time. Do not batch multiple tasks into one
+   unvalidated change set.
+4. For each task, write or confirm the failing test first, implement only the
+   minimum code for that task, run the task-specific focused tests from the
+   plan, and fix failures before moving on.
+5. When a task touches visible UI, run a visual/browser validation for that
+   exact surface before starting the next task. Live tile layout/focus changes
+   require Live page validation; History chart changes require History page
+   validation.
+6. Commit and push each completed task, or record an explicit checkpoint with
+   the exact tests run before starting the next task.
+7. If using subagents, use `superpowers:subagent-driven-development`: dispatch
+   one fresh subagent per independent plan task, review the diff and test
+   output in the parent chat, then proceed to the next task only after the
+   current task is validated.
+8. If any listed validation cannot run, stop and record the blocker plus the
+   smallest safe fallback. Do not silently continue to the next task.
+
+The first implementation task is Task 1 from the plan: extract shared signal
+colors and prove History class series use the same colors as Live tracking.
+
+## Historical Jetson Update Commands
+
 On the MacBook master, pull latest and rerun the master installer so Docker
 recreates MediaMTX with UDP `8189` published:
 
@@ -422,24 +506,27 @@ The master compose is expected to bind `7422` on `0.0.0.0` for leaf nodes.
 - If the portable network changes, rerun the Jetson installer with
   `--unpaired --public-stream-host NEW_JETSON_IP_OR_HOSTNAME`.
 
-## Next Product Work After Live Is Stable
+## Next Product Work After UI Polish
 
-1. Validate Jetson live video and telemetry after the NATS leaf fix.
-2. Confirm native passthrough and processed stream modes from Live.
-3. Create one real evidence clip and review it in Evidence.
-4. Exercise Operations Start/Stop/Restart/Drain for the Jetson camera.
-5. Run a small reboot validation: Mac master service, Jetson edge service,
+1. Pull latest on MacBook and Jetson and validate reduced resolution/FPS
+   renditions after `89639fc1`.
+2. Create one real evidence clip and review it in Evidence.
+3. Exercise Operations Start/Stop/Restart/Drain for the Jetson camera.
+4. Run a small reboot validation: Mac master service, Jetson edge service,
    Deployment heartbeat, Operations status, Live stream.
-6. If stable, record Track A/B Jetson soak evidence for registered runtime
+5. If stable, record Track A/B Jetson soak evidence for registered runtime
    artifacts.
-7. Only after soak evidence exists, decide whether Task 24 / DeepStream can be
+6. Only after soak evidence exists, decide whether Task 24 / DeepStream can be
    opened. It remains deferred for now.
 
 ## Guardrails To Carry Forward
 
 - Stay on `codex/omnisight-installer`; no merge to `main` yet.
 - Execute one task at a time.
-- Commit and push after each completed task.
+- Follow the implementation plan task-by-task: failing/focused test first,
+  minimal implementation, focused tests, visual validation when UI is affected,
+  then checkpoint before the next task.
+- Commit and push after each completed task whenever practical.
 - Do not stage unrelated untracked scratch files.
 - Keep WebGL off.
 - Keep the backend/browser as a control plane, not a remote shell.
@@ -456,8 +543,9 @@ We are continuing Vezor/OmniSight installer validation from branch codex/omnisig
 Read the handoff first:
 docs/superpowers/status/2026-05-15-next-chat-omnisight-installer-portable-demo-handoff.md
 
-Use the canonical installer guide:
-docs/product-installer-and-first-run-guide.md
+Then implement the approved Live tile and Pattern graph UX polish from:
+docs/superpowers/specs/2026-05-16-live-tile-and-pattern-graph-ux-design.md
+docs/superpowers/plans/2026-05-16-live-tile-and-pattern-graph-ux-implementation-plan.md
 
-We are at the point where commit 8c37f50e fixed installed Jetson edge NATS by adding a local nats-leaf service. First, help me validate the Jetson after rerunning install-edge.sh --unpaired. Do not start Task 24 / DeepStream. Keep WebGL off. Stay on this branch and do not merge to main.
+Follow the plan task-by-task. For each task, write or confirm the failing test, implement only that task, run the listed focused tests, validate visually when the task touches UI, and do not start the next task until the current task is passing or I approve a documented exception. Keep unrelated untracked files untouched. Do not start Task 24 / DeepStream. Keep WebGL off. Stay on this branch and do not merge to main.
 ```
