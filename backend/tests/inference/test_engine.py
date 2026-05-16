@@ -2991,6 +2991,39 @@ async def test_build_runtime_engine_buffers_tracking_persistence(
 
 
 @pytest.mark.asyncio
+async def test_build_runtime_engine_uses_master_http_ingest_for_edge_telemetry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "mode": ProcessingMode.EDGE,
+            "publish": PublishSettings(subject_prefix="evt.tracking", http_fallback_url=None),
+        }
+    )
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(
+            _env_file=None,
+            api_base_url="http://master.local:8000",
+            edge_api_keys={"edge-secret": ["/api/v1/edge/*"]},
+        ),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert isinstance(engine.publisher, engine_module.BufferedTelemetryPublisher)
+        wrapped = engine.publisher.wrapped_publisher
+        assert isinstance(wrapped, engine_module.HttpPublisher)
+        assert wrapped.url == "http://master.local:8000/api/v1/edge/telemetry"
+        assert wrapped.headers == {"X-Edge-Key": "edge-secret"}
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
 async def test_build_runtime_engine_passes_runtime_vocabulary_to_detector_factory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

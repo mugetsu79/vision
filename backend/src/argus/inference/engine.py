@@ -1689,6 +1689,17 @@ async def load_engine_config(
         ) from exc
 
 
+def _edge_telemetry_ingest_url(settings: Settings) -> str:
+    return f"{settings.api_base_url.rstrip('/')}/api/v1/edge/telemetry"
+
+
+def _edge_telemetry_headers(settings: Settings) -> dict[str, str]:
+    for edge_key in settings.edge_api_keys:
+        if edge_key:
+            return {settings.edge_api_key_header: edge_key}
+    return {}
+
+
 async def build_runtime_engine(
     config: EngineConfig,
     *,
@@ -1866,10 +1877,18 @@ async def build_runtime_engine(
         subject_prefix=config.publish.subject_prefix,
     )
     publisher: Publisher
-    if config.publish.http_fallback_url is not None:
+    if config.mode is ProcessingMode.EDGE:
+        publisher = HttpPublisher(
+            url=config.publish.http_fallback_url or _edge_telemetry_ingest_url(settings),
+            headers=_edge_telemetry_headers(settings),
+        )
+    elif config.publish.http_fallback_url is not None:
         publisher = ResilientPublisher(
             primary=primary_publisher,
-            fallback=HttpPublisher(url=config.publish.http_fallback_url),
+            fallback=HttpPublisher(
+                url=config.publish.http_fallback_url,
+                headers=_edge_telemetry_headers(settings),
+            ),
         )
     else:
         publisher = primary_publisher

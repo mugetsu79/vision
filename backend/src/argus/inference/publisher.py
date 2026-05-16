@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Literal, Protocol
 from uuid import UUID
@@ -229,11 +229,13 @@ class HttpPublisher:
         self,
         *,
         url: str,
+        headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
         flush_interval_seconds: float = 0.5,
         monotonic: MonotonicClock = time.monotonic,
     ) -> None:
         self.url = url
+        self.headers = dict(headers or {})
         self.flush_interval_seconds = flush_interval_seconds
         self._monotonic = monotonic
         self._owned_client = http_client is None
@@ -253,7 +255,11 @@ class HttpPublisher:
         if not self._buffer:
             return
         payload = TelemetryBatch(events=list(self._buffer))
-        response = await self._http_client.post(self.url, json=payload.model_dump(mode="json"))
+        response = await self._http_client.post(
+            self.url,
+            json=payload.model_dump(mode="json"),
+            headers=self.headers or None,
+        )
         response.raise_for_status()
         self._buffer.clear()
         self._batch_started_at = None

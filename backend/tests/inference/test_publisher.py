@@ -132,6 +132,27 @@ async def test_http_publisher_batches_frames_with_half_second_flush() -> None:
 
 
 @pytest.mark.asyncio
+async def test_http_publisher_sends_configured_headers() -> None:
+    seen_headers: list[str | None] = []
+
+    async def handler(request: Request) -> Response:
+        seen_headers.append(request.headers.get("x-edge-key"))
+        return Response(202, json={"accepted": True})
+
+    publisher = HttpPublisher(
+        url="http://backend.internal/api/v1/edge/telemetry",
+        headers={"X-Edge-Key": "edge-secret"},
+        http_client=AsyncClient(transport=MockTransport(handler)),
+        monotonic=lambda: 1.0,
+    )
+
+    await publisher.publish(_telemetry_frame())
+    await publisher.close()
+
+    assert seen_headers == ["edge-secret"]
+
+
+@pytest.mark.asyncio
 async def test_resilient_publisher_falls_back_to_http_when_nats_is_unreachable() -> None:
     batches: list[list[dict[str, object]]] = []
 
