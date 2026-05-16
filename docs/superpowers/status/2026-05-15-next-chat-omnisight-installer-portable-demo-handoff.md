@@ -15,9 +15,11 @@ Continue from the pushed branch:
 codex/omnisight-installer
 ```
 
-Latest pushed branch tip at this handoff includes:
+Recent pushed history at this handoff includes. The commit containing this
+handoff refresh may be newer than the first listed entry:
 
 ```text
+579b269d fix(live): keep visible count stable during telemetry gaps
 61229ea3 docs(handoff): refresh live tile ux runway
 dbd80171 docs: plan live tile and graph ux polish
 89639fc1 fix(streams): restart publisher on fps profile changes
