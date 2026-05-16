@@ -122,7 +122,7 @@ describe("CameraWizard", () => {
     vi.restoreAllMocks();
   });
 
-  test("moves through the first three steps and preserves browser delivery profile selection", async () => {
+  test("moves through the first three steps and preserves live rendition selection", async () => {
     const user = userEvent.setup();
 
     renderWizard();
@@ -156,17 +156,15 @@ describe("CameraWizard", () => {
       }),
     ).toBeInTheDocument();
 
-    const browserDeliveryProfile = screen.getByLabelText(
-      /browser delivery profile/i,
-    );
-    expect(
-      within(browserDeliveryProfile).getByRole("option", {
-        name: "720p10 viewer preview",
-      }),
-    ).toBeInTheDocument();
-
-    await user.selectOptions(browserDeliveryProfile, "540p5");
-    expect(browserDeliveryProfile).toHaveValue("540p5");
+    expect(screen.getByText(/live delivery/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/processed custom/i)).toBeChecked();
+    expect(screen.getByRole("option", { name: "900p" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "240p" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "25 fps" })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText(/live rendition resolution/i), "540p");
+    await user.selectOptions(screen.getByLabelText(/live rendition fps cap/i), "5");
+    expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("540p");
+    expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("5");
 
     await user.click(screen.getByRole("button", { name: /back/i }));
     expect(
@@ -174,10 +172,11 @@ describe("CameraWizard", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /next/i }));
-    expect(screen.getByLabelText(/browser delivery profile/i)).toHaveValue("540p5");
+    expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("540p");
+    expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("5");
   });
 
-  test("labels edge delivery profiles as edge-built bandwidth savers", async () => {
+  test("shows edge source probes in the live delivery controls", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((_input, init) => {
       const rawBody = init?.body;
@@ -234,14 +233,10 @@ describe("CameraWizard", () => {
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    const browserDeliveryProfile = await screen.findByLabelText(
-      /browser delivery profile/i,
-    );
-    expect(
-      within(browserDeliveryProfile).getByRole("option", {
-        name: "720p10 edge bandwidth saver",
-      }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/live delivery/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/processed custom/i)).toBeChecked();
+    expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("720p");
+    expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("10");
   });
 
   test("submits selected edge node for RTSP edge processing", async () => {
@@ -417,7 +412,7 @@ describe("CameraWizard", () => {
     ).toBeInTheDocument();
   });
 
-  test("probes a new RTSP source before showing browser delivery profiles", async () => {
+  test("probes a new RTSP source before showing live rendition controls", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
@@ -467,7 +462,12 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(await screen.findByText(/source is 1280×720/i)).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "1080p15 viewer preview" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("720p");
+    expect(
+      within(screen.getByLabelText(/live rendition resolution/i)).queryByRole("option", {
+        name: "1080p",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   test("uses probed source size for new-camera calibration authoring", async () => {
@@ -510,7 +510,7 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
     await user.click(screen.getByRole("button", { name: /next/i }));
-    expect(await screen.findByRole("option", { name: "1080p15 viewer preview" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "1080p" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /next/i }));
 
@@ -627,7 +627,11 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(await screen.findByText(/source is 1280×720/i)).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "1080p15 viewer preview" })).not.toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText(/live rendition resolution/i)).queryByRole("option", {
+        name: "1080p",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   test("hides unsupported browser profiles for the detected source size", async () => {
@@ -705,7 +709,11 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    expect(screen.queryByRole("option", { name: "1080p15 viewer preview" })).not.toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText(/live rendition resolution/i)).queryByRole("option", {
+        name: "1080p",
+      }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(/source is 1280×720, so 1080p15 is unavailable/i),
     ).toBeInTheDocument();
@@ -780,14 +788,14 @@ describe("CameraWizard", () => {
     });
   });
 
-  test("stores the selected named stream delivery profile on the camera payload", async () => {
+  test("stores the selected transport profile on the camera payload", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     renderWizard({ onSubmit });
 
     await completeRequiredCreateSteps(user);
-    const streamProfile = screen.getByLabelText(/stream delivery profile/i);
+    const streamProfile = screen.getByLabelText(/transport profile/i);
     expect(
       within(streamProfile).getByRole("option", { name: /edge hls delivery/i }),
     ).toBeInTheDocument();
@@ -809,35 +817,25 @@ describe("CameraWizard", () => {
     expect(browserDelivery?.edge_override_url).toBe("https://edge-streams.example.com");
   });
 
-  test("locks browser delivery to native when a native stream profile is selected", async () => {
+  test("keeps live rendition separate when a native transport profile is selected", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     renderWizard({ onSubmit });
 
     await completeRequiredCreateSteps(user);
-    const browserDeliveryProfile = screen.getByLabelText(/browser delivery profile/i);
-    await user.selectOptions(browserDeliveryProfile, "540p5");
-    expect(browserDeliveryProfile).toHaveValue("540p5");
+    await user.selectOptions(screen.getByLabelText(/live rendition resolution/i), "540p");
+    await user.selectOptions(screen.getByLabelText(/live rendition fps cap/i), "5");
+    expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("540p");
+    expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("5");
 
     await user.selectOptions(
-      screen.getByLabelText(/stream delivery profile/i),
+      screen.getByLabelText(/transport profile/i),
       "55555555-5555-5555-5555-555555555555",
     );
 
-    expect(browserDeliveryProfile).toHaveValue("native");
-    expect(
-      within(browserDeliveryProfile).queryByRole("option", { name: /540p5/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(browserDeliveryProfile).queryByRole("option", { name: /720p10/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(browserDeliveryProfile).queryByRole("option", { name: /1080p15/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(browserDeliveryProfile).queryByRole("option", { name: /annotated/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("540p");
+    expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("5");
 
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
@@ -852,10 +850,13 @@ describe("CameraWizard", () => {
       "55555555-5555-5555-5555-555555555555",
     );
     expect(browserDelivery?.delivery_mode).toBe("native");
-    expect(browserDelivery?.default_profile).toBe("native");
-    expect(browserDelivery?.profiles).toEqual([
-      { id: "native", kind: "passthrough" },
-    ]);
+    expect(browserDelivery?.default_profile).toBe("540p5");
+    expect(browserDelivery?.profiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "native", kind: "passthrough" }),
+        expect.objectContaining({ id: "540p5", kind: "transcode" }),
+      ]),
+    );
   });
 
   test("submits USB edge source settings with edge-only guidance", async () => {
@@ -1081,10 +1082,8 @@ describe("CameraWizard", () => {
     await user.click(screen.getByLabelText("person"));
     await user.click(screen.getByLabelText("car"));
     await user.click(screen.getByRole("button", { name: /next/i }));
-    await user.selectOptions(
-      screen.getByLabelText(/browser delivery profile/i),
-      "540p5",
-    );
+    await user.selectOptions(screen.getByLabelText(/live rendition resolution/i), "540p");
+    await user.selectOptions(screen.getByLabelText(/live rendition fps cap/i), "5");
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(screen.getAllByText(/event boundaries/i).length).toBeGreaterThan(0);

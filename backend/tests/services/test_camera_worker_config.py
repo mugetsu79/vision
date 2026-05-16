@@ -45,6 +45,7 @@ from argus.services.app import (
     CameraService,
     _browser_delivery_with_stream_profile,
     _camera_to_worker_config,
+    _resolve_worker_stream_settings,
     _stream_delivery_base_urls,
     derive_browser_profiles,
 )
@@ -444,19 +445,50 @@ def _runtime_artifact(
     )
 
 
-def test_source_capability_hides_1080p_above_720p_source() -> None:
+def test_derive_browser_profiles_includes_full_resolution_fps_grid() -> None:
+    source = SourceCapability(width=1920, height=1080, fps=20, codec="h264")
+
+    profiles = derive_browser_profiles(source)
+    ids = [profile.id for profile in profiles.allowed]
+
+    assert ids[:2] == ["native", "annotated"]
+    assert "1080p25" in ids
+    assert "1080p20" in ids
+    assert "900p15" in ids
+    assert "720p10" in ids
+    assert "540p5" in ids
+    assert "360p25" in ids
+    assert "240p5" in ids
+    assert profiles.unsupported == []
+
+
+def test_source_capability_hides_profiles_above_720p_source() -> None:
     source = SourceCapability(width=1280, height=720, fps=20, codec="h264")
 
     profiles = derive_browser_profiles(source)
+    allowed_ids = [profile.id for profile in profiles.allowed]
+    unsupported_ids = [profile.id for profile in profiles.unsupported]
 
-    assert [profile.id for profile in profiles.allowed] == [
-        "native",
-        "annotated",
-        "720p10",
-        "540p5",
-    ]
-    assert profiles.unsupported[0].id == "1080p15"
-    assert profiles.unsupported[0].reason == "source_resolution_too_small"
+    assert "720p25" in allowed_ids
+    assert "720p10" in allowed_ids
+    assert "540p25" in allowed_ids
+    assert "240p5" in allowed_ids
+    assert "900p5" in unsupported_ids
+    assert "1080p5" in unsupported_ids
+    assert all(profile.reason == "source_resolution_too_small" for profile in profiles.unsupported)
+
+
+def test_worker_stream_settings_resolves_selected_reduced_profile() -> None:
+    settings = _resolve_worker_stream_settings(
+        browser_delivery=BrowserDeliverySettings(default_profile="900p20"),
+        fps_cap=25,
+    )
+
+    assert settings.profile_id == "900p20"
+    assert settings.kind == "transcode"
+    assert settings.width == 1600
+    assert settings.height == 900
+    assert settings.fps == 20
 
 
 def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> None:
@@ -1223,7 +1255,7 @@ def test_edge_native_browser_delivery_keeps_passthrough_stream() -> None:
     assert config.model.classes == ["person", "car"]
 
 
-def test_stream_delivery_profile_controls_playback_base_urls_and_mode() -> None:
+def test_stream_delivery_profile_controls_playback_base_urls_and_mode_without_changing_rendition() -> None:
     settings = _settings()
     delivery = WorkerStreamDeliverySettings(
         profile_id=uuid4(),
@@ -1235,7 +1267,7 @@ def test_stream_delivery_profile_controls_playback_base_urls_and_mode() -> None:
     )
 
     resolved = _browser_delivery_with_stream_profile(
-        BrowserDeliverySettings(default_profile="native"),
+        BrowserDeliverySettings(default_profile="720p10"),
         delivery,
     )
     central_urls = _stream_delivery_base_urls(
@@ -1251,7 +1283,7 @@ def test_stream_delivery_profile_controls_playback_base_urls_and_mode() -> None:
         processing_mode=ProcessingMode.EDGE,
     )
 
-    assert resolved.default_profile == "annotated"
+    assert resolved.default_profile == "720p10"
     assert resolved.delivery_profile_id == delivery.profile_id
     assert resolved.delivery_mode == "hls"
     assert central_urls["hls"] == "https://streams.example.com"

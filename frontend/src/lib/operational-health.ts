@@ -42,6 +42,8 @@ export type SceneHealthRow = {
   worker: HealthSignal;
   rules: HealthSignal;
   delivery: HealthSignal;
+  transport: HealthSignal;
+  liveRendition: HealthSignal;
   telemetry: HealthSignal;
   actionHref: string;
   actionLabel: string;
@@ -278,6 +280,8 @@ export function deriveSceneReadinessRows({
     const diagnostic = diagnosticsByCamera.get(camera.id);
     const privacy = derivePrivacyPosture(camera);
     const delivery = deriveDeliverySignal(camera, diagnostic);
+    const transport = deriveTransportSignal(camera);
+    const liveRendition = deriveLiveRenditionSignal(camera, diagnostic);
     const telemetry = deriveTelemetrySignal(framesByCamera[camera.id]);
     const workerSignal = deriveWorkerSignal(worker);
     const rules = deriveRuleRuntimeSignal(worker?.rule_runtime);
@@ -315,6 +319,8 @@ export function deriveSceneReadinessRows({
       worker: workerSignal,
       rules,
       delivery,
+      transport,
+      liveRendition,
       telemetry,
       actionHref: action.href,
       actionLabel: action.label,
@@ -427,6 +433,77 @@ function deriveDeliverySignal(
     return { health: "attention", label: "Delivery profile selected" };
   }
   return { health: "unknown", label: "Delivery not reported" };
+}
+
+function deriveTransportSignal(camera: Camera): HealthSignal {
+  const delivery = camera.browser_delivery;
+  const profileName = delivery.delivery_profile_name;
+  const mode = delivery.delivery_mode;
+  if (profileName) {
+    return {
+      health: "healthy",
+      label: profileName,
+      detail: mode ? `${formatReason(mode)} transport` : undefined,
+    };
+  }
+  if (mode) {
+    return {
+      health: "healthy",
+      label: `${formatReason(mode)} transport`,
+    };
+  }
+  return { health: "unknown", label: "Inherited transport" };
+}
+
+function deriveLiveRenditionSignal(
+  camera: Camera,
+  diagnostic: FleetDeliveryDiagnostic | undefined,
+): HealthSignal {
+  const defaultProfile =
+    diagnostic?.default_profile ?? camera.browser_delivery.default_profile;
+  const profile =
+    diagnostic?.available_profiles?.find(
+      (candidate) => candidate.id === defaultProfile,
+    ) ??
+    camera.browser_delivery.profiles?.find(
+      (candidate) => candidate.id === defaultProfile,
+    );
+  const nativeStatus =
+    diagnostic?.native_status ?? camera.browser_delivery.native_status;
+  const label =
+    typeof profile?.label === "string" && profile.label.length > 0
+      ? profile.label
+      : formatBrowserDeliveryProfileId(defaultProfile);
+
+  if (defaultProfile === "native" && nativeStatus?.available === false) {
+    return {
+      health: "danger",
+      label,
+      detail: formatReason(nativeStatus.reason),
+    };
+  }
+
+  return {
+    health: "healthy",
+    label,
+    detail: diagnostic?.selected_stream_mode
+      ? `${formatReason(diagnostic.selected_stream_mode)} stream`
+      : undefined,
+  };
+}
+
+function formatBrowserDeliveryProfileId(profileId: string): string {
+  if (profileId === "native") {
+    return "Native clean";
+  }
+  if (profileId === "annotated") {
+    return "Annotated source";
+  }
+  const match = /^(\d+p)(\d+)$/.exec(profileId);
+  if (match) {
+    return `${match[1]} / ${match[2]} fps`;
+  }
+  return profileId;
 }
 
 function deriveTelemetrySignal(

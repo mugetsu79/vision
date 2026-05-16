@@ -102,7 +102,7 @@ describe("TelemetryCanvas", () => {
       camera_id: "11111111-1111-1111-1111-111111111111",
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
-      stream_mode: "annotated-whip",
+      stream_mode: "passthrough",
       counts: { bus: 1, car: 1 },
       tracks: [
         {
@@ -240,12 +240,52 @@ describe("TelemetryCanvas", () => {
     expect(fillTextMock).not.toHaveBeenCalled();
   });
 
-  test("does not draw a frontend overlay when disabled", async () => {
+  test("does not draw explicit stable overlays on annotated streams", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "annotated-whip",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 100, y1: 120, x2: 340, y2: 260 },
+          track_id: 7,
+          track_state: "active",
+          stable_track_id: 7,
+          source_track_id: 44,
+          last_seen_age_ms: 0,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          tracks={[signalTrack(frame.tracks[0])]}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(clearRectMock).toHaveBeenCalled());
+    expect(strokeRectMock).not.toHaveBeenCalled();
+    expect(fillTextMock).not.toHaveBeenCalled();
+  });
+
+  test("does not draw a frontend overlay when disabled", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
       counts: { person: 1 },
       tracks: [
         {

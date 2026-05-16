@@ -32,7 +32,7 @@ export function CameraStepSummary({
         { label: "Site", value: data.siteName },
         { label: "Processing", value: data.processingMode },
         { label: "Tracker", value: data.trackerType },
-        { label: "Browser delivery", value: data.browserDeliveryProfile },
+        { label: "Live rendition", value: data.browserDeliveryProfile },
         { label: "Frame cadence", value: `skip ${data.frameSkip}, cap ${data.fpsCap} FPS` },
         { label: "Source", value: data.sourceLabel ?? data.rtspUrlMasked },
         { label: "Event clip", value: data.recordingLabel ?? "Enabled" },

@@ -328,15 +328,14 @@ describe("LivePage", () => {
     });
     expect(within(northGateStatus).getByText(/^central scene$/i)).toBeInTheDocument();
     expect(within(northGateStatus).getByText(/worker running/i)).toBeInTheDocument();
-    expect(
-      within(northGateStatus).getByText(/processed stream live/i),
-    ).toBeInTheDocument();
+    expect(within(northGateStatus).getAllByText(/native clean/i).length).toBeGreaterThan(0);
+    expect(within(northGateStatus).getByText(/inherited transport/i)).toBeInTheDocument();
     expect(within(depotYardStatus).getByText(/^hybrid scene$/i)).toBeInTheDocument();
     expect(
       within(depotYardStatus).getByText(/worker awaiting report/i),
     ).toBeInTheDocument();
     expect(
-      within(depotYardStatus).getByText(/processed stream live/i),
+      within(depotYardStatus).getByText(/540p \/ 5 fps/i),
     ).toBeInTheDocument();
 
     expect(FakeWebSocket.instances[0]?.url).toContain("/ws/telemetry");
@@ -705,6 +704,201 @@ describe("LivePage", () => {
     expect(screen.queryByText(/native clean/i)).not.toBeInTheDocument();
   });
 
+  test("stages and applies a camera live rendition without changing transport fields", async () => {
+    const user = userEvent.setup();
+    const patchBodies: unknown[] = [];
+    const camera = {
+      id: "11111111-1111-1111-1111-111111111111",
+      site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      edge_node_id: null,
+      name: "North Gate",
+      rtsp_url_masked: "rtsp://***",
+      processing_mode: "central",
+      primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      secondary_model_id: null,
+      tracker_type: "botsort",
+      active_classes: ["car", "bus"],
+      attribute_rules: [],
+      zones: [],
+      homography: {
+        src: [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+        ],
+        dst: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+        ],
+        ref_distance_m: 10,
+      },
+      privacy: {
+        blur_faces: true,
+        blur_plates: true,
+        method: "gaussian",
+        strength: 7,
+      },
+      browser_delivery: {
+        default_profile: "720p10",
+        allow_native_on_demand: true,
+        delivery_profile_id: "44444444-4444-4444-4444-444444444444",
+        delivery_profile_name: "Edge HLS delivery",
+        delivery_profile_hash: "transport-hash",
+        delivery_mode: "hls",
+        public_base_url: "https://video.example.test",
+        edge_override_url: "https://edge.example.test",
+        profiles: [
+          { id: "native", kind: "passthrough", label: "Native camera" },
+          { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10, label: "720p / 10 fps" },
+          { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5, label: "540p / 5 fps" },
+        ],
+        unsupported_profiles: [{ id: "1080p15", reason: "source_resolution_too_low" }],
+        native_status: {
+          available: false,
+          reason: "privacy_filtering_required",
+        },
+      },
+      source_capability: {
+        width: 1280,
+        height: 720,
+        fps: 20,
+        codec: "h264",
+        aspect_ratio: "16:9",
+      },
+      frame_skip: 1,
+      fps_cap: 25,
+      created_at: "2026-04-18T10:00:00Z",
+      updated_at: "2026-04-18T10:00:00Z",
+    };
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras" && request.method === "GET") {
+        return new Response(JSON.stringify([camera]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (
+        url.pathname ===
+          "/api/v1/cameras/11111111-1111-1111-1111-111111111111" &&
+        request.method === "PATCH"
+      ) {
+        const body = (await request.clone().json()) as unknown;
+        patchBodies.push(body);
+        return new Response(
+          JSON.stringify({
+            ...camera,
+            browser_delivery: {
+              ...camera.browser_delivery,
+              default_profile: "540p5",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      return new Response("Not found", { status: 404 });
+    });
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "North Gate" });
+    const renditionSelect = screen.getByLabelText(/north gate live rendition/i);
+    expect(within(renditionSelect).queryByRole("option", { name: /native camera/i })).toBeNull();
+
+    await user.selectOptions(renditionSelect, "540p5");
+    expect(screen.getByText(/will reconfigure the worker to publish 540p \/ 5 fps/i)).toBeInTheDocument();
+    expect(patchBodies).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: /apply to scene/i }));
+
+    await waitFor(() => expect(patchBodies).toHaveLength(1));
+    expect(patchBodies[0]).toEqual({
+      browser_delivery: {
+        ...camera.browser_delivery,
+        default_profile: "540p5",
+      },
+    });
+  });
+
+  test("lets operators disable browser-only overlays per live tile", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["person"],
+            attribute_rules: [],
+            zones: [],
+            homography: null,
+            privacy: {
+              blur_faces: false,
+              blur_plates: false,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "native",
+              allow_native_on_demand: true,
+              profiles: [{ id: "native", kind: "passthrough", label: "Native camera" }],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "North Gate" });
+    expect(telemetryCanvasMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      disabled: false,
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: /browser overlay/i }));
+
+    await waitFor(() =>
+      expect(telemetryCanvasMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        disabled: true,
+      }),
+    );
+  });
+
   test("shows telemetry stale instead of offline when the last worker frame is old", async () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
@@ -786,7 +980,6 @@ describe("LivePage", () => {
       (await screen.findAllByText(/telemetry stale/i)).length,
     ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/annotated-whip/i)).toBeInTheDocument();
-    expect(screen.queryByText(/native clean/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^offline$/i)).not.toBeInTheDocument();
   });
 });

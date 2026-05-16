@@ -22,6 +22,8 @@ const rows: SceneHealthRow[] = [
       detail: "loaded - ffffffffffff - 12 May 2026, 09:30",
     },
     delivery: { health: "healthy", label: "Native stream available" },
+    transport: { health: "healthy", label: "WebRTC relay ready" },
+    liveRendition: { health: "healthy", label: "Native clean" },
     telemetry: { health: "healthy", label: "Telemetry live" },
     actionHref: "/live",
     actionLabel: "Open live",
@@ -48,6 +50,12 @@ const rows: SceneHealthRow[] = [
     delivery: {
       health: "danger",
       label: "Direct stream unavailable",
+      detail: "source unavailable",
+    },
+    transport: { health: "unknown", label: "Inherited transport" },
+    liveRendition: {
+      health: "danger",
+      label: "Native clean",
       detail: "source unavailable",
     },
     telemetry: { health: "unknown", label: "Awaiting telemetry" },
@@ -81,7 +89,12 @@ describe("SceneIntelligenceMatrix", () => {
     expect(screen.getByText(/12 may 2026/i)).toBeInTheDocument();
     expect(screen.getByText(/no active rules/i)).toBeInTheDocument();
     expect(screen.getAllByText(/worker stale/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/direct stream unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText("Transport")).toBeInTheDocument();
+    expect(screen.getByText("Live rendition")).toBeInTheDocument();
+    expect(screen.getByText(/webrtc relay ready/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/native clean/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/inherited transport/i)).toBeInTheDocument();
+    expect(screen.getByText(/source unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/awaiting telemetry/i)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /inspect delivery for depot yard/i }),

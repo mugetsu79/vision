@@ -238,6 +238,52 @@ describe("VideoStream", () => {
     expect(secondUrl).not.toBe(firstUrl);
   });
 
+  test("restarts the stream session when the live rendition changes", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("upstream failed", { status: 502 }),
+    );
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    const view = render(
+      <VideoStream
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="720p10"
+      />,
+    );
+
+    await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
+    const firstUrl = String(loadSourceMock.mock.calls[0]?.[0]);
+
+    view.rerender(
+      <VideoStream
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="540p5"
+      />,
+    );
+
+    await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(2));
+    const secondUrl = String(loadSourceMock.mock.calls[1]?.[0]);
+
+    expect(secondUrl).not.toBe(firstUrl);
+    expect(screen.getByText("540p5")).toBeInTheDocument();
+  });
+
   test("retries WebRTC without HLS fallback when the stream path is not ready", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(

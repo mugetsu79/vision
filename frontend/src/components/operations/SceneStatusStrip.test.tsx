@@ -16,6 +16,8 @@ const row: SceneHealthRow = {
   worker: { health: "healthy", label: "Worker running" },
   rules: { health: "healthy", label: "1 active rule", detail: "loaded" },
   delivery: { health: "healthy", label: "Native stream available" },
+  transport: { health: "unknown", label: "Inherited transport" },
+  liveRendition: { health: "healthy", label: "Native clean" },
   telemetry: { health: "attention", label: "Telemetry stale" },
   actionHref: "/settings",
   actionLabel: "Inspect operations",
@@ -31,20 +33,21 @@ describe("SceneStatusStrip", () => {
     expect(screen.getByText(/telemetry stale/i)).toBeInTheDocument();
     expect(screen.getByText(/central scene/i)).toBeInTheDocument();
     expect(screen.getByText(/worker running/i)).toBeInTheDocument();
-    expect(screen.getByText(/processed stream live/i)).toBeInTheDocument();
+    expect(screen.getByText(/native clean/i)).toBeInTheDocument();
+    expect(screen.getByText(/inherited transport/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/direct stream unavailable/i),
     ).not.toBeInTheDocument();
   });
 
-  test("renders gated copy for unavailable direct delivery", () => {
+  test("renders live rendition detail for unavailable native delivery", () => {
     render(
       <SceneStatusStrip
         row={{
           ...row,
-          delivery: {
-            health: "attention",
-            label: "Direct stream unavailable",
+          liveRendition: {
+            health: "danger",
+            label: "Native clean",
             detail: "privacy filtering required",
           },
         }}
@@ -52,8 +55,8 @@ describe("SceneStatusStrip", () => {
     );
 
     expect(
-      screen.getAllByText(/native passthrough gated/i).length,
-    ).toBeGreaterThan(0);
+      screen.getByText(/native clean: privacy filtering required/i),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(/direct stream unavailable/i),
     ).not.toBeInTheDocument();

@@ -450,7 +450,7 @@ vi.mock("@/hooks/use-configuration", () => ({
     data: {
       kinds: [
         { kind: "evidence_storage", label: "Evidence storage" },
-        { kind: "stream_delivery", label: "Streams" },
+        { kind: "stream_delivery", label: "Transport profile" },
         { kind: "runtime_selection", label: "Runtime" },
         { kind: "privacy_policy", label: "Privacy and retention" },
         { kind: "llm_provider", label: "LLM and policy" },

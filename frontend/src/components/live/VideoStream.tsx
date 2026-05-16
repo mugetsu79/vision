@@ -75,6 +75,8 @@ export function VideoStream({
   const [sessionToken, setSessionToken] = useState(() =>
     nextStreamSessionToken(),
   );
+  const streamSelectionKey = `${defaultProfile}:${deliveryMode ?? ""}`;
+  const streamSelectionKeyRef = useRef(streamSelectionKey);
 
   const clearReconnectTimer = useEffectEvent(() => {
     if (reconnectTimerRef.current !== null) {
@@ -154,6 +156,15 @@ export function VideoStream({
   );
 
   const streamReady = isVisible && isPageVisible;
+
+  useEffect(() => {
+    if (streamSelectionKeyRef.current === streamSelectionKey) {
+      return;
+    }
+
+    streamSelectionKeyRef.current = streamSelectionKey;
+    requestSessionRestart("immediate");
+  }, [requestSessionRestart, streamSelectionKey]);
 
   const emitFirstFrameMetric = useEffectEvent(
     (activeTransport: Extract<StreamTransport, "webrtc" | "hls" | "mjpeg">) => {

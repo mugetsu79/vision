@@ -1532,7 +1532,24 @@ class InferenceEngine:
                 ),
             )
         if self._stream_registration.mode is StreamMode.ANNOTATED_WHIP:
+            before_frame = stream_frame.copy() if self._diagnostics_enabled else None
             self._draw_annotations(stream_frame, tracks)
+            if self._diagnostics_enabled:
+                changed_pixels = (
+                    None
+                    if before_frame is None
+                    else int(np.count_nonzero(stream_frame != before_frame))
+                )
+                logger.info(
+                    (
+                        "Annotated frame overlay diagnostics camera_id=%s "
+                        "annotation_tracks=%s pixel_delta=%s frame_shape=%s"
+                    ),
+                    self.config.camera_id,
+                    len(tracks),
+                    changed_pixels,
+                    tuple(int(value) for value in stream_frame.shape),
+                )
         return stream_frame
 
     def _draw_annotations(self, frame: Frame, tracks: list[LifecycleTrack]) -> None:

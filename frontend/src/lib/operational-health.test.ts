@@ -279,6 +279,12 @@ describe("operational health", () => {
       privacy: { health: "healthy", label: "Face/plate filtering configured" },
       worker: { health: "healthy", label: "Worker running" },
       delivery: { health: "healthy", label: "Native stream available" },
+      transport: { health: "unknown", label: "Inherited transport" },
+      liveRendition: {
+        health: "healthy",
+        label: "Native clean",
+        detail: "passthrough stream",
+      },
       telemetry: { health: "healthy", label: "Telemetry live" },
     });
     expect(rows[1]).toMatchObject({
@@ -287,6 +293,12 @@ describe("operational health", () => {
       readiness: { health: "attention", label: "Needs setup" },
       worker: { health: "attention", label: "Worker stale" },
       delivery: { health: "danger", label: "Direct stream unavailable" },
+      transport: { health: "unknown", label: "Inherited transport" },
+      liveRendition: {
+        health: "danger",
+        label: "Native clean",
+        detail: "source unavailable",
+      },
       telemetry: { health: "unknown", label: "Awaiting telemetry" },
       actionHref: "/cameras",
       actionLabel: "Review setup",
@@ -365,6 +377,11 @@ describe("operational health", () => {
     expect(rows[0]).toMatchObject({
       readiness: { health: "attention", label: "Needs attention" },
       delivery: { health: "attention", label: "Direct stream unavailable" },
+      liveRendition: {
+        health: "healthy",
+        label: "720p / 10 fps",
+        detail: "transcode stream",
+      },
       actionHref: "/settings",
       actionLabel: "Inspect delivery",
     });

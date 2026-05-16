@@ -1371,7 +1371,7 @@ export interface components {
              * Id
              * @enum {string}
              */
-            id: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
+            id: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
             /**
              * Kind
              * @enum {string}
@@ -1399,7 +1399,7 @@ export interface components {
              * @default 720p10
              * @enum {string}
              */
-            default_profile: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
+            default_profile: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
             /**
              * Allow Native On Demand
              * @default true
@@ -2240,7 +2240,7 @@ export interface components {
              * Default Profile
              * @enum {string}
              */
-            default_profile: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
+            default_profile: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
             /** Available Profiles */
             available_profiles?: components["schemas"]["BrowserDeliveryProfile"][];
             native_status?: components["schemas"]["NativeAvailability"];
@@ -4989,7 +4989,7 @@ export interface components {
              * @default native
              * @enum {string}
              */
-            profile_id: "native" | "annotated" | "1080p15" | "720p10" | "540p5";
+            profile_id: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
             /**
              * Kind
              * @default passthrough
@@ -5505,7 +5505,9 @@ export interface operations {
     };
     get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get: {
         parameters: {
-            query?: never;
+            query?: {
+                supervisor_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };

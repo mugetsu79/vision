@@ -37,7 +37,21 @@ type VisionComputeTier = SceneVisionProfile["compute_tier"];
 type VisionAccuracyMode = SceneVisionProfile["accuracy_mode"];
 type SceneDifficulty = SceneVisionProfile["scene_difficulty"];
 type ObjectDomain = SceneVisionProfile["object_domain"];
-type BrowserDeliveryProfile = "native" | "annotated" | "1080p15" | "720p10" | "540p5";
+type GeneratedBrowserDeliveryProfile = components["schemas"]["BrowserDeliveryProfile"];
+type GeneratedBrowserDeliveryProfileId = GeneratedBrowserDeliveryProfile["id"];
+type ProcessedBrowserDeliveryResolution =
+  | "1080p"
+  | "900p"
+  | "720p"
+  | "540p"
+  | "360p"
+  | "240p";
+type ProcessedBrowserDeliveryFps = 25 | 20 | 15 | 10 | 5;
+type ProcessedBrowserDeliveryProfile =
+  `${ProcessedBrowserDeliveryResolution}${ProcessedBrowserDeliveryFps}`;
+type BrowserDeliveryProfile =
+  | GeneratedBrowserDeliveryProfileId
+  | ProcessedBrowserDeliveryProfile;
 type CameraSourceKind = components["schemas"]["CameraSourceKind"];
 type EvidenceRecordingPolicy = components["schemas"]["EvidenceRecordingPolicy"];
 type EvidenceStorageProfile = EvidenceRecordingPolicy["storage_profile"];
@@ -111,12 +125,40 @@ const DEFAULT_ANALYTICS_FRAME_SIZE: FrameSize = {
   height: 720,
 };
 
+const BROWSER_DELIVERY_RESOLUTION_GRID: Array<{
+  id: ProcessedBrowserDeliveryResolution;
+  width: number;
+  height: number;
+}> = [
+  { id: "1080p", width: 1920, height: 1080 },
+  { id: "900p", width: 1600, height: 900 },
+  { id: "720p", width: 1280, height: 720 },
+  { id: "540p", width: 960, height: 540 },
+  { id: "360p", width: 640, height: 360 },
+  { id: "240p", width: 426, height: 240 },
+];
+
+const BROWSER_DELIVERY_FPS_GRID: ProcessedBrowserDeliveryFps[] = [
+  25,
+  20,
+  15,
+  10,
+  5,
+];
+
 const DEFAULT_BROWSER_DELIVERY_PROFILES: BrowserDeliveryProfilePayload[] = [
   { id: "native", kind: "passthrough" },
   { id: "annotated", kind: "transcode" },
-  { id: "1080p15", kind: "transcode", w: 1920, h: 1080, fps: 15 },
-  { id: "720p10", kind: "transcode", w: 1280, h: 720, fps: 10 },
-  { id: "540p5", kind: "transcode", w: 960, h: 540, fps: 5 },
+  ...BROWSER_DELIVERY_RESOLUTION_GRID.flatMap((resolution) =>
+    BROWSER_DELIVERY_FPS_GRID.map((fps) => ({
+      id: buildProcessedBrowserDeliveryProfile(resolution.id, fps),
+      kind: "transcode" as const,
+      w: resolution.width,
+      h: resolution.height,
+      fps,
+      label: `${resolution.id} / ${fps} fps`,
+    })),
+  ),
 ];
 
 export type SiteOption = { id: string; name: string };
@@ -204,12 +246,14 @@ function toPointTupleArray(points: number[][] | undefined): Point[] {
 }
 
 function isBrowserDeliveryProfile(value: unknown): value is BrowserDeliveryProfile {
-  return (
-    value === "native" ||
-    value === "annotated" ||
-    value === "1080p15" ||
-    value === "720p10" ||
-    value === "540p5"
+  if (value === "native" || value === "annotated") {
+    return true;
+  }
+  if (typeof value !== "string") {
+    return false;
+  }
+  return BROWSER_DELIVERY_RESOLUTION_GRID.some((resolution) =>
+    BROWSER_DELIVERY_FPS_GRID.some((fps) => value === `${resolution.id}${fps}`),
   );
 }
 
@@ -247,28 +291,82 @@ function resolveBrowserDeliveryProfile(
   return profiles.find((profile) => profile.id === "720p10")?.id ?? profiles[0]?.id ?? "native";
 }
 
-function nativeOnlyBrowserDeliveryProfiles(
-  profiles: BrowserDeliveryProfilePayload[],
-): BrowserDeliveryProfilePayload[] {
-  const nativeProfile = profiles.find((profile) => profile.id === "native");
-  return nativeProfile ? [nativeProfile] : [{ id: "native", kind: "passthrough" }];
-}
-
-function formatBrowserDeliveryProfileLabel(
-  profile: BrowserDeliveryProfilePayload,
-  processingMode: CameraWizardData["processingMode"],
-) {
+function formatLiveRenditionLabel(profile: BrowserDeliveryProfilePayload) {
   if (profile.label) {
     return profile.label;
   }
-  const isEdge = processingMode === "edge";
   if (profile.id === "native") {
-    return isEdge ? "Native edge passthrough" : "Native camera";
+    return "Native clean";
   }
   if (profile.id === "annotated") {
-    return isEdge ? "Annotated edge stream" : "Annotated";
+    return "Annotated source";
   }
-  return isEdge ? `${profile.id} edge bandwidth saver` : `${profile.id} viewer preview`;
+  const parsed = parseProcessedBrowserDeliveryProfile(profile.id);
+  return parsed ? `${parsed.resolution} / ${parsed.fps} fps` : profile.id;
+}
+
+function parseProcessedBrowserDeliveryProfile(profileId: BrowserDeliveryProfile) {
+  for (const resolution of BROWSER_DELIVERY_RESOLUTION_GRID) {
+    for (const fps of BROWSER_DELIVERY_FPS_GRID) {
+      if (profileId === `${resolution.id}${fps}`) {
+        return { resolution: resolution.id, fps };
+      }
+    }
+  }
+  return null;
+}
+
+function buildProcessedBrowserDeliveryProfile(
+  resolution: ProcessedBrowserDeliveryResolution,
+  fps: ProcessedBrowserDeliveryFps,
+): ProcessedBrowserDeliveryProfile {
+  return `${resolution}${fps}`;
+}
+
+function uniqueProcessedResolutions(profiles: BrowserDeliveryProfilePayload[]) {
+  return BROWSER_DELIVERY_RESOLUTION_GRID.filter((resolution) =>
+    profiles.some(
+      (profile) =>
+        parseProcessedBrowserDeliveryProfile(profile.id)?.resolution === resolution.id,
+    ),
+  );
+}
+
+function availableFpsForResolution(
+  profiles: BrowserDeliveryProfilePayload[],
+  resolution: ProcessedBrowserDeliveryResolution,
+) {
+  return BROWSER_DELIVERY_FPS_GRID.filter((fps) =>
+    profiles.some(
+      (profile) => profile.id === buildProcessedBrowserDeliveryProfile(resolution, fps),
+    ),
+  );
+}
+
+function resolveProcessedBrowserDeliveryProfile(
+  profiles: BrowserDeliveryProfilePayload[],
+  preferredResolution: ProcessedBrowserDeliveryResolution,
+  preferredFps: ProcessedBrowserDeliveryFps,
+) {
+  const preferredProfile = buildProcessedBrowserDeliveryProfile(
+    preferredResolution,
+    preferredFps,
+  );
+  if (profiles.some((profile) => profile.id === preferredProfile)) {
+    return preferredProfile;
+  }
+
+  const sameResolutionFallback = BROWSER_DELIVERY_FPS_GRID.map((fps) =>
+    buildProcessedBrowserDeliveryProfile(preferredResolution, fps),
+  ).find((profileId) => profiles.some((profile) => profile.id === profileId));
+  if (sameResolutionFallback) {
+    return sameResolutionFallback;
+  }
+
+  return (
+    profiles.find((profile) => parseProcessedBrowserDeliveryProfile(profile.id))?.id ??
+    "annotated"
+  );
 }
 
 function formatSourceSize(sourceCapability: SourceCapability | null) {
@@ -353,21 +451,15 @@ function createDefaultData(initialCamera?: Camera | null): CameraWizardData {
 }
 
 function buildBrowserDelivery(data: CameraWizardData) {
-  const nativeStream = data.streamDeliveryMode === "native";
-
   return {
-    default_profile: nativeStream ? "native" : data.browserDeliveryProfile,
+    default_profile: data.browserDeliveryProfile,
     allow_native_on_demand: true,
     delivery_profile_id: data.streamDeliveryProfileId || null,
     delivery_mode: data.streamDeliveryMode,
     public_base_url: data.streamDeliveryPublicBaseUrl,
     edge_override_url: data.streamDeliveryEdgeOverrideUrl,
-    profiles: nativeStream
-      ? nativeOnlyBrowserDeliveryProfiles(data.browserDeliveryProfiles)
-      : data.browserDeliveryProfiles,
-    unsupported_profiles: nativeStream
-      ? []
-      : data.unsupportedBrowserDeliveryProfiles,
+    profiles: data.browserDeliveryProfiles,
+    unsupported_profiles: data.unsupportedBrowserDeliveryProfiles,
     native_status: data.browserDeliveryNativeStatus,
   };
 }
@@ -1231,12 +1323,26 @@ export function CameraWizard({
     () => streamDeliveryProfileOptions(streamDeliveryProfilesQuery.data),
     [streamDeliveryProfilesQuery.data],
   );
-  const browserDeliveryProfileOptions = useMemo(
+  const processedResolutionOptions = useMemo(
+    () => uniqueProcessedResolutions(data.browserDeliveryProfiles),
+    [data.browserDeliveryProfiles],
+  );
+  const selectedProcessedProfile =
+    parseProcessedBrowserDeliveryProfile(data.browserDeliveryProfile) ??
+    parseProcessedBrowserDeliveryProfile(
+      resolveProcessedBrowserDeliveryProfile(
+        data.browserDeliveryProfiles,
+        "720p",
+        10,
+      ),
+    ) ?? { resolution: "720p" as const, fps: 10 as const };
+  const processedFpsOptions = useMemo(
     () =>
-      data.streamDeliveryMode === "native"
-        ? nativeOnlyBrowserDeliveryProfiles(data.browserDeliveryProfiles)
-        : data.browserDeliveryProfiles,
-    [data.browserDeliveryProfiles, data.streamDeliveryMode],
+      availableFpsForResolution(
+        data.browserDeliveryProfiles,
+        selectedProcessedProfile.resolution,
+      ),
+    [data.browserDeliveryProfiles, selectedProcessedProfile.resolution],
   );
 
   useEffect(() => {
@@ -1286,14 +1392,6 @@ export function CameraWizard({
       };
     });
   }, [sourceProbeQuery.data]);
-
-  useEffect(() => {
-    if (data.streamDeliveryMode !== "native" || data.browserDeliveryProfile === "native") {
-      return;
-    }
-
-    setData((current) => ({ ...current, browserDeliveryProfile: "native" }));
-  }, [data.browserDeliveryProfile, data.streamDeliveryMode]);
 
   useEffect(() => {
     setData((current) => {
@@ -1499,13 +1597,45 @@ export function CameraWizard({
       streamDeliveryMode: option.deliveryMode,
       streamDeliveryPublicBaseUrl: option.publicBaseUrl,
       streamDeliveryEdgeOverrideUrl: option.edgeOverrideUrl,
-      browserDeliveryProfile:
-        option.deliveryMode === "native"
-          ? "native"
-          : option.deliveryMode
-            ? "annotated"
-            : current.browserDeliveryProfile,
     }));
+  }
+
+  function updateLiveRendition(kind: "native" | "annotated" | "processed") {
+    if (kind === "native" || kind === "annotated") {
+      updateData("browserDeliveryProfile", kind);
+      return;
+    }
+
+    updateData(
+      "browserDeliveryProfile",
+      resolveProcessedBrowserDeliveryProfile(
+        data.browserDeliveryProfiles,
+        selectedProcessedProfile.resolution,
+        selectedProcessedProfile.fps,
+      ),
+    );
+  }
+
+  function updateProcessedResolution(resolution: ProcessedBrowserDeliveryResolution) {
+    updateData(
+      "browserDeliveryProfile",
+      resolveProcessedBrowserDeliveryProfile(
+        data.browserDeliveryProfiles,
+        resolution,
+        selectedProcessedProfile.fps,
+      ),
+    );
+  }
+
+  function updateProcessedFps(fps: ProcessedBrowserDeliveryFps) {
+    updateData(
+      "browserDeliveryProfile",
+      resolveProcessedBrowserDeliveryProfile(
+        data.browserDeliveryProfiles,
+        selectedProcessedProfile.resolution,
+        fps,
+      ),
+    );
   }
 
   function updateVisionProfile(patch: Partial<VisionProfileDraft>) {
@@ -1581,7 +1711,7 @@ export function CameraWizard({
 
     if (stepTitle === "Privacy, Processing & Delivery") {
       if (!data.browserDeliveryProfile) {
-        return "Browser delivery profile is required.";
+        return "Live rendition is required.";
       }
       if (data.strength < 1 || data.strength > 100) {
         return "Strength must be between 1 and 100.";
@@ -2321,47 +2451,133 @@ export function CameraWizard({
                   </label>
                 </div>
               </section>
-              {streamProfileOptions.length > 0 ? (
-                <label className="grid gap-2 text-sm text-[#d8e2f2]">
-                  <span>Stream delivery profile</span>
-                  <Select
-                    aria-label="Stream delivery profile"
-                    value={data.streamDeliveryProfileId}
-                    onChange={(event) =>
-                      updateStreamDeliveryProfile(event.target.value)
-                    }
-                  >
-                    <option value="">Use default binding</option>
-                    {streamProfileOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              ) : null}
-              <label className="grid gap-2 text-sm text-[#d8e2f2]">
-                <span>Browser delivery profile</span>
-                <Select
-                  aria-label="Browser delivery profile"
-                  value={data.browserDeliveryProfile}
-                  onChange={(event) =>
-                    updateData(
-                      "browserDeliveryProfile",
-                      event.target.value as BrowserDeliveryProfile,
-                    )
-                  }
-                >
-                  {browserDeliveryProfileOptions.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {formatBrowserDeliveryProfileLabel(
-                        profile,
-                        data.processingMode,
+              <section className="space-y-3 rounded-[1.5rem] border border-[#243853] bg-[#09121c] p-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+                    Live delivery
+                  </p>
+                  <p className="mt-1 text-sm text-[#9eb2cf]">
+                    Transport controls relay access. Rendition controls the video operators see.
+                  </p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.4fr)]">
+                  <label className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <span>Transport profile</span>
+                    <Select
+                      aria-label="Transport profile"
+                      value={data.streamDeliveryProfileId}
+                      onChange={(event) =>
+                        updateStreamDeliveryProfile(event.target.value)
+                      }
+                    >
+                      <option value="">Use inherited transport</option>
+                      {streamProfileOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <fieldset className="grid gap-2 text-sm text-[#d8e2f2]">
+                    <legend className="font-medium">Live rendition</legend>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {[
+                        ["native", "Native clean"],
+                        ["annotated", "Annotated source"],
+                        ["processed", "Processed custom"],
+                      ].map(([value, label]) => {
+                        const selected =
+                          value === "processed"
+                            ? Boolean(
+                                parseProcessedBrowserDeliveryProfile(
+                                  data.browserDeliveryProfile,
+                                ),
+                              )
+                            : data.browserDeliveryProfile === value;
+                        return (
+                          <label
+                            key={value}
+                            className={`flex items-center justify-center gap-2 rounded-[0.8rem] border px-3 py-2 text-xs font-semibold transition ${
+                              selected
+                                ? "border-[#4d91ff] bg-[#132849] text-[#f4f8ff]"
+                                : "border-white/10 bg-white/[0.03] text-[#9eb2cf]"
+                            }`}
+                          >
+                            <input
+                              className="sr-only"
+                              name="live-rendition"
+                              type="radio"
+                              value={value}
+                              checked={selected}
+                              onChange={() =>
+                                updateLiveRendition(
+                                  value as "native" | "annotated" | "processed",
+                                )
+                              }
+                            />
+                            {label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {parseProcessedBrowserDeliveryProfile(data.browserDeliveryProfile) ? (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="grid gap-1">
+                          <span className="text-xs text-[#9eb2cf]">Resolution</span>
+                          <Select
+                            aria-label="Live rendition resolution"
+                            value={selectedProcessedProfile.resolution}
+                            onChange={(event) =>
+                              updateProcessedResolution(
+                                event.target
+                                  .value as ProcessedBrowserDeliveryResolution,
+                              )
+                            }
+                          >
+                            {processedResolutionOptions.map((resolution) => (
+                              <option key={resolution.id} value={resolution.id}>
+                                {resolution.id}
+                              </option>
+                            ))}
+                          </Select>
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="text-xs text-[#9eb2cf]">FPS cap</span>
+                          <Select
+                            aria-label="Live rendition FPS cap"
+                            value={String(selectedProcessedProfile.fps)}
+                            onChange={(event) =>
+                              updateProcessedFps(
+                                Number(event.target.value) as ProcessedBrowserDeliveryFps,
+                              )
+                            }
+                          >
+                            {processedFpsOptions.map((fps) => (
+                              <option key={fps} value={fps}>
+                                {fps} fps
+                              </option>
+                            ))}
+                          </Select>
+                        </label>
+                      </div>
+                    ) : null}
+                    <p className="text-xs text-[#8ea4c7]">
+                      Selected:{" "}
+                      {formatLiveRenditionLabel(
+                        data.browserDeliveryProfiles.find(
+                          (profile) => profile.id === data.browserDeliveryProfile,
+                        ) ?? {
+                          id: data.browserDeliveryProfile,
+                          kind:
+                            data.browserDeliveryProfile === "native"
+                              ? "passthrough"
+                              : "transcode",
+                        },
                       )}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+                    </p>
+                  </fieldset>
+                </div>
+              </section>
               {sourceProbeQuery.isFetching ? (
                 <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
                   Inspecting source capability...
@@ -2836,8 +3052,8 @@ export function CameraWizard({
           </div>
           {stepTitle === "Review" ? (
             <p className="rounded-[1.15rem] border border-[#2a456d] bg-[#0d1725] px-4 py-3 text-sm text-[#a7b8d4]">
-              Native ingest stays untouched for inference quality. The selected browser
-              delivery profile becomes the operator-facing default for later live views.
+              Native ingest stays untouched for inference quality. The selected live
+              rendition becomes the operator-facing default for later live views.
             </p>
           ) : null}
         </div>

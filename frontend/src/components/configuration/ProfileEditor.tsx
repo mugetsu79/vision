@@ -72,6 +72,10 @@ export function ProfileEditor({
 
   const storedSecrets = selectedProfile?.secret_state ?? {};
   const title = selectedProfile ? "Edit profile" : "New profile";
+  const kindLabel =
+    state.kind === "stream_delivery"
+      ? "Transport profile"
+      : labelForKind(state.kind);
 
   function update(patch: Partial<EditorState>) {
     setState((current) => ({ ...current, ...patch }));
@@ -90,7 +94,7 @@ export function ProfileEditor({
             {title}
           </h3>
           <p className="mt-1 text-xs text-[var(--vz-text-muted)]">
-            {labelForKind(state.kind)}
+            {kindLabel}
           </p>
         </div>
         <Button type="button" onClick={() => void handleSave()}>
@@ -247,13 +251,17 @@ function StreamFields({
 }) {
   return (
     <div className="grid gap-3 md:grid-cols-3">
-      <Field label="Delivery mode">
+      <p className="md:col-span-3 text-xs text-[var(--vz-text-muted)]">
+        Reusable relay and browser transport settings. Live rendition resolution,
+        FPS, and overlays are selected per camera.
+      </p>
+      <Field label="Transport mode">
         <Select
-          aria-label="Delivery mode"
+          aria-label="Transport mode"
           value={state.deliveryMode}
           onChange={(event) => update({ deliveryMode: event.target.value })}
         >
-          <option value="native">Native</option>
+          <option value="native">Native/direct</option>
           <option value="webrtc">WebRTC</option>
           <option value="hls">HLS</option>
           <option value="mjpeg">MJPEG</option>

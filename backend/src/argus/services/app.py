@@ -4789,7 +4789,7 @@ async def _resolve_stream_delivery_profile_row(
         ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Stream delivery profile could not be resolved.",
+                detail="Transport profile could not be resolved.",
             )
         return profile
 
@@ -4830,7 +4830,7 @@ async def _resolve_stream_delivery_profile_row(
         ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Stream delivery profile could not be resolved.",
+                detail="Transport profile could not be resolved.",
             )
         return profile
     return next(
@@ -5602,13 +5602,8 @@ def _browser_delivery_with_stream_profile(
 ) -> BrowserDeliverySettings:
     if stream_delivery is None:
         return browser_delivery
-    default_profile = _browser_profile_for_delivery_mode(
-        stream_delivery.delivery_mode,
-        browser_delivery.default_profile,
-    )
     return browser_delivery.model_copy(
         update={
-            "default_profile": default_profile,
             "delivery_profile_id": stream_delivery.profile_id,
             "delivery_profile_name": stream_delivery.profile_name,
             "delivery_profile_hash": stream_delivery.profile_hash,
@@ -5617,17 +5612,6 @@ def _browser_delivery_with_stream_profile(
             "edge_override_url": stream_delivery.edge_override_url,
         }
     )
-
-
-def _browser_profile_for_delivery_mode(
-    delivery_mode: str | None,
-    current_profile: BrowserDeliveryProfileId,
-) -> BrowserDeliveryProfileId:
-    if delivery_mode in {"webrtc", "hls", "mjpeg", "transcode"}:
-        return "annotated"
-    if delivery_mode == "native":
-        return "native"
-    return current_profile
 
 
 def _stream_delivery_base_urls(
@@ -5684,13 +5668,21 @@ def _resolve_default_browser_profile(
 ) -> BrowserDeliveryProfileId:
     fallback_order: tuple[BrowserDeliveryProfileId, ...]
     if requested_profile == "native":
-        fallback_order = ("native", "annotated", "720p10", "540p5")
+        fallback_order = ("native", "annotated", "720p10", "540p5", "360p5", "240p5")
     else:
-        fallback_order = (requested_profile, "720p10", "540p5", "annotated", "native")
+        fallback_order = (
+            requested_profile,
+            "720p10",
+            "540p5",
+            "360p5",
+            "240p5",
+            "annotated",
+            "native",
+        )
     for profile_id in fallback_order:
         if profile_id in allowed_profile_ids:
             return profile_id
-    return "annotated" if "annotated" in allowed_profile_ids else "native"
+    return next(iter(allowed_profile_ids), "native")
 
 
 async def _probe_source_capability(

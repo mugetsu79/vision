@@ -23,7 +23,9 @@ describe("ProfileEditor", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Delivery mode")).toBeInTheDocument();
+    expect(screen.getByText("Transport profile")).toBeInTheDocument();
+    expect(screen.getByText(/reusable relay and browser transport settings/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Transport mode")).toBeInTheDocument();
     expect(screen.getByLabelText("Public base URL")).toBeInTheDocument();
     expect(screen.getByLabelText("Edge override URL")).toBeInTheDocument();
 

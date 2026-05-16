@@ -54,6 +54,48 @@ DETECTION_REGION = {
     "frame_size": {"width": 1280, "height": 720},
 }
 
+_EXPECTED_720P_SOURCE_BROWSER_PROFILE_IDS = [
+    "native",
+    "annotated",
+    "720p25",
+    "720p20",
+    "720p15",
+    "720p10",
+    "720p5",
+    "540p25",
+    "540p20",
+    "540p15",
+    "540p10",
+    "540p5",
+    "360p25",
+    "360p20",
+    "360p15",
+    "360p10",
+    "360p5",
+    "240p25",
+    "240p20",
+    "240p15",
+    "240p10",
+    "240p5",
+]
+
+
+def _assert_browser_profiles_match_720p_source(
+    profiles: list[dict[str, object]],
+) -> None:
+    profile_ids = [profile["id"] for profile in profiles]
+    assert profile_ids == _EXPECTED_720P_SOURCE_BROWSER_PROFILE_IDS
+    assert "1080p5" not in profile_ids
+    assert "900p5" not in profile_ids
+
+
+def _assert_1080p_profile_marked_unsupported(
+    unsupported_profiles: list[dict[str, object]],
+) -> None:
+    unsupported_ids = [profile["id"] for profile in unsupported_profiles]
+    assert "1080p15" in unsupported_ids
+    assert "720p25" not in unsupported_ids
+
 
 class _FakeSession:
     async def __aenter__(self) -> _FakeSession:
@@ -943,13 +985,10 @@ async def test_update_camera_reprobes_source_capability_when_rtsp_changes(
         aspect_ratio="16:9",
     )
     assert response.browser_delivery.default_profile == "720p10"
-    assert [profile["id"] for profile in response.browser_delivery.profiles] == [
-        "native",
-        "annotated",
-        "720p10",
-        "540p5",
-    ]
-    assert response.browser_delivery.unsupported_profiles[0]["id"] == "1080p15"
+    _assert_browser_profiles_match_720p_source(response.browser_delivery.profiles)
+    _assert_1080p_profile_marked_unsupported(
+        response.browser_delivery.unsupported_profiles
+    )
 
 
 @pytest.mark.asyncio
@@ -1012,13 +1051,10 @@ async def test_probe_camera_source_filters_profiles_before_create(
         aspect_ratio="16:9",
     )
     assert response.browser_delivery.default_profile == "720p10"
-    assert [profile["id"] for profile in response.browser_delivery.profiles] == [
-        "native",
-        "annotated",
-        "720p10",
-        "540p5",
-    ]
-    assert response.browser_delivery.unsupported_profiles[0]["id"] == "1080p15"
+    _assert_browser_profiles_match_720p_source(response.browser_delivery.profiles)
+    _assert_1080p_profile_marked_unsupported(
+        response.browser_delivery.unsupported_profiles
+    )
 
 
 @pytest.mark.asyncio
@@ -1121,13 +1157,10 @@ async def test_probe_camera_source_filters_existing_camera_with_stale_profiles(
         "aspect_ratio": "16:9",
     }
     assert response.browser_delivery.default_profile == "720p10"
-    assert [profile["id"] for profile in response.browser_delivery.profiles] == [
-        "native",
-        "annotated",
-        "720p10",
-        "540p5",
-    ]
-    assert response.browser_delivery.unsupported_profiles[0]["id"] == "1080p15"
+    _assert_browser_profiles_match_720p_source(response.browser_delivery.profiles)
+    _assert_1080p_profile_marked_unsupported(
+        response.browser_delivery.unsupported_profiles
+    )
 
 
 @pytest.mark.asyncio
@@ -1295,12 +1328,7 @@ async def test_probe_camera_source_falls_back_to_still_capture_without_ffprobe(
         aspect_ratio="16:9",
     )
     assert response.browser_delivery.default_profile == "720p10"
-    assert [profile["id"] for profile in response.browser_delivery.profiles] == [
-        "native",
-        "annotated",
-        "720p10",
-        "540p5",
-    ]
+    _assert_browser_profiles_match_720p_source(response.browser_delivery.profiles)
 
 
 @pytest.mark.asyncio

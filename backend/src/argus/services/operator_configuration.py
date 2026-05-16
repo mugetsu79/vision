@@ -107,7 +107,7 @@ class OperatorConfigurationService:
                 },
                 {
                     "kind": OperatorConfigProfileKind.STREAM_DELIVERY.value,
-                    "label": "Stream delivery",
+                    "label": "Transport profile",
                     "secret_keys": [],
                 },
                 {
@@ -837,7 +837,7 @@ class OperatorConfigurationService:
             return await self._validate_evidence_storage(profile.config, secrets)
         if profile.kind == OperatorConfigProfileKind.STREAM_DELIVERY:
             StreamDeliveryProfileConfig.model_validate(profile.config)
-            return OperatorConfigValidationStatus.VALID, "Stream delivery profile is valid."
+            return OperatorConfigValidationStatus.VALID, "Transport profile is valid."
         if profile.kind == OperatorConfigProfileKind.RUNTIME_SELECTION:
             RuntimeSelectionProfileConfig.model_validate(profile.config)
             return OperatorConfigValidationStatus.VALID, "Runtime selection profile is valid."

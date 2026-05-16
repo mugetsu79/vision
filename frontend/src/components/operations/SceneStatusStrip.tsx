@@ -6,14 +6,16 @@ type SceneStatusStripProps = {
 };
 
 export function SceneStatusStrip({ row }: SceneStatusStripProps) {
-  const deliveryCopy =
-    row.delivery.label === "Direct stream unavailable"
-      ? "Native passthrough gated"
-      : "Processed stream live";
   const workerCopy =
     row.worker.label === "Worker not reported"
       ? "Worker awaiting report"
       : row.worker.label;
+  const details = [
+    row.liveRendition.detail
+      ? `${row.liveRendition.label}: ${row.liveRendition.detail}`
+      : null,
+    row.transport.detail ? `${row.transport.label}: ${row.transport.detail}` : null,
+  ].filter(Boolean);
 
   return (
     <div
@@ -24,8 +26,11 @@ export function SceneStatusStrip({ row }: SceneStatusStripProps) {
       <StatusToneBadge tone={healthToTone(row.telemetry.health)}>
         {row.telemetry.label}
       </StatusToneBadge>
-      <StatusToneBadge tone={healthToTone(row.delivery.health)}>
-        {deliveryCopy}
+      <StatusToneBadge tone={healthToTone(row.liveRendition.health)}>
+        {row.liveRendition.label}
+      </StatusToneBadge>
+      <StatusToneBadge tone={healthToTone(row.transport.health)}>
+        {row.transport.label}
       </StatusToneBadge>
       <StatusToneBadge tone="muted">
         {row.processingMode} scene
@@ -33,9 +38,9 @@ export function SceneStatusStrip({ row }: SceneStatusStripProps) {
       <StatusToneBadge tone={healthToTone(row.worker.health)}>
         {workerCopy}
       </StatusToneBadge>
-      {row.delivery.detail ? (
+      {details.length > 0 ? (
         <span className="text-xs text-[color:var(--vz-text-muted)]">
-          {deliveryCopy}: {row.delivery.detail}
+          {details.join(" · ")}
         </span>
       ) : null}
     </div>

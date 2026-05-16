@@ -193,11 +193,17 @@ export function selectDrawableSignalTracks(
   tracks: SignalTrack[],
   streamMode: TelemetryFrame["stream_mode"] | null | undefined,
 ): SignalTrack[] {
-  if (streamMode === "annotated-whip") {
+  if (!shouldDrawBrowserTelemetryOverlay(streamMode)) {
     return [];
   }
 
   return tracks;
+}
+
+export function shouldDrawBrowserTelemetryOverlay(
+  streamMode: TelemetryFrame["stream_mode"] | null | undefined,
+): boolean {
+  return streamMode !== "annotated-whip";
 }
 
 export function signalStateForTelemetryTrack(track: TelemetryTrack): SignalState {

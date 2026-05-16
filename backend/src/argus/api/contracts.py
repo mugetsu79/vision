@@ -647,17 +647,66 @@ class PrivacySettings(BaseModel):
     strength: int = Field(default=7, ge=1, le=100)
 
 
-BrowserDeliveryProfileId = Literal["native", "annotated", "1080p15", "720p10", "540p5"]
+BrowserDeliveryProfileId = Literal[
+    "native",
+    "annotated",
+    "1080p25",
+    "1080p20",
+    "1080p15",
+    "1080p10",
+    "1080p5",
+    "900p25",
+    "900p20",
+    "900p15",
+    "900p10",
+    "900p5",
+    "720p25",
+    "720p20",
+    "720p15",
+    "720p10",
+    "720p5",
+    "540p25",
+    "540p20",
+    "540p15",
+    "540p10",
+    "540p5",
+    "360p25",
+    "360p20",
+    "360p15",
+    "360p10",
+    "360p5",
+    "240p25",
+    "240p20",
+    "240p15",
+    "240p10",
+    "240p5",
+]
 
 
 def _default_browser_delivery_profiles() -> list[dict[str, Any]]:
-    return [
+    profiles: list[dict[str, Any]] = [
         {"id": "native", "kind": "passthrough"},
         {"id": "annotated", "kind": "transcode"},
-        {"id": "1080p15", "kind": "transcode", "w": 1920, "h": 1080, "fps": 15},
-        {"id": "720p10", "kind": "transcode", "w": 1280, "h": 720, "fps": 10},
-        {"id": "540p5", "kind": "transcode", "w": 960, "h": 540, "fps": 5},
     ]
+    for label, width, height in (
+        ("1080p", 1920, 1080),
+        ("900p", 1600, 900),
+        ("720p", 1280, 720),
+        ("540p", 960, 540),
+        ("360p", 640, 360),
+        ("240p", 426, 240),
+    ):
+        for fps in (25, 20, 15, 10, 5):
+            profiles.append(
+                {
+                    "id": f"{label}{fps}",
+                    "kind": "transcode",
+                    "w": width,
+                    "h": height,
+                    "fps": fps,
+                }
+            )
+    return profiles
 
 
 class SourceCapability(BaseModel):

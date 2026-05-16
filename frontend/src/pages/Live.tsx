@@ -12,8 +12,10 @@ import { TelemetryTerrain } from "@/components/live/TelemetryTerrain";
 import { VideoStream } from "@/components/live/VideoStream";
 import { SceneStatusStrip } from "@/components/operations/SceneStatusStrip";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
-import { useCameras } from "@/hooks/use-cameras";
+import { useCameras, useUpdateCamera } from "@/hooks/use-cameras";
 import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
 import { useFleetOverview } from "@/hooks/use-operations";
 import { useStableSignalFrame } from "@/hooks/use-stable-signal-frame";
@@ -31,6 +33,13 @@ import {
 type QueryResponse = components["schemas"]["QueryResponse"];
 type CameraResponse = components["schemas"]["CameraResponse"];
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
+type BrowserDeliverySettings = components["schemas"]["BrowserDeliverySettings"];
+type BrowserDeliveryProfile = NonNullable<BrowserDeliverySettings["profiles"]>[number];
+type LiveRenditionOption = {
+  id: string;
+  label: string;
+  description: string | null;
+};
 
 export function LivePage() {
   return <WorkspacePage />;
@@ -271,6 +280,14 @@ function ScenePortalCard({
   onSignalRowsChange: (cameraId: string, rows: SignalCountRow[]) => void;
 }) {
   const stableSignal = useStableSignalFrame(frame, classFilter);
+  const updateCamera = useUpdateCamera();
+  const [browserOverlayEnabled, setBrowserOverlayEnabled] = useState(true);
+  const renditionOptions = useMemo(
+    () => getAvailableRenditionOptions(camera),
+    [camera],
+  );
+  const currentProfile = camera.browser_delivery?.default_profile ?? "720p10";
+  const [stagedProfile, setStagedProfile] = useState<string>(currentProfile);
   const sourceSize = getCameraSourceSize(camera);
   const overlayTracks = useMemo(
     () => selectDrawableSignalTracks(stableSignal.tracks, frame?.stream_mode),
@@ -282,6 +299,19 @@ function ScenePortalCard({
       : "0 visible now";
   const heartbeatStatus = getHeartbeatStatus(frame);
   const deliveryProfileLabel = formatDeliveryProfile(camera);
+  const selectedRendition = renditionOptions.find(
+    (option) => option.id === stagedProfile,
+  );
+  const hasRenditionChange = stagedProfile !== currentProfile;
+  const canApplyRendition =
+    hasRenditionChange &&
+    camera.browser_delivery !== undefined &&
+    camera.browser_delivery !== null &&
+    !updateCamera.isPending;
+
+  useEffect(() => {
+    setStagedProfile(currentProfile);
+  }, [currentProfile]);
 
   useEffect(() => {
     onSignalRowsChange(camera.id, stableSignal.counts.rows);
@@ -292,6 +322,24 @@ function ScenePortalCard({
       onSignalRowsChange(camera.id, []);
     };
   }, [camera.id, onSignalRowsChange]);
+
+  const applyRendition = useCallback(async () => {
+    if (!camera.browser_delivery || stagedProfile === currentProfile) {
+      return;
+    }
+
+    await updateCamera.mutateAsync({
+      cameraId: camera.id,
+      payload: {
+        browser_delivery: {
+          ...camera.browser_delivery,
+          // The server profile catalog can be wider than the generated union.
+          default_profile:
+            stagedProfile as BrowserDeliverySettings["default_profile"],
+        },
+      },
+    });
+  }, [camera.browser_delivery, camera.id, currentProfile, stagedProfile, updateCamera]);
 
   return (
     <article
@@ -350,6 +398,7 @@ function ScenePortalCard({
           activeClasses={classFilter}
           tracks={overlayTracks}
           sourceSize={sourceSize}
+          disabled={!browserOverlayEnabled}
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
           <div>
@@ -365,6 +414,62 @@ function ScenePortalCard({
       </div>
 
       <div className="space-y-3 border-t border-white/8 px-5 py-4">
+        <div className="grid gap-3 rounded-[0.75rem] border border-white/8 bg-[#07101c]/80 p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="flex items-center gap-2 text-xs font-medium text-[#c7d8f2]">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[#6ebdff]"
+              checked={browserOverlayEnabled}
+              onChange={(event) => setBrowserOverlayEnabled(event.target.checked)}
+            />
+            Browser overlay
+          </label>
+
+          {renditionOptions.length > 0 ? (
+            <div className="grid gap-2 sm:min-w-[240px]">
+              <label
+                className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]"
+                htmlFor={`live-rendition-${camera.id}`}
+              >
+                Live rendition
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  id={`live-rendition-${camera.id}`}
+                  aria-label={`${camera.name} live rendition`}
+                  className="min-w-[170px] flex-1 rounded-[0.65rem] px-3 py-2"
+                  value={stagedProfile}
+                  onChange={(event) =>
+                    setStagedProfile(event.target.value)
+                  }
+                >
+                  {renditionOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  className="px-3 py-2 text-xs"
+                  disabled={!canApplyRendition}
+                  onClick={() => void applyRendition()}
+                >
+                  Apply to scene
+                </Button>
+              </div>
+              <p className="text-xs text-[#91a8c9]">
+                {hasRenditionChange
+                  ? `Apply to scene will reconfigure the worker to publish ${selectedRendition?.label ?? stagedProfile}.`
+                  : "Current worker rendition. Changes are staged until applied to the scene."}
+              </p>
+              {updateCamera.isError ? (
+                <p className="text-xs text-[#ff9fb5]">
+                  Could not apply rendition. Try again from this scene.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         <TelemetryTerrain
           cameraId={camera.id}
           cameraName={camera.name}
@@ -442,6 +547,66 @@ function formatDeliveryProfile(camera: CameraResponse): string {
   return isEdge
     ? `${defaultProfile} edge bandwidth saver`
     : `${defaultProfile} viewer preview`;
+}
+
+function getAvailableRenditionOptions(
+  camera: CameraResponse,
+): LiveRenditionOption[] {
+  const profiles = camera.browser_delivery?.profiles ?? [];
+  return profiles.flatMap((profile) => {
+    const id = readProfileId(profile);
+    if (typeof id !== "string" || id.length === 0) {
+      return [];
+    }
+    if (
+      id === "native" &&
+      camera.browser_delivery?.native_status?.available === false
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        id,
+        label: readProfileLabel(profile) ?? formatProfileId(id, camera),
+        description: readProfileDescription(profile),
+      },
+    ];
+  });
+}
+
+function readProfileId(profile: BrowserDeliveryProfile): unknown {
+  return profile["id"];
+}
+
+function readProfileLabel(profile: BrowserDeliveryProfile): string | null {
+  const label = profile["label"];
+  return typeof label === "string" && label.length > 0 ? label : null;
+}
+
+function readProfileDescription(profile: BrowserDeliveryProfile): string | null {
+  const description = profile["description"];
+  return typeof description === "string" && description.length > 0
+    ? description
+    : null;
+}
+
+function formatProfileId(
+  profileId: string,
+  camera: CameraResponse,
+): string {
+  if (profileId === "native" || profileId === "annotated") {
+    return formatDeliveryProfile({
+      ...camera,
+      browser_delivery: {
+        ...camera.browser_delivery,
+        default_profile: profileId,
+      },
+    });
+  }
+
+  const match = /^(\d+p)(\d+)$/.exec(profileId);
+  return match ? `${match[1]} / ${match[2]} fps` : profileId;
 }
 
 function formatStreamMode(frame: TelemetryFrame): string {

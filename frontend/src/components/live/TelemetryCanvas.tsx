@@ -4,6 +4,7 @@ import { filterTracks } from "@/lib/live";
 import type { components } from "@/lib/api.generated";
 import {
   colorForClass,
+  shouldDrawBrowserTelemetryOverlay,
   signalAgeMsForTelemetryTrack,
   signalStateForTelemetryTrack,
   trackKey,
@@ -59,7 +60,10 @@ export function TelemetryCanvas({
     const { width, height } = sizeRef.current;
     context.clearRect(0, 0, width, height);
 
-    if (disabledRef.current) {
+    if (
+      disabledRef.current ||
+      !shouldDrawBrowserTelemetryOverlay(frameRef.current?.stream_mode)
+    ) {
       return;
     }
 
@@ -203,7 +207,7 @@ function resolveVisibleSignals(
     return tracks;
   }
 
-  if (frame?.stream_mode === "annotated-whip") {
+  if (!shouldDrawBrowserTelemetryOverlay(frame?.stream_mode)) {
     return [];
   }
 

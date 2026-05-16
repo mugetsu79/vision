@@ -1478,6 +1478,86 @@ async def test_engine_draws_annotations_for_central_stream_frames() -> None:
     assert np.any(stream_client.pushed_frames[0] != 0)
 
 
+def test_annotated_stream_frame_reports_drawn_pixels(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        diagnostics_enabled=True,
+    )
+    engine._stream_registration = StreamRegistration(
+        camera_id=camera_id,
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path=f"rtsp://mediamtx.internal/{camera_id}/annotated",
+        publish_path=f"rtsp://mediamtx.internal/{camera_id}/annotated",
+    )
+    frame = np.full((720, 1280, 3), 255, dtype=np.uint8)
+    tracks = [
+        LifecycleTrack(
+            stable_track_id=1,
+            source_track_id=1,
+            state="active",
+            last_seen_age_ms=0,
+            detection=Detection(
+                class_name="person",
+                confidence=0.95,
+                bbox=(100.0, 120.0, 300.0, 420.0),
+                track_id=1,
+            ),
+        )
+    ]
+
+    with caplog.at_level(logging.INFO, logger="argus.inference.engine"):
+        result = engine._build_stream_frame(frame, tracks)
+
+    assert np.count_nonzero(result != frame) > 0
+    assert "Annotated frame overlay diagnostics" in caplog.text
+    assert "annotation_tracks=1" in caplog.text
+    assert "pixel_delta=0" not in caplog.text
+
+
+def test_annotated_stream_frame_reports_zero_tracks(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    camera_id = uuid4()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        diagnostics_enabled=True,
+    )
+    engine._stream_registration = StreamRegistration(
+        camera_id=camera_id,
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path=f"rtsp://mediamtx.internal/{camera_id}/annotated",
+        publish_path=f"rtsp://mediamtx.internal/{camera_id}/annotated",
+    )
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+    with caplog.at_level(logging.INFO, logger="argus.inference.engine"):
+        result = engine._build_stream_frame(frame, [])
+
+    assert result.sum() == 0
+    assert "Annotated frame overlay diagnostics" in caplog.text
+    assert "annotation_tracks=0" in caplog.text
+    assert "pixel_delta=0" in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_engine_applies_privacy_filter_to_person_head_regions() -> None:
     camera_id = uuid4()
