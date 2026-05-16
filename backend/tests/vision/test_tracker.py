@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from argus.models.enums import TrackerType
-from argus.vision.tracker import TrackerConfig, create_tracker
+from argus.vision.tracker import TrackerConfig, _build_ultralytics_backend, create_tracker
 from argus.vision.types import Detection
 
 
@@ -28,6 +28,43 @@ class _FakeTrackerBackend:
                 ]
             )
         return rows
+
+
+class _LegacyConstructorTracker:
+    def __init__(self, args) -> None:  # noqa: ANN001
+        self.args = args
+
+    def update(self, results, img=None, feats=None):  # noqa: ANN001
+        return []
+
+
+class _FrameRateConstructorTracker:
+    def __init__(self, args, *, frame_rate: int = 30) -> None:  # noqa: ANN001
+        self.args = args
+        self.frame_rate = frame_rate
+
+    def update(self, results, img=None, feats=None):  # noqa: ANN001
+        return []
+
+
+def test_tracker_backend_constructor_supports_legacy_ultralytics_signature() -> None:
+    backend = _build_ultralytics_backend(
+        _LegacyConstructorTracker,
+        TrackerConfig(tracker_type=TrackerType.BOTSORT, frame_rate=17),
+    )
+
+    assert isinstance(backend, _LegacyConstructorTracker)
+    assert backend.args.frame_rate == 17
+
+
+def test_tracker_backend_constructor_passes_frame_rate_when_supported() -> None:
+    backend = _build_ultralytics_backend(
+        _FrameRateConstructorTracker,
+        TrackerConfig(tracker_type=TrackerType.BOTSORT, frame_rate=17),
+    )
+
+    assert isinstance(backend, _FrameRateConstructorTracker)
+    assert backend.frame_rate == 17
 
 
 def test_tracker_factory_wraps_backend_and_assigns_track_ids() -> None:

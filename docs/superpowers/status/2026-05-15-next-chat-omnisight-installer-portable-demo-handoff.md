@@ -299,6 +299,29 @@ python3 -m uv run --project backend pytest installer/tests/test_edge_installer_a
 make verify-installers -> 59 installer tests passed and compose render passed
 ```
 
+2026-05-16 telemetry follow-up: after the master was restarted with UDP
+`8189` published, browser video became visible. Telemetry still did not appear
+because the Jetson worker crashed before its first inference frame:
+
+```text
+TypeError: BOTSORT.__init__() got an unexpected keyword argument 'frame_rate'
+```
+
+Root cause: the Jetson image has an Ultralytics tracker constructor signature
+that accepts only the tracker args namespace, while the local Mac dependency
+accepts `frame_rate` as a keyword argument.
+
+Fix: tracker construction now detects whether the Ultralytics constructor
+accepts `frame_rate`; newer signatures receive the keyword, older signatures
+receive `frame_rate` on the args namespace.
+
+Validation:
+
+```text
+python3 -m uv run --project backend pytest backend/tests/vision/test_tracker.py backend/tests/inference/test_engine.py::test_engine_resets_lifecycle_when_tracker_type_changes -q -> 14 passed
+python3 -m uv run --project backend ruff check backend/src/argus/vision/tracker.py backend/tests/vision/test_tracker.py -> clean
+```
+
 ## Immediate Next Step
 
 On the MacBook master, pull latest and rerun the master installer so Docker

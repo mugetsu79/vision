@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -64,6 +65,7 @@ class TrackerConfig:
 
     def to_namespace(self) -> SimpleNamespace:
         return SimpleNamespace(
+            frame_rate=self.frame_rate,
             track_high_thresh=self.track_high_thresh,
             track_low_thresh=self.track_low_thresh,
             new_track_thresh=self.new_track_thresh,
@@ -202,11 +204,31 @@ def _default_backend_factory(tracker_name: str, config: TrackerConfig) -> Tracke
     if tracker_name == TrackerType.BOTSORT.value:
         from ultralytics.trackers.bot_sort import BOTSORT
 
-        return BOTSORT(config.to_namespace(), frame_rate=config.frame_rate)
+        return _build_ultralytics_backend(BOTSORT, config)
 
     if tracker_name == TrackerType.BYTETRACK.value:
         from ultralytics.trackers.byte_tracker import BYTETracker
 
-        return BYTETracker(config.to_namespace(), frame_rate=config.frame_rate)
+        return _build_ultralytics_backend(BYTETracker, config)
 
     raise ValueError(f"Unsupported tracker type: {tracker_name}")
+
+
+def _build_ultralytics_backend(
+    tracker_cls: Callable[..., TrackerBackend],
+    config: TrackerConfig,
+) -> TrackerBackend:
+    args = config.to_namespace()
+    if _accepts_frame_rate_keyword(tracker_cls):
+        return tracker_cls(args, frame_rate=config.frame_rate)
+    return tracker_cls(args)
+
+
+def _accepts_frame_rate_keyword(tracker_cls: Callable[..., TrackerBackend]) -> bool:
+    try:
+        parameters = inspect.signature(tracker_cls).parameters
+    except (TypeError, ValueError):
+        return True
+    return "frame_rate" in parameters or any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+    )
