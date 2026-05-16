@@ -227,6 +227,25 @@ Fix: skip privacy/storage residency enforcement when evidence recording is
 disabled. Keep the existing 422 guard for enabled evidence capture where
 artifacts may actually be written.
 
+Validation after applying the fix locally on the MacBook master:
+
+```text
+GET /api/v1/cameras/be93bed8-ee2d-4aea-b8bf-e1133e16653e/worker-config -> 200
+recording_enabled=false storage_profile=edge_local privacy_residency=central
+```
+
+The master MediaMTX relay path then became available:
+
+```text
+cameras/be93bed8-ee2d-4aea-b8bf-e1133e16653e/passthrough
+ready=true available=true tracks=["MPEG-4 Audio", "H264"]
+```
+
+If Live is still not visible after this point, continue at the browser/WebRTC
+delivery layer. Before the source became ready, master MediaMTX logged repeated
+RTSP source `404`; after the fix it logged the stream as available, then some
+WebRTC sessions closed with `deadline exceeded while waiting connection`.
+
 ## Immediate Next Step
 
 On the Jetson, pull latest and rerun the edge installer as an unpaired update:
