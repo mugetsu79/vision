@@ -1463,10 +1463,7 @@ class InferenceEngine:
                     else [track.detection for track in tracks]
                 ),
             )
-        if (
-            self._stream_registration.mode is StreamMode.ANNOTATED_WHIP
-            and self.config.stream.profile_id != "native"
-        ):
+        if self._stream_registration.mode is StreamMode.ANNOTATED_WHIP:
             self._draw_annotations(stream_frame, tracks)
         return stream_frame
 

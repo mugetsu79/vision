@@ -1669,7 +1669,7 @@ async def test_engine_requests_person_detections_for_face_privacy_without_publis
 
 
 @pytest.mark.asyncio
-async def test_engine_publishes_clean_native_video_while_telemetry_tracks() -> None:
+async def test_engine_draws_annotations_when_processed_stream_uses_annotated_mode() -> None:
     camera_id = uuid4()
     stream_client = _FakeStreamClient()
     publisher = _FakePublisher()
@@ -1701,7 +1701,7 @@ async def test_engine_publishes_clean_native_video_while_telemetry_tracks() -> N
     await engine.close()
 
     assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
-    assert np.all(stream_client.pushed_frames[0] == 0)
+    assert np.any(stream_client.pushed_frames[0] != 0)
     assert publisher.frames[0].stream_mode is StreamMode.ANNOTATED_WHIP
     assert len(publisher.frames[0].tracks) == 1
     assert publisher.frames[0].tracks[0].class_name == "car"
