@@ -14,15 +14,18 @@ Continue from the pushed branch:
 codex/omnisight-installer
 ```
 
-Latest pushed checkpoint at this handoff:
+Latest pushed branch tip at this handoff includes:
 
 ```text
+Worker-config supervisor credential route fix
+07b958c9 fix(installer): clear stale edge containers before preflight
 8c37f50e Wire installed edge NATS leaf
 ```
 
 Recent relevant checkpoints:
 
 ```text
+07b958c9 fix(installer): clear stale edge containers before preflight
 8c37f50e Wire installed edge NATS leaf
 9b1cfade Fix edge runtime Python 3.10 UTC import
 7d8098a7 Resolve edge-owned operations profiles
@@ -183,6 +186,23 @@ Latest installer fix:
 
 This port cleanup fix has not yet been validated on the physical Jetson. That
 is the first next step.
+
+2026-05-16 live-video follow-up: after the port cleanup and NATS leaf fix, the
+Jetson logs showed the local NATS leaf connected, the supervisor posted fleet,
+service, hardware, and runtime reports, and then the worker process failed on:
+
+```text
+GET /api/v1/cameras/<camera-id>/worker-config "HTTP/1.1 401 Unauthorized"
+```
+
+Root cause: `/api/v1/cameras/{camera_id}/worker-config` still required a normal
+admin JWT, while installed workers only receive the paired supervisor
+credential. The next backend fix changes that route to use the same
+admin-or-supervisor-credential tenant dependency as the Operations endpoints,
+while preserving viewer rejection.
+
+This worker-config credential fix must be pulled on the MacBook master and the
+master installer rerun before revalidating the Jetson stream.
 
 ## Immediate Next Step
 

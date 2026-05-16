@@ -14,7 +14,11 @@ from argus.api.contracts import (
     TenantContext,
     WorkerConfigResponse,
 )
-from argus.api.dependencies import get_app_services, get_tenant_context
+from argus.api.dependencies import (
+    SupervisorOrAdminTenantDependency,
+    get_app_services,
+    get_tenant_context,
+)
 from argus.core.security import AuthenticatedUser, require
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
@@ -62,8 +66,7 @@ async def get_camera(
 @router.get("/{camera_id}/worker-config", response_model=WorkerConfigResponse)
 async def get_camera_worker_config(
     camera_id: UUID,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> WorkerConfigResponse:
     return await services.cameras.get_worker_config(tenant_context, camera_id)

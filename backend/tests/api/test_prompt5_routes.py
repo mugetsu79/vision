@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
@@ -181,6 +181,53 @@ class FakeTenancyService:
             tenant_id=self.context.tenant_id,
             tenant_slug=self.context.tenant_slug,
             user=user,
+        )
+
+
+class FakeSecurity:
+    def __init__(self, user: AuthenticatedUser) -> None:
+        self.user = user
+
+    async def authenticate_request(self, request) -> AuthenticatedUser:  # noqa: ANN001
+        if request.headers.get("Authorization") == "Bearer node-credential":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token issuer is not trusted.",
+            )
+        return self.user
+
+    async def close(self) -> None:
+        return None
+
+
+class FakeDeploymentService:
+    def __init__(self, context: TenantContext) -> None:
+        self.context = context
+        self.credential_material: str | None = None
+
+    async def authenticate_supervisor_credential(
+        self,
+        *,
+        credential_material: str,
+        supervisor_id: str | None = None,
+    ) -> TenantContext:
+        del supervisor_id
+        self.credential_material = credential_material
+        if credential_material != "node-credential":
+            raise ValueError("Invalid supervisor credential.")
+        return TenantContext(
+            tenant_id=self.context.tenant_id,
+            tenant_slug=self.context.tenant_slug,
+            user=AuthenticatedUser(
+                subject="supervisor:edge-supervisor-1",
+                email=None,
+                role=RoleEnum.OPERATOR,
+                issuer="vezor-node-credential",
+                realm=self.context.tenant_slug,
+                is_superadmin=False,
+                tenant_context=str(self.context.tenant_id),
+                claims={"auth_type": "supervisor_node_credential"},
+            ),
         )
 
 
@@ -682,6 +729,7 @@ class FakeServices:
     streams: FakeStreamService
     query: FakeQueryService
     telemetry: FakeTelemetryService
+    deployment: FakeDeploymentService | None = None
 
 
 def _build_app(services: FakeServices, user: AuthenticatedUser) -> TestClient:
@@ -1107,6 +1155,7 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
     camera_service = FakeCameraService(model_classes_by_id={model.id: model.classes})
     payload = _camera_payload(site.id, model.id)
     camera = await camera_service.create_camera(context, payload)
+    deployment_service = FakeDeploymentService(context)
     services = FakeServices(
         tenancy=FakeTenancyService(context),
         sites=site_service,
@@ -1127,6 +1176,7 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
                 tracks=[],
             )
         ),
+        deployment=deployment_service,
     )
     app = create_app(
         Settings(
@@ -1138,6 +1188,7 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
         )
     )
     app.state.services = services
+    app.state.security = FakeSecurity(user)
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_current_websocket_user] = lambda: user
 
@@ -1145,7 +1196,10 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
         transport=ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
-        response = await client.get(f"/api/v1/cameras/{camera.id}/worker-config")
+        response = await client.get(
+            f"/api/v1/cameras/{camera.id}/worker-config",
+            headers={"Authorization": "Bearer admin-token"},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -1171,15 +1225,33 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
     }
 
     viewer = _sample_user(role=RoleEnum.VIEWER, tenant_id=context.tenant_id)
+    app.state.security = FakeSecurity(viewer)
     app.dependency_overrides[get_current_user] = lambda: viewer
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
-        viewer_response = await client.get(f"/api/v1/cameras/{camera.id}/worker-config")
+        viewer_response = await client.get(
+            f"/api/v1/cameras/{camera.id}/worker-config",
+            headers={"Authorization": "Bearer viewer-token"},
+        )
 
     assert viewer_response.status_code == 403
+
+    app.state.security = FakeSecurity(user)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        supervisor_response = await client.get(
+            f"/api/v1/cameras/{camera.id}/worker-config",
+            headers={"Authorization": "Bearer node-credential"},
+        )
+
+    assert supervisor_response.status_code == 200
+    assert services.deployment is not None
+    assert services.deployment.credential_material == "node-credential"
 
 
 @pytest.mark.asyncio

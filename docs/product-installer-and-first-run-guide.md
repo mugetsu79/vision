@@ -1648,6 +1648,18 @@ compose environment is stale. Pull the latest `codex/omnisight-installer`
 branch and rerun `install-edge.sh`; the installed worker must inherit
 `ARGUS_NATS_URL=nats://nats-leaf:4222`.
 
+If `vezor-supervisor` can post fleet, service, hardware, and runtime reports but
+the worker process exits with:
+
+```text
+GET /api/v1/cameras/<camera-id>/worker-config "HTTP/1.1 401 Unauthorized"
+```
+
+the worker-config endpoint is rejecting the paired supervisor credential. Pull
+the latest `codex/omnisight-installer` branch on the master, rerun the master
+installer so the backend image includes the route fix, then rerun the Jetson
+edge installer as an unpaired update.
+
 ### Jetson edge reinstall says installer ports are already in use
 
 The edge installer stops the existing `vezor-edge` appliance before Jetson
