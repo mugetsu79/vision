@@ -121,7 +121,9 @@ describe("buildHistoryChartOption", () => {
     const seriesList = option.series as unknown as Array<{
       name: string;
       color?: string;
+      lineStyle?: { width?: number };
     }>;
+    const carSeries = seriesList.find((entry) => entry.name === "car");
 
     expect(seriesList.find((entry) => entry.name === "person")?.color).toBe(
       "#61e6a6",
@@ -132,13 +134,7 @@ describe("buildHistoryChartOption", () => {
     expect((option.legend as { textStyle: { color: string } }).textStyle.color).toBe(
       "#dbe7ff",
     );
-    expect(
-      (
-        seriesList.find((entry) => entry.name === "car") as {
-          lineStyle: { width: number };
-        }
-      ).lineStyle.width,
-    ).toBe(3);
+    expect(carSeries?.lineStyle?.width).toBe(3);
   });
 });
 
