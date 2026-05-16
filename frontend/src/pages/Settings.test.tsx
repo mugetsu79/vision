@@ -9,6 +9,7 @@ const settingsMocks = vi.hoisted(() => ({
   sites: null as unknown,
   models: null as unknown,
   memoryPatterns: null as unknown,
+  framesByCamera: null as unknown,
 }));
 
 const fleetOverview = {
@@ -362,6 +363,13 @@ vi.mock("@/hooks/use-cameras", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-live-telemetry", () => ({
+  useLiveTelemetry: () => ({
+    connectionState: "open",
+    framesByCamera: settingsMocks.framesByCamera ?? {},
+  }),
+}));
+
 vi.mock("@/hooks/use-sites", () => ({
   useSites: () => ({
     data: settingsMocks.sites ?? [
@@ -525,6 +533,7 @@ describe("SettingsPage operations workbench", () => {
     settingsMocks.sites = null;
     settingsMocks.models = null;
     settingsMocks.memoryPatterns = null;
+    settingsMocks.framesByCamera = null;
   });
 
   test("renders fleet operations instead of placeholder copy", () => {
@@ -548,6 +557,9 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
     expect(
       within(sceneMatrix).getByText(/2 active rules/i),
+    ).toBeInTheDocument();
+    expect(
+      within(sceneMatrix).getByText(/awaiting telemetry/i),
     ).toBeInTheDocument();
     expect(within(sceneMatrix).getByText(/ffffffffffff/i)).toBeInTheDocument();
     const memoryPanel = screen.getByTestId("operational-memory-panel");
@@ -588,6 +600,26 @@ describe("SettingsPage operations workbench", () => {
     expect(
       screen.queryByText(/prompt 7 uses this route/i),
     ).not.toBeInTheDocument();
+  });
+
+  test("shows live telemetry status when operations receives retained live frames", () => {
+    settingsMocks.framesByCamera = {
+      "00000000-0000-0000-0000-000000000101": {
+        camera_id: "00000000-0000-0000-0000-000000000101",
+        ts: new Date().toISOString(),
+        profile: "central-gpu",
+        stream_mode: "annotated-whip",
+        counts: {},
+        tracks: [],
+      },
+    };
+
+    renderPage();
+
+    const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
+    expect(
+      within(sceneMatrix).getByText(/telemetry live/i),
+    ).toBeInTheDocument();
   });
 
   test("guides a fresh tenant to configure sites, scenes, and deployment", () => {

@@ -24,6 +24,7 @@ import { ConfigurationWorkspace } from "@/components/configuration/Configuration
 import { Button } from "@/components/ui/button";
 import { omniLabels } from "@/copy/omnisight";
 import { useCameras, type Camera } from "@/hooks/use-cameras";
+import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
 import {
   useModels,
   useRuntimeArtifactsByModelId,
@@ -47,6 +48,9 @@ type FleetRuleRuntime = NonNullable<
 export function SettingsPage() {
   const fleet = useFleetOverview();
   const { data: cameras = [] } = useCameras();
+  const { framesByCamera } = useLiveTelemetry(
+    cameras.map((camera) => camera.id),
+  );
   const { data: sites = [] } = useSites();
   const { data: models = [] } = useModels();
   const runtimeArtifacts = useRuntimeArtifactsByModelId(
@@ -88,6 +92,7 @@ export function SettingsPage() {
     cameras,
     sites,
     fleet: fleet.data,
+    framesByCamera,
   });
   const edgeNodes = fleet.data.nodes
     .filter((node) => node.id !== null)

@@ -1874,7 +1874,8 @@ async def build_runtime_engine(
         subject_prefix=config.publish.subject_prefix,
     )
     publisher: Publisher
-    if config.mode is ProcessingMode.EDGE:
+    edge_http_publisher = config.mode is ProcessingMode.EDGE
+    if edge_http_publisher:
         publisher = HttpPublisher(
             url=config.publish.http_fallback_url or _edge_telemetry_ingest_url(settings),
             headers=_edge_telemetry_headers(settings),
@@ -1892,7 +1893,7 @@ async def build_runtime_engine(
         publisher = primary_publisher
     publisher = BufferedTelemetryPublisher(
         publisher,
-        max_queue_size=settings.telemetry_publish_queue_size,
+        max_queue_size=1 if edge_http_publisher else settings.telemetry_publish_queue_size,
         shutdown_timeout_seconds=settings.telemetry_publish_shutdown_timeout_seconds,
     )
     resolved_rule_engine: RuleEvaluator = rule_engine or RuleEngine(
@@ -2103,6 +2104,8 @@ def _draw_dashed_line(
 def _counts_by_lifecycle_tracks(tracks: list[LifecycleTrack]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for track in tracks:
+        if track.state != "active":
+            continue
         class_name = track.detection.class_name
         counts[class_name] = counts.get(class_name, 0) + 1
     return counts

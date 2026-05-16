@@ -277,8 +277,8 @@ function ScenePortalCard({
     [frame?.stream_mode, stableSignal.tracks],
   );
   const visibleCopy =
-    stableSignal.counts.total > 0
-      ? `${stableSignal.counts.total} visible now`
+    stableSignal.counts.liveTotal > 0
+      ? `${stableSignal.counts.liveTotal} visible now`
       : "0 visible now";
   const heartbeatStatus = getHeartbeatStatus(frame);
   const deliveryProfileLabel = formatDeliveryProfile(camera);

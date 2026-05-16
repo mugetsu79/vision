@@ -1754,7 +1754,7 @@ async def test_engine_publishes_stable_count_and_coasting_track_after_missed_det
     await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 1, tzinfo=UTC))
     await engine.close()
 
-    assert [frame.counts for frame in publisher.frames] == [{"person": 1}, {"person": 1}]
+    assert [frame.counts for frame in publisher.frames] == [{"person": 1}, {}]
     first_track = publisher.frames[0].tracks[0]
     second_track = publisher.frames[1].tracks[0]
     assert first_track.track_id == 1
@@ -1820,7 +1820,7 @@ async def test_engine_resets_lifecycle_when_tracker_type_changes() -> None:
 
     assert [frame.counts for frame in publisher.frames] == [
         {"person": 1},
-        {"person": 1},
+        {},
         {},
     ]
 
@@ -3105,6 +3105,7 @@ async def test_build_runtime_engine_uses_master_http_ingest_for_edge_telemetry(
 
     try:
         assert isinstance(engine.publisher, engine_module.BufferedTelemetryPublisher)
+        assert engine.publisher.max_queue_size == 1
         wrapped = engine.publisher.wrapped_publisher
         assert isinstance(wrapped, engine_module.HttpPublisher)
         assert wrapped.url == "http://master.local:8000/api/v1/edge/telemetry"
@@ -4330,6 +4331,39 @@ def test_draw_annotations_uses_dashed_subdued_box_for_coasting_tracks(
     assert line_calls
     assert all(color == (72, 184, 128) and thickness == 1 for color, thickness in line_calls)
     assert captured_labels == ["person", "person held 0.8s"]
+
+
+def test_counts_by_lifecycle_tracks_reports_only_active_visible_tracks() -> None:
+    counts = engine_module._counts_by_lifecycle_tracks(
+        [
+            LifecycleTrack(
+                stable_track_id=1,
+                source_track_id=11,
+                state="active",
+                last_seen_age_ms=0,
+                detection=Detection(
+                    class_name="person",
+                    confidence=0.94,
+                    bbox=(4.0, 4.0, 20.0, 40.0),
+                    track_id=1,
+                ),
+            ),
+            LifecycleTrack(
+                stable_track_id=2,
+                source_track_id=12,
+                state="coasting",
+                last_seen_age_ms=700,
+                detection=Detection(
+                    class_name="person",
+                    confidence=0.91,
+                    bbox=(24.0, 4.0, 40.0, 40.0),
+                    track_id=2,
+                ),
+            ),
+        ]
+    )
+
+    assert counts == {"person": 1}
 
 
 def test_engine_entrypoint_guard_is_after_runtime_helpers() -> None:
