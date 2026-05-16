@@ -184,6 +184,7 @@ Network:
 - Jetson can reach master API on port `8000`
 - browser can reach master frontend on port `3000`
 - master can reach Jetson MediaMTX RTSP on port `8554`
+- browser can complete MediaMTX WebRTC ICE on UDP port `8189`
 - VPN and firewall rules checked before the demo
 
 ## Model Files And Formats
@@ -341,8 +342,8 @@ Use this for the portable MacBook Pro pilot.
 On the MacBook:
 
 If you previously ran the development stack on the same Mac, stop it before
-installing so ports `3000`, `8000`, `8080`, `8554`, `8888`, `8889`, and `9000`
-belong to the installed appliance:
+installing so TCP ports `3000`, `8000`, `8080`, `8554`, `8888`, `8889`, and
+`9000`, plus UDP port `8189`, belong to the installed appliance:
 
 ```bash
 echo "Development fallback cleanup" && docker compose -f infra/docker-compose.dev.yml down
@@ -1744,11 +1745,11 @@ installer without `--unpaired`. A current installer preserves the claimed
 `edge_node_id` during later unpaired updates, fixes config permissions, and
 makes the credential readable only to the non-root supervisor container user.
 
-If a rerun fails preflight because ports `8554`, `8888`, or `8889` are already
-in use, the previous edge MediaMTX container is still running. Pull the latest
-branch and rerun the installer; the updated installer stops the existing
-`vezor-edge.service` and Compose stack before preflight so the port checks see a
-clean host.
+If a rerun fails preflight because TCP ports `8554`, `8888`, or `8889`, or UDP
+port `8189`, are already in use, the previous edge MediaMTX container is still
+running. Pull the latest branch and rerun the installer; the updated installer
+stops the existing `vezor-edge.service` and Compose stack before preflight so
+the port checks see a clean host.
 
 ### A demo network change breaks the kit
 

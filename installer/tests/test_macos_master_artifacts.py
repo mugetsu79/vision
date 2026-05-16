@@ -53,8 +53,11 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "x86_64" in script
     assert "/Applications/Docker.app" in script
     assert "check_port_available" in script
+    assert "check_udp_port_available" in script
     assert "for port in 3000 8000 8080 8554 8888 8889 9000" in script
+    assert "for port in 8189" in script
     assert 'port_owner="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null)"' in script
+    assert 'port_owner="$(lsof -nP -iUDP:"$port" 2>/dev/null)"' in script
     assert 'printf \'%s\\n\' "$port_owner" >&2' in script
     assert "stop_existing_master" in script
     assert "launchctl bootstrap system" in script

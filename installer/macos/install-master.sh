@@ -312,6 +312,18 @@ check_port_available() {
   fi
 }
 
+check_udp_port_available() {
+  local port="$1"
+  local port_owner=""
+  if command -v lsof >/dev/null 2>&1 \
+    && port_owner="$(lsof -nP -iUDP:"$port" 2>/dev/null)"; then
+    echo "UDP port $port is already in use." >&2
+    printf '%s\n' "$port_owner" >&2
+    echo "Stop any development stack or other service using UDP port $port, then rerun the installer." >&2
+    exit 1
+  fi
+}
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This installer target is macOS master. Detected: $(uname -s)" >&2
   exit 1
@@ -352,6 +364,9 @@ stop_existing_master
 
 for port in 3000 8000 8080 8554 8888 8889 9000; do
   check_port_available "$port"
+done
+for port in 8189; do
+  check_udp_port_available "$port"
 done
 
 run install -d -m 0755 \

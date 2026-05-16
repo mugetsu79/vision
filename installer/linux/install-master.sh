@@ -234,6 +234,14 @@ check_port_available() {
   fi
 }
 
+check_udp_port_available() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1 && ss -lun "( sport = :$port )" | grep -q ":$port"; then
+    echo "UDP port $port is already in use." >&2
+    exit 1
+  fi
+}
+
 require_linux
 require_command systemctl
 
@@ -248,6 +256,9 @@ fi
 
 for port in 3000 8000 8080 8554 8888 8889 9000; do
   check_port_available "$port"
+done
+for port in 8189; do
+  check_udp_port_available "$port"
 done
 
 if [[ -n "$MANIFEST" && ! -f "$MANIFEST" ]]; then

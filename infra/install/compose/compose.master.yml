@@ -125,6 +125,7 @@ services:
       - "${VEZOR_MEDIAMTX_RTSP_BIND:-0.0.0.0}:8554:8554"
       - "${VEZOR_MEDIAMTX_HLS_BIND:-0.0.0.0}:8888:8888"
       - "${VEZOR_MEDIAMTX_WEBRTC_BIND:-0.0.0.0}:8889:8889"
+      - "${VEZOR_MEDIAMTX_WEBRTC_UDP_BIND:-0.0.0.0}:8189:8189/udp"
       - "${VEZOR_MEDIAMTX_API_BIND:-127.0.0.1}:9997:9997"
     volumes:
       - /etc/vezor/mediamtx/mediamtx.yml:/mediamtx.yml:ro

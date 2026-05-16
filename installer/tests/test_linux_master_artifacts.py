@@ -54,6 +54,7 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
 
     assert "/var/lib/vezor/postgres:/var/lib/postgresql/data" in compose
     assert "/var/lib/vezor/minio:/data" in compose
+    assert '"${VEZOR_MEDIAMTX_WEBRTC_UDP_BIND:-0.0.0.0}:8189:8189/udp"' in compose
     assert "/etc/vezor/master.json:/etc/vezor/master.json:ro" in compose
     assert "/etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro" in compose
     assert (
@@ -157,6 +158,8 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert "check_udp_port_available" in script
+    assert "for port in 8189" in script
     assert "VEZOR_PUBLIC_KEYCLOAK_URL=" in script
     assert "VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev" in script
     assert "VEZOR_OIDC_CLIENT_ID=argus-frontend" in script

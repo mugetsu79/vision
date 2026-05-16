@@ -274,7 +274,48 @@ python3 -m uv run --project backend pytest installer/tests/test_edge_installer_a
 make verify-installers -> 59 installer tests passed and compose render passed
 ```
 
+2026-05-16 WebRTC delivery follow-up: after the model mount fix, the Jetson
+worker reached runtime startup and master MediaMTX could pull the camera RTSP
+path, but browser sessions still showed blank video. Master MediaMTX logged
+repeated:
+
+```text
+WebRTC session closed: deadline exceeded while waiting connection
+```
+
+Root cause: the installed product compose files exposed MediaMTX WebRTC HTTP on
+`8889/tcp` but did not expose MediaMTX's ICE UDP mux port `8189/udp`. The dev
+compose files already exposed `8189/udp`, which is why this was product-install
+specific.
+
+Fix: product master and edge supervisor compose profiles now expose
+`8189:8189/udp`, and macOS/Linux master plus Jetson preflight checks now verify
+UDP port `8189` availability.
+
+Validation:
+
+```text
+python3 -m uv run --project backend pytest installer/tests/test_edge_installer_artifacts.py installer/tests/test_linux_master_artifacts.py installer/tests/test_macos_master_artifacts.py -q -> 31 passed
+make verify-installers -> 59 installer tests passed and compose render passed
+```
+
 ## Immediate Next Step
+
+On the MacBook master, pull latest and rerun the master installer so Docker
+recreates MediaMTX with UDP `8189` published:
+
+```bash
+cd /opt/vezor/current
+git fetch origin
+git pull --ff-only origin codex/omnisight-installer
+sudo ./installer/macos/install-master.sh \
+  --version "portable-demo" \
+  --manifest installer/manifests/dev-example.json \
+  --public-url "http://192.168.1.166:3000"
+docker inspect vezor-master-mediamtx-1 --format '{{json .NetworkSettings.Ports}}'
+```
+
+Expected: the Docker port map includes `8189/udp`.
 
 On the Jetson, pull latest and rerun the edge installer as an unpaired update:
 

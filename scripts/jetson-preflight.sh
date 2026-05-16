@@ -95,6 +95,16 @@ check_port_available() {
   fi
 }
 
+check_udp_port_available() {
+  local port="$1"
+
+  if command -v ss >/dev/null 2>&1 && ss -lun "( sport = :$port )" | grep -q ":$port"; then
+    fail "installer UDP port $port is already in use"
+  else
+    pass "installer UDP port $port is available"
+  fi
+}
+
 if [[ "$(uname -m)" == "aarch64" ]]; then
   pass "Jetson architecture is arm64"
 else
@@ -178,6 +188,9 @@ fi
 if [[ "$installer_mode" -eq 1 ]]; then
   for port in 8554 8888 8889 9108; do
     check_port_available "$port"
+  done
+  for port in 8189; do
+    check_udp_port_available "$port"
   done
 
   if compgen -G "/dev/video*" >/dev/null; then

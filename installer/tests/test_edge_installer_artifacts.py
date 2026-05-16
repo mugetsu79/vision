@@ -142,6 +142,7 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
     assert 'command: ["-js", "-c", "/etc/nats/nats.conf"]' in compose
     assert "/etc/vezor/nats/leaf.conf:/etc/nats/nats.conf:ro" in compose
     assert "/var/lib/vezor/nats:/data" in compose
+    assert '"${VEZOR_EDGE_WEBRTC_UDP_BIND:-0.0.0.0}:8189:8189/udp"' in compose
     assert 'entrypoint: ["/app/.venv/bin/python", "-m", "argus.supervisor.runner"]' in compose
     assert "      - --config" in compose
     assert "ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}" in compose
@@ -166,5 +167,7 @@ def test_jetson_preflight_supports_installer_json_mode() -> None:
     assert "--installer" in preflight
     assert "--json" in preflight
     assert "check_port_available" in preflight
+    assert "check_udp_port_available" in preflight
+    assert "for port in 8189" in preflight
     assert "nvidia-container-toolkit" in preflight
     assert "Docker Compose v2 plugin is available" in preflight
