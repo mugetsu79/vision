@@ -2806,6 +2806,96 @@ def test_worker_main_configures_logging_and_reuses_settings(
     assert captured["awaitable"].__class__.__name__ == "_Awaitable"
 
 
+@pytest.mark.asyncio
+async def test_run_engine_for_edge_camera_avoids_local_database_stores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured: dict[str, object] = {}
+
+    class _StopWorker(Exception):
+        pass
+
+    class _FakeEventsClient:
+        def __init__(self, settings: object) -> None:
+            captured["events_settings"] = settings
+
+        async def connect(self) -> None:
+            captured["events_connected"] = True
+
+        async def close(self) -> None:
+            captured["events_closed"] = True
+
+    class _FakeDatabaseManager:
+        def __init__(self, settings: object) -> None:
+            captured["db_settings"] = settings
+
+        @property
+        def session_factory(self) -> object:
+            return object()
+
+        async def dispose(self) -> None:
+            captured["db_disposed"] = True
+
+    class _FakeEngine:
+        async def start(self) -> None:
+            captured["engine_started"] = True
+
+        async def run_once(self) -> None:
+            raise _StopWorker
+
+        async def close(self) -> None:
+            captured["engine_closed"] = True
+
+    async def fake_load_engine_config(
+        received_camera_id: UUID,
+        *,
+        settings: object,
+    ) -> EngineConfig:
+        captured["config_camera_id"] = received_camera_id
+        captured["config_settings"] = settings
+        return _engine_config(received_camera_id).model_copy(
+            update={"mode": ProcessingMode.EDGE}
+        )
+
+    async def fake_build_runtime_engine(
+        config: EngineConfig,
+        **kwargs: object,
+    ) -> _FakeEngine:
+        captured["config"] = config
+        captured["tracking_store"] = kwargs.get("tracking_store")
+        captured["count_event_store"] = kwargs.get("count_event_store")
+        captured["rule_event_store"] = kwargs.get("rule_event_store")
+        captured["incident_capture"] = kwargs.get("incident_capture")
+        return _FakeEngine()
+
+    monkeypatch.setattr(engine_module, "NatsJetStreamClient", _FakeEventsClient)
+    monkeypatch.setattr(engine_module, "DatabaseManager", _FakeDatabaseManager)
+    monkeypatch.setattr(engine_module, "load_engine_config", fake_load_engine_config)
+    monkeypatch.setattr(engine_module, "build_runtime_engine", fake_build_runtime_engine)
+    monkeypatch.setattr(
+        engine_module,
+        "probe_publish_profile",
+        lambda **kwargs: PublishProfile.JETSON_NANO,
+    )
+
+    settings = engine_module.Settings(_env_file=None, enable_worker_metrics_server=False)
+
+    with pytest.raises(_StopWorker):
+        await engine_module.run_engine_for_camera(camera_id, settings=settings)
+
+    assert captured["config_camera_id"] == camera_id
+    assert captured["events_connected"] is True
+    assert captured["tracking_store"] is None
+    assert captured["count_event_store"] is None
+    assert captured["rule_event_store"] is None
+    assert captured["incident_capture"] is None
+    assert "db_settings" not in captured
+    assert "db_disposed" not in captured
+    assert captured["engine_closed"] is True
+    assert captured["events_closed"] is True
+
+
 def test_engine_config_accepts_worker_evidence_storage_settings() -> None:
     camera_id = uuid4()
     profile_id = uuid4()

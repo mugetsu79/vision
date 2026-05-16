@@ -1939,7 +1939,6 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
     if resolved_settings.enable_worker_metrics_server:
         start_http_server(resolved_settings.worker_metrics_port)
     events_client = NatsJetStreamClient(resolved_settings)
-    db_manager = DatabaseManager(resolved_settings)
     await events_client.connect()
     config = await load_engine_config(camera_id, settings=resolved_settings)
     resolved_profile = probe_publish_profile(
@@ -1948,14 +1947,17 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         command_runner=default_profile_probe,
     )
     config = config.model_copy(update={"profile": resolved_profile})
-    engine = await build_runtime_engine(
-        config,
-        settings=resolved_settings,
-        events_client=events_client,
-        tracking_store=TrackingEventStore(db_manager.session_factory),
-        count_event_store=CountEventStore(db_manager.session_factory),
-        rule_event_store=SQLRuleEventStore(db_manager.session_factory),
-        incident_capture=IncidentClipCaptureService(
+    db_manager: DatabaseManager | None = None
+    tracking_store: TrackingEventStore | None = None
+    count_event_store: CountEventStore | None = None
+    rule_event_store: SQLRuleEventStore | None = None
+    incident_capture: IncidentClipCaptureService | None = None
+    if config.mode is not ProcessingMode.EDGE:
+        db_manager = DatabaseManager(resolved_settings)
+        tracking_store = TrackingEventStore(db_manager.session_factory)
+        count_event_store = CountEventStore(db_manager.session_factory)
+        rule_event_store = SQLRuleEventStore(db_manager.session_factory)
+        incident_capture = IncidentClipCaptureService(
             object_store=build_evidence_store(resolved_settings),
             storage_resolver=ResolvedEvidenceStorageResolver(
                 settings=resolved_settings,
@@ -1964,7 +1966,15 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
             repository=SQLIncidentRepository(db_manager.session_factory),
             recording_policy=config.recording_policy,
             privacy_policy=config.privacy_policy,
-        ),
+        )
+    engine = await build_runtime_engine(
+        config,
+        settings=resolved_settings,
+        events_client=events_client,
+        tracking_store=tracking_store,
+        count_event_store=count_event_store,
+        rule_event_store=rule_event_store,
+        incident_capture=incident_capture,
     )
     await engine.start()
     try:
@@ -1974,7 +1984,8 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
     finally:
         await engine.close()
         await events_client.close()
-        await db_manager.dispose()
+        if db_manager is not None:
+            await db_manager.dispose()
 
 
 def _build_homography(config: dict[str, Any] | None) -> Homography | None:
