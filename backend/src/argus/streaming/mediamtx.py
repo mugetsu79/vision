@@ -86,6 +86,7 @@ class _PublisherState:
     path_name: str
     publish_path: str
     frame_shape: tuple[int, ...]
+    target_fps: int
     publisher: FramePublisher
     last_published_at: datetime | None = None
 
@@ -704,6 +705,7 @@ class MediaMTXClient:
                 existing.path_name != registration.path_name
                 or existing.publish_path != registration.publish_path
                 or existing.frame_shape != frame_shape
+                or existing.target_fps != registration.target_fps
                 or not existing.publisher.is_alive()
             )
         ):
@@ -729,6 +731,7 @@ class MediaMTXClient:
             path_name=registration.path_name,
             publish_path=registration.publish_path,
             frame_shape=frame_shape,
+            target_fps=registration.target_fps,
             publisher=publisher,
         )
         self._publishers[registration.camera_id] = state

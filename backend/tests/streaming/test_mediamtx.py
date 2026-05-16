@@ -580,6 +580,69 @@ async def test_mediamtx_client_replaces_publisher_when_path_changes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mediamtx_client_replaces_publisher_when_target_fps_changes() -> None:
+    created_publishers: list[_FakeFramePublisher] = []
+    camera_id = uuid4()
+
+    async def publisher_factory(
+        *,
+        registration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _FakeFramePublisher:
+        del registration, frame, publish_url
+        publisher = _FakeFramePublisher()
+        created_publishers.append(publisher)
+        return publisher
+
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
+        publisher_factory=publisher_factory,
+    )
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    full_rate_registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
+        target_fps=25,
+        target_width=None,
+        target_height=None,
+    )
+    await client.push_frame(
+        full_rate_registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 1, tzinfo=UTC),
+    )
+
+    reduced_rate_registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
+        target_fps=5,
+        target_width=1280,
+        target_height=720,
+    )
+    await client.push_frame(
+        reduced_rate_registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 1, 1, tzinfo=UTC),
+    )
+
+    assert len(created_publishers) == 2
+    assert created_publishers[0].closed is True
+    assert created_publishers[1].closed is False
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_mediamtx_client_close_shuts_down_active_publishers() -> None:
     created_publishers: list[_FakeFramePublisher] = []
     camera_id = uuid4()
