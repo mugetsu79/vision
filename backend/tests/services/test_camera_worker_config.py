@@ -1255,7 +1255,8 @@ def test_edge_native_browser_delivery_keeps_passthrough_stream() -> None:
     assert config.model.classes == ["person", "car"]
 
 
-def test_stream_delivery_profile_controls_playback_base_urls_and_mode_without_changing_rendition() -> None:
+def test_stream_delivery_profile_controls_playback_base_urls_and_mode_without_changing_rendition(
+) -> None:
     settings = _settings()
     delivery = WorkerStreamDeliverySettings(
         profile_id=uuid4(),

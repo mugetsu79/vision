@@ -112,13 +112,13 @@ export function HistoryTrendPanel({
             aria-hidden="true"
             data-testid="history-bucket-shaft"
             layoutId="history-bucket-shaft"
-            className="pointer-events-none absolute top-0 bottom-0 w-[2.4%] bg-[rgba(110,189,255,0.18)]"
+            className="pointer-events-none absolute top-0 bottom-0 w-[2.4%] bg-[rgba(110,189,255,0.12)]"
             style={{
               left: bucketLeftPercent(series.points, series.selectedBucket),
             }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
           >
-            <span className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-[var(--vz-lens-cerulean)] opacity-70" />
+            <span className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-[var(--vz-lens-cerulean)] opacity-60" />
           </motion.div>
         ) : null}
       </div>

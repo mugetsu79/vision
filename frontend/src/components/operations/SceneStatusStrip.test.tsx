@@ -61,4 +61,25 @@ describe("SceneStatusStrip", () => {
       screen.queryByText(/direct stream unavailable/i),
     ).not.toBeInTheDocument();
   });
+
+  test("renders active worker detail quietly", () => {
+    render(
+      <SceneStatusStrip
+        row={{
+          ...row,
+          worker: {
+            health: "healthy",
+            label: "Worker active",
+            detail: "runtime report pending",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/^worker active$/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/worker active: runtime report pending/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/worker awaiting report/i)).not.toBeInTheDocument();
+  });
 });

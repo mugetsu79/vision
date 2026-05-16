@@ -80,9 +80,9 @@ export function HistoryTrendChart({
 
   const height = series.includeSpeed
     ? series.speedThreshold !== null && series.speedThreshold !== undefined
-      ? "680px"
-      : "560px"
-    : "360px";
+      ? "740px"
+      : "640px"
+    : "440px";
 
   return (
     <div

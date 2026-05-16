@@ -314,10 +314,13 @@ def _build_stream_provisioner(
     )
     if not mediamtx_api_url or not mediamtx_rtsp_base_url or not mediamtx_whip_base_url:
         return None
+    profile_name = (
+        config.publish_profile
+        or os.getenv("ARGUS_PUBLISH_PROFILE")
+        or PublishProfile.CENTRAL_GPU.value
+    )
     try:
-        publish_profile = PublishProfile(
-            config.publish_profile or os.getenv("ARGUS_PUBLISH_PROFILE", "central-gpu")
-        )
+        publish_profile = PublishProfile(profile_name)
     except ValueError:
         publish_profile = PublishProfile.CENTRAL_GPU
     stream_client = MediaMTXClient(

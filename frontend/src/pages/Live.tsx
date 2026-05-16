@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { Maximize2, Minimize2, PanelTopOpen, Square } from "lucide-react";
 
 import { InspectorPanel } from "@/components/layout/InspectorPanel";
 import {
@@ -16,6 +18,10 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras, useUpdateCamera } from "@/hooks/use-cameras";
+import {
+  useLiveTileLayout,
+  type LiveTileSize,
+} from "@/hooks/use-live-tile-layout";
 import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
 import { useFleetOverview } from "@/hooks/use-operations";
 import { useStableSignalFrame } from "@/hooks/use-stable-signal-frame";
@@ -51,6 +57,8 @@ function WorkspacePage() {
   const { connectionState, framesByCamera } = useLiveTelemetry(
     cameras.map((camera) => camera.id),
   );
+  const { tileSizeFor, setTileSize } = useLiveTileLayout();
+  const [focusedCameraId, setFocusedCameraId] = useState<string | null>(null);
   const [activeQuery, setActiveQuery] = useState<{
     response: QueryResponse;
     scope: LiveQueryScope;
@@ -141,11 +149,67 @@ function WorkspacePage() {
     [sceneHealthRows],
   );
 
+  useEffect(() => {
+    if (!focusedCameraId) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFocusedCameraId(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focusedCameraId]);
+
+  const focusedCamera =
+    cameras.find((camera) => camera.id === focusedCameraId) ?? null;
+
+  const renderScenePortalCard = (camera: CameraResponse, isFocused: boolean) => {
+    const frame = framesByCamera[camera.id];
+    const classFilter = classFiltersByCamera.get(camera.id) ?? null;
+    const sceneHealth = sceneHealthByCamera.get(camera.id);
+    const tileSize = tileSizeFor(camera.id);
+
+    return (
+      <ScenePortalCard
+        key={camera.id}
+        camera={camera}
+        tileSize={tileSize}
+        onTileSizeChange={(size) => setTileSize(camera.id, size)}
+        isFocused={isFocused}
+        onFocus={() => setFocusedCameraId(camera.id)}
+        onCloseFocus={() => setFocusedCameraId(null)}
+        frame={frame}
+        classFilter={classFilter}
+        sceneHealth={sceneHealth}
+        onSignalRowsChange={handleSignalRowsChange}
+      />
+    );
+  };
+
+  const focusedLayer =
+    focusedCamera && typeof document !== "undefined"
+      ? createPortal(
+          <>
+            <button
+              type="button"
+              aria-label="Close focused scene"
+              className="fixed inset-0 z-40 bg-black/70"
+              onClick={() => setFocusedCameraId(null)}
+            />
+            {renderScenePortalCard(focusedCamera, true)}
+          </>,
+          document.body,
+        )
+      : null;
+
   return (
     <div
       data-testid="live-intelligence-workspace"
       className="grid gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_340px]"
     >
+      {focusedLayer}
       <section className="min-w-0 space-y-5">
         <WorkspaceBand
           eyebrow="Live"
@@ -205,24 +269,13 @@ function WorkspacePage() {
 
             <div
               data-testid="scene-portal-grid"
-              className="grid gap-4 md:grid-cols-2"
+              className="grid gap-4 md:grid-cols-2 xl:grid-cols-6"
             >
-              {cameras.map((camera) => {
-                const frame = framesByCamera[camera.id];
-                const classFilter = classFiltersByCamera.get(camera.id) ?? null;
-                const sceneHealth = sceneHealthByCamera.get(camera.id);
-
-                return (
-                  <ScenePortalCard
-                    key={camera.id}
-                    camera={camera}
-                    frame={frame}
-                    classFilter={classFilter}
-                    sceneHealth={sceneHealth}
-                    onSignalRowsChange={handleSignalRowsChange}
-                  />
-                );
-              })}
+              {cameras.map((camera) =>
+                camera.id === focusedCameraId
+                  ? null
+                  : renderScenePortalCard(camera, false),
+              )}
             </div>
           </section>
         )}
@@ -268,12 +321,22 @@ function WorkspacePage() {
 
 function ScenePortalCard({
   camera,
+  tileSize,
+  onTileSizeChange,
+  isFocused,
+  onFocus,
+  onCloseFocus,
   frame,
   classFilter,
   sceneHealth,
   onSignalRowsChange,
 }: {
   camera: CameraResponse;
+  tileSize: LiveTileSize;
+  onTileSizeChange: (size: LiveTileSize) => void;
+  isFocused: boolean;
+  onFocus: () => void;
+  onCloseFocus: () => void;
   frame: TelemetryFrame | undefined;
   classFilter: string[] | null;
   sceneHealth: SceneHealthRow | undefined;
@@ -345,8 +408,25 @@ function ScenePortalCard({
     <article
       data-testid="scene-portal"
       data-scene-portal-tile
+      role={isFocused ? "region" : undefined}
+      aria-label={isFocused ? `${camera.name} focused scene` : undefined}
       tabIndex={0}
-      className="group relative overflow-hidden rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)] outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--vz-elev-glow-cerulean)] focus-within:shadow-[var(--vz-elev-glow-cerulean)]"
+      style={
+        isFocused
+          ? {
+              inset: "0.75rem",
+              maxHeight: "calc(100vh - 1.5rem)",
+              position: "fixed",
+              zIndex: 50,
+            }
+          : undefined
+      }
+      className={[
+        "group relative overflow-hidden rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)] outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--vz-elev-glow-cerulean)] focus-within:shadow-[var(--vz-elev-glow-cerulean)]",
+        isFocused
+          ? "overflow-x-hidden overflow-y-auto shadow-[var(--vz-elev-3)]"
+          : tileSpanClass(tileSize),
+      ].join(" ")}
     >
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
         <div>
@@ -366,13 +446,64 @@ function ScenePortalCard({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Badge className={heartbeatBadgeClass(heartbeatStatus)}>
-            {heartbeatBadgeLabel(heartbeatStatus)}
-          </Badge>
-          <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-            {camera.tracker_type}
-          </Badge>
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Badge className={heartbeatBadgeClass(heartbeatStatus)}>
+              {heartbeatBadgeLabel(heartbeatStatus)}
+            </Badge>
+            <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+              {camera.tracker_type}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label={`Use compact tile for ${camera.name}`}
+              title="Compact tile"
+              onClick={() => onTileSizeChange("compact")}
+              className={tileToolButtonClass(tileSize === "compact")}
+            >
+              <Minimize2 className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Use standard tile for ${camera.name}`}
+              title="Standard tile"
+              onClick={() => onTileSizeChange("standard")}
+              className={tileToolButtonClass(tileSize === "standard")}
+            >
+              <Square className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Use large tile for ${camera.name}`}
+              title="Large tile"
+              onClick={() => onTileSizeChange("large")}
+              className={tileToolButtonClass(tileSize === "large")}
+            >
+              <PanelTopOpen className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Focus scene ${camera.name}`}
+              title="Focus scene"
+              onClick={onFocus}
+              className={tileToolButtonClass(false)}
+            >
+              <Maximize2 className="size-4" />
+            </button>
+            {isFocused ? (
+              <button
+                type="button"
+                aria-label="Close focused scene"
+                title="Close focused scene"
+                onClick={onCloseFocus}
+                className={tileToolButtonClass(false)}
+              >
+                <Minimize2 className="size-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
         {sceneHealth ? (
           <div className="basis-full pt-1">
@@ -382,103 +513,148 @@ function ScenePortalCard({
       </div>
 
       <div
-        data-scene-portal-media
-        className="relative aspect-video bg-[color:var(--vz-media-black)]"
+        className={
+          isFocused
+            ? "grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]"
+            : ""
+        }
       >
-        <span data-bracket aria-hidden="true" />
-        <VideoStream
-          cameraId={camera.id}
-          cameraName={camera.name}
-          defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
-          deliveryMode={camera.browser_delivery?.delivery_mode ?? null}
-          heartbeatTs={frame?.ts ?? null}
-        />
-        <TelemetryCanvas
-          frame={frame}
-          activeClasses={classFilter}
-          tracks={overlayTracks}
-          sourceSize={sourceSize}
-          disabled={!browserOverlayEnabled}
-        />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#8ea8cf]">
-              {formatHeartbeat(frame)}
-            </p>
-            <p className="mt-1 text-sm text-[#dce6f7]">{visibleCopy}</p>
-          </div>
-          {frame ? (
-            <p className="text-xs text-[#9db3d3]">{formatStreamMode(frame)}</p>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="space-y-3 border-t border-white/8 px-5 py-4">
-        <div className="grid gap-3 rounded-[0.75rem] border border-white/8 bg-[#07101c]/80 p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="flex items-center gap-2 text-xs font-medium text-[#c7d8f2]">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-[#6ebdff]"
-              checked={browserOverlayEnabled}
-              onChange={(event) => setBrowserOverlayEnabled(event.target.checked)}
-            />
-            Browser overlay
-          </label>
-
-          {renditionOptions.length > 0 ? (
-            <div className="grid gap-2 sm:min-w-[240px]">
-              <label
-                className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]"
-                htmlFor={`live-rendition-${camera.id}`}
-              >
-                Live rendition
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  id={`live-rendition-${camera.id}`}
-                  aria-label={`${camera.name} live rendition`}
-                  className="min-w-[170px] flex-1 rounded-[0.65rem] px-3 py-2"
-                  value={stagedProfile}
-                  onChange={(event) =>
-                    setStagedProfile(event.target.value)
-                  }
-                >
-                  {renditionOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-                <Button
-                  className="px-3 py-2 text-xs"
-                  disabled={!canApplyRendition}
-                  onClick={() => void applyRendition()}
-                >
-                  Apply to scene
-                </Button>
-              </div>
-              <p className="text-xs text-[#91a8c9]">
-                {hasRenditionChange
-                  ? `Apply to scene will reconfigure the worker to publish ${selectedRendition?.label ?? stagedProfile}.`
-                  : "Current worker rendition. Changes are staged until applied to the scene."}
+        <div
+          data-scene-portal-media
+          style={
+            isFocused
+              ? { aspectRatio: "auto", height: "min(58vh, 620px)" }
+              : undefined
+          }
+          className={[
+            "relative aspect-video bg-[color:var(--vz-media-black)]",
+            isFocused ? "lg:aspect-auto" : "",
+          ].join(" ")}
+        >
+          <span data-bracket aria-hidden="true" />
+          <VideoStream
+            cameraId={camera.id}
+            cameraName={camera.name}
+            defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
+            deliveryMode={camera.browser_delivery?.delivery_mode ?? null}
+            heartbeatTs={frame?.ts ?? null}
+          />
+          <TelemetryCanvas
+            frame={frame}
+            activeClasses={classFilter}
+            tracks={overlayTracks}
+            sourceSize={sourceSize}
+            disabled={!browserOverlayEnabled}
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#8ea8cf]">
+                {formatHeartbeat(frame)}
               </p>
-              {updateCamera.isError ? (
-                <p className="text-xs text-[#ff9fb5]">
-                  Could not apply rendition. Try again from this scene.
-                </p>
-              ) : null}
+              <p className="mt-1 text-sm text-[#dce6f7]">{visibleCopy}</p>
             </div>
-          ) : null}
+            {frame ? (
+              <p className="text-xs text-[#9db3d3]">{formatStreamMode(frame)}</p>
+            ) : null}
+          </div>
         </div>
-        <TelemetryTerrain
-          cameraId={camera.id}
-          cameraName={camera.name}
-          activeClasses={camera.active_classes ?? []}
-          signalRows={stableSignal.counts.rows}
-        />
+
+        <div
+          className={
+            isFocused
+              ? "space-y-3 border-t border-white/8 p-4 lg:border-l lg:border-t-0 lg:p-0 lg:pl-4"
+              : "space-y-3 border-t border-white/8 px-5 py-4"
+          }
+        >
+          <div
+            className={[
+              "grid gap-3 rounded-[0.75rem] border border-white/8 bg-[#07101c]/80 p-3",
+              isFocused ? "" : "sm:grid-cols-[minmax(0,1fr)_auto]",
+            ].join(" ")}
+          >
+            <label className="flex items-center gap-2 text-xs font-medium text-[#c7d8f2]">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[#6ebdff]"
+                checked={browserOverlayEnabled}
+                onChange={(event) => setBrowserOverlayEnabled(event.target.checked)}
+              />
+              Browser overlay
+            </label>
+
+            {renditionOptions.length > 0 ? (
+              <div className="grid gap-2 sm:min-w-[240px]">
+                <label
+                  className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]"
+                  htmlFor={`live-rendition-${camera.id}`}
+                >
+                  Live rendition
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    id={`live-rendition-${camera.id}`}
+                    aria-label={`${camera.name} live rendition`}
+                    className="min-w-[170px] flex-1 rounded-[0.65rem] px-3 py-2"
+                    value={stagedProfile}
+                    onChange={(event) =>
+                      setStagedProfile(event.target.value)
+                    }
+                  >
+                    {renditionOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    className={[
+                      "px-3 py-2 text-xs",
+                      isFocused ? "w-full" : "",
+                    ].join(" ")}
+                    disabled={!canApplyRendition}
+                    onClick={() => void applyRendition()}
+                  >
+                    Apply to scene
+                  </Button>
+                </div>
+                <p className="text-xs text-[#91a8c9]">
+                  {hasRenditionChange
+                    ? `Apply to scene will reconfigure the worker to publish ${selectedRendition?.label ?? stagedProfile}.`
+                    : "Current worker rendition. Changes are staged until applied to the scene."}
+                </p>
+                {updateCamera.isError ? (
+                  <p className="text-xs text-[#ff9fb5]">
+                    Could not apply rendition. Try again from this scene.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <TelemetryTerrain
+            cameraId={camera.id}
+            cameraName={camera.name}
+            activeClasses={camera.active_classes ?? []}
+            signalRows={stableSignal.counts.rows}
+          />
+        </div>
       </div>
     </article>
   );
+}
+
+function tileSpanClass(size: LiveTileSize): string {
+  if (size === "large") return "md:col-span-2 xl:col-span-6";
+  if (size === "compact") return "xl:col-span-2";
+  return "xl:col-span-3";
+}
+
+function tileToolButtonClass(active: boolean): string {
+  return [
+    "inline-flex size-8 items-center justify-center rounded-[var(--vz-r-sm)] border transition",
+    active
+      ? "border-[color:var(--vz-hair-focus)] bg-[rgba(110,189,255,0.12)] text-[var(--vz-text-primary)]"
+      : "border-[color:var(--vz-hair)] bg-white/[0.03] text-[var(--vz-text-secondary)] hover:border-[color:var(--vz-hair-focus)] hover:text-[var(--vz-text-primary)]",
+  ].join(" ");
 }
 
 function connectionBadgeLabel(connectionState: string): string {

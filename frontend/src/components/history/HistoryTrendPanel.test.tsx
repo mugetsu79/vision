@@ -51,9 +51,10 @@ describe("HistoryTrendPanel", () => {
 
     expect(shaft).toHaveAttribute("aria-hidden", "true");
     expect(shaft).toHaveStyle({ left: "50%" });
-    expect(shaft).toHaveClass("bg-[rgba(110,189,255,0.18)]");
+    expect(shaft).toHaveClass("bg-[rgba(110,189,255,0.12)]");
     expect(shaft.querySelector("span")).toHaveClass(
       "bg-[var(--vz-lens-cerulean)]",
+      "opacity-60",
     );
   });
 });

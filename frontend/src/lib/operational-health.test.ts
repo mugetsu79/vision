@@ -321,6 +321,41 @@ describe("operational health", () => {
     });
   });
 
+  test("marks not-reported workers active when telemetry is fresh", () => {
+    const activeFleet: FleetOverview = {
+      ...fleet,
+      camera_workers: fleet.camera_workers.map((worker) =>
+        worker.camera_id === "camera-2"
+          ? {
+              ...worker,
+              runtime_status: "not_reported",
+              detail: null,
+            }
+          : worker,
+      ),
+    };
+
+    const rows = deriveSceneReadinessRows({
+      cameras,
+      sites,
+      fleet: activeFleet,
+      framesByCamera: {
+        "camera-2": {
+          ...freshFrame,
+          camera_id: "camera-2",
+          ts: new Date().toISOString(),
+        },
+      },
+    });
+    const row = rows.find((candidate) => candidate.cameraId === "camera-2");
+
+    expect(row?.worker).toEqual({
+      health: "healthy",
+      label: "Worker active",
+      detail: "runtime report pending",
+    });
+  });
+
   test("routes delivery and worker issues to operations without treating fallback delivery as danger", () => {
     const fallbackCamera = createCamera({
       id: "camera-3",

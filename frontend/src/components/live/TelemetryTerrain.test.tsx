@@ -14,7 +14,7 @@ import { TelemetryTerrain } from "@/components/live/TelemetryTerrain";
 import { colorForClass, type SignalCountRow } from "@/lib/live-signal-stability";
 
 describe("TelemetryTerrain", () => {
-  test("renders accessible live signal terrain for the primary class", () => {
+  test("renders accessible live signal trend for primary and secondary classes", () => {
     const rows: SignalCountRow[] = [
       {
         className: "person",
@@ -45,10 +45,15 @@ describe("TelemetryTerrain", () => {
 
     const terrain = screen.getByTestId("telemetry-terrain");
     expect(terrain).toHaveAccessibleName(/north gate telemetry terrain/i);
-    expect(within(terrain).getByText(/telemetry terrain/i)).toBeInTheDocument();
+    expect(within(terrain).getByText(/signal trend/i)).toBeInTheDocument();
     expect(within(terrain).getByText(/person active/i)).toBeInTheDocument();
     expect(within(terrain).getByText(/car held/i)).toBeInTheDocument();
-    expect(within(terrain).getByLabelText(/person signal terrain/i)).toBeInTheDocument();
+    const paths = within(terrain)
+      .getByLabelText(/person signal trend/i)
+      .querySelectorAll("path");
+    expect(paths.length).toBeGreaterThanOrEqual(3);
+    expect(terrain.querySelector('path[stroke="#61e6a6"]')).toBeInTheDocument();
+    expect(terrain.querySelector('path[stroke="#62a6ff"]')).toBeInTheDocument();
   });
 
   test("renders occupancy buckets as a stepped terrain instead of diagonal spikes", () => {
@@ -72,7 +77,7 @@ describe("TelemetryTerrain", () => {
       />,
     );
 
-    const svg = screen.getByLabelText(/person signal terrain/i);
+    const svg = screen.getByLabelText(/person signal trend/i);
     const line = svg.querySelector('path[fill="none"]');
 
     expect(line?.getAttribute("d")).toContain(" H ");

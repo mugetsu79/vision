@@ -6,15 +6,12 @@ type SceneStatusStripProps = {
 };
 
 export function SceneStatusStrip({ row }: SceneStatusStripProps) {
-  const workerCopy =
-    row.worker.label === "Worker not reported"
-      ? "Worker awaiting report"
-      : row.worker.label;
   const details = [
     row.liveRendition.detail
       ? `${row.liveRendition.label}: ${row.liveRendition.detail}`
       : null,
     row.transport.detail ? `${row.transport.label}: ${row.transport.detail}` : null,
+    row.worker.detail ? `${row.worker.label}: ${row.worker.detail}` : null,
   ].filter(Boolean);
 
   return (
@@ -36,7 +33,7 @@ export function SceneStatusStrip({ row }: SceneStatusStripProps) {
         {row.processingMode} scene
       </StatusToneBadge>
       <StatusToneBadge tone={healthToTone(row.worker.health)}>
-        {workerCopy}
+        {row.worker.label}
       </StatusToneBadge>
       {details.length > 0 ? (
         <span className="text-xs text-[color:var(--vz-text-muted)]">

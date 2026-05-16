@@ -1,5 +1,7 @@
 import type { EChartsOption } from "echarts";
 
+import { colorForClass } from "@/lib/signal-colors";
+
 export type HistoryTrendPoint = {
   bucket: string;
   values: Record<string, number>;
@@ -25,17 +27,6 @@ export type HistoryTrendChartClickParams = {
   dataIndex?: number;
 };
 
-const PALETTE = [
-  "#4f8cff",
-  "#8b6dff",
-  "#26d0ff",
-  "#6de4a7",
-  "#ffaf52",
-  "#ff6b91",
-  "#c28bff",
-  "#f5d570",
-];
-
 export function bucketFromChartClick(
   params: HistoryTrendChartClickParams,
   points: HistoryTrendPoint[],
@@ -60,16 +51,10 @@ export function buildHistoryChartOption(
     series.speedThreshold !== undefined;
   const speedClasses = series.speedClassesUsed ?? [];
 
-  const colorFor = new Map<string, string>();
-  series.classNames.forEach((cls, i) => {
-    colorFor.set(cls, PALETTE[i % PALETTE.length]);
-  });
-  speedClasses.forEach((cls) => {
-    if (!colorFor.has(cls)) {
-      colorFor.set(cls, PALETTE[colorFor.size % PALETTE.length]);
-    }
-  });
-  const paletteOf = (cls: string) => colorFor.get(cls) ?? PALETTE[0];
+  const paletteOf = (cls: string) => colorForClass(cls).stroke;
+  const palette = Array.from(
+    new Set([...series.classNames, ...speedClasses].map(paletteOf)),
+  );
 
   const grids: NonNullable<EChartsOption["grid"]> = [
     {
@@ -86,8 +71,8 @@ export function buildHistoryChartOption(
       gridIndex: 0,
       boundaryGap: false,
       data: buckets,
-      axisLine: { lineStyle: { color: "rgba(117, 146, 187, 0.32)" } },
-      axisLabel: { color: "#8ea8cf", hideOverlap: true },
+      axisLine: { lineStyle: { color: "rgba(206, 224, 255, 0.16)" } },
+      axisLabel: { color: "#8497b3", hideOverlap: true },
     },
   ];
   const yAxes: NonNullable<EChartsOption["yAxis"]> = [
@@ -95,9 +80,9 @@ export function buildHistoryChartOption(
       type: "value",
       gridIndex: 0,
       minInterval: 1,
-      splitLine: { lineStyle: { color: "rgba(117, 146, 187, 0.14)" } },
-      axisLine: { show: false },
-      axisLabel: { color: "#8ea8cf" },
+      splitLine: { lineStyle: { color: "rgba(206, 224, 255, 0.08)" } },
+      axisLine: { lineStyle: { color: "rgba(206, 224, 255, 0.16)" } },
+      axisLabel: { color: "#8497b3" },
     },
   ];
 
@@ -108,15 +93,20 @@ export function buildHistoryChartOption(
       smooth: true,
       showSymbol: false,
       color: paletteOf(cls),
-      lineStyle: { width: 2.5 },
-      areaStyle: { opacity: 0.1 },
+      lineStyle: { width: 3 },
+      areaStyle: { opacity: 0.12 },
+      emphasis: { focus: "series" },
       xAxisIndex: 0,
       yAxisIndex: 0,
       data: series.points.map((p) => p.values[cls] ?? 0),
       markLine: selectedBucketLabel
         ? {
-            symbol: "none",
-            lineStyle: { color: "#f5d570", type: "dashed", width: 1.5 },
+          symbol: "none",
+            lineStyle: {
+              color: "rgba(110, 189, 255, 0.42)",
+              type: "dashed",
+              width: 1.5,
+            },
             data: [{ xAxis: selectedBucketLabel, name: "selected bucket" }],
           }
         : undefined,
@@ -142,8 +132,8 @@ export function buildHistoryChartOption(
       gridIndex: 1,
       minInterval: 1,
       splitLine: { show: false },
-      axisLine: { show: false },
-      axisLabel: { color: "#8ea8cf" },
+      axisLine: { lineStyle: { color: "rgba(206, 224, 255, 0.16)" } },
+      axisLabel: { color: "#8497b3" },
     });
     speedClasses.forEach((cls) => {
       seriesList.push({
@@ -172,17 +162,17 @@ export function buildHistoryChartOption(
       gridIndex: grids.length - 1,
       boundaryGap: false,
       data: buckets,
-      axisLine: { lineStyle: { color: "rgba(117, 146, 187, 0.32)" } },
-      axisLabel: { color: "#8ea8cf", hideOverlap: true },
+      axisLine: { lineStyle: { color: "rgba(206, 224, 255, 0.16)" } },
+      axisLabel: { color: "#8497b3", hideOverlap: true },
     });
     yAxes.push({
       type: "value",
       gridIndex: grids.length - 1,
       name: "km/h",
-      nameTextStyle: { color: "#8ea8cf" },
-      splitLine: { lineStyle: { color: "rgba(117, 146, 187, 0.14)" } },
-      axisLine: { show: false },
-      axisLabel: { color: "#8ea8cf" },
+      nameTextStyle: { color: "#8497b3" },
+      splitLine: { lineStyle: { color: "rgba(206, 224, 255, 0.08)" } },
+      axisLine: { lineStyle: { color: "rgba(206, 224, 255, 0.16)" } },
+      axisLabel: { color: "#8497b3" },
     });
 
     speedClasses.forEach((cls, i) => {
@@ -197,7 +187,7 @@ export function buildHistoryChartOption(
         xAxisIndex: xIndex,
         yAxisIndex: yIndex,
         color,
-        lineStyle: { width: 2, type: "solid" },
+        lineStyle: { width: 2.4, type: "solid" },
         data: series.points.map((p) => p.speed_p50?.[cls] ?? null),
       });
       seriesList.push({
@@ -208,14 +198,14 @@ export function buildHistoryChartOption(
         xAxisIndex: xIndex,
         yAxisIndex: yIndex,
         color,
-        lineStyle: { width: 1.5, type: "dashed" },
-        areaStyle: { opacity: 0.08 },
+        lineStyle: { width: 1.8, type: "dashed" },
+        areaStyle: { opacity: 0.06 },
         data: series.points.map((p) => p.speed_p95?.[cls] ?? null),
         markLine:
           thresholdSet && i === 0
             ? {
                 symbol: "none",
-                lineStyle: { color: "#ff6b91", type: "dashed" },
+                lineStyle: { color: "#ff6f9d", type: "dashed", width: 1.5 },
                 data: [
                   { yAxis: series.speedThreshold ?? 0, name: "threshold" },
                 ],
@@ -227,14 +217,14 @@ export function buildHistoryChartOption(
 
   return {
     animation: false,
-    color: PALETTE,
+    color: palette,
     legend: { top: 0, textStyle: { color: "#dbe7ff" }, itemGap: 18 },
     grid: grids,
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "cross", link: [{ xAxisIndex: "all" }] },
-      backgroundColor: "rgba(6, 11, 18, 0.96)",
-      borderColor: "rgba(90, 149, 255, 0.28)",
+      backgroundColor: "rgba(3, 5, 10, 0.96)",
+      borderColor: "rgba(110, 189, 255, 0.28)",
       textStyle: { color: "#eef4ff" },
     },
     toolbox: {

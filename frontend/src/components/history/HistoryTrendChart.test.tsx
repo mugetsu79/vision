@@ -102,8 +102,43 @@ describe("buildHistoryChartOption", () => {
     ).toBe("23 Apr, 01:00");
     expect(
       seriesList.find((entry) => entry.name === "person")?.markLine?.data[0]
-        .xAxis,
+      .xAxis,
     ).toBe("23 Apr, 01:00");
+  });
+
+  test("uses live signal colors for class series", () => {
+    const option = buildHistoryChartOption({
+      classNames: ["person", "car"],
+      points: [
+        {
+          bucket: "2026-04-23T00:00:00Z",
+          values: { person: 2, car: 1 },
+          total_count: 3,
+        },
+      ],
+    });
+
+    const seriesList = option.series as unknown as Array<{
+      name: string;
+      color?: string;
+    }>;
+
+    expect(seriesList.find((entry) => entry.name === "person")?.color).toBe(
+      "#61e6a6",
+    );
+    expect(seriesList.find((entry) => entry.name === "car")?.color).toBe(
+      "#62a6ff",
+    );
+    expect((option.legend as { textStyle: { color: string } }).textStyle.color).toBe(
+      "#dbe7ff",
+    );
+    expect(
+      (
+        seriesList.find((entry) => entry.name === "car") as {
+          lineStyle: { width: number };
+        }
+      ).lineStyle.width,
+    ).toBe(3);
   });
 });
 

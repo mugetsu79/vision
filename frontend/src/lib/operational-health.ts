@@ -282,8 +282,9 @@ export function deriveSceneReadinessRows({
     const delivery = deriveDeliverySignal(camera, diagnostic);
     const transport = deriveTransportSignal(camera);
     const liveRendition = deriveLiveRenditionSignal(camera, diagnostic);
-    const telemetry = deriveTelemetrySignal(framesByCamera[camera.id]);
-    const workerSignal = deriveWorkerSignal(worker);
+    const telemetryFrame = framesByCamera[camera.id];
+    const telemetry = deriveTelemetrySignal(telemetryFrame);
+    const workerSignal = deriveWorkerSignal(worker, telemetryFrame);
     const rules = deriveRuleRuntimeSignal(worker?.rule_runtime);
     const readiness = deriveReadinessSignal({
       camera,
@@ -375,12 +376,36 @@ function deriveRuleRuntimeSignal(
 
 function deriveWorkerSignal(
   worker: FleetCameraWorker | undefined,
+  frame: TelemetryFrame | undefined,
 ): HealthSignal {
+  const telemetryFresh = getHeartbeatStatus(frame) === "fresh";
+
   if (!worker) {
-    return { health: "unknown", label: "Worker not reported" };
+    if (telemetryFresh) {
+      return {
+        health: "healthy",
+        label: "Worker active",
+        detail: "runtime report pending",
+      };
+    }
+    return { health: "unknown", label: "Worker starting" };
   }
   if (worker.runtime_status === "running") {
     return { health: "healthy", label: "Worker running" };
+  }
+  if (worker.runtime_status === "not_reported") {
+    if (telemetryFresh) {
+      return {
+        health: "healthy",
+        label: "Worker active",
+        detail: "runtime report pending",
+      };
+    }
+    return {
+      health: "attention",
+      label: "Worker starting",
+      detail: worker.detail ?? undefined,
+    };
   }
   if (worker.runtime_status === "stale") {
     return {
@@ -396,17 +421,12 @@ function deriveWorkerSignal(
       detail: worker.detail ?? undefined,
     };
   }
-  if (worker.runtime_status === "not_reported") {
-    return {
-      health: "unknown",
-      label: "Worker not reported",
-      detail: worker.detail ?? undefined,
-    };
-  }
   return {
     health: "unknown",
-    label: "Worker not reported",
-    detail: worker.detail ?? undefined,
+    label: telemetryFresh ? "Worker active" : "Worker starting",
+    detail: telemetryFresh
+      ? "runtime report pending"
+      : worker.detail ?? undefined,
   };
 }
 

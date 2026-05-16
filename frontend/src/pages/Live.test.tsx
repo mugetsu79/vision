@@ -131,6 +131,7 @@ class FakeWebSocket {
 describe("LivePage", () => {
   beforeEach(() => {
     telemetryCanvasMock.mockClear();
+    window.localStorage.clear();
     act(() => {
       useAuthStore.setState({
         status: "authenticated",
@@ -332,7 +333,7 @@ describe("LivePage", () => {
     expect(within(northGateStatus).getByText(/inherited transport/i)).toBeInTheDocument();
     expect(within(depotYardStatus).getByText(/^hybrid scene$/i)).toBeInTheDocument();
     expect(
-      within(depotYardStatus).getByText(/worker awaiting report/i),
+      within(depotYardStatus).getByText(/worker starting/i),
     ).toBeInTheDocument();
     expect(
       within(depotYardStatus).getByText(/540p \/ 5 fps/i),
@@ -395,6 +396,7 @@ describe("LivePage", () => {
     await waitFor(
       () => expect(screen.getAllByText(/telemetry live/i).length).toBeGreaterThanOrEqual(2),
     );
+    expect(within(depotYardStatus).getByText(/^worker active$/i)).toBeInTheDocument();
     expect(screen.getByText("car")).toBeInTheDocument();
     expect(screen.getByText("bus")).toBeInTheDocument();
     expect(screen.getAllByText(/visible now/i).length).toBeGreaterThanOrEqual(2);
@@ -524,6 +526,108 @@ describe("LivePage", () => {
     });
     expect(screen.getByText("1 visible now")).toBeInTheDocument();
     expect(screen.queryByText("0 visible now")).not.toBeInTheDocument();
+  });
+
+  test("supports tile sizing controls and app-level focus mode", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["person", "car"],
+            attribute_rules: [],
+            zones: [],
+            homography: {
+              src: [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+              ],
+              dst: [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+              ],
+              ref_distance_m: 10,
+            },
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
+    );
+    const portal = screen.getByTestId("scene-portal");
+
+    expect(
+      within(portal).getByRole("button", { name: /use compact tile/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(portal).getByRole("button", { name: /use standard tile/i }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(portal).getByRole("button", { name: /use large tile/i }),
+    );
+    expect(portal).toHaveClass("md:col-span-2");
+    expect(portal).toHaveClass("xl:col-span-6");
+
+    await user.click(
+      within(portal).getByRole("button", { name: /focus scene/i }),
+    );
+    const focusedScene = screen.getByRole("region", {
+      name: /north gate focused scene/i,
+    });
+    expect(focusedScene.parentElement).toBe(document.body);
+    expect(within(focusedScene).getByTestId("terrain-North Gate")).toBeInTheDocument();
+    expect(
+      within(focusedScene).getByRole("button", {
+        name: /close focused scene/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: /north gate focused scene/i }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   test("shows why native is unavailable for a camera", async () => {
