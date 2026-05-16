@@ -135,6 +135,28 @@ async def test_drain_stops_accepting_new_work_and_only_terminates_target_worker(
 
 
 @pytest.mark.asyncio
+async def test_start_resumes_after_drain_for_explicit_operator_start() -> None:
+    camera_id = uuid4()
+    first_process = _FakeProcess()
+    second_process = _FakeProcess()
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(base_env={}),
+        subprocess_exec=_exec_sequence([first_process, second_process]),
+    )
+    await adapter.start(camera_id)
+    await adapter.drain(camera_id)
+
+    result = await adapter.start(camera_id)
+
+    assert result.runtime_state == "running"
+    assert result.last_error is None
+    assert adapter.accepting_new_work is True
+    assert adapter.is_running(camera_id)
+    assert first_process.terminate_called is True
+    assert second_process.terminate_called is False
+
+
+@pytest.mark.asyncio
 async def test_start_reports_error_when_subprocess_creation_fails() -> None:
     async def _exec(*argv: str, env: Mapping[str, str]) -> _FakeProcess:
         del argv, env

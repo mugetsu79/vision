@@ -332,6 +332,42 @@ async def test_runner_recovers_desired_worker_from_fleet_after_restart() -> None
     assert operations.runtime_reports[0]["camera_id"] == worker.camera_id
 
 
+@pytest.mark.asyncio
+async def test_runner_provisions_stream_paths_without_starting_not_desired_worker() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        desired_state=WorkerDesiredState.NOT_DESIRED,
+        runtime_status=WorkerRuntimeStatus.OFFLINE,
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    operations = _FakeOperations(
+        requests=[],
+        fleet=_fleet_overview(worker),
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    adapter = _FakeProcessAdapter()
+    stream_provisioner = _FakeStreamProvisioner()
+    runner = SupervisorRunner(
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+        stream_provisioner=stream_provisioner,
+    )
+
+    processed = await runner.run_once()
+
+    assert processed == 0
+    assert stream_provisioner.fleets == [operations.fleet]
+    assert adapter.calls == []
+
+
 def _lifecycle_request(action: OperationsLifecycleAction) -> OperationsLifecycleRequestResponse:
     return OperationsLifecycleRequestResponse(
         id=uuid4(),
@@ -547,6 +583,14 @@ class _FakeProcessAdapter:
 
     def is_running(self, camera_id: UUID) -> bool:
         return camera_id in self.running
+
+
+class _FakeStreamProvisioner:
+    def __init__(self) -> None:
+        self.fleets: list[FleetOverviewResponse | None] = []
+
+    async def ensure_fleet_streams(self, fleet: FleetOverviewResponse | None) -> None:
+        self.fleets.append(fleet)
 
 
 def _fleet_worker(

@@ -21,6 +21,7 @@ from argus.api.contracts import (
     SupervisorRuntimeReportResponse,
     SupervisorServiceReportCreate,
     SupervisorServiceReportResponse,
+    WorkerConfigResponse,
     WorkerModelAdmissionRequest,
     WorkerModelAdmissionResponse,
 )
@@ -165,6 +166,10 @@ class SupervisorOperationsClient:
     async def fetch_fleet_overview(self) -> FleetOverviewResponse:
         body = await self._request("GET", "/api/v1/operations/fleet")
         return FleetOverviewResponse.model_validate(body)
+
+    async def fetch_worker_config(self, camera_id: UUID) -> WorkerConfigResponse:
+        body = await self._request("GET", f"/api/v1/cameras/{camera_id}/worker-config")
+        return WorkerConfigResponse.model_validate(body)
 
     async def poll_lifecycle_requests(
         self,

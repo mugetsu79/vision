@@ -24,6 +24,7 @@ from argus.models.enums import (
     DeploymentNodeKind,
     DeploymentServiceManager,
 )
+from argus.streaming.mediamtx import MediaMTXClient, PublishProfile
 from argus.supervisor.credential_store import FileCredentialStore
 from argus.supervisor.hardware_probe import HostCapabilityProbe
 from argus.supervisor.metrics_probe import MetricsSnapshot, WorkerMetricsContext, WorkerMetricsProbe
@@ -34,6 +35,7 @@ from argus.supervisor.operations_client import (
 )
 from argus.supervisor.process_adapter import LocalWorkerProcessAdapter, WorkerLaunchConfig
 from argus.supervisor.reconciler import SupervisorReconciler
+from argus.supervisor.stream_provisioner import SupervisorStreamProvisioner
 
 LOGGER = logging.getLogger(__name__)
 _NIL_TENANT_ID = UUID(int=0)
@@ -54,6 +56,10 @@ class MetricsProbe(Protocol):
         worker_contexts: Iterable[WorkerMetricsContext],
         previous_snapshot: MetricsSnapshot | None = None,
     ) -> list[HardwarePerformanceSample]: ...
+
+
+class StreamProvisioner(Protocol):
+    async def ensure_fleet_streams(self, fleet: FleetOverviewResponse | None) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +87,12 @@ class RunnerConfig:
     supervisor_version: str | None = None
     hostname: str | None = None
     public_mediamtx_rtsp_url: str | None = None
+    mediamtx_api_url: str | None = None
+    mediamtx_rtsp_base_url: str | None = None
+    mediamtx_whip_base_url: str | None = None
+    mediamtx_username: str | None = None
+    mediamtx_password: str | None = None
+    publish_profile: str | None = None
     healthcheck: bool = False
 
 
@@ -102,6 +114,7 @@ class SupervisorRunner:
         public_mediamtx_rtsp_url: str | None = None,
         product_mode: bool = False,
         auth_mode: str = "static_bearer_dev",
+        stream_provisioner: StreamProvisioner | None = None,
     ) -> None:
         self.supervisor_id = supervisor_id
         self.edge_node_id = edge_node_id
@@ -117,6 +130,7 @@ class SupervisorRunner:
         self.public_mediamtx_rtsp_url = public_mediamtx_rtsp_url
         self.product_mode = product_mode
         self.auth_mode = auth_mode
+        self.stream_provisioner = stream_provisioner
         self.reconciler = SupervisorReconciler(
             operations=operations,  # type: ignore[arg-type]
             process_adapter=process_adapter,  # type: ignore[arg-type]
@@ -128,6 +142,7 @@ class SupervisorRunner:
 
     async def run_once(self) -> int:
         fleet = await self._fetch_fleet_overview()
+        await self._ensure_stream_paths(fleet)
         worker_contexts = _worker_contexts_from_fleet(fleet)
         observed_performance = await self._performance_samples(worker_contexts)
         report = self.hardware_probe.build_hardware_report(
@@ -223,6 +238,14 @@ class SupervisorRunner:
             LOGGER.warning("Supervisor reconciliation failed: %s", exc)
             return 0
 
+    async def _ensure_stream_paths(self, fleet: FleetOverviewResponse | None) -> None:
+        if self.stream_provisioner is None:
+            return
+        try:
+            await self.stream_provisioner.ensure_fleet_streams(fleet)
+        except Exception as exc:
+            LOGGER.warning("Supervisor stream provisioning failed: %s", exc)
+
     async def _performance_samples(
         self,
         worker_contexts: list[WorkerMetricsContext],
@@ -250,6 +273,7 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
         token_provider=token_provider,
         credential_store=credential_store,
     )
+    stream_provisioner = _build_stream_provisioner(config, operations=operations)
     worker_token_provider = token_provider or _credential_store_token_provider(credential_store)
     return SupervisorRunner(
         supervisor_id=config.supervisor_id,
@@ -272,6 +296,42 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
         public_mediamtx_rtsp_url=config.public_mediamtx_rtsp_url,
         product_mode=config.product_mode,
         auth_mode=config.auth_mode,
+        stream_provisioner=stream_provisioner,
+    )
+
+
+def _build_stream_provisioner(
+    config: RunnerConfig,
+    *,
+    operations: SupervisorOperationsClient,
+) -> SupervisorStreamProvisioner | None:
+    mediamtx_api_url = config.mediamtx_api_url or os.getenv("ARGUS_MEDIAMTX_API_URL")
+    mediamtx_rtsp_base_url = (
+        config.mediamtx_rtsp_base_url or os.getenv("ARGUS_MEDIAMTX_RTSP_BASE_URL")
+    )
+    mediamtx_whip_base_url = (
+        config.mediamtx_whip_base_url or os.getenv("ARGUS_MEDIAMTX_WHIP_BASE_URL")
+    )
+    if not mediamtx_api_url or not mediamtx_rtsp_base_url or not mediamtx_whip_base_url:
+        return None
+    try:
+        publish_profile = PublishProfile(
+            config.publish_profile or os.getenv("ARGUS_PUBLISH_PROFILE", "central-gpu")
+        )
+    except ValueError:
+        publish_profile = PublishProfile.CENTRAL_GPU
+    stream_client = MediaMTXClient(
+        api_base_url=mediamtx_api_url,
+        rtsp_base_url=mediamtx_rtsp_base_url,
+        whip_base_url=mediamtx_whip_base_url,
+        username=config.mediamtx_username or os.getenv("ARGUS_MEDIAMTX_USERNAME"),
+        password=config.mediamtx_password or os.getenv("ARGUS_MEDIAMTX_PASSWORD"),
+    )
+    return SupervisorStreamProvisioner(
+        operations=operations,
+        stream_client=stream_client,
+        edge_node_id=config.edge_node_id,
+        publish_profile=publish_profile,
     )
 
 
@@ -300,6 +360,18 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         "--public-mediamtx-rtsp-url",
         default=os.getenv("ARGUS_PUBLIC_MEDIAMTX_RTSP_URL"),
     )
+    parser.add_argument("--mediamtx-api-url", default=os.getenv("ARGUS_MEDIAMTX_API_URL"))
+    parser.add_argument(
+        "--mediamtx-rtsp-base-url",
+        default=os.getenv("ARGUS_MEDIAMTX_RTSP_BASE_URL"),
+    )
+    parser.add_argument(
+        "--mediamtx-whip-base-url",
+        default=os.getenv("ARGUS_MEDIAMTX_WHIP_BASE_URL"),
+    )
+    parser.add_argument("--mediamtx-username", default=os.getenv("ARGUS_MEDIAMTX_USERNAME"))
+    parser.add_argument("--mediamtx-password", default=os.getenv("ARGUS_MEDIAMTX_PASSWORD"))
+    parser.add_argument("--publish-profile", default=os.getenv("ARGUS_PUBLISH_PROFILE"))
     parser.add_argument("--hardware-report-interval-seconds", type=float, default=60.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--once", action="store_true")
@@ -346,6 +418,12 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         auth_mode="password_grant_dev" if has_refreshable_token else "static_bearer_dev",
         service_manager=DeploymentServiceManager.DIRECT_CHILD,
         public_mediamtx_rtsp_url=args.public_mediamtx_rtsp_url,
+        mediamtx_api_url=args.mediamtx_api_url,
+        mediamtx_rtsp_base_url=args.mediamtx_rtsp_base_url,
+        mediamtx_whip_base_url=args.mediamtx_whip_base_url,
+        mediamtx_username=args.mediamtx_username,
+        mediamtx_password=args.mediamtx_password,
+        publish_profile=args.publish_profile,
         healthcheck=args.healthcheck,
     )
 
@@ -400,6 +478,26 @@ def _parse_config_file(args: argparse.Namespace, parser: argparse.ArgumentParser
         supervisor_version=_optional_string(payload.get("version")),
         hostname=_optional_string(payload.get("hostname")),
         public_mediamtx_rtsp_url=_optional_string(payload.get("public_mediamtx_rtsp_url")),
+        mediamtx_api_url=(
+            _optional_string(payload.get("mediamtx_api_url")) or args.mediamtx_api_url
+        ),
+        mediamtx_rtsp_base_url=(
+            _optional_string(payload.get("mediamtx_rtsp_base_url"))
+            or args.mediamtx_rtsp_base_url
+        ),
+        mediamtx_whip_base_url=(
+            _optional_string(payload.get("mediamtx_whip_base_url"))
+            or args.mediamtx_whip_base_url
+        ),
+        mediamtx_username=(
+            _optional_string(payload.get("mediamtx_username")) or args.mediamtx_username
+        ),
+        mediamtx_password=(
+            _optional_string(payload.get("mediamtx_password")) or args.mediamtx_password
+        ),
+        publish_profile=(
+            _optional_string(payload.get("publish_profile")) or args.publish_profile
+        ),
         healthcheck=args.healthcheck,
     )
 

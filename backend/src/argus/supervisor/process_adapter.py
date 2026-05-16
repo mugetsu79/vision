@@ -62,11 +62,7 @@ class LocalWorkerProcessAdapter:
         return process is not None and _returncode(process) is None
 
     async def start(self, camera_id: UUID) -> WorkerProcessResult:
-        if not self.accepting_new_work:
-            return WorkerProcessResult(
-                runtime_state="error",
-                last_error="Supervisor is draining and is not accepting new work.",
-            )
+        self.accepting_new_work = True
         existing = self._processes.get(camera_id)
         if existing is not None and _returncode(existing) is None:
             return WorkerProcessResult(runtime_state="running")

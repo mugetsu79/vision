@@ -7,7 +7,7 @@ import inspect
 import logging
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
@@ -116,6 +116,12 @@ Frame = NDArray[np.uint8]
 
 logger = logging.getLogger(__name__)
 _CAPTURE_WAIT_SPIKE_WARNING_THRESHOLD_S = 0.250
+_DETECTOR_PROVIDER_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "TensorrtExecutionProvider": ("CUDAExecutionProvider", "CPUExecutionProvider"),
+    "CUDAExecutionProvider": ("CPUExecutionProvider",),
+    "CoreMLExecutionProvider": ("CPUExecutionProvider",),
+    "OpenVINOExecutionProvider": ("CPUExecutionProvider",),
+}
 
 _FACE_PRIVACY_DETECTION_CLASSES = ("person", "pedestrian")
 _ACTIVE_ANNOTATION_COLORS_BGR: dict[str, tuple[int, int, int]] = {
@@ -611,6 +617,49 @@ def _build_detector_with_selection(
     runtime_policy: RuntimeExecutionPolicy,
     runtime_selection: RuntimeSelection,
 ) -> Detector:
+    last_error: Exception | None = None
+    providers = _detector_provider_candidates(
+        runtime_policy=runtime_policy,
+        runtime_selection=runtime_selection,
+    )
+    for index, provider in enumerate(providers):
+        candidate_policy = (
+            runtime_policy
+            if provider == runtime_policy.provider
+            else replace(runtime_policy, provider=provider)
+        )
+        try:
+            return _call_build_detector(
+                model=model,
+                runtime=runtime,
+                runtime_policy=candidate_policy,
+                runtime_selection=runtime_selection,
+            )
+        except Exception as exc:
+            last_error = exc
+            if index == len(providers) - 1:
+                raise
+            logger.warning(
+                (
+                    "Detector provider initialization failed; retrying with fallback "
+                    "provider failed_provider=%s fallback_provider=%s error=%s"
+                ),
+                provider,
+                providers[index + 1],
+                exc,
+            )
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("No detector execution providers are available.")
+
+
+def _call_build_detector(
+    *,
+    model: ModelSettings,
+    runtime: Any,
+    runtime_policy: RuntimeExecutionPolicy,
+    runtime_selection: RuntimeSelection,
+) -> Detector:
     try:
         return build_detector(
             model=model,
@@ -626,6 +675,25 @@ def _build_detector_with_selection(
             runtime=runtime,
             runtime_policy=runtime_policy,
         )
+
+
+def _detector_provider_candidates(
+    *,
+    runtime_policy: RuntimeExecutionPolicy,
+    runtime_selection: RuntimeSelection,
+) -> tuple[str, ...]:
+    if (
+        runtime_policy.provider_overridden
+        or not runtime_selection.fallback_allowed
+        or runtime_selection.artifact is not None
+    ):
+        return (runtime_policy.provider,)
+    available = set(runtime_policy.available_providers)
+    candidates = [runtime_policy.provider]
+    for provider in _DETECTOR_PROVIDER_FALLBACKS.get(runtime_policy.provider, ()):
+        if provider in available and provider not in candidates:
+            candidates.append(provider)
+    return tuple(candidates)
 
 
 @dataclass(slots=True)

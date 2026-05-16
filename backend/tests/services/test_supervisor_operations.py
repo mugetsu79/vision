@@ -11,6 +11,7 @@ from argus.api.contracts import (
     OperationsLifecycleRequestCreate,
     SupervisorRuntimeReportCreate,
     WorkerAssignmentCreate,
+    WorkerDesiredState,
     WorkerModelAdmissionRequest,
 )
 from argus.models.enums import (
@@ -143,6 +144,74 @@ async def test_creates_lifecycle_requests_without_running_process_commands(
     assert {request.status for request in requests} == {
         OperationsLifecycleStatus.REQUESTED
     }
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_stop_drain_and_start_update_active_assignment_desired_state() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    service = SupervisorOperationsService(_MemorySessionFactory())
+    assignment = await service.create_assignment(
+        tenant_id=tenant_id,
+        payload=WorkerAssignmentCreate(
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            desired_state=WorkerDesiredState.SUPERVISED,
+        ),
+        actor_subject="operator-1",
+    )
+
+    await service.create_lifecycle_request(
+        tenant_id=tenant_id,
+        payload=OperationsLifecycleRequestCreate(
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment.id,
+            action=OperationsLifecycleAction.STOP,
+        ),
+        actor_subject="operator-1",
+    )
+    stopped = await service.latest_assignments_by_camera(
+        tenant_id=tenant_id,
+        camera_ids=[camera_id],
+    )
+
+    assert stopped[camera_id].desired_state == WorkerDesiredState.NOT_DESIRED.value
+
+    await service.create_lifecycle_request(
+        tenant_id=tenant_id,
+        payload=OperationsLifecycleRequestCreate(
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment.id,
+            action=OperationsLifecycleAction.DRAIN,
+        ),
+        actor_subject="operator-1",
+    )
+    drained = await service.latest_assignments_by_camera(
+        tenant_id=tenant_id,
+        camera_ids=[camera_id],
+    )
+
+    assert drained[camera_id].desired_state == WorkerDesiredState.NOT_DESIRED.value
+
+    await service.create_lifecycle_request(
+        tenant_id=tenant_id,
+        payload=OperationsLifecycleRequestCreate(
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment.id,
+            action=OperationsLifecycleAction.START,
+        ),
+        actor_subject="operator-1",
+    )
+    started = await service.latest_assignments_by_camera(
+        tenant_id=tenant_id,
+        camera_ids=[camera_id],
+    )
+
+    assert started[camera_id].desired_state == WorkerDesiredState.SUPERVISED.value
 
 
 def test_resolved_operations_mode_controls_lifecycle_owner_and_actions() -> None:

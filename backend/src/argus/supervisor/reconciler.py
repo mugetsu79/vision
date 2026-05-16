@@ -217,6 +217,8 @@ class SupervisorReconciler:
         return processed
 
     def _should_start_desired_worker(self, worker: FleetCameraWorkerSummary) -> bool:
+        if getattr(self.process_adapter, "accepting_new_work", True) is False:
+            return False
         if worker.desired_state not in _DESIRED_RUNNING_STATES:
             return False
         if not _worker_owner_matches_supervisor(worker, edge_node_id=self.edge_node_id):

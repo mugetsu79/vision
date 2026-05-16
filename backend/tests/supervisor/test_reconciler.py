@@ -160,6 +160,46 @@ async def test_reconciler_recovers_desired_worker_after_restart() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reconciler_does_not_recover_desired_worker_while_draining() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    admission = _admission_response(
+        tenant_id=tenant_id,
+        camera_id=uuid4(),
+        edge_node_id=edge_node_id,
+        assignment_id=uuid4(),
+        status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.OFFLINE,
+        admission=admission,
+    )
+    operations = _FakeSupervisorOperations(
+        requests=[],
+        admission=admission,
+    )
+    adapter = _FakeProcessAdapter()
+    adapter.accepting_new_work = False
+    reconciler = SupervisorReconciler(
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+    )
+
+    processed = await reconciler.reconcile_once(fleet=_fleet_overview(worker))
+
+    assert processed == 0
+    assert adapter.calls == []
+    assert operations.admission_evaluations == []
+    assert operations.runtime_reports == []
+
+
+@pytest.mark.asyncio
 async def test_reconciler_does_not_recover_worker_with_unknown_model_admission() -> None:
     tenant_id = uuid4()
     edge_node_id = uuid4()
@@ -437,8 +477,10 @@ class _FakeProcessAdapter:
     def __init__(self) -> None:
         self.calls: list[tuple[str, UUID]] = []
         self.running: set[UUID] = set()
+        self.accepting_new_work = True
 
     async def start(self, camera_id: UUID) -> WorkerProcessResult:
+        self.accepting_new_work = True
         if camera_id not in self.running:
             self.calls.append(("start", camera_id))
             self.running.add(camera_id)
@@ -459,6 +501,7 @@ class _FakeProcessAdapter:
 
     async def drain(self, camera_id: UUID) -> WorkerProcessResult:
         self.calls.append(("drain", camera_id))
+        self.accepting_new_work = False
         self.running.discard(camera_id)
         return WorkerProcessResult(runtime_state="draining")
 

@@ -192,10 +192,39 @@ class SupervisorOperationsService:
             request_payload=dict(payload.request_payload),
         )
         async with self.session_factory() as session:
+            await self._apply_lifecycle_desired_state(
+                session=session,
+                tenant_id=tenant_id,
+                payload=payload,
+            )
             session.add(row)
             await session.commit()
             await session.refresh(row)
         return row
+
+    async def _apply_lifecycle_desired_state(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_id: UUID,
+        payload: OperationsLifecycleRequestCreate,
+    ) -> None:
+        desired_state = _desired_state_for_lifecycle_action(payload.action)
+        if desired_state is None:
+            return
+        statement = (
+            select(WorkerAssignment)
+            .where(WorkerAssignment.tenant_id == tenant_id)
+            .where(WorkerAssignment.camera_id == payload.camera_id)
+            .where(WorkerAssignment.active.is_(True))
+            .order_by(WorkerAssignment.created_at.desc())
+        )
+        if payload.assignment_id is not None:
+            statement = statement.where(WorkerAssignment.id == payload.assignment_id)
+        rows = list((await session.execute(statement)).scalars().all())
+        assignment = next((row for row in rows if isinstance(row, WorkerAssignment)), None)
+        if assignment is not None:
+            assignment.desired_state = desired_state.value
 
     async def latest_lifecycle_requests_by_camera(
         self,
@@ -728,6 +757,16 @@ def _request_matches_supervisor_scope(
     if edge_node_id is None:
         return row.edge_node_id is None
     return row.edge_node_id == edge_node_id
+
+
+def _desired_state_for_lifecycle_action(
+    action: OperationsLifecycleAction,
+) -> WorkerDesiredState | None:
+    if action in {OperationsLifecycleAction.STOP, OperationsLifecycleAction.DRAIN}:
+        return WorkerDesiredState.NOT_DESIRED
+    if action in {OperationsLifecycleAction.START, OperationsLifecycleAction.RESTART}:
+        return WorkerDesiredState.SUPERVISED
+    return None
 
 
 def _hardware_report_hash(

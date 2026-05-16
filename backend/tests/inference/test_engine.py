@@ -3020,6 +3020,68 @@ def _patch_runtime_engine_build_dependencies(
     return fake_runtime, runtime_policy
 
 
+def test_build_detector_with_selection_retries_after_tensorrt_provider_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_policy = RuntimeExecutionPolicy(
+        host=HostClassification(
+            system="linux",
+            machine="aarch64",
+            cpu_vendor=CpuVendor.UNKNOWN,
+            available_providers=(
+                ExecutionProvider.TENSORRT.value,
+                ExecutionProvider.CUDA.value,
+                ExecutionProvider.CPU.value,
+            ),
+            profile=ExecutionProfile.LINUX_AARCH64_NVIDIA_JETSON,
+            profile_overridden=False,
+        ),
+        provider=ExecutionProvider.TENSORRT.value,
+        available_providers=(
+            ExecutionProvider.TENSORRT.value,
+            ExecutionProvider.CUDA.value,
+            ExecutionProvider.CPU.value,
+        ),
+        provider_overridden=False,
+    )
+    runtime_selection = RuntimeSelection(
+        selected_backend="onnxruntime",
+        artifact=None,
+        fallback=True,
+        fallback_reason="no_runtime_artifacts",
+        fallback_allowed=True,
+    )
+    providers: list[str] = []
+
+    def fake_build_detector(
+        *,
+        model: object,
+        runtime: object,
+        runtime_policy: RuntimeExecutionPolicy,
+        runtime_selection: RuntimeSelection,
+    ) -> object:
+        del model, runtime, runtime_selection
+        providers.append(runtime_policy.provider)
+        if runtime_policy.provider == ExecutionProvider.TENSORRT.value:
+            raise RuntimeError("TensorRT EP failed to create engine")
+        return object()
+
+    monkeypatch.setattr(engine_module, "build_detector", fake_build_detector)
+
+    detector = engine_module._build_detector_with_selection(
+        model=object(),
+        runtime=object(),
+        runtime_policy=runtime_policy,
+        runtime_selection=runtime_selection,
+    )
+
+    assert detector is not None
+    assert providers == [
+        ExecutionProvider.TENSORRT.value,
+        ExecutionProvider.CUDA.value,
+    ]
+
+
 @pytest.mark.asyncio
 async def test_build_runtime_engine_uses_detector_factory_for_fixed_vocab_models(
     monkeypatch: pytest.MonkeyPatch,
