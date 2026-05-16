@@ -25,6 +25,9 @@ Worker-config supervisor credential route fix
 Recent relevant checkpoints:
 
 ```text
+c30f4c6f docs(installer): record live stream validation
+49a4cbba fix(workers): allow disabled recording storage mismatch
+34ea9272 fix(workers): allow supervisor credentials for worker config
 07b958c9 fix(installer): clear stale edge containers before preflight
 8c37f50e Wire installed edge NATS leaf
 9b1cfade Fix edge runtime Python 3.10 UTC import
@@ -246,6 +249,31 @@ delivery layer. Before the source became ready, master MediaMTX logged repeated
 RTSP source `404`; after the fix it logged the stream as available, then some
 WebRTC sessions closed with `deadline exceeded while waiting connection`.
 
+2026-05-16 YOLO11n model follow-up: the Jetson then reached runtime startup
+but selected the canonical `YOLO11n COCO` row and failed on:
+
+```text
+Load model from /models/yolo11n.onnx failed. File doesn't exist
+```
+
+Root cause: the model row on the MacBook master points at
+`/models/yolo11n.onnx`, while the edge installer stores host-side models under
+`/var/lib/vezor/models`. The edge supervisor compose file mounted
+`/var/lib/vezor` but did not expose the runtime alias `/models`, so copying the
+file to `/var/lib/vezor/models/yolo11n.onnx` still left
+`docker exec vezor-supervisor ls /models/yolo11n.onnx` failing.
+
+Fix: the edge installer now writes `VEZOR_MODEL_HOST_DIR=$MODEL_DIR` to
+`/etc/vezor/edge.env`, and `compose.supervisor.yml` mounts
+`${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models:ro`.
+
+Validation:
+
+```text
+python3 -m uv run --project backend pytest installer/tests/test_edge_installer_artifacts.py -q -> 7 passed
+make verify-installers -> 59 installer tests passed and compose render passed
+```
+
 ## Immediate Next Step
 
 On the Jetson, pull latest and rerun the edge installer as an unpaired update:
@@ -269,6 +297,19 @@ sudo ./installer/linux/install-edge.sh \
   --public-stream-host "$JETSON_STREAM_HOST" \
   --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
 ```
+
+Then make sure the selected ONNX model exists on the Jetson runtime model
+directory and is visible at `/models` inside the supervisor container:
+
+```bash
+sudo install -d -m 0755 /var/lib/vezor/models
+sudo install -m 0644 /tmp/yolo11n.onnx /var/lib/vezor/models/yolo11n.onnx
+docker exec vezor-supervisor ls -lh /models/yolo11n.onnx
+```
+
+If `/tmp/yolo11n.onnx` is not present on the Jetson, copy the master machine's
+registered `/var/lib/vezor/models/yolo11n.onnx` to the Jetson first, or switch
+the camera to a model file already present on the Jetson such as `YOLO26n COCO`.
 
 Then check:
 

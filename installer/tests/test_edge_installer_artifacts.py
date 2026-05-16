@@ -81,6 +81,7 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "f\"authJWTJWKS: {api_url}/.well-known/argus/mediamtx/jwks.json\"" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
+    assert "VEZOR_MODEL_HOST_DIR=$MODEL_DIR" in script
     assert "VEZOR_NATS_IMAGE=$NATS_IMAGE" in script
     assert "ARGUS_NATS_URL=nats://nats-leaf:4222" in script
     assert "VEZOR_NATS_LEAF_REMOTE_URL=$MASTER_NATS_LEAF_URL" in script
@@ -155,6 +156,7 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
         "${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}"
         ":/run/vezor/credentials:ro"
     ) in compose
+    assert "${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models:ro" in compose
     assert "      - nats-leaf" in compose
 
 

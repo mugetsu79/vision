@@ -56,6 +56,7 @@ services:
       - /etc/vezor/edge.json:/etc/vezor/edge.json:ro
       - /etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro
       - ${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}:/run/vezor/credentials:ro
+      - ${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models:ro
       - /var/lib/vezor:/var/lib/vezor
       - /var/log/vezor:/var/log/vezor
     depends_on:
