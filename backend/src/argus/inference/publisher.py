@@ -232,11 +232,15 @@ class HttpPublisher:
         headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
         flush_interval_seconds: float = 0.5,
+        max_buffer_size: int | None = None,
         monotonic: MonotonicClock = time.monotonic,
     ) -> None:
+        if max_buffer_size is not None and max_buffer_size < 1:
+            raise ValueError("max_buffer_size must be at least 1 when set")
         self.url = url
         self.headers = dict(headers or {})
         self.flush_interval_seconds = flush_interval_seconds
+        self.max_buffer_size = max_buffer_size
         self._monotonic = monotonic
         self._owned_client = http_client is None
         self._http_client = http_client or httpx.AsyncClient()
@@ -248,6 +252,8 @@ class HttpPublisher:
         if self._batch_started_at is None:
             self._batch_started_at = now
         self._buffer.append(frame)
+        if self.max_buffer_size is not None:
+            self._buffer = self._buffer[-self.max_buffer_size :]
         if now - self._batch_started_at >= self.flush_interval_seconds:
             await self.flush()
 

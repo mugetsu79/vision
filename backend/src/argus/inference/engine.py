@@ -1881,6 +1881,7 @@ async def build_runtime_engine(
         publisher = HttpPublisher(
             url=config.publish.http_fallback_url or _edge_telemetry_ingest_url(settings),
             headers=_edge_telemetry_headers(settings),
+            max_buffer_size=1,
         )
     elif config.publish.http_fallback_url is not None:
         publisher = ResilientPublisher(

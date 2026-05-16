@@ -153,6 +153,31 @@ async def test_http_publisher_sends_configured_headers() -> None:
 
 
 @pytest.mark.asyncio
+async def test_http_publisher_can_coalesce_batch_to_latest_frame() -> None:
+    posted_batches: list[list[dict[str, object]]] = []
+    clock_values = iter([0.0, 0.10, 0.60])
+
+    async def handler(request: Request) -> Response:
+        posted_batches.append(json.loads(request.content.decode("utf-8"))["events"])
+        return Response(202, json={"accepted": True})
+
+    publisher = HttpPublisher(
+        url="http://backend.internal/api/v1/edge/telemetry",
+        http_client=AsyncClient(transport=MockTransport(handler)),
+        max_buffer_size=1,
+        monotonic=lambda: next(clock_values),
+    )
+
+    await publisher.publish(_telemetry_frame(1))
+    await publisher.publish(_telemetry_frame(2))
+    await publisher.publish(_telemetry_frame(3))
+
+    assert len(posted_batches) == 1
+    assert len(posted_batches[0]) == 1
+    assert posted_batches[0][0]["tracks"][0]["track_id"] == 3
+
+
+@pytest.mark.asyncio
 async def test_resilient_publisher_falls_back_to_http_when_nats_is_unreachable() -> None:
     batches: list[list[dict[str, object]]] = []
 

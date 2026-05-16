@@ -3109,6 +3109,7 @@ async def test_build_runtime_engine_uses_master_http_ingest_for_edge_telemetry(
         assert isinstance(wrapped, engine_module.HttpPublisher)
         assert wrapped.url == "http://master.local:8000/api/v1/edge/telemetry"
         assert wrapped.headers == {"X-Edge-Key": "edge-secret"}
+        assert wrapped.max_buffer_size == 1
     finally:
         await engine.close()
 
