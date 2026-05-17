@@ -2984,6 +2984,123 @@ async def test_run_engine_for_edge_camera_avoids_local_database_stores(
     assert captured["events_closed"] is True
 
 
+@pytest.mark.asyncio
+async def test_run_engine_polls_worker_config_and_applies_stream_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured: dict[str, object] = {"loaded_streams": [], "applied_streams": []}
+
+    class _StopWorker(Exception):
+        pass
+
+    class _FakeEventsClient:
+        def __init__(self, settings: object) -> None:
+            captured["events_settings"] = settings
+
+        async def connect(self) -> None:
+            captured["events_connected"] = True
+
+        async def close(self) -> None:
+            captured["events_closed"] = True
+
+    class _FakeEngine:
+        def __init__(self) -> None:
+            self.run_count = 0
+
+        async def start(self) -> None:
+            captured["engine_started"] = True
+
+        async def run_once(self) -> None:
+            self.run_count += 1
+            await asyncio.sleep(0.002)
+            if self.run_count >= 2:
+                raise _StopWorker
+
+        async def apply_command(self, command: CameraCommand) -> None:
+            assert command.stream is not None
+            captured["applied_streams"].append(
+                command.stream.model_dump(mode="python")
+            )
+
+        async def close(self) -> None:
+            captured["engine_closed"] = True
+
+    async def fake_load_engine_config(
+        received_camera_id: UUID,
+        *,
+        settings: object,
+    ) -> EngineConfig:
+        assert received_camera_id == camera_id
+        loaded_streams: list[str] = captured["loaded_streams"]  # type: ignore[assignment]
+        stream = (
+            StreamSettings(
+                profile_id="native",
+                kind="passthrough",
+                width=None,
+                height=None,
+                fps=25,
+            )
+            if not loaded_streams
+            else StreamSettings(
+                profile_id="720p10",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=10,
+            )
+        )
+        loaded_streams.append(stream.profile_id)
+        return _engine_config(received_camera_id).model_copy(
+            update={"mode": ProcessingMode.EDGE, "stream": stream}
+        )
+
+    async def fake_build_runtime_engine(
+        config: EngineConfig,
+        **kwargs: object,
+    ) -> _FakeEngine:
+        captured["initial_stream"] = config.stream.model_dump(mode="python")
+        return _FakeEngine()
+
+    monkeypatch.setattr(engine_module, "NatsJetStreamClient", _FakeEventsClient)
+    monkeypatch.setattr(engine_module, "load_engine_config", fake_load_engine_config)
+    monkeypatch.setattr(engine_module, "build_runtime_engine", fake_build_runtime_engine)
+    monkeypatch.setattr(
+        engine_module,
+        "probe_publish_profile",
+        lambda **kwargs: PublishProfile.JETSON_NANO,
+    )
+
+    settings = engine_module.Settings(
+        _env_file=None,
+        enable_worker_metrics_server=False,
+        worker_config_poll_interval_seconds=0.001,
+    )
+
+    with pytest.raises(_StopWorker):
+        await engine_module.run_engine_for_camera(camera_id, settings=settings)
+
+    assert captured["loaded_streams"] == ["native", "720p10"]
+    assert captured["initial_stream"] == {
+        "profile_id": "native",
+        "kind": "passthrough",
+        "width": None,
+        "height": None,
+        "fps": 25,
+    }
+    assert captured["applied_streams"] == [
+        {
+            "profile_id": "720p10",
+            "kind": "transcode",
+            "width": 1280,
+            "height": 720,
+            "fps": 10,
+        }
+    ]
+    assert captured["engine_closed"] is True
+    assert captured["events_closed"] is True
+
+
 def test_engine_config_accepts_worker_evidence_storage_settings() -> None:
     camera_id = uuid4()
     profile_id = uuid4()

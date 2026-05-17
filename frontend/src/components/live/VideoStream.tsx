@@ -40,6 +40,7 @@ class StreamNotReadyError extends Error {
 
 export function VideoStream({
   activeProfileId = null,
+  activeStreamMode = null,
   cameraId,
   cameraName,
   defaultProfile,
@@ -47,6 +48,7 @@ export function VideoStream({
   heartbeatTs = null,
 }: {
   activeProfileId?: string | null;
+  activeStreamMode?: string | null;
   cameraId: string;
   cameraName: string;
   defaultProfile: string;
@@ -176,7 +178,12 @@ export function VideoStream({
 
   const streamProfileReady =
     activeProfileId === null || activeProfileId === defaultProfile;
-  const streamReady = isVisible && isPageVisible && streamProfileReady;
+  const streamModeReady = isStreamModeReadyForProfile(
+    activeStreamMode,
+    defaultProfile,
+  );
+  const streamReady =
+    isVisible && isPageVisible && streamProfileReady && streamModeReady;
 
   useEffect(() => {
     if (streamSelectionKeyRef.current === streamSelectionKey) {
@@ -883,6 +890,24 @@ async function startNativeHls({
 function nextStreamSessionToken(): number {
   streamSessionCounter += 1;
   return streamSessionCounter;
+}
+
+function isStreamModeReadyForProfile(
+  activeStreamMode: string | null,
+  defaultProfile: string,
+) {
+  if (activeStreamMode === null) {
+    return true;
+  }
+
+  if (defaultProfile === "native") {
+    return activeStreamMode === "passthrough";
+  }
+
+  return (
+    activeStreamMode === "annotated-whip" ||
+    activeStreamMode === "filtered-preview"
+  );
 }
 
 function transportLabel(transport: StreamTransport): string {

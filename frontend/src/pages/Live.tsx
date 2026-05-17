@@ -534,6 +534,7 @@ function ScenePortalCard({
           <span data-bracket aria-hidden="true" />
           <VideoStream
             activeProfileId={readFrameStreamProfileId(frame)}
+            activeStreamMode={frame?.stream_mode ?? null}
             cameraId={camera.id}
             cameraName={camera.name}
             defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
@@ -567,12 +568,7 @@ function ScenePortalCard({
               : "space-y-3 border-t border-white/8 px-5 py-4"
           }
         >
-          <div
-            className={[
-              "grid gap-3 rounded-[0.75rem] border border-white/8 bg-[#07101c]/80 p-3",
-              isFocused ? "" : "sm:grid-cols-[minmax(0,1fr)_auto]",
-            ].join(" ")}
-          >
+          <div className="grid gap-3 rounded-[0.75rem] border border-white/8 bg-[#07101c]/80 p-3">
             <label className="flex items-center gap-2 text-xs font-medium text-[#c7d8f2]">
               <input
                 type="checkbox"

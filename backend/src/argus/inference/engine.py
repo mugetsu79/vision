@@ -1775,6 +1775,42 @@ async def load_engine_config(
         ) from exc
 
 
+def _command_from_engine_config(config: EngineConfig) -> CameraCommand:
+    runtime_vocabulary = config.model.runtime_vocabulary
+    return CameraCommand(
+        active_classes=list(config.active_classes),
+        runtime_vocabulary=list(runtime_vocabulary.terms),
+        runtime_vocabulary_source=runtime_vocabulary.source,
+        runtime_vocabulary_version=runtime_vocabulary.version,
+        tracker_type=config.tracker.tracker_type,
+        privacy=config.privacy,
+        stream=config.stream,
+        attribute_rules=list(config.attribute_rules),
+        incident_rules=list(config.incident_rules),
+        zones=list(config.zones),
+        vision_profile=config.vision_profile,
+        detection_regions=list(config.detection_regions),
+        homography=config.homography,
+    )
+
+
+async def _refresh_engine_config(
+    engine: InferenceEngine,
+    camera_id: UUID,
+    *,
+    settings: Settings,
+) -> None:
+    try:
+        refreshed = await load_engine_config(camera_id, settings=settings)
+        await engine.apply_command(_command_from_engine_config(refreshed))
+    except Exception as exc:
+        logger.warning(
+            "Worker config refresh failed for camera %s; continuing with active config: %s",
+            camera_id,
+            exc,
+        )
+
+
 def _edge_telemetry_ingest_url(settings: Settings) -> str:
     return f"{settings.api_base_url.rstrip('/')}/api/v1/edge/telemetry"
 
@@ -2066,9 +2102,20 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         incident_capture=incident_capture,
     )
     await engine.start()
+    loop = asyncio.get_running_loop()
+    config_poll_interval = resolved_settings.worker_config_poll_interval_seconds
+    next_config_poll_at = loop.time() + config_poll_interval
     try:
         while True:
             await engine.run_once()
+            now = loop.time()
+            if now >= next_config_poll_at:
+                next_config_poll_at = now + config_poll_interval
+                await _refresh_engine_config(
+                    engine,
+                    camera_id,
+                    settings=resolved_settings,
+                )
             await asyncio.sleep(0)
     finally:
         await engine.close()

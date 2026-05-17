@@ -390,6 +390,53 @@ describe("VideoStream", () => {
     expect(body.profile_id).toBe("720p25");
   });
 
+  test("waits for telemetry to confirm the active stream mode before connecting", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0\r\n" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const view = await act(async () => {
+      const rendered = render(
+        <VideoStream
+          activeProfileId="annotated"
+          activeStreamMode="passthrough"
+          cameraId="11111111-1111-1111-1111-111111111111"
+          cameraName="North Gate"
+          defaultProfile="annotated"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      return rendered;
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
+
+    await act(async () => {
+      view.rerender(
+        <VideoStream
+          activeProfileId="annotated"
+          activeStreamMode="annotated-whip"
+          cameraId="11111111-1111-1111-1111-111111111111"
+          cameraName="North Gate"
+          defaultProfile="annotated"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+
+    expect(body.profile_id).toBe("annotated");
+  });
+
   test("falls back to HLS after repeated WebRTC not-ready responses", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
