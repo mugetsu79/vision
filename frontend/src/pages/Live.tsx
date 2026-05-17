@@ -533,6 +533,7 @@ function ScenePortalCard({
         >
           <span data-bracket aria-hidden="true" />
           <VideoStream
+            activeProfileId={readFrameStreamProfileId(frame)}
             cameraId={camera.id}
             cameraName={camera.name}
             defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
@@ -787,6 +788,11 @@ function formatProfileId(
 
 function formatStreamMode(frame: TelemetryFrame): string {
   return frame.stream_mode;
+}
+
+function readFrameStreamProfileId(frame: TelemetryFrame | undefined): string | null {
+  const value = frame?.stream_profile_id;
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function getCameraSourceSize(camera: CameraResponse): { width: number; height: number } | null {

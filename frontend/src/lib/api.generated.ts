@@ -4387,6 +4387,11 @@ export interface components {
             ts: string;
             profile: components["schemas"]["PublishProfile"];
             stream_mode: components["schemas"]["StreamMode"];
+            /**
+             * Stream Profile Id
+             * @default native
+             */
+            stream_profile_id: string;
             /** Counts */
             counts: {
                 [key: string]: number;

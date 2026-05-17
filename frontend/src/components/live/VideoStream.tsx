@@ -39,12 +39,14 @@ class StreamNotReadyError extends Error {
 }
 
 export function VideoStream({
+  activeProfileId = null,
   cameraId,
   cameraName,
   defaultProfile,
   deliveryMode = null,
   heartbeatTs = null,
 }: {
+  activeProfileId?: string | null;
   cameraId: string;
   cameraName: string;
   defaultProfile: string;
@@ -172,7 +174,9 @@ export function VideoStream({
     [accessToken, cameraId, sessionToken, tenantId],
   );
 
-  const streamReady = isVisible && isPageVisible;
+  const streamProfileReady =
+    activeProfileId === null || activeProfileId === defaultProfile;
+  const streamReady = isVisible && isPageVisible && streamProfileReady;
 
   useEffect(() => {
     if (streamSelectionKeyRef.current === streamSelectionKey) {

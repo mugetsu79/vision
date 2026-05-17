@@ -349,6 +349,47 @@ describe("VideoStream", () => {
     expect(body.profile_id).toBe("540p5");
   });
 
+  test("waits for telemetry to confirm the active stream profile before connecting", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0\r\n" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const view = await act(async () => {
+      const rendered = render(
+        <VideoStream
+          activeProfileId="native"
+          cameraId="11111111-1111-1111-1111-111111111111"
+          cameraName="North Gate"
+          defaultProfile="720p25"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      return rendered;
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
+
+    view.rerender(
+      <VideoStream
+        activeProfileId="720p25"
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="720p25"
+      />,
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+
+    expect(body.profile_id).toBe("720p25");
+  });
+
   test("falls back to HLS after repeated WebRTC not-ready responses", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(

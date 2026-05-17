@@ -12,6 +12,7 @@ function frame(tracks: TelemetryFrame["tracks"]): TelemetryFrame {
     ts: new Date().toISOString(),
     profile: "central-gpu",
     stream_mode: "annotated-whip",
+    stream_profile_id: "native",
     counts: {},
     tracks,
   };

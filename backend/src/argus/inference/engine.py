@@ -1122,6 +1122,7 @@ class InferenceEngine:
                 if self._stream_registration
                 else StreamMode.PASSTHROUGH
             ),
+            stream_profile_id=self.config.stream.profile_id,
             counts=_counts_by_lifecycle_tracks(stable_tracks),
             tracks=[_telemetry_track_from_lifecycle_track(track) for track in stable_tracks],
         )

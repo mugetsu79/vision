@@ -1943,6 +1943,7 @@ async def test_engine_continues_when_annotated_video_publish_fails(
     await engine.close()
 
     assert telemetry.stream_mode is StreamMode.ANNOTATED_WHIP
+    assert telemetry.stream_profile_id == "720p10"
     assert publisher.frames == [telemetry]
     assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
     assert "publish_stream" in engine.last_stage_timings

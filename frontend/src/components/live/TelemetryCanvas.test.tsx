@@ -103,6 +103,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
+      stream_profile_id: "native",
       counts: { bus: 1, car: 1 },
       tracks: [
         {
@@ -170,6 +171,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "filtered-preview",
+      stream_profile_id: "native",
       counts: { bus: 1, car: 1 },
       tracks: [
         {
@@ -214,6 +216,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "annotated-whip",
+      stream_profile_id: "native",
       counts: { person: 1 },
       tracks: [
         {
@@ -246,6 +249,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "annotated-whip",
+      stream_profile_id: "native",
       counts: { person: 1 },
       tracks: [
         {
@@ -286,6 +290,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
+      stream_profile_id: "native",
       counts: { person: 1 },
       tracks: [
         {
@@ -322,6 +327,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
+      stream_profile_id: "native",
       counts: { person: 1 },
       tracks: [
         {
@@ -357,6 +363,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
+      stream_profile_id: "native",
       counts: { person: 1 },
       tracks: [
         {
@@ -392,6 +399,7 @@ describe("TelemetryCanvas", () => {
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
+      stream_profile_id: "native",
       counts: { person: 1 },
       tracks: [
         {

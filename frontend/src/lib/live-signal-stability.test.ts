@@ -44,6 +44,7 @@ function frame(tracks: TelemetryTrack[]): TelemetryFrame {
     ts: "2026-05-09T08:00:00Z",
     profile: "central-gpu",
     stream_mode: "annotated-whip",
+    stream_profile_id: "native",
     counts: tracks.reduce<Record<string, number>>((counts, item) => {
       counts[item.class_name] = (counts[item.class_name] ?? 0) + 1;
       return counts;
