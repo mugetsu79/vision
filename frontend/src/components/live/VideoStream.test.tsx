@@ -349,7 +349,7 @@ describe("VideoStream", () => {
     expect(body.profile_id).toBe("540p5");
   });
 
-  test("retries WebRTC without HLS fallback when the stream path is not ready", async () => {
+  test("falls back to HLS after repeated WebRTC not-ready responses", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: "WebRTC stream is not ready yet." }), {
@@ -396,7 +396,18 @@ describe("VideoStream", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(loadHlsClientMock).not.toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadHlsClientMock).toHaveBeenCalledTimes(1);
+    expect(loadSourceMock).toHaveBeenCalledTimes(1);
+    expect(
+      new URL(String(loadSourceMock.mock.calls[0]?.[0])).searchParams.get(
+        "profile_id",
+      ),
+    ).toBe("annotated");
   });
 
   test("starts playback after the HLS manifest is parsed", async () => {

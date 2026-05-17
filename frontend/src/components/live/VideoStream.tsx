@@ -27,6 +27,7 @@ const WEBRTC_FIRST_FRAME_TIMEOUT_MS = 8_000;
 const HEARTBEAT_STALE_AFTER_MS = 15_000;
 const HEARTBEAT_RECOVERY_PROMOTION_DELAY_MS = 3_000;
 const WEBRTC_DISCONNECT_GRACE_MS = 2_000;
+const WEBRTC_NOT_READY_FALLBACK_RETRIES = 2;
 
 let streamSessionCounter = 0;
 
@@ -58,6 +59,7 @@ export function VideoStream({
   const firstFrameSentRef = useRef(false);
   const playbackStartedAtRef = useRef(0);
   const hlsRetryCountRef = useRef(0);
+  const webrtcNotReadyCountRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
   const heartbeatStatusRef = useRef<"unknown" | "fresh" | "stale">("unknown");
@@ -136,6 +138,19 @@ export function VideoStream({
     },
   );
 
+  const handleWebRtcNotReady = useEffectEvent(() => {
+    webrtcNotReadyCountRef.current += 1;
+    if (
+      webrtcNotReadyCountRef.current >= WEBRTC_NOT_READY_FALLBACK_RETRIES
+    ) {
+      setTransport("standby");
+      setWebrtcFailed(true);
+      return;
+    }
+
+    requestSessionRestart();
+  });
+
   const hlsUrl = useMemo(
     () =>
       buildApiUrl(`/api/v1/streams/${cameraId}/hls.m3u8`, {
@@ -165,6 +180,7 @@ export function VideoStream({
     }
 
     streamSelectionKeyRef.current = streamSelectionKey;
+    webrtcNotReadyCountRef.current = 0;
     requestSessionRestart("immediate");
   }, [requestSessionRestart, streamSelectionKey]);
 
@@ -199,6 +215,7 @@ export function VideoStream({
   useEffect(() => {
     clearReconnectTimer();
     reconnectAttemptRef.current = 0;
+    webrtcNotReadyCountRef.current = 0;
     heartbeatStatusRef.current = "unknown";
 
     return () => {
@@ -284,6 +301,7 @@ export function VideoStream({
 
         stopWebRtc = stop;
         if (!disposed) {
+          webrtcNotReadyCountRef.current = 0;
           setTransport("webrtc");
           firstFrameTimer = window.setTimeout(() => {
             if (disposed || firstFrameSentRef.current) {
@@ -299,7 +317,7 @@ export function VideoStream({
         stopWebRtc?.();
         if (!disposed) {
           if (error instanceof StreamNotReadyError) {
-            requestSessionRestart();
+            handleWebRtcNotReady();
             return;
           }
 
