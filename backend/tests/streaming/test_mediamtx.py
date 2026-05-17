@@ -171,6 +171,62 @@ async def test_mediamtx_client_registers_annotated_for_jetson_transcode_profile(
 
 
 @pytest.mark.asyncio
+async def test_mediamtx_client_registers_profile_specific_processed_path() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        return Response(200, json={"ok": True})
+
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+    )
+
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+        profile_id="540p5",
+        target_width=960,
+        target_height=540,
+        target_fps=5,
+    )
+
+    assert registration.mode is StreamMode.ANNOTATED_WHIP
+    assert registration.path_name == f"cameras/{camera_id}/annotated/540p5"
+    assert (
+        registration.publish_path
+        == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated/540p5"
+    )
+    assert registration.target_width == 960
+    assert registration.target_height == 540
+    assert registration.target_fps == 5
+    assert requests[-1] == (
+        "POST",
+        f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated/540p5",
+        {
+            "name": f"cameras/{camera_id}/annotated/540p5",
+            "source": "publisher",
+            "sourceOnDemand": False,
+        },
+    )
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_default_publisher_factory_uses_ffmpeg_for_jetson_profile_without_nvenc(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

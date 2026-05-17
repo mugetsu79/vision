@@ -4181,6 +4181,8 @@ export interface components {
         StreamOfferRequest: {
             /** Sdp Offer */
             sdp_offer: string;
+            /** Profile Id */
+            profile_id?: ("native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5") | null;
         };
         /** StreamOfferResponse */
         StreamOfferResponse: {
@@ -7973,6 +7975,7 @@ export interface operations {
     get_hls_playlist_api_v1_streams__camera_id__hls_m3u8_get: {
         parameters: {
             query?: {
+                profile_id?: string | null;
                 tenant_id?: string | null;
             };
             header?: {
@@ -8008,6 +8011,7 @@ export interface operations {
     get_hls_resource_api_v1_streams__camera_id__hls__resource_path__get: {
         parameters: {
             query?: {
+                profile_id?: string | null;
                 tenant_id?: string | null;
             };
             header?: {
@@ -8044,6 +8048,7 @@ export interface operations {
     get_video_feed_video_feed__camera_id__get: {
         parameters: {
             query?: {
+                profile_id?: string | null;
                 tenant_id?: string | null;
             };
             header?: {

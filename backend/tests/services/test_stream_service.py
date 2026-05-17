@@ -6,9 +6,10 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from jose import jwt
 
-from argus.api.contracts import TenantContext
+from argus.api.contracts import BrowserDeliverySettings, TenantContext
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
 from argus.models.enums import ProcessingMode, RoleEnum, TrackerType
@@ -170,6 +171,138 @@ async def test_stream_service_resolves_edge_native_delivery_to_passthrough_acces
 
     assert access.mode is StreamMode.PASSTHROUGH
     assert access.path_name == f"cameras/{camera_id}/passthrough"
+
+
+@pytest.mark.asyncio
+async def test_stream_access_uses_requested_browser_delivery_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    tenant_id = uuid4()
+    camera = Camera(
+        id=camera_id,
+        site_id=uuid4(),
+        edge_node_id=None,
+        name="CAMERA1",
+        rtsp_url_encrypted="encrypted",
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=[],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={"blur_faces": False, "blur_plates": False},
+        browser_delivery=BrowserDeliverySettings(default_profile="720p10").model_dump(
+            mode="python"
+        ),
+        frame_skip=1,
+        fps_cap=25,
+    )
+
+    async def fake_load_camera(session, requested_tenant_id, requested_camera_id):
+        assert requested_tenant_id == tenant_id
+        assert requested_camera_id == camera_id
+        return camera
+
+    monkeypatch.setattr("argus.services.app._load_camera", fake_load_camera)
+
+    service = StreamService(
+        session_factory=_DummySessionFactory(),
+        mediamtx=_DummyMediaMTXClient(),
+        negotiator=_DummyNegotiator(),
+        settings=Settings(_env_file=None, enable_startup_services=False),
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="admin-dev",
+            email="admin-dev@argus.local",
+            role=RoleEnum.ADMIN,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+
+    access = await service._resolve_stream_access(
+        tenant_context,
+        camera_id,
+        requested_profile_id="540p5",
+    )
+
+    assert access.profile_id == "540p5"
+    assert access.path_name == f"cameras/{camera_id}/annotated/540p5"
+
+
+@pytest.mark.asyncio
+async def test_stream_access_rejects_unknown_requested_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    tenant_id = uuid4()
+    camera = Camera(
+        id=camera_id,
+        site_id=uuid4(),
+        edge_node_id=None,
+        name="CAMERA1",
+        rtsp_url_encrypted="encrypted",
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=[],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={"blur_faces": False, "blur_plates": False},
+        browser_delivery=BrowserDeliverySettings(default_profile="720p10").model_dump(
+            mode="python"
+        ),
+        frame_skip=1,
+        fps_cap=25,
+    )
+
+    async def fake_load_camera(session, requested_tenant_id, requested_camera_id):
+        assert requested_tenant_id == tenant_id
+        assert requested_camera_id == camera_id
+        return camera
+
+    monkeypatch.setattr("argus.services.app._load_camera", fake_load_camera)
+
+    service = StreamService(
+        session_factory=_DummySessionFactory(),
+        mediamtx=_DummyMediaMTXClient(),
+        negotiator=_DummyNegotiator(),
+        settings=Settings(_env_file=None, enable_startup_services=False),
+    )
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="admin-dev",
+            email="admin-dev@argus.local",
+            role=RoleEnum.ADMIN,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service._resolve_stream_access(
+            tenant_context,
+            camera_id,
+            requested_profile_id="../540p5",
+        )
+
+    assert exc_info.value.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -563,7 +696,7 @@ async def test_stream_service_relay_edge_transcode_path_from_edge_mediamtx(
 
     access = await service._resolve_stream_access(tenant_context, camera_id)
 
-    path_name = f"cameras/{camera_id}/annotated"
+    path_name = f"cameras/{camera_id}/annotated/720p10"
     assert access.mode is StreamMode.ANNOTATED_WHIP
     assert access.path_name == path_name
     assert len(mediamtx.ensured_paths) == 1
@@ -649,7 +782,7 @@ async def test_stream_service_relays_manual_edge_transcode_with_wildcard_edge_ba
 
     access = await service._resolve_stream_access(tenant_context, camera_id)
 
-    path_name = f"cameras/{camera_id}/annotated"
+    path_name = f"cameras/{camera_id}/annotated/720p10"
     assert access.mode is StreamMode.ANNOTATED_WHIP
     assert access.path_name == path_name
     assert access.rtsp_url == f"rtsp://imac.local:8554/{path_name}"

@@ -140,6 +140,7 @@ export function VideoStream({
     () =>
       buildApiUrl(`/api/v1/streams/${cameraId}/hls.m3u8`, {
         access_token: accessToken,
+        profile_id: defaultProfile,
         session_token: String(sessionToken),
         tenant_id: tenantId,
       }),
@@ -149,6 +150,7 @@ export function VideoStream({
     () =>
       buildApiUrl(`/video_feed/${cameraId}`, {
         access_token: accessToken,
+        profile_id: defaultProfile,
         session_token: String(sessionToken),
         tenant_id: tenantId,
       }),
@@ -265,6 +267,7 @@ export function VideoStream({
         const stop = await startWebRtc({
           accessToken,
           cameraId,
+          defaultProfile,
           onConnectionLost: () => {
             if (!disposed) {
               requestSessionRestart();
@@ -575,7 +578,7 @@ export function VideoStream({
 
       <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
         <Badge className="border-[#31538b] bg-[#081120]/80 text-[#eef4ff]">
-          {deliveryMode ?? defaultProfile}
+          {defaultProfile}
         </Badge>
         <Badge className="border-[#31538b] bg-[#081120]/80 text-[#eef4ff]">
           {transportLabel(transport)}
@@ -588,6 +591,7 @@ export function VideoStream({
 async function startWebRtc({
   accessToken,
   cameraId,
+  defaultProfile,
   onConnectionLost,
   sessionToken,
   tenantId,
@@ -595,6 +599,7 @@ async function startWebRtc({
 }: {
   accessToken: string;
   cameraId: string;
+  defaultProfile: string;
   onConnectionLost: () => void;
   sessionToken: number;
   tenantId: string | null;
@@ -681,7 +686,10 @@ async function startWebRtc({
           "Content-Type": "application/json",
           ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
         },
-        body: JSON.stringify({ sdp_offer: offer.sdp ?? "" }),
+        body: JSON.stringify({
+          profile_id: defaultProfile,
+          sdp_offer: offer.sdp ?? "",
+        }),
       },
     );
 

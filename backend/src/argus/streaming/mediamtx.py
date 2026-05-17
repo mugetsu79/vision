@@ -62,6 +62,7 @@ class StreamRegistration:
     read_path: str
     publish_path: str | None = None
     path_name: str | None = None
+    profile_id: str | None = None
     managed_path_config: bool = False
     target_fps: int = 25
     target_width: int | None = None
@@ -420,6 +421,7 @@ class MediaMTXClient:
         profile: PublishProfile,
         stream_kind: str,
         privacy: PrivacyPolicy,
+        profile_id: str | None = None,
         target_fps: int = 25,
         target_width: int | None = None,
         target_height: int | None = None,
@@ -431,6 +433,7 @@ class MediaMTXClient:
             profile=profile,
             stream_kind=stream_kind,
             privacy=privacy,
+            profile_id=profile_id,
             target_fps=target_fps,
             target_width=target_width,
             target_height=target_height,
@@ -587,6 +590,7 @@ class MediaMTXClient:
         profile: PublishProfile,
         stream_kind: str,
         privacy: PrivacyPolicy,
+        profile_id: str | None,
         target_fps: int,
         target_width: int | None,
         target_height: int | None,
@@ -629,6 +633,7 @@ class MediaMTXClient:
                 camera_id=camera_id,
                 mode=StreamMode.PASSTHROUGH,
                 path_name=passthrough_name,
+                profile_id=profile_id,
                 read_path=passthrough_read,
                 managed_path_config=True,
                 target_fps=max(1, target_fps),
@@ -639,7 +644,11 @@ class MediaMTXClient:
             )
 
         if profile is PublishProfile.CENTRAL_GPU or not privacy.requires_filtering:
-            annotated_name = f"cameras/{camera_id}/annotated"
+            annotated_name = _stream_path_name(
+                camera_id=camera_id,
+                variant="annotated",
+                profile_id=profile_id,
+            )
             annotated_path = f"{self.rtsp_base_url}/{annotated_name}"
             await self._ensure_path(
                 annotated_name,
@@ -650,6 +659,7 @@ class MediaMTXClient:
                 camera_id=camera_id,
                 mode=StreamMode.ANNOTATED_WHIP,
                 path_name=annotated_name,
+                profile_id=profile_id,
                 read_path=annotated_path,
                 publish_path=annotated_path,
                 managed_path_config=True,
@@ -661,12 +671,17 @@ class MediaMTXClient:
             )
 
         if privacy.requires_filtering:
-            preview_name = f"cameras/{camera_id}/preview"
+            preview_name = _stream_path_name(
+                camera_id=camera_id,
+                variant="preview",
+                profile_id=profile_id,
+            )
             preview_path = f"{self.rtsp_base_url}/{preview_name}"
             return StreamRegistration(
                 camera_id=camera_id,
                 mode=StreamMode.FILTERED_PREVIEW,
                 path_name=preview_name,
+                profile_id=profile_id,
                 read_path=preview_path,
                 publish_path=preview_path,
                 target_fps=max(1, target_fps),
@@ -680,6 +695,7 @@ class MediaMTXClient:
             camera_id=camera_id,
             mode=StreamMode.PASSTHROUGH,
             path_name=passthrough_name,
+            profile_id=profile_id,
             read_path=passthrough_read,
             managed_path_config=True,
             target_fps=max(1, target_fps),
@@ -858,6 +874,15 @@ async def _default_publisher_factory(
         frame=frame,
         publish_url=publish_url,
     )
+
+
+_LEGACY_PROFILE_PATH_IDS = {"native", "annotated", None}
+
+
+def _stream_path_name(*, camera_id: UUID, variant: str, profile_id: str | None) -> str:
+    if variant in {"annotated", "preview"} and profile_id not in _LEGACY_PROFILE_PATH_IDS:
+        return f"cameras/{camera_id}/{variant}/{profile_id}"
+    return f"cameras/{camera_id}/{variant}"
 
 
 def _frame_dimensions(frame: Frame) -> tuple[int, int]:

@@ -72,6 +72,7 @@ class StreamAccess:
     whep_url: str
     hls_url: str
     mjpeg_url: str
+    profile_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -389,6 +390,7 @@ def resolve_stream_access(
     webrtc_base_url: str,
     hls_base_url: str,
     mjpeg_base_url: str,
+    profile_id: str | None = None,
     mjpeg_path_template: str = "{base}/{path}/mjpeg",
 ) -> StreamAccess:
     privacy_required = _privacy_requires_filtering(privacy)
@@ -408,7 +410,11 @@ def resolve_stream_access(
         mode = StreamMode.ANNOTATED_WHIP
         variant = "annotated"
 
-    path_name = f"cameras/{camera_id}/{variant}"
+    path_name = _stream_path_name(
+        camera_id=camera_id,
+        variant=variant,
+        profile_id=profile_id,
+    )
     rtsp_base = rtsp_base_url.rstrip("/")
     webrtc_base = webrtc_base_url.rstrip("/")
     hls_base = hls_base_url.rstrip("/")
@@ -422,7 +428,17 @@ def resolve_stream_access(
         whep_url=f"{webrtc_base}/{path_name}/whep",
         hls_url=f"{hls_base}/{path_name}/index.m3u8",
         mjpeg_url=mjpeg_url,
+        profile_id=profile_id,
     )
+
+
+_LEGACY_PROFILE_PATH_IDS = {"native", "annotated", None}
+
+
+def _stream_path_name(*, camera_id: UUID, variant: str, profile_id: str | None) -> str:
+    if variant in {"annotated", "preview"} and profile_id not in _LEGACY_PROFILE_PATH_IDS:
+        return f"cameras/{camera_id}/{variant}/{profile_id}"
+    return f"cameras/{camera_id}/{variant}"
 
 
 def _append_query_parameter(url: str, *, key: str, value: str) -> str:

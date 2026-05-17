@@ -2057,6 +2057,7 @@ class IncidentReviewUpdate(BaseModel):
 
 class StreamOfferRequest(BaseModel):
     sdp_offer: str = Field(min_length=1)
+    profile_id: BrowserDeliveryProfileId | None = None
 
 
 class StreamOfferResponse(BaseModel):

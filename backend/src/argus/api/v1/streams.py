@@ -9,7 +9,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from argus.api.contracts import StreamOfferRequest, StreamOfferResponse, TenantContext
@@ -136,11 +136,13 @@ async def get_hls_playlist(
     current_user: MediaUser,
     tenant_context: MediaTenantDependency,
     services: ServicesDependency,
+    profile_id: str | None = Query(default=None),
 ) -> Response:
     enforce_role(current_user, RoleEnum.VIEWER)
     playlist_url = await services.streams.get_hls_playlist_url(
         tenant_context,
         camera_id=camera_id,
+        requested_profile_id=profile_id,
     )
     payload, headers = await _fetch_hls_upstream(
         _merge_upstream_playlist_query(playlist_url, request=request)
@@ -168,11 +170,13 @@ async def get_hls_resource(
     current_user: MediaUser,
     tenant_context: MediaTenantDependency,
     services: ServicesDependency,
+    profile_id: str | None = Query(default=None),
 ) -> Response:
     enforce_role(current_user, RoleEnum.VIEWER)
     playlist_url = await services.streams.get_hls_playlist_url(
         tenant_context,
         camera_id=camera_id,
+        requested_profile_id=profile_id,
     )
     upstream_url = _build_hls_resource_url(playlist_url, resource_path)
     payload, headers = await _fetch_hls_upstream(
@@ -203,12 +207,14 @@ async def get_video_feed(
     current_user: MediaUser,
     tenant_context: MediaTenantDependency,
     services: ServicesDependency,
+    profile_id: str | None = Query(default=None),
 ) -> StreamingResponse:
     enforce_role(current_user, RoleEnum.VIEWER)
     proxy_stream = await services.streams.open_mjpeg_proxy(
         tenant_context,
         camera_id=camera_id,
         user=current_user,
+        requested_profile_id=profile_id,
     )
     return StreamingResponse(
         proxy_stream.iter_bytes(),
@@ -288,7 +294,7 @@ def _rewrite_hls_playlist(*, playlist: str, camera_id: UUID, request: Request) -
 
 def _media_request_query_params(request: Request) -> dict[str, str]:
     values: dict[str, str] = {}
-    for key in ("access_token", "tenant_id"):
+    for key in ("access_token", "tenant_id", "profile_id"):
         value = request.query_params.get(key)
         if value:
             values[key] = value

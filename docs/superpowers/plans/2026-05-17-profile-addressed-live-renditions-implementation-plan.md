@@ -1118,10 +1118,17 @@ Expected: PASS.
 Run:
 
 ```bash
-corepack pnpm generate:api
+corepack pnpm --dir frontend generate:api
 ```
 
 Expected: `frontend/src/lib/api.generated.ts` includes `profile_id?: BrowserDeliveryProfileId | null` or the generator's equivalent for `StreamOfferRequest`.
+
+If the local backend running on `127.0.0.1:8000` is stale, generate the schema from the checked-out backend code and feed that file to `openapi-typescript`:
+
+```bash
+python3 -m uv run --project backend python -c 'import json; from argus.main import create_app; from argus.core.config import Settings; app = create_app(Settings(enable_startup_services=False, enable_nats=False)); print(json.dumps(app.openapi()))' > /private/tmp/argus-openapi-profile.json
+corepack pnpm --dir frontend exec openapi-typescript /private/tmp/argus-openapi-profile.json -o src/lib/api.generated.ts
+```
 
 - [ ] **Step 2: Run TypeScript build**
 

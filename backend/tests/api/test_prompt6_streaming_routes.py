@@ -66,6 +66,11 @@ class FakeProxyStream:
 
 
 class FakeStreamService:
+    def __init__(self) -> None:
+        self.offer_calls: list[StreamOfferRequest] = []
+        self.hls_profile_ids: list[str | None] = []
+        self.mjpeg_profile_ids: list[str | None] = []
+
     async def create_offer(
         self,
         context: TenantContext,
@@ -73,6 +78,7 @@ class FakeStreamService:
         camera_id: UUID,
         offer: StreamOfferRequest,
     ) -> StreamOfferResponse:
+        self.offer_calls.append(offer)
         return StreamOfferResponse(
             camera_id=camera_id,
             sdp_answer="v=0\r\no=mediamtx 1 1 IN IP4 127.0.0.1\r\n",
@@ -83,7 +89,9 @@ class FakeStreamService:
         context: TenantContext,
         *,
         camera_id: UUID,
+        requested_profile_id: str | None = None,
     ) -> str:
+        self.hls_profile_ids.append(requested_profile_id)
         return f"http://mediamtx.internal:8888/cameras/{camera_id}/preview/index.m3u8?jwt=test-token"
 
     async def open_mjpeg_proxy(
@@ -92,7 +100,9 @@ class FakeStreamService:
         *,
         camera_id: UUID,
         user: AuthenticatedUser,
+        requested_profile_id: str | None = None,
     ) -> FakeProxyStream:
+        self.mjpeg_profile_ids.append(requested_profile_id)
         return FakeProxyStream(
             media_type="multipart/x-mixed-replace; boundary=frame",
             headers={"Cache-Control": "no-store"},
@@ -101,6 +111,115 @@ class FakeStreamService:
                 b"--frame\r\nContent-Type: image/jpeg\r\n\r\nframe-two\r\n",
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_stream_offer_forwards_requested_profile_id() -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    stream_service = FakeStreamService()
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=stream_service,
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    camera_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/streams/{camera_id}/offer",
+            json={"sdp_offer": "v=0\r\n", "profile_id": "540p5"},
+        )
+
+    assert response.status_code == 200
+    assert stream_service.offer_calls[-1].profile_id == "540p5"
+
+
+@pytest.mark.asyncio
+async def test_hls_route_forwards_requested_profile_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    stream_service = FakeStreamService()
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=stream_service,
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
+    camera_id = uuid4()
+
+    async def fake_fetch(url: str) -> tuple[bytes, dict[str, str]]:
+        assert url.endswith("index.m3u8?jwt=test-token")
+        return (b"#EXTM3U\n", {"content-type": "application/vnd.apple.mpegurl"})
+
+    monkeypatch.setattr(streams_module, "_fetch_hls_upstream", fake_fetch)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(
+            f"/api/v1/streams/{camera_id}/hls.m3u8",
+            params={"profile_id": "540p5"},
+        )
+
+    assert response.status_code == 200
+    assert stream_service.hls_profile_ids[-1] == "540p5"
+
+
+@pytest.mark.asyncio
+async def test_video_feed_route_forwards_requested_profile_id() -> None:
+    user = _sample_user()
+    context = _tenant_context(user)
+    stream_service = FakeStreamService()
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        enable_nats=False,
+        enable_tracing=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    app = create_app(settings=settings)
+    app.state.services = SimpleNamespace(
+        tenancy=FakeTenancyService(context),
+        streams=stream_service,
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_media_user] = lambda: user
+    camera_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get(
+            f"/video_feed/{camera_id}",
+            params={"profile_id": "540p5"},
+        )
+
+    assert response.status_code == 200
+    assert stream_service.mjpeg_profile_ids[-1] == "540p5"
 
 
 @pytest.mark.asyncio
@@ -260,6 +379,7 @@ async def test_hls_route_proxies_playlist_and_rewrites_media_uris(
             params={
                 "access_token": "viewer-token",
                 "tenant_id": str(context.tenant_id),
+                "profile_id": "540p5",
                 "_HLS_msn": "42",
                 "_HLS_part": "2",
             },
@@ -268,11 +388,11 @@ async def test_hls_route_proxies_playlist_and_rewrites_media_uris(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/vnd.apple.mpegurl")
     assert (
-        f"/api/v1/streams/{camera_id}/hls/init.mp4?access_token=viewer-token&tenant_id={context.tenant_id}"
+        f"/api/v1/streams/{camera_id}/hls/init.mp4?access_token=viewer-token&tenant_id={context.tenant_id}&profile_id=540p5"
         in response.text
     )
     assert (
-        f"/api/v1/streams/{camera_id}/hls/segment0.mp4?access_token=viewer-token&tenant_id={context.tenant_id}"
+        f"/api/v1/streams/{camera_id}/hls/segment0.mp4?access_token=viewer-token&tenant_id={context.tenant_id}&profile_id=540p5"
         in response.text
     )
 

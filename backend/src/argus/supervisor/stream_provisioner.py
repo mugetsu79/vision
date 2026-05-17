@@ -28,6 +28,7 @@ class StreamClient(Protocol):
         stream_kind: str,
         privacy: PrivacyPolicy,
         target_fps: int = 25,
+        profile_id: str | None = None,
         target_width: int | None = None,
         target_height: int | None = None,
     ) -> StreamRegistration: ...
@@ -72,6 +73,7 @@ class SupervisorStreamProvisioner:
                 stream_kind=config.stream.kind,
                 privacy=PrivacyPolicy.model_validate(config.privacy.model_dump(mode="python")),
                 target_fps=config.stream.fps,
+                profile_id=config.stream.profile_id,
                 target_width=config.stream.width,
                 target_height=config.stream.height,
             )

@@ -187,8 +187,49 @@ describe("VideoStream", () => {
       "/api/v1/streams/11111111-1111-1111-1111-111111111111/hls.m3u8",
     );
     expect(loadSourceMock.mock.calls[0]?.[0]).toContain("access_token=stream-token");
+    expect(
+      new URL(String(loadSourceMock.mock.calls[0]?.[0])).searchParams.get(
+        "profile_id",
+      ),
+    ).toBe("720p10");
     expect(await screen.findByText(/standby preview/i)).toBeInTheDocument();
     expect(FakeRTCPeerConnection.instances[0]?.closed).toBe(true);
+  });
+
+  test("adds the selected profile id to HLS requests and the profile badge", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("upstream failed", { status: 502 }),
+    );
+    isSupportedMock.mockReturnValue(true);
+    loadHlsClientMock.mockResolvedValue({
+      isSupported: isSupportedMock,
+      Hls: class FakeHls {
+        static Events = { ERROR: "error", MANIFEST_PARSED: "manifestParsed" };
+        static isSupported() {
+          return true;
+        }
+
+        loadSource = loadSourceMock;
+        attachMedia = attachMediaMock;
+        on = onMock;
+        destroy = destroyMock;
+      },
+    });
+
+    render(
+      <VideoStream
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="540p5"
+        deliveryMode="hls"
+      />,
+    );
+
+    await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
+    const url = new URL(String(loadSourceMock.mock.calls[0]?.[0]));
+
+    expect(url.searchParams.get("profile_id")).toBe("540p5");
+    expect(screen.getByText("540p5")).toBeInTheDocument();
   });
 
   test("uses a fresh fallback stream URL after remounting", async () => {
@@ -281,7 +322,31 @@ describe("VideoStream", () => {
     const secondUrl = String(loadSourceMock.mock.calls[1]?.[0]);
 
     expect(secondUrl).not.toBe(firstUrl);
+    expect(new URL(firstUrl).searchParams.get("profile_id")).toBe("720p10");
+    expect(new URL(secondUrl).searchParams.get("profile_id")).toBe("540p5");
     expect(screen.getByText("540p5")).toBeInTheDocument();
+  });
+
+  test("sends the selected profile id in WebRTC offers", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0\r\n" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(
+      <VideoStream
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="540p5"
+      />,
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+
+    expect(body.profile_id).toBe("540p5");
   });
 
   test("retries WebRTC without HLS fallback when the stream path is not ready", async () => {
@@ -488,6 +553,10 @@ describe("VideoStream", () => {
     expect(image).toHaveAttribute(
       "src",
       expect.stringContaining("/video_feed/cccccccc-cccc-cccc-cccc-cccccccccccc"),
+    );
+    expect(image).toHaveAttribute(
+      "src",
+      expect.stringContaining("profile_id=720p10"),
     );
     expect(screen.getByText(/mjpeg forensic fallback/i)).toBeInTheDocument();
   });

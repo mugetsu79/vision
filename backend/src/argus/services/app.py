@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import math
+import re
 import secrets
 import uuid
 from collections.abc import Mapping, Sequence
@@ -3813,7 +3814,11 @@ class StreamService:
         camera_id: UUID,
         offer: StreamOfferRequest,
     ) -> StreamOfferResponse:
-        access = await self._resolve_stream_access(tenant_context, camera_id)
+        access = await self._resolve_stream_access(
+            tenant_context,
+            camera_id,
+            requested_profile_id=getattr(offer, "profile_id", None),
+        )
         sdp_answer = await self.negotiator.negotiate_offer(
             access=access,
             camera_id=camera_id,
@@ -3827,8 +3832,13 @@ class StreamService:
         tenant_context: TenantContext,
         *,
         camera_id: UUID,
+        requested_profile_id: str | None = None,
     ) -> str:
-        access = await self._resolve_stream_access(tenant_context, camera_id)
+        access = await self._resolve_stream_access(
+            tenant_context,
+            camera_id,
+            requested_profile_id=requested_profile_id,
+        )
         return self.token_issuer.build_hls_url(
             subject=tenant_context.user.subject,
             camera_id=camera_id,
@@ -3841,8 +3851,13 @@ class StreamService:
         *,
         camera_id: UUID,
         user: Any,
+        requested_profile_id: str | None = None,
     ) -> UpstreamProxyStream:
-        access = await self._resolve_stream_access(tenant_context, camera_id)
+        access = await self._resolve_stream_access(
+            tenant_context,
+            camera_id,
+            requested_profile_id=requested_profile_id,
+        )
         try:
             await self.video_feed_limiter.acquire(user.subject)
         except ConcurrencyLimitExceeded as exc:
@@ -3875,6 +3890,8 @@ class StreamService:
         self,
         tenant_context: TenantContext,
         camera_id: UUID,
+        *,
+        requested_profile_id: str | None = None,
     ) -> StreamAccess:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
@@ -3901,6 +3918,10 @@ class StreamService:
             browser_delivery,
             profile,
         )
+        browser_delivery = _select_browser_delivery_profile(
+            browser_delivery,
+            requested_profile_id,
+        )
         stream_settings = _resolve_worker_stream_settings(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
@@ -3916,6 +3937,7 @@ class StreamService:
             processing_mode=camera.processing_mode,
             edge_node_id=effective_edge_node_id,
             stream_kind=stream_settings.kind,
+            profile_id=stream_settings.profile_id,
             privacy=camera.privacy,
             rtsp_base_url=base_urls["rtsp"],
             webrtc_base_url=base_urls["webrtc"],
@@ -5738,6 +5760,33 @@ def _probe_source_capability_from_still(rtsp_url: str) -> SourceCapability:
 def _aspect_ratio(width: int, height: int) -> str:
     divisor = math.gcd(width, height)
     return f"{width // divisor}:{height // divisor}"
+
+
+_STREAM_PROFILE_PATH_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _select_browser_delivery_profile(
+    browser_delivery: BrowserDeliverySettings,
+    requested_profile_id: str | None,
+) -> BrowserDeliverySettings:
+    selected_profile_id = requested_profile_id or browser_delivery.default_profile
+    if not _STREAM_PROFILE_PATH_RE.fullmatch(selected_profile_id):
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="Invalid stream profile id.",
+        )
+    profile_payloads = browser_delivery.profiles or BrowserDeliverySettings().profiles
+    profiles_by_id = {str(profile["id"]): dict(profile) for profile in profile_payloads}
+    if "native" not in profiles_by_id:
+        profiles_by_id["native"] = {"id": "native", "kind": "passthrough"}
+    if "annotated" not in profiles_by_id:
+        profiles_by_id["annotated"] = {"id": "annotated", "kind": "transcode"}
+    if selected_profile_id not in profiles_by_id:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="Unsupported stream profile id.",
+        )
+    return browser_delivery.model_copy(update={"default_profile": selected_profile_id})
 
 
 def _resolve_worker_stream_settings(

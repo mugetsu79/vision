@@ -49,6 +49,71 @@ def test_resolve_stream_access_returns_annotated_variant_for_central_transcode_p
     assert access.mjpeg_url == f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated/mjpeg"
 
 
+def test_resolve_stream_access_uses_profile_specific_transcode_path() -> None:
+    camera_id = uuid4()
+
+    access = resolve_stream_access(
+        camera_id=camera_id,
+        processing_mode=ProcessingMode.CENTRAL,
+        edge_node_id=None,
+        stream_kind="transcode",
+        profile_id="540p5",
+        privacy={"blur_faces": False, "blur_plates": False},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+
+    assert access.mode is StreamMode.ANNOTATED_WHIP
+    assert access.profile_id == "540p5"
+    assert access.path_name == f"cameras/{camera_id}/annotated/540p5"
+    assert access.rtsp_url == (
+        f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated/540p5"
+    )
+    assert access.whep_url == (
+        f"http://mediamtx.internal:8889/cameras/{camera_id}/annotated/540p5/whep"
+    )
+    assert access.hls_url == (
+        f"http://mediamtx.internal:8888/cameras/{camera_id}/annotated/540p5/index.m3u8"
+    )
+    assert access.mjpeg_url == (
+        f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated/540p5/mjpeg"
+    )
+
+
+def test_resolve_stream_access_keeps_legacy_paths_for_native_and_annotated() -> None:
+    camera_id = uuid4()
+
+    native = resolve_stream_access(
+        camera_id=camera_id,
+        processing_mode=ProcessingMode.CENTRAL,
+        edge_node_id=None,
+        stream_kind="passthrough",
+        profile_id="native",
+        privacy={"blur_faces": False, "blur_plates": False},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+    annotated = resolve_stream_access(
+        camera_id=camera_id,
+        processing_mode=ProcessingMode.CENTRAL,
+        edge_node_id=None,
+        stream_kind="transcode",
+        profile_id="annotated",
+        privacy={"blur_faces": False, "blur_plates": False},
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        webrtc_base_url="http://mediamtx.internal:8889",
+        hls_base_url="http://mediamtx.internal:8888",
+        mjpeg_base_url="http://mediamtx.internal:8890",
+    )
+
+    assert native.path_name == f"cameras/{camera_id}/passthrough"
+    assert annotated.path_name == f"cameras/{camera_id}/annotated"
+
+
 def test_resolve_stream_access_returns_passthrough_variant_for_central_native_profile() -> None:
     camera_id = uuid4()
 

@@ -400,11 +400,13 @@ class _FakeStreamClient:
         stream_kind: str,
         privacy: PrivacyPolicy,
         target_fps: int,
+        profile_id: str | None = None,
         target_width: int | None = None,
         target_height: int | None = None,
     ) -> StreamRegistration:
         self.register_stream_calls.append(
             {
+                "profile_id": profile_id,
                 "stream_kind": stream_kind,
                 "target_fps": target_fps,
                 "target_width": target_width,
@@ -1986,6 +1988,7 @@ async def test_engine_respects_passthrough_stream_kind_even_on_central_profile()
     await engine.close()
 
     assert stream_client.register_stream_calls == [{
+        "profile_id": "native",
         "stream_kind": "passthrough",
         "target_fps": 25,
         "target_width": None,
@@ -2028,6 +2031,7 @@ async def test_engine_registers_browser_delivery_dimensions_and_fps() -> None:
     await engine.close()
 
     assert stream_client.register_stream_calls == [{
+        "profile_id": "720p10",
         "stream_kind": "transcode",
         "target_fps": 10,
         "target_width": 1280,
@@ -2086,18 +2090,21 @@ async def test_engine_applies_stream_profile_command_without_restart() -> None:
 
     assert stream_client.register_stream_calls == [
         {
+            "profile_id": "native",
             "stream_kind": "passthrough",
             "target_fps": 25,
             "target_width": None,
             "target_height": None,
         },
         {
+            "profile_id": "720p10",
             "stream_kind": "transcode",
             "target_fps": 10,
             "target_width": 1280,
             "target_height": 720,
         },
         {
+            "profile_id": "native",
             "stream_kind": "passthrough",
             "target_fps": 25,
             "target_width": None,
@@ -3052,6 +3059,7 @@ def _patch_runtime_engine_build_dependencies(
             stream_kind: str,
             privacy: PrivacyPolicy,
             target_fps: int,
+            profile_id: str | None = None,
             target_width: int | None = None,
             target_height: int | None = None,
         ) -> StreamRegistration:
@@ -3655,6 +3663,7 @@ async def test_build_runtime_engine_resolves_provider_policy_once_and_passes_it_
             stream_kind: str,
             privacy: PrivacyPolicy,
             target_fps: int,
+            profile_id: str | None = None,
             target_width: int | None = None,
             target_height: int | None = None,
         ) -> StreamRegistration:
@@ -3775,6 +3784,7 @@ async def test_build_runtime_engine_logs_passthrough_delivery_without_ingest_tok
             stream_kind: str,
             privacy: PrivacyPolicy,
             target_fps: int,
+            profile_id: str | None = None,
             target_width: int | None = None,
             target_height: int | None = None,
         ) -> StreamRegistration:
@@ -3891,6 +3901,7 @@ async def test_build_runtime_engine_uses_direct_camera_rtsp_for_processed_stream
             stream_kind: str,
             privacy: PrivacyPolicy,
             target_fps: int,
+            profile_id: str | None = None,
             target_width: int | None = None,
             target_height: int | None = None,
         ) -> StreamRegistration:
@@ -4025,6 +4036,7 @@ async def test_build_runtime_engine_uses_direct_camera_rtsp_for_passthrough_dete
             stream_kind: str,
             privacy: PrivacyPolicy,
             target_fps: int,
+            profile_id: str | None = None,
             target_width: int | None = None,
             target_height: int | None = None,
         ) -> StreamRegistration:

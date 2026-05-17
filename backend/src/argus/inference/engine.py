@@ -581,6 +581,7 @@ class StreamClient(Protocol):
         stream_kind: str,
         privacy: PrivacyPolicy,
         target_fps: int,
+        profile_id: str | None = None,
         target_width: int | None = None,
         target_height: int | None = None,
     ) -> StreamRegistration: ...
@@ -930,6 +931,7 @@ class InferenceEngine:
                 stream_kind=self.config.stream.kind,
                 privacy=self._state.privacy,
                 target_fps=self.config.stream.fps,
+                profile_id=self.config.stream.profile_id,
                 target_width=self.config.stream.width,
                 target_height=self.config.stream.height,
             )
@@ -1271,6 +1273,7 @@ class InferenceEngine:
                 stream_kind=self.config.stream.kind,
                 privacy=self._state.privacy,
                 target_fps=self.config.stream.fps,
+                profile_id=self.config.stream.profile_id,
                 target_width=self.config.stream.width,
                 target_height=self.config.stream.height,
             )
@@ -1824,6 +1827,7 @@ async def build_runtime_engine(
         stream_kind=config.stream.kind,
         privacy=config.privacy,
         target_fps=config.stream.fps,
+        profile_id=config.stream.profile_id,
         target_width=config.stream.width,
         target_height=config.stream.height,
     )

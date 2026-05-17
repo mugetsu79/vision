@@ -53,6 +53,7 @@ async def test_provisioner_registers_edge_stream_paths_even_when_worker_not_desi
             "camera_id": camera_id,
             "rtsp_url": "rtsp://camera.local/live",
             "profile": PublishProfile.JETSON_NANO,
+            "profile_id": "native",
             "stream_kind": "passthrough",
             "target_fps": 25,
             "target_width": 1280,
@@ -111,6 +112,7 @@ class _FakeStreamClient:
         stream_kind: str,
         privacy,
         target_fps: int = 25,
+        profile_id: str | None = None,
         target_width: int | None = None,
         target_height: int | None = None,
     ) -> StreamRegistration:
@@ -119,6 +121,7 @@ class _FakeStreamClient:
                 "camera_id": camera_id,
                 "rtsp_url": rtsp_url,
                 "profile": profile,
+                "profile_id": profile_id,
                 "stream_kind": stream_kind,
                 "target_fps": target_fps,
                 "target_width": target_width,
