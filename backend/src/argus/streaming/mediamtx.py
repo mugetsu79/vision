@@ -881,7 +881,7 @@ _LEGACY_PROFILE_PATH_IDS = {"native", "annotated", None}
 
 def _stream_path_name(*, camera_id: UUID, variant: str, profile_id: str | None) -> str:
     if variant in {"annotated", "preview"} and profile_id not in _LEGACY_PROFILE_PATH_IDS:
-        return f"cameras/{camera_id}/{variant}/{profile_id}"
+        return f"cameras/{camera_id}/{variant}-{profile_id}"
     return f"cameras/{camera_id}/{variant}"
 
 

@@ -41,9 +41,9 @@ Processed dimensioned profiles get profile-specific paths:
 | --- | --- | --- |
 | `native` | passthrough | `cameras/{camera_id}/passthrough` |
 | `annotated` | transcode legacy/default | `cameras/{camera_id}/annotated` |
-| `720p10` | transcode | `cameras/{camera_id}/annotated/720p10` |
-| `540p5` | transcode | `cameras/{camera_id}/annotated/540p5` |
-| privacy preview for `540p5` | filtered preview | `cameras/{camera_id}/preview/540p5` |
+| `720p10` | transcode | `cameras/{camera_id}/annotated-720p10` |
+| `540p5` | transcode | `cameras/{camera_id}/annotated-540p5` |
+| privacy preview for `540p5` | filtered preview | `cameras/{camera_id}/preview-540p5` |
 
 The generic `annotated` and `preview` paths remain for compatibility and for non-dimensioned fallback profiles. Dimensioned profiles use profile-specific suffixes so tests and operators can tell exactly which rendition is being consumed.
 
@@ -161,6 +161,6 @@ Manual validation should use the portable demo with WebGL off:
 1. Start Live with a camera on `720p10`.
 2. Apply `540p5`.
 3. Confirm the browser requests `profile_id=540p5`.
-4. Confirm the MediaMTX path is `cameras/{camera_id}/annotated/540p5`.
+4. Confirm the MediaMTX path is `cameras/{camera_id}/annotated-540p5`.
 5. Confirm the video element reports approximately 960x540.
 6. Confirm the observed frame cadence drops near 5 FPS.

@@ -55,11 +55,11 @@ def test_resolve_stream_access_uses_profile_specific_transcode_path() -> None:
 
     assert access.mode is StreamMode.ANNOTATED_WHIP
     assert access.profile_id == "540p5"
-    assert access.path_name == f"cameras/{camera_id}/annotated/540p5"
-    assert access.rtsp_url == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated/540p5"
-    assert access.whep_url == f"http://mediamtx.internal:8889/cameras/{camera_id}/annotated/540p5/whep"
-    assert access.hls_url == f"http://mediamtx.internal:8888/cameras/{camera_id}/annotated/540p5/index.m3u8"
-    assert access.mjpeg_url == f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated/540p5/mjpeg"
+    assert access.path_name == f"cameras/{camera_id}/annotated-540p5"
+    assert access.rtsp_url == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated-540p5"
+    assert access.whep_url == f"http://mediamtx.internal:8889/cameras/{camera_id}/annotated-540p5/whep"
+    assert access.hls_url == f"http://mediamtx.internal:8888/cameras/{camera_id}/annotated-540p5/index.m3u8"
+    assert access.mjpeg_url == f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated-540p5/mjpeg"
 
 
 def test_resolve_stream_access_keeps_legacy_paths_for_native_and_annotated() -> None:
@@ -274,7 +274,7 @@ async def test_stream_access_uses_requested_browser_delivery_profile(
     )
 
     assert access.profile_id == "540p5"
-    assert access.path_name == f"cameras/{camera_id}/annotated/540p5"
+    assert access.path_name == f"cameras/{camera_id}/annotated-540p5"
 
 
 @pytest.mark.asyncio
@@ -852,8 +852,8 @@ async def test_mediamtx_client_registers_profile_specific_processed_path() -> No
         target_fps=5,
     )
 
-    assert registration.path_name == f"cameras/{camera_id}/annotated/540p5"
-    assert registration.publish_path == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated/540p5"
+    assert registration.path_name == f"cameras/{camera_id}/annotated-540p5"
+    assert registration.publish_path == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated-540p5"
     assert registration.target_width == 960
     assert registration.target_height == 540
     assert registration.target_fps == 5
@@ -1196,7 +1196,7 @@ Required observations:
 
 - HLS URL includes `profile_id=540p5` when HLS is active.
 - WebRTC offer body includes `"profile_id":"540p5"` when WebRTC is active.
-- The stream path resolved by backend or MediaMTX logs includes `cameras/{camera_id}/annotated/540p5`.
+- The stream path resolved by backend or MediaMTX logs includes `cameras/{camera_id}/annotated-540p5`.
 - The tile badge shows `540p5`.
 - While the profile-specific path is not ready, the tile retries instead of showing the old profile as if it were current.
 

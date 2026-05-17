@@ -40,9 +40,9 @@ pathDefaults:
   source: publisher
 
 paths:
-  "~^cameras/[^/]+/annotated$":
+  "~^cameras/[^/]+/annotated(?:-[A-Za-z0-9_.-]+)?$":
     source: publisher
-  "~^cameras/[^/]+/preview$":
+  "~^cameras/[^/]+/preview(?:-[A-Za-z0-9_.-]+)?$":
     source: publisher
   "~^cameras/[^/]+/passthrough$":
     source: publisher

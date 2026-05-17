@@ -67,18 +67,18 @@ def test_resolve_stream_access_uses_profile_specific_transcode_path() -> None:
 
     assert access.mode is StreamMode.ANNOTATED_WHIP
     assert access.profile_id == "540p5"
-    assert access.path_name == f"cameras/{camera_id}/annotated/540p5"
+    assert access.path_name == f"cameras/{camera_id}/annotated-540p5"
     assert access.rtsp_url == (
-        f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated/540p5"
+        f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated-540p5"
     )
     assert access.whep_url == (
-        f"http://mediamtx.internal:8889/cameras/{camera_id}/annotated/540p5/whep"
+        f"http://mediamtx.internal:8889/cameras/{camera_id}/annotated-540p5/whep"
     )
     assert access.hls_url == (
-        f"http://mediamtx.internal:8888/cameras/{camera_id}/annotated/540p5/index.m3u8"
+        f"http://mediamtx.internal:8888/cameras/{camera_id}/annotated-540p5/index.m3u8"
     )
     assert access.mjpeg_url == (
-        f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated/540p5/mjpeg"
+        f"http://mediamtx.internal:8890/cameras/{camera_id}/annotated-540p5/mjpeg"
     )
 
 

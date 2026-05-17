@@ -205,19 +205,19 @@ async def test_mediamtx_client_registers_profile_specific_processed_path() -> No
     )
 
     assert registration.mode is StreamMode.ANNOTATED_WHIP
-    assert registration.path_name == f"cameras/{camera_id}/annotated/540p5"
+    assert registration.path_name == f"cameras/{camera_id}/annotated-540p5"
     assert (
         registration.publish_path
-        == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated/540p5"
+        == f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/annotated-540p5"
     )
     assert registration.target_width == 960
     assert registration.target_height == 540
     assert registration.target_fps == 5
     assert requests[-1] == (
         "POST",
-        f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated/540p5",
+        f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated-540p5",
         {
-            "name": f"cameras/{camera_id}/annotated/540p5",
+            "name": f"cameras/{camera_id}/annotated-540p5",
             "source": "publisher",
             "sourceOnDemand": False,
         },

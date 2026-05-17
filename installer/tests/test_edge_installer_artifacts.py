@@ -7,6 +7,7 @@ EDGE_SERVICE = REPO_ROOT / "infra" / "install" / "systemd" / "vezor-edge.service
 INSTALL_SCRIPT = REPO_ROOT / "installer" / "linux" / "install-edge.sh"
 PREFLIGHT = REPO_ROOT / "scripts" / "jetson-preflight.sh"
 SUPERVISOR_COMPOSE = REPO_ROOT / "infra" / "install" / "compose" / "compose.supervisor.yml"
+MEDIAMTX_CONFIG = REPO_ROOT / "infra" / "mediamtx" / "mediamtx.yml"
 
 FORBIDDEN_PRODUCT_STRINGS = (
     "ARGUS_API_BEARER_TOKEN",
@@ -128,6 +129,14 @@ def test_edge_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
 
     for forbidden in FORBIDDEN_PRODUCT_STRINGS:
         assert forbidden not in combined
+
+
+def test_mediamtx_config_allows_profile_suffixed_processed_paths() -> None:
+    config = _read(MEDIAMTX_CONFIG)
+
+    assert "~^cameras/[^/]+/annotated(?:-[A-Za-z0-9_.-]+)?$" in config
+    assert "~^cameras/[^/]+/preview(?:-[A-Za-z0-9_.-]+)?$" in config
+    assert "~^cameras/[^/]+/passthrough$" in config
 
 
 def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -> None:

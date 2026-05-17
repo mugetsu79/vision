@@ -236,7 +236,7 @@ async def test_stream_access_uses_requested_browser_delivery_profile(
     )
 
     assert access.profile_id == "540p5"
-    assert access.path_name == f"cameras/{camera_id}/annotated/540p5"
+    assert access.path_name == f"cameras/{camera_id}/annotated-540p5"
 
 
 @pytest.mark.asyncio
@@ -696,7 +696,7 @@ async def test_stream_service_relay_edge_transcode_path_from_edge_mediamtx(
 
     access = await service._resolve_stream_access(tenant_context, camera_id)
 
-    path_name = f"cameras/{camera_id}/annotated/720p10"
+    path_name = f"cameras/{camera_id}/annotated-720p10"
     assert access.mode is StreamMode.ANNOTATED_WHIP
     assert access.path_name == path_name
     assert len(mediamtx.ensured_paths) == 1
@@ -782,7 +782,7 @@ async def test_stream_service_relays_manual_edge_transcode_with_wildcard_edge_ba
 
     access = await service._resolve_stream_access(tenant_context, camera_id)
 
-    path_name = f"cameras/{camera_id}/annotated/720p10"
+    path_name = f"cameras/{camera_id}/annotated-720p10"
     assert access.mode is StreamMode.ANNOTATED_WHIP
     assert access.path_name == path_name
     assert access.rtsp_url == f"rtsp://imac.local:8554/{path_name}"
