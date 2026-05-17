@@ -447,6 +447,7 @@ class MediaMTXClient:
             await self._request(
                 "DELETE",
                 f"/v3/config/paths/delete/{previous.path_name}",
+                ignore_not_found=True,
             )
         publisher_state = self._publishers.get(camera_id)
         if (
@@ -800,12 +801,15 @@ class MediaMTXClient:
         path: str,
         *,
         json: dict[str, Any] | None = None,
+        ignore_not_found: bool = False,
     ) -> None:
         response = await self._http_client.request(
             method,
             f"{self.api_base_url}{path}",
             json=json,
         )
+        if ignore_not_found and response.status_code == 404:
+            return
         response.raise_for_status()
 
 

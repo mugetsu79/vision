@@ -334,6 +334,59 @@ async def test_mediamtx_client_registers_filtered_preview_and_deletes_passthroug
 
 
 @pytest.mark.asyncio
+async def test_mediamtx_client_ignores_missing_previous_managed_path_on_profile_switch() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+    camera_id = uuid4()
+    stale_path_url = (
+        f"http://mediamtx.internal:9997/v3/config/paths/delete/cameras/{camera_id}/annotated"
+    )
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        if request.method == "DELETE" and str(request.url) == stale_path_url:
+            return Response(404, json={"error": "path not found"})
+        return Response(200, json={"ok": True})
+
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+    )
+
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+        profile_id="native",
+    )
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+        profile_id="240p5",
+        target_width=426,
+        target_height=240,
+        target_fps=5,
+    )
+
+    assert registration.path_name == f"cameras/{camera_id}/annotated-240p5"
+    assert ("DELETE", stale_path_url, None) in requests
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_mediamtx_client_registers_whip_target_for_central_profile() -> None:
     requests: list[tuple[str, str, dict[str, object] | None]] = []
 

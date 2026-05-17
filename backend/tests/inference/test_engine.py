@@ -1855,6 +1855,66 @@ async def test_engine_publishes_stable_count_and_coasting_track_after_missed_det
 
 
 @pytest.mark.asyncio
+async def test_engine_keeps_coasting_track_after_noop_worker_config_refresh() -> None:
+    camera_id = uuid4()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((96, 96, 3), dtype=np.uint8), np.zeros((96, 96, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="person",
+                        confidence=0.96,
+                        bbox=(20.0, 10.0, 60.0, 90.0),
+                        class_id=0,
+                    )
+                ],
+                [],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    await engine.apply_command(
+        CameraCommand(
+            zones=list(config.zones),
+            vision_profile=config.vision_profile,
+            detection_regions=list(config.detection_regions),
+            homography=config.homography,
+        )
+    )
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    second_track = publisher.frames[1].tracks[0]
+    assert second_track.track_id == 1
+    assert second_track.stable_track_id == 1
+    assert second_track.track_state == "coasting"
+    assert second_track.last_seen_age_ms == 1000
+
+
+@pytest.mark.asyncio
 async def test_engine_resets_lifecycle_when_tracker_type_changes() -> None:
     camera_id = uuid4()
     publisher = _FakePublisher()
@@ -2430,6 +2490,56 @@ async def test_engine_clears_speed_history_when_live_homography_changes() -> Non
 
     assert tracking_store.records[1][1][0].speed_kph is not None
     assert tracking_store.records[2][1][0].speed_kph is None
+
+
+@pytest.mark.asyncio
+async def test_engine_keeps_speed_history_when_worker_config_refreshes_same_homography() -> None:
+    camera_id = uuid4()
+    tracking_store = _FakeTrackingStore()
+    homography_payload = {
+        "src_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "ref_distance_m": 10.0,
+    }
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "homography": homography_payload,
+            "vision_profile": {
+                "motion_metrics": {"speed_enabled": True},
+            },
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+                np.zeros((32, 32, 3), dtype=np.uint8),
+            ]
+        ),
+        detector=_SequenceDetector(
+            [
+                [Detection(class_name="car", confidence=0.95, bbox=(0.0, 0.0, 2.0, 2.0))],
+                [Detection(class_name="car", confidence=0.95, bbox=(1.0, 0.0, 3.0, 2.0))],
+                [Detection(class_name="car", confidence=0.95, bbox=(2.0, 0.0, 4.0, 2.0))],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=tracking_store,
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 5, tzinfo=UTC))
+    await engine.apply_command(CameraCommand(homography=homography_payload))
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, 10, tzinfo=UTC))
+
+    assert tracking_store.records[1][1][0].speed_kph is not None
+    assert tracking_store.records[2][1][0].speed_kph is not None
 
 
 @pytest.mark.asyncio

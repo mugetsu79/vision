@@ -1286,24 +1286,31 @@ class InferenceEngine:
             replace_rules = getattr(self.rule_engine, "replace_rules", None)
             if callable(replace_rules):
                 replace_rules(_rule_definitions_from_worker_rules(command.incident_rules))
-        if command.zones is not None:
+        if command.zones is not None and list(command.zones) != self._state.zones:
             self._state.zones = list(command.zones)
             self._count_event_processor = self._build_count_event_processor()
             self._zones = (
                 Zones(_polygon_zone_definitions(self._state.zones)) if self._state.zones else None
             )
-        if command.detection_regions is not None:
-            self._state.detection_regions = list(command.detection_regions)
-            self.config.detection_regions = list(command.detection_regions)
+        if (
+            command.detection_regions is not None
+            and list(command.detection_regions) != self._state.detection_regions
+        ):
+            next_detection_regions = list(command.detection_regions)
+            self._state.detection_regions = next_detection_regions
+            self.config.detection_regions = next_detection_regions
             self._detection_region_policy = DetectionRegionPolicy(self._state.detection_regions)
             self._track_lifecycle.reset()
         if "homography" in command.model_fields_set:
-            self.config.homography = (
-                dict(command.homography) if command.homography is not None else None
-            )
-            self.homography = _build_homography(self.config.homography)
-            self._track_history.clear()
-        if command.vision_profile is not None:
+            next_homography = dict(command.homography) if command.homography is not None else None
+            if next_homography != self.config.homography:
+                self.config.homography = next_homography
+                self.homography = _build_homography(self.config.homography)
+                self._track_history.clear()
+        if (
+            command.vision_profile is not None
+            and command.vision_profile != self._state.vision_profile
+        ):
             self._state.vision_profile = command.vision_profile
             self.config.vision_profile = command.vision_profile
             self._resolved_vision_profile = resolve_scene_vision_profile(
