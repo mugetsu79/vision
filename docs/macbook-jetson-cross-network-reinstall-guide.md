@@ -12,6 +12,46 @@ Command sources:
 - `archive/macbook-pro-jetson-portable-demo-install-guide.md` for older network
   port notes only
 
+## 0. Reboot-Only Fast Path
+
+Use this section when the MacBook and Jetson were already installed and paired,
+and the only event was a shutdown or reboot. If the reachable MacBook and
+Jetson addresses did not change, do not rerun the installers and do not set the
+variables in section 1.
+
+On the MacBook:
+
+```bash
+cd /opt/vezor/current
+sudo launchctl print system/com.vezor.master
+curl -fsS http://127.0.0.1:8000/healthz
+docker ps --filter name=vezor-master
+```
+
+If `docker ps` cannot reach Docker, start Docker Desktop and rerun the checks
+after the Docker engine is ready.
+
+On the Jetson:
+
+```bash
+systemctl status vezor-edge.service
+/opt/vezor/current/bin/vezorctl status --json
+docker ps --filter name=vezor
+docker logs --tail 80 vezor-supervisor
+```
+
+Then open the normal master frontend URL in the browser. If Control ->
+Deployment shows fresh master and Jetson heartbeats, the Jetson credential is
+active, and Live telemetry/video work, stop here.
+
+Continue to the reinstall steps below only when one of these changed:
+
+- the MacBook address that the Jetson or browser must reach
+- the Jetson stream address that the MacBook or browser must reach
+- the branch needs to be updated before validation
+- the installed services are still stale after normal service restart checks
+- the Jetson needs to be re-paired or its credential is no longer active
+
 ## 1. Pick The Reachable Addresses
 
 Do not use `127.0.0.1`, `localhost`, or a private LAN address unless that exact
