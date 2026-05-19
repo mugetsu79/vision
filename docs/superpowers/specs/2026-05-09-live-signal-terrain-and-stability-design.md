@@ -1,6 +1,7 @@
 # Live Signal Terrain And Stability Design
 
 Date: 2026-05-09
+Status: Historical planning reference.
 
 ## Goal
 

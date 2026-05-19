@@ -1,5 +1,7 @@
 # Jetson Optimized Runtime Artifacts And Open-Vocab Implementation Plan
 
+Status: Partially implemented; DeepStream/Task 24 items deferred.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Status:** Track A, Track B, UI visibility, docs, and artifact validation
@@ -90,7 +92,7 @@ prove it is necessary.
 - Modify: `frontend/src/pages/Cameras.tsx` / camera wizard details if model
   artifact status is shown there.
 - Modify: `docs/runbook.md`
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 - Modify: `docs/scene-vision-profile-configuration-guide.md`
 
 ---
@@ -980,7 +982,7 @@ git commit -m "feat(scripts): register and validate runtime artifacts"
 
 **Files:**
 
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 - Modify: `docs/runbook.md`
 
 - [ ] **Step 1: Add fixed-vocab Jetson artifact workflow**
@@ -995,13 +997,13 @@ Document:
 - [ ] **Step 2: Run markdown sanity**
 
 ```bash
-git diff --check -- docs/imac-master-orin-lab-test-guide.md docs/runbook.md
+git diff --check -- archive/imac-master-orin-lab-test-guide.md docs/runbook.md
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/imac-master-orin-lab-test-guide.md docs/runbook.md
+git add archive/imac-master-orin-lab-test-guide.md docs/runbook.md
 git commit -m "docs(jetson): document fixed-vocab runtime artifacts"
 ```
 
@@ -1242,7 +1244,7 @@ git commit -m "feat(ui): show runtime artifact status"
 
 **Files:**
 
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 - Modify: `docs/runbook.md`
 - Modify: `docs/scene-vision-profile-configuration-guide.md`
 
@@ -1275,7 +1277,7 @@ git diff --check -- docs
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/imac-master-orin-lab-test-guide.md docs/runbook.md docs/scene-vision-profile-configuration-guide.md
+git add archive/imac-master-orin-lab-test-guide.md docs/runbook.md docs/scene-vision-profile-configuration-guide.md
 git commit -m "docs(runtime): explain optimized open-vocab artifacts"
 ```
 
@@ -1361,8 +1363,8 @@ Report:
 - Create: `backend/src/argus/vision/deepstream_runtime.py`
 - Create: `backend/src/argus/vision/deepstream_metadata.py`
 - Create: `infra/deepstream/`
-- Create: `docs/superpowers/specs/YYYY-MM-DD-deepstream-jetson-runtime-design.md`
-- Create: `docs/superpowers/plans/YYYY-MM-DD-deepstream-jetson-runtime-implementation-plan.md`
+- Create a future dated DeepStream Jetson runtime design spec after Task 24 is approved.
+- Create a future dated DeepStream Jetson runtime implementation plan after Task 24 is approved.
 
 Future task outline:
 

@@ -1,5 +1,6 @@
 # Prompt 7 Design: Frontend Foundation
 
+Status: Historical planning reference.
 - Date: 2026-04-18
 - Scope: Prompt 7 only
 - Status: Approved design, ready for implementation planning after user review

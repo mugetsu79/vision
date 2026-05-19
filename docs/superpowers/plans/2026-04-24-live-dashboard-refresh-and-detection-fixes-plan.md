@@ -1,5 +1,7 @@
 # Live Dashboard Refresh and Detection Fixes Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land five detection/telemetry bug fixes, consolidate Dashboard and Live into one "Live" page, and add a 30-minute detection-rate sparkline inside each camera tile.

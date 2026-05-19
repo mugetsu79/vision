@@ -1,5 +1,7 @@
 # Vezor OmniSight UI Redesign Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Redesign the Vezor frontend so it reads as an OmniSight spatial intelligence platform, with a bold branded entry experience, a faint living lens field in the app shell, calmer operational workflows, and product-neutral language.

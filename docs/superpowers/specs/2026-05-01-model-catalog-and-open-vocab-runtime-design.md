@@ -1,5 +1,6 @@
 # Model Catalog And Open-Vocab Runtime Design
 
+Status: Historical planning reference.
 **Date:** 2026-05-01
 **Status:** Implemented; Stream 1 closed on 2026-05-02
 **Scope:** Recommended detector model options, model registration/catalog flow, Jetson runtime profile support, and a true open-vocabulary detector backend for central and edge workers.

@@ -1,5 +1,6 @@
 # Live Stream Self-Healing Design
 
+Status: Historical planning reference.
 ## Goal
 
 Make browser delivery recover gracefully from unstable connectivity without flapping between `WebRTC`, `LL-HLS`, and `MJPEG`, and without tearing down healthy video just because telemetry updates are delayed.

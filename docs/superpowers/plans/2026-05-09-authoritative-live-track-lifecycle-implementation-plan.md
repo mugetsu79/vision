@@ -1,5 +1,7 @@
 # Authoritative Live Track Lifecycle Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop live telemetry and annotated stream overlays from flapping between visible and invisible during short detector/tracker misses, while shaping the tracker path for crowded and obstructed scenes.

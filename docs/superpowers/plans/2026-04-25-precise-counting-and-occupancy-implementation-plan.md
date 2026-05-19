@@ -1,5 +1,7 @@
 # Precise Counting and Occupancy Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add precise count events (`line_cross`, `zone_enter`, `zone_exit`) while keeping Live occupancy stable, preserving multi-object tracking and speed measurement, and making History explicitly metric-aware.

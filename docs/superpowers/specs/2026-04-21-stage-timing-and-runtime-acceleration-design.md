@@ -1,5 +1,6 @@
 # Worker Stage Timing And Runtime Acceleration Design
 
+Status: Historical planning reference.
 ## Goal
 
 Make the inference worker measurable enough to explain high CPU usage, then add a cross-platform execution-provider policy so production inference can choose the best available runtime for the actual host instead of assuming one hardware family.

@@ -1,6 +1,7 @@
 # Authoritative Live Track Lifecycle Design
 
 Date: 2026-05-09
+Status: Historical planning reference.
 
 ## Goal
 

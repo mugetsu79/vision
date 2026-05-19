@@ -1,5 +1,7 @@
 # Fleet Operations Workbench Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the placeholder Settings page with a Fleet and Operations workbench that shows desired worker state, runtime state, edge bootstrap material, manual dev commands, and source-aware delivery diagnostics.

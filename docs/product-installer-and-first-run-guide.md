@@ -13,11 +13,11 @@ Use this document for:
 - first-run, node pairing, camera setup, validation, support bundles, upgrades,
   and uninstall
 
-The manual/dev path remains separate because it intentionally uses development
-Docker Compose commands and copied short-lived dev tokens:
+The legacy manual/dev path is archived because it intentionally uses
+development Docker Compose commands and copied short-lived dev tokens:
 
 - manual/dev path:
-  [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md)
+  [archive/macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/archive/macbook-pro-jetson-portable-demo-install-guide.md)
 
 This document is deliberately explicit. It covers host preparation, models,
 first-run, node pairing, camera setup, validation, support bundles, upgrades,

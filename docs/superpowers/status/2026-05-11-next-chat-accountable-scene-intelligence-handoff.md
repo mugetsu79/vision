@@ -164,7 +164,7 @@ Relevant docs:
 - `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`
 - `docs/model-loading-and-configuration-guide.md`
 - `docs/runbook.md`
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`
 
 ### Product Direction Locked For Next Stage
 

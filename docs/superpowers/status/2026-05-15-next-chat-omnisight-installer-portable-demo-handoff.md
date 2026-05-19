@@ -90,7 +90,7 @@ docs/product-installer-and-first-run-guide.md
 The older portable guide is now only a dev/manual fallback pointer:
 
 ```text
-docs/macbook-pro-jetson-portable-demo-install-guide.md
+archive/macbook-pro-jetson-portable-demo-install-guide.md
 ```
 
 The current product-installer implementation plan is:

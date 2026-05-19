@@ -1,5 +1,7 @@
 # History Operator Review Workbench Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the phase-1 History Operator Review Workbench: complete bucket ranges, explicit coverage states, follow-now windows, split review, bucket details, deterministic unified search, and exports that match the visible state.

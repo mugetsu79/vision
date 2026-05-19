@@ -136,7 +136,7 @@ Validate the full development stack in two phases. Phase A is now clean on the r
 
 Use the lab guide as the operational source of truth:
 
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`
 - `docs/operator-deployment-playbook.md`
 - `docs/runbook.md`
 - `docs/deployment-modes-and-matrix.md`
@@ -323,7 +323,7 @@ On the iMac, register a second model record for the Jetson container path:
 - format: `onnx`
 - same SHA and size as the iMac model file
 
-Use `docs/imac-master-orin-lab-test-guide.md` section 3.3 for the full command.
+Use `archive/imac-master-orin-lab-test-guide.md` section 3.3 for the full command.
 
 ### 4. Move Camera 2 To Edge
 
@@ -437,7 +437,7 @@ Docs:
 
 - `README.md`
 - `product-spec-v4.md`
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`
 - `docs/operator-deployment-playbook.md`
 - `docs/deployment-modes-and-matrix.md`
 - `docs/runbook.md`

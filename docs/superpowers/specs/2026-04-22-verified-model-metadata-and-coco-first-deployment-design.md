@@ -1,5 +1,6 @@
 # Verified Model Metadata And COCO-First Deployment Design
 
+Status: Historical planning reference.
 ## Goal
 
 Make the default Vezor deployment path correct and easy to operate when using standard COCO-style ONNX detection models, while keeping custom reduced-class models as an advanced optional path. The system must stop accepting model metadata that disagrees with the actual ONNX file, because that mismatch breaks detection, query resolution, and live operations in ways that are hard to diagnose after deployment.
@@ -10,7 +11,7 @@ Make the default Vezor deployment path correct and easy to operate when using st
 - The worker detector interprets output logits using `DetectionModelConfig.classes` in [backend/src/argus/vision/detector.py](/Users/yann.moren/vision/backend/src/argus/vision/detector.py:18).
 - The natural-language query layer builds its allowed class vocabulary from `Model.classes` in [backend/src/argus/services/query.py](/Users/yann.moren/vision/backend/src/argus/services/query.py:124).
 - Camera `active_classes` narrow what a camera operationally cares about in [backend/src/argus/inference/engine.py](/Users/yann.moren/vision/backend/src/argus/inference/engine.py:493), and the Dashboard mirrors that narrowing in [frontend/src/lib/live.ts](/Users/yann.moren/vision/frontend/src/lib/live.ts:15).
-- The iMac/Jetson lab guide currently instructs operators to register `yolo12n.onnx` as if it were already a six-class model in [docs/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/docs/imac-master-orin-lab-test-guide.md:498) and [docs/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/docs/imac-master-orin-lab-test-guide.md:858).
+- The iMac/Jetson lab guide currently instructs operators to register `yolo12n.onnx` as if it were already a six-class model in [archive/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/archive/imac-master-orin-lab-test-guide.md:498) and [archive/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/archive/imac-master-orin-lab-test-guide.md:858).
 
 ## Problem Statement
 
@@ -185,7 +186,7 @@ The guide should stop implying that a generic `yolo12n.onnx` file is already tha
 
 ### iMac / Jetson Lab Guide
 
-Update [docs/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/docs/imac-master-orin-lab-test-guide.md) so that:
+Update [archive/imac-master-orin-lab-test-guide.md](/Users/yann.moren/vision/archive/imac-master-orin-lab-test-guide.md) so that:
 
 - the default path registers `yolo12n.onnx` as a standard COCO model
 - the camera setup step applies six-class `active_classes`

@@ -270,4 +270,4 @@ Docs:
 - `docs/superpowers/specs/2026-04-26-operator-setup-history-delivery-hardening-design.md`
 - `docs/superpowers/specs/2026-04-28-fleet-operations-workbench-design.md`
 - `docs/superpowers/plans/2026-04-28-fleet-operations-workbench-implementation-plan.md`
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`

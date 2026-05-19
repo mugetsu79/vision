@@ -1,6 +1,7 @@
 # Evidence Desk Timeline And Case Context Design
 
 Date: 2026-05-09
+Status: Historical planning reference.
 
 ## Goal
 

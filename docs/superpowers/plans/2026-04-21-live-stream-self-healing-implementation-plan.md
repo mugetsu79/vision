@@ -1,5 +1,7 @@
 # Live Stream Self-Healing Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the browser live tile recover cleanly from unstable connectivity without restarting healthy `WebRTC` video just because telemetry is stale.

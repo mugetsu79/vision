@@ -1,5 +1,7 @@
 # OmniSight Spec — Phase 4: Optional WebGL Lens Implementation Plan
 
+Status: Deferred; WebGL remains off.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Behind a build-time feature flag, render the Vezor 3D mark as a real WebGL object on the Sign-In stage and Dashboard hero using `@react-three/fiber`. The CSS-perspective `OmniSightLens` from Phase 2 stays as the default + fallback for `prefers-reduced-motion`, `prefers-reduced-data`, and unsupported clients.

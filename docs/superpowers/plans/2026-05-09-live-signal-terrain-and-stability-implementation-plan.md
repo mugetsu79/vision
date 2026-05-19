@@ -1,5 +1,7 @@
 # Live Signal Terrain And Stability Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stabilize the Live scene card, add class-colored tracking boxes, replace the thin sparkline with Telemetry Terrain, and make the legends above the video calmer and clearer.

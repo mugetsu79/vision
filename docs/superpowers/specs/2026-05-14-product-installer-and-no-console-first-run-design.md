@@ -1,6 +1,7 @@
 # Product Installer And No-Console First Run Design
 
 Date: 2026-05-14
+Status: Implemented; current installer docs supersede this planning artifact.
 
 ## Status
 

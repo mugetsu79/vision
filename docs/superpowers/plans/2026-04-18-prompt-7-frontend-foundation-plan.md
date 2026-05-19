@@ -1,5 +1,7 @@
 # Prompt 7 Frontend Foundation Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first real Argus frontend foundation with real Keycloak PKCE auth, a typed OpenAPI-driven client, a dark-first hybrid command-center shell aligned to the Argus visual brief, and working Sites/Cameras CRUD including a stepped camera setup flow with homography editing and browser delivery-profile controls.

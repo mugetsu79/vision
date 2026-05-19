@@ -1,6 +1,7 @@
 # Accountable Scene Intelligence And Evidence Recording Design
 
 Date: 2026-05-11
+Status: Historical roadmap; remaining DeepStream work deferred.
 
 ## Status
 

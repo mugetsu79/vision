@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-04-18
 **Deciders:** Platform owner (Yann), infra lead, finance (capex sign-off)
-**Related:** `argus_v4_spec.md` §2.2 (process model), §3.2 (edge hardware), §3.3 (central hardware), `ADR-0001-identity-provider.md`
+**Related:** [product-spec-v4.md](../../product-spec-v4.md) §2.2 (process model), §3.2 (edge hardware), §3.3 (central hardware), [ADR-0001](ADR-0001-identity-provider.md)
 
 ## Context
 
@@ -100,7 +100,7 @@ The upgrade path matters as much as the baseline. L4 → 2× L4 is mechanically 
 
 1. [ ] Capex request: 1× NVIDIA L4 24 GB + 2U chassis with ≥1 passive-cooling-compatible PCIe slot.
 2. [ ] Staging parity: provision an AWS `g6.xlarge` or GCP `g2-standard-4` for CI end-to-end tests.
-3. [ ] Benchmark: run the Prompt 3 Jetson bench (adapted) on the L4 and confirm ≥50 streams at 25 fps with the full pipeline enabled. Record results in `docs/benchmarks/central-l4.md`.
-4. [ ] Driver + runtime pinning: NVIDIA driver ≥ 560, CUDA 12.6, TensorRT 10.x. Document in `infra/central/README.md`.
+3. [ ] Benchmark: run the Prompt 3 Jetson bench (adapted) on the L4 and confirm ≥50 streams at 25 fps with the full pipeline enabled. Record results in [docs/benchmarks/central-l4.md](../benchmarks/central-l4.md).
+4. [ ] Driver + runtime pinning: NVIDIA driver ≥ 560, CUDA 12.6, TensorRT 10.x. Document in [infra/central/README.md](../../infra/central/README.md).
 5. [ ] Prometheus exporter for `nvidia-smi` to track VRAM, NVENC sessions, and SM utilization; alert at 80% of any.
 6. [ ] Capacity review on the first day the fleet exceeds 40 central streams; trigger the 2× L4 procurement when we cross 50.

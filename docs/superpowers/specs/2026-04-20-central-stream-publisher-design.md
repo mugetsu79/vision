@@ -1,5 +1,6 @@
 # Central Stream Publisher Design
 
+Status: Historical planning reference.
 ## Goal
 
 Make `central` and privacy-filtered live streams render real video in the UI by publishing processed worker frames into MediaMTX instead of only registering stream paths.

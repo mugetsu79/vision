@@ -1,5 +1,6 @@
 # Browser Delivery And Encoder Design
 
+Status: Historical planning reference.
 ## Goal
 
 Turn camera `browser_delivery` presets like `720p10` into real operator-facing stream behavior, then add production-grade encoder selection so HQ nodes can use hardware encode when available.

@@ -1,5 +1,7 @@
 # OmniSight Spec — Phase 2: Spatial Cockpit Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the four most brand-defining surfaces feel spatial: a CSS-perspective `OmniSightLens` (replacing the 20 MB MP4), a `WorkspaceHero` primitive, upgraded Live scene tiles with corner brackets and Z-pop hover, and a Sites page that no longer duplicates a card grid above a table.

@@ -3,6 +3,17 @@
 Date: 2026-05-19
 Branch: `codex/omnisight-installer`
 
+Follow-up applied on 2026-05-19:
+
+- created `docs/auth.md`, `docs/benchmarks/central-l4.md`, and
+  `infra/central/README.md`
+- updated ADR and brand-plan links to existing documents
+- deleted `docs/error.md`
+- moved the legacy MacBook and iMac lab guides into `archive/`
+- marked profile-addressed live renditions and WebGL work as deferred
+- added top-level `Status:` metadata to tracked Superpowers plans/specs
+- created a fresh current handoff
+
 ## Scope
 
 Audited tracked Markdown files with:
@@ -48,7 +59,9 @@ Untracked Markdown files observed but not touched:
 
 ### 1. Fix Broken Internal Documentation Links
 
-These references point to files that do not exist in the tracked repo:
+Original audit findings are listed below. The 2026-05-19 follow-up resolved the
+ADR and brand-plan targets; DeepStream references remain deferred until Task 24
+is explicitly approved.
 
 | Source | Missing target | Recommendation |
 |---|---|---|
@@ -62,23 +75,25 @@ These references point to files that do not exist in the tracked repo:
 | `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md` | `docs/superpowers/plans/YYYY-MM-DD-deepstream-jetson-runtime-implementation-plan.md` | Same as above. |
 | `docs/superpowers/plans/2026-05-11-accountable-scene-intelligence-and-evidence-recording-implementation-plan.md` | `infra/deepstream/README.md` | Do not create until Task 24 is approved; mark the reference as future/deferred. |
 
-### 2. Archive Or Delete `docs/error.md`
+### 2. Deleted `docs/error.md`
 
 `docs/error.md` is a pasted terminal failure about camera JSON parsing, not a
 guide, runbook, ADR, or durable troubleshooting note.
 
-Recommendation: move to `archive/` with a descriptive name if it still matters,
-or delete it after confirming no one needs the raw transcript.
+Follow-up: deleted after confirming it was only a raw transcript.
 
 ### 3. Demote Legacy MacBook/iMac Guides
 
 These guides still contain useful lab context, but they should not compete with
 the canonical installer path:
 
+Follow-up: both guides were moved under `archive/`, and primary docs now point
+operators to the product installer and cross-network reinstall guides first.
+
 | File | Current state | Recommendation |
 |---|---|---|
-| `docs/macbook-pro-jetson-portable-demo-install-guide.md` | Already marked `legacy manual/dev fallback`; still large and easy to confuse with the installer-managed path. | Move to `archive/` or retitle as `legacy-portable-demo-dev-fallback.md` after confirming `docs/product-installer-and-first-run-guide.md` and `docs/macbook-jetson-cross-network-reinstall-guide.md` cover the current operator path. |
-| `docs/imac-master-orin-lab-test-guide.md` | Historical 2019 iMac lab path with old/manual validation language. | Move to `archive/` or add a stronger historical banner and remove it from primary reading lists. |
+| `archive/macbook-pro-jetson-portable-demo-install-guide.md` | Already marked `legacy manual/dev fallback`; still large and easy to confuse with the installer-managed path. | Move to `archive/` or retitle as `legacy-portable-demo-dev-fallback.md` after confirming `docs/product-installer-and-first-run-guide.md` and `docs/macbook-jetson-cross-network-reinstall-guide.md` cover the current operator path. |
+| `archive/imac-master-orin-lab-test-guide.md` | Historical 2019 iMac lab path with old/manual validation language. | Move to `archive/` or add a stronger historical banner and remove it from primary reading lists. |
 
 ### 4. Update The Latest Installer Handoff
 
@@ -88,6 +103,9 @@ fixes and the new cross-network reinstall guide.
 
 Recommendation: either update it with the latest pushed commits and current
 restart/reinstall docs, or mark it superseded by a new dated handoff.
+
+Follow-up: created
+`docs/superpowers/status/2026-05-19-next-chat-omnisight-installer-current-branch-handoff.md`.
 
 ### 5. Mark Profile-Addressed Live Renditions As Deferred
 
@@ -104,6 +122,9 @@ Recommendation: update both docs with a `Status: Deferred after May 2026 field
 validation` note and link to the commits that stabilized the interim behavior.
 Do not treat the implementation plan as the next active plan without a new
 approval pass.
+
+Follow-up: both documents now carry `Status: Deferred after May 2026 field
+validation.`
 
 ## Medium-Priority Updates
 
@@ -170,9 +191,9 @@ still depends on them:
 
 | Candidate | Why |
 |---|---|
-| `docs/error.md` | Raw terminal scratch, not durable documentation. |
-| `docs/imac-master-orin-lab-test-guide.md` | Historical iMac lab path; superseded by installer-managed MacBook/Linux master + Jetson docs. |
-| `docs/macbook-pro-jetson-portable-demo-install-guide.md` | Already marked legacy manual/dev fallback; canonical path lives elsewhere. |
+| `docs/error.md` | Deleted in the 2026-05-19 follow-up cleanup. |
+| `archive/imac-master-orin-lab-test-guide.md` | Historical iMac lab path; superseded by installer-managed MacBook/Linux master + Jetson docs. |
+| `archive/macbook-pro-jetson-portable-demo-install-guide.md` | Already marked legacy manual/dev fallback; canonical path lives elsewhere. |
 | `docs/superpowers/status/2026-04-26-precise-counting-and-setup-handoff.md` | Old handoff. |
 | `docs/superpowers/status/2026-04-28-imac-jetson-dev-validation-handoff.md` | Old handoff. |
 | `docs/superpowers/status/2026-04-28-omnisight-ui-redesign-followup-handoff.md` | Old handoff. |
@@ -247,18 +268,18 @@ Do not archive these without replacing their role:
 - `docs/ADR/ADR-0001-identity-provider.md`
 - `docs/ADR/ADR-0002-central-gpu.md`
 
-Some of these still need update passes, especially ADR references and
-branch-specific wording, but they are current enough to remain discoverable.
+Some of these still need update passes for branch-specific wording, but they
+are current enough to remain discoverable.
 
 ## Recommended Next Actions
 
-1. Fix the broken local doc links listed above.
-2. Archive or delete `docs/error.md`.
-3. Mark the profile-addressed live rendition docs deferred.
-4. Create a new current handoff, then archive older `docs/superpowers/status/*`
-   handoffs.
-5. Decide whether legacy lab guides live under `archive/` or stay under `docs/`
-   with stronger historical banners.
-6. Add `Status:` metadata to all superpowers plan/spec docs.
+1. Keep the repaired local doc links healthy when docs move again.
+2. Keep `docs/error.md` deleted unless the raw transcript is explicitly needed again.
+3. Treat profile-addressed live rendition work as deferred until re-approved.
+4. Use the 2026-05-19 current handoff for the next chat, then archive older
+   `docs/superpowers/status/*` handoffs when the team wants a deeper cleanup.
+5. Keep legacy lab guides under `archive/` unless a current operator flow needs
+   a new, installer-managed replacement.
+6. Preserve top-level `Status:` metadata on new Superpowers plan/spec docs.
 7. Re-run this audit after the branch merges to main and remove branch-specific
    validation wording from current operator docs.

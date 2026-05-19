@@ -2,7 +2,7 @@
 
 Date: 2026-04-28
 Branch: `codex/source-aware-delivery-calibration-fixes`
-Status: Design approved for specification; implementation not started.
+Status: Historical planning reference.
 
 ## Purpose
 

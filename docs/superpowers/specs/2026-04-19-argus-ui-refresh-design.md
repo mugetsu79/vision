@@ -1,5 +1,6 @@
 # Argus UI Refresh Design
 
+Status: Historical planning reference.
 - Date: 2026-04-19
 - Scope: Full frontend product refresh
 - Status: Approved design, ready for implementation planning after user review

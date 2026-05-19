@@ -1,5 +1,6 @@
 # Codex Handoff — OmniSight UI Spec Implementation
 
+Status: Historical planning reference.
 **For:** Codex CLI agent (`codex exec`) running on the user's machine.
 **Mission:** Implement the OmniSight UI/UX spec across four phased plans.
 **Created:** 2026-04-30.

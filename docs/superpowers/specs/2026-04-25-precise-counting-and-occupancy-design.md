@@ -1,5 +1,6 @@
 # Precise Counting, Occupancy, and Count Events Design
 
+Status: Historical planning reference.
 > **Status:** Draft for review
 >
 > **Date:** 2026-04-25

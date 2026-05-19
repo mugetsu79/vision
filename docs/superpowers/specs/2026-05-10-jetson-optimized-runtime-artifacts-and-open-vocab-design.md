@@ -1,6 +1,7 @@
 # Jetson Optimized Runtime Artifacts And Open-Vocab Design
 
 Date: 2026-05-10
+Status: Partially implemented; DeepStream/Task 24 items deferred.
 
 ## Status
 

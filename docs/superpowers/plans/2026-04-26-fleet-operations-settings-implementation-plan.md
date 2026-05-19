@@ -1,5 +1,7 @@
 # Fleet Operations and Settings UX Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the placeholder Settings page with a real Fleet / Operations surface that exposes worker/bootstrap state, camera assignments, delivery diagnostics, and a UI-led production story for central and edge workers.

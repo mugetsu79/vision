@@ -1,7 +1,7 @@
 # Profile Addressed Live Renditions Design
 
 Date: 2026-05-17
-Status: Approved for implementation planning
+Status: Deferred after May 2026 field validation.
 
 ## Goal
 

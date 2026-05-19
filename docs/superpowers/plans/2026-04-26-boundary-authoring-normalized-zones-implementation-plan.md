@@ -1,5 +1,7 @@
 # Boundary Authoring and Normalized Zones Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace raw line/polygon coordinate entry with visual authoring on a frozen analytics frame, while persisting boundaries as normalized coordinates that stay stable across browser display sizes.

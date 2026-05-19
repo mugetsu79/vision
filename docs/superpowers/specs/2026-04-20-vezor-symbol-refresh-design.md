@@ -1,5 +1,6 @@
 # Vezor Symbol Refresh Design
 
+Status: Historical planning reference.
 - Date: 2026-04-20
 - Scope: Product brand asset refresh
 - Status: Approved design, ready for implementation planning after user review

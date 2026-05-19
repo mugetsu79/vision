@@ -1,5 +1,7 @@
 # Model Catalog And Open-Vocab Runtime Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Status:** Completed on 2026-05-02 on branch `model-catalog-open-vocab-runtime`. This file is now historical implementation scaffolding; unchecked boxes below reflect the original plan format, not remaining Stream 1 work. The validated Jetson TensorRT artifact and compiled scene open-vocab follow-up has also landed in `docs/superpowers/plans/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-implementation-plan.md`.
@@ -64,7 +66,7 @@
   - Cover fixed-vocab versus open-vocab UI states.
 - `frontend/src/pages/Cameras.test.tsx`
   - Cover model catalog inventory hints and registered model metadata passthrough.
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`
   - Update from YOLO12-only guidance to recommended YOLO26/YOLO11/YOLO12 catalog choices.
 - `docs/runbook.md`
   - Document catalog, local artifacts, open-vocab readiness, and raw TensorRT engine limits.
@@ -1634,12 +1636,12 @@ git commit -m "feat(frontend): show model capability metadata"
 ## Task 8: Update Lab Docs And Verification
 
 **Files:**
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 - Modify: `docs/runbook.md`
 
 - [ ] **Step 1: Update model guidance in lab guide**
 
-In `docs/imac-master-orin-lab-test-guide.md`, replace the YOLO12-only language with:
+In `archive/imac-master-orin-lab-test-guide.md`, replace the YOLO12-only language with:
 
 ```markdown
 Recommended fixed-vocab model order for this lab:
@@ -1718,7 +1720,7 @@ Expected: all backend tests, lint, mypy, frontend build, and focused frontend te
 Run:
 
 ```bash
-git add docs/imac-master-orin-lab-test-guide.md docs/runbook.md
+git add archive/imac-master-orin-lab-test-guide.md docs/runbook.md
 git commit -m "docs(models): document recommended model catalog"
 ```
 

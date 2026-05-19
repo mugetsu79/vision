@@ -342,7 +342,7 @@ Expected success shape:
 
 After `make verify-all` is clean, use:
 
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`
 - `docs/superpowers/status/2026-04-28-imac-jetson-dev-validation-handoff.md`
 - `docs/operator-deployment-playbook.md`
 - `docs/runbook.md`

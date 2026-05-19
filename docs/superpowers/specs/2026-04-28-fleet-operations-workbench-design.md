@@ -1,5 +1,6 @@
 # Fleet Operations Workbench Design
 
+Status: Historical planning reference.
 > **Status:** Phase 1 implemented; supervisor lifecycle controls remain follow-on work
 >
 > **Date:** 2026-04-28

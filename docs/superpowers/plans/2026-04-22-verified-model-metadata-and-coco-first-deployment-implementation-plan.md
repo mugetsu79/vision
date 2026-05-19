@@ -1,5 +1,7 @@
 # Verified Model Metadata And COCO-First Deployment Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make standard COCO-style ONNX models the safe default deployment path by verifying embedded class metadata at model registration time, preserving full model truth in `Model.classes`, and exposing persistent per-camera `active_classes` narrowing in the camera setup flow and docs.
@@ -44,7 +46,7 @@
   Purpose: Document the verified COCO-first registration contract.
 - Modify: `docs/runbook.md`
   Purpose: Clarify that `models/` is just the file location and that ONNX metadata drives class truth.
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
   Purpose: Rewrite the default lab path around COCO-base registration plus camera `active_classes`, and move custom reduced-class models into an advanced section.
 
 ## Task 1: Add ONNX Metadata Extraction And Resolution
@@ -618,7 +620,7 @@ git commit -m "feat: configure camera active classes in setup"
 **Files:**
 - Modify: `README.md`
 - Modify: `docs/runbook.md`
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 
 - [ ] **Step 1: Write the documentation changes as failing review criteria**
 
@@ -725,7 +727,7 @@ Run:
 
 ```bash
 cd /Users/yann.moren/vision
-git diff -- README.md docs/runbook.md docs/imac-master-orin-lab-test-guide.md
+git diff -- README.md docs/runbook.md archive/imac-master-orin-lab-test-guide.md
 ```
 
 Expected: the diff removes manual six-class declarations from standard `yolo12n.onnx` model registration and moves them into an explicit advanced/custom section.
@@ -733,7 +735,7 @@ Expected: the diff removes manual six-class declarations from standard `yolo12n.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add README.md docs/runbook.md docs/imac-master-orin-lab-test-guide.md
+git add README.md docs/runbook.md archive/imac-master-orin-lab-test-guide.md
 git commit -m "docs: make coco-first deployment the default"
 ```
 

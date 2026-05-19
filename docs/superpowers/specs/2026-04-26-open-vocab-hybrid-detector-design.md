@@ -1,5 +1,6 @@
 # Open-Vocab Hybrid Detector Design
 
+Status: Historical planning reference.
 **Date:** 2026-04-26  
 **Status:** Implemented in stages; control-plane foundation, model catalog registration, and experimental Ultralytics `.pt` open-vocab runtime have landed
 **Scope:** Product behavior, backend contracts, worker runtime design, UI behavior, and rollout boundaries for adding first-class open-vocabulary detector support alongside the current fixed-vocabulary model path.

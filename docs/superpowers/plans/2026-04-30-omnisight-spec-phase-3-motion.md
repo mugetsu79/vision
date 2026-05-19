@@ -1,5 +1,7 @@
 # OmniSight Spec — Phase 3: Motion Choreography Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring the product alive with purposeful motion — a sliding "lens focus" indicator on the nav, an evidence selection cross-fade, a Patterns bucket-selection slide, a token-driven `Toast` surface, and a `useReducedMotionSafe` helper used everywhere. All token-driven; all keyboard- and reduced-motion-safe.

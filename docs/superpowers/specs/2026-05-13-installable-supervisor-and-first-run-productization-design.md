@@ -1,6 +1,7 @@
 # Installable Supervisor And First-Run Productization Design
 
 Date: 2026-05-13
+Status: Implemented; superseded by product installer work.
 
 ## Status
 

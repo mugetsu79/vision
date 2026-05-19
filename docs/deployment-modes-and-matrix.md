@@ -4,7 +4,7 @@ This document explains how to choose between `central`, `edge`, and `hybrid` cam
 
 It is the short decision document.
 
-For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md). For the canonical installer-managed MacBook Pro/Linux master + Jetson path, use [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). For the portable manual MacBook Pro + Jetson demo, use [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md).
+For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md). For the canonical installer-managed MacBook Pro/Linux master + Jetson path, use [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). Historical manual lab paths are archived under `archive/`.
 
 ## Current Implementation Posture
 
@@ -236,6 +236,7 @@ For the specific MacBook Pro/iMac + Jetson evaluation path:
 ## Related Documents
 
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
-- [macbook-pro-jetson-portable-demo-install-guide.md](/Users/yann.moren/vision/docs/macbook-pro-jetson-portable-demo-install-guide.md)
+- [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md)
+- [macbook-jetson-cross-network-reinstall-guide.md](/Users/yann.moren/vision/docs/macbook-jetson-cross-network-reinstall-guide.md)
 - [runbook.md](/Users/yann.moren/vision/docs/runbook.md)
 - [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md)

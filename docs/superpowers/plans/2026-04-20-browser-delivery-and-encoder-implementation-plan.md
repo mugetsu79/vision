@@ -1,5 +1,7 @@
 # Browser Delivery And Encoder Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make browser-delivery presets such as `720p10` drive the actual published live stream, then add host-aware encoder selection without changing the browser-side contract.
@@ -173,7 +175,7 @@ Expected: PASS
 ### Task 4: Final Verification And Delivery
 
 **Files:**
-- Modify if needed: `docs/imac-master-orin-lab-test-guide.md`
+- Modify if needed: `archive/imac-master-orin-lab-test-guide.md`
 
 - [ ] **Step 1: Run the focused backend verification suite**
 
@@ -200,6 +202,6 @@ Expected: no output
 - [ ] **Step 3: Commit Step 2**
 
 ```bash
-git add backend/src/argus/streaming/mediamtx.py backend/src/argus/core/config.py backend/tests/streaming/test_mediamtx.py backend/tests/core/test_config.py docs/imac-master-orin-lab-test-guide.md
+git add backend/src/argus/streaming/mediamtx.py backend/src/argus/core/config.py backend/tests/streaming/test_mediamtx.py backend/tests/core/test_config.py archive/imac-master-orin-lab-test-guide.md
 git commit -m "feat: add stream encoder capability selection"
 ```

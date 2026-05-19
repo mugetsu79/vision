@@ -1,5 +1,7 @@
 # Accountable Scene Intelligence And Evidence Recording Implementation Plan
 
+Status: Historical roadmap; remaining DeepStream work deferred.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the full still-pertinent handoff runway: accountable scene evidence, Evidence Desk polish, runtime passports, per-worker incident rules, operational memory, prompt-to-policy, identity-light cross-camera intelligence, Fleet/Operations hardening, installable first-run productization, product installer packaging, Jetson runtime soak, and gated DeepStream.
@@ -540,7 +542,7 @@ docker compose -f infra/docker-compose.dev.yml exec backend python -m uv run ale
 | `infra/install/compose/compose.supervisor.yml` | create | production container supervisor service profile with healthchecks and restart policy |
 | `docs/runbook.md` | modify | storage and recording configuration |
 | `docs/operator-deployment-playbook.md` | modify | edge USB camera, local evidence, and remote/cloud evidence guidance |
-| `docs/imac-master-orin-lab-test-guide.md` | modify | Linux master plus Jetson soak validation and rollback |
+| `archive/imac-master-orin-lab-test-guide.md` | modify | Linux master plus Jetson soak validation and rollback |
 | `docs/model-loading-and-configuration-guide.md` | modify | runtime artifact soak and DeepStream gate notes |
 
 ## Task 1: Data Contract And Migration
@@ -4877,7 +4879,7 @@ Start/Stop/Restart/Drain requests without shelling out from the backend API.
 - Modify: `infra/docker-compose.edge.yml`
 - Modify: `docs/operator-deployment-playbook.md`
 - Modify: `docs/runbook.md`
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 
 - [x] **Step 1: Add failing hardware probe tests**
 
@@ -5135,7 +5137,7 @@ Update:
 
 - `docs/operator-deployment-playbook.md`
 - `docs/runbook.md`
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`
 
 Document:
 
@@ -5168,7 +5170,7 @@ git diff --check -- \
   infra/docker-compose.edge.yml \
   docs/operator-deployment-playbook.md \
   docs/runbook.md \
-  docs/imac-master-orin-lab-test-guide.md
+  archive/imac-master-orin-lab-test-guide.md
 ```
 
 Expected: pass and no diff-check output.
@@ -5191,7 +5193,7 @@ git add backend/src/argus/supervisor/hardware_probe.py \
   infra/docker-compose.edge.yml \
   docs/operator-deployment-playbook.md \
   docs/runbook.md \
-  docs/imac-master-orin-lab-test-guide.md
+  archive/imac-master-orin-lab-test-guide.md
 git commit -m "feat(operations): add runnable supervisor reporter"
 git push origin codex/omnisight-ui-spec-implementation
 ```
@@ -5675,7 +5677,7 @@ the implication that normal production use requires copied commands.
 - Test: `backend/tests/services/test_deployment_nodes.py`
 - Modify: `docs/operator-deployment-playbook.md`
 - Modify: `docs/runbook.md`
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 
 - [ ] **Step 1: Add failing backend diagnostics tests**
 
@@ -5763,7 +5765,7 @@ python3 -m uv run pytest tests/api/test_deployment_routes.py tests/services/test
 cd /Users/yann.moren/vision
 corepack pnpm --dir frontend generate:api
 corepack pnpm --dir frontend exec vitest run src/pages/Deployment.test.tsx src/pages/Settings.test.tsx
-git diff --check -- docs/operator-deployment-playbook.md docs/runbook.md docs/imac-master-orin-lab-test-guide.md
+git diff --check -- docs/operator-deployment-playbook.md docs/runbook.md archive/imac-master-orin-lab-test-guide.md
 ```
 
 Expected: pass and no diff-check output.
@@ -5786,7 +5788,7 @@ git add frontend/src/lib/api.generated.ts \
   backend/tests/services/test_deployment_nodes.py \
   docs/operator-deployment-playbook.md \
   docs/runbook.md \
-  docs/imac-master-orin-lab-test-guide.md
+  archive/imac-master-orin-lab-test-guide.md
 git commit -m "feat(deployment): add first-run deployment UI"
 git push origin codex/omnisight-ui-spec-implementation
 ```
@@ -5896,7 +5898,7 @@ git push origin codex/omnisight-ui-spec-implementation
 - Modify: `backend/src/argus/main.py`
 - Test: `backend/tests/services/test_runtime_soak.py`
 - Test: `backend/tests/api/test_runtime_soak_routes.py`
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 - Modify: `docs/model-loading-and-configuration-guide.md`
 - Modify: `docs/runbook.md`
 
@@ -5951,7 +5953,7 @@ Document:
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest tests/services/test_runtime_soak.py tests/api/test_runtime_soak_routes.py -q
 cd /Users/yann.moren/vision
-git diff --check -- docs/imac-master-orin-lab-test-guide.md docs/model-loading-and-configuration-guide.md docs/runbook.md
+git diff --check -- archive/imac-master-orin-lab-test-guide.md docs/model-loading-and-configuration-guide.md docs/runbook.md
 ```
 
 Expected: pass and no diff-check output.
@@ -5966,7 +5968,7 @@ git add backend/src/argus/models/tables.py \
   backend/src/argus/main.py \
   backend/tests/services/test_runtime_soak.py \
   backend/tests/api/test_runtime_soak_routes.py \
-  docs/imac-master-orin-lab-test-guide.md \
+  archive/imac-master-orin-lab-test-guide.md \
   docs/model-loading-and-configuration-guide.md \
   docs/runbook.md
 git commit -m "feat(runtime): record Jetson artifact soak runs"

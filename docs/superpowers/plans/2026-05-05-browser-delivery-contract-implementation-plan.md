@@ -1,5 +1,7 @@
 # Browser Delivery Contract Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `native` true passthrough everywhere, make non-native profiles worker-published processed streams, and label central versus edge bandwidth scope clearly.
@@ -64,7 +66,7 @@
 - Modify `docs/deployment-modes-and-matrix.md`
   - Document that central reduced profiles reduce master-to-browser bandwidth only.
 
-- Modify `docs/imac-master-orin-lab-test-guide.md`
+- Modify `archive/imac-master-orin-lab-test-guide.md`
   - Update lab language for central and edge browser delivery profiles.
 
 ---
@@ -1196,7 +1198,7 @@ git commit -m "fix(live): show actual browser stream mode"
 **Files:**
 - Modify: `frontend/src/lib/api.generated.ts`
 - Modify: `docs/deployment-modes-and-matrix.md`
-- Modify: `docs/imac-master-orin-lab-test-guide.md`
+- Modify: `archive/imac-master-orin-lab-test-guide.md`
 
 - [ ] **Step 1: Regenerate frontend API types**
 
@@ -1222,7 +1224,7 @@ In `docs/deployment-modes-and-matrix.md`, update the browser delivery terminolog
 
 - [ ] **Step 3: Update Jetson lab guide**
 
-In `docs/imac-master-orin-lab-test-guide.md`, update the central/edge browser delivery notes so they use these phrases:
+In `archive/imac-master-orin-lab-test-guide.md`, update the central/edge browser delivery notes so they use these phrases:
 
 ```markdown
 For central cameras, `720p10` is a viewer preview. It helps when a browser connects remotely to the iMac UI, but it does not reduce the camera-to-iMac inference ingest.
@@ -1238,7 +1240,7 @@ Run:
 
 ```bash
 cd /Users/yann.moren/vision
-git diff -- frontend/src/lib/api.generated.ts docs/deployment-modes-and-matrix.md docs/imac-master-orin-lab-test-guide.md
+git diff -- frontend/src/lib/api.generated.ts docs/deployment-modes-and-matrix.md archive/imac-master-orin-lab-test-guide.md
 ```
 
 Expected: only delivery-contract wording and generated schema changes.
@@ -1249,7 +1251,7 @@ Run:
 
 ```bash
 cd /Users/yann.moren/vision
-git add frontend/src/lib/api.generated.ts docs/deployment-modes-and-matrix.md docs/imac-master-orin-lab-test-guide.md
+git add frontend/src/lib/api.generated.ts docs/deployment-modes-and-matrix.md archive/imac-master-orin-lab-test-guide.md
 git commit -m "docs: clarify browser delivery bandwidth scope"
 ```
 

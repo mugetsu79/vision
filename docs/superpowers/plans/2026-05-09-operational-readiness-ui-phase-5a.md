@@ -1,5 +1,7 @@
 # Operational Readiness UI Phase 5A Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a frontend-only operational readiness layer that makes Vezor's sovereign spatial intelligence loop legible: sites, scenes, central/edge/hybrid deployment posture, privacy posture, evidence awaiting review, scene readiness, worker/delivery health, and telemetry freshness.

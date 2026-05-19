@@ -1,5 +1,6 @@
 # TensorRT Engine Artifact Runtime Design
 
+Status: Historical planning reference.
 **Date:** 2026-05-02
 **Status:** Implemented as part of Track A in
 `docs/superpowers/specs/2026-05-10-jetson-optimized-runtime-artifacts-and-open-vocab-design.md`

@@ -1,5 +1,6 @@
 # Operator Setup, History, Delivery, and Fleet Hardening Design
 
+Status: Historical planning reference.
 > **Status:** Partially implemented; setup hardening, source-aware delivery, History review, Fleet / Operations phase 1, Evidence Desk review queue, model catalog registration, and experimental open-vocab runtime support have landed
 >
 > **Date:** 2026-04-26

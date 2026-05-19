@@ -1,5 +1,7 @@
 # Argus UI Refresh Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Refresh the full Argus frontend into the approved `Matte Command Rail` / `Balanced` / `Unified Left Rail Workspace` design while preserving all existing auth, live, history, incident, and admin functionality.

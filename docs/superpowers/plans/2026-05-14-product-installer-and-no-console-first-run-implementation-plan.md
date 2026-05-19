@@ -1,5 +1,7 @@
 # Product Installer And No-Console First Run Implementation Plan
 
+Status: Implemented; current installer docs supersede this planning artifact.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 ## Current Status As Of 2026-05-15
@@ -292,7 +294,7 @@ git push origin codex/omnisight-installer
 - Create: `installer/macos/uninstall.sh`
 - Create: `installer/tests/test_macos_master_artifacts.py`
 - Modify: `installer/README.md`
-- Modify: `docs/macbook-pro-jetson-portable-demo-install-guide.md`
+- Modify: `archive/macbook-pro-jetson-portable-demo-install-guide.md`
 
 - [ ] **Step 1: Write macOS artifact tests**
 
@@ -354,7 +356,7 @@ cd /Users/yann.moren/vision
 python3 -m uv run --project installer pytest installer/tests/test_macos_master_artifacts.py -q
 bash -n installer/macos/install-master.sh
 bash -n installer/macos/uninstall.sh
-git diff --check -- infra/install/launchd/com.vezor.master.plist installer/macos docs/macbook-pro-jetson-portable-demo-install-guide.md
+git diff --check -- infra/install/launchd/com.vezor.master.plist installer/macos archive/macbook-pro-jetson-portable-demo-install-guide.md
 ```
 
 Expected: pass.
@@ -362,7 +364,7 @@ Expected: pass.
 Commit:
 
 ```bash
-git add infra/install/launchd/com.vezor.master.plist installer/macos/install-master.sh installer/macos/uninstall.sh installer/tests/test_macos_master_artifacts.py installer/README.md docs/macbook-pro-jetson-portable-demo-install-guide.md
+git add infra/install/launchd/com.vezor.master.plist installer/macos/install-master.sh installer/macos/uninstall.sh installer/tests/test_macos_master_artifacts.py installer/README.md archive/macbook-pro-jetson-portable-demo-install-guide.md
 git commit -m "feat(installer): add macOS master package artifacts"
 git push origin codex/omnisight-installer
 ```
@@ -738,7 +740,7 @@ git push origin codex/omnisight-installer
 - Modify: `README.md`
 - Modify: `docs/runbook.md`
 - Modify: `docs/operator-deployment-playbook.md`
-- Modify: `docs/macbook-pro-jetson-portable-demo-install-guide.md`
+- Modify: `archive/macbook-pro-jetson-portable-demo-install-guide.md`
 - Modify: `docs/deployment-modes-and-matrix.md`
 
 - [ ] **Step 1: Write product installer guide**
@@ -773,7 +775,7 @@ Run:
 
 ```bash
 cd /Users/yann.moren/vision
-git diff --check -- README.md docs/product-installer-and-first-run-guide.md docs/runbook.md docs/operator-deployment-playbook.md docs/macbook-pro-jetson-portable-demo-install-guide.md docs/deployment-modes-and-matrix.md
+git diff --check -- README.md docs/product-installer-and-first-run-guide.md docs/runbook.md docs/operator-deployment-playbook.md archive/macbook-pro-jetson-portable-demo-install-guide.md docs/deployment-modes-and-matrix.md
 rg -n "make dev-up|docker compose|ARGUS_API_BEARER_TOKEN" docs/product-installer-and-first-run-guide.md
 ```
 
@@ -783,7 +785,7 @@ guide are explicitly labeled `Development fallback` or `Break-glass`.
 Commit:
 
 ```bash
-git add README.md docs/product-installer-and-first-run-guide.md docs/runbook.md docs/operator-deployment-playbook.md docs/macbook-pro-jetson-portable-demo-install-guide.md docs/deployment-modes-and-matrix.md
+git add README.md docs/product-installer-and-first-run-guide.md docs/runbook.md docs/operator-deployment-playbook.md archive/macbook-pro-jetson-portable-demo-install-guide.md docs/deployment-modes-and-matrix.md
 git commit -m "docs(installer): add product first-run guide"
 git push origin codex/omnisight-installer
 ```

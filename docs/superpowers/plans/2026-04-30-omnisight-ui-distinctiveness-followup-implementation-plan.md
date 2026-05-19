@@ -1,5 +1,7 @@
 # OmniSight UI Distinctiveness Follow-Up Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the current OmniSight UI feel distinctive rather than generic by rebuilding the sign-in stage, restoring a real dashboard overview, differentiating page compositions, and enforcing the requested palette discipline.

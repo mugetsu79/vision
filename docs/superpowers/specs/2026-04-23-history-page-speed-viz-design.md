@@ -1,5 +1,6 @@
 # History Page Speed Visualization Design
 
+Status: Historical planning reference.
 - Date: 2026-04-23
 - Scope: Frontend `/history` page — detection count defaults, stacked speed panel, user-configurable speed threshold, URL-persisted filter state; one additive endpoint change on `/api/v1/history/series`.
 - Status: Approved design, pending user review before writing the implementation plan

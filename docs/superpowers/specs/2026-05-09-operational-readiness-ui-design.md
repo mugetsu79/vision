@@ -1,5 +1,6 @@
 # Operational Readiness For Sovereign Spatial Intelligence Design
 
+Status: Historical planning reference.
 **Date:** 2026-05-09
 **Status:** Proposed for Phase 5A, reframed after the market-positioning report
 **Scope:** Frontend-only UI/UX improvements that make Vezor's existing multi-site, central/edge/hybrid, privacy-aware scene-intelligence loop visible. WebGL remains off and out of scope.

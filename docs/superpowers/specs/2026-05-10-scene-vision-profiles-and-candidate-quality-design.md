@@ -1,6 +1,7 @@
 # Scene Vision Profiles And Candidate Quality Design
 
 Date: 2026-05-10
+Status: Historical planning reference.
 
 ## Goal
 

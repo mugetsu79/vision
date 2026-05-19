@@ -1,5 +1,7 @@
 # History Follow-Now, Zero Buckets, and Search Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make History feel live and understandable by adding relative/absolute time modes, explicit zero-detection buckets, clearer bucket semantics, and search across cameras, classes, and count boundaries.

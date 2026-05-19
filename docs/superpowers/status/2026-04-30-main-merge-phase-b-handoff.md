@@ -124,7 +124,7 @@ Keep the iMac as the temporary master:
 
 Primary guide:
 
-- `docs/imac-master-orin-lab-test-guide.md`
+- `archive/imac-master-orin-lab-test-guide.md`
 
 Also useful:
 
@@ -213,5 +213,5 @@ If Phase B finds bugs:
 Paste this into the next chat:
 
 ```text
-We are now on main at d5a593e after merging codex/source-aware-delivery-calibration-fixes. Phase A iMac-only validation and make verify-all are green. Read docs/superpowers/status/2026-04-30-main-merge-phase-b-handoff.md and docs/imac-master-orin-lab-test-guide.md. I will test manually on the real iMac and Jetson; support me through Phase B iMac master + Jetson Orin edge validation. Do not re-plan completed work. Keep Operations runtime truth honest and debug systematically if validation finds a bug.
+We are now on main at d5a593e after merging codex/source-aware-delivery-calibration-fixes. Phase A iMac-only validation and make verify-all are green. Read docs/superpowers/status/2026-04-30-main-merge-phase-b-handoff.md and archive/imac-master-orin-lab-test-guide.md. I will test manually on the real iMac and Jetson; support me through Phase B iMac master + Jetson Orin edge validation. Do not re-plan completed work. Keep Operations runtime truth honest and debug systematically if validation finds a bug.
 ```

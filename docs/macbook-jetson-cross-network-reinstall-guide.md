@@ -9,7 +9,7 @@ Command sources:
 - `docs/product-installer-and-first-run-guide.md`
 - `installer/macos/install-master.sh --help`
 - `installer/linux/install-edge.sh --help`
-- `docs/macbook-pro-jetson-portable-demo-install-guide.md` for older network
+- `archive/macbook-pro-jetson-portable-demo-install-guide.md` for older network
   port notes only
 
 ## 1. Pick The Reachable Addresses

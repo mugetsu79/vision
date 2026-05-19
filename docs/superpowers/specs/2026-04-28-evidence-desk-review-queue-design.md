@@ -1,5 +1,6 @@
 # Evidence Desk Review Queue Design
 
+Status: Historical planning reference.
 **Date:** 2026-04-28
 **Status:** Implemented on `codex/source-aware-delivery-calibration-fixes`
 **Scope:** Task 8 refinement for the open-vocab hybrid detector track. This spec replaces the narrow UI-only Task 8 interpretation with an evidence review queue that matches the current incident capture implementation.

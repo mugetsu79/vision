@@ -1,5 +1,7 @@
 # Vezor Symbol Refresh Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the shipped Vezor symbol artwork with a refined SVG rebuild that stays close to the uploaded base symbol, using the existing v2 source assets as the implementation anchor, while keeping the current runtime asset paths and `Vezor` branding unchanged.

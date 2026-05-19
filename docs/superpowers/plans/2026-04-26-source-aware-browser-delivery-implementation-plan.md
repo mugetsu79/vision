@@ -1,5 +1,7 @@
 # Source-Aware Browser Delivery Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make browser delivery truthful by probing source capability, suppressing invalid profiles like `1080p15` above a `720p` source, and clearly separating analytics ingest from browser native and browser rendition modes.

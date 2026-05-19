@@ -1,5 +1,7 @@
 # History Page Speed Viz Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `/history` useful on first load, add a stacked speed panel (p50/p95 per class + user threshold + violation bars), and persist filter state in the URL so navigation and deep links work.

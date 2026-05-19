@@ -1,5 +1,7 @@
 # Scene Vision Profiles And Candidate Quality Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add selectable scene vision profiles, explicit speed enablement, detection include/exclusion regions, and a candidate quality gate so live tracking can reject obvious false positives and avoid duplicate fragments without sacrificing low-score association for existing tracks.

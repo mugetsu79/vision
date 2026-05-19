@@ -1,5 +1,7 @@
 # Vezor Brand Rename Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rename the user-facing product brand from `Argus` to `Vezor` while keeping the existing symbol, visual design, and internal technical namespace stable in the first pass.
@@ -71,8 +73,8 @@ Only do this if you want the technical surface to say `Vezor` too:
 - Modify: `backend/src/argus/api/v1/streams.py`
 - Modify: `README.md`
 - Modify: `backend/README.md`
-- Modify: `docs/brand/argus-logo-brand-spec.md`
-- Modify: `docs/brand/usage-guide.md`
+- Modify: `docs/brand/logo-brand-spec.md`
+- Modify: `docs/brand/logo-usage-guide.md`
 - Modify: `docs/brand/logo-generation-prompts.md`
 
 ### Files To Leave Alone In The Recommended Pass
@@ -459,8 +461,8 @@ git commit -m "feat: rename visible backend titles to Vezor"
 - Create: `docs/brand/assets/source/`
 - Modify: `README.md`
 - Modify: `backend/README.md`
-- Modify: `docs/brand/argus-logo-brand-spec.md`
-- Modify: `docs/brand/usage-guide.md`
+- Modify: `docs/brand/logo-brand-spec.md`
+- Modify: `docs/brand/logo-usage-guide.md`
 - Modify: `docs/brand/logo-generation-prompts.md`
 - Modify: `frontend/public/brand/argus-lockup-ui.svg`
 - Modify: `frontend/public/brand/argus-symbol-ui.svg`
@@ -500,7 +502,7 @@ FastAPI backend scaffold for Vezor | The OmniSight Platform.
 For docs, run a controlled sweep:
 
 ```bash
-rg -n '\bArgus\b' README.md backend/README.md docs/brand docs/imac-master-orin-lab-test-guide.md docs/deployment-modes-and-matrix.md docs/operator-deployment-playbook.md docs/runbook.md
+rg -n '\bArgus\b' README.md backend/README.md docs/brand archive/imac-master-orin-lab-test-guide.md docs/deployment-modes-and-matrix.md docs/operator-deployment-playbook.md docs/runbook.md
 ```
 
 Replace visible product-name usages with `Vezor`, but do **not** rename historical ADR content that discusses original project context unless it is operator-facing.
@@ -518,8 +520,9 @@ Prefer neutral references in docs:
 Run:
 
 ```bash
-git mv docs/brand/argus-logo-brand-spec.md docs/brand/logo-brand-spec.md
-git mv docs/brand/usage-guide.md docs/brand/logo-usage-guide.md
+# Historical rename completed; current files are already:
+test -f docs/brand/logo-brand-spec.md
+test -f docs/brand/logo-usage-guide.md
 ```
 
 Keep `docs/brand/logo-generation-prompts.md` in place, but rewrite its content for `Vezor`.

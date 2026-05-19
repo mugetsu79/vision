@@ -1,5 +1,6 @@
 # Live Dashboard Refresh and Detection Fixes Design
 
+Status: Historical planning reference.
 - Date: 2026-04-24
 - Scope: Merge Dashboard and Live into a single "Live" page, add a per-camera 30-minute detection sparkline, fix five detection/telemetry bugs surfaced by the first iMac smoke test.
 - Status: Approved design, pending user review before writing the implementation plan

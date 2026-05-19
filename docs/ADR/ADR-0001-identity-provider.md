@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-04-18
 **Deciders:** Platform owner (Yann), backend lead, security reviewer
-**Related:** `argus_v4_spec.md` §7 (Security & Privacy), §12 (Resolved & Open Decisions)
+**Related:** [product-spec-v4.md](../../product-spec-v4.md) §7 (Security & Privacy), §12 (Resolved & Open Decisions)
 
 ## Context
 
@@ -100,7 +100,7 @@ Authentik remains attractive if the customer base shifts toward developer-native
 **Becomes harder:**
 - Operating lean on a memory-constrained central VM; budget an extra 512 MB.
 - Customizing the login UX — Keycloak themes are workable but not great.
-- Onboarding engineers to the realm/client/role mental model (mitigated by a `docs/auth.md` primer).
+- Onboarding engineers to the realm/client/role mental model (mitigated by the [auth primer](../auth.md)).
 
 **To revisit:**
 - If Keycloak's Quarkus footprint or UX becomes a real blocker in the field, re-evaluate Authentik at V3.2.
@@ -111,6 +111,6 @@ Authentik remains attractive if the customer base shifts toward developer-native
 1. [ ] Stand up Keycloak in `infra/docker-compose.dev.yml` with a seed realm `argus-dev` and four demo roles.
 2. [ ] Commit `infra/keycloak/realm-export.json` covering clients for SPA (PKCE), backend (confidential), and edge-node registration.
 3. [ ] Implement the FastAPI JWKS validator + `CurrentUser` dependency (see blueprint Prompt 2).
-4. [ ] Add a `docs/auth.md` primer covering realms, clients, roles, and the tenant-onboarding runbook.
+4. [x] Add a [docs/auth.md](../auth.md) primer covering realms, clients, roles, and the tenant-onboarding runbook.
 5. [ ] Add a Terraform module (`infra/terraform/keycloak/`) that provisions a realm per tenant from a YAML list.
 6. [ ] Document the Authentik-as-alternative path in `docs/runbook.md` (pointer only; no code).

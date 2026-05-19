@@ -3,7 +3,7 @@
 Date: 2026-04-30
 Branch: `main`
 Checkpoint: `32c3f28`
-Status: Approved for implementation planning
+Status: Historical planning reference.
 
 ## Purpose
 

@@ -1,5 +1,7 @@
 # Profile Addressed Live Renditions Implementation Plan
 
+Status: Deferred after May 2026 field validation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Live tile rendition changes enforce the selected resolution and frame rate by routing browser playback to profile-specific stream paths.

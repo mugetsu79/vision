@@ -1,5 +1,6 @@
 # Browser Delivery Contract Design
 
+Status: Historical planning reference.
 ## Goal
 
 Make browser delivery semantics honest across central and edge deployments:

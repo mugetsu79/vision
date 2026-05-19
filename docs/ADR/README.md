@@ -12,7 +12,7 @@ When you add a new ADR:
 1. Copy the structure from the existing files in `/Users/yann.moren/vision/docs/ADR/`.
 2. Name it `ADR-XXXX-short-topic.md` with the next sequential number.
 3. Fill in the context, decision, options considered, consequences, and action items.
-4. Link the ADR back to the relevant sections in `/Users/yann.moren/vision/argus_v4_spec.md`.
+4. Link the ADR back to the relevant sections in [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md).
 5. If it replaces an older decision, update the older ADR to mention the superseding record.
 
 The current seed ADRs are:

@@ -1,5 +1,7 @@
 # OmniSight Spec — Phase 1: Foundations Implementation Plan
 
+Status: Historical planning reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land the design-token, typography, and primitive-component foundations from `docs/brand/omnisight-ui-spec-sheet.md` (sections 2, 3.1, 3.2, 5.1–5.5, 6.1) so later phases (cockpit, motion, WebGL) can build on a single source of truth.
