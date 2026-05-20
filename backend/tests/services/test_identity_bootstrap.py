@@ -243,4 +243,7 @@ async def test_keycloak_bootstrap_provisioner_removes_pkce_for_lan_http_compatib
         if method == "PUT" and path == "/admin/realms/vezor/clients/client-uuid"
     )
     assert isinstance(client_update_body, dict)
-    assert client_update_body["attributes"] == {"client.session.idle.timeout": "300"}
+    assert client_update_body["attributes"] == {
+        "client.session.idle.timeout": "300",
+        "pkce.code.challenge.method": "",
+    }

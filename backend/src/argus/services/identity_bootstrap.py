@@ -343,7 +343,10 @@ class KeycloakBootstrapProvisioner:
         )
         attributes = dict(existing_attributes) if isinstance(existing_attributes, dict) else {}
         attributes.pop("pkce.code.challenge.method", None)
-        if not self.settings.keycloak_frontend_disable_pkce:
+        if self.settings.keycloak_frontend_disable_pkce:
+            # Keycloak preserves client attributes on update unless they are explicitly blanked.
+            attributes["pkce.code.challenge.method"] = ""
+        else:
             attributes["pkce.code.challenge.method"] = "S256"
 
         return {
