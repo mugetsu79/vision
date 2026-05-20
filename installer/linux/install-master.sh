@@ -98,6 +98,21 @@ PY
   exit 1
 }
 
+public_hostname_from_url() {
+  local url="$1"
+  local host_port="${url#*://}"
+
+  host_port="${host_port%%/*}"
+  if [[ "$host_port" == \[*\]* ]]; then
+    host_port="${host_port#\[}"
+    host_port="${host_port%%\]*}"
+  else
+    host_port="${host_port%%:*}"
+  fi
+
+  printf '%s\n' "$host_port"
+}
+
 write_secret_if_missing() {
   local path="$1"
   local value="${2:-}"
@@ -275,6 +290,16 @@ MEDIAMTX_IMAGE="$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)"
 BACKEND_IMAGE="$(manifest_image_ref backend vezor/backend:portable-demo)"
 FRONTEND_IMAGE="$(manifest_image_ref frontend vezor/frontend:portable-demo)"
 SUPERVISOR_IMAGE="$(manifest_image_ref supervisor "$BACKEND_IMAGE")"
+PUBLIC_KEYCLOAK_URL="${PUBLIC_URL%:*}:8080"
+PUBLIC_HOSTNAME="$(public_hostname_from_url "$PUBLIC_URL")"
+KEYCLOAK_BIND="127.0.0.1"
+case "$PUBLIC_HOSTNAME" in
+  localhost|127.*|::1)
+    ;;
+  *)
+    KEYCLOAK_BIND="0.0.0.0"
+    ;;
+esac
 
 run install -d -m 0755 \
   "$CONFIG_DIR" \
@@ -322,8 +347,10 @@ VEZOR_SUPERVISOR_IMAGE=$SUPERVISOR_IMAGE
 VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
 VEZOR_PUBLIC_FRONTEND_URL=$PUBLIC_URL
 VEZOR_PUBLIC_API_BASE_URL=${PUBLIC_URL%:*}:8000
-VEZOR_PUBLIC_KEYCLOAK_URL=${PUBLIC_URL%:*}:8080
+VEZOR_PUBLIC_KEYCLOAK_URL=$PUBLIC_KEYCLOAK_URL
 VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev
+VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND
+VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL
 VEZOR_OIDC_CLIENT_ID=argus-frontend
 ENV
   chmod 0644 "$MASTER_ENV"

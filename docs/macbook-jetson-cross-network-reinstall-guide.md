@@ -65,6 +65,7 @@ JETSON_STREAM_HOST="JETSON_VPN_IP_OR_DNS_REACHABLE_BY_MASTER"
 
 MASTER_PUBLIC_URL="http://${MASTER_PUBLIC_HOST}:3000"
 MASTER_API_URL="http://${MASTER_PUBLIC_HOST}:8000"
+MASTER_KEYCLOAK_URL="http://${MASTER_PUBLIC_HOST}:8080"
 ```
 
 Set the relevant variables in each shell where you run commands; the MacBook
@@ -132,8 +133,14 @@ Validate from the MacBook:
 sudo launchctl print system/com.vezor.master
 curl -fsS http://127.0.0.1:8000/healthz
 curl -fsS "$MASTER_API_URL/healthz"
+curl -fsS "$MASTER_KEYCLOAK_URL/realms/argus-dev/.well-known/openid-configuration"
 docker ps --filter name=vezor-master
 ```
+
+When `$MASTER_PUBLIC_HOST` is not `localhost` or `127.0.0.1`, the Keycloak
+container should show `0.0.0.0:8080->8080/tcp` in `docker ps`. If it still
+shows `127.0.0.1:8080->8080/tcp`, browser sign-in cannot reach Keycloak from
+the remote address; rerun the master installer from the updated branch.
 
 Validate from the Jetson:
 
@@ -270,6 +277,10 @@ In the UI:
 - `--public-url "http://127.0.0.1:3000"` on the MacBook when the browser or
   Jetson is remote. Use `$MASTER_PUBLIC_URL`.
 - `--api-url "http://127.0.0.1:8000"` on the Jetson. Use `$MASTER_API_URL`.
+- Seeing the master frontend but no Keycloak sign-in redirect. Confirm
+  `$MASTER_KEYCLOAK_URL/realms/argus-dev/.well-known/openid-configuration`
+  is reachable from the operator browser network and that `docker ps` exposes
+  Keycloak on `0.0.0.0:8080` for non-loopback public URLs.
 - Omitting `--public-stream-host` after the Jetson changes networks. The
   master will keep trying to read the old Jetson RTSP address.
 - Using only the short pairing code. The edge installer needs both
