@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -26,6 +27,8 @@ from argus.services.app import DatabaseAuditLogger, build_app_services
 from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.query import QueryService, SQLCameraClassInventory, SQLQueryQuotaEnforcer
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -40,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if settings_object.enable_nats:
             await app.state.events.connect()
         app.state.tracing.configure(app, engine=app.state.db.engine)
+        await reconcile_identity_provider_for_startup(app)
 
     try:
         yield
@@ -51,6 +55,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await close_services()
         await app.state.security.close()
         await app.state.db.dispose()
+
+
+async def reconcile_identity_provider_for_startup(app: FastAPI) -> None:
+    try:
+        await app.state.services.deployment.reconcile_identity_provider()
+    except Exception:
+        logger.warning("Failed to reconcile identity provider frontend client.", exc_info=True)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

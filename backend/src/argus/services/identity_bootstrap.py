@@ -64,6 +64,18 @@ class KeycloakBootstrapProvisioner:
         await self._ensure_realm_role_assignment(token, user_id, RoleEnum.ADMIN.value)
         return user_id
 
+    async def reconcile_frontend_client(self) -> bool:
+        token = await self._admin_token()
+        response = await self.http_client.get(
+            f"{self.base_url}/admin/realms/{self.realm}",
+            headers=self._headers(token),
+        )
+        if response.status_code == 404:
+            return False
+        self._raise_for_status(response, f"read Keycloak realm {self.realm}")
+        await self._ensure_frontend_client(token)
+        return True
+
     async def _admin_token(self) -> str:
         response = await self.http_client.post(
             f"{self.base_url}/realms/master/protocol/openid-connect/token",

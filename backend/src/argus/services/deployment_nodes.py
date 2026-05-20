@@ -111,6 +111,12 @@ class DeploymentNodeService:
         if callable(close):
             await close()
 
+    async def reconcile_identity_provider(self) -> bool:
+        reconcile = getattr(self.identity_provisioner, "reconcile_frontend_client", None)
+        if not callable(reconcile):
+            return False
+        return bool(await reconcile())
+
     async def get_master_bootstrap_status(self) -> MasterBootstrapStatusResponse:
         now = self.now_factory()
         async with self.session_factory() as session:

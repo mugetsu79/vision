@@ -141,6 +141,11 @@ When `$MASTER_PUBLIC_HOST` is not `localhost` or `127.0.0.1`, the Keycloak
 container should show `0.0.0.0:8080->8080/tcp` in `docker ps`. If it still
 shows `127.0.0.1:8080->8080/tcp`, browser sign-in cannot reach Keycloak from
 the remote address; rerun the master installer from the updated branch.
+After backend startup, the existing Keycloak frontend client is also reconciled
+to the current `$MASTER_PUBLIC_URL`, and the backend allows that frontend URL
+through CORS. This matters after IP changes because first-run may already be
+complete and the original Keycloak client may still contain only localhost
+redirect URIs.
 
 Validate from the Jetson:
 
@@ -281,6 +286,10 @@ In the UI:
   `$MASTER_KEYCLOAK_URL/realms/argus-dev/.well-known/openid-configuration`
   is reachable from the operator browser network and that `docker ps` exposes
   Keycloak on `0.0.0.0:8080` for non-loopback public URLs.
+- Seeing Keycloak metadata work but the Sign in button still does nothing.
+  Reinstall from the updated branch so backend startup repairs the existing
+  Keycloak `argus-frontend` redirect URIs and web origins for
+  `$MASTER_PUBLIC_URL`.
 - Omitting `--public-stream-host` after the Jetson changes networks. The
   master will keep trying to read the old Jetson RTSP address.
 - Using only the short pairing code. The edge installer needs both

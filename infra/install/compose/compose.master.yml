@@ -156,6 +156,7 @@ services:
       ARGUS_KEYCLOAK_ISSUER: ${VEZOR_PUBLIC_OIDC_AUTHORITY:-http://localhost:8080/realms/argus-dev}
       ARGUS_KEYCLOAK_FRONTEND_CLIENT_ID: ${VEZOR_OIDC_CLIENT_ID:-argus-frontend}
       ARGUS_KEYCLOAK_FRONTEND_URL: ${VEZOR_PUBLIC_FRONTEND_URL:-http://localhost:3000}
+      ARGUS_CORS_ALLOWED_ORIGINS: '["${VEZOR_PUBLIC_FRONTEND_URL:-http://localhost:3000}","http://localhost:3000","http://127.0.0.1:3000"]'
     ports:
       - "${VEZOR_API_BIND:-0.0.0.0}:8000:8000"
     volumes:

@@ -116,3 +116,65 @@ async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_use
         "value": "first-run-password",
         "temporary": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_keycloak_bootstrap_provisioner_reconciles_existing_frontend_client_url() -> None:
+    calls: list[tuple[str, str, dict[str, object] | str | None]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body: dict[str, object] | str | None
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = json.loads(request.content.decode("utf-8"))
+        else:
+            body = request.content.decode("utf-8") if request.content else None
+        calls.append((request.method, request.url.path, body))
+
+        if request.url.path == "/realms/master/protocol/openid-connect/token":
+            return httpx.Response(200, json={"access_token": "admin-token"})
+        if request.method == "GET" and request.url.path == "/admin/realms/vezor":
+            return httpx.Response(200, json={"realm": "vezor"})
+        if request.method == "GET" and request.url.path == "/admin/realms/vezor/clients":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "client-uuid",
+                        "clientId": "argus-frontend",
+                        "redirectUris": ["http://localhost:3000/*"],
+                        "webOrigins": ["http://localhost:3000"],
+                    }
+                ],
+            )
+        if request.method == "PUT" and request.url.path == (
+            "/admin/realms/vezor/clients/client-uuid"
+        ):
+            return httpx.Response(204)
+        return httpx.Response(500, json={"unexpected": request.url.path})
+
+    settings = Settings(
+        _env_file=None,
+        keycloak_server_url="http://keycloak:8080",
+        keycloak_issuer="http://192.168.8.199:8080/realms/vezor",
+        keycloak_admin_username="admin",
+        keycloak_admin_password=SecretStr("admin-password"),
+        keycloak_frontend_client_id="argus-frontend",
+        keycloak_frontend_url="http://192.168.8.199:3000",
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://keycloak:8080",
+    ) as http_client:
+        provisioner = KeycloakBootstrapProvisioner(settings, http_client=http_client)
+
+        reconciled = await provisioner.reconcile_frontend_client()
+
+    assert reconciled is True
+    client_update_body = next(
+        body
+        for method, path, body in calls
+        if method == "PUT" and path == "/admin/realms/vezor/clients/client-uuid"
+    )
+    assert isinstance(client_update_body, dict)
+    assert "http://192.168.8.199:3000/*" in client_update_body["redirectUris"]
+    assert "http://192.168.8.199:3000" in client_update_body["webOrigins"]

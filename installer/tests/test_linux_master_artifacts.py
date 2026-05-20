@@ -63,6 +63,8 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     ) in compose
     assert "ARGUS_KEYCLOAK_ISSUER" in compose
     assert "ARGUS_KEYCLOAK_FRONTEND_CLIENT_ID" in compose
+    assert "ARGUS_CORS_ALLOWED_ORIGINS" in compose
+    assert "${VEZOR_PUBLIC_FRONTEND_URL:-http://localhost:3000}" in compose
     assert "backend_db_url:" in compose
     assert "target: ARGUS_DB_URL" in compose
     assert "target: ARGUS_MINIO_ACCESS_KEY" in compose

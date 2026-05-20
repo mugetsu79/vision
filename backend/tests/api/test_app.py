@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from argus.api.contracts import CameraSetupPreviewResponse, FrameSize, TenantContext
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, get_current_user
-from argus.main import create_app
+from argus.main import create_app, reconcile_identity_provider_for_startup
 from argus.models.enums import RoleEnum
 
 
@@ -68,6 +68,20 @@ class _FakeServices:
         return None
 
 
+class _FakeDeploymentService:
+    def __init__(self) -> None:
+        self.reconcile_calls = 0
+
+    async def reconcile_identity_provider(self) -> bool:
+        self.reconcile_calls += 1
+        return True
+
+
+class _FakeStartupServices:
+    def __init__(self) -> None:
+        self.deployment = _FakeDeploymentService()
+
+
 @pytest.mark.asyncio
 async def test_health_and_metrics_routes_are_exposed() -> None:
     settings = Settings(
@@ -91,6 +105,19 @@ async def test_health_and_metrics_routes_are_exposed() -> None:
     assert metrics_response.status_code == 200
     assert "python_info" in metrics_response.text
     assert "argus_http_requests_total" in metrics_response.text
+
+
+@pytest.mark.asyncio
+async def test_startup_reconciles_identity_provider_client() -> None:
+    class _State:
+        services = _FakeStartupServices()
+
+    class _App:
+        state = _State()
+
+    await reconcile_identity_provider_for_startup(_App())
+
+    assert _App.state.services.deployment.reconcile_calls == 1
 
 
 @pytest.mark.asyncio
