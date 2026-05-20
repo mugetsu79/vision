@@ -165,7 +165,10 @@ class KeycloakBootstrapProvisioner:
             )
 
         client_id = str(client["id"])
-        merged = {**client, **self._frontend_client_payload()}
+        merged = {
+            **client,
+            **self._frontend_client_payload(existing_attributes=client.get("attributes")),
+        }
         response = await self.http_client.put(
             f"{self.base_url}/admin/realms/{self.realm}/clients/{client_id}",
             headers=self._headers(token),
@@ -327,7 +330,10 @@ class KeycloakBootstrapProvisioner:
         )
         self._raise_for_status(assign, f"assign Keycloak role {role_name}")
 
-    def _frontend_client_payload(self) -> dict[str, Any]:
+    def _frontend_client_payload(
+        self,
+        existing_attributes: object | None = None,
+    ) -> dict[str, Any]:
         origins = _dedupe(
             (
                 self.settings.keycloak_frontend_url.rstrip("/"),
@@ -335,6 +341,11 @@ class KeycloakBootstrapProvisioner:
                 "http://127.0.0.1:3000",
             )
         )
+        attributes = dict(existing_attributes) if isinstance(existing_attributes, dict) else {}
+        attributes.pop("pkce.code.challenge.method", None)
+        if not self.settings.keycloak_frontend_disable_pkce:
+            attributes["pkce.code.challenge.method"] = "S256"
+
         return {
             "clientId": self.settings.keycloak_frontend_client_id,
             "name": "Vezor Frontend",
@@ -345,7 +356,7 @@ class KeycloakBootstrapProvisioner:
             "directAccessGrantsEnabled": False,
             "redirectUris": [f"{origin}/*" for origin in origins],
             "webOrigins": origins,
-            "attributes": {"pkce.code.challenge.method": "S256"},
+            "attributes": attributes,
         }
 
     def _headers(self, token: str) -> dict[str, str]:

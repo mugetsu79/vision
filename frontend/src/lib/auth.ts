@@ -22,6 +22,7 @@ export const oidcManager = new UserManager({
   post_logout_redirect_uri: frontendConfig.oidcPostLogoutRedirectUri,
   response_type: "code",
   scope: "openid profile email",
+  disablePKCE: frontendConfig.oidcDisablePkce,
   userStore: new WebStorageStateStore({ store: window.localStorage }),
 });
 

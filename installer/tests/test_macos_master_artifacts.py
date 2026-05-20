@@ -155,10 +155,14 @@ def test_macos_installer_exposes_browser_auth_for_non_loopback_public_url() -> N
     script = _read(INSTALL_SCRIPT)
 
     assert "public_hostname_from_url" in script
+    assert "oidc_disable_pkce_for_public_url" in script
     assert 'KEYCLOAK_BIND="0.0.0.0"' in script
+    assert "printf 'true\\n'" in script
+    assert 'OIDC_DISABLE_PKCE="$(oidc_disable_pkce_for_public_url "$PUBLIC_URL" "$PUBLIC_HOSTNAME")"' in script
     assert "PUBLIC_KEYCLOAK_URL=\"${PUBLIC_URL%:*}:8080\"" in script
     assert "VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND" in script
     assert "VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL" in script
+    assert "VEZOR_OIDC_DISABLE_PKCE=$OIDC_DISABLE_PKCE" in script
 
 
 def test_macos_dev_installer_builds_local_master_images_before_launchd_start() -> None:

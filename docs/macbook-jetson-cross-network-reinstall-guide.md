@@ -147,6 +147,24 @@ through CORS. This matters after IP changes because first-run may already be
 complete and the original Keycloak client may still contain only localhost
 redirect URIs.
 
+When `$MASTER_PUBLIC_URL` uses non-localhost `http://...`, the installer also
+enables the portable LAN HTTP auth compatibility flag. Browsers do not expose
+WebCrypto on LAN HTTP origins, so S256 PKCE cannot run there until the demo is
+served over HTTPS. Confirm the flag after reinstall:
+
+```bash
+curl -fsS "$MASTER_PUBLIC_URL/config.js"
+```
+
+The output should include:
+
+```text
+VITE_OIDC_DISABLE_PKCE: "true"
+```
+
+For `https://...`, `localhost`, or `127.0.0.1` master URLs, this flag should be
+`"false"` and S256 PKCE remains enabled.
+
 Validate from the Jetson:
 
 ```bash

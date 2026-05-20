@@ -113,6 +113,25 @@ public_hostname_from_url() {
   printf '%s\n' "$host_port"
 }
 
+oidc_disable_pkce_for_public_url() {
+  local url="$1"
+  local hostname="$2"
+
+  if [[ "$url" != http://* ]]; then
+    printf 'false\n'
+    return 0
+  fi
+
+  case "$hostname" in
+    localhost|127.*|::1)
+      printf 'false\n'
+      ;;
+    *)
+      printf 'true\n'
+      ;;
+  esac
+}
+
 write_secret_if_missing() {
   local path="$1"
   local value="${2:-}"
@@ -292,6 +311,7 @@ FRONTEND_IMAGE="$(manifest_image_ref frontend vezor/frontend:portable-demo)"
 SUPERVISOR_IMAGE="$(manifest_image_ref supervisor "$BACKEND_IMAGE")"
 PUBLIC_KEYCLOAK_URL="${PUBLIC_URL%:*}:8080"
 PUBLIC_HOSTNAME="$(public_hostname_from_url "$PUBLIC_URL")"
+OIDC_DISABLE_PKCE="$(oidc_disable_pkce_for_public_url "$PUBLIC_URL" "$PUBLIC_HOSTNAME")"
 KEYCLOAK_BIND="127.0.0.1"
 case "$PUBLIC_HOSTNAME" in
   localhost|127.*|::1)
@@ -352,6 +372,7 @@ VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev
 VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND
 VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL
 VEZOR_OIDC_CLIENT_ID=argus-frontend
+VEZOR_OIDC_DISABLE_PKCE=$OIDC_DISABLE_PKCE
 ENV
   chmod 0644 "$MASTER_ENV"
 fi

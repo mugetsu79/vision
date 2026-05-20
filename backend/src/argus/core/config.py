@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     keycloak_admin_password: SecretStr | None = None
     keycloak_frontend_client_id: str = "argus-frontend"
     keycloak_frontend_url: str = "http://localhost:3000"
+    keycloak_frontend_disable_pkce: bool = False
 
     rtsp_encryption_key: SecretStr = SecretStr("argus-dev-rtsp-key")
     config_encryption_key: SecretStr = SecretStr("argus-dev-config-key")

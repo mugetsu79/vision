@@ -3,7 +3,8 @@ type FrontendEnvKey =
   | "VITE_OIDC_AUTHORITY"
   | "VITE_OIDC_CLIENT_ID"
   | "VITE_OIDC_REDIRECT_URI"
-  | "VITE_OIDC_POST_LOGOUT_REDIRECT_URI";
+  | "VITE_OIDC_POST_LOGOUT_REDIRECT_URI"
+  | "VITE_OIDC_DISABLE_PKCE";
 
 type FrontendRuntimeEnv = Readonly<Partial<Record<FrontendEnvKey, string | undefined>>>;
 
@@ -25,6 +26,7 @@ const buildTimeEnv: FrontendRuntimeEnv = {
   VITE_OIDC_CLIENT_ID: import.meta.env.VITE_OIDC_CLIENT_ID,
   VITE_OIDC_REDIRECT_URI: import.meta.env.VITE_OIDC_REDIRECT_URI,
   VITE_OIDC_POST_LOGOUT_REDIRECT_URI: import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
+  VITE_OIDC_DISABLE_PKCE: import.meta.env.VITE_OIDC_DISABLE_PKCE,
 };
 
 const injectedRuntimeEnv =
@@ -43,6 +45,8 @@ export function mergeFrontendRuntimeEnv(
     VITE_OIDC_POST_LOGOUT_REDIRECT_URI:
       injectedEnv?.VITE_OIDC_POST_LOGOUT_REDIRECT_URI ||
       buildEnv.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
+    VITE_OIDC_DISABLE_PKCE:
+      injectedEnv?.VITE_OIDC_DISABLE_PKCE || buildEnv.VITE_OIDC_DISABLE_PKCE,
   };
 }
 
@@ -94,6 +98,10 @@ function requireEnv(
   return value;
 }
 
+function readBooleanEnv(value: string | undefined): boolean {
+  return value === "1" || value?.toLowerCase() === "true";
+}
+
 export function resolveFrontendConfig(
   env: FrontendRuntimeEnv,
   location: FrontendLocationLike | undefined = runtimeLocation,
@@ -110,6 +118,7 @@ export function resolveFrontendConfig(
       location,
       isDev,
     ),
+    oidcDisablePkce: readBooleanEnv(env.VITE_OIDC_DISABLE_PKCE),
   } as const;
 }
 
