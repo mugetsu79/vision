@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import errno
 import inspect
 import logging
 from collections import defaultdict
@@ -2069,7 +2070,7 @@ async def build_runtime_engine(
 async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = None) -> None:
     resolved_settings = settings or Settings()
     if resolved_settings.enable_worker_metrics_server:
-        start_http_server(resolved_settings.worker_metrics_port)
+        _start_worker_metrics_server(resolved_settings.worker_metrics_port)
     events_client = NatsJetStreamClient(resolved_settings)
     await events_client.connect()
     config = await load_engine_config(camera_id, settings=resolved_settings)
@@ -2129,6 +2130,21 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
         await events_client.close()
         if db_manager is not None:
             await db_manager.dispose()
+
+
+def _start_worker_metrics_server(port: int) -> None:
+    try:
+        start_http_server(port)
+    except OSError as exc:
+        if exc.errno in {errno.EADDRINUSE, 98, 48}:
+            logger.warning(
+                "Worker metrics server port %s is already in use; "
+                "continuing without starting another metrics endpoint. "
+                "This is expected when multiple camera workers share one container.",
+                port,
+            )
+            return
+        raise
 
 
 def _build_homography(config: dict[str, Any] | None) -> Homography | None:

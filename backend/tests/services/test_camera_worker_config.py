@@ -414,6 +414,7 @@ def _runtime_artifact(
     model_id,
     camera_id=None,
     scope: RuntimeArtifactScope = RuntimeArtifactScope.MODEL,
+    kind: RuntimeArtifactKind = RuntimeArtifactKind.TENSORRT_ENGINE,
     capability: DetectorCapability = DetectorCapability.FIXED_VOCAB,
     source_model_sha256: str = "a" * 64,
     validation_status: RuntimeArtifactValidationStatus = RuntimeArtifactValidationStatus.VALID,
@@ -425,10 +426,18 @@ def _runtime_artifact(
         model_id=model_id,
         camera_id=camera_id,
         scope=scope,
-        kind=RuntimeArtifactKind.TENSORRT_ENGINE,
+        kind=kind,
         capability=capability,
-        runtime_backend="tensorrt_engine",
-        path="/models/yolo12n.engine",
+        runtime_backend=(
+            "tensorrt_engine"
+            if kind is RuntimeArtifactKind.TENSORRT_ENGINE
+            else "onnxruntime"
+        ),
+        path=(
+            "/models/yolo12n.engine"
+            if kind is RuntimeArtifactKind.TENSORRT_ENGINE
+            else "/models/yolo12n.onnx"
+        ),
         target_profile="linux-aarch64-nvidia-jetson",
         precision=RuntimeArtifactPrecision.FP16,
         input_shape={"width": 640, "height": 640},
@@ -1334,6 +1343,53 @@ async def test_worker_config_includes_resolved_runtime_selection_profile() -> No
     assert config.runtime_selection.preferred_backend == "tensorrt_engine"
     assert config.runtime_selection.artifact_preference == "tensorrt_first"
     assert config.runtime_selection.fallback_allowed is False
+
+
+@pytest.mark.asyncio
+async def test_runtime_passport_honors_dynamic_first_runtime_selection() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    runtime_profile_id = uuid4()
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    tensorrt = _runtime_artifact(model_id=model.id)
+    runtime_selection = WorkerRuntimeSelectionSettings(
+        profile_id=runtime_profile_id,
+        profile_name="Dynamic first",
+        profile_hash="f" * 64,
+        preferred_backend="onnxruntime",
+        artifact_preference="dynamic_first",
+        fallback_allowed=True,
+    )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[tensorrt],
+    )
+    service = CameraService(
+        session_factory=session_factory,
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=_FakeOperatorConfigurationService(
+            runtime_selection=runtime_selection,
+        ),
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    snapshots = session_factory.state["runtime_passport_snapshots"]
+    assert isinstance(snapshots, list)
+    passport = snapshots[0].passport
+    selected_runtime = passport["selected_runtime"]
+    assert config.runtime_artifacts[0].id == tensorrt.id
+    assert selected_runtime["backend"] == "onnxruntime"
+    assert selected_runtime["fallback"] is True
+    assert selected_runtime["fallback_reason"] == "dynamic_preferred"
+    assert selected_runtime["runtime_artifact_id"] is None
+    assert passport["runtime_selection_profile"]["artifact_preference"] == "dynamic_first"
 
 
 @pytest.mark.asyncio

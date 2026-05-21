@@ -792,6 +792,10 @@ class CameraService:
         )
         runtime_selection_payload = scene_contract["runtime_selection"]
         runtime_vocabulary_payload = scene_contract["runtime_vocabulary"]
+        runtime_artifact = _selected_runtime_artifact_for_passport(
+            runtime_artifacts,
+            runtime_selection=cast(dict[str, object], runtime_selection_payload),
+        )
         runtime_passport = build_runtime_passport(
             tenant_id=tenant_context.tenant_id,
             camera_id=camera.id,
@@ -799,8 +803,8 @@ class CameraService:
             model_metadata=_model_contract_payload(primary_model),
             runtime_selection=cast(dict[str, object], runtime_selection_payload),
             runtime_artifact=(
-                _runtime_artifact_passport_payload(runtime_artifacts[0])
-                if runtime_artifacts
+                _runtime_artifact_passport_payload(runtime_artifact)
+                if runtime_artifact is not None
                 else None
             ),
             selection_report=_runtime_selection_report_payload(
@@ -5275,6 +5279,9 @@ def _runtime_selection_contract_payload(
     runtime_selection: WorkerRuntimeSelectionSettings | None = None,
 ) -> dict[str, object]:
     artifacts = runtime_artifacts or []
+    artifact_preference = (
+        runtime_selection.artifact_preference if runtime_selection is not None else None
+    )
     profile_payload = (
         {
             "profile_id": str(runtime_selection.profile_id)
@@ -5290,10 +5297,24 @@ def _runtime_selection_contract_payload(
         else {}
     )
     if artifacts:
+        candidate_artifact_ids = [str(artifact.id) for artifact in artifacts]
+        if artifact_preference == "dynamic_first":
+            capability_config = _model_capability_config(model)
+            return {
+                "backend": runtime_selection.preferred_backend
+                or capability_config.get("runtime_backend")
+                or "onnxruntime",
+                "candidate_artifact_ids": candidate_artifact_ids,
+                "selected_artifact_id": None,
+                "target_profile": None,
+                "precision": None,
+                "fallback_reason": "dynamic_preferred",
+                **profile_payload,
+            }
         first = artifacts[0]
         return {
             "backend": first.runtime_backend,
-            "candidate_artifact_ids": [str(artifact.id) for artifact in artifacts],
+            "candidate_artifact_ids": candidate_artifact_ids,
             "selected_artifact_id": str(first.id),
             "target_profile": first.target_profile,
             "precision": first.precision.value,
@@ -5310,6 +5331,21 @@ def _runtime_selection_contract_payload(
         "fallback_reason": "no_validated_runtime_artifact",
         **profile_payload,
     }
+
+
+def _selected_runtime_artifact_for_passport(
+    runtime_artifacts: list[ModelRuntimeArtifact],
+    *,
+    runtime_selection: dict[str, object],
+) -> ModelRuntimeArtifact | None:
+    selected_artifact_id = runtime_selection.get("selected_artifact_id")
+    if selected_artifact_id is None:
+        return None
+    selected_artifact_id_text = str(selected_artifact_id)
+    return next(
+        (artifact for artifact in runtime_artifacts if str(artifact.id) == selected_artifact_id_text),
+        None,
+    )
 
 
 def _runtime_selection_report_payload(

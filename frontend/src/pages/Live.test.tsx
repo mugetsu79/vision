@@ -630,6 +630,121 @@ describe("LivePage", () => {
     );
   });
 
+  test("deletes a live scene after confirmation, even when it is already absent server-side", async () => {
+    const user = userEvent.setup();
+    const requestLog: string[] = [];
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const northGate = {
+      id: "11111111-1111-1111-1111-111111111111",
+      site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      edge_node_id: null,
+      name: "North Gate",
+      rtsp_url_masked: "rtsp://***",
+      processing_mode: "central",
+      primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      secondary_model_id: null,
+      tracker_type: "botsort",
+      active_classes: ["person"],
+      attribute_rules: [],
+      zones: [],
+      homography: null,
+      privacy: {
+        blur_faces: false,
+        blur_plates: false,
+        method: "gaussian",
+        strength: 7,
+      },
+      browser_delivery: {
+        default_profile: "native",
+        allow_native_on_demand: true,
+        profiles: [{ id: "native", kind: "passthrough", label: "Native camera" }],
+      },
+      frame_skip: 1,
+      fps_cap: 25,
+      created_at: "2026-04-18T10:00:00Z",
+      updated_at: "2026-04-18T10:00:00Z",
+    };
+    const depotYard = {
+      ...northGate,
+      id: "22222222-2222-2222-2222-222222222222",
+      name: "Depot Yard",
+      tracker_type: "bytetrack",
+    };
+    let northGateDeleted = false;
+
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      requestLog.push(`${request.method} ${url.pathname}`);
+
+      if (url.pathname === "/api/v1/cameras" && request.method === "GET") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              northGateDeleted ? [depotYard] : [northGate, depotYard],
+            ),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      }
+
+      if (
+        url.pathname ===
+          "/api/v1/cameras/11111111-1111-1111-1111-111111111111" &&
+        request.method === "DELETE"
+      ) {
+        northGateDeleted = true;
+        return Promise.resolve(
+          new Response(JSON.stringify({ detail: "Camera not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "North Gate" });
+    expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
+
+    const northGatePortal = screen
+      .getByRole("heading", { name: "North Gate" })
+      .closest("[data-scene-portal-tile]");
+    expect(northGatePortal).not.toBeNull();
+
+    await user.click(
+      within(northGatePortal as HTMLElement).getByRole("button", {
+        name: /delete scene north gate/i,
+      }),
+    );
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Delete North Gate? This cannot be undone.",
+    );
+    await waitFor(() =>
+      expect(requestLog).toContain(
+        "DELETE /api/v1/cameras/11111111-1111-1111-1111-111111111111",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "North Gate" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
+  });
+
   test("shows why native is unavailable for a camera", async () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(

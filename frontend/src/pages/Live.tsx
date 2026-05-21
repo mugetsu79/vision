@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Maximize2, Minimize2, PanelTopOpen, Square } from "lucide-react";
+import {
+  Maximize2,
+  Minimize2,
+  PanelTopOpen,
+  Square,
+  Trash2,
+} from "lucide-react";
 
 import { InspectorPanel } from "@/components/layout/InspectorPanel";
 import {
@@ -17,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
-import { useCameras, useUpdateCamera } from "@/hooks/use-cameras";
+import { useCameras, useDeleteCamera, useUpdateCamera } from "@/hooks/use-cameras";
 import {
   useLiveTileLayout,
   type LiveTileSize,
@@ -53,12 +59,17 @@ export function LivePage() {
 
 function WorkspacePage() {
   const { data: cameras = [], isLoading } = useCameras();
+  const deleteCamera = useDeleteCamera();
   const fleet = useFleetOverview();
   const { connectionState, framesByCamera } = useLiveTelemetry(
     cameras.map((camera) => camera.id),
   );
   const { tileSizeFor, setTileSize } = useLiveTileLayout();
   const [focusedCameraId, setFocusedCameraId] = useState<string | null>(null);
+  const [deletingCameraId, setDeletingCameraId] = useState<string | null>(null);
+  const [deleteErrorCameraId, setDeleteErrorCameraId] = useState<string | null>(
+    null,
+  );
   const [activeQuery, setActiveQuery] = useState<{
     response: QueryResponse;
     scope: LiveQueryScope;
@@ -148,6 +159,41 @@ function WorkspacePage() {
     () => new Map(sceneHealthRows.map((row) => [row.cameraId, row])),
     [sceneHealthRows],
   );
+  const liveCameraIds = useMemo(
+    () => new Set(cameras.map((camera) => camera.id)),
+    [cameras],
+  );
+
+  useEffect(() => {
+    if (focusedCameraId && !liveCameraIds.has(focusedCameraId)) {
+      setFocusedCameraId(null);
+    }
+
+    setActiveQuery((current) => {
+      if (
+        current?.scope.scope === "camera" &&
+        !liveCameraIds.has(current.scope.cameraId)
+      ) {
+        return null;
+      }
+      return current;
+    });
+
+    setSignalRowsByCamera((current) => {
+      let changed = false;
+      const next = new Map<string, SignalCountRow[]>();
+
+      for (const [cameraId, rows] of current.entries()) {
+        if (liveCameraIds.has(cameraId)) {
+          next.set(cameraId, rows);
+        } else {
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [focusedCameraId, liveCameraIds]);
 
   useEffect(() => {
     if (!focusedCameraId) return;
@@ -161,6 +207,48 @@ function WorkspacePage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [focusedCameraId]);
+
+  const handleDeleteScene = useCallback(
+    async (camera: CameraResponse) => {
+      if (!window.confirm(`Delete ${camera.name}? This cannot be undone.`)) {
+        return;
+      }
+
+      setDeletingCameraId(camera.id);
+      setDeleteErrorCameraId(null);
+
+      try {
+        await deleteCamera.mutateAsync(camera.id);
+        setFocusedCameraId((current) =>
+          current === camera.id ? null : current,
+        );
+        setActiveQuery((current) => {
+          if (
+            current?.scope.scope === "camera" &&
+            current.scope.cameraId === camera.id
+          ) {
+            return null;
+          }
+          return current;
+        });
+        setSignalRowsByCamera((current) => {
+          if (!current.has(camera.id)) {
+            return current;
+          }
+          const next = new Map(current);
+          next.delete(camera.id);
+          return next;
+        });
+      } catch {
+        setDeleteErrorCameraId(camera.id);
+      } finally {
+        setDeletingCameraId((current) =>
+          current === camera.id ? null : current,
+        );
+      }
+    },
+    [deleteCamera],
+  );
 
   const focusedCamera =
     cameras.find((camera) => camera.id === focusedCameraId) ?? null;
@@ -180,6 +268,9 @@ function WorkspacePage() {
         isFocused={isFocused}
         onFocus={() => setFocusedCameraId(camera.id)}
         onCloseFocus={() => setFocusedCameraId(null)}
+        onDelete={() => void handleDeleteScene(camera)}
+        isDeleting={deletingCameraId === camera.id}
+        deleteFailed={deleteErrorCameraId === camera.id}
         frame={frame}
         classFilter={classFilter}
         sceneHealth={sceneHealth}
@@ -326,6 +417,9 @@ function ScenePortalCard({
   isFocused,
   onFocus,
   onCloseFocus,
+  onDelete,
+  isDeleting,
+  deleteFailed,
   frame,
   classFilter,
   sceneHealth,
@@ -337,6 +431,9 @@ function ScenePortalCard({
   isFocused: boolean;
   onFocus: () => void;
   onCloseFocus: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+  deleteFailed: boolean;
   frame: TelemetryFrame | undefined;
   classFilter: string[] | null;
   sceneHealth: SceneHealthRow | undefined;
@@ -503,12 +600,27 @@ function ScenePortalCard({
                 <Minimize2 className="size-4" />
               </button>
             ) : null}
+            <button
+              type="button"
+              aria-label={`Delete scene ${camera.name}`}
+              title="Delete scene"
+              disabled={isDeleting}
+              onClick={onDelete}
+              className={tileToolButtonClass(false, "danger")}
+            >
+              <Trash2 className="size-4" />
+            </button>
           </div>
         </div>
         {sceneHealth ? (
           <div className="basis-full pt-1">
             <SceneStatusStrip row={sceneHealth} />
           </div>
+        ) : null}
+        {deleteFailed ? (
+          <p className="basis-full text-xs text-[#ff9fb5]">
+            Could not delete scene. Try again from this scene.
+          </p>
         ) : null}
       </div>
 
@@ -645,9 +757,22 @@ function tileSpanClass(size: LiveTileSize): string {
   return "xl:col-span-3";
 }
 
-function tileToolButtonClass(active: boolean): string {
+function tileToolButtonClass(
+  active: boolean,
+  tone: "neutral" | "danger" = "neutral",
+): string {
+  const base =
+    "inline-flex size-8 items-center justify-center rounded-[var(--vz-r-sm)] border transition disabled:cursor-not-allowed disabled:opacity-50";
+
+  if (tone === "danger") {
+    return [
+      base,
+      "border-[#5f2630] bg-[#2a0d14]/60 text-[#ffb4c2] hover:border-[#9b4052] hover:text-[#ffe6ea]",
+    ].join(" ");
+  }
+
   return [
-    "inline-flex size-8 items-center justify-center rounded-[var(--vz-r-sm)] border transition",
+    base,
     active
       ? "border-[color:var(--vz-hair-focus)] bg-[rgba(110,189,255,0.12)] text-[var(--vz-text-primary)]"
       : "border-[color:var(--vz-hair)] bg-white/[0.03] text-[var(--vz-text-secondary)] hover:border-[color:var(--vz-hair-focus)] hover:text-[var(--vz-text-primary)]",

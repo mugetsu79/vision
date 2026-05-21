@@ -78,16 +78,30 @@ export function useDeleteCamera() {
 
   return useMutation({
     mutationFn: async (cameraId: string) => {
-      const { error } = await apiClient.DELETE("/api/v1/cameras/{camera_id}", {
-        params: { path: { camera_id: cameraId } },
-      });
+      const { error, response } = await apiClient.DELETE(
+        "/api/v1/cameras/{camera_id}",
+        {
+          params: { path: { camera_id: cameraId } },
+        },
+      );
 
-      if (error) {
+      if (error && response.status !== 404) {
         throw toApiError(error, "Failed to delete camera.");
       }
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["cameras"] });
+    onSuccess: async (_data, cameraId) => {
+      queryClient.setQueriesData<Camera[]>({ queryKey: ["cameras"] }, (current) => {
+        if (!Array.isArray(current)) {
+          return current;
+        }
+
+        return current.filter((camera) => camera.id !== cameraId);
+      });
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["cameras"] }),
+        queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] }),
+      ]);
     },
   });
 }

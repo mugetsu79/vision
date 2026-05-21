@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import json
 import logging
@@ -58,6 +59,37 @@ from argus.vision.runtime import (
 from argus.vision.runtime_selection import RuntimeSelection
 from argus.vision.track_lifecycle import LifecycleTrack
 from argus.vision.types import Detection
+
+
+def test_worker_metrics_server_port_collision_is_non_fatal(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    calls: list[int] = []
+
+    def fake_start_http_server(port: int) -> None:
+        calls.append(port)
+        raise OSError(errno.EADDRINUSE, "Address already in use")
+
+    monkeypatch.setattr(engine_module, "start_http_server", fake_start_http_server)
+    caplog.set_level(logging.WARNING, logger=engine_module.logger.name)
+
+    engine_module._start_worker_metrics_server(9108)
+
+    assert calls == [9108]
+    assert "Worker metrics server port 9108 is already in use" in caplog.text
+
+
+def test_worker_metrics_server_unexpected_os_error_is_fatal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_start_http_server(port: int) -> None:
+        raise OSError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(engine_module, "start_http_server", fake_start_http_server)
+
+    with pytest.raises(OSError, match="Permission denied"):
+        engine_module._start_worker_metrics_server(9108)
 
 
 class _FakeFrameSource:
