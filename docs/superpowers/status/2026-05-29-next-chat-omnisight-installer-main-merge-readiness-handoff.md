@@ -64,6 +64,81 @@ Validated by Yann after the installer branch work:
 - Profile/rendition switching appears to work.
 - Live scene deletion exists for cleaning up old scenes such as `Room1`.
 
+## Carry-Forward Context From Older Handoffs
+
+The older handoffs are superseded as starting points, but the following context
+still matters. Do not treat omission from the immediate task list as proof that
+these were re-tested or no longer exist.
+
+Validated earlier in the installer branch:
+
+- MacBook master can install and expose first-run.
+- First-run can create the tenant/admin.
+- Sign-in works after the LAN HTTP / Keycloak fixes.
+- Deployment shows central and Jetson nodes.
+- Jetson edge install succeeds with the Python 3.10 ONNX Runtime GPU wheel.
+- Jetson reports hardware/service health after pairing.
+- Model rows can be registered and appear in scene setup.
+- TensorRT engines for YOLO26n and YOLO26s were built on the Jetson and
+  registered as runtime artifacts.
+- Native passthrough and annotated streams can be switched from Live.
+- Annotated live video draws detection boxes.
+
+Historical fixes now covered by current installer docs:
+
+- Edge workers must use `nats://nats-leaf:4222`, not `127.0.0.1:4222`.
+- The master NATS leaf listener must be reachable on `7422`.
+- Product MediaMTX needs UDP `8189` exposed for WebRTC browser delivery.
+- Jetson worker containers need the runtime model alias mounted at `/models`.
+- Worker-config must allow paired supervisor credentials while still rejecting
+  viewers.
+- Disabled evidence recording should not block live worker config on unused
+  privacy/storage residency mismatch.
+- Stale product-owned Jetson containers can hold ports; the current installer
+  performs cleanup before preflight.
+- Older Ultralytics BoT-SORT constructors may not accept a `frame_rate`
+  keyword; tracker construction handles that compatibility.
+
+Operational guidance that still applies:
+
+- Camera setup must assign the Jetson edge node in the scene/camera flow; an
+  Operations profile binding alone does not make the source edge-owned.
+- The scene model dropdown should select canonical model rows such as
+  `YOLO26n COCO`. TensorRT is a runtime artifact attached to that row, not a
+  separate scene model.
+- The default ONNX export is static 640x640. Build TensorRT engines with
+  `trtexec --onnx ... --fp16`; do not pass dynamic `--shapes=...` for that
+  export.
+- The installed Jetson worker image uses Python 3.10 for the Jetson ONNX
+  Runtime GPU wheel. Installer/admin tooling uses Python 3.12.
+- Short-lived browser/admin tokens are setup/admin tooling only, not normal
+  product operation.
+- If the portable network changes, rerun the Jetson installer with
+  `--unpaired --public-stream-host NEW_JETSON_IP_OR_HOSTNAME`, or use the
+  full public MediaMTX RTSP URL option for forwarded RTSP ports.
+
+Historical live runtime caveats:
+
+- Earlier logs showed annotated `720p25` rendering below 25fps because the
+  inference loop was around 67-72ms/frame. Treat profile FPS values as
+  targets/caps, not guaranteed burned-in annotation throughput.
+- Earlier logs showed RTSP `capture_wait` p99/max spikes around 560-590ms.
+  That can cause tracker flicker independent of the Live tile sizing issue.
+- Profile-addressed rendition work was marked deferred after field validation.
+  Current profile/rendition switching appeared to work, but do not reopen the
+  larger product-expansion plan without approval.
+
+Remaining product validation after the Live sizing fix:
+
+1. Create one real evidence clip and review it in Evidence.
+2. Exercise Operations Start/Stop/Restart/Drain for the Jetson camera.
+3. Run reboot validation: Mac master service, Jetson edge service, Deployment
+   heartbeat, Operations status, and Live stream.
+4. If stable, record Track A/B Jetson soak evidence for registered runtime
+   artifacts.
+5. Only after soak evidence exists, decide whether Task 24 / DeepStream can be
+   opened.
+
 ## Immediate Next Work
 
 Priority before broad UI/UX polish:
