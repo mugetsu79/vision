@@ -1,8 +1,9 @@
 # Next Chat Handoff: OmniSight Installer Current Branch
 
 Date: 2026-05-19
-Last updated: 2026-05-19
-Status: Current handoff for `codex/omnisight-installer`.
+Last updated: 2026-05-29
+Status: Superseded by
+`docs/superpowers/status/2026-05-29-next-chat-omnisight-installer-main-merge-readiness-handoff.md`.
 
 Purpose: paste this document into a fresh chat to continue work on the current
 repository branch. Keep `main` untouched unless Yann explicitly changes that

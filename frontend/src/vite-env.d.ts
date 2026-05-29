@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_OIDC_CLIENT_ID: string;
   readonly VITE_OIDC_REDIRECT_URI: string;
   readonly VITE_OIDC_POST_LOGOUT_REDIRECT_URI: string;
+  readonly VITE_OIDC_DISABLE_PKCE: string | undefined;
 }
 
 interface ImportMeta {

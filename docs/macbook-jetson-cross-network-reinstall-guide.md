@@ -92,15 +92,19 @@ PUBLIC_MEDIAMTX_RTSP_URL="rtsp://JETSON_PUBLIC_HOST_OR_IP:PUBLIC_RTSP_PORT"
 and pass `--public-mediamtx-rtsp-url "$PUBLIC_MEDIAMTX_RTSP_URL"` to the edge
 installer.
 
-## 2. Update The Branch On Both Hosts
+## 2. Update The Source Checkout On Both Hosts
+
+Use `main` after the installer work lands there. If you are validating a
+pre-merge branch or a release tag, substitute that ref consistently on both
+hosts.
 
 MacBook:
 
 ```bash
 cd /opt/vezor/current
 git fetch origin
-git switch codex/omnisight-installer
-git pull --ff-only origin codex/omnisight-installer
+git switch main
+git pull --ff-only origin main
 ```
 
 Jetson:
@@ -108,8 +112,8 @@ Jetson:
 ```bash
 cd /opt/vezor/current
 git fetch origin
-git switch codex/omnisight-installer
-git pull --ff-only origin codex/omnisight-installer
+git switch main
+git pull --ff-only origin main
 ```
 
 ## 3. Rerun The MacBook Master Installer

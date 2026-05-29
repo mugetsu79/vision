@@ -3,6 +3,16 @@
 Date: 2026-05-19
 Branch: `codex/omnisight-installer`
 
+Follow-up applied on 2026-05-29 before recommending the installer work for
+`main`:
+
+- confirmed `omnisight-ui-check` is an ancestor of `codex/omnisight-installer`
+- refreshed current operator docs to use `main` or release-tag source commands
+  instead of hard-coding the installer validation branch
+- recorded the latest field result: second scene startup validated, rendition
+  switching acceptable, Live tile resize/rendering remains a follow-up
+- created a fresh merge-readiness handoff
+
 Follow-up applied on 2026-05-19:
 
 - created `docs/auth.md`, `docs/benchmarks/central-l4.md`, and
@@ -161,9 +171,9 @@ These are mostly current and should not be archived:
 - `docs/model-loading-and-configuration-guide.md`
 - `docs/scene-vision-profile-configuration-guide.md`
 
-Recommendation: after `codex/omnisight-installer` merges, remove or rewrite
-branch-specific language such as `codex/omnisight-installer`, installer branch
-validation, and temporary pilot wording where it has become product behavior.
+Follow-up: the current installer and cross-network reinstall guides now use
+`main` or a release tag for source-checkout commands. Historical plans and
+archived lab guides retain their branch names as provenance.
 
 ### Brand/UI Spec Sheet Needs Refresh Or Historical Label
 
@@ -276,10 +286,11 @@ are current enough to remain discoverable.
 1. Keep the repaired local doc links healthy when docs move again.
 2. Keep `docs/error.md` deleted unless the raw transcript is explicitly needed again.
 3. Treat profile-addressed live rendition work as deferred until re-approved.
-4. Use the 2026-05-19 current handoff for the next chat, then archive older
-   `docs/superpowers/status/*` handoffs when the team wants a deeper cleanup.
+4. Use the 2026-05-29 merge-readiness handoff for the next chat, then archive
+   older `docs/superpowers/status/*` handoffs when the team wants a deeper
+   cleanup.
 5. Keep legacy lab guides under `archive/` unless a current operator flow needs
    a new, installer-managed replacement.
 6. Preserve top-level `Status:` metadata on new Superpowers plan/spec docs.
-7. Re-run this audit after the branch merges to main and remove branch-specific
-   validation wording from current operator docs.
+7. After the branch merges to main, do one light pass for references that should
+   become release-specific rather than source-checkout-specific.

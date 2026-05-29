@@ -21,7 +21,7 @@ development Docker Compose commands and copied short-lived dev tokens:
 
 This document is deliberately explicit. It covers host preparation, models,
 first-run, node pairing, camera setup, validation, support bundles, upgrades,
-and the branch-validation details that are easy to miss.
+and the source-checkout details that are easy to miss.
 
 ## Scope And Product Rules
 
@@ -45,26 +45,29 @@ Normal installed operation must not depend on:
 - WebGL
 - DeepStream or Task 24 work before Track A/B Jetson soak evidence exists
 
-## Current Branch Reality
+## Current Source Reality
 
-The `codex/omnisight-installer` branch contains installer scripts, service
-templates, Compose appliance profiles, first-run APIs, node pairing, credential
-storage, service status contracts, support bundle redaction, and UI surfaces.
-It is not yet a signed final package.
+The current source tree contains installer scripts, service templates, Compose
+appliance profiles, first-run APIs, node pairing, credential storage, service
+status contracts, support bundle redaction, and UI surfaces. It is not yet a
+signed final package.
 
-Latest status checkpoint for branch validation:
+Latest source checkpoint validated before the main-merge recommendation:
 
 ```text
-8c37f50e Wire installed edge NATS leaf
+ac2715c5 Fix edge scene startup and live scene deletion
 ```
 
-That checkpoint adds the installed Jetson `vezor-edge-nats-leaf` service and
-wires edge workers to `nats://nats-leaf:4222`. If Jetson worker logs show
-`Connect call failed ('127.0.0.1', 4222)`, update the branch and rerun the edge
-installer; the edge compose environment is stale.
+That checkpoint includes the installed Jetson NATS leaf path, LAN HTTP Keycloak
+compatibility, second-scene worker startup fixes, and the Live scene delete
+action. If Jetson worker logs show stale behavior such as
+`Connect call failed ('127.0.0.1', 4222)` or a second scene failing because the
+worker metrics port is already bound, update the checkout and rerun the relevant
+installer; the installed compose environment or image is stale.
 
-For branch validation from a checkout, `/opt/vezor/current` must be this branch
-at a commit that includes the package wrapper commands:
+For source validation from a checkout, `/opt/vezor/current` must be on the
+current release branch, tag, or `main` at a commit that includes the package
+wrapper commands:
 
 ```bash
 test -x /opt/vezor/current/bin/vezor-master
@@ -78,7 +81,8 @@ is older than this guide. Update that checkout before rerunning install:
 ```bash
 cd /opt/vezor/current
 git fetch origin
-git pull --ff-only origin codex/omnisight-installer
+git switch main
+git pull --ff-only origin main
 ```
 
 Then rerun the wrapper checks above.
@@ -131,7 +135,7 @@ Fill this in before you start:
 
 | Item | Value |
 |---|---|
-| Branch or release | `codex/omnisight-installer` or release tag |
+| Source ref or release | `main` or release tag |
 | Master type | `macos` or `linux-amd64` |
 | Master hostname | |
 | Master LAN IP | |
@@ -297,7 +301,7 @@ sudo rsync -av "$HOME/vezor-model-export/models/" /var/lib/vezor/models/
 sudo chmod -R a+rX /var/lib/vezor/models
 ```
 
-## Prepare The Branch Checkout
+## Prepare The Source Checkout
 
 On every master host being validated from source:
 
@@ -306,8 +310,8 @@ cd "$HOME"
 git clone https://github.com/mugetsu79/vision.git
 cd "$HOME/vision"
 git fetch origin
-git switch codex/omnisight-installer
-git pull --ff-only origin codex/omnisight-installer
+git switch main
+git pull --ff-only origin main
 uv python install 3.12
 uv sync --project installer --python 3.12
 sudo mkdir -p /opt/vezor
@@ -329,8 +333,8 @@ test -x /opt/vezor/current/bin/vezor-edge
 test -x /opt/vezor/current/bin/vezorctl
 ```
 
-If they are not present, update `/opt/vezor/current` to the latest
-`codex/omnisight-installer` branch and rerun `make verify-installers`.
+If they are not present, update `/opt/vezor/current` to the latest source ref
+or release tag and rerun `make verify-installers`.
 
 For a Jetson with only the operating system installed, use the dedicated
 Jetson bootstrap section below before trying `cd /opt/vezor/current`.
@@ -413,8 +417,8 @@ tail -160 /var/log/vezor/master.log
 ```
 
 `pull access denied` or `403 Forbidden` for `ghcr.io/vezor/*` means the install
-tree is stale; pull the latest `codex/omnisight-installer` branch and rerun the
-installer so the dev manifest uses locally built images.
+tree is stale; pull the latest source ref or release tag and rerun the installer
+so the dev manifest uses locally built images.
 
 `invalid mount config ... /private/etc/vezor/secrets/... permission denied`
 also means the install tree is stale; the current macOS installer repairs
@@ -491,7 +495,7 @@ try to mint bootstrap tokens from another machine.
 Installed containers see model files at `/models/<filename>`. Register model
 rows with `/models/...` paths.
 
-Current branch validation still uses the backend model registration script.
+Current source validation still uses the backend model registration script.
 Treat this as installer/bootstrap administration, not normal day-to-day
 operation. Once model rows exist, camera setup and worker operation happen from
 the UI.
@@ -589,7 +593,7 @@ admin account.
 
 ### Alternative: Copy A Token From The Browser Session
 
-For branch validation, you can also copy the short-lived admin access token
+For installer validation, you can also copy the short-lived admin access token
 from the signed-in browser session instead of using the temporary CLI client.
 Use this only for installer/admin validation. Do not paste the token into chat,
 screenshots, docs, tickets, or shell history.
@@ -731,8 +735,8 @@ From Control -> Deployment:
 
 The short value such as `wabV2jeN` is only the pairing code. It is not enough
 by itself because `vezorctl pair` also needs the session id. If your UI shows
-only the code, pull the latest `codex/omnisight-installer` branch, rerun the
-master installer to rebuild the frontend, and create a new pairing session.
+only the code, pull the latest source ref or release tag, rerun the master
+installer to rebuild the frontend, and create a new pairing session.
 
 On the master host:
 
@@ -903,8 +907,8 @@ if [ ! -d "$HOME/vision/.git" ]; then
 fi
 cd "$HOME/vision"
 git fetch origin
-git switch codex/omnisight-installer
-git pull --ff-only origin codex/omnisight-installer
+git switch main
+git pull --ff-only origin main
 uv sync --project installer --python 3.12
 
 sudo mkdir -p /opt/vezor
@@ -1425,7 +1429,7 @@ Never send unredacted bundles outside the trusted operator boundary.
 
 ## Upgrade
 
-Branch validation upgrade:
+Source checkout upgrade:
 
 1. stop the master or edge service
 2. update `/opt/vezor/current`
@@ -1441,7 +1445,7 @@ Linux:
 sudo systemctl stop vezor-master.service
 cd /opt/vezor/current
 git fetch origin
-git pull --ff-only origin codex/omnisight-installer
+git pull --ff-only origin main
 sudo systemctl start vezor-master.service
 ```
 
@@ -1450,7 +1454,7 @@ macOS:
 ```bash
 cd /opt/vezor/current
 git fetch origin
-git pull --ff-only origin codex/omnisight-installer
+git pull --ff-only origin main
 sudo ./installer/macos/install-master.sh \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
@@ -1507,9 +1511,8 @@ Check wrapper commands first:
 ls -l /opt/vezor/current/bin/vezor-master /opt/vezor/current/bin/vezor-edge
 ```
 
-If they are missing, update `/opt/vezor/current` to a newer
-`codex/omnisight-installer` checkout. The installer service files call these
-local wrappers directly.
+If they are missing, update `/opt/vezor/current` to a newer source checkout or
+release tag. The installer service files call these local wrappers directly.
 
 ### The backend cannot see a model file
 
@@ -1539,9 +1542,9 @@ docker logs vezor-master-postgres-1 --tail 80
 
 When the log contains `chmod` or `chown` permission errors under
 `/var/lib/postgresql/data`, the host data directory was prepared in a way Docker
-Desktop cannot write through. Pull the latest `codex/omnisight-installer`
-branch and rerun the macOS installer. The installer stops the partial appliance
-and repairs ownership for the Docker-writable state directories automatically.
+Desktop cannot write through. Pull the latest source ref or release tag and
+rerun the macOS installer. The installer stops the partial appliance and repairs
+ownership for the Docker-writable state directories automatically.
 Do not replace this with a development-stack compose flow.
 
 ### macOS install stops on an unhealthy NATS container
@@ -1555,8 +1558,8 @@ docker inspect -f '{{json .State.Health}}' vezor-master-nats-1
 
 The installable compose healthcheck must use `/nats-server` directly because the
 official NATS image does not include `wget`, `curl`, or a shell. Pull the latest
-`codex/omnisight-installer` branch and rerun the installer if the health log
-mentions `exec: "wget": executable file not found`.
+source ref or release tag and rerun the installer if the health log mentions
+`exec: "wget": executable file not found`.
 
 ### Backend is unhealthy during Alembic migrations
 
@@ -1568,8 +1571,8 @@ docker logs vezor-master-backend-1 --tail 120
 
 If Alembic is trying to connect to `localhost:5432` from inside the backend
 container, the backend image is too old to read `/run/secrets/ARGUS_DB_URL`.
-Pull the latest `codex/omnisight-installer` branch and rerun the installer so
-the local backend image is rebuilt.
+Pull the latest source ref or release tag and rerun the installer so the local
+backend image is rebuilt.
 
 If the log says `extension "timescaledb" is not available`, the master was
 started with a plain PostgreSQL image. The installable master must use a
@@ -1586,9 +1589,9 @@ directories do not need manual `postgresql.conf` edits.
 ### Keycloak restarts on first boot
 
 If `docker logs vezor-master-keycloak-1` repeatedly says the `--optimized` flag
-was used on the first server start, pull the latest `codex/omnisight-installer`
-branch and rerun the installer. First boot must use `start`; optimized mode is
-only valid after a Keycloak build step.
+was used on the first server start, pull the latest source ref or release tag
+and rerun the installer. First boot must use `start`; optimized mode is only
+valid after a Keycloak build step.
 
 If the log says PostgreSQL requested SCRAM authentication but no password was
 provided, the Keycloak container is too old or using stale compose config that
@@ -1645,8 +1648,8 @@ curl -fsS http://127.0.0.1:9997/v3/paths/list
 ```
 
 If `vezor-supervisor` logs `Connect call failed ('127.0.0.1', 4222)`, the edge
-compose environment is stale. Pull the latest `codex/omnisight-installer`
-branch and rerun `install-edge.sh`; the installed worker must inherit
+compose environment is stale. Pull the latest source ref or release tag and
+rerun `install-edge.sh`; the installed worker must inherit
 `ARGUS_NATS_URL=nats://nats-leaf:4222`.
 
 If `vezor-supervisor` can post fleet, service, hardware, and runtime reports but
@@ -1657,9 +1660,9 @@ GET /api/v1/cameras/<camera-id>/worker-config "HTTP/1.1 401 Unauthorized"
 ```
 
 the worker-config endpoint is rejecting the paired supervisor credential. Pull
-the latest `codex/omnisight-installer` branch on the master, rerun the master
-installer so the backend image includes the route fix, then rerun the Jetson
-edge installer as an unpaired update.
+the latest source ref or release tag on the master, rerun the master installer
+so the backend image includes the route fix, then rerun the Jetson edge
+installer as an unpaired update.
 
 If the same endpoint returns:
 
@@ -1669,10 +1672,9 @@ Privacy policy residency does not match evidence storage residency
 ```
 
 and the camera's evidence recording is disabled, the master backend image is
-older than the disabled-recording residency fix. Pull the latest
-`codex/omnisight-installer` branch on the master and rerun the master installer
-so the backend image no longer blocks live workers on an unused evidence storage
-profile.
+older than the disabled-recording residency fix. Pull the latest source ref or
+release tag on the master and rerun the master installer so the backend image no
+longer blocks live workers on an unused evidence storage profile.
 
 ### Jetson edge reinstall says installer ports are already in use
 

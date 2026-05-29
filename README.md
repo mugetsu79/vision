@@ -12,7 +12,7 @@ Vezor separates **native ingest for analytics** from **browser delivery for oper
 
 The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, and support bundles. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
 
-The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, and the Evidence Desk incident review queue. The installer branch adds local macOS master, Linux master, and Jetson edge package artifacts plus first-run bootstrap. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, and deferred Task 24 DeepStream work are still outside the portable demo path.
+The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, and the Evidence Desk incident review queue. The installer-managed path now includes local macOS master, Linux master, and Jetson edge package artifacts plus first-run bootstrap. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, and deferred Task 24 DeepStream work are still outside the portable demo path.
 
 ## What’s In This Repo
 
