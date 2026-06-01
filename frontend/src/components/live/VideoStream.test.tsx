@@ -152,6 +152,24 @@ describe("VideoStream", () => {
     loadHlsClientMock.mockReset();
   });
 
+  test("preserves the full decoded frame inside resized panels", async () => {
+    await act(async () => {
+      render(
+        <VideoStream
+          activeProfileId="native"
+          cameraId="11111111-1111-1111-1111-111111111111"
+          cameraName="North Gate"
+          defaultProfile="720p10"
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const video = screen.getByLabelText(/north gate live video/i);
+    expect(video).toHaveClass("object-contain");
+    expect(video).not.toHaveClass("object-cover");
+  });
+
   test("falls back to HLS when WebRTC negotiation fails", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),

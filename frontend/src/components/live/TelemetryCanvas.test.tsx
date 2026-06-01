@@ -357,7 +357,7 @@ describe("TelemetryCanvas", () => {
     expect(strokeRectMock).toHaveBeenCalledWith(320, 120, 160, 190);
   });
 
-  test("matches object-cover crop offsets for non-widescreen sources", async () => {
+  test("matches object-contain letterbox offsets for non-widescreen sources", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
       ts: "2026-04-19T09:15:00Z",
@@ -390,7 +390,7 @@ describe("TelemetryCanvas", () => {
     );
 
     await waitFor(() => expect(strokeRectMock).toHaveBeenCalled());
-    expect(strokeRectMock).toHaveBeenCalledWith(320, 60, 160, 190);
+    expect(strokeRectMock).toHaveBeenCalledWith(320, 90, 120, 142.5);
   });
 
   test("does not expose raw tracker ids in user-facing labels", async () => {

@@ -267,7 +267,7 @@ function resolveCoordinateTransform(
     };
   }
 
-  const scale = Math.max(canvasWidth / source.width, canvasHeight / source.height);
+  const scale = Math.min(canvasWidth / source.width, canvasHeight / source.height);
   const renderedWidth = source.width * scale;
   const renderedHeight = source.height * scale;
 
