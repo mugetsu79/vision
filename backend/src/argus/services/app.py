@@ -1639,9 +1639,16 @@ class OperationsService:
             runtime_report = runtime_report_by_camera.get(camera.id)
             lifecycle_request = lifecycle_request_by_camera.get(camera.id)
             model_admission = model_admission_by_camera.get(camera.id)
+            assignment_removed = (
+                assignment is not None
+                and WorkerDesiredState(assignment.desired_state)
+                is WorkerDesiredState.NOT_DESIRED
+            )
             assigned_edge_node_id = (
                 assignment.edge_node_id if assignment is not None else camera.edge_node_id
             )
+            if assignment_removed:
+                assigned_edge_node_id = None
             hardware_report = _fleet_worker_hardware_report(
                 camera=camera,
                 assigned_edge_node_id=assigned_edge_node_id,
@@ -1650,13 +1657,19 @@ class OperationsService:
             )
             if assignment is not None:
                 desired = WorkerDesiredState(assignment.desired_state)
+            if assignment_removed:
+                owner = "none"
+                detail = (
+                    "Worker assignment removed. Assign a worker location to enable "
+                    "processing again."
+                )
             if runtime_report is not None and supervisor_service is not None:
                 runtime = supervisor_service.runtime_status_for_report(
                     runtime_report,
                     now=now,
                 )
             controls = None
-            if self.runtime_configuration is not None:
+            if self.runtime_configuration is not None and not assignment_removed:
                 runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
                     tenant_context,
                     OperatorConfigProfileKind.OPERATIONS_MODE,

@@ -5,6 +5,7 @@ import {
   RefreshCw,
   RotateCcw,
   Square,
+  Trash2,
   Unplug,
 } from "lucide-react";
 
@@ -45,9 +46,11 @@ export function SupervisorLifecycleControls({
   const latestRequest = worker.latest_lifecycle_request ?? null;
   const lifecycleDisabledReason = lifecycleReason(worker);
   const needsDeploymentSetup = shouldOpenDeployment(worker);
+  const workerRemoved = worker.desired_state === "not_desired";
   const selectedDesiredState = targetNodeId ? "supervised" : "manual";
-
-  const targetChanged = targetNodeId !== (worker.node_id ?? "");
+  const desiredStateChanged = selectedDesiredState !== worker.desired_state;
+  const targetChanged =
+    targetNodeId !== (worker.node_id ?? "") || desiredStateChanged;
   const availableNodes = useMemo(
     () =>
       worker.node_id && !edgeNodes.some((node) => node.id === worker.node_id)
@@ -82,6 +85,27 @@ export function SupervisorLifecycleControls({
     });
   }
 
+  async function removeWorkerAssignment() {
+    const runningCopy = ["running", "starting", "draining", "stale"].includes(
+      worker.runtime_status,
+    )
+      ? " Use Stop or Drain first if you need the supervisor to shut down the current process before removing the assignment."
+      : "";
+    const confirmed = window.confirm(
+      `Remove worker assignment for ${worker.camera_name}? This keeps the scene and deployment node, but Operations will no longer desire a worker for this scene until you assign one again.${runningCopy}`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await assignment.mutateAsync({
+      camera_id: worker.camera_id,
+      edge_node_id: null,
+      desired_state: "not_desired",
+    });
+    setTargetNodeId("");
+  }
+
   return (
     <section
       data-testid="supervisor-lifecycle-controls"
@@ -104,6 +128,7 @@ export function SupervisorLifecycleControls({
               type="button"
               onClick={() => void createRequest(action)}
               disabled={
+                workerRemoved ||
                 !allowedActions.has(action) ||
                 !admissionAllowsAction(worker, action) ||
                 lifecycle.isPending
@@ -136,15 +161,26 @@ export function SupervisorLifecycleControls({
             ))}
           </Select>
         </label>
-        <Button
-          type="button"
-          onClick={() => void updateAssignment()}
-          disabled={!targetChanged || assignment.isPending}
-          className="self-end"
-        >
-          <RefreshCw className="mr-2 size-4" />
-          Assign worker
-        </Button>
+        <div className="flex flex-wrap gap-2 self-end">
+          <Button
+            type="button"
+            onClick={() => void updateAssignment()}
+            disabled={!targetChanged || assignment.isPending}
+          >
+            <RefreshCw className="mr-2 size-4" />
+            Assign worker
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void removeWorkerAssignment()}
+            disabled={workerRemoved || assignment.isPending}
+            variant="secondary"
+            className="border-[#5f2630] bg-[#2a0d14]/60 text-[#ffb4c2] hover:border-[#9b4052] hover:text-[#ffe6ea]"
+          >
+            <Trash2 className="mr-2 size-4" />
+            {workerRemoved ? "Worker removed" : "Remove worker"}
+          </Button>
+        </div>
       </div>
 
       {needsDeploymentSetup ? (

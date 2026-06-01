@@ -10,6 +10,7 @@ from argus.api.contracts import (
     DeploymentNodeResponse,
     FleetBootstrapRequest,
     TenantContext,
+    WorkerDesiredState,
 )
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
@@ -32,6 +33,7 @@ from argus.models.tables import (
     EdgeNodeHardwareReport,
     RuleEvent,
     Site,
+    WorkerAssignment,
 )
 from argus.services.app import OperationsService
 
@@ -365,6 +367,102 @@ async def test_fleet_overview_edge_assignment_overrides_central_operations_owner
 
 
 @pytest.mark.asyncio
+async def test_fleet_overview_removed_assignment_suppresses_worker_owner() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    edge = EdgeNode(
+        id=uuid4(),
+        site_id=site.id,
+        hostname="jetson-portable-1",
+        public_key="seed",
+        version="portable-demo",
+        last_seen_at=datetime.now(tz=UTC),
+    )
+    camera = Camera(
+        id=uuid4(),
+        site_id=site.id,
+        edge_node_id=edge.id,
+        name="Room1",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        processing_mode=ProcessingMode.EDGE,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={},
+        source_capability=None,
+        frame_skip=1,
+        fps_cap=25,
+    )
+    assignment = WorkerAssignment(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=camera.id,
+        edge_node_id=None,
+        desired_state=WorkerDesiredState.NOT_DESIRED.value,
+        active=True,
+        supersedes_assignment_id=None,
+        assigned_by_subject="operator-1",
+        created_at=datetime.now(tz=UTC),
+        updated_at=datetime.now(tz=UTC),
+    )
+    edge_report = EdgeNodeHardwareReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        edge_node_id=edge.id,
+        supervisor_id="jetson-portable-1",
+        reported_at=datetime.now(tz=UTC),
+        host_profile="linux-aarch64-nvidia-jetson",
+        os_name="linux",
+        machine_arch="aarch64",
+        cpu_model=None,
+        cpu_cores=6,
+        memory_total_mb=7607,
+        accelerators=["cuda", "tensorrt"],
+        provider_capabilities={"TensorrtExecutionProvider": True},
+        observed_performance=[],
+        thermal_state=None,
+        report_hash="d" * 64,
+        created_at=datetime.now(tz=UTC),
+    )
+    session_factory = _FakeSessionFactory([(edge, site)], [(camera, site)], [], [], [])
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        supervisor_operations=_FakeSupervisorOperations(
+            assignments_by_camera={camera.id: assignment},
+            edge_reports={edge.id: edge_report},
+        ),
+        runtime_configuration=_FakeRuntimeConfiguration(
+            {
+                "lifecycle_owner": "central_supervisor",
+                "supervisor_mode": "polling",
+                "restart_policy": "on_failure",
+            }
+        ),
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    worker = response.camera_workers[0]
+    assert response.summary.desired_workers == 0
+    assert worker.desired_state == WorkerDesiredState.NOT_DESIRED
+    assert worker.node_id is None
+    assert worker.node_hostname is None
+    assert worker.lifecycle_owner == "none"
+    assert worker.allowed_lifecycle_actions == []
+    assert worker.detail == (
+        "Worker assignment removed. Assign a worker location to enable processing again."
+    )
+    assert worker.assignment is not None
+    assert worker.assignment.active is True
+
+
+@pytest.mark.asyncio
 async def test_fleet_overview_uses_deployment_heartbeat_status_and_hides_duplicate_edges() -> None:
     tenant_id = uuid4()
     site = _site(tenant_id)
@@ -574,15 +672,21 @@ class _FakeSupervisorOperations:
     def __init__(
         self,
         *,
+        assignments_by_camera: dict[UUID, WorkerAssignment] | None = None,
         central_report: EdgeNodeHardwareReport | None = None,
         edge_reports: dict[UUID, EdgeNodeHardwareReport] | None = None,
     ) -> None:
+        self.assignments_by_camera = assignments_by_camera or {}
         self.central_report = central_report
         self.edge_reports = edge_reports or {}
 
     async def latest_assignments_by_camera(self, **kwargs):  # noqa: ANN003
-        del kwargs
-        return {}
+        camera_ids = kwargs.get("camera_ids", [])
+        return {
+            camera_id: assignment
+            for camera_id, assignment in self.assignments_by_camera.items()
+            if camera_id in camera_ids
+        }
 
     async def latest_runtime_reports_by_camera(self, **kwargs):  # noqa: ANN003
         del kwargs

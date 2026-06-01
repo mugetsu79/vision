@@ -157,6 +157,68 @@ describe("SupervisorLifecycleControls", () => {
     });
   });
 
+  test("removes a configured worker assignment without deleting the scene", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker()}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /remove worker/i }));
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Remove worker assignment for Driveway"),
+    );
+    expect(assignmentMutateAsync).toHaveBeenCalledWith({
+      camera_id: "00000000-0000-0000-0000-000000000101",
+      edge_node_id: null,
+      desired_state: "not_desired",
+    });
+  });
+
+  test("keeps removed workers stopped until an operator assigns them again", async () => {
+    const user = userEvent.setup();
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker({
+          node_id: null,
+          node_hostname: null,
+          desired_state: "not_desired",
+          runtime_status: "not_reported",
+          lifecycle_owner: "none",
+          detail:
+            "Worker assignment removed. Assign a worker location to enable processing again.",
+          allowed_lifecycle_actions: [],
+          assignment: {
+            ...supervisedWorker().assignment!,
+            edge_node_id: null,
+            desired_state: "not_desired",
+          },
+          runtime_report: null,
+          latest_lifecycle_request: null,
+        })}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^restart$/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /worker removed/i }),
+    ).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /assign worker/i }));
+
+    expect(assignmentMutateAsync).toHaveBeenCalledWith({
+      camera_id: "00000000-0000-0000-0000-000000000101",
+      edge_node_id: null,
+      desired_state: "manual",
+    });
+  });
+
   test("disables lifecycle requests in manual or disabled supervisor modes", () => {
     const { rerender } = render(
       <SupervisorLifecycleControls

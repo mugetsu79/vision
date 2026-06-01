@@ -771,6 +771,68 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
   });
 
+  test("surfaces removed worker assignments with a re-enable path", () => {
+    settingsMocks.fleetOverview = {
+      ...fleetOverview,
+      summary: {
+        ...fleetOverview.summary,
+        desired_workers: 1,
+        running_workers: 0,
+      },
+      nodes: fleetOverview.nodes.map((node) =>
+        node.id === "00000000-0000-0000-0000-000000000201"
+          ? { ...node, assigned_camera_ids: [] }
+          : node,
+      ),
+      camera_workers: fleetOverview.camera_workers.map((worker) =>
+        worker.camera_id === "00000000-0000-0000-0000-000000000102"
+          ? {
+              ...worker,
+              node_id: null,
+              node_hostname: null,
+              desired_state: "not_desired",
+              runtime_status: "not_reported",
+              lifecycle_owner: "none",
+              detail:
+                "Worker assignment removed. Assign a worker location to enable processing again.",
+              runtime_report: null,
+              latest_lifecycle_request: null,
+              latest_hardware_report: null,
+              latest_model_admission: null,
+              allowed_lifecycle_actions: [],
+              assignment: {
+                ...worker.assignment,
+                edge_node_id: null,
+                desired_state: "not_desired",
+              },
+            }
+          : worker,
+      ),
+    };
+
+    renderPage();
+
+    const workerRail = screen.getByTestId("worker-rail");
+    expect(within(workerRail).getByText("Driveway")).toBeInTheDocument();
+    expect(within(workerRail).getByText(/not_desired/i)).toBeInTheDocument();
+
+    const drivewayControls = screen.getByRole("region", {
+      name: /supervisor controls for driveway/i,
+    });
+    expect(
+      within(drivewayControls).getByText(/worker assignment removed/i),
+    ).toBeInTheDocument();
+    expect(
+      within(drivewayControls).getByRole("button", { name: /^start$/i }),
+    ).toBeDisabled();
+    expect(
+      within(drivewayControls).getByRole("button", { name: /worker removed/i }),
+    ).toBeDisabled();
+    expect(
+      within(drivewayControls).getByRole("button", { name: /assign worker/i }),
+    ).not.toBeDisabled();
+  });
+
   test("shows model runtime artifact status", () => {
     renderPage();
 
