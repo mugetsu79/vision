@@ -164,6 +164,70 @@ describe("LivePage", () => {
     });
   });
 
+  test("does not mark workspace telemetry live before a scene heartbeat arrives", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["car", "bus"],
+            attribute_rules: [],
+            zones: [],
+            homography: null,
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
+    );
+
+    const workspaceBand = screen
+      .getByRole("heading", { name: /live intelligence/i })
+      .closest("section");
+    expect(workspaceBand).not.toBeNull();
+    expect(
+      within(workspaceBand as HTMLElement).getByText(/awaiting telemetry/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspaceBand as HTMLElement).queryByText(/^telemetry live$/i),
+    ).not.toBeInTheDocument();
+  });
+
   test("renders the multi-camera live wall, presence badges, and query-driven stats", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch")

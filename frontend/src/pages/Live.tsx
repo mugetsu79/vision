@@ -28,7 +28,10 @@ import {
   useLiveTileLayout,
   type LiveTileSize,
 } from "@/hooks/use-live-tile-layout";
-import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
+import {
+  useLiveTelemetry,
+  type TelemetryConnectionState,
+} from "@/hooks/use-live-telemetry";
 import { useFleetOverview } from "@/hooks/use-operations";
 import { useStableSignalFrame } from "@/hooks/use-stable-signal-frame";
 import type { components } from "@/lib/api.generated";
@@ -51,6 +54,11 @@ type LiveRenditionOption = {
   id: string;
   label: string;
   description: string | null;
+};
+type StatusTone = "healthy" | "attention" | "danger" | "muted" | "accent";
+type WorkspaceTelemetryBadge = {
+  label: string;
+  tone: StatusTone;
 };
 
 export function LivePage() {
@@ -158,6 +166,10 @@ function WorkspacePage() {
   const sceneHealthByCamera = useMemo(
     () => new Map(sceneHealthRows.map((row) => [row.cameraId, row])),
     [sceneHealthRows],
+  );
+  const telemetryBadge = useMemo(
+    () => getWorkspaceTelemetryBadge(connectionState, cameras, framesByCamera),
+    [cameras, connectionState, framesByCamera],
   );
   const liveCameraIds = useMemo(
     () => new Set(cameras.map((camera) => camera.id)),
@@ -308,8 +320,8 @@ function WorkspacePage() {
           description="Watch scenes, signals, and operator intent converge in one live spatial intelligence layer."
           actions={
             <>
-              <StatusToneBadge tone={connectionTone(connectionState)}>
-                {connectionBadgeLabel(connectionState)}
+              <StatusToneBadge tone={telemetryBadge.tone}>
+                {telemetryBadge.label}
               </StatusToneBadge>
               <StatusToneBadge tone="accent">
                 {cameras.length} connected scenes
@@ -779,32 +791,33 @@ function tileToolButtonClass(
   ].join(" ");
 }
 
-function connectionBadgeLabel(connectionState: string): string {
-  if (connectionState === "open") {
-    return "Telemetry live";
-  }
+function getWorkspaceTelemetryBadge(
+  connectionState: TelemetryConnectionState,
+  cameras: CameraResponse[],
+  framesByCamera: Record<string, TelemetryFrame>,
+): WorkspaceTelemetryBadge {
   if (connectionState === "error") {
-    return "Telemetry degraded";
+    return { label: "Telemetry degraded", tone: "danger" };
   }
   if (connectionState === "closed") {
-    return "Telemetry reconnecting";
+    return { label: "Telemetry reconnecting", tone: "attention" };
   }
-  return "Telemetry connecting";
-}
+  if (connectionState !== "open") {
+    return { label: "Telemetry connecting", tone: "accent" };
+  }
 
-function connectionTone(
-  connectionState: string,
-): "healthy" | "attention" | "danger" | "accent" {
-  if (connectionState === "open") {
-    return "healthy";
+  const heartbeatStatuses = cameras.map((camera) =>
+    getHeartbeatStatus(framesByCamera[camera.id]),
+  );
+
+  if (heartbeatStatuses.some((status) => status === "fresh")) {
+    return { label: "Telemetry live", tone: "healthy" };
   }
-  if (connectionState === "error") {
-    return "danger";
+  if (heartbeatStatuses.some((status) => status === "stale")) {
+    return { label: "Telemetry stale", tone: "attention" };
   }
-  if (connectionState === "closed") {
-    return "attention";
-  }
-  return "accent";
+
+  return { label: "Awaiting telemetry", tone: "accent" };
 }
 
 function heartbeatBadgeLabel(status: "unknown" | "fresh" | "stale"): string {
