@@ -127,6 +127,10 @@ class _FakeSession:
         del model, ident
         return None
 
+    async def delete(self, item: object) -> None:
+        del item
+        return None
+
 
 class _FakeResult:
     def scalars(self) -> _FakeResult:
@@ -142,6 +146,27 @@ class _FakeResult:
 class _FakeSessionFactory:
     def __call__(self) -> _FakeSession:
         return _FakeSession()
+
+
+class _DeleteRecordingSession(_FakeSession):
+    def __init__(self) -> None:
+        self.executed: list[object] = []
+        self.deleted: list[object] = []
+
+    async def execute(self, statement: object) -> _FakeResult:
+        self.executed.append(statement)
+        return _FakeResult()
+
+    async def delete(self, item: object) -> None:
+        self.deleted.append(item)
+
+
+class _SingleSessionFactory:
+    def __init__(self, session: _FakeSession) -> None:
+        self.session = session
+
+    def __call__(self) -> _FakeSession:
+        return self.session
 
 
 class _FakeAuditLogger:
@@ -546,6 +571,52 @@ def test_update_camera_rejects_explicit_null_detection_regions() -> None:
         CameraUpdate(detection_regions=None)
 
     assert "detection_regions cannot be null." in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_delete_camera_cleans_scene_owned_operational_records_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    camera = _camera(uuid4(), uuid4(), uuid4(), settings)
+    session = _DeleteRecordingSession()
+    audit_logger = _FakeAuditLogger()
+    service = CameraService(
+        session_factory=_SingleSessionFactory(session),
+        settings=settings,
+        audit_logger=audit_logger,
+        events=None,
+    )
+
+    async def fake_load_camera(session_arg, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert session_arg is session
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera.id
+        return camera
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+
+    await service.delete_camera(_tenant_context(tenant_id), camera.id)
+
+    executed_tables = {
+        getattr(getattr(statement, "table", None), "name", None)
+        for statement in session.executed
+    }
+    assert {
+        "operator_config_bindings",
+        "operator_config_profiles",
+        "operations_lifecycle_requests",
+        "worker_assignments",
+        "worker_model_admission_reports",
+        "worker_runtime_reports",
+    }.issubset(executed_tables)
+    assert session.deleted == [camera]
+    assert audit_logger.calls[-1]["action"] == "camera.delete"
 
 
 @pytest.mark.asyncio

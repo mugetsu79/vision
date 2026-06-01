@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
+import type { OperatorConfigProfile } from "@/hooks/use-configuration";
 
 const createProfile = vi.fn();
 const updateProfile = vi.fn();
@@ -10,7 +11,7 @@ const deleteProfile = vi.fn();
 const testProfile = vi.fn();
 const upsertBinding = vi.fn();
 
-const profiles = [
+const profiles: OperatorConfigProfile[] = [
   {
     id: "profile-minio",
     tenant_id: "tenant-1",
@@ -58,7 +59,53 @@ const profiles = [
     updated_at: "2026-05-11T10:00:00Z",
   },
 ];
-let profileRows = profiles;
+const operationsProfiles: OperatorConfigProfile[] = [
+  {
+    id: "profile-operations-edge",
+    tenant_id: "tenant-1",
+    kind: "operations_mode",
+    scope: "tenant",
+    name: "Edge polling",
+    slug: "edge-polling",
+    enabled: true,
+    is_default: true,
+    config: {
+      lifecycle_owner: "edge_supervisor",
+      supervisor_mode: "polling",
+      restart_policy: "on_failure",
+    },
+    secret_state: {},
+    validation_status: "valid",
+    validation_message: null,
+    validated_at: "2026-05-11T10:05:00Z",
+    config_hash: "c".repeat(64),
+    created_at: "2026-05-11T10:00:00Z",
+    updated_at: "2026-05-11T10:00:00Z",
+  },
+  {
+    id: "profile-operations-central",
+    tenant_id: "tenant-1",
+    kind: "operations_mode",
+    scope: "tenant",
+    name: "Central polling",
+    slug: "central-polling",
+    enabled: true,
+    is_default: false,
+    config: {
+      lifecycle_owner: "central_supervisor",
+      supervisor_mode: "polling",
+      restart_policy: "always",
+    },
+    secret_state: {},
+    validation_status: "unvalidated",
+    validation_message: null,
+    validated_at: null,
+    config_hash: "d".repeat(64),
+    created_at: "2026-05-11T10:00:00Z",
+    updated_at: "2026-05-11T10:00:00Z",
+  },
+];
+let profileRows: OperatorConfigProfile[] = profiles;
 
 vi.mock("@/hooks/use-configuration", () => ({
   useConfigurationCatalog: () => ({
@@ -265,6 +312,7 @@ describe("ConfigurationWorkspace", () => {
 
   test("updates default profile and deletes the selected profile from list actions", async () => {
     const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderWorkspace();
 
     await user.click(screen.getByRole("button", { name: /set default/i }));
@@ -275,9 +323,55 @@ describe("ConfigurationWorkspace", () => {
     });
     expect(await screen.findByText(/default profile updated/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /delete/i }));
+    await user.click(screen.getByRole("button", { name: /delete profile/i }));
 
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Delete profile Central MinIO"),
+    );
     expect(deleteProfile).toHaveBeenCalledWith("profile-minio");
+    expect(await screen.findByText(/profile deleted/i)).toBeInTheDocument();
+  });
+
+  test("duplicates an operations mode profile as a new bindable profile", async () => {
+    const user = userEvent.setup();
+    profileRows = operationsProfiles;
+    renderWorkspace();
+
+    await user.click(screen.getByRole("tab", { name: /operations/i }));
+    await user.click(screen.getByRole("button", { name: /duplicate profile/i }));
+
+    expect(screen.getByRole("heading", { name: /new profile/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Profile name")).toHaveValue("Edge polling copy");
+    expect(screen.getByLabelText("Slug")).toHaveValue("edge-polling-copy");
+
+    await user.selectOptions(screen.getByLabelText("Lifecycle owner"), "central_supervisor");
+    await user.click(screen.getByRole("button", { name: /save profile/i }));
+
+    expect(createProfile).toHaveBeenCalledWith({
+      kind: "operations_mode",
+      scope: "tenant",
+      name: "Edge polling copy",
+      slug: "edge-polling-copy",
+      enabled: true,
+      is_default: false,
+      config: {
+        lifecycle_owner: "central_supervisor",
+        supervisor_mode: "polling",
+        restart_policy: "on_failure",
+      },
+      secrets: {},
+    });
+  });
+
+  test("reports configuration profile delete failures", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    deleteProfile.mockRejectedValue(new Error("Profile is still referenced."));
+    renderWorkspace();
+
+    await user.click(screen.getByRole("button", { name: /delete profile/i }));
+
+    expect(await screen.findByText(/profile is still referenced/i)).toBeInTheDocument();
   });
 
   test("binds a profile that loads after the initial render", async () => {

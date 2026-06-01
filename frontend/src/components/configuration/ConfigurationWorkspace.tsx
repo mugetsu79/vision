@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   Brain,
+  Copy,
   Cpu,
   Database,
   Radio,
@@ -56,6 +57,57 @@ const KIND_ICONS: Record<OperatorConfigKind, typeof Database> = {
   operations_mode: Workflow,
 };
 
+function createProfileDraft(
+  kind: OperatorConfigKind,
+  profiles: OperatorConfigProfile[],
+  source?: OperatorConfigProfile | null,
+): OperatorConfigProfile {
+  const baseName = source ? `${source.name} copy` : `New ${labelForKind(kind)} profile`;
+  const baseSlug = source
+    ? slugify(`${source.slug}-copy`)
+    : slugify(`new-${kind.replaceAll("_", "-")}`);
+  const slug = uniqueSlug(baseSlug, profiles.map((profile) => profile.slug));
+
+  return {
+    id: `draft-${kind}`,
+    tenant_id: source?.tenant_id ?? "draft",
+    kind,
+    scope: source?.scope ?? "tenant",
+    name: baseName,
+    slug,
+    enabled: source?.enabled ?? true,
+    is_default: false,
+    config: source?.config ?? {},
+    secret_state: {},
+    validation_status: "unvalidated",
+    validation_message: null,
+    validated_at: null,
+    config_hash: "0".repeat(64),
+    created_at: source?.created_at ?? "1970-01-01T00:00:00Z",
+    updated_at: source?.updated_at ?? "1970-01-01T00:00:00Z",
+  };
+}
+
+function uniqueSlug(baseSlug: string, existingSlugs: string[]) {
+  const existing = new Set(existingSlugs);
+  let candidate = baseSlug || "profile";
+  let index = 2;
+  while (existing.has(candidate)) {
+    candidate = `${baseSlug}-${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function slugify(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "profile";
+}
+
 export function ConfigurationWorkspace({
   cameras = [],
   sites = [],
@@ -65,6 +117,7 @@ export function ConfigurationWorkspace({
   const [activeKind, setActiveKind] = useState<OperatorConfigKind>("evidence_storage");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [draftProfile, setDraftProfile] = useState<OperatorConfigProfile | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [profileFeedback, setProfileFeedback] = useState<ConfigurationFeedback | null>(null);
   const [bindingFeedback, setBindingFeedback] = useState<ConfigurationFeedback | null>(null);
@@ -81,6 +134,7 @@ export function ConfigurationWorkspace({
   );
   const selectedProfile =
     profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null;
+  const editorDraftProfile = isCreating ? draftProfile : null;
   const catalogLabels = new Map(
     (catalog.data?.kinds ?? []).map((item) => [item.kind, item.label]),
   );
@@ -101,7 +155,9 @@ export function ConfigurationWorkspace({
           },
         });
       } else {
-        await createProfile.mutateAsync(payload);
+        const created = await createProfile.mutateAsync(payload);
+        setSelectedProfileId(created.id);
+        setDraftProfile(null);
         setIsCreating(false);
       }
       setProfileFeedback({ tone: "healthy", message: "Profile saved." });
@@ -117,6 +173,30 @@ export function ConfigurationWorkspace({
   async function handleTest(profile: OperatorConfigProfile) {
     const result = await testProfile.mutateAsync(profile.id);
     setTestResult(`${result.status}${result.message ? ` - ${result.message}` : ""}`);
+  }
+
+  async function handleDeleteProfile(profile: OperatorConfigProfile) {
+    const confirmed = window.confirm(
+      `Delete profile ${profile.name}? Existing bindings for this profile will be removed.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setProfileFeedback(null);
+    try {
+      await deleteProfile.mutateAsync(profile.id);
+      if (selectedProfileId === profile.id) {
+        setSelectedProfileId(null);
+      }
+      setTestResult(null);
+      setProfileFeedback({ tone: "healthy", message: "Profile deleted." });
+    } catch (error) {
+      setProfileFeedback({
+        tone: "danger",
+        message: error instanceof Error ? error.message : "Failed to delete profile.",
+      });
+    }
   }
 
   return (
@@ -138,6 +218,7 @@ export function ConfigurationWorkspace({
           onClick={() => {
             setIsCreating(true);
             setSelectedProfileId(null);
+            setDraftProfile(createProfileDraft(activeKind, profiles));
             setTestResult(null);
             setProfileFeedback(null);
             setBindingFeedback(null);
@@ -167,6 +248,7 @@ export function ConfigurationWorkspace({
                 setActiveKind(kind);
                 setSelectedProfileId(null);
                 setIsCreating(false);
+                setDraftProfile(null);
                 setTestResult(null);
                 setProfileFeedback(null);
                 setBindingFeedback(null);
@@ -263,10 +345,12 @@ export function ConfigurationWorkspace({
           <ProfileEditor
             kind={activeKind}
             selectedProfile={isCreating ? null : selectedProfile}
+            draftProfile={editorDraftProfile}
             onKindChange={(kind) => {
               setActiveKind(kind);
               setSelectedProfileId(null);
               setIsCreating(false);
+              setDraftProfile(null);
               setTestResult(null);
               setProfileFeedback(null);
               setBindingFeedback(null);
@@ -288,9 +372,24 @@ export function ConfigurationWorkspace({
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => void deleteProfile.mutateAsync(selectedProfile.id)}
+                onClick={() => {
+                  setDraftProfile(createProfileDraft(activeKind, profiles, selectedProfile));
+                  setIsCreating(true);
+                  setSelectedProfileId(null);
+                  setTestResult(null);
+                  setProfileFeedback(null);
+                  setBindingFeedback(null);
+                }}
               >
-                Delete
+                <Copy className="mr-2 size-4" />
+                Duplicate profile
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void handleDeleteProfile(selectedProfile)}
+              >
+                Delete profile
               </Button>
               {testResult ? (
                 <StatusToneBadge tone={testResult.startsWith("valid") ? "healthy" : "danger"}>

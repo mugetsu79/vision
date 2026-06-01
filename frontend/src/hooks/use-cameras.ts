@@ -101,6 +101,7 @@ export function useDeleteCamera() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["cameras"] }),
         queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] }),
+        queryClient.invalidateQueries({ queryKey: ["configuration"] }),
       ]);
     },
   });

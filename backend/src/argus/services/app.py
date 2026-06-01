@@ -21,7 +21,7 @@ from uuid import UUID
 import httpx
 from fastapi import HTTPException, status
 from nats.js import api as js_api
-from sqlalchemy import bindparam, select, text, update
+from sqlalchemy import bindparam, delete, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -160,6 +160,7 @@ from argus.models.tables import (
     AuditLog,
     Camera,
     CameraVocabularySnapshot,
+    CountEvent,
     DetectionRule,
     EdgeNode,
     EdgeNodeHardwareReport,
@@ -170,10 +171,15 @@ from argus.models.tables import (
     Model,
     ModelRuntimeArtifact,
     OperationalMemoryPattern,
+    OperationsLifecycleRequest,
     OperatorConfigBinding,
     OperatorConfigProfile,
+    OperatorConfigSecret,
+    PolicyDraft,
+    PolicyDraftLedgerEntry,
     PrivacyManifestSnapshot,
     RuleEvent,
+    RuntimeArtifactSoakRun,
     RuntimePassportSnapshot,
     SceneContractSnapshot,
     Site,
@@ -181,6 +187,8 @@ from argus.models.tables import (
     Tenant,
     TrackingEvent,
     WorkerAssignment,
+    WorkerModelAdmissionReport,
+    WorkerRuntimeReport,
 )
 from argus.services.camera_sources import (
     NormalizedCameraSource,
@@ -1284,12 +1292,222 @@ class CameraService:
     async def delete_camera(self, tenant_context: TenantContext, camera_id: UUID) -> None:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+            await self._delete_scene_owned_records(
+                session,
+                tenant_id=tenant_context.tenant_id,
+                camera_id=camera_id,
+            )
             await session.delete(camera)
             await session.commit()
         await self.audit_logger.record(
             tenant_context=tenant_context,
             action="camera.delete",
             target=f"camera:{camera_id}",
+        )
+
+    async def _delete_scene_owned_records(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        camera_id: UUID,
+    ) -> None:
+        camera_profile_ids = select(OperatorConfigProfile.id).where(
+            OperatorConfigProfile.tenant_id == tenant_id,
+            OperatorConfigProfile.camera_id == camera_id,
+        )
+        camera_assignment_ids = select(WorkerAssignment.id).where(
+            WorkerAssignment.tenant_id == tenant_id,
+            WorkerAssignment.camera_id == camera_id,
+        )
+        camera_admission_ids = select(WorkerModelAdmissionReport.id).where(
+            WorkerModelAdmissionReport.tenant_id == tenant_id,
+            WorkerModelAdmissionReport.camera_id == camera_id,
+        )
+        camera_runtime_artifact_ids = select(ModelRuntimeArtifact.id).where(
+            ModelRuntimeArtifact.camera_id == camera_id,
+        )
+        camera_incident_ids = select(Incident.id).where(Incident.camera_id == camera_id)
+        camera_evidence_artifact_ids = select(EvidenceArtifact.id).where(
+            or_(
+                EvidenceArtifact.camera_id == camera_id,
+                EvidenceArtifact.incident_id.in_(camera_incident_ids),
+            )
+        )
+        camera_rule_ids = select(DetectionRule.id).where(DetectionRule.camera_id == camera_id)
+        camera_policy_draft_ids = select(PolicyDraft.id).where(
+            PolicyDraft.tenant_id == tenant_id,
+            PolicyDraft.camera_id == camera_id,
+        )
+
+        await session.execute(
+            update(Incident)
+            .where(Incident.camera_id == camera_id)
+            .values(
+                scene_contract_snapshot_id=None,
+                privacy_manifest_snapshot_id=None,
+                runtime_passport_snapshot_id=None,
+            )
+        )
+        await session.execute(
+            update(RuntimePassportSnapshot)
+            .where(RuntimePassportSnapshot.camera_id == camera_id)
+            .values(incident_id=None)
+        )
+
+        await session.execute(
+            delete(LocalFirstSyncAttempt).where(
+                LocalFirstSyncAttempt.tenant_id == tenant_id,
+                or_(
+                    LocalFirstSyncAttempt.artifact_id.in_(camera_evidence_artifact_ids),
+                    LocalFirstSyncAttempt.remote_profile_id.in_(camera_profile_ids),
+                ),
+            )
+        )
+        await session.execute(
+            delete(OperatorConfigBinding).where(
+                OperatorConfigBinding.tenant_id == tenant_id,
+                or_(
+                    OperatorConfigBinding.profile_id.in_(camera_profile_ids),
+                    (
+                        (OperatorConfigBinding.scope == OperatorConfigScope.CAMERA)
+                        & (OperatorConfigBinding.scope_key == str(camera_id))
+                    ),
+                ),
+            )
+        )
+        await session.execute(
+            delete(OperatorConfigSecret).where(
+                OperatorConfigSecret.tenant_id == tenant_id,
+                OperatorConfigSecret.profile_id.in_(camera_profile_ids),
+            )
+        )
+        await session.execute(
+            delete(PolicyDraftLedgerEntry).where(
+                PolicyDraftLedgerEntry.tenant_id == tenant_id,
+                or_(
+                    PolicyDraftLedgerEntry.camera_id == camera_id,
+                    PolicyDraftLedgerEntry.policy_draft_id.in_(camera_policy_draft_ids),
+                ),
+            )
+        )
+        await session.execute(
+            delete(RuleEvent).where(
+                or_(
+                    RuleEvent.camera_id == camera_id,
+                    RuleEvent.rule_id.in_(camera_rule_ids),
+                )
+            )
+        )
+        await session.execute(
+            delete(EvidenceLedgerEntry).where(
+                EvidenceLedgerEntry.tenant_id == tenant_id,
+                or_(
+                    EvidenceLedgerEntry.camera_id == camera_id,
+                    EvidenceLedgerEntry.incident_id.in_(camera_incident_ids),
+                ),
+            )
+        )
+        await session.execute(
+            delete(EvidenceArtifact).where(
+                or_(
+                    EvidenceArtifact.camera_id == camera_id,
+                    EvidenceArtifact.incident_id.in_(camera_incident_ids),
+                )
+            )
+        )
+        await session.execute(
+            delete(RuntimeArtifactSoakRun).where(
+                RuntimeArtifactSoakRun.tenant_id == tenant_id,
+                or_(
+                    RuntimeArtifactSoakRun.camera_id == camera_id,
+                    RuntimeArtifactSoakRun.operations_assignment_id.in_(camera_assignment_ids),
+                    RuntimeArtifactSoakRun.model_admission_report_id.in_(camera_admission_ids),
+                    RuntimeArtifactSoakRun.runtime_artifact_id.in_(camera_runtime_artifact_ids),
+                    RuntimeArtifactSoakRun.runtime_selection_profile_id.in_(camera_profile_ids),
+                ),
+            )
+        )
+        await session.execute(
+            delete(OperationsLifecycleRequest).where(
+                OperationsLifecycleRequest.tenant_id == tenant_id,
+                or_(
+                    OperationsLifecycleRequest.camera_id == camera_id,
+                    OperationsLifecycleRequest.assignment_id.in_(camera_assignment_ids),
+                    OperationsLifecycleRequest.admission_report_id.in_(camera_admission_ids),
+                ),
+            )
+        )
+        await session.execute(
+            delete(WorkerRuntimeReport).where(
+                WorkerRuntimeReport.tenant_id == tenant_id,
+                or_(
+                    WorkerRuntimeReport.camera_id == camera_id,
+                    WorkerRuntimeReport.assignment_id.in_(camera_assignment_ids),
+                    WorkerRuntimeReport.runtime_artifact_id.in_(camera_runtime_artifact_ids),
+                ),
+            )
+        )
+        await session.execute(
+            delete(WorkerModelAdmissionReport).where(
+                WorkerModelAdmissionReport.tenant_id == tenant_id,
+                or_(
+                    WorkerModelAdmissionReport.camera_id == camera_id,
+                    WorkerModelAdmissionReport.assignment_id.in_(camera_assignment_ids),
+                    WorkerModelAdmissionReport.runtime_artifact_id.in_(camera_runtime_artifact_ids),
+                ),
+            )
+        )
+        await session.execute(
+            update(WorkerAssignment)
+            .where(
+                WorkerAssignment.tenant_id == tenant_id,
+                WorkerAssignment.camera_id == camera_id,
+            )
+            .values(supersedes_assignment_id=None)
+        )
+        await session.execute(
+            delete(WorkerAssignment).where(
+                WorkerAssignment.tenant_id == tenant_id,
+                WorkerAssignment.camera_id == camera_id,
+            )
+        )
+        await session.execute(delete(CountEvent).where(CountEvent.camera_id == camera_id))
+        await session.execute(delete(TrackingEvent).where(TrackingEvent.camera_id == camera_id))
+        await session.execute(
+            delete(CameraVocabularySnapshot).where(CameraVocabularySnapshot.camera_id == camera_id)
+        )
+        await session.execute(
+            delete(PolicyDraft).where(
+                PolicyDraft.tenant_id == tenant_id,
+                PolicyDraft.camera_id == camera_id,
+            )
+        )
+        await session.execute(delete(Incident).where(Incident.camera_id == camera_id))
+        await session.execute(
+            delete(RuntimePassportSnapshot).where(RuntimePassportSnapshot.camera_id == camera_id)
+        )
+        await session.execute(
+            delete(SceneContractSnapshot).where(SceneContractSnapshot.camera_id == camera_id)
+        )
+        await session.execute(
+            delete(PrivacyManifestSnapshot).where(PrivacyManifestSnapshot.camera_id == camera_id)
+        )
+        await session.execute(delete(DetectionRule).where(DetectionRule.camera_id == camera_id))
+        await session.execute(
+            delete(OperationalMemoryPattern).where(
+                OperationalMemoryPattern.tenant_id == tenant_id,
+                OperationalMemoryPattern.camera_id == camera_id,
+            )
+        )
+        await session.execute(
+            delete(OperatorConfigProfile).where(
+                OperatorConfigProfile.tenant_id == tenant_id,
+                OperatorConfigProfile.camera_id == camera_id,
+            )
+        )
+        await session.execute(
+            delete(ModelRuntimeArtifact).where(ModelRuntimeArtifact.camera_id == camera_id)
         )
 
     async def _publish_camera_command(self, camera: Camera) -> None:

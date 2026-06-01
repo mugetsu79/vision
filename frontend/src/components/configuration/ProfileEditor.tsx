@@ -17,6 +17,7 @@ import type {
 type ProfileEditorProps = {
   kind: OperatorConfigKind;
   selectedProfile: OperatorConfigProfile | null;
+  draftProfile?: OperatorConfigProfile | null;
   onKindChange?: (kind: OperatorConfigKind) => void;
   onSave: (payload: OperatorConfigProfileCreate) => Promise<void> | void;
 };
@@ -59,16 +60,17 @@ type EditorState = {
 export function ProfileEditor({
   kind,
   selectedProfile,
+  draftProfile = null,
   onKindChange,
   onSave,
 }: ProfileEditorProps) {
   const [state, setState] = useState<EditorState>(() =>
-    stateFromProfile(kind, selectedProfile),
+    stateFromProfile(kind, selectedProfile ?? draftProfile),
   );
 
   useEffect(() => {
-    setState(stateFromProfile(kind, selectedProfile));
-  }, [kind, selectedProfile]);
+    setState(stateFromProfile(kind, selectedProfile ?? draftProfile));
+  }, [kind, selectedProfile, draftProfile]);
 
   const storedSecrets = selectedProfile?.secret_state ?? {};
   const title = selectedProfile ? "Edit profile" : "New profile";

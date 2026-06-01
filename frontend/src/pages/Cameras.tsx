@@ -58,6 +58,7 @@ function CamerasContent() {
   const [selectedPolicyCameraId, setSelectedPolicyCameraId] = useState<
     string | null
   >(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { data: cameras = [], isLoading: camerasLoading } = useCameras();
   const { data: sites = [] } = useSites();
   const {
@@ -169,7 +170,15 @@ function CamerasContent() {
       return;
     }
 
-    await deleteCamera.mutateAsync(camera.id);
+    setDeleteError(null);
+    try {
+      await deleteCamera.mutateAsync(camera.id);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Failed to delete scene.",
+      );
+      return;
+    }
 
     if (selectedCamera?.id === camera.id) {
       closeWizard();
@@ -190,6 +199,15 @@ function CamerasContent() {
         description={`Scene setup connects source streams, models, privacy rules, event boundaries, and calibration so ${brandName} can understand each environment.`}
         actions={<Button onClick={openCreateWizard}>Add scene</Button>}
       />
+
+      {deleteError ? (
+        <div
+          role="alert"
+          className="rounded-[0.75rem] border border-[#5a2330] bg-[#241118] px-4 py-3 text-sm text-[#ffc2cd]"
+        >
+          {deleteError}
+        </div>
+      ) : null}
 
       <section
         data-testid="scene-setup-sequence"
