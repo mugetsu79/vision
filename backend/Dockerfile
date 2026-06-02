@@ -15,12 +15,12 @@ COPY pyproject.toml uv.lock alembic.ini README.md ./
 COPY src ./src
 
 RUN pip install --no-cache-dir uv \
-    && uv sync --locked --no-dev --group runtime --group llm --group model-metadata
+    && uv sync --locked --no-dev --group runtime --group llm --group vision
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS central-runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/app/.venv/bin:$PATH" \

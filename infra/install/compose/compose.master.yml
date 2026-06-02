@@ -220,11 +220,32 @@ services:
       - argus.supervisor.runner
       - --config
       - /etc/vezor/supervisor.json
+    env_file:
+      - ${VEZOR_MASTER_ENV_FILE:-/etc/vezor/master.env}
+    environment:
+      ARGUS_REDIS_URL: redis://redis:6379/0
+      ARGUS_NATS_URL: nats://nats:4222
+      ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
+      ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      ARGUS_MEDIAMTX_WEBRTC_BASE_URL: http://mediamtx:8889
+      ARGUS_MEDIAMTX_HLS_BASE_URL: http://mediamtx:8888
+      ARGUS_MEDIAMTX_MJPEG_BASE_URL: http://mediamtx:8888
+      ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889
+      ARGUS_MINIO_ENDPOINT: minio:9000
+      ARGUS_MINIO_SECURE: "false"
     volumes:
       - /etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro
       - ${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}:/run/vezor/credentials:ro
+      - /var/lib/vezor/models:/models:ro
       - /var/lib/vezor:/var/lib/vezor
       - /var/log/vezor:/var/log/vezor
+    secrets:
+      - source: backend_db_url
+        target: ARGUS_DB_URL
+      - source: minio_root_user
+        target: ARGUS_MINIO_ACCESS_KEY
+      - source: minio_root_password
+        target: ARGUS_MINIO_SECRET_KEY
     depends_on:
       backend:
         condition: service_healthy

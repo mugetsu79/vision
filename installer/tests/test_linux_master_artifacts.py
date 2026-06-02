@@ -23,6 +23,17 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _service_block(compose: str, service_name: str) -> str:
+    start = compose.index(f"  {service_name}:\n")
+    lines = compose[start:].splitlines()
+    block = [lines[0]]
+    for line in lines[1:]:
+        if line.startswith("  ") and not line.startswith("    "):
+            break
+        block.append(line)
+    return "\n".join(block)
+
+
 def test_linux_master_systemd_service_is_restartable_appliance_wrapper() -> None:
     service = _read(MASTER_SERVICE)
 
@@ -72,6 +83,27 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "ARGUS_DB_URL: postgresql" not in compose
     assert "target: ARGUS_KEYCLOAK_ADMIN_USERNAME" in compose
     assert "target: ARGUS_KEYCLOAK_ADMIN_PASSWORD" in compose
+
+
+def test_linux_master_supervisor_provides_runtime_worker_connectivity() -> None:
+    compose = _read(MASTER_COMPOSE)
+    supervisor = _service_block(compose, "vezor-supervisor")
+
+    assert "${VEZOR_MASTER_ENV_FILE:-/etc/vezor/master.env}" in supervisor
+    assert "ARGUS_NATS_URL: nats://nats:4222" in supervisor
+    assert "ARGUS_REDIS_URL: redis://redis:6379/0" in supervisor
+    assert "ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997" in supervisor
+    assert "ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554" in supervisor
+    assert "ARGUS_MEDIAMTX_WEBRTC_BASE_URL: http://mediamtx:8889" in supervisor
+    assert "ARGUS_MEDIAMTX_HLS_BASE_URL: http://mediamtx:8888" in supervisor
+    assert "ARGUS_MEDIAMTX_MJPEG_BASE_URL: http://mediamtx:8888" in supervisor
+    assert "ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889" in supervisor
+    assert "ARGUS_MINIO_ENDPOINT: minio:9000" in supervisor
+    assert 'ARGUS_MINIO_SECURE: "false"' in supervisor
+    assert "/var/lib/vezor/models:/models:ro" in supervisor
+    assert "target: ARGUS_DB_URL" in supervisor
+    assert "target: ARGUS_MINIO_ACCESS_KEY" in supervisor
+    assert "target: ARGUS_MINIO_SECRET_KEY" in supervisor
 
 
 def test_linux_master_nats_healthcheck_uses_nats_server_binary() -> None:

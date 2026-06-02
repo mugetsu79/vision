@@ -14,3 +14,15 @@ def test_central_dockerfile_supports_installer_compose_commands() -> None:
     assert "apt-get install -y --no-install-recommends curl" in dockerfile
     assert "CMD [" in dockerfile
     assert "ENTRYPOINT [" not in dockerfile
+
+
+def test_central_dockerfile_installs_worker_vision_dependencies() -> None:
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "--group vision" in dockerfile
+
+
+def test_central_runtime_image_installs_processed_stream_publisher() -> None:
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "ffmpeg" in dockerfile
