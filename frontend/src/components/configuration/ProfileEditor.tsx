@@ -8,12 +8,20 @@ import {
   CONFIGURATION_KINDS,
   labelForKind,
 } from "@/components/configuration/configuration-copy";
+import {
+  PROFILE_COMMON_FIELD_GUIDANCE,
+  PROFILE_FIELD_GUIDANCE,
+  PROFILE_KIND_GUIDANCE,
+} from "@/components/configuration/configuration-guidance";
 import { RuntimeImpactPanel } from "@/components/configuration/RuntimeImpactPanel";
 import {
   supportForField,
   valueCapability,
   type ConfigurationFieldCapability,
 } from "@/components/configuration/configuration-capabilities";
+import { FieldHelp } from "@/components/guidance/FieldHelp";
+import { GuidancePanel } from "@/components/guidance/GuidancePanel";
+import type { FieldGuidance } from "@/components/guidance/guidance-types";
 import type {
   ConfigurationCatalog,
   OperatorConfigKind,
@@ -23,6 +31,14 @@ import type {
 
 const TRANSCODE_ROUTE_NORMALIZED_MESSAGE =
   "Transcode route mode was normalized. Use camera live rendition profiles for output size and FPS.";
+
+const DEFAULT_PROFILE_GUIDANCE: FieldGuidance = {
+  label: "Default profile",
+  hint: "Acts as the tenant fallback when no more specific binding wins.",
+  details: [
+    "Keep one default profile per configuration kind so unbound targets resolve predictably.",
+  ],
+};
 
 type ProfileEditorProps = {
   kind: OperatorConfigKind;
@@ -121,46 +137,55 @@ export function ProfileEditor({
         </Button>
       </div>
 
+      <GuidancePanel guidance={PROFILE_KIND_GUIDANCE[state.kind]} />
+
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label="Configuration kind">
-          <Select
-            aria-label="Configuration kind"
-            value={state.kind}
-            onChange={(event) => {
-              const nextKind = event.target.value as OperatorConfigKind;
-              update({ kind: nextKind });
-              onKindChange?.(nextKind);
-            }}
-          >
-            {CONFIGURATION_KINDS.map((option) => (
-              <option key={option} value={option}>
-                {labelForKind(option)}
-              </option>
-            ))}
-          </Select>
+        <Field label="Configuration kind" help={PROFILE_COMMON_FIELD_GUIDANCE.kind}>
+          {(helpId) => (
+            <Select
+              aria-describedby={helpId}
+              aria-label="Configuration kind"
+              value={state.kind}
+              onChange={(event) => {
+                const nextKind = event.target.value as OperatorConfigKind;
+                update({ kind: nextKind });
+                onKindChange?.(nextKind);
+              }}
+            >
+              {CONFIGURATION_KINDS.map((option) => (
+                <option key={option} value={option}>
+                  {labelForKind(option)}
+                </option>
+              ))}
+            </Select>
+          )}
         </Field>
-        <Field label="Profile name">
-          <Input
-            aria-label="Profile name"
-            value={state.name}
-            onChange={(event) => update({ name: event.target.value })}
-          />
+        <Field label="Profile name" help={PROFILE_COMMON_FIELD_GUIDANCE.name}>
+          {(helpId) => (
+            <Input
+              aria-describedby={helpId}
+              aria-label="Profile name"
+              value={state.name}
+              onChange={(event) => update({ name: event.target.value })}
+            />
+          )}
         </Field>
-        <Field label="Slug">
-          <Input
-            aria-label="Slug"
-            value={state.slug}
-            onChange={(event) => update({ slug: event.target.value })}
-          />
+        <Field label="Slug" help={PROFILE_COMMON_FIELD_GUIDANCE.slug}>
+          {(helpId) => (
+            <Input
+              aria-describedby={helpId}
+              aria-label="Slug"
+              value={state.slug}
+              onChange={(event) => update({ slug: event.target.value })}
+            />
+          )}
         </Field>
-        <label className="flex items-center gap-2 text-sm font-medium text-[#d8e2f2]">
-          <input
-            type="checkbox"
-            checked={state.isDefault}
-            onChange={(event) => update({ isDefault: event.target.checked })}
-          />
-          Default profile
-        </label>
+        <CheckboxField
+          label="Default profile"
+          checked={state.isDefault}
+          help={DEFAULT_PROFILE_GUIDANCE}
+          onChange={(checked) => update({ isDefault: checked })}
+        />
       </div>
 
       {state.kind === "evidence_storage" ? (
@@ -204,49 +229,78 @@ function EvidenceStorageFields({
   storedSecrets: Record<string, "missing" | "present">;
   update: (patch: Partial<EditorState>) => void;
 }) {
+  const guidance = PROFILE_FIELD_GUIDANCE.evidence_storage;
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      <Field label="Provider">
-        <Select
-          aria-label="Provider"
-          value={state.provider}
-          onChange={(event) => update({ provider: event.target.value })}
-        >
-          <option value="local_filesystem">Local filesystem</option>
-          <option value="minio">MinIO</option>
-          <option value="s3_compatible">S3-compatible</option>
-          <option value="local_first">Local first</option>
-        </Select>
+      <Field label="Provider" help={guidance.provider}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Provider"
+            value={state.provider}
+            onChange={(event) => update({ provider: event.target.value })}
+          >
+            <option value="local_filesystem">Local filesystem</option>
+            <option value="minio">MinIO</option>
+            <option value="s3_compatible">S3-compatible</option>
+            <option value="local_first">Local first</option>
+          </Select>
+        )}
       </Field>
-      <Field label="Storage scope">
-        <Select
-          aria-label="Storage scope"
-          value={state.storageScope}
-          onChange={(event) => update({ storageScope: event.target.value })}
-        >
-          <option value="edge">Edge</option>
-          <option value="central">Central</option>
-          <option value="cloud">Cloud</option>
-        </Select>
+      <Field label="Storage scope" help={guidance.storage_scope}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Storage scope"
+            value={state.storageScope}
+            onChange={(event) => update({ storageScope: event.target.value })}
+          >
+            <option value="edge">Edge</option>
+            <option value="central">Central</option>
+            <option value="cloud">Cloud</option>
+          </Select>
+        )}
       </Field>
-      <TextInput label="Local root" value={state.localRoot} update={update} field="localRoot" />
-      <TextInput label="Endpoint" value={state.endpoint} update={update} field="endpoint" />
-      <TextInput label="Region" value={state.region} update={update} field="region" />
-      <TextInput label="Bucket" value={state.bucket} update={update} field="bucket" />
-      <label className="flex items-center gap-2 text-sm font-medium text-[#d8e2f2]">
-        <input
-          aria-label="Secure TLS"
-          type="checkbox"
-          checked={state.secure}
-          onChange={(event) => update({ secure: event.target.checked })}
-        />
-        Secure TLS
-      </label>
+      <TextInput
+        label="Local root"
+        value={state.localRoot}
+        update={update}
+        field="localRoot"
+        help={guidance.local_root}
+      />
+      <TextInput
+        label="Endpoint"
+        value={state.endpoint}
+        update={update}
+        field="endpoint"
+        help={guidance.endpoint}
+      />
+      <TextInput
+        label="Region"
+        value={state.region}
+        update={update}
+        field="region"
+        help={guidance.region}
+      />
+      <TextInput
+        label="Bucket"
+        value={state.bucket}
+        update={update}
+        field="bucket"
+        help={guidance.bucket}
+      />
+      <CheckboxField
+        label="Secure TLS"
+        checked={state.secure}
+        help={guidance.secure}
+        onChange={(checked) => update({ secure: checked })}
+      />
       <TextInput
         label="Path prefix"
         value={state.pathPrefix}
         update={update}
         field="pathPrefix"
+        help={guidance.path_prefix}
       />
       <SecretInput
         label="Access key"
@@ -254,6 +308,7 @@ function EvidenceStorageFields({
         value={state.accessKey}
         stored={storedSecrets.access_key === "present"}
         update={update}
+        help={guidance.access_key}
       />
       <SecretInput
         label="Secret key"
@@ -261,6 +316,7 @@ function EvidenceStorageFields({
         value={state.secretKey}
         stored={storedSecrets.secret_key === "present"}
         update={update}
+        help={guidance.secret_key}
       />
     </div>
   );
@@ -282,6 +338,7 @@ function StreamFields({
     "stream_delivery",
     "delivery_mode",
   );
+  const guidance = PROFILE_FIELD_GUIDANCE.stream_delivery;
   const isLegacyTranscode = state.deliveryMode === "transcode";
   return (
     <div className="grid gap-3 md:grid-cols-3">
@@ -302,37 +359,42 @@ function StreamFields({
           </Button>
         </div>
       ) : null}
-      <Field label="Transport mode">
-        <Select
-          aria-label="Transport mode"
-          value={isLegacyTranscode ? "native" : state.deliveryMode}
-          onChange={(event) => update({ deliveryMode: event.target.value })}
-        >
-          <CapabilityOption field={deliveryModeCapability} value="native">
-            Native/direct
-          </CapabilityOption>
-          <CapabilityOption field={deliveryModeCapability} value="webrtc">
-            WebRTC
-          </CapabilityOption>
-          <CapabilityOption field={deliveryModeCapability} value="hls">
-            HLS
-          </CapabilityOption>
-          <CapabilityOption field={deliveryModeCapability} value="mjpeg">
-            MJPEG
-          </CapabilityOption>
-        </Select>
+      <Field label="Transport mode" help={guidance.delivery_mode}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Transport mode"
+            value={isLegacyTranscode ? "native" : state.deliveryMode}
+            onChange={(event) => update({ deliveryMode: event.target.value })}
+          >
+            <CapabilityOption field={deliveryModeCapability} value="native">
+              Native/direct
+            </CapabilityOption>
+            <CapabilityOption field={deliveryModeCapability} value="webrtc">
+              WebRTC
+            </CapabilityOption>
+            <CapabilityOption field={deliveryModeCapability} value="hls">
+              HLS
+            </CapabilityOption>
+            <CapabilityOption field={deliveryModeCapability} value="mjpeg">
+              MJPEG
+            </CapabilityOption>
+          </Select>
+        )}
       </Field>
       <TextInput
         label="Public base URL"
         value={state.publicBaseUrl}
         update={update}
         field="publicBaseUrl"
+        help={guidance.public_base_url}
       />
       <TextInput
         label="Edge override URL"
         value={state.edgeOverrideUrl}
         update={update}
         field="edgeOverrideUrl"
+        help={guidance.edge_override_url}
       />
     </div>
   );
@@ -345,41 +407,45 @@ function RuntimeFields({
   state: EditorState;
   update: (patch: Partial<EditorState>) => void;
 }) {
+  const guidance = PROFILE_FIELD_GUIDANCE.runtime_selection;
   return (
     <div className="grid gap-3 md:grid-cols-3">
-      <Field label="Preferred backend">
-        <Select
-          aria-label="Preferred backend"
-          value={state.preferredBackend}
-          onChange={(event) => update({ preferredBackend: event.target.value })}
-        >
-          <option value="">Auto</option>
-          <option value="onnxruntime">ONNX Runtime</option>
-          <option value="tensorrt_engine">TensorRT engine</option>
-          <option value="ultralytics_yolo_world">YOLO World</option>
-          <option value="ultralytics_yoloe">YOLOE</option>
-        </Select>
+      <Field label="Preferred backend" help={guidance.preferred_backend}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Preferred backend"
+            value={state.preferredBackend}
+            onChange={(event) => update({ preferredBackend: event.target.value })}
+          >
+            <option value="">Auto</option>
+            <option value="onnxruntime">ONNX Runtime</option>
+            <option value="tensorrt_engine">TensorRT engine</option>
+            <option value="ultralytics_yolo_world">YOLO World</option>
+            <option value="ultralytics_yoloe">YOLOE</option>
+          </Select>
+        )}
       </Field>
-      <Field label="Artifact preference">
-        <Select
-          aria-label="Artifact preference"
-          value={state.artifactPreference}
-          onChange={(event) => update({ artifactPreference: event.target.value })}
-        >
-          <option value="tensorrt_first">TensorRT first</option>
-          <option value="onnx_first">ONNX first</option>
-          <option value="dynamic_first">Dynamic first</option>
-        </Select>
+      <Field label="Artifact preference" help={guidance.artifact_preference}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Artifact preference"
+            value={state.artifactPreference}
+            onChange={(event) => update({ artifactPreference: event.target.value })}
+          >
+            <option value="tensorrt_first">TensorRT first</option>
+            <option value="onnx_first">ONNX first</option>
+            <option value="dynamic_first">Dynamic first</option>
+          </Select>
+        )}
       </Field>
-      <label className="flex items-center gap-2 text-sm font-medium text-[#d8e2f2]">
-        <input
-          aria-label="Allow fallback"
-          type="checkbox"
-          checked={state.fallbackAllowed}
-          onChange={(event) => update({ fallbackAllowed: event.target.checked })}
-        />
-        Allow fallback
-      </label>
+      <CheckboxField
+        label="Allow fallback"
+        checked={state.fallbackAllowed}
+        help={guidance.fallback_allowed}
+        onChange={(checked) => update({ fallbackAllowed: checked })}
+      />
     </div>
   );
 }
@@ -391,6 +457,7 @@ function PrivacyFields({
   state: EditorState;
   update: (patch: Partial<EditorState>) => void;
 }) {
+  const guidance = PROFILE_FIELD_GUIDANCE.privacy_policy;
   return (
     <div className="grid gap-3 md:grid-cols-4">
       <TextInput
@@ -399,6 +466,7 @@ function PrivacyFields({
         update={update}
         field="retentionDays"
         type="number"
+        help={guidance.retention_days}
       />
       <TextInput
         label="Storage quota bytes"
@@ -406,28 +474,35 @@ function PrivacyFields({
         update={update}
         field="storageQuotaBytes"
         type="number"
+        help={guidance.storage_quota_bytes}
       />
-      <Field label="Plaintext plate posture">
-        <Select
-          aria-label="Plaintext plate posture"
-          value={state.plaintextPlateStorage}
-          onChange={(event) => update({ plaintextPlateStorage: event.target.value })}
-        >
-          <option value="blocked">Blocked</option>
-          <option value="allowed">Allowed</option>
-        </Select>
+      <Field label="Plaintext plate posture" help={guidance.plaintext_plate_storage}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Plaintext plate posture"
+            value={state.plaintextPlateStorage}
+            onChange={(event) => update({ plaintextPlateStorage: event.target.value })}
+          >
+            <option value="blocked">Blocked</option>
+            <option value="allowed">Allowed</option>
+          </Select>
+        )}
       </Field>
-      <Field label="Residency guardrail">
-        <Select
-          aria-label="Residency guardrail"
-          value={state.residency}
-          onChange={(event) => update({ residency: event.target.value })}
-        >
-          <option value="edge">Edge</option>
-          <option value="central">Central</option>
-          <option value="cloud">Cloud</option>
-          <option value="local_first">Local first</option>
-        </Select>
+      <Field label="Residency guardrail" help={guidance.residency}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Residency guardrail"
+            value={state.residency}
+            onChange={(event) => update({ residency: event.target.value })}
+          >
+            <option value="edge">Edge</option>
+            <option value="central">Central</option>
+            <option value="cloud">Cloud</option>
+            <option value="local_first">Local first</option>
+          </Select>
+        )}
       </Field>
     </div>
   );
@@ -442,17 +517,37 @@ function LlmFields({
   storedSecrets: Record<string, "missing" | "present">;
   update: (patch: Partial<EditorState>) => void;
 }) {
+  const guidance = PROFILE_FIELD_GUIDANCE.llm_provider;
   return (
     <div className="grid gap-3 md:grid-cols-4">
-      <TextInput label="Provider" value={state.llmProvider} update={update} field="llmProvider" />
-      <TextInput label="Model" value={state.llmModel} update={update} field="llmModel" />
-      <TextInput label="Base URL" value={state.llmBaseUrl} update={update} field="llmBaseUrl" />
+      <TextInput
+        label="Provider"
+        value={state.llmProvider}
+        update={update}
+        field="llmProvider"
+        help={guidance.provider}
+      />
+      <TextInput
+        label="Model"
+        value={state.llmModel}
+        update={update}
+        field="llmModel"
+        help={guidance.model}
+      />
+      <TextInput
+        label="Base URL"
+        value={state.llmBaseUrl}
+        update={update}
+        field="llmBaseUrl"
+        help={guidance.base_url}
+      />
       <SecretInput
         label="API key"
         field="apiKey"
         value={state.apiKey}
         stored={storedSecrets.api_key === "present"}
         update={update}
+        help={guidance.api_key}
       />
     </div>
   );
@@ -472,46 +567,56 @@ function OperationsFields({
     "operations_mode",
     "supervisor_mode",
   );
+  const guidance = PROFILE_FIELD_GUIDANCE.operations_mode;
   return (
     <div className="grid gap-3 md:grid-cols-3">
-      <Field label="Lifecycle owner">
-        <Select
-          aria-label="Lifecycle owner"
-          value={state.lifecycleOwner}
-          onChange={(event) => update({ lifecycleOwner: event.target.value })}
-        >
-          <option value="manual">Manual</option>
-          <option value="edge_supervisor">Edge supervisor</option>
-          <option value="central_supervisor">Central supervisor</option>
-        </Select>
+      <Field label="Lifecycle owner" help={guidance.lifecycle_owner}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Lifecycle owner"
+            value={state.lifecycleOwner}
+            onChange={(event) => update({ lifecycleOwner: event.target.value })}
+          >
+            <option value="manual">Manual</option>
+            <option value="edge_supervisor">Edge supervisor</option>
+            <option value="central_supervisor">Central supervisor</option>
+          </Select>
+        )}
       </Field>
-      <Field label="Supervisor mode">
-        <Select
-          aria-label="Supervisor mode"
-          value={state.supervisorMode}
-          onChange={(event) => update({ supervisorMode: event.target.value })}
-        >
-          <CapabilityOption field={supervisorModeCapability} value="disabled">
-            Disabled
-          </CapabilityOption>
-          <CapabilityOption field={supervisorModeCapability} value="polling">
-            Polling
-          </CapabilityOption>
-          <CapabilityOption field={supervisorModeCapability} value="push">
-            Push
-          </CapabilityOption>
-        </Select>
+      <Field label="Supervisor mode" help={guidance.supervisor_mode}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Supervisor mode"
+            value={state.supervisorMode}
+            onChange={(event) => update({ supervisorMode: event.target.value })}
+          >
+            <CapabilityOption field={supervisorModeCapability} value="disabled">
+              Disabled
+            </CapabilityOption>
+            <CapabilityOption field={supervisorModeCapability} value="polling">
+              Polling
+            </CapabilityOption>
+            <CapabilityOption field={supervisorModeCapability} value="push">
+              Push
+            </CapabilityOption>
+          </Select>
+        )}
       </Field>
-      <Field label="Restart policy">
-        <Select
-          aria-label="Restart policy"
-          value={state.restartPolicy}
-          onChange={(event) => update({ restartPolicy: event.target.value })}
-        >
-          <option value="never">Never</option>
-          <option value="on_failure">On failure</option>
-          <option value="always">Always</option>
-        </Select>
+      <Field label="Restart policy" help={guidance.restart_policy}>
+        {(helpId) => (
+          <Select
+            aria-describedby={helpId}
+            aria-label="Restart policy"
+            value={state.restartPolicy}
+            onChange={(event) => update({ restartPolicy: event.target.value })}
+          >
+            <option value="never">Never</option>
+            <option value="on_failure">On failure</option>
+            <option value="always">Always</option>
+          </Select>
+        )}
       </Field>
     </div>
   );
@@ -538,12 +643,24 @@ function CapabilityOption({
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+type FieldChildren = ReactNode | ((helpId: string | undefined) => ReactNode);
+
+function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  help?: FieldGuidance;
+  children: FieldChildren;
+}) {
+  const helpId = help ? helpIdForLabel(label) : undefined;
   return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
-      {label}
-      {children}
-    </label>
+    <div className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
+      <span>{label}</span>
+      {typeof children === "function" ? children(helpId) : children}
+      {help && helpId ? <FieldHelp id={helpId} guidance={help} /> : null}
+    </div>
   );
 }
 
@@ -552,22 +669,27 @@ function TextInput({
   value,
   field,
   update,
+  help,
   type = "text",
 }: {
   label: string;
   value: string;
   field: keyof EditorState;
   update: (patch: Partial<EditorState>) => void;
+  help?: FieldGuidance;
   type?: string;
 }) {
   return (
-    <Field label={label}>
-      <Input
-        aria-label={label}
-        type={type}
-        value={value}
-        onChange={(event) => update({ [field]: event.target.value })}
-      />
+    <Field label={label} help={help}>
+      {(helpId) => (
+        <Input
+          aria-describedby={helpId}
+          aria-label={label}
+          type={type}
+          value={value}
+          onChange={(event) => update({ [field]: event.target.value })}
+        />
+      )}
     </Field>
   );
 }
@@ -578,32 +700,73 @@ function SecretInput({
   value,
   stored,
   update,
+  help,
 }: {
   label: string;
   field: keyof EditorState;
   value: string;
   stored: boolean;
   update: (patch: Partial<EditorState>) => void;
+  help?: FieldGuidance;
 }) {
   return (
-    <Field label={label}>
-      <div className="flex items-center gap-2">
-        <Input
-          aria-label={label}
-          type="password"
-          value={value}
-          placeholder={stored ? "Replace secret" : ""}
-          onChange={(event) => update({ [field]: event.target.value })}
-        />
-        {stored ? (
-          <span className="whitespace-nowrap rounded-full border border-white/10 px-2.5 py-1 text-xs font-semibold text-[#8fd3ff]">
-            Stored
-          </span>
-        ) : null}
-      </div>
-      <span className="text-xs text-[var(--vz-text-muted)]">Replace secret</span>
+    <Field label={label} help={help}>
+      {(helpId) => (
+        <>
+          <div className="flex items-center gap-2">
+            <Input
+              aria-describedby={helpId}
+              aria-label={label}
+              type="password"
+              value={value}
+              placeholder={stored ? "Replace secret" : ""}
+              onChange={(event) => update({ [field]: event.target.value })}
+            />
+            {stored ? (
+              <span className="whitespace-nowrap rounded-full border border-white/10 px-2.5 py-1 text-xs font-semibold text-[#8fd3ff]">
+                Stored
+              </span>
+            ) : null}
+          </div>
+          <span className="text-xs text-[var(--vz-text-muted)]">Replace secret</span>
+        </>
+      )}
     </Field>
   );
+}
+
+function CheckboxField({
+  label,
+  checked,
+  help,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  help?: FieldGuidance;
+  onChange: (checked: boolean) => void;
+}) {
+  const helpId = help ? helpIdForLabel(label) : undefined;
+
+  return (
+    <div className="space-y-1 text-sm font-medium text-[#d8e2f2]">
+      <label className="flex items-center gap-2">
+        <input
+          aria-describedby={helpId}
+          aria-label={label}
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        {label}
+      </label>
+      {help && helpId ? <FieldHelp id={helpId} guidance={help} /> : null}
+    </div>
+  );
+}
+
+function helpIdForLabel(label: string) {
+  return `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-help-hint`;
 }
 
 function stateFromProfile(

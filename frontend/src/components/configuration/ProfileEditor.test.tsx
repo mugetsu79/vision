@@ -2,9 +2,16 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { CONFIGURATION_KINDS } from "@/components/configuration/configuration-copy";
+import {
+  PROFILE_COMMON_FIELD_GUIDANCE,
+  PROFILE_FIELD_GUIDANCE,
+  PROFILE_KIND_GUIDANCE,
+} from "@/components/configuration/configuration-guidance";
 import { ProfileEditor } from "@/components/configuration/ProfileEditor";
 import type {
   ConfigurationCatalog,
+  OperatorConfigKind,
   OperatorConfigProfileCreate,
 } from "@/hooks/use-configuration";
 
@@ -14,6 +21,66 @@ describe("ProfileEditor", () => {
   beforeEach(() => {
     saveProfile.mockReset();
     saveProfile.mockResolvedValue(undefined);
+  });
+
+  test("renders guidance for each configuration kind", () => {
+    for (const kind of CONFIGURATION_KINDS) {
+      const { unmount } = render(
+        <ProfileEditor kind={kind} selectedProfile={null} onSave={saveProfile} />,
+      );
+
+      expect(screen.getByText(PROFILE_KIND_GUIDANCE[kind].title)).toBeInTheDocument();
+      expect(screen.getByText(PROFILE_KIND_GUIDANCE[kind].summary)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  test("renders field guidance for every visible configuration field", () => {
+    const expectedFieldsByKind: Record<OperatorConfigKind, string[]> = {
+      evidence_storage: [
+        "provider",
+        "storage_scope",
+        "local_root",
+        "endpoint",
+        "region",
+        "bucket",
+        "secure",
+        "path_prefix",
+        "access_key",
+        "secret_key",
+      ],
+      stream_delivery: ["delivery_mode", "public_base_url", "edge_override_url"],
+      runtime_selection: [
+        "preferred_backend",
+        "artifact_preference",
+        "fallback_allowed",
+      ],
+      privacy_policy: [
+        "retention_days",
+        "storage_quota_bytes",
+        "plaintext_plate_storage",
+        "residency",
+      ],
+      llm_provider: ["provider", "model", "base_url", "api_key"],
+      operations_mode: ["lifecycle_owner", "supervisor_mode", "restart_policy"],
+    };
+
+    for (const kind of CONFIGURATION_KINDS) {
+      const { unmount } = render(
+        <ProfileEditor kind={kind} selectedProfile={null} onSave={saveProfile} />,
+      );
+
+      for (const help of Object.values(PROFILE_COMMON_FIELD_GUIDANCE)) {
+        expect(screen.getByText(help.hint)).toBeInTheDocument();
+      }
+      for (const fieldKey of expectedFieldsByKind[kind]) {
+        expect(
+          screen.getByText(PROFILE_FIELD_GUIDANCE[kind][fieldKey].hint),
+        ).toBeInTheDocument();
+      }
+
+      unmount();
+    }
   });
 
   test("renders concrete controls for every configuration category", async () => {

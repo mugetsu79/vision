@@ -6,6 +6,14 @@ import { productBrand } from "@/brand/product";
 import { BoundaryAuthoringCanvas } from "@/components/cameras/BoundaryAuthoringCanvas";
 import { CameraStepSummary } from "@/components/cameras/CameraStepSummary";
 import { HomographyEditor } from "@/components/cameras/HomographyEditor";
+import {
+  SCENE_FIELD_GUIDANCE,
+  SCENE_STEP_GUIDANCE,
+} from "@/components/cameras/scene-guidance";
+import { FieldHelp } from "@/components/guidance/FieldHelp";
+import { GuidancePanel } from "@/components/guidance/GuidancePanel";
+import { ReadinessChecklist } from "@/components/guidance/ReadinessChecklist";
+import type { ReadinessItem } from "@/components/guidance/guidance-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -852,6 +860,49 @@ function isHomographyComplete(data: CameraWizardData["homography"]) {
   return data.src.length === 4 && data.dst.length === 4 && data.refDistanceM > 0;
 }
 
+function calibrationReadinessItems(data: CameraWizardData): ReadinessItem[] {
+  return [
+    {
+      id: "source-points",
+      label: "Source points",
+      detail:
+        data.homography.src.length === 4
+          ? "Four camera-image source points are set."
+          : `${data.homography.src.length} of 4 source points set.`,
+      tone: data.homography.src.length === 4 ? "success" : "warning",
+    },
+    {
+      id: "destination-points",
+      label: "Destination points",
+      detail:
+        data.homography.dst.length === 4
+          ? "Four matching top-down destination points are set."
+          : `${data.homography.dst.length} of 4 destination points set.`,
+      tone: data.homography.dst.length === 4 ? "success" : "warning",
+    },
+    {
+      id: "reference-distance",
+      label: "Reference distance",
+      detail:
+        data.homography.refDistanceM > 0
+          ? `${data.homography.refDistanceM} m reference distance set.`
+          : "Add a measured distance in meters before trusting speed or distance.",
+      tone: data.homography.refDistanceM > 0 ? "success" : "warning",
+    },
+    {
+      id: "detection-regions",
+      label: "Detection regions",
+      detail:
+        data.detectionRegions.length > 0
+          ? `${data.detectionRegions.length} detector mask region${
+              data.detectionRegions.length === 1 ? "" : "s"
+            } configured.`
+          : "No include or exclusion regions; detector considers the full frame.",
+      tone: "info",
+    },
+  ];
+}
+
 function serializeHomography(data: CameraWizardData["homography"]) {
   if (!isHomographyComplete(data)) {
     return null;
@@ -1207,6 +1258,7 @@ export function CameraWizard({
   const isEditMode = initialCamera !== null;
   const maskedRtspPlaceholder = rtspUrlPlaceholder ?? initialCamera?.rtsp_url_masked ?? "";
   const stepTitle = steps[stepIndex];
+  const stepGuidance = SCENE_STEP_GUIDANCE[stepTitle];
   const trimmedRtspUrl = data.rtspUrl.trim();
   const trimmedUsbUri = data.usbUri.trim();
   const activeSourceUri = data.sourceKind === "usb" ? trimmedUsbUri : trimmedRtspUrl;
@@ -2673,6 +2725,12 @@ export function CameraWizard({
                       boundaries directly on the analyzed frame. Lines emit crossings,
                       while polygons emit entry and exit events.
                     </p>
+                    <div className="mt-3 max-w-2xl">
+                      <FieldHelp
+                        id="event-boundaries-help"
+                        guidance={SCENE_FIELD_GUIDANCE.eventBoundaries}
+                      />
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -2846,6 +2904,12 @@ export function CameraWizard({
                       Limit detector attention with include polygons or mask operational dead zones
                       with exclusion polygons. Event boundaries above still publish count events.
                     </p>
+                    <div className="mt-3 max-w-2xl">
+                      <FieldHelp
+                        id="detection-regions-help"
+                        guidance={SCENE_FIELD_GUIDANCE.detectionRegions}
+                      />
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -3032,7 +3096,11 @@ export function CameraWizard({
           <h3 className="mt-3 text-xl font-semibold text-[#f4f8ff]">{stepTitle}</h3>
         </div>
         <div className="space-y-4 px-5 py-5 text-sm text-[#d8e2f2]">
+          {stepGuidance ? <GuidancePanel guidance={stepGuidance} /> : null}
           <p>{contextPanel}</p>
+          {stepTitle === "Calibration" ? (
+            <ReadinessChecklist items={calibrationReadinessItems(data)} />
+          ) : null}
           <div className="space-y-2">
             {steps.map((step, index) => (
               <div

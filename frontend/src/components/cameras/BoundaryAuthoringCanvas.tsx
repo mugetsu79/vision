@@ -84,6 +84,7 @@ export function BoundaryAuthoringCanvas({
 
   const styles = VARIANT_STYLES[variant];
   const pointLimit = maxPoints ?? DEFAULT_MAX_POINTS[mode] ?? Number.POSITIVE_INFINITY;
+  const isPointLimitReached = value.length >= pointLimit;
 
   const polygonPreview = useMemo(() => {
     if (mode !== "polygon" || value.length < 3) {
@@ -280,6 +281,13 @@ export function BoundaryAuthoringCanvas({
           {helperText}
         </p>
       ) : null}
+      <p className="text-xs text-[#8ea4c7]">
+        {value.length} {value.length === 1 ? "point" : "points"} placed
+        {Number.isFinite(pointLimit) ? ` of ${pointLimit}` : ""}.{" "}
+        {isPointLimitReached
+          ? "Point limit reached; drag numbered handles to adjust."
+          : "Click the canvas to add points; drag numbered handles to adjust."}
+      </p>
     </div>
   );
 }

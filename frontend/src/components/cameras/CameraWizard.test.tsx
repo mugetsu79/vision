@@ -141,7 +141,7 @@ describe("CameraWizard", () => {
     ).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
-    expect(screen.getByText(/active class scope/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/active class scope/i).length).toBeGreaterThan(0);
     await user.click(screen.getByLabelText("person"));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-2");
     expect(screen.queryByLabelText("person")).not.toBeInTheDocument();
@@ -296,7 +296,9 @@ describe("CameraWizard", () => {
     await user.selectOptions(screen.getByLabelText(/primary model/i), "open-model");
 
     expect(screen.getByLabelText(/runtime vocabulary/i)).toBeInTheDocument();
-    expect(screen.queryByText(/active class scope/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/leave every class unchecked/i),
+    ).not.toBeInTheDocument();
   });
 
   test("summarizes dynamic fallback when no compiled artifact is available", async () => {
@@ -515,6 +517,23 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(screen.getByText(/analytics frame 1920×1080/i)).toBeInTheDocument();
+  });
+
+  test("calibration explains source, destination, boundaries, and detection regions", async () => {
+    const user = userEvent.setup();
+
+    renderWizard();
+
+    await completeRequiredCreateSteps(user);
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(
+      screen.getByText(/map the camera image to operational space/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/source points/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/destination points/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/line boundaries/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/include or exclusion regions/i).length).toBeGreaterThan(0);
   });
 
   test("reprobes an existing camera before showing stale stored browser profiles", async () => {

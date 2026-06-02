@@ -91,6 +91,17 @@ const catalog = {
 };
 
 describe("EffectiveConfigurationPanel", () => {
+  test("explains desired and runtime applied configuration states", () => {
+    render(<EffectiveConfigurationPanel cameras={cameras} catalog={catalog} />);
+
+    expect(screen.getByText(/desired configuration/i)).toBeInTheDocument();
+    expect(screen.getByText(/runtime-applied hash/i)).toBeInTheDocument();
+    expect(screen.getByText(/direct camera binding/i)).toBeInTheDocument();
+    expect(screen.getByText(/inherited from edge node, site, or tenant default/i)).toBeInTheDocument();
+    expect(screen.getByText(/validation status shows tested state/i)).toBeInTheDocument();
+    expect(screen.getByText(/desired-only/i)).toBeInTheDocument();
+  });
+
   test("shows effective profile winners and redacted secret state", async () => {
     const user = userEvent.setup();
     render(<EffectiveConfigurationPanel cameras={cameras} catalog={catalog} />);

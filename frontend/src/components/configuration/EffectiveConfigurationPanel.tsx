@@ -84,6 +84,25 @@ export function EffectiveConfigurationPanel({
           <h3 className="mt-1 text-sm font-semibold text-[#f4f8ff]">
             Effective configuration
           </h3>
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-[#9fb2cf]">
+            Desired configuration is the profile set resolved by binding precedence.
+            Runtime-applied hash shows what a worker has actually reported. A mismatch
+            means the UI has saved intent that the runtime has not applied yet.
+          </p>
+          <ul className="mt-2 grid max-w-2xl gap-1 text-xs leading-5 text-[#9fb2cf]">
+            <li>
+              Direct camera binding means the camera won; inherited from edge node, site,
+              or tenant default means a broader binding supplied the profile.
+            </li>
+            <li>
+              Validation status shows tested state: valid, invalid, or unvalidated before
+              operators rely on the binding.
+            </li>
+            <li>
+              Desired-only rows are saved intent without a worker report; applied hash
+              and aligned mean the worker reported the same profile hash.
+            </li>
+          </ul>
         </div>
         <label className="grid gap-1 text-xs font-semibold text-[#9fb2cf]">
           <span>Resolved target</span>

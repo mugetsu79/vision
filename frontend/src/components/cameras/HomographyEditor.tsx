@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { productBrand } from "@/brand/product";
 import { BoundaryAuthoringCanvas } from "@/components/cameras/BoundaryAuthoringCanvas";
+import { SCENE_FIELD_GUIDANCE } from "@/components/cameras/scene-guidance";
+import { FieldHelp } from "@/components/guidance/FieldHelp";
 import {
   type FrameSize,
   denormalizePointList,
@@ -72,6 +74,12 @@ export function HomographyEditor({
                 Analytics still
               </p>
               <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">Source points</h3>
+              <div className="mt-2 max-w-md">
+                <FieldHelp
+                  id="source-points-help"
+                  guidance={SCENE_FIELD_GUIDANCE.sourcePoints}
+                />
+              </div>
             </div>
             <Button
               className="px-3 py-2"
@@ -133,6 +141,12 @@ export function HomographyEditor({
               <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
                 Destination points
               </h3>
+              <div className="mt-2 max-w-md">
+                <FieldHelp
+                  id="destination-points-help"
+                  guidance={SCENE_FIELD_GUIDANCE.destinationPoints}
+                />
+              </div>
             </div>
             <Button
               className="px-3 py-2"
@@ -187,9 +201,10 @@ export function HomographyEditor({
       </div>
 
       <div className="grid gap-4 rounded-[1.5rem] border border-white/8 bg-[#0b1320] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <label className="grid gap-2 text-sm text-[#d8e2f2]">
-          <span>Reference distance (m)</span>
+        <div className="grid gap-2 text-sm text-[#d8e2f2]">
+          <label htmlFor="reference-distance-m">Reference distance (m)</label>
           <Input
+            id="reference-distance-m"
             aria-label="Reference distance (m)"
             min={0}
             step="0.1"
@@ -197,7 +212,11 @@ export function HomographyEditor({
             value={refDistanceM}
             onChange={(event) => updateRefDistance(event.target.value)}
           />
-        </label>
+          <FieldHelp
+            id="reference-distance-help"
+            guidance={SCENE_FIELD_GUIDANCE.referenceDistance}
+          />
+        </div>
         <div className="flex gap-3">
           <Button
             className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
