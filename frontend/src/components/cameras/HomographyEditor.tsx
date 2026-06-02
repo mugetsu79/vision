@@ -100,13 +100,12 @@ export function HomographyEditor({
               ariaLabel="Source points canvas"
               backgroundContent={
                 <p className="max-w-sm text-sm text-[#9eb2cf]">
-                  Place four source points directly on the captured analytics still. If the
-                  still is temporarily unavailable, keep using the authoring plane and refresh
-                  the still once the camera source responds.
+                  Click four fixed floor marks in the camera image. If this is a new
+                  camera, use this temporary plane now and refresh the still after saving.
                 </p>
               }
               frameSize={resolvedSourceFrameSize}
-              helperText="This captured analytics still anchors the source plane for calibration and count-boundary authoring across the rest of setup."
+              helperText="These camera image points should sit on the same flat floor plane where people or vehicles move."
               maxPoints={4}
               mode="points"
               pointLabelPrefix="Source"
@@ -167,12 +166,12 @@ export function HomographyEditor({
               ariaLabel="Destination points canvas"
               backgroundContent={
                 <p className="max-w-sm text-sm text-[#cbbaf4]">
-                  Shape a simple top-down reference plane here so motion can map into a
-                  real-world calibration.
+                  Draw the same four marks as if you were looking straight down from above.
+                  Keep the order the same as the camera image points.
                 </p>
               }
               frameSize={resolvedDestinationFrameSize}
-              helperText="Destination points can use the same interaction model even though this plane is abstract instead of a camera frame."
+              helperText="The top-down drawing does not need GPS coordinates; it only needs to preserve the same mark order and shape."
               maxPoints={4}
               mode="points"
               pointLabelPrefix="Destination"
@@ -217,7 +216,7 @@ export function HomographyEditor({
             guidance={SCENE_FIELD_GUIDANCE.referenceDistance}
           />
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <Button
             className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
             onClick={() => onChange({ src: [], dst, refDistanceM })}
@@ -230,13 +229,18 @@ export function HomographyEditor({
           >
             Reset destination
           </Button>
+          <Button
+            className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+            onClick={() => onChange({ src: [], dst: [], refDistanceM: 0 })}
+          >
+            Clear calibration
+          </Button>
         </div>
       </div>
 
       <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-        Source points: {src.length} / 4. Destination points: {dst.length} / 4. {brandName}
-        uses this calibration to translate image motion into real-world distance and
-        direction later in the pipeline.
+        Camera image points: {src.length} / 4. Top-down points: {dst.length} / 4. {brandName}
+        saves calibration only when all four pairs and a measured distance are set.
       </p>
     </div>
   );

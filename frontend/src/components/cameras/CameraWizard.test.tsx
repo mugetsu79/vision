@@ -519,7 +519,7 @@ describe("CameraWizard", () => {
     expect(screen.getByText(/analytics frame 1920×1080/i)).toBeInTheDocument();
   });
 
-  test("calibration explains source, destination, boundaries, and detection regions", async () => {
+  test("calibration explains point setup, speed accuracy, and detection regions", async () => {
     const user = userEvent.setup();
 
     renderWizard();
@@ -528,10 +528,14 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(
-      screen.getByText(/map the camera image to operational space/i),
+      screen.getByText(/calibrate the floor plane for events and speed/i),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/source points/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/destination points/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/camera image points/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/top-down points/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/speed measurements use the four calibration marks/i)).toBeInTheDocument();
+    expect(screen.getByText(/camera is fixed and not zooming/i)).toBeInTheDocument();
+    expect(screen.getByText(/known walk, cart, or vehicle pass/i)).toBeInTheDocument();
+    expect(screen.getByText(/ramp, stairs, raised platform/i)).toBeInTheDocument();
     expect(screen.getByText(/line boundaries/i)).toBeInTheDocument();
     expect(screen.getAllByText(/include or exclusion regions/i).length).toBeGreaterThan(0);
   });
@@ -759,6 +763,27 @@ describe("CameraWizard", () => {
     expect(submittedPayload?.homography).toBeNull();
   });
 
+  test("blocks saving a started but incomplete calibration draft", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWizard({ onSubmit });
+
+    await completeRequiredCreateSteps(user);
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /add source point/i }));
+    await user.click(screen.getByRole("button", { name: /add destination point/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(
+      screen.getByText(/calibration started but source points are 1 of 4/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: /calibration/i }),
+    ).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   test("submits RTSP source settings and event clip recording policy", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
@@ -974,7 +999,9 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    expect(screen.getByText(/4 source points are required/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/calibration started but source points are 0 of 4/i),
+    ).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
 
     for (let count = 0; count < 4; count += 1) {
@@ -982,7 +1009,9 @@ describe("CameraWizard", () => {
     }
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    expect(screen.getByText(/4 destination points are required/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/calibration started but destination points are 0 of 4/i),
+    ).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
 
     for (let count = 0; count < 4; count += 1) {
@@ -992,7 +1021,9 @@ describe("CameraWizard", () => {
     }
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    expect(screen.getByText(/reference distance is required/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/calibration started but reference distance is missing/i),
+    ).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 

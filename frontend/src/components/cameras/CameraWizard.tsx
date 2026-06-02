@@ -9,6 +9,8 @@ import { HomographyEditor } from "@/components/cameras/HomographyEditor";
 import {
   SCENE_FIELD_GUIDANCE,
   SCENE_STEP_GUIDANCE,
+  SPEED_CALIBRATION_CHECKLIST,
+  SPEED_CALIBRATION_WARNING,
 } from "@/components/cameras/scene-guidance";
 import { FieldHelp } from "@/components/guidance/FieldHelp";
 import { GuidancePanel } from "@/components/guidance/GuidancePanel";
@@ -860,6 +862,23 @@ function isHomographyComplete(data: CameraWizardData["homography"]) {
   return data.src.length === 4 && data.dst.length === 4 && data.refDistanceM > 0;
 }
 
+function hasHomographyDraft(data: CameraWizardData["homography"]) {
+  return data.src.length > 0 || data.dst.length > 0 || data.refDistanceM > 0;
+}
+
+function validateHomographyForSave(data: CameraWizardData["homography"]) {
+  if (data.src.length !== 4) {
+    return `Calibration started but source points are ${data.src.length} of 4. Add four source points, or reset source and destination if you do not want to save calibration.`;
+  }
+  if (data.dst.length !== 4) {
+    return `Calibration started but destination points are ${data.dst.length} of 4. Add four destination points in the same order, or reset source and destination if you do not want to save calibration.`;
+  }
+  if (data.refDistanceM <= 0) {
+    return "Calibration started but reference distance is missing. Add a measured distance in meters, or reset source and destination if you do not want to save calibration.";
+  }
+  return null;
+}
+
 function calibrationReadinessItems(data: CameraWizardData): ReadinessItem[] {
   return [
     {
@@ -1531,7 +1550,7 @@ export function CameraWizard({
       return {
         tone: "neutral" as const,
         title: "Analytics still becomes available after the camera is saved",
-        body: `Use the provisional ${defaultFrameLabel} authoring plane for now. Once the camera exists, ${brandName} can capture a real analytics still for source points and event boundaries.`,
+        body: `Use the temporary ${defaultFrameLabel} drawing plane for now. Complete calibration before saving if you want points preserved. After saving, edit the camera and refresh the still to confirm the points line up with the real video frame.`,
         frameLabel: defaultFrameLabel,
       };
     }
@@ -1786,15 +1805,10 @@ export function CameraWizard({
     }
 
     if (stepTitle === "Calibration") {
-      if (data.visionProfile.speedEnabled) {
-        if (data.homography.src.length !== 4) {
-          return "4 source points are required.";
-        }
-        if (data.homography.dst.length !== 4) {
-          return "4 destination points are required.";
-        }
-        if (data.homography.refDistanceM <= 0) {
-          return "Reference distance is required.";
+      if (data.visionProfile.speedEnabled || hasHomographyDraft(data.homography)) {
+        const homographyError = validateHomographyForSave(data.homography);
+        if (homographyError) {
+          return homographyError;
         }
       }
       const boundaryError = validateZoneBoundaries(data.zones);
@@ -2701,6 +2715,39 @@ export function CameraWizard({
                     ) : null}
                   </div>
                 </div>
+              </section>
+              <section className="rounded-[1.5rem] border border-[#284066] bg-[#0c1522] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+                      Speed accuracy
+                    </p>
+                    <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
+                      Calibrate speed on the floor where objects move
+                    </h3>
+                    <p className="mt-2 max-w-3xl text-sm text-[#9eb2cf]">
+                      Speed measurements use the four calibration marks and the measured
+                      distance to translate camera motion into meters per second. The better
+                      those marks match the real floor, the better the speed estimate.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2]">
+                    {data.visionProfile.speedEnabled ? "Speed metrics on" : "Speed metrics off"}
+                  </span>
+                </div>
+                <ul className="mt-4 grid gap-2 md:grid-cols-2">
+                  {SPEED_CALIBRATION_CHECKLIST.map((item) => (
+                    <li
+                      key={item}
+                      className="rounded-[1rem] border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-[#d8e2f2]"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 rounded-[1rem] border border-[#5b4b28] bg-[#19150c] px-4 py-3 text-sm text-[#ffd9a1]">
+                  {SPEED_CALIBRATION_WARNING}
+                </p>
               </section>
               <HomographyEditor
                 destinationFrameSize={DEFAULT_ANALYTICS_FRAME_SIZE}

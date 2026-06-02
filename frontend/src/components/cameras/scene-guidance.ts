@@ -90,35 +90,35 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
   },
   Calibration: {
     eyebrow: "Geometry",
-    title: "Map the camera image to operational space",
+    title: "Calibrate the floor plane for events and speed",
     summary:
-      "Use source and destination points to calibrate perspective, then draw event boundaries and detection masks on the same analytics frame.",
+      "Pick four fixed floor marks in the camera view, draw the same marks from above, then add a measured distance so motion can be mapped to real space.",
     concepts: [
       {
-        term: "Source points",
-        definition: "Reference marks placed on the camera image.",
+        term: "Camera image points",
+        definition: "The four fixed floor marks you click in the camera view. These are also called source points.",
       },
       {
-        term: "Destination points",
-        definition: "Matching marks on an abstract top-down world plane.",
+        term: "Top-down points",
+        definition: "The same four marks drawn as if you were looking straight down from above. These are also called destination points.",
       },
       {
-        term: "Detection region",
-        definition: "An include or exclusion mask applied before event rules are evaluated.",
+        term: "Measured distance",
+        definition: "A real distance in meters between visible marks on the same floor plane.",
       },
     ],
     steps: [
-      "Confirm the analytics still matches the camera view.",
-      "Place four source points on stable ground-plane reference marks in the camera image.",
-      "Place four destination points in the same order on the top-down plane.",
-      "Enter a known reference distance in meters.",
-      "Draw line boundaries or polygon zones for events.",
-      "Add include or exclusion regions only when detector attention needs masking.",
+      "If this is a new camera, use the temporary plane now and refresh the still after saving.",
+      "Click four fixed floor marks in the camera image.",
+      "Draw those same four marks from above in the same order.",
+      "Enter a real measured distance in meters.",
+      "Draw line boundaries or polygon zones for events after calibration lines up.",
+      "Add include or exclusion regions only when the detector needs masking.",
     ],
     commonMistakes: [
-      "Mixing source and destination point order.",
-      "Using moving objects, shadows, or vertical surfaces as reference marks.",
-      "Adding detection masks when event boundaries alone are enough.",
+      "Mixing the point order between the camera image and top-down drawing.",
+      "Using shadows, people, vehicles, wall corners, or moved objects as reference marks.",
+      "Measuring a distance on a different floor level from where objects move.",
     ],
   },
   Review: {
@@ -131,40 +131,41 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
 
 export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
   sourcePoints: {
-    label: "Source points",
-    hint: "Points on the camera image that identify the real-world reference plane.",
+    label: "Camera image points",
+    hint: "Click four fixed floor marks in the camera view. These are the source points.",
     details: [
-      "Use four stable points on the floor, ground, lane, doorway, or loading bay.",
-      "Avoid shadows, moving objects, vertical walls, and temporary equipment.",
-      "Use the same point order as destination points.",
+      "Use marks that will not move: floor paint, lane marks, doorway floor corners, or loading-bay corners.",
+      "Avoid shadows, people, vehicles, wall corners above the floor, and temporary equipment.",
+      "Click the points in the same order you will draw them in the top-down view.",
     ],
-    safeDefault: "Four corners of a visible rectangular ground-plane area.",
+    safeDefault: "Four corners of a visible rectangle on the floor or ground.",
     runtimeEffect:
-      "Completed source and destination points allow distance, direction, and speed features to trust the camera perspective.",
+      "Completed camera image points and top-down points let speed and direction use the camera perspective.",
     required: true,
   },
   destinationPoints: {
-    label: "Destination points",
-    hint: "Matching points on an abstract top-down world plane.",
+    label: "Top-down points",
+    hint: "Draw the same four real-world marks as if looking straight down from above.",
     details: [
-      "They represent the same real-world marks as the source points.",
-      "They do not need to be GPS coordinates.",
-      "Keep the point order identical to source points.",
+      "These points represent the same marks you clicked in the camera image.",
+      "They do not need to be GPS coordinates or perfectly scaled.",
+      "Keep the point order identical to the camera image points.",
     ],
-    safeDefault: "A simple rectangle with the same corner order as the source plane.",
+    safeDefault: "A simple rectangle with the same corner order as the camera image points.",
     required: true,
   },
   referenceDistance: {
-    label: "Reference distance",
-    hint: "A known real-world distance in meters between reference marks.",
+    label: "Measured distance",
+    hint: "Enter a real distance in meters between two visible floor marks.",
     details: [
-      "Measure a visible lane width, doorway width, floor marking, or loading-bay span.",
-      "Use meters so downstream distance and speed logic uses consistent units.",
+      "Measure a lane width, doorway width, floor stripe, parking bay, or loading-bay span.",
+      "Use a longer measured span when possible; it usually gives better speed estimates than a short guessed distance.",
+      "The measured distance should be on the same flat plane where feet or wheels move.",
     ],
     safeDefault:
-      "Use a measured distance, not an estimate, whenever speed or distance matters.",
+      "Use a tape-measured distance, not an estimate, whenever speed matters.",
     runtimeEffect:
-      "Speed and distance logic should not be trusted until a measured reference distance is set.",
+      "Speed should not be trusted until the measured distance is set and verified with known movement.",
   },
   eventBoundaries: {
     label: "Event boundaries",
@@ -205,3 +206,15 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     ],
   },
 };
+
+export const SPEED_CALIBRATION_CHECKLIST = [
+  "Camera is fixed and not zooming.",
+  "The four camera image points sit on the same flat floor plane where people or vehicles move.",
+  "Top-down points match the same four marks in the same order.",
+  "Measured distance is real, in meters, and on that same floor plane.",
+  "Objects used for speed testing move through the calibrated area.",
+  "A known walk, cart, or vehicle pass has been checked against the reported speed.",
+];
+
+export const SPEED_CALIBRATION_WARNING =
+  "Speed is only as accurate as the calibrated floor plane. If objects move on a ramp, stairs, raised platform, or outside the marked area, treat speed as an estimate.";
