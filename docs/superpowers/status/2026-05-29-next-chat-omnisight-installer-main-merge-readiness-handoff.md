@@ -1,56 +1,187 @@
-# Next Chat Handoff: Main After Installer Merge
+# Next Chat Handoff: Live Sizing And Configuration Guidance Follow-Up
 
 Date: 2026-05-29
-Last updated: 2026-05-29
-Status: Current handoff for continuing from `main` after the installer merge.
+Last updated: 2026-06-02
+Status: Current handoff for continuing from pushed branch `codex/omnisight-live-video-window-sizing` before merge to `main`.
 
-Purpose: start the next chat from merged `main`, verify the installed MacBook
-master plus Jetson edge path if needed, then fix the Live video stream window
-sizing/rendering issue before starting broader UI/UX polish.
+Purpose: start the next chat from the pushed Live/configuration branch, verify
+the MacBook test build if needed, then continue with the new configuration
+guidance UX spec/plan.
 
 ## Branch And Repository State
 
 Current source of truth:
 
 ```text
-main
+codex/omnisight-live-video-window-sizing
 ```
 
 Latest pushed checkpoint:
 
 ```text
-b9f2d5ef docs(installer): record main merge readiness
+f6f3274a feat(config): harden runtime profiles and installer networking
 ```
 
-`codex/omnisight-installer` was fast-forward merged into `main` and pushed to
-origin. `omnisight-ui-check` is not a separate blocker; it points at
-`d5282c60 docs: refresh markdown cleanup and handoff`, which is already in
-`main`.
+The branch is pushed to `origin/codex/omnisight-live-video-window-sizing`.
+`main` remains the last merged base for this work until the branch is merged.
+
+Commit stack after `main`:
+
+```text
+83176921 fix(live): preserve full video frame sizing
+84540396 fix(live): gate telemetry badge on scene heartbeat
+0510b26a feat(operations): remove configured scene workers
+5a514645 fix(operations): delete scenes with worker history
+15756c20 docs: specify production configuration hardening
+1d60f289 docs: plan production configuration hardening
+f6f3274a feat(config): harden runtime profiles and installer networking
+```
 
 Start the next chat with:
 
 ```bash
 cd "$HOME/vision"
 git fetch origin
-git switch main
-git pull --ff-only origin main
+git switch codex/omnisight-live-video-window-sizing
+git pull --ff-only origin codex/omnisight-live-video-window-sizing
 git status -sb
 git log --oneline -12
 ```
 
-Recommended branch for the next focused fix:
+Do not create another branch unless the next chat is intentionally starting a
+new implementation lane. If the configuration guidance UX work begins before
+this branch is merged, a reasonable follow-up branch is:
 
 ```bash
-git switch -c codex/omnisight-live-video-window-sizing
+git switch -c codex/omnisight-configuration-guidance-ux
 ```
 
 Known local hygiene:
 
 - unrelated untracked scratch files may exist locally
 - `taste-skill/` may exist locally for later UI work
+- the current uncommitted intended docs are:
+  - `docs/superpowers/specs/2026-06-02-configuration-guidance-ux-design.md`
+  - `docs/superpowers/plans/2026-06-02-configuration-guidance-ux.md`
 - do not use `git add -A`
 - stage only files needed for the current task
 - keep unrelated untracked files untouched
+
+## Completed Since The 2026-05-29 Handoff
+
+Implemented and pushed on `codex/omnisight-live-video-window-sizing`:
+
+- Live video sizing fix: tiles preserve the full video frame and keep video
+  pixels aligned with overlays during resize/focus changes.
+- Live telemetry badge fix: `Telemetry live` is gated on scene heartbeat so the
+  page does not claim telemetry is live when Jetson/cameras are offline.
+- Operations worker management: configured scene workers can be removed from the
+  UI.
+- Scene/profile cleanup: scene deletion works even after worker history exists,
+  and profile deletion was hardened with impact-aware behavior.
+- Production configuration plumbing:
+  - capability catalog and binding inventory
+  - binding validation plus unbind support
+  - safe default profile replacement
+  - desired/applied runtime configuration summaries and hash diagnostics
+  - evidence storage and privacy/retention enforcement
+  - transport enforcement for WebRTC, HLS, MJPEG, and normalized legacy
+    transcode profiles
+  - runtime selection enforcement with selected backend/artifact and
+    fallback-disabled blocking
+  - LLM provider policy drafting with fail-closed missing-secret behavior
+  - operations mode enforcement for disabled, polling, push, and
+    restart-policy-aware recovery
+  - generated OpenAPI types and UI polish for inventory, impact, unbind rows,
+    delete dialogs, and effective configuration diagnostics
+- Installer/networking hardening:
+  - MediaMTX config rendering now derives browser-facing origins and WebRTC
+    hosts from the configured public URL instead of assuming localhost.
+  - Master macOS/Linux installers render MediaMTX origins/hosts from
+    `--public-url`.
+  - Edge installer accepts optional `--frontend-url`, derives the master
+    frontend origin from `--api-url`, parses edge stream host, rewrites JWKS,
+    and includes WebRTC hosts.
+  - Loopback-only private service binds intentionally remain for Postgres,
+    Redis, MinIO, NATS normal/monitoring, MediaMTX API, and worker metrics.
+
+Validation before the latest push:
+
+```text
+backend pytest: 145 passed, 57 warnings
+backend ruff: clean
+frontend vitest: 75 passed, existing React act(...) warnings in VideoStream tests
+frontend build: passed
+installer validation: 67 passed, shell syntax, executable bits, manifest validation, secret scan, master/edge compose render all passed
+```
+
+## MacBook Test Build Update
+
+Use this branch, not `main`, until the branch is merged:
+
+```bash
+cd /opt/vezor/current
+git fetch origin
+git switch codex/omnisight-live-video-window-sizing
+git pull --ff-only origin codex/omnisight-live-video-window-sizing
+
+MASTER_PUBLIC_HOST="YOUR_MACBOOK_PRIVATE_IP_OR_DNS"
+MASTER_PUBLIC_URL="http://${MASTER_PUBLIC_HOST}:3000"
+MASTER_API_URL="http://${MASTER_PUBLIC_HOST}:8000"
+MASTER_KEYCLOAK_URL="http://${MASTER_PUBLIC_HOST}:8080"
+
+sudo ./installer/macos/install-master.sh \
+  --version "portable-demo" \
+  --manifest installer/manifests/dev-example.json \
+  --public-url "$MASTER_PUBLIC_URL" \
+  --data-dir /var/lib/vezor
+```
+
+Verify both local and network access:
+
+```bash
+sudo launchctl print system/com.vezor.master
+curl -fsS http://127.0.0.1:8000/healthz
+curl -fsS "$MASTER_API_URL/healthz"
+curl -fsS "$MASTER_KEYCLOAK_URL/realms/argus-dev/.well-known/openid-configuration"
+docker ps --filter name=vezor-master
+sudo grep -A8 -E 'apiAllowOrigins|webrtcAllowOrigins|hlsAllowOrigins|webrtcAdditionalHosts' /etc/vezor/mediamtx/mediamtx.yml
+```
+
+Expected MediaMTX check: browser-facing origins should include the configured
+MacBook private IP/DNS origin, and WebRTC additional hosts should include the
+configured private IP/DNS host rather than only `localhost` or `127.0.0.1`.
+
+## Configuration Guidance UX Spec/Plan
+
+Yann requested better in-product explanations for complex configuration flows,
+especially:
+
+- Scene camera setup, including source/destination calibration points and
+  inclusion/exclusion areas.
+- Operations -> Control Plane Configuration, covering all profile kinds and
+  binding/effective-runtime behavior.
+- Additional guidance wherever it improves the operator experience.
+
+Created but not yet committed unless the next chat chooses to commit them:
+
+```text
+docs/superpowers/specs/2026-06-02-configuration-guidance-ux-design.md
+docs/superpowers/plans/2026-06-02-configuration-guidance-ux.md
+```
+
+Recommended next implementation shape:
+
+1. Smoke the branch install/UI on the MacBook if field validation is the next
+   priority.
+2. Execute the configuration guidance UX plan if product UX is next:
+   - add shared guidance data/types/components
+   - add `scene-guidance.ts` and `configuration-guidance.ts`
+   - integrate Scene calibration guidance in the camera wizard, homography, and
+     boundary canvas surfaces
+   - integrate Control Plane Configuration guidance in profile editing,
+     bindings, and effective desired/applied runtime panels
+   - run focused frontend tests and build
 
 ## Field Validation Summary
 
@@ -128,7 +259,7 @@ Historical live runtime caveats:
   Current profile/rendition switching appeared to work, but do not reopen the
   larger product-expansion plan without approval.
 
-Remaining product validation after the Live sizing fix:
+Remaining product validation now that the branch includes the Live sizing fix:
 
 1. Create one real evidence clip and review it in Evidence.
 2. Exercise Operations Start/Stop/Restart/Drain for the Jetson camera.
@@ -141,73 +272,56 @@ Remaining product validation after the Live sizing fix:
 
 ## Immediate Next Work
 
-Priority before broad UI/UX polish:
+Primary choices for the next chat:
 
-```text
-Fix Live video stream window sizing/rendering.
-```
+1. Field-smoke the pushed branch on the MacBook:
+   - update the install from `codex/omnisight-live-video-window-sizing`
+   - confirm local and LAN health endpoints
+   - confirm MediaMTX origins/hosts are rendered from the configured MacBook
+     private IP/DNS
+   - check Live when Jetson/cameras are offline so `Telemetry live` stays hidden
+   - check scene/profile/worker deletion behavior
+   - check runtime configuration panels for effective desired/applied state
+2. Begin the configuration guidance UX implementation:
+   - use the plan in
+     `docs/superpowers/plans/2026-06-02-configuration-guidance-ux.md`
+   - consider `superpowers:executing-plans` for sequential execution or
+     subagent-driven work if the next chat explicitly wants parallel agents
+   - keep the implementation UX-focused and avoid changing runtime semantics
+     unless the plan exposes a real integration gap
+3. If product stability is the priority, continue the remaining validation list
+   above before starting a broader UI/UX polish branch.
 
-Observed issue:
-
-- Increasing or decreasing the Live video window size can produce odd video
-  resolution/rendering behavior.
-- This appears separate from the installer path and separate from basic
-  profile/rendition switching, which has been field-validated enough for now.
-
-Recommended debugging shape:
-
-1. Reproduce on current `main` with one live Jetson scene and, if practical, two
-   live scenes.
-2. Capture desktop and narrow/mobile screenshots or browser recordings.
-3. Inspect the Live layout and stream components before changing behavior:
-   - `frontend/src/pages/Live.tsx`
-   - `frontend/src/components/live/VideoStream.tsx`
-   - `frontend/src/components/live/TelemetryCanvas.tsx`
-   - any CSS/classes controlling tile aspect ratio, object fit, and stream
-     canvas/video sizing
-4. Identify whether the problem is:
-   - CSS/layout aspect-ratio drift
-   - video element `object-fit` or intrinsic-size handling
-   - overlay canvas size desync
-   - WebRTC/HLS reconnect or rendition URL choice after tile resize
-   - profile metadata being displayed as if it were actual decoded dimensions
-5. Fix the smallest proven cause.
-6. Add focused tests where possible, then do browser visual QA.
-
-Suggested verification for this fix:
+Suggested verification after guidance UX work:
 
 ```bash
-corepack pnpm --dir frontend exec vitest run src/pages/Live.test.tsx src/components/live/VideoStream.test.tsx src/components/live/TelemetryCanvas.test.tsx
-corepack pnpm --dir frontend exec eslint src/pages/Live.tsx src/components/live/VideoStream.tsx src/components/live/TelemetryCanvas.tsx
-corepack pnpm --dir frontend exec tsc -b
+corepack pnpm --dir frontend exec vitest run
+corepack pnpm --dir frontend run build
 ```
 
-Use browser visual QA after the code tests:
+Use browser visual QA after code tests:
 
-- one scene, native stream
-- one scene, annotated stream
-- one scene, reduced rendition
-- two scenes visible
-- resize/focus tile up and down repeatedly
-- confirm overlay boxes and video pixels stay aligned
+- scene camera setup with source/destination calibration guidance visible
+- inclusion/exclusion area editing with clear guidance and validation states
+- each Control Plane Configuration profile kind
+- bindings, unbind, default profile, delete impact, and effective runtime views
+- narrow and desktop viewports
 
-## Broader UI/UX Polish Comes After
+## Broader UI/UX Polish Later
 
-The plan was to review UI/UX again after the installer merge, and that still
-makes sense. Do this only after the video window sizing issue is fixed or
-clearly isolated.
+The focused next UX pass is configuration comprehension, not a general redesign.
+Use `taste-skill/` as local inspiration/input only after the guidance work or
+field validation is complete.
 
-Use `taste-skill/` as local inspiration/input for the later UI pass, but keep
-the first branch narrowly focused on video sizing/rendering. The later UI/UX
-branch can then look at:
+Later polish can still look at:
 
 - Live tile density and focus mode polish
 - rendition/profile control clarity
 - Deployment/Operations visual hierarchy
-- scene setup ergonomics
+- broader scene setup ergonomics
 - consistency with the OmniSight visual direction
 
-Suggested later branch:
+Suggested later branch after this pushed branch is merged:
 
 ```bash
 git switch -c codex/omnisight-ui-ux-polish
@@ -215,7 +329,9 @@ git switch -c codex/omnisight-ui-ux-polish
 
 ## Current Documentation State
 
-Operator-facing docs now assume source users update `main` or a release tag:
+Operator-facing docs still assume source users update `main` or a release tag.
+For testing the current changes before merge, use
+`codex/omnisight-live-video-window-sizing`:
 
 - `README.md`
 - `docs/product-installer-and-first-run-guide.md`
