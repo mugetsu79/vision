@@ -29,7 +29,7 @@ export function SceneStatusStrip({ row }: SceneStatusStripProps) {
       <StatusToneBadge tone={healthToTone(row.transport.health)}>
         {row.transport.label}
       </StatusToneBadge>
-      <StatusToneBadge tone="muted">
+      <StatusToneBadge tone="healthy">
         {row.processingMode} scene
       </StatusToneBadge>
       <StatusToneBadge tone={healthToTone(row.worker.health)}>

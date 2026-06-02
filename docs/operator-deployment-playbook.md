@@ -77,7 +77,10 @@ development fallback or break-glass material only.
 - edge and central supervisor credentials are scoped, rotated, revocable, and
   provisioned through one-time pairing or credential rotation, not copied from
   local dev tokens
-- the current MacBook/iMac + Jetson lab should set the edge worker's `ARGUS_NATS_URL` directly to the macOS master NATS listener; the NATS leaf shape is the production target once supervisor bootstrap owns credentials and routing
+- installer-managed MacBook/iMac + Jetson labs should use the Jetson local NATS
+  leaf: edge workers connect to `nats://nats-leaf:4222`, and the leaf connects
+  back to the master leaf listener on port `7422`. Direct master NATS URLs are
+  only for the older development fallback compose path.
 
 Production topology:
 

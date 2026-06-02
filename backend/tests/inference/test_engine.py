@@ -2158,11 +2158,11 @@ async def test_engine_applies_stream_profile_command_without_restart() -> None:
     await engine.apply_command(
         CameraCommand(
             stream=StreamSettings(
-                profile_id="720p10",
+                profile_id="240p5",
                 kind="transcode",
-                width=1280,
-                height=720,
-                fps=10,
+                width=426,
+                height=240,
+                fps=5,
             )
         )
     )
@@ -2190,11 +2190,11 @@ async def test_engine_applies_stream_profile_command_without_restart() -> None:
             "target_height": None,
         },
         {
-            "profile_id": "720p10",
+            "profile_id": "240p5",
             "stream_kind": "transcode",
-            "target_fps": 10,
-            "target_width": 1280,
-            "target_height": 720,
+            "target_fps": 5,
+            "target_width": 426,
+            "target_height": 240,
         },
         {
             "profile_id": "native",

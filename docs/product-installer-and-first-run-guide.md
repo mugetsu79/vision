@@ -1462,6 +1462,32 @@ sudo ./installer/macos/install-master.sh \
   --data-dir /var/lib/vezor
 ```
 
+Jetson edge branch install:
+
+```bash
+sudo systemctl stop vezor-edge.service
+cd /opt/vezor/current
+git fetch origin
+git pull --ff-only origin main
+
+sudo ./installer/linux/install-edge.sh \
+  --version "portable-demo" \
+  --manifest installer/manifests/dev-example.json \
+  --api-url "$MASTER_API_URL" \
+  --unpaired \
+  --edge-name "jetson-portable-1" \
+  --model-dir /var/lib/vezor/models \
+  --public-stream-host "$JETSON_STREAM_HOST" \
+  --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
+```
+
+Use the same source ref on the master and Jetson. While validating a pre-merge
+branch, replace `main` with that branch name on both hosts. Use `--unpaired`
+only after the Jetson has already paired successfully and
+`/etc/vezor/supervisor.json` contains an `edge_node_id`; otherwise create a
+fresh Pair Jetson edge session from Deployment and rerun the paired install
+command.
+
 Final packages should use signed package upgrades with rollback metadata
 instead of git pulls.
 

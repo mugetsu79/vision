@@ -40,6 +40,24 @@ describe("SceneStatusStrip", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("renders configured inherited transport and scene mode as healthy", () => {
+    render(
+      <SceneStatusStrip
+        row={{
+          ...row,
+          transport: { health: "healthy", label: "Inherited transport" },
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/inherited transport/i).className).toContain(
+      "vz-state-healthy",
+    );
+    expect(screen.getByText(/central scene/i).className).toContain(
+      "vz-state-healthy",
+    );
+  });
+
   test("renders live rendition detail for unavailable native delivery", () => {
     render(
       <SceneStatusStrip

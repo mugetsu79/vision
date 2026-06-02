@@ -228,6 +228,74 @@ describe("LivePage", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("shows scene telemetry health once when the operational strip is present", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["person"],
+            attribute_rules: [],
+            zones: [],
+            homography: null,
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "North Gate" });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit({
+        camera_id: "11111111-1111-1111-1111-111111111111",
+        ts: new Date().toISOString(),
+        profile: "central-gpu",
+        stream_mode: "annotated-whip",
+        counts: {},
+        tracks: [],
+      });
+    });
+
+    const portal = screen.getByTestId("scene-portal");
+    await waitFor(() =>
+      expect(within(portal).getAllByText(/^telemetry live$/i)).toHaveLength(1),
+    );
+    expect(within(portal).getByText(/^botsort$/i)).toBeInTheDocument();
+  });
+
   test("renders the multi-camera live wall, presence badges, and query-driven stats", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch")
@@ -1145,6 +1213,12 @@ describe("LivePage", () => {
         default_profile: "540p5",
       },
     });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("stream-North Gate"),
+      ).toHaveTextContent("North Gate stream 540p5"),
+    );
+    expect(screen.getByRole("button", { name: /apply to scene/i })).toBeDisabled();
   });
 
   test("lets operators disable browser-only overlays per live tile", async () => {

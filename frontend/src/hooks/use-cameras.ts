@@ -67,8 +67,35 @@ export function useUpdateCamera() {
 
       return data;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["cameras"] });
+    onSuccess: async (camera, variables) => {
+      const updateCameraList = (current: Camera[] | undefined) => {
+        if (!Array.isArray(current) || !camera) {
+          return current;
+        }
+        return current.map((candidate) => {
+          if (candidate.id !== variables.cameraId) {
+            return candidate;
+          }
+          return camera;
+        });
+      };
+
+      queryClient.setQueryData<Camera[]>(["cameras", "all"], updateCameraList);
+      queryClient.setQueriesData<Camera[]>(
+        {
+          predicate: (query) =>
+            Array.isArray(query.queryKey) && query.queryKey[0] === "cameras",
+        },
+        updateCameraList,
+      );
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["cameras"],
+          refetchType: "none",
+        }),
+        queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] }),
+      ]);
     },
   });
 }

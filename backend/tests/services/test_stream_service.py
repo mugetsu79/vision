@@ -710,6 +710,91 @@ async def test_stream_service_relay_edge_transcode_path_from_edge_mediamtx(
 
 
 @pytest.mark.asyncio
+async def test_stream_service_relays_privacy_filtered_edge_reduced_profile_from_edge_mediamtx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    camera = Camera(
+        id=camera_id,
+        site_id=uuid4(),
+        edge_node_id=edge_node_id,
+        name="CAMERA1",
+        rtsp_url_encrypted="encrypted",
+        processing_mode=ProcessingMode.EDGE,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=[],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={"blur_faces": True, "blur_plates": False},
+        browser_delivery={
+            "default_profile": "240p5",
+            "allow_native_on_demand": True,
+            "profiles": [
+                {"id": "native", "kind": "passthrough"},
+                {"id": "annotated", "kind": "transcode"},
+                {"id": "240p5", "kind": "transcode", "w": 426, "h": 240, "fps": 5},
+            ],
+        },
+        frame_skip=1,
+        fps_cap=25,
+    )
+
+    async def fake_load_camera(session, requested_tenant_id, requested_camera_id):
+        assert requested_tenant_id == tenant_id
+        assert requested_camera_id == camera_id
+        return camera
+
+    monkeypatch.setattr("argus.services.app._load_camera", fake_load_camera)
+
+    mediamtx = _DummyMediaMTXClient()
+    service = StreamService(
+        session_factory=_DummySessionFactory(),
+        mediamtx=mediamtx,
+        negotiator=_DummyNegotiator(),
+        settings=Settings(
+            _env_file=None,
+            enable_startup_services=False,
+            edge_mediamtx_rtsp_base_urls={str(edge_node_id): "rtsp://jetson.local:8554"},
+        ),
+    )
+
+    tenant_context = TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="admin-dev",
+            email="admin-dev@argus.local",
+            role=RoleEnum.ADMIN,
+            issuer="http://localhost:8080/realms/argus-dev",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={},
+        ),
+    )
+
+    access = await service._resolve_stream_access(tenant_context, camera_id)
+
+    path_name = f"cameras/{camera_id}/preview-240p5"
+    assert access.mode is StreamMode.FILTERED_PREVIEW
+    assert access.profile_id == "240p5"
+    assert access.path_name == path_name
+    assert len(mediamtx.ensured_paths) == 1
+    ensured_path_name, source, source_on_demand = mediamtx.ensured_paths[0]
+    assert ensured_path_name == path_name
+    split_source = urlsplit(source)
+    assert f"{split_source.scheme}://{split_source.netloc}{split_source.path}" == (
+        f"rtsp://jetson.local:8554/{path_name}"
+    )
+    assert source_on_demand is True
+
+
+@pytest.mark.asyncio
 async def test_stream_service_relays_manual_edge_transcode_with_wildcard_edge_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

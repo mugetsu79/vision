@@ -472,7 +472,7 @@ function deriveTransportSignal(camera: Camera): HealthSignal {
       label: `${formatReason(mode)} transport`,
     };
   }
-  return { health: "unknown", label: "Inherited transport" };
+  return { health: "healthy", label: "Inherited transport" };
 }
 
 function deriveLiveRenditionSignal(

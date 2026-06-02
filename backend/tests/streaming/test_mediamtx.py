@@ -334,6 +334,40 @@ async def test_mediamtx_client_registers_filtered_preview_and_deletes_passthroug
 
 
 @pytest.mark.asyncio
+async def test_mediamtx_client_registers_jetson_privacy_preview_for_reduced_profile() -> None:
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
+    )
+
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=False),
+        profile_id="240p5",
+        target_width=426,
+        target_height=240,
+        target_fps=5,
+    )
+
+    assert registration.mode is StreamMode.FILTERED_PREVIEW
+    assert registration.path_name == f"cameras/{camera_id}/preview-240p5"
+    assert registration.publish_path == (
+        f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/preview-240p5"
+    )
+    assert registration.target_width == 426
+    assert registration.target_height == 240
+    assert registration.target_fps == 5
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_mediamtx_client_ignores_missing_previous_managed_path_on_profile_switch() -> None:
     requests: list[tuple[str, str, dict[str, object] | None]] = []
     camera_id = uuid4()

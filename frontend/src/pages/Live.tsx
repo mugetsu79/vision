@@ -575,9 +575,11 @@ function ScenePortalCard({
 
         <div className="flex flex-wrap items-start justify-end gap-2">
           <div className="flex flex-wrap justify-end gap-2">
-            <Badge className={heartbeatBadgeClass(heartbeatStatus)}>
-              {heartbeatBadgeLabel(heartbeatStatus)}
-            </Badge>
+            {sceneHealth ? null : (
+              <Badge className={heartbeatBadgeClass(heartbeatStatus)}>
+                {heartbeatBadgeLabel(heartbeatStatus)}
+              </Badge>
+            )}
             <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
               {camera.tracker_type}
             </Badge>

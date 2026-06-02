@@ -280,7 +280,7 @@ describe("operational health", () => {
       privacy: { health: "healthy", label: "Face/plate filtering configured" },
       worker: { health: "healthy", label: "Worker running" },
       delivery: { health: "healthy", label: "Native stream available" },
-      transport: { health: "unknown", label: "Inherited transport" },
+      transport: { health: "healthy", label: "Inherited transport" },
       liveRendition: {
         health: "healthy",
         label: "Native clean",
@@ -294,7 +294,7 @@ describe("operational health", () => {
       readiness: { health: "attention", label: "Needs setup" },
       worker: { health: "attention", label: "Worker stale" },
       delivery: { health: "danger", label: "Direct stream unavailable" },
-      transport: { health: "unknown", label: "Inherited transport" },
+      transport: { health: "healthy", label: "Inherited transport" },
       liveRendition: {
         health: "danger",
         label: "Native clean",
