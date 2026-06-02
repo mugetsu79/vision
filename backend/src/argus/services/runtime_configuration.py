@@ -80,8 +80,9 @@ class RuntimeConfigurationService:
             entries: dict[OperatorConfigProfileKind, ResolvedOperatorConfigEntryResponse] = {}
             profiles: dict[OperatorConfigProfileKind, OperatorConfigProfileResponse] = {}
             for kind in OperatorConfigProfileKind:
-                resolution = await self._resolve_entry(
+                resolution = await self._resolve_entry_with_bootstrap(
                     session,
+                    tenant_context,
                     tenant_id=tenant_context.tenant_id,
                     kind=kind,
                     camera_id=camera_id,
@@ -129,8 +130,9 @@ class RuntimeConfigurationService:
                 resolved_site_id = camera_site_id or site_id
                 resolved_edge_node_id = camera_edge_node_id or edge_node_id
                 await self._seed_if_empty(session, tenant_context)
-                entry = await self._resolve_entry(
+                entry = await self._resolve_entry_with_bootstrap(
                     session,
+                    tenant_context,
                     tenant_id=tenant_context.tenant_id,
                     kind=kind,
                     camera_id=camera_id,
@@ -160,6 +162,43 @@ class RuntimeConfigurationService:
             profile_hash=profile.config_hash,
             config=dict(profile.config),
             secrets=secrets,
+        )
+
+    async def _resolve_entry_with_bootstrap(
+        self,
+        session: AsyncSession,
+        tenant_context: TenantContext,
+        *,
+        tenant_id: UUID,
+        kind: OperatorConfigProfileKind,
+        camera_id: UUID | None,
+        site_id: UUID | None,
+        edge_node_id: UUID | None,
+    ) -> ResolvedOperatorConfigEntryResponse:
+        entry = await self._resolve_entry(
+            session,
+            tenant_id=tenant_id,
+            kind=kind,
+            camera_id=camera_id,
+            site_id=site_id,
+            edge_node_id=edge_node_id,
+        )
+        if (
+            self.bootstrap_defaults is None
+            or entry.resolution_status == "resolved"
+            or entry.profile_id is not None
+            or entry.winner_scope is not None
+        ):
+            return entry
+
+        await self.bootstrap_defaults(tenant_context)
+        return await self._resolve_entry(
+            session,
+            tenant_id=tenant_id,
+            kind=kind,
+            camera_id=camera_id,
+            site_id=site_id,
+            edge_node_id=edge_node_id,
         )
 
     async def _resolve_entry(

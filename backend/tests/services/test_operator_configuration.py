@@ -431,6 +431,44 @@ async def test_operator_config_service_resolution_order_and_bootstrap_default(
 
 
 @pytest.mark.asyncio
+async def test_runtime_resolution_bootstraps_missing_new_profile_kind(
+    tmp_path: Path,
+) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    storage_profile = await service.create_profile(
+        context,
+        _storage_profile_create(slug="existing-storage", is_default=True),
+    )
+
+    resolved = await service.runtime_configuration.resolve_profile_for_runtime(
+        context,
+        OperatorConfigProfileKind.OPERATIONS_MODE,
+    )
+
+    assert resolved.kind is OperatorConfigProfileKind.OPERATIONS_MODE
+    assert resolved.profile_name == "Default operations mode"
+    assert resolved.config == {
+        "lifecycle_owner": "manual",
+        "supervisor_mode": "disabled",
+        "restart_policy": "on_failure",
+    }
+    assert any(
+        profile.kind is OperatorConfigProfileKind.OPERATIONS_MODE and profile.is_default
+        for profile in session_factory.state["profiles"]
+    )
+    assert any(
+        profile.id == storage_profile.id and profile.is_default
+        for profile in session_factory.state["profiles"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_operator_config_service_tests_local_and_remote_storage_profiles(
     tmp_path: Path,
 ) -> None:

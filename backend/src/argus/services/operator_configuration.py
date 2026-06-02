@@ -933,14 +933,17 @@ class OperatorConfigurationService:
                 ]
                 if same_slug:
                     continue
+                payload_is_default = payload.is_default
                 if payload.is_default:
-                    _clear_default(
-                        [
-                            profile
-                            for profile in existing + seeded
-                            if profile.kind == payload.kind
-                        ]
-                    )
+                    kind_profiles = [
+                        profile
+                        for profile in existing + seeded
+                        if profile.kind == payload.kind
+                    ]
+                    if any(profile.is_default for profile in kind_profiles):
+                        payload_is_default = False
+                    else:
+                        _clear_default(kind_profiles)
                 profile = OperatorConfigProfile(
                     id=uuid4(),
                     tenant_id=tenant_context.tenant_id,
@@ -952,7 +955,7 @@ class OperatorConfigurationService:
                     name=payload.name,
                     slug=payload.slug,
                     enabled=payload.enabled,
-                    is_default=payload.is_default,
+                    is_default=payload_is_default,
                     config=payload.config,
                     validation_status=OperatorConfigValidationStatus.UNVALIDATED,
                     validation_message=None,
