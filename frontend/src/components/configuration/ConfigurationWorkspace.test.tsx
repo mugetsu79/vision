@@ -10,6 +10,7 @@ const updateProfile = vi.fn();
 const deleteProfile = vi.fn();
 const testProfile = vi.fn();
 const upsertBinding = vi.fn();
+const deleteBinding = vi.fn();
 
 const profiles: OperatorConfigProfile[] = [
   {
@@ -106,6 +107,18 @@ const operationsProfiles: OperatorConfigProfile[] = [
   },
 ];
 let profileRows: OperatorConfigProfile[] = profiles;
+let bindingRows = [
+  {
+    id: "binding-1",
+    tenant_id: "tenant-1",
+    kind: "evidence_storage",
+    scope: "camera",
+    scope_key: "camera-1",
+    profile_id: "profile-minio",
+    created_at: "2026-06-01T10:00:00Z",
+    updated_at: "2026-06-01T10:00:00Z",
+  },
+];
 
 vi.mock("@/hooks/use-configuration", () => ({
   useConfigurationCatalog: () => ({
@@ -137,12 +150,32 @@ vi.mock("@/hooks/use-configuration", () => ({
     mutateAsync: deleteProfile,
     isPending: false,
   }),
+  useConfigurationProfileImpact: () => ({
+    data: {
+      profile_id: "profile-minio",
+      kind: "evidence_storage",
+      is_default: true,
+      direct_bindings: bindingRows,
+      affected_targets_count: 3,
+      requires_replacement_default: true,
+      secret_state: { secret_key: "present" },
+    },
+    isLoading: false,
+  }),
   useTestConfigurationProfile: () => ({
     mutateAsync: testProfile,
     isPending: false,
   }),
+  useConfigurationBindings: () => ({
+    data: bindingRows,
+    isLoading: false,
+  }),
   useUpsertConfigurationBinding: () => ({
     mutateAsync: upsertBinding,
+    isPending: false,
+  }),
+  useDeleteConfigurationBinding: () => ({
+    mutateAsync: deleteBinding,
     isPending: false,
   }),
   useResolvedConfiguration: () => ({
@@ -193,6 +226,18 @@ function renderWorkspace() {
 describe("ConfigurationWorkspace", () => {
   beforeEach(() => {
     profileRows = profiles;
+    bindingRows = [
+      {
+        id: "binding-1",
+        tenant_id: "tenant-1",
+        kind: "evidence_storage",
+        scope: "camera",
+        scope_key: "camera-1",
+        profile_id: "profile-minio",
+        created_at: "2026-06-01T10:00:00Z",
+        updated_at: "2026-06-01T10:00:00Z",
+      },
+    ];
     createProfile.mockReset();
     createProfile.mockResolvedValue(profiles[0]);
     updateProfile.mockReset();
@@ -208,6 +253,8 @@ describe("ConfigurationWorkspace", () => {
     });
     upsertBinding.mockReset();
     upsertBinding.mockResolvedValue({});
+    deleteBinding.mockReset();
+    deleteBinding.mockResolvedValue(undefined);
   });
 
   test("renders operator configuration categories and a single default badge", () => {
@@ -279,6 +326,27 @@ describe("ConfigurationWorkspace", () => {
     expect(await screen.findByText(/profile saved/i)).toBeInTheDocument();
   });
 
+  test("deletes a default profile through impact confirmation with replacement", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    await user.click(screen.getByRole("button", { name: /delete profile/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /delete profile/i });
+    expect(within(dialog).getByText(/3 resolved targets/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/1 direct binding/i)).toBeInTheDocument();
+    await user.selectOptions(
+      within(dialog).getByLabelText("Replacement default profile"),
+      "profile-local",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    expect(deleteProfile).toHaveBeenCalledWith({
+      profileId: "profile-minio",
+      replacementDefaultProfileId: "profile-local",
+    });
+  });
+
   test("tests profiles and binds selected profile to each supported scope", async () => {
     const user = userEvent.setup();
     renderWorkspace();
@@ -312,7 +380,6 @@ describe("ConfigurationWorkspace", () => {
 
   test("updates default profile and deletes the selected profile from list actions", async () => {
     const user = userEvent.setup();
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderWorkspace();
 
     await user.click(screen.getByRole("button", { name: /set default/i }));
@@ -325,10 +392,17 @@ describe("ConfigurationWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: /delete profile/i }));
 
-    expect(confirm).toHaveBeenCalledWith(
-      expect.stringContaining("Delete profile Central MinIO"),
+    const dialog = await screen.findByRole("dialog", { name: /delete profile/i });
+    await user.selectOptions(
+      within(dialog).getByLabelText("Replacement default profile"),
+      "profile-local",
     );
-    expect(deleteProfile).toHaveBeenCalledWith("profile-minio");
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    expect(deleteProfile).toHaveBeenCalledWith({
+      profileId: "profile-minio",
+      replacementDefaultProfileId: "profile-local",
+    });
     expect(await screen.findByText(/profile deleted/i)).toBeInTheDocument();
   });
 
@@ -365,11 +439,16 @@ describe("ConfigurationWorkspace", () => {
 
   test("reports configuration profile delete failures", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     deleteProfile.mockRejectedValue(new Error("Profile is still referenced."));
     renderWorkspace();
 
     await user.click(screen.getByRole("button", { name: /delete profile/i }));
+    const dialog = await screen.findByRole("dialog", { name: /delete profile/i });
+    await user.selectOptions(
+      within(dialog).getByLabelText("Replacement default profile"),
+      "profile-local",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
 
     expect(await screen.findByText(/profile is still referenced/i)).toBeInTheDocument();
   });

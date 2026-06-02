@@ -17,6 +17,7 @@ from argus.models.enums import (
     ModelAdmissionStatus,
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
+    WorkerRuntimeState,
 )
 from argus.supervisor.process_adapter import WorkerProcessAdapter, WorkerProcessResult
 
@@ -27,6 +28,7 @@ _ADMITTED_STATUSES = {
     ModelAdmissionStatus.DEGRADED,
 }
 _DESIRED_RUNNING_STATES = {WorkerDesiredState.DESIRED, WorkerDesiredState.SUPERVISED}
+_MAX_ON_FAILURE_RESTARTS = 3
 
 
 class SupervisorOperationsClient(Protocol):
@@ -226,6 +228,8 @@ class SupervisorReconciler:
         is_running = getattr(self.process_adapter, "is_running", None)
         if callable(is_running) and is_running(worker.camera_id):
             return False
+        if not _restart_policy_allows_recovery(worker):
+            return False
         return True
 
     def _request_from_desired_worker(
@@ -282,6 +286,22 @@ def _worker_owner_matches_supervisor(
     if edge_node_id is None:
         return worker.lifecycle_owner == "central_supervisor" and worker.node_id is None
     return worker.lifecycle_owner == "edge_supervisor" and worker.node_id == edge_node_id
+
+
+def _restart_policy_allows_recovery(worker: FleetCameraWorkerSummary) -> bool:
+    runtime_report = worker.runtime_report
+    if runtime_report is None:
+        return True
+    if worker.restart_policy == "always":
+        return True
+    if worker.restart_policy == "never":
+        return False
+    if worker.restart_policy == "on_failure":
+        return (
+            runtime_report.runtime_state is WorkerRuntimeState.ERROR
+            and runtime_report.restart_count < _MAX_ON_FAILURE_RESTARTS
+        )
+    return False
 
 
 def _start_key(request: OperationsLifecycleRequestResponse) -> tuple[UUID, UUID | None, str]:

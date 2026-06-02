@@ -341,6 +341,27 @@ as:
 /models/yolo26n.onnx
 ```
 
+## Runtime Selection Profiles
+
+Runtime selection is configured from Settings -> Configuration under `Runtime
+selection`. Use it to express the operator intent before the worker starts:
+
+- preferred backend, such as `tensorrt`, `cuda`, `onnxruntime`, or `pytorch`
+- artifact preference, such as target-specific validated artifacts first
+- whether fallback is allowed when the preferred backend or artifact is missing
+
+When fallback is disabled, worker config generation blocks if the selected
+camera has no compatible validated artifact/backend. When fallback is allowed,
+the runtime passport records the selected backend, selected artifact id when
+one was used, and fallback reason when the worker continued with the canonical
+runtime path.
+
+For a MacBook master plus Jetson edge test, bind the runtime selection profile
+to the camera or Jetson site, then check Operations or
+`/api/v1/cameras/{camera_id}/worker-config`. The applied configuration summary
+should show the expected runtime-selection profile hash and the selected
+backend/artifact before you compare model performance.
+
 ## Runtime Artifact Soak Records
 
 Validated runtime artifacts are not fleet-safe until their target hardware run

@@ -232,7 +232,9 @@ describe("SupervisorLifecycleControls", () => {
       />,
     );
 
-    expect(screen.getByText(/manual-mode guidance/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/manual mode requires operator-started worker processes/i),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^restart$/i })).toBeDisabled();
 
     rerender(
@@ -246,10 +248,58 @@ describe("SupervisorLifecycleControls", () => {
       />,
     );
 
+    expect(screen.getByText(/supervisor mode is disabled/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
+  });
+
+  test("renders backend lifecycle detail exactly and honors allowed actions", () => {
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker({
+          supervisor_mode: "disabled",
+          allowed_lifecycle_actions: ["restart"],
+          detail:
+            "Operations profile is disabled until a production supervisor is paired.",
+        })}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    const panel = screen.getByTestId("supervisor-lifecycle-controls");
     expect(
-      screen.getByText(/lifecycle requests disabled/i),
+      within(panel).getByText(
+        "Operations profile is disabled until a production supervisor is paired.",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^restart$/i })).not.toBeDisabled();
+  });
+
+  test("renders push mode and lifecycle dispatch state", () => {
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker({
+          supervisor_mode: "push",
+          detail: "Edge supervisor owns this worker process via push mode.",
+          latest_lifecycle_request: {
+            ...supervisedWorker().latest_lifecycle_request!,
+            status: "requested",
+            action: "restart",
+            error: "Timed out waiting for supervisor push acknowledgement.",
+            request_payload: {
+              source: "operations_ui",
+              dispatch_mode: "push",
+              dispatch_status: "ack_timeout",
+            },
+          },
+        })}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    const panel = screen.getByTestId("supervisor-lifecycle-controls");
+    expect(within(panel).getByText("Push mode")).toBeInTheDocument();
+    expect(within(panel).getByText(/ack timeout/i)).toBeInTheDocument();
   });
 
   test("directs missing installed supervisor state to Deployment pairing", () => {

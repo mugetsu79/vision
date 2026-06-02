@@ -6,6 +6,7 @@ PAIRING_CODE=""
 SESSION_ID=""
 EDGE_NAME="jetson-edge"
 MODEL_DIR="/var/lib/vezor/models"
+FRONTEND_URL="${VEZOR_MASTER_FRONTEND_URL:-}"
 VERSION=""
 MANIFEST=""
 JETSON_ORT_WHEEL_URL="${JETSON_ORT_WHEEL_URL:-}"
@@ -33,6 +34,7 @@ Options:
   --unpaired             Install service without claiming a pairing session.
   --edge-name NAME       Local edge node name. Default: jetson-edge.
   --model-dir PATH       Local model directory. Default: /var/lib/vezor/models.
+  --frontend-url URL     Master frontend URL allowed by edge MediaMTX.
   --public-stream-host HOST
                          Host/IP the master can use to read this edge MediaMTX service.
   --public-mediamtx-rtsp-url URL
@@ -72,6 +74,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --model-dir)
       MODEL_DIR="${2:?--model-dir requires a value}"
+      shift 2
+      ;;
+    --frontend-url)
+      FRONTEND_URL="${2:?--frontend-url requires a value}"
       shift 2
       ;;
     --public-stream-host)
@@ -190,6 +196,42 @@ detect_public_stream_host() {
   hostname -f 2>/dev/null || hostname
 }
 
+public_hostname_from_url() {
+  local url="$1"
+  local host_port="${url#*://}"
+
+  host_port="${host_port%%/*}"
+  if [[ "$host_port" == \[*\]* ]]; then
+    host_port="${host_port#\[}"
+    host_port="${host_port%%\]*}"
+  else
+    host_port="${host_port%%:*}"
+  fi
+
+  if [[ -z "$host_port" ]]; then
+    echo "Unable to derive hostname from URL: $url" >&2
+    exit 2
+  fi
+
+  printf '%s\n' "$host_port"
+}
+
+frontend_url_from_api_url() {
+  python3 - "$API_URL" <<'PY'
+import sys
+from urllib.parse import urlparse
+
+parsed = urlparse(sys.argv[1])
+scheme = parsed.scheme or "http"
+host = parsed.hostname
+if not host:
+    raise SystemExit("Unable to derive master frontend URL from --api-url.")
+if ":" in host:
+    host = f"[{host}]"
+print(f"{scheme}://{host}:3000")
+PY
+}
+
 existing_supervisor_config_value() {
   local key="$1"
   if [[ ! -f "$SUPERVISOR_CONFIG" ]]; then
@@ -296,12 +338,15 @@ else
   exit 1
 fi
 
+require_command python3
+
 MEDIAMTX_IMAGE="$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)"
 NATS_IMAGE="$(manifest_image_ref nats nats:2)"
 EDGE_WORKER_IMAGE="$(manifest_image_ref edge-worker vezor/edge-worker:portable-demo)"
 if [[ -z "$PUBLIC_MEDIAMTX_RTSP_URL" ]]; then
   PUBLIC_MEDIAMTX_RTSP_URL="rtsp://$(detect_public_stream_host):8554"
 fi
+EDGE_STREAM_HOST="$(public_hostname_from_url "$PUBLIC_MEDIAMTX_RTSP_URL")"
 
 if [[ "$UNPAIRED" -eq 0 && -z "$PAIRING_CODE" ]]; then
   echo "Provide --pairing-code or choose --unpaired for deferred pairing." >&2
@@ -326,6 +371,10 @@ fi
 if [[ -z "$API_URL" ]]; then
   echo "Edge install requires --api-url or an existing supervisor api_base_url." >&2
   exit 2
+fi
+
+if [[ -z "$FRONTEND_URL" ]]; then
+  FRONTEND_URL="$(frontend_url_from_api_url)"
 fi
 
 MASTER_NATS_LEAF_URL="$(master_nats_leaf_url)"
@@ -385,18 +434,16 @@ MEDIAMTX_CONFIG="$CONFIG_DIR/mediamtx/mediamtx.yml"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write edge MediaMTX config $MEDIAMTX_CONFIG"
 else
-  API_URL="$API_URL" python3 - "$RELEASE_DIR/infra/mediamtx/mediamtx.yml" "$MEDIAMTX_CONFIG" <<'PY'
-import sys
-from pathlib import Path
-
-api_url = __import__("os").environ["API_URL"].rstrip("/")
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-target = source.replace(
-    "authJWTJWKS: http://backend:8000/.well-known/argus/mediamtx/jwks.json",
-    f"authJWTJWKS: {api_url}/.well-known/argus/mediamtx/jwks.json",
-)
-Path(sys.argv[2]).write_text(target, encoding="utf-8")
-PY
+  python3 "$RELEASE_DIR/installer/lib/render_mediamtx_config.py" \
+    --source "$RELEASE_DIR/infra/mediamtx/mediamtx.yml" \
+    --dest "$MEDIAMTX_CONFIG" \
+    --jwks-url "${API_URL%/}/.well-known/argus/mediamtx/jwks.json" \
+    --frontend-origin "$FRONTEND_URL" \
+    --frontend-origin "http://localhost:3000" \
+    --frontend-origin "http://127.0.0.1:3000" \
+    --webrtc-host "$EDGE_STREAM_HOST" \
+    --webrtc-host "localhost" \
+    --webrtc-host "127.0.0.1"
   chmod 0644 "$MEDIAMTX_CONFIG"
 fi
 

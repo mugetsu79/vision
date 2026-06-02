@@ -379,6 +379,8 @@ if [[ ! -d /Applications/Docker.app ]]; then
   exit 1
 fi
 
+require_command python3
+
 if [[ -n "$MANIFEST" && ! -f "$MANIFEST" ]]; then
   echo "Manifest not found: $MANIFEST" >&2
   exit 1
@@ -455,7 +457,16 @@ write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_username" "admin"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_password"
 
 run install -m 0644 /opt/vezor/current/infra/nats/nats.conf "$CONFIG_DIR/nats/nats.conf"
-run install -m 0644 /opt/vezor/current/infra/mediamtx/mediamtx.yml "$CONFIG_DIR/mediamtx/mediamtx.yml"
+run python3 /opt/vezor/current/installer/lib/render_mediamtx_config.py \
+  --source /opt/vezor/current/infra/mediamtx/mediamtx.yml \
+  --dest "$CONFIG_DIR/mediamtx/mediamtx.yml" \
+  --frontend-origin "$PUBLIC_URL" \
+  --frontend-origin "http://localhost:3000" \
+  --frontend-origin "http://127.0.0.1:3000" \
+  --webrtc-host "$PUBLIC_HOSTNAME" \
+  --webrtc-host "localhost" \
+  --webrtc-host "127.0.0.1"
+run chmod 0644 "$CONFIG_DIR/mediamtx/mediamtx.yml"
 
 MASTER_ENV="$CONFIG_DIR/master.env"
 if [[ "$DRY_RUN" -eq 1 ]]; then

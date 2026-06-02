@@ -4,9 +4,10 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -56,9 +57,80 @@ class WorkerOperationsControls:
     detail: str
 
 
+@dataclass(frozen=True, slots=True)
+class LifecycleDispatchResult:
+    dispatch_mode: Literal["polling", "push"]
+    dispatch_status: Literal[
+        "queued_for_polling",
+        "acknowledged",
+        "ack_timeout",
+        "failed",
+    ]
+    error: str | None = None
+
+
+class LifecycleDispatcher(Protocol):
+    async def dispatch(
+        self,
+        request: OperationsLifecycleRequest,
+    ) -> LifecycleDispatchResult | object: ...
+
+
+class _LifecyclePublisher(Protocol):
+    async def publish(self, subject: str, payload: OperationsLifecycleRequestResponse) -> None: ...
+
+
+class PollingLifecycleDispatcher:
+    async def dispatch(
+        self,
+        request: OperationsLifecycleRequest,
+    ) -> LifecycleDispatchResult:
+        del request
+        return LifecycleDispatchResult(
+            dispatch_mode="polling",
+            dispatch_status="queued_for_polling",
+        )
+
+
+class NatsPushLifecycleDispatcher:
+    def __init__(self, publisher: _LifecyclePublisher) -> None:
+        self.publisher = publisher
+
+    async def dispatch(
+        self,
+        request: OperationsLifecycleRequest,
+    ) -> LifecycleDispatchResult:
+        subject_key = str(request.edge_node_id) if request.edge_node_id is not None else "central"
+        try:
+            await self.publisher.publish(
+                f"supervisor.{subject_key}.lifecycle",
+                operations_lifecycle_request_response(request),
+            )
+        except TimeoutError:
+            return LifecycleDispatchResult(
+                dispatch_mode="push",
+                dispatch_status="ack_timeout",
+                error="Timed out waiting for supervisor push acknowledgement.",
+            )
+        except Exception as exc:
+            return LifecycleDispatchResult(
+                dispatch_mode="push",
+                dispatch_status="failed",
+                error=str(exc),
+            )
+        return LifecycleDispatchResult(dispatch_mode="push", dispatch_status="acknowledged")
+
+
 class SupervisorOperationsService:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        push_lifecycle_dispatcher: LifecycleDispatcher | None = None,
+    ) -> None:
         self.session_factory = session_factory
+        self.polling_lifecycle_dispatcher = PollingLifecycleDispatcher()
+        self.push_lifecycle_dispatcher = push_lifecycle_dispatcher
 
     async def list_assignments(
         self,
@@ -178,7 +250,19 @@ class SupervisorOperationsService:
         tenant_id: UUID,
         payload: OperationsLifecycleRequestCreate,
         actor_subject: str | None,
+        operations_mode: dict[str, object] | OperationsModeProfileConfig | None = None,
     ) -> OperationsLifecycleRequest:
+        profile = _operations_mode_profile(operations_mode)
+        supervisor_mode = (
+            SupervisorMode(profile.supervisor_mode)
+            if profile is not None
+            else SupervisorMode.POLLING
+        )
+        if supervisor_mode is SupervisorMode.DISABLED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Supervisor mode is disabled by the resolved operations profile.",
+            )
         now = datetime.now(tz=UTC)
         row = OperationsLifecycleRequest(
             tenant_id=tenant_id,
@@ -200,7 +284,42 @@ class SupervisorOperationsService:
             session.add(row)
             await session.commit()
             await session.refresh(row)
+            dispatch_result = await self._dispatch_lifecycle_request(
+                row,
+                supervisor_mode=supervisor_mode,
+            )
+            row.request_payload = {
+                **dict(row.request_payload),
+                "dispatch_mode": dispatch_result.dispatch_mode,
+                "dispatch_status": dispatch_result.dispatch_status,
+            }
+            row.error = dispatch_result.error
+            await session.commit()
+            await session.refresh(row)
         return row
+
+    async def _dispatch_lifecycle_request(
+        self,
+        row: OperationsLifecycleRequest,
+        *,
+        supervisor_mode: SupervisorMode,
+    ) -> LifecycleDispatchResult:
+        dispatcher = (
+            self.push_lifecycle_dispatcher
+            if supervisor_mode is SupervisorMode.PUSH
+            else self.polling_lifecycle_dispatcher
+        )
+        if dispatcher is None:
+            return LifecycleDispatchResult(
+                dispatch_mode="push",
+                dispatch_status="failed",
+                error="Supervisor push dispatcher is not configured.",
+            )
+        result = await dispatcher.dispatch(row)
+        return _coerce_lifecycle_dispatch_result(
+            result,
+            dispatch_mode="push" if supervisor_mode is SupervisorMode.PUSH else "polling",
+        )
 
     async def _apply_lifecycle_desired_state(
         self,
@@ -757,6 +876,43 @@ def _request_matches_supervisor_scope(
     if edge_node_id is None:
         return row.edge_node_id is None
     return row.edge_node_id == edge_node_id
+
+
+def _operations_mode_profile(
+    value: dict[str, object] | OperationsModeProfileConfig | None,
+) -> OperationsModeProfileConfig | None:
+    if value is None:
+        return None
+    if isinstance(value, OperationsModeProfileConfig):
+        return value
+    return OperationsModeProfileConfig.model_validate(value)
+
+
+def _coerce_lifecycle_dispatch_result(
+    result: LifecycleDispatchResult | object,
+    *,
+    dispatch_mode: Literal["polling", "push"],
+) -> LifecycleDispatchResult:
+    if isinstance(result, LifecycleDispatchResult):
+        return result
+    if isinstance(result, dict):
+        raw_status = result.get("dispatch_status")
+        error = result.get("error")
+    else:
+        raw_status = getattr(result, "dispatch_status", None)
+        error = getattr(result, "error", None)
+    dispatch_status = (
+        raw_status
+        if raw_status in {"queued_for_polling", "acknowledged", "ack_timeout", "failed"}
+        else "queued_for_polling"
+        if dispatch_mode == "polling"
+        else "failed"
+    )
+    return LifecycleDispatchResult(
+        dispatch_mode=dispatch_mode,
+        dispatch_status=dispatch_status,
+        error=error if isinstance(error, str) else None,
+    )
 
 
 def _desired_state_for_lifecycle_action(

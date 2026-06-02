@@ -45,6 +45,7 @@ export function SupervisorLifecycleControls({
   const runtimeReport = worker.runtime_report ?? null;
   const latestRequest = worker.latest_lifecycle_request ?? null;
   const lifecycleDisabledReason = lifecycleReason(worker);
+  const lifecycleDispatchState = dispatchState(latestRequest);
   const needsDeploymentSetup = shouldOpenDeployment(worker);
   const workerRemoved = worker.desired_state === "not_desired";
   const selectedDesiredState = targetNodeId ? "supervised" : "manual";
@@ -120,6 +121,18 @@ export function SupervisorLifecycleControls({
           <p className="mt-1 text-sm text-[#d8e2f2]">
             {lifecycleDisabledReason}
           </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {worker.supervisor_mode === "push" ? (
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-950/30 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                Push mode
+              </span>
+            ) : null}
+            {lifecycleDispatchState ? (
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#b9c7dc]">
+                {lifecycleDispatchState}
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {lifecycleButtons.map(({ action, label, icon: Icon }) => (
@@ -257,6 +270,9 @@ function LifecycleFact({ label, value }: { label: string; value: string }) {
 }
 
 function lifecycleReason(worker: Worker): string {
+  if (worker.detail) {
+    return worker.detail;
+  }
   if (worker.lifecycle_owner === "manual_dev") {
     return "Manual-mode guidance only. Lifecycle requests stay disabled.";
   }
@@ -267,6 +283,21 @@ function lifecycleReason(worker: Worker): string {
     return worker.detail ?? "Supervisor has not reported healthy runtime state.";
   }
   return worker.detail ?? "Supervisor lifecycle requests are available.";
+}
+
+function dispatchState(
+  request: Worker["latest_lifecycle_request"] | null | undefined,
+): string | null {
+  const payload = request?.request_payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const mode = payload.dispatch_mode;
+  const status = payload.dispatch_status;
+  if (mode !== "push" || typeof status !== "string") {
+    return null;
+  }
+  return `Dispatch ${status.replaceAll("_", " ")}`;
 }
 
 function shouldOpenDeployment(worker: Worker): boolean {

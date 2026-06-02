@@ -1,7 +1,7 @@
 # Production Configuration Hardening Design
 
 Date: 2026-06-01
-Status: Ready for review
+Status: Implemented locally; awaiting MacBook/Jetson smoke validation
 
 ## Product Goal
 
@@ -653,4 +653,3 @@ The work is complete when:
 - operations push mode has real delivery and acknowledgement behavior
 - operators can delete, duplicate, bind, unbind, and inspect profiles without
   terminal checks
-

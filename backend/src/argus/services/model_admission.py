@@ -32,7 +32,17 @@ def evaluate_worker_model_admission(
 
     backend = request.selected_backend or request.preferred_backend or "onnxruntime"
     frame_budget_ms = _frame_budget_ms(request.stream_profile)
-    constraints: dict[str, Any] = {"frame_budget_ms": frame_budget_ms}
+    constraints: dict[str, Any] = {
+        "frame_budget_ms": frame_budget_ms,
+        "selected_backend": backend,
+        "preferred_backend": request.preferred_backend,
+        "runtime_selection_profile_id": (
+            str(request.runtime_selection_profile_id)
+            if request.runtime_selection_profile_id is not None
+            else None
+        ),
+        "fallback_allowed": request.fallback_allowed,
+    }
 
     host_profile = str(_value(hardware_report, "host_profile") or "")
     if (

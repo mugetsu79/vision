@@ -10,6 +10,40 @@
 
 ---
 
+## Implementation Status - 2026-06-01
+
+Status: implemented locally on `codex/omnisight-live-video-window-sizing`.
+Manual MacBook/Jetson smoke remains the next operator validation step.
+
+Completed:
+
+- Shared capability catalog, binding inventory, unbind, impact-aware profile
+  delete, safe default replacement, and binding validation.
+- Applied configuration summaries in worker config, runtime passports, fleet
+  worker summaries, and effective configuration UI.
+- Evidence/privacy residency checks and per-camera retention enforcement.
+- Transport enforcement for `webrtc`, `hls`, and `mjpeg`; legacy `transcode`
+  profiles normalize to native with an operator message; Live starts forced HLS
+  without negotiating WebRTC first.
+- Runtime selection enforcement, selected backend/artifact reporting, and
+  fallback-disabled blocking.
+- LLM provider-backed policy drafting with missing-secret fail-closed behavior
+  and deterministic fallback for malformed/unavailable provider responses.
+- Operations mode enforcement for disabled, polling, and push dispatch paths,
+  plus restart-policy-aware supervisor recovery.
+- Configuration UX polish: profile inventory, runtime impact, unbind rows,
+  impact delete dialog, capability-disabled controls, effective desired/applied
+  hash diagnostics, and regenerated OpenAPI TypeScript types.
+- Documentation updates in the runbook, deployment playbook, MacBook/Jetson
+  reinstall guide, model configuration guide, and scene configuration guide.
+
+Verified:
+
+- `python3 -m uv run --project backend pytest backend/tests/services/test_operator_configuration.py backend/tests/api/test_configuration_routes.py backend/tests/services/test_camera_worker_config.py backend/tests/services/test_stream_delivery.py backend/tests/services/test_runtime_selection.py backend/tests/services/test_operations_service.py backend/tests/services/test_runtime_passports.py backend/tests/services/test_model_admission.py backend/tests/services/test_llm_provider_runtime.py backend/tests/services/test_policy_drafts.py backend/tests/services/test_privacy_manifests.py backend/tests/services/test_supervisor_operations.py backend/tests/api/test_operations_endpoints.py backend/tests/supervisor/test_reconciler.py -q` -> 145 passed.
+- `python3 -m uv run --project backend ruff check ...` on touched backend files -> all checks passed.
+- `corepack pnpm --dir frontend test src/hooks/use-configuration.test.tsx src/components/configuration/ConfigurationWorkspace.test.tsx src/components/configuration/ProfileEditor.test.tsx src/components/configuration/ProfileBindingPanel.test.tsx src/components/configuration/EffectiveConfigurationPanel.test.tsx src/components/live/VideoStream.test.tsx src/pages/Live.test.tsx src/components/operations/SupervisorLifecycleControls.test.tsx src/pages/Settings.test.tsx` -> 75 passed.
+- `corepack pnpm --dir frontend build` -> passed.
+
 ## Scope Check
 
 The approved spec covers multiple independent runtime subsystems. Treat this as

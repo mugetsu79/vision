@@ -284,6 +284,23 @@ export interface paths {
         patch: operations["update_configuration_profile_api_v1_configuration_profiles__profile_id__patch"];
         trace?: never;
     };
+    "/api/v1/configuration/profiles/{profile_id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Configuration Profile Impact */
+        get: operations["get_configuration_profile_impact_api_v1_configuration_profiles__profile_id__impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/configuration/profiles/{profile_id}/test": {
         parameters: {
             query?: never;
@@ -308,11 +325,29 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Configuration Bindings */
+        get: operations["list_configuration_bindings_api_v1_configuration_bindings_get"];
         put?: never;
         /** Upsert Configuration Binding */
         post: operations["upsert_configuration_binding_api_v1_configuration_bindings_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuration/bindings/{binding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Configuration Binding */
+        delete: operations["delete_configuration_binding_api_v1_configuration_bindings__binding_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1365,6 +1400,55 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AppliedOperatorConfigRef */
+        AppliedOperatorConfigRef: {
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /**
+             * Support
+             * @default active
+             * @enum {string}
+             */
+            support: "active" | "advisory" | "requires_service" | "unsupported";
+            /** Operator Message */
+            operator_message?: string | null;
+        };
+        /** AppliedOperatorConfigurationSummary */
+        AppliedOperatorConfigurationSummary: {
+            evidence_storage?: components["schemas"]["AppliedOperatorConfigRef"];
+            stream_delivery?: components["schemas"]["AppliedOperatorConfigRef"];
+            runtime_selection?: components["schemas"]["AppliedRuntimeSelectionConfigRef"];
+            privacy_policy?: components["schemas"]["AppliedOperatorConfigRef"];
+            llm_provider?: components["schemas"]["AppliedOperatorConfigRef"];
+            operations_mode?: components["schemas"]["AppliedOperatorConfigRef"];
+        };
+        /** AppliedRuntimeSelectionConfigRef */
+        AppliedRuntimeSelectionConfigRef: {
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /**
+             * Support
+             * @default active
+             * @enum {string}
+             */
+            support: "active" | "advisory" | "requires_service" | "unsupported";
+            /** Operator Message */
+            operator_message?: string | null;
+            /** Selected Backend */
+            selected_backend?: string | null;
+            /** Selected Artifact Id */
+            selected_artifact_id?: string | null;
+            /** Fallback Reason */
+            fallback_reason?: string | null;
+        };
         /** BrowserDeliveryProfile */
         BrowserDeliveryProfile: {
             /**
@@ -1417,6 +1501,8 @@ export interface components {
             public_base_url?: string | null;
             /** Edge Override Url */
             edge_override_url?: string | null;
+            /** Operator Message */
+            operator_message?: string | null;
             /** Profiles */
             profiles?: {
                 [key: string]: unknown;
@@ -2203,6 +2289,7 @@ export interface components {
             dev_run_command?: string | null;
             /** Detail */
             detail?: string | null;
+            configuration?: components["schemas"]["AppliedOperatorConfigurationSummary"];
             runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
             rule_runtime?: components["schemas"]["FleetRuleRuntimeSummary"];
             assignment?: components["schemas"]["WorkerAssignmentResponse"] | null;
@@ -3267,6 +3354,11 @@ export interface components {
          * @enum {string}
          */
         OperationsLifecycleStatus: "requested" | "acknowledged" | "completed" | "failed";
+        /** OperatorConfigBindingListResponse */
+        OperatorConfigBindingListResponse: {
+            /** Bindings */
+            bindings?: components["schemas"]["OperatorConfigBindingResponse"][];
+        };
         /** OperatorConfigBindingRequest */
         OperatorConfigBindingRequest: {
             kind: components["schemas"]["OperatorConfigProfileKind"];
@@ -3343,6 +3435,38 @@ export interface components {
             /** Secrets */
             secrets?: {
                 [key: string]: string;
+            };
+        };
+        /** OperatorConfigProfileDeleteRequest */
+        OperatorConfigProfileDeleteRequest: {
+            /** Replacement Default Profile Id */
+            replacement_default_profile_id?: string | null;
+        };
+        /** OperatorConfigProfileImpactResponse */
+        OperatorConfigProfileImpactResponse: {
+            /**
+             * Profile Id
+             * Format: uuid
+             */
+            profile_id: string;
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /** Is Default */
+            is_default: boolean;
+            /** Direct Bindings */
+            direct_bindings?: components["schemas"]["OperatorConfigBindingResponse"][];
+            /**
+             * Affected Targets Count
+             * @default 0
+             */
+            affected_targets_count: number;
+            /**
+             * Requires Replacement Default
+             * @default false
+             */
+            requires_replacement_default: boolean;
+            /** Secret State */
+            secret_state?: {
+                [key: string]: "missing" | "present";
             };
         };
         /**
@@ -3993,6 +4117,7 @@ export interface components {
             id: string;
             /** Passport Hash */
             passport_hash: string;
+            configuration?: components["schemas"]["AppliedOperatorConfigurationSummary"];
             /** Selected Backend */
             selected_backend?: string | null;
             /** Model Hash */
@@ -4554,6 +4679,7 @@ export interface components {
             runtime_passport_snapshot_id?: string | null;
             /** Runtime Passport Hash */
             runtime_passport_hash?: string | null;
+            configuration?: components["schemas"]["AppliedOperatorConfigurationSummary"];
             recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
             evidence_storage?: components["schemas"]["WorkerEvidenceStorageSettings"] | null;
             camera: components["schemas"]["WorkerCameraSettings"];
@@ -4988,6 +5114,8 @@ export interface components {
             public_base_url?: string | null;
             /** Edge Override Url */
             edge_override_url?: string | null;
+            /** Operator Message */
+            operator_message?: string | null;
         };
         /** WorkerStreamSettings */
         WorkerStreamSettings: {
@@ -5714,7 +5842,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OperatorConfigProfileDeleteRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {
@@ -5771,6 +5903,39 @@ export interface operations {
             };
         };
     };
+    get_configuration_profile_impact_api_v1_configuration_profiles__profile_id__impact_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigProfileImpactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     test_configuration_profile_api_v1_configuration_profiles__profile_id__test_post: {
         parameters: {
             query?: never;
@@ -5791,6 +5956,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperatorConfigTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_bindings_api_v1_configuration_bindings_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["OperatorConfigProfileKind"] | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigBindingListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5827,6 +6025,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OperatorConfigBindingResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_binding_api_v1_configuration_bindings__binding_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

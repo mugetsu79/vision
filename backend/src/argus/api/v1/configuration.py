@@ -6,9 +6,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from argus.api.contracts import (
+    OperatorConfigBindingListResponse,
     OperatorConfigBindingRequest,
     OperatorConfigBindingResponse,
     OperatorConfigProfileCreate,
+    OperatorConfigProfileDeleteRequest,
+    OperatorConfigProfileImpactResponse,
     OperatorConfigProfileResponse,
     OperatorConfigProfileUpdate,
     OperatorConfigTestResponse,
@@ -74,14 +77,34 @@ async def update_configuration_profile(
     return await services.configuration.update_profile(tenant_context, profile_id, payload)
 
 
+@router.get(
+    "/profiles/{profile_id}/impact",
+    response_model=OperatorConfigProfileImpactResponse,
+)
+async def get_configuration_profile_impact(
+    profile_id: UUID,
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> OperatorConfigProfileImpactResponse:
+    return await services.configuration.profile_impact(tenant_context, profile_id)
+
+
 @router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_configuration_profile(
     profile_id: UUID,
     current_user: AdminUser,
     tenant_context: TenantDependency,
     services: ServicesDependency,
+    payload: OperatorConfigProfileDeleteRequest | None = None,
 ) -> Response:
-    await services.configuration.delete_profile(tenant_context, profile_id)
+    await services.configuration.delete_profile(
+        tenant_context,
+        profile_id,
+        replacement_default_profile_id=(
+            payload.replacement_default_profile_id if payload is not None else None
+        ),
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -103,6 +126,29 @@ async def upsert_configuration_binding(
     services: ServicesDependency,
 ) -> OperatorConfigBindingResponse:
     return await services.configuration.upsert_binding(tenant_context, payload)
+
+
+@router.get("/bindings", response_model=OperatorConfigBindingListResponse)
+async def list_configuration_bindings(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+    kind: ConfigKindQuery = None,
+) -> OperatorConfigBindingListResponse:
+    return OperatorConfigBindingListResponse(
+        bindings=await services.configuration.list_bindings(tenant_context, kind=kind),
+    )
+
+
+@router.delete("/bindings/{binding_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_configuration_binding(
+    binding_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> Response:
+    await services.configuration.delete_binding(tenant_context, binding_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/resolved", response_model=ResolvedOperatorConfigResponse)

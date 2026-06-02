@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
@@ -13,6 +14,7 @@ from argus.llm.parser import ClassFilterParser
 from argus.models.enums import OperatorConfigProfileKind, RoleEnum
 from argus.services.llm_provider_runtime import (
     LLMProviderRuntimeService,
+    OpenAICompatibleLLMProviderClient,
     ResolvedLLMProviderSettings,
     resolved_llm_provider_from_runtime_config,
 )
@@ -71,6 +73,28 @@ def test_resolved_llm_provider_fails_closed_when_required_secret_is_missing() ->
     assert "api_key" in str(exc_info.value.detail)
 
 
+def test_missing_required_api_key_blocks_provider_assistance() -> None:
+    runtime_config = RuntimeOperatorConfig(
+        kind=OperatorConfigProfileKind.LLM_PROVIDER,
+        profile_id=UUID("11111111-1111-1111-1111-111111111111"),
+        profile_name="OpenAI",
+        profile_slug="openai",
+        profile_hash="a" * 64,
+        config={
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "api_key_required": True,
+        },
+        secrets={},
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        resolved_llm_provider_from_runtime_config(runtime_config)
+
+    assert exc_info.value.status_code == 422
+    assert "api_key" in str(exc_info.value.detail)
+
+
 @pytest.mark.asyncio
 async def test_runtime_service_resolves_selected_profile_for_camera() -> None:
     tenant_context = _tenant_context()
@@ -101,6 +125,54 @@ async def test_runtime_service_resolves_selected_profile_for_camera() -> None:
     ]
     assert resolved.profile_id == runtime_config.profile_id
     assert resolved.model == "gpt-4.1-mini"
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_provider_posts_profile_model_and_secret() -> None:
+    requests: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"rules":[{"name":"High visibility worker near gate"}]}'
+                        }
+                    }
+                ]
+            },
+        )
+
+    resolved = ResolvedLLMProviderSettings(
+        profile_id=uuid4(),
+        profile_name="Camera OpenAI",
+        profile_hash="d" * 64,
+        provider="openai",
+        model="gpt-4.1-mini",
+        base_url="https://api.openai.test/v1",
+        api_key="sk-runtime",
+        api_key_required=True,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as http_client:
+        client = OpenAICompatibleLLMProviderClient(http_client=http_client)
+
+        payload = await client.create_policy_draft(
+            resolved=resolved,
+            prompt="alert on workers near gate",
+            camera_state={"runtime_vocabulary": ["person"]},
+        )
+
+    assert payload == {"rules": [{"name": "High visibility worker near gate"}]}
+    assert requests[0].url == "https://api.openai.test/v1/chat/completions"
+    assert requests[0].headers["Authorization"] == "Bearer sk-runtime"
+    assert requests[0].headers["Content-Type"] == "application/json"
+    assert requests[0].read()
+    assert requests[0].content
+    assert b'"model":"gpt-4.1-mini"' in requests[0].content
+    assert b"alert on workers near gate" in requests[0].content
 
 
 @pytest.mark.asyncio

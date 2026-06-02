@@ -158,11 +158,30 @@ def test_macos_installer_exposes_browser_auth_for_non_loopback_public_url() -> N
     assert "oidc_disable_pkce_for_public_url" in script
     assert 'KEYCLOAK_BIND="0.0.0.0"' in script
     assert "printf 'true\\n'" in script
-    assert 'OIDC_DISABLE_PKCE="$(oidc_disable_pkce_for_public_url "$PUBLIC_URL" "$PUBLIC_HOSTNAME")"' in script
+    assert (
+        'OIDC_DISABLE_PKCE="$(oidc_disable_pkce_for_public_url '
+        '"$PUBLIC_URL" "$PUBLIC_HOSTNAME")"'
+    ) in script
     assert "PUBLIC_KEYCLOAK_URL=\"${PUBLIC_URL%:*}:8080\"" in script
     assert "VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND" in script
     assert "VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL" in script
     assert "VEZOR_OIDC_DISABLE_PKCE=$OIDC_DISABLE_PKCE" in script
+
+
+def test_macos_installer_renders_mediamtx_for_public_network_host() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "render_mediamtx_config.py" in script
+    assert "--frontend-origin \"$PUBLIC_URL\"" in script
+    assert "--frontend-origin \"http://localhost:3000\"" in script
+    assert "--frontend-origin \"http://127.0.0.1:3000\"" in script
+    assert "--webrtc-host \"$PUBLIC_HOSTNAME\"" in script
+    assert "--webrtc-host \"localhost\"" in script
+    assert "--webrtc-host \"127.0.0.1\"" in script
+    assert (
+        'run install -m 0644 /opt/vezor/current/infra/mediamtx/mediamtx.yml '
+        '"$CONFIG_DIR/mediamtx/mediamtx.yml"'
+    ) not in script
 
 
 def test_macos_dev_installer_builds_local_master_images_before_launchd_start() -> None:

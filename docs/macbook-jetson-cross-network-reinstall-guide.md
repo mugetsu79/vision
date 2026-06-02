@@ -82,6 +82,12 @@ Required reachability:
 | MacBook -> Jetson | `rtsp://$JETSON_STREAM_HOST:8554` |
 | Browser -> master MediaMTX | UDP `8189` must work for WebRTC browser delivery |
 
+Loopback binds are still expected for private services. Postgres, Redis, MinIO,
+normal NATS, NATS monitoring, MediaMTX API, and worker metrics should remain on
+`127.0.0.1` unless a future deployment mode explicitly exposes them. The
+installer should only make browser-facing origins and stream hosts match the
+reachable network address.
+
 If the Jetson RTSP service is exposed on a non-standard public port, use the
 full edge installer option:
 
@@ -169,6 +175,45 @@ VITE_OIDC_DISABLE_PKCE: "true"
 For `https://...`, `localhost`, or `127.0.0.1` master URLs, this flag should be
 `"false"` and S256 PKCE remains enabled.
 
+Confirm the installed MediaMTX config also trusts and advertises the reachable
+master host:
+
+```bash
+sudo grep -A8 -E 'apiAllowOrigins|webrtcAllowOrigins|hlsAllowOrigins|webrtcAdditionalHosts' \
+  /etc/vezor/mediamtx/mediamtx.yml
+```
+
+Expected entries include:
+
+- `http://$MASTER_PUBLIC_HOST:3000`
+- `$MASTER_PUBLIC_HOST`
+- `http://localhost:3000`
+- `http://127.0.0.1:3000`
+- `localhost`
+- `127.0.0.1`
+
+### MacBook Configuration Smoke
+
+Before retesting the Jetson, verify the MacBook master can serve the current
+configuration workspace:
+
+1. Sign in at `$MASTER_PUBLIC_URL` and open Settings -> Configuration.
+2. Confirm all six profile kinds load: Evidence storage, Transport profile,
+   Runtime selection, Privacy policy, LLM provider, and Operations mode.
+3. Test one profile, bind it to a camera or site, then unbind it. The UI should
+   show binding inventory and should warn before deleting profiles with active
+   bindings or default responsibility.
+4. Open Operations and confirm the selected worker shows supervisor mode,
+   restart policy, allowed lifecycle actions, and any push dispatch state from
+   the latest request.
+5. Open Live with the Jetson still stopped. Scenes may show awaiting telemetry,
+   but the page should not claim fresh telemetry unless a worker heartbeat is
+   current.
+
+If a forced HLS/WebRTC/MJPEG transport profile is bound, Live should start on
+that transport directly. If an old `transcode` transport profile exists,
+normalize it in Settings -> Configuration before treating the smoke as clean.
+
 Validate from the Jetson:
 
 ```bash
@@ -204,7 +249,7 @@ JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0
 
 Use this when the Jetson was already paired successfully before. This preserves
 the existing credential and updates the master API URL, NATS leaf URL, JWKS URL,
-and public Jetson stream host.
+master frontend origin allow list, and public Jetson stream host.
 
 ```bash
 cd /opt/vezor/current
@@ -232,6 +277,13 @@ sudo ./installer/linux/install-edge.sh \
   --model-dir /var/lib/vezor/models \
   --public-mediamtx-rtsp-url "$PUBLIC_MEDIAMTX_RTSP_URL" \
   --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
+```
+
+If the master frontend uses a non-standard port or URL that cannot be derived
+from `$MASTER_API_URL`, also pass:
+
+```bash
+--frontend-url "$MASTER_PUBLIC_URL"
 ```
 
 Only use `--unpaired` after one successful paired install has written
@@ -263,6 +315,21 @@ sudo ./installer/linux/install-edge.sh \
   --public-stream-host "$JETSON_STREAM_HOST" \
   --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
 ```
+
+After either Jetson install path, confirm edge MediaMTX points back to the
+reachable master API and advertises the Jetson stream host:
+
+```bash
+sudo grep -A8 -E 'authJWTJWKS|webrtcAllowOrigins|hlsAllowOrigins|webrtcAdditionalHosts' \
+  /etc/vezor/mediamtx/mediamtx.yml
+```
+
+Expected entries include:
+
+- `http://$MASTER_PUBLIC_HOST:8000/.well-known/argus/mediamtx/jwks.json`
+- `http://$MASTER_PUBLIC_HOST:3000`
+- `$JETSON_STREAM_HOST`
+- loopback fallback entries
 
 ## 5. Validate
 

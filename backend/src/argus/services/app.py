@@ -27,6 +27,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
+    AppliedOperatorConfigRef,
+    AppliedOperatorConfigurationSummary,
+    AppliedRuntimeSelectionConfigRef,
     BrowserDeliveryProfile,
     BrowserDeliveryProfileId,
     BrowserDeliverySettings,
@@ -221,6 +224,7 @@ from argus.services.runtime_soak import RuntimeSoakService
 from argus.services.scene_contracts import SceneContractService, build_scene_contract
 from argus.services.supervisor_operations import (
     REPORT_STALE_AFTER,
+    NatsPushLifecycleDispatcher,
     SupervisorOperationsService,
     edge_node_hardware_report_response,
     operations_lifecycle_request_response,
@@ -244,6 +248,10 @@ from argus.vision.model_metadata import resolve_model_classes
 from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+TRANSCODE_ROUTE_NORMALIZED_MESSAGE = (
+    "Transcode route mode was normalized. Use camera live rendition profiles "
+    "for output size and FPS."
+)
 
 if TYPE_CHECKING:
     from argus.services.query import QueryService
@@ -292,6 +300,14 @@ class IncidentArtifactContent:
     content_type: str
     file_path: Path | None = None
     redirect_url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeSelectionDecision:
+    selected_backend: str | None
+    selected_artifact_id: UUID | None
+    fallback_reason: str | None
+    blocked_reason: str | None
 
 
 @dataclass(slots=True)
@@ -809,6 +825,7 @@ class CameraService:
             camera_id=camera.id,
             scene_contract_hash=contract_snapshot.contract_hash,
             model_metadata=_model_contract_payload(primary_model),
+            configuration=base_config.configuration.model_dump(mode="json"),
             runtime_selection=cast(dict[str, object], runtime_selection_payload),
             runtime_artifact=(
                 _runtime_artifact_passport_payload(runtime_artifact)
@@ -1914,6 +1931,11 @@ class OperationsService:
                     else controls.lifecycle_owner
                 )
                 detail = controls.detail
+            runtime_passport_summary = (
+                _runtime_passport_summary(runtime_passport)
+                if (runtime_passport := runtime_passports_by_camera.get(camera.id)) is not None
+                else None
+            )
             camera_workers.append(
                 FleetCameraWorkerSummary(
                     camera_id=camera.id,
@@ -1933,12 +1955,12 @@ class OperationsService:
                         _central_dev_run_command(camera.id) if owner == "manual_dev" else None
                     ),
                     detail=detail,
-                    runtime_passport=(
-                        _runtime_passport_summary(runtime_passport)
-                        if (runtime_passport := runtime_passports_by_camera.get(camera.id))
-                        is not None
-                        else None
+                    configuration=(
+                        runtime_passport_summary.configuration
+                        if runtime_passport_summary is not None
+                        else AppliedOperatorConfigurationSummary()
                     ),
+                    runtime_passport=runtime_passport_summary,
                     rule_runtime=_fleet_rule_runtime_summary(
                         incident_rules_by_camera.get(camera.id, []),
                         latest_rule_events_by_camera.get(camera.id),
@@ -2098,10 +2120,27 @@ class OperationsService:
         tenant_context: TenantContext,
         payload: OperationsLifecycleRequestCreate,
     ) -> OperationsLifecycleRequestResponse:
+        operations_mode = None
+        if self.runtime_configuration is not None:
+            async with self.session_factory() as session:
+                camera = await _load_camera(
+                    session,
+                    tenant_context.tenant_id,
+                    payload.camera_id,
+                )
+            runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
+                tenant_context,
+                OperatorConfigProfileKind.OPERATIONS_MODE,
+                camera_id=camera.id,
+                site_id=camera.site_id,
+                edge_node_id=payload.edge_node_id or camera.edge_node_id,
+            )
+            operations_mode = runtime_config.config
         row = await self._supervisor_operations().create_lifecycle_request(
             tenant_id=tenant_context.tenant_id,
             payload=payload,
             actor_subject=tenant_context.user.subject,
+            operations_mode=operations_mode,
         )
         return operations_lifecycle_request_response(row)
 
@@ -2221,7 +2260,12 @@ class OperationsService:
                     tenant_id=tenant_context.tenant_id,
                 )
             )
-        request_payload = payload.model_copy(update={"camera_id": camera_id})
+        request_payload = payload.model_copy(
+            update={
+                "camera_id": camera_id,
+                "selected_backend": payload.selected_backend or payload.preferred_backend,
+            }
+        )
         decision = evaluate_worker_model_admission(
             request_payload,
             hardware_report=hardware_report,
@@ -3890,6 +3934,9 @@ def _runtime_passport_summary(
     return RuntimePassportSummary(
         id=snapshot.id,
         passport_hash=snapshot.passport_hash,
+        configuration=AppliedOperatorConfigurationSummary.model_validate(
+            _dict_payload(passport.get("configuration"))
+        ),
         selected_backend=_string_or_none(selected_runtime.get("backend")),
         model_hash=_string_or_none(model.get("sha256")),
         runtime_artifact_id=_uuid_or_none(selected_runtime.get("runtime_artifact_id")),
@@ -4053,6 +4100,7 @@ class StreamService:
             tenant_context,
             camera_id,
             requested_profile_id=getattr(offer, "profile_id", None),
+            requested_route="webrtc",
         )
         sdp_answer = await self.negotiator.negotiate_offer(
             access=access,
@@ -4073,6 +4121,7 @@ class StreamService:
             tenant_context,
             camera_id,
             requested_profile_id=requested_profile_id,
+            requested_route="hls",
         )
         return self.token_issuer.build_hls_url(
             subject=tenant_context.user.subject,
@@ -4092,6 +4141,7 @@ class StreamService:
             tenant_context,
             camera_id,
             requested_profile_id=requested_profile_id,
+            requested_route="mjpeg",
         )
         try:
             await self.video_feed_limiter.acquire(user.subject)
@@ -4127,6 +4177,7 @@ class StreamService:
         camera_id: UUID,
         *,
         requested_profile_id: str | None = None,
+        requested_route: Literal["webrtc", "hls", "mjpeg"] | None = None,
     ) -> StreamAccess:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
@@ -4157,6 +4208,7 @@ class StreamService:
             browser_delivery,
             requested_profile_id,
         )
+        _enforce_stream_delivery_route(browser_delivery, requested_route)
         stream_settings = _resolve_worker_stream_settings(
             browser_delivery=browser_delivery,
             fps_cap=camera.fps_cap,
@@ -4202,13 +4254,20 @@ class StreamService:
         if profile is None:
             return None
         config = StreamDeliveryProfileConfig.model_validate(profile.config)
+        delivery_mode = "native" if config.delivery_mode == "transcode" else config.delivery_mode
+        operator_message = (
+            TRANSCODE_ROUTE_NORMALIZED_MESSAGE
+            if config.delivery_mode == "transcode"
+            else None
+        )
         return WorkerStreamDeliverySettings(
             profile_id=profile.id,
             profile_name=profile.name,
             profile_hash=profile.config_hash,
-            delivery_mode=config.delivery_mode,
+            delivery_mode=delivery_mode,
             public_base_url=config.public_base_url,
             edge_override_url=config.edge_override_url,
+            operator_message=operator_message,
         )
 
     async def _ensure_edge_stream_relay(
@@ -4376,7 +4435,10 @@ def build_app_services(
         audit_logger,
     )
     evidence_ledger = EvidenceLedgerService(db.session_factory)
-    supervisor_operations = SupervisorOperationsService(db.session_factory)
+    supervisor_operations = SupervisorOperationsService(
+        db.session_factory,
+        push_lifecycle_dispatcher=NatsPushLifecycleDispatcher(events),
+    )
     deployment_nodes = DeploymentNodeService(
         db.session_factory,
         identity_provisioner=keycloak_bootstrap_provisioner_from_settings(settings),
@@ -5228,6 +5290,7 @@ def _camera_to_worker_config(
         camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
     )
     if stream_delivery is not None:
+        stream_delivery = _normalize_stream_delivery_settings(stream_delivery)
         requested_browser_delivery = requested_browser_delivery.model_copy(
             update={
                 "delivery_profile_id": stream_delivery.profile_id,
@@ -5236,6 +5299,7 @@ def _camera_to_worker_config(
                 "delivery_mode": stream_delivery.delivery_mode,
                 "public_base_url": stream_delivery.public_base_url,
                 "edge_override_url": stream_delivery.edge_override_url,
+                "operator_message": stream_delivery.operator_message,
             }
         )
     source_capability = (
@@ -5265,6 +5329,16 @@ def _camera_to_worker_config(
         DetectionRegion.model_validate(_worker_detection_region_payload(region))
         for region in (camera.detection_regions or [])
     ]
+    runtime_selection_decision = _runtime_selection_decision_for_model(
+        model=primary_model,
+        runtime_artifacts=runtime_artifacts or [],
+        runtime_selection=runtime_selection,
+    )
+    if runtime_selection_decision.blocked_reason is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=runtime_selection_decision.blocked_reason,
+        )
     return WorkerConfigResponse(
         camera_id=camera.id,
         mode=camera.processing_mode,
@@ -5272,6 +5346,13 @@ def _camera_to_worker_config(
         privacy_manifest_hash=privacy_manifest_hash,
         runtime_passport_snapshot_id=runtime_passport_snapshot_id,
         runtime_passport_hash=runtime_passport_hash,
+        configuration=_operator_configuration_summary(
+            evidence_storage=evidence_storage,
+            stream_delivery=stream_delivery,
+            runtime_selection=runtime_selection,
+            runtime_selection_decision=runtime_selection_decision,
+            privacy_policy=privacy_policy,
+        ),
         recording_policy=resolved_recording_policy,
         evidence_storage=evidence_storage,
         camera=WorkerCameraSettings(
@@ -5322,6 +5403,52 @@ def _camera_to_worker_config(
         vision_profile=vision_profile,
         detection_regions=detection_regions,
         homography=_homography_to_worker_payload(camera.homography),
+    )
+
+
+def _operator_configuration_summary(
+    *,
+    evidence_storage: WorkerEvidenceStorageSettings | None,
+    stream_delivery: WorkerStreamDeliverySettings | None,
+    runtime_selection: WorkerRuntimeSelectionSettings | None,
+    runtime_selection_decision: RuntimeSelectionDecision | None = None,
+    privacy_policy: WorkerPrivacyPolicySettings | None,
+) -> AppliedOperatorConfigurationSummary:
+    return AppliedOperatorConfigurationSummary(
+        evidence_storage=_operator_config_ref(evidence_storage),
+        stream_delivery=_operator_config_ref(stream_delivery),
+        runtime_selection=AppliedRuntimeSelectionConfigRef(
+            profile_id=runtime_selection.profile_id if runtime_selection is not None else None,
+            profile_name=runtime_selection.profile_name if runtime_selection is not None else None,
+            profile_hash=runtime_selection.profile_hash if runtime_selection is not None else None,
+            selected_backend=(
+                runtime_selection_decision.selected_backend
+                if runtime_selection_decision is not None
+                else (
+                    runtime_selection.preferred_backend if runtime_selection is not None else None
+                )
+            ),
+            selected_artifact_id=(
+                runtime_selection_decision.selected_artifact_id
+                if runtime_selection_decision is not None
+                else None
+            ),
+            fallback_reason=(
+                runtime_selection_decision.fallback_reason
+                if runtime_selection_decision is not None
+                else None
+            ),
+        ),
+        privacy_policy=_operator_config_ref(privacy_policy),
+    )
+
+
+def _operator_config_ref(profile: object | None) -> AppliedOperatorConfigRef:
+    return AppliedOperatorConfigRef(
+        profile_id=getattr(profile, "profile_id", None),
+        profile_name=getattr(profile, "profile_name", None),
+        profile_hash=getattr(profile, "profile_hash", None),
+        operator_message=getattr(profile, "operator_message", None),
     )
 
 
@@ -5510,9 +5637,17 @@ def _runtime_selection_contract_payload(
     runtime_selection: WorkerRuntimeSelectionSettings | None = None,
 ) -> dict[str, object]:
     artifacts = runtime_artifacts or []
-    artifact_preference = (
-        runtime_selection.artifact_preference if runtime_selection is not None else None
+    decision = _runtime_selection_decision_for_model(
+        model=model,
+        runtime_artifacts=artifacts,
+        runtime_selection=runtime_selection,
     )
+    if decision.blocked_reason is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=decision.blocked_reason,
+        )
+    selected_artifact = _runtime_artifact_by_id(artifacts, decision.selected_artifact_id)
     profile_payload = (
         {
             "profile_id": str(runtime_selection.profile_id)
@@ -5527,41 +5662,228 @@ def _runtime_selection_contract_payload(
         if runtime_selection is not None
         else {}
     )
-    if artifacts:
-        candidate_artifact_ids = [str(artifact.id) for artifact in artifacts]
-        if artifact_preference == "dynamic_first":
-            capability_config = _model_capability_config(model)
-            return {
-                "backend": runtime_selection.preferred_backend
-                or capability_config.get("runtime_backend")
-                or "onnxruntime",
-                "candidate_artifact_ids": candidate_artifact_ids,
-                "selected_artifact_id": None,
-                "target_profile": None,
-                "precision": None,
-                "fallback_reason": "dynamic_preferred",
-                **profile_payload,
-            }
-        first = artifacts[0]
-        return {
-            "backend": first.runtime_backend,
-            "candidate_artifact_ids": candidate_artifact_ids,
-            "selected_artifact_id": str(first.id),
-            "target_profile": first.target_profile,
-            "precision": first.precision.value,
-            "fallback_reason": None,
-            **profile_payload,
-        }
-    capability_config = _model_capability_config(model)
+    candidate_artifact_ids = [str(artifact.id) for artifact in artifacts]
     return {
-        "backend": capability_config.get("runtime_backend") or "onnxruntime",
-        "candidate_artifact_ids": [],
-        "selected_artifact_id": None,
-        "target_profile": None,
-        "precision": None,
-        "fallback_reason": "no_validated_runtime_artifact",
+        "backend": decision.selected_backend,
+        "candidate_artifact_ids": candidate_artifact_ids,
+        "selected_artifact_id": (
+            str(decision.selected_artifact_id)
+            if decision.selected_artifact_id is not None
+            else None
+        ),
+        "target_profile": (
+            selected_artifact.target_profile if selected_artifact is not None else None
+        ),
+        "precision": (
+            selected_artifact.precision.value if selected_artifact is not None else None
+        ),
+        "fallback_reason": decision.fallback_reason,
         **profile_payload,
     }
+
+
+def _runtime_selection_decision_for_model(
+    *,
+    model: Model,
+    runtime_artifacts: list[ModelRuntimeArtifact],
+    runtime_selection: WorkerRuntimeSelectionSettings | None,
+) -> RuntimeSelectionDecision:
+    model_backend = _string_or_none(_model_capability_config(model).get("runtime_backend"))
+    preferred_backend = (
+        runtime_selection.preferred_backend if runtime_selection is not None else None
+    )
+    artifact_preference = (
+        runtime_selection.artifact_preference
+        if runtime_selection is not None
+        else "tensorrt_first"
+    )
+    fallback_allowed = (
+        runtime_selection.fallback_allowed if runtime_selection is not None else True
+    )
+    return _runtime_selection_decision(
+        preferred_backend=preferred_backend,
+        artifact_preference=artifact_preference,
+        fallback_allowed=fallback_allowed,
+        available_artifacts=runtime_artifacts,
+        available_backends=_runtime_selection_available_backends(
+            model_backend=model_backend,
+            runtime_artifacts=runtime_artifacts,
+        ),
+        model_backend=model_backend,
+    )
+
+
+def _runtime_selection_decision(
+    *,
+    preferred_backend: str | None,
+    artifact_preference: str,
+    fallback_allowed: bool,
+    available_artifacts: Sequence[object],
+    available_backends: Sequence[str] | None = None,
+    model_backend: str | None = None,
+) -> RuntimeSelectionDecision:
+    artifacts = list(available_artifacts)
+    backend_candidates = _ordered_unique(
+        [
+            *(available_backends or []),
+            model_backend,
+            "onnxruntime",
+        ]
+    )
+    preferred_available = (
+        preferred_backend is not None
+        and preferred_backend in set(backend_candidates)
+    )
+
+    if artifact_preference == "dynamic_first":
+        selected_backend = preferred_backend or model_backend or _first_or_none(backend_candidates)
+        if preferred_backend is not None and not preferred_available and not fallback_allowed:
+            return _blocked_runtime_selection_decision()
+        return RuntimeSelectionDecision(
+            selected_backend=selected_backend,
+            selected_artifact_id=None,
+            fallback_reason="dynamic_preferred",
+            blocked_reason=None,
+        )
+
+    selected_artifact = _select_runtime_artifact(
+        artifacts,
+        preferred_backend=preferred_backend,
+        artifact_preference=artifact_preference,
+    )
+    if selected_artifact is not None:
+        selected_backend = _artifact_runtime_backend(selected_artifact)
+        if (
+            preferred_backend is not None
+            and selected_backend != preferred_backend
+            and not fallback_allowed
+        ):
+            return _blocked_runtime_selection_decision()
+        return RuntimeSelectionDecision(
+            selected_backend=selected_backend,
+            selected_artifact_id=_artifact_uuid(selected_artifact),
+            fallback_reason=(
+                f"{preferred_backend} artifact unavailable"
+                if preferred_backend is not None and selected_backend != preferred_backend
+                else None
+            ),
+            blocked_reason=None,
+        )
+
+    if preferred_backend is not None and preferred_available:
+        return RuntimeSelectionDecision(
+            selected_backend=preferred_backend,
+            selected_artifact_id=None,
+            fallback_reason=None,
+            blocked_reason=None,
+        )
+
+    if not fallback_allowed:
+        return _blocked_runtime_selection_decision()
+
+    return RuntimeSelectionDecision(
+        selected_backend=_first_or_none(backend_candidates) or preferred_backend,
+        selected_artifact_id=None,
+        fallback_reason="no_validated_runtime_artifact",
+        blocked_reason=None,
+    )
+
+
+def _blocked_runtime_selection_decision() -> RuntimeSelectionDecision:
+    return RuntimeSelectionDecision(
+        selected_backend=None,
+        selected_artifact_id=None,
+        fallback_reason=None,
+        blocked_reason=(
+            "Runtime selection has no compatible artifact and fallback is disabled."
+        ),
+    )
+
+
+def _runtime_selection_available_backends(
+    *,
+    model_backend: str | None,
+    runtime_artifacts: Sequence[object],
+) -> list[str]:
+    return _ordered_unique(
+        [
+            *(_artifact_runtime_backend(artifact) for artifact in runtime_artifacts),
+            model_backend,
+            "onnxruntime",
+        ]
+    )
+
+
+def _select_runtime_artifact(
+    artifacts: Sequence[object],
+    *,
+    preferred_backend: str | None,
+    artifact_preference: str,
+) -> object | None:
+    for backend in _artifact_backend_preference(
+        preferred_backend=preferred_backend,
+        artifact_preference=artifact_preference,
+    ):
+        artifact = next(
+            (
+                candidate
+                for candidate in artifacts
+                if _artifact_runtime_backend(candidate) == backend
+            ),
+            None,
+        )
+        if artifact is not None:
+            return artifact
+    return _first_or_none(list(artifacts))
+
+
+def _artifact_backend_preference(
+    *,
+    preferred_backend: str | None,
+    artifact_preference: str,
+) -> list[str]:
+    preferred = [preferred_backend] if preferred_backend is not None else []
+    if artifact_preference == "onnx_first":
+        return _ordered_unique([*preferred, "onnxruntime", "tensorrt_engine"])
+    return _ordered_unique([*preferred, "tensorrt_engine", "onnxruntime"])
+
+
+def _runtime_artifact_by_id(
+    artifacts: Sequence[ModelRuntimeArtifact],
+    artifact_id: UUID | None,
+) -> ModelRuntimeArtifact | None:
+    if artifact_id is None:
+        return None
+    return next((artifact for artifact in artifacts if artifact.id == artifact_id), None)
+
+
+def _artifact_runtime_backend(artifact: object) -> str | None:
+    return _string_or_none(getattr(artifact, "runtime_backend", None))
+
+
+def _artifact_uuid(artifact: object) -> UUID | None:
+    value = getattr(artifact, "id", None)
+    if isinstance(value, UUID):
+        return value
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
+
+
+def _ordered_unique(values: Sequence[str | None]) -> list[str]:
+    ordered: list[str] = []
+    for value in values:
+        if value is None or value in ordered:
+            continue
+        ordered.append(value)
+    return ordered
+
+
+def _first_or_none[T](values: Sequence[T]) -> T | None:
+    return values[0] if values else None
 
 
 def _selected_runtime_artifact_for_passport(
@@ -5574,7 +5896,11 @@ def _selected_runtime_artifact_for_passport(
         return None
     selected_artifact_id_text = str(selected_artifact_id)
     return next(
-        (artifact for artifact in runtime_artifacts if str(artifact.id) == selected_artifact_id_text),
+        (
+            artifact
+            for artifact in runtime_artifacts
+            if str(artifact.id) == selected_artifact_id_text
+        ),
         None,
     )
 
@@ -5891,6 +6217,7 @@ def _browser_delivery_with_stream_profile(
 ) -> BrowserDeliverySettings:
     if stream_delivery is None:
         return browser_delivery
+    stream_delivery = _normalize_stream_delivery_settings(stream_delivery)
     return browser_delivery.model_copy(
         update={
             "delivery_profile_id": stream_delivery.profile_id,
@@ -5899,7 +6226,41 @@ def _browser_delivery_with_stream_profile(
             "delivery_mode": stream_delivery.delivery_mode,
             "public_base_url": stream_delivery.public_base_url,
             "edge_override_url": stream_delivery.edge_override_url,
+            "operator_message": stream_delivery.operator_message,
         }
+    )
+
+
+def _normalize_stream_delivery_settings(
+    stream_delivery: WorkerStreamDeliverySettings,
+) -> WorkerStreamDeliverySettings:
+    if stream_delivery.delivery_mode != "transcode":
+        return stream_delivery
+    return stream_delivery.model_copy(
+        update={
+            "delivery_mode": "native",
+            "operator_message": (
+                stream_delivery.operator_message or TRANSCODE_ROUTE_NORMALIZED_MESSAGE
+            ),
+        }
+    )
+
+
+def _enforce_stream_delivery_route(
+    browser_delivery: BrowserDeliverySettings,
+    requested_route: Literal["webrtc", "hls", "mjpeg"] | None,
+) -> None:
+    delivery_mode = browser_delivery.delivery_mode
+    if delivery_mode in {None, "native", "transcode"}:
+        return
+    if requested_route is None or requested_route == delivery_mode:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"Transport profile is configured for {delivery_mode}; "
+            f"use the {delivery_mode.upper()} stream route."
+        ),
     )
 
 

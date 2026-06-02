@@ -1,24 +1,30 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
+    FleetCameraWorkerSummary,
     HardwarePerformanceSample,
     OperationsLifecycleRequestCreate,
     SupervisorRuntimeReportCreate,
+    SupervisorRuntimeReportResponse,
     WorkerAssignmentCreate,
     WorkerDesiredState,
     WorkerModelAdmissionRequest,
+    WorkerRuntimeStatus,
 )
 from argus.models.enums import (
     DetectorCapability,
     ModelAdmissionStatus,
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
+    ProcessingMode,
     SupervisorMode,
     WorkerRuntimeState,
 )
@@ -26,6 +32,7 @@ from argus.services.supervisor_operations import (
     SupervisorOperationsService,
     resolve_worker_operations_controls,
 )
+from argus.supervisor.reconciler import SupervisorReconciler
 
 
 @pytest.mark.asyncio
@@ -214,6 +221,129 @@ async def test_lifecycle_stop_drain_and_start_update_active_assignment_desired_s
     assert started[camera_id].desired_state == WorkerDesiredState.SUPERVISED.value
 
 
+@pytest.mark.asyncio
+async def test_polling_mode_creates_request_for_supervisor_pickup_without_push_publish() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    dispatcher = _LifecyclePushDispatchSpy()
+    service = SupervisorOperationsService(
+        _MemorySessionFactory(),
+        push_lifecycle_dispatcher=dispatcher,
+    )
+
+    request = await service.create_lifecycle_request(
+        tenant_id=tenant_id,
+        payload=OperationsLifecycleRequestCreate(
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            action=OperationsLifecycleAction.START,
+        ),
+        actor_subject="operator-1",
+        operations_mode={
+            "lifecycle_owner": "edge_supervisor",
+            "supervisor_mode": "polling",
+            "restart_policy": "on_failure",
+        },
+    )
+
+    assert dispatcher.published_subjects == []
+    assert request.status is OperationsLifecycleStatus.REQUESTED
+    assert request.request_payload["dispatch_mode"] == "polling"
+    assert request.request_payload["dispatch_status"] == "queued_for_polling"
+
+
+@pytest.mark.asyncio
+async def test_push_mode_publishes_lifecycle_request_and_records_ack_state() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    dispatcher = _LifecyclePushDispatchSpy()
+    service = SupervisorOperationsService(
+        _MemorySessionFactory(),
+        push_lifecycle_dispatcher=dispatcher,
+    )
+
+    request = await service.create_lifecycle_request(
+        tenant_id=tenant_id,
+        payload=OperationsLifecycleRequestCreate(
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            action=OperationsLifecycleAction.START,
+        ),
+        actor_subject="operator-1",
+        operations_mode={
+            "lifecycle_owner": "edge_supervisor",
+            "supervisor_mode": "push",
+            "restart_policy": "on_failure",
+        },
+    )
+
+    assert dispatcher.published_subjects == [f"supervisor.{edge_node_id}.lifecycle"]
+    assert request.status is OperationsLifecycleStatus.REQUESTED
+    assert request.request_payload["dispatch_mode"] == "push"
+    assert request.request_payload["dispatch_status"] == "acknowledged"
+    assert request.error is None
+
+
+@pytest.mark.asyncio
+async def test_push_mode_records_ack_timeout_state() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    dispatcher = _LifecyclePushDispatchSpy()
+    dispatcher.queue_ack(timeout=True)
+    service = SupervisorOperationsService(
+        _MemorySessionFactory(),
+        push_lifecycle_dispatcher=dispatcher,
+    )
+
+    request = await service.create_lifecycle_request(
+        tenant_id=tenant_id,
+        payload=OperationsLifecycleRequestCreate(
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            action=OperationsLifecycleAction.RESTART,
+        ),
+        actor_subject="operator-1",
+        operations_mode={
+            "lifecycle_owner": "edge_supervisor",
+            "supervisor_mode": "push",
+            "restart_policy": "always",
+        },
+    )
+
+    assert dispatcher.published_subjects == [f"supervisor.{edge_node_id}.lifecycle"]
+    assert request.status is OperationsLifecycleStatus.REQUESTED
+    assert request.request_payload["dispatch_mode"] == "push"
+    assert request.request_payload["dispatch_status"] == "ack_timeout"
+    assert request.error == "Timed out waiting for supervisor push acknowledgement."
+
+
+@pytest.mark.asyncio
+async def test_disabled_supervisor_mode_rejects_lifecycle_request_with_clear_conflict() -> None:
+    service = SupervisorOperationsService(_MemorySessionFactory())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_lifecycle_request(
+            tenant_id=uuid4(),
+            payload=OperationsLifecycleRequestCreate(
+                camera_id=uuid4(),
+                edge_node_id=uuid4(),
+                action=OperationsLifecycleAction.START,
+            ),
+            actor_subject="operator-1",
+            operations_mode={
+                "lifecycle_owner": "edge_supervisor",
+                "supervisor_mode": "disabled",
+                "restart_policy": "never",
+            },
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "supervisor mode is disabled" in str(exc_info.value.detail).lower()
+
+
 def test_resolved_operations_mode_controls_lifecycle_owner_and_actions() -> None:
     manual = resolve_worker_operations_controls(
         {
@@ -287,6 +417,64 @@ def test_missing_or_stale_runtime_reports_render_honest_states() -> None:
             now=now,
         )
         == "unknown"
+    )
+
+
+def test_restart_policy_controls_desired_worker_reconciliation() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    reconciler = SupervisorReconciler(
+        operations=_NoopSupervisorOperations(),
+        process_adapter=_FakeProcessAdapter(),
+        tenant_id=tenant_id,
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+    )
+
+    assert not reconciler._should_start_desired_worker(
+        _fleet_worker(
+            tenant_id=tenant_id,
+            edge_node_id=edge_node_id,
+            restart_policy="never",
+            runtime_state=WorkerRuntimeState.STOPPED,
+            restart_count=0,
+        )
+    )
+    assert not reconciler._should_start_desired_worker(
+        _fleet_worker(
+            tenant_id=tenant_id,
+            edge_node_id=edge_node_id,
+            restart_policy="on_failure",
+            runtime_state=WorkerRuntimeState.STOPPED,
+            restart_count=0,
+        )
+    )
+    assert reconciler._should_start_desired_worker(
+        _fleet_worker(
+            tenant_id=tenant_id,
+            edge_node_id=edge_node_id,
+            restart_policy="on_failure",
+            runtime_state=WorkerRuntimeState.ERROR,
+            restart_count=1,
+        )
+    )
+    assert not reconciler._should_start_desired_worker(
+        _fleet_worker(
+            tenant_id=tenant_id,
+            edge_node_id=edge_node_id,
+            restart_policy="on_failure",
+            runtime_state=WorkerRuntimeState.ERROR,
+            restart_count=3,
+        )
+    )
+    assert reconciler._should_start_desired_worker(
+        _fleet_worker(
+            tenant_id=tenant_id,
+            edge_node_id=edge_node_id,
+            restart_policy="always",
+            runtime_state=WorkerRuntimeState.STOPPED,
+            restart_count=0,
+        )
     )
 
 
@@ -480,10 +668,81 @@ def _fail_if_called(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
     raise AssertionError("Lifecycle requests must not shell out from the API process.")
 
 
+class _LifecyclePushDispatchSpy:
+    def __init__(self) -> None:
+        self.published_subjects: list[str] = []
+        self._timeout_next = False
+
+    def queue_ack(self, *, timeout: bool) -> None:
+        self._timeout_next = timeout
+
+    async def dispatch(self, request) -> object:  # noqa: ANN001
+        self.published_subjects.append(f"supervisor.{request.edge_node_id}.lifecycle")
+        if self._timeout_next:
+            self._timeout_next = False
+            return SimpleNamespace(
+                dispatch_status="ack_timeout",
+                error="Timed out waiting for supervisor push acknowledgement.",
+            )
+        return SimpleNamespace(dispatch_status="acknowledged", error=None)
+
+
 class _ReportLike:
     def __init__(self, heartbeat_at: datetime) -> None:
         self.heartbeat_at = heartbeat_at
         self.runtime_state = WorkerRuntimeState.RUNNING
+
+
+class _NoopSupervisorOperations:
+    pass
+
+
+class _FakeProcessAdapter:
+    accepting_new_work = True
+
+    def is_running(self, camera_id) -> bool:  # noqa: ANN001
+        return False
+
+
+def _fleet_worker(
+    *,
+    tenant_id,
+    edge_node_id,
+    restart_policy: str,
+    runtime_state: WorkerRuntimeState,
+    restart_count: int,
+) -> FleetCameraWorkerSummary:
+    camera_id = uuid4()
+    now = datetime(2026, 5, 13, 10, 0, tzinfo=UTC)
+    return FleetCameraWorkerSummary(
+        camera_id=camera_id,
+        camera_name="Driveway",
+        site_id=uuid4(),
+        node_id=edge_node_id,
+        node_hostname="edge-supervisor-1",
+        processing_mode=ProcessingMode.EDGE,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.OFFLINE,
+        lifecycle_owner="edge_supervisor",
+        detail="Edge supervisor owns this worker process.",
+        runtime_report=SupervisorRuntimeReportResponse(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=uuid4(),
+            heartbeat_at=now,
+            runtime_state=runtime_state,
+            restart_count=restart_count,
+            last_error="worker exited" if runtime_state is WorkerRuntimeState.ERROR else None,
+            runtime_artifact_id=None,
+            scene_contract_hash=None,
+            created_at=now,
+        ),
+        supervisor_mode=SupervisorMode.POLLING,
+        restart_policy=restart_policy,  # type: ignore[arg-type]
+        allowed_lifecycle_actions=[],
+    )
 
 
 class _Result:

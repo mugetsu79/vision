@@ -937,6 +937,8 @@ describe("LivePage", () => {
               delivery_profile_id: "44444444-4444-4444-4444-444444444444",
               delivery_profile_name: "Edge HLS delivery",
               delivery_mode: "hls",
+              operator_message:
+                "Transcode route mode was normalized. Use camera live rendition profiles for output size and FPS.",
               profiles: [
                 {
                   id: "native",
@@ -968,6 +970,9 @@ describe("LivePage", () => {
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
     expect(screen.getByText(/central processing · Native camera/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/transcode route mode was normalized/i),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("stream-North Gate")).toHaveTextContent("hls");
 
     act(() => {

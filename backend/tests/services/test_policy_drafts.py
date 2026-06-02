@@ -10,6 +10,7 @@ from argus.models.enums import PolicyDraftStatus, RoleEnum
 from argus.services.llm_provider_runtime import ResolvedLLMProviderSettings
 from argus.services.policy_drafts import (
     PolicyDraftCompiler,
+    PolicyDraftService,
     PolicyDraftState,
     apply_policy_draft,
     approve_policy_draft,
@@ -107,6 +108,154 @@ async def test_policy_draft_records_redacted_llm_secret_state() -> None:
         "api_key_required": True,
     }
     assert "super-secret-key" not in str(draft.metadata)
+
+
+@pytest.mark.asyncio
+async def test_policy_draft_uses_resolved_llm_provider() -> None:
+    resolver = _FakeLLMProviderResolver(
+        ResolvedLLMProviderSettings(
+            profile_id=uuid4(),
+            profile_name="Camera OpenAI",
+            profile_hash="c" * 64,
+            provider="openai",
+            model="gpt-4.1-mini",
+            base_url="https://api.openai.com/v1",
+            api_key="sk-runtime",
+            api_key_required=True,
+        )
+    )
+    provider_client = _MockLLMProviderClient()
+    provider_client.queue_response(
+        {"rules": [{"name": "High visibility worker near gate"}]}
+    )
+    service = PolicyDraftService(
+        session_factory=object(),  # type: ignore[arg-type]
+        audit_logger=_FakeAuditLogger(),
+        llm_provider_resolver=resolver,
+        llm_provider_client=provider_client,
+    )
+    tenant_context = _tenant_context()
+    camera_id = uuid4()
+    camera_state = {"runtime_vocabulary": ["person"], "recording_policy": {}}
+
+    draft = await service.compiler.compile(
+        tenant_context=tenant_context,
+        camera_id=camera_id,
+        prompt="alert on workers near gate",
+        camera_state=camera_state,
+        use_llm=True,
+    )
+
+    assert resolver.calls == [(tenant_context, camera_id)]
+    assert provider_client.calls == [
+        (resolver.resolved, "alert on workers near gate", camera_state)
+    ]
+    assert draft.metadata["llm_assistance"] == "provider_assisted"
+    assert draft.metadata["llm_provider"] == "openai"
+    assert draft.metadata["llm_model"] == "gpt-4.1-mini"
+    assert draft.structured_diff["rule_changes"] == [
+        {
+            "name": "High visibility worker near gate",
+            "incident_type": "high_visibility_worker_near_gate",
+            "severity": "warning",
+            "predicate": {
+                "class_names": ["person"],
+                "zone_ids": [],
+                "min_confidence": 0.5,
+                "attributes": {},
+            },
+            "action": "alert",
+            "cooldown_seconds": 60,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_malformed_provider_output_returns_deterministic_fallback_warning() -> None:
+    resolver = _FakeLLMProviderResolver(_resolved_provider())
+    provider_client = _MockLLMProviderClient()
+    provider_client.queue_response({"unexpected": "shape"})
+    compiler = PolicyDraftCompiler(
+        llm_provider_resolver=resolver,
+        llm_provider_client=provider_client,
+    )
+
+    draft = await compiler.compile(
+        tenant_context=_tenant_context(),
+        camera_id=uuid4(),
+        prompt="alert on forklifts in dock",
+        camera_state={"runtime_vocabulary": [], "recording_policy": {}},
+        use_llm=True,
+    )
+
+    assert draft.metadata["llm_assistance"] == "provider_rejected"
+    assert draft.metadata["llm_fallback"] == "deterministic"
+    assert draft.metadata["llm_provider"] == "openai"
+    assert draft.structured_diff["runtime_vocabulary"]["add"] == ["forklift"]
+    assert draft.structured_diff["rule_changes"][0]["incident_type"] == "forklift_activity"
+
+
+@pytest.mark.asyncio
+async def test_policy_draft_does_not_call_provider_when_llm_disabled() -> None:
+    resolver = _FakeLLMProviderResolver(_resolved_provider())
+    provider_client = _MockLLMProviderClient()
+    compiler = PolicyDraftCompiler(
+        llm_provider_resolver=resolver,
+        llm_provider_client=provider_client,
+    )
+
+    draft = await compiler.compile(
+        tenant_context=_tenant_context(),
+        camera_id=uuid4(),
+        prompt="Watch forklifts in the dock zone and record clips",
+        camera_state={
+            "runtime_vocabulary": [],
+            "recording_policy": {"enabled": False, "mode": "event_clip"},
+        },
+        use_llm=False,
+    )
+
+    assert resolver.calls == []
+    assert provider_client.calls == []
+    assert draft.metadata["llm_assistance"] == "disabled"
+    assert draft.structured_diff["runtime_vocabulary"]["add"] == ["forklift"]
+
+
+@pytest.mark.asyncio
+async def test_policy_draft_falls_back_when_provider_client_unavailable() -> None:
+    resolver = _FakeLLMProviderResolver(_resolved_provider())
+    compiler = PolicyDraftCompiler(
+        llm_provider_resolver=resolver,
+        llm_provider_client=None,
+    )
+
+    draft = await compiler.compile(
+        tenant_context=_tenant_context(),
+        camera_id=uuid4(),
+        prompt="Watch forklifts in the dock zone and record clips",
+        camera_state={
+            "runtime_vocabulary": [],
+            "recording_policy": {"enabled": False, "mode": "event_clip"},
+        },
+        use_llm=True,
+    )
+
+    assert draft.metadata["llm_assistance"] == "provider_unavailable"
+    assert draft.metadata["llm_fallback"] == "deterministic"
+    assert draft.structured_diff["runtime_vocabulary"]["add"] == ["forklift"]
+
+
+def test_policy_draft_service_injects_mock_llm_provider_client() -> None:
+    provider_client = _MockLLMProviderClient()
+
+    service = PolicyDraftService(
+        session_factory=object(),  # type: ignore[arg-type]
+        audit_logger=_FakeAuditLogger(),
+        llm_provider_resolver=_FakeLLMProviderResolver(_resolved_provider()),
+        llm_provider_client=provider_client,
+    )
+
+    assert service.compiler.llm_provider_client is provider_client
 
 
 def test_policy_draft_requires_approval_before_apply() -> None:
@@ -219,6 +368,45 @@ class _FakeLLMProviderResolver:
     ) -> ResolvedLLMProviderSettings:
         self.calls.append((tenant_context, camera_id))
         return self.resolved
+
+
+class _MockLLMProviderClient:
+    def __init__(self) -> None:
+        self.responses: list[dict[str, object]] = []
+        self.calls: list[tuple[ResolvedLLMProviderSettings, str, dict[str, object]]] = []
+
+    def queue_response(self, response: dict[str, object]) -> None:
+        self.responses.append(response)
+
+    async def create_policy_draft(
+        self,
+        *,
+        resolved: ResolvedLLMProviderSettings,
+        prompt: str,
+        camera_state: dict[str, object],
+    ) -> dict[str, object]:
+        self.calls.append((resolved, prompt, camera_state))
+        if not self.responses:
+            raise AssertionError("No mock LLM provider response queued.")
+        return self.responses.pop(0)
+
+
+class _FakeAuditLogger:
+    async def record(self, **kwargs):  # noqa: ANN003, ANN201
+        del kwargs
+
+
+def _resolved_provider() -> ResolvedLLMProviderSettings:
+    return ResolvedLLMProviderSettings(
+        profile_id=uuid4(),
+        profile_name="Camera OpenAI",
+        profile_hash="c" * 64,
+        provider="openai",
+        model="gpt-4.1-mini",
+        base_url="https://api.openai.com/v1",
+        api_key=None,
+        api_key_required=False,
+    )
 
 
 def _tenant_context() -> TenantContext:

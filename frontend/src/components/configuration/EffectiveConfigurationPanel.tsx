@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
+import { Copy } from "lucide-react";
 
 import {
   CONFIGURATION_KINDS,
   labelForKind,
 } from "@/components/configuration/configuration-copy";
+import { kindCapability } from "@/components/configuration/configuration-capabilities";
 import { StatusToneBadge } from "@/components/layout/workspace-surfaces";
 import {
   useResolvedConfiguration,
+  type ConfigurationCatalog,
   type OperatorConfigKind,
+  type OperatorConfigSupportState,
   type ResolvedConfigurationTarget,
   type ResolvedOperatorConfigEntry,
 } from "@/hooks/use-configuration";
@@ -29,12 +33,14 @@ type EffectiveConfigurationPanelProps = {
   cameras?: NamedTarget[];
   sites?: NamedTarget[];
   edgeNodes?: NamedTarget[];
+  catalog?: ConfigurationCatalog;
 };
 
 export function EffectiveConfigurationPanel({
   cameras = [],
   sites = [],
   edgeNodes = [],
+  catalog,
 }: EffectiveConfigurationPanelProps) {
   const targetOptions = useMemo<TargetOption[]>(
     () => [
@@ -102,6 +108,7 @@ export function EffectiveConfigurationPanel({
             key={kind}
             entry={entries[kind]}
             fallbackKind={kind}
+            catalog={catalog}
           />
         ))}
       </div>
@@ -112,16 +119,34 @@ export function EffectiveConfigurationPanel({
 function EffectiveConfigurationRow({
   entry,
   fallbackKind,
+  catalog,
 }: {
   entry: ResolvedOperatorConfigEntry | undefined;
   fallbackKind: OperatorConfigKind;
+  catalog?: ConfigurationCatalog;
 }) {
   const kind = entry?.kind ?? fallbackKind;
   const profileName = entry?.profile_name ?? "No profile";
   const status = entry?.resolution_status === "resolved" ? "Resolved" : "Unresolved";
+  const capability = kindCapability(catalog, kind);
+  const support = capability?.runtime_support;
+  const desiredHash = entry?.profile_hash ?? null;
+  const appliedHash = appliedProfileHash(entry);
+  const aligned = desiredHash && appliedHash && desiredHash === appliedHash;
   const secretLabels = Object.entries(entry?.secret_state ?? {}).map(
     ([key, state]) => `${key} ${state === "present" ? "stored" : "missing"}`,
   );
+  const diagnosticPayload = {
+    kind,
+    profile_id: entry?.profile_id ?? null,
+    profile_hash: desiredHash,
+    applied_profile_hash: appliedHash,
+    winner_scope: entry?.winner_scope ?? null,
+    validation_status: entry?.validation_status ?? null,
+    resolution_status: entry?.resolution_status ?? "unresolved",
+    runtime_support: support ?? null,
+    operator_message: entry?.operator_message ?? null,
+  };
 
   return (
     <div
@@ -130,11 +155,18 @@ function EffectiveConfigurationRow({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-[#dbe8ff]">{labelForKind(kind)}</p>
-        <StatusToneBadge
-          tone={entry?.resolution_status === "resolved" ? "healthy" : "danger"}
-        >
-          {status}
-        </StatusToneBadge>
+        <div className="flex flex-wrap gap-2">
+          {support ? (
+            <StatusToneBadge tone={supportTone(support)}>
+              {support.replaceAll("_", " ")}
+            </StatusToneBadge>
+          ) : null}
+          <StatusToneBadge
+            tone={entry?.resolution_status === "resolved" ? "healthy" : "danger"}
+          >
+            {status}
+          </StatusToneBadge>
+        </div>
       </div>
       <p className="mt-2 truncate text-sm font-semibold text-[#f4f8ff]">
         {profileName}
@@ -142,12 +174,20 @@ function EffectiveConfigurationRow({
       <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#8fa4c4]">
         {entry?.winner_scope ? <span>{entry.winner_scope}</span> : null}
         {entry?.validation_status ? <span>{entry.validation_status}</span> : null}
-        {entry?.profile_hash ? <span>{entry.profile_hash.slice(0, 8)}</span> : null}
+        {desiredHash ? <span>desired {desiredHash.slice(0, 8)}</span> : null}
+        {appliedHash ? <span>applied {appliedHash.slice(0, 8)}</span> : null}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <StatusToneBadge tone={entry?.applies_to_runtime ? "accent" : "muted"}>
           {entry?.applies_to_runtime ? "runtime-wired now" : "runtime-wired later"}
         </StatusToneBadge>
+        {appliedHash ? (
+          <StatusToneBadge tone={aligned ? "healthy" : "danger"}>
+            {aligned ? "aligned" : "drift"}
+          </StatusToneBadge>
+        ) : (
+          <StatusToneBadge tone="muted">applied not reported</StatusToneBadge>
+        )}
         {secretLabels.map((label) => (
           <StatusToneBadge key={label} tone="muted">
             {label}
@@ -157,6 +197,36 @@ function EffectiveConfigurationRow({
       {entry?.operator_message ? (
         <p className="mt-2 text-xs leading-5 text-[#9fb2cf]">{entry.operator_message}</p>
       ) : null}
+      <button
+        type="button"
+        className="mt-3 inline-flex items-center rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-[#9fb2cf] transition hover:border-[#8fd3ff]/60 hover:text-[#f4f8ff]"
+        onClick={() => {
+          void navigator.clipboard?.writeText(JSON.stringify(diagnosticPayload, null, 2));
+        }}
+      >
+        <Copy className="mr-2 size-3.5" />
+        Copy diagnostics
+      </button>
     </div>
   );
+}
+
+function appliedProfileHash(entry: ResolvedOperatorConfigEntry | undefined) {
+  const value = entry?.config?.applied_profile_hash;
+  return typeof value === "string" ? value : null;
+}
+
+function supportTone(
+  support: OperatorConfigSupportState,
+): "healthy" | "danger" | "accent" | "muted" {
+  if (support === "active") {
+    return "healthy";
+  }
+  if (support === "unsupported") {
+    return "danger";
+  }
+  if (support === "requires_service") {
+    return "accent";
+  }
+  return "muted";
 }

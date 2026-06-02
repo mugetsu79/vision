@@ -15,12 +15,21 @@ export type OperatorConfigBindingRequest =
   components["schemas"]["OperatorConfigBindingRequest"];
 export type OperatorConfigBindingResponse =
   components["schemas"]["OperatorConfigBindingResponse"];
+export type OperatorConfigProfileDeleteRequest =
+  components["schemas"]["OperatorConfigProfileDeleteRequest"];
+export type OperatorConfigProfileImpact =
+  components["schemas"]["OperatorConfigProfileImpactResponse"];
 export type OperatorConfigTestResponse =
   components["schemas"]["OperatorConfigTestResponse"];
 export type ResolvedOperatorConfig =
   components["schemas"]["ResolvedOperatorConfigResponse"];
 export type ResolvedOperatorConfigEntry =
   components["schemas"]["ResolvedOperatorConfigEntryResponse"];
+export type OperatorConfigSupportState =
+  | "active"
+  | "advisory"
+  | "requires_service"
+  | "unsupported";
 export type ResolvedConfigurationTarget =
   | string
   | {
@@ -33,9 +42,31 @@ export type ConfigurationCatalog = {
   kinds?: Array<{
     kind: OperatorConfigKind;
     label: string;
+    runtime_support?: OperatorConfigSupportState;
+    operator_summary?: string;
     secret_keys?: string[];
+    fields?: Array<{
+      name: string;
+      label: string;
+      support: OperatorConfigSupportState;
+      requires?: string[];
+      operator_message?: string | null;
+      values?: Array<{
+        value: string;
+        support: OperatorConfigSupportState;
+        requires?: string[];
+        operator_message?: string | null;
+      }>;
+    }>;
   }>;
 };
+
+type DeleteConfigurationProfilePayload =
+  | string
+  | {
+      profileId: string;
+      replacementDefaultProfileId?: string | null;
+    };
 
 async function invalidateConfigurationRuntimeQueries(queryClient: QueryClient) {
   await Promise.all([
@@ -121,10 +152,20 @@ export function useUpdateConfigurationProfile() {
 export function useDeleteConfigurationProfile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (profileId: string) => {
+    mutationFn: async (payload: DeleteConfigurationProfilePayload) => {
+      const profileId = typeof payload === "string" ? payload : payload.profileId;
+      const replacementDefaultProfileId =
+        typeof payload === "string" ? null : payload.replacementDefaultProfileId;
+      const body: OperatorConfigProfileDeleteRequest | undefined =
+        replacementDefaultProfileId
+          ? { replacement_default_profile_id: replacementDefaultProfileId }
+          : undefined;
       const { error } = await apiClient.DELETE(
         "/api/v1/configuration/profiles/{profile_id}",
-        { params: { path: { profile_id: profileId } } },
+        {
+          params: { path: { profile_id: profileId } },
+          ...(body ? { body } : {}),
+        },
       );
       if (error) {
         throw toApiError(error, "Failed to delete configuration profile.");
@@ -132,6 +173,41 @@ export function useDeleteConfigurationProfile() {
     },
     onSuccess: async () => {
       await invalidateConfigurationRuntimeQueries(queryClient);
+    },
+  });
+}
+
+export function useConfigurationProfileImpact(profileId?: string | null) {
+  return useQuery({
+    queryKey: ["configuration", "profiles", profileId ?? "none", "impact"],
+    enabled: Boolean(profileId),
+    queryFn: async () => {
+      if (!profileId) {
+        return null;
+      }
+      const { data, error } = await apiClient.GET(
+        "/api/v1/configuration/profiles/{profile_id}/impact",
+        { params: { path: { profile_id: profileId } } },
+      );
+      if (error || !data) {
+        throw toApiError(error, "Failed to load configuration profile impact.");
+      }
+      return data as OperatorConfigProfileImpact;
+    },
+  });
+}
+
+export function useConfigurationBindings(kind?: OperatorConfigKind) {
+  return useQuery({
+    queryKey: ["configuration", "bindings", kind ?? "all"],
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET("/api/v1/configuration/bindings", {
+        params: { query: kind ? { kind } : {} },
+      });
+      if (error) {
+        throw toApiError(error, "Failed to load configuration bindings.");
+      }
+      return data?.bindings ?? [];
     },
   });
 }
@@ -166,6 +242,24 @@ export function useUpsertConfigurationBinding() {
         throw toApiError(error, "Failed to bind configuration profile.");
       }
       return data;
+    },
+    onSuccess: async () => {
+      await invalidateConfigurationRuntimeQueries(queryClient);
+    },
+  });
+}
+
+export function useDeleteConfigurationBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (bindingId: string) => {
+      const { error } = await apiClient.DELETE(
+        "/api/v1/configuration/bindings/{binding_id}",
+        { params: { path: { binding_id: bindingId } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to delete configuration binding.");
+      }
     },
     onSuccess: async () => {
       await invalidateConfigurationRuntimeQueries(queryClient);

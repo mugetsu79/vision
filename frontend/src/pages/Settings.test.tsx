@@ -488,6 +488,14 @@ vi.mock("@/hooks/use-configuration", () => ({
     ],
     isLoading: false,
   }),
+  useConfigurationBindings: () => ({
+    data: [],
+    isLoading: false,
+  }),
+  useConfigurationProfileImpact: () => ({
+    data: null,
+    isLoading: false,
+  }),
   useCreateConfigurationProfile: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -497,6 +505,10 @@ vi.mock("@/hooks/use-configuration", () => ({
     isPending: false,
   }),
   useDeleteConfigurationProfile: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeleteConfigurationBinding: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),

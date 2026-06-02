@@ -25,7 +25,11 @@ vi.mock("@/hooks/use-configuration", () => ({
             applies_to_runtime: true,
             secret_state: { secret_key: "present" },
             operator_message: null,
-            config: { provider: "minio", bucket: "incidents" },
+            config: {
+              provider: "minio",
+              bucket: "incidents",
+              applied_profile_hash: "a".repeat(64),
+            },
           },
           operations_mode: {
             kind: "operations_mode",
@@ -69,10 +73,27 @@ const cameras = [
   { id: "camera-2", label: "Gate camera" },
 ];
 
+const catalog = {
+  kinds: [
+    {
+      kind: "evidence_storage" as const,
+      label: "Evidence storage",
+      runtime_support: "active" as const,
+      operator_summary: "Routes incident evidence.",
+    },
+    {
+      kind: "operations_mode" as const,
+      label: "Operations mode",
+      runtime_support: "requires_service" as const,
+      operator_summary: "Controls worker lifecycle.",
+    },
+  ],
+};
+
 describe("EffectiveConfigurationPanel", () => {
   test("shows effective profile winners and redacted secret state", async () => {
     const user = userEvent.setup();
-    render(<EffectiveConfigurationPanel cameras={cameras} />);
+    render(<EffectiveConfigurationPanel cameras={cameras} catalog={catalog} />);
 
     expect(screen.getByRole("heading", { name: /effective configuration/i })).toBeInTheDocument();
     const storageRow = screen.getByTestId("effective-config-evidence_storage");
@@ -80,6 +101,10 @@ describe("EffectiveConfigurationPanel", () => {
     expect(within(storageRow).getByText("camera")).toBeInTheDocument();
     expect(within(storageRow).getByText("valid")).toBeInTheDocument();
     expect(within(storageRow).getByText("runtime-wired now")).toBeInTheDocument();
+    expect(within(storageRow).getByText("active")).toBeInTheDocument();
+    expect(within(storageRow).getByText("desired aaaaaaaa")).toBeInTheDocument();
+    expect(within(storageRow).getByText("applied aaaaaaaa")).toBeInTheDocument();
+    expect(within(storageRow).getByText("aligned")).toBeInTheDocument();
     expect(within(storageRow).getByText("secret_key stored")).toBeInTheDocument();
     expect(screen.queryByText("sk-runtime-secret")).not.toBeInTheDocument();
     expect(screen.getByText("Runtime-wired in Task 20.")).toBeInTheDocument();
@@ -97,5 +122,22 @@ describe("EffectiveConfigurationPanel", () => {
 
     expect(within(runtimeRow).getByText("Unresolved")).toBeInTheDocument();
     expect(within(runtimeRow).getByText("TensorRT first")).toBeInTheDocument();
+  });
+
+  test("copies diagnostic JSON for an effective configuration row", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render(<EffectiveConfigurationPanel cameras={cameras} catalog={catalog} />);
+
+    const storageRow = screen.getByTestId("effective-config-evidence_storage");
+    await user.click(within(storageRow).getByRole("button", { name: /copy diagnostics/i }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("profile-storage"),
+    );
   });
 });

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol, cast
@@ -41,7 +42,11 @@ from argus.models.tables import (
     Site,
 )
 from argus.services.incident_rules import normalize_incident_type, validate_incident_rule_payload
-from argus.services.llm_provider_runtime import ResolvedLLMProviderSettings
+from argus.services.llm_provider_runtime import (
+    LLMProviderClient,
+    OpenAICompatibleLLMProviderClient,
+    ResolvedLLMProviderSettings,
+)
 
 HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
@@ -159,8 +164,14 @@ class PolicyDraftState:
 
 
 class PolicyDraftCompiler:
-    def __init__(self, llm_provider_resolver: LLMProviderResolver | None) -> None:
+    def __init__(
+        self,
+        llm_provider_resolver: LLMProviderResolver | None,
+        *,
+        llm_provider_client: LLMProviderClient | None = None,
+    ) -> None:
         self.llm_provider_resolver = llm_provider_resolver
+        self.llm_provider_client = llm_provider_client
 
     async def compile(
         self,
@@ -177,6 +188,7 @@ class PolicyDraftCompiler:
             "llm_model": "fallback",
             "llm_assistance": "disabled" if not use_llm else "fallback",
         }
+        structured_diff = _deterministic_policy_diff(prompt, camera_state)
         if use_llm and self.llm_provider_resolver is not None:
             resolved = await self.llm_provider_resolver.resolve_for_prompt(
                 tenant_context=tenant_context,
@@ -194,8 +206,50 @@ class PolicyDraftCompiler:
                     "llm_assistance": "profile_resolved",
                 }
             )
+            if self.llm_provider_client is None:
+                metadata.update(
+                    {
+                        "llm_assistance": "provider_unavailable",
+                        "llm_fallback": "deterministic",
+                    }
+                )
+            else:
+                try:
+                    provider_output = await self.llm_provider_client.create_policy_draft(
+                        resolved=resolved,
+                        prompt=prompt,
+                        camera_state=camera_state,
+                    )
+                except Exception as exc:
+                    metadata.update(
+                        {
+                            "llm_assistance": "provider_unavailable",
+                            "llm_fallback": "deterministic",
+                            "llm_error_type": type(exc).__name__,
+                        }
+                    )
+                else:
+                    try:
+                        provider_diff = _policy_diff_from_provider_output(
+                            provider_output,
+                            deterministic_diff=structured_diff,
+                            camera_state=camera_state,
+                        )
+                    except Exception:
+                        provider_diff = None
+                    if provider_diff is None:
+                        metadata.update(
+                            {
+                                "llm_assistance": "provider_rejected",
+                                "llm_fallback": "deterministic",
+                            }
+                        )
+                    else:
+                        structured_diff = provider_diff
+                        metadata["llm_assistance"] = "provider_assisted"
+        elif use_llm:
+            metadata["llm_fallback"] = "deterministic"
 
-        structured_diff = _deterministic_policy_diff(prompt, camera_state)
         return PolicyDraftState(
             id=None,
             tenant_id=tenant_context.tenant_id,
@@ -216,13 +270,19 @@ class PolicyDraftService:
         audit_logger: AuditLogger,
         *,
         llm_provider_resolver: LLMProviderResolver | None = None,
+        llm_provider_client: LLMProviderClient | None = None,
         camera_service: CameraUpdateService | None = None,
         incident_rule_service: IncidentRuleCreateService | None = None,
         ledger: PolicyDraftLedgerRecorder | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.audit_logger = audit_logger
-        self.compiler = PolicyDraftCompiler(llm_provider_resolver)
+        if llm_provider_resolver is not None and llm_provider_client is None:
+            llm_provider_client = OpenAICompatibleLLMProviderClient()
+        self.compiler = PolicyDraftCompiler(
+            llm_provider_resolver,
+            llm_provider_client=llm_provider_client,
+        )
         self.camera_service = camera_service
         self.incident_rule_service = incident_rule_service
         self.ledger = ledger or PolicyDraftLedgerRecorder(session_factory)
@@ -804,6 +864,208 @@ def _deterministic_policy_diff(prompt: str, camera_state: dict[str, Any]) -> dic
         "incident_rules": {"add": rule_changes},
         "rule_changes": rule_changes,
     }
+
+
+def _policy_diff_from_provider_output(
+    provider_output: Mapping[str, object],
+    *,
+    deterministic_diff: dict[str, Any],
+    camera_state: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not isinstance(provider_output, Mapping):
+        return None
+    structured_diff = provider_output.get("structured_diff")
+    if isinstance(structured_diff, Mapping):
+        return _sanitize_provider_structured_diff(
+            structured_diff,
+            deterministic_diff=deterministic_diff,
+            camera_state=camera_state,
+        )
+    if "rules" in provider_output:
+        rules = _sanitize_provider_rules(provider_output.get("rules"), camera_state)
+        if rules is None:
+            return None
+        return _policy_diff_with_provider_rules(deterministic_diff, rules)
+    return None
+
+
+def _sanitize_provider_structured_diff(
+    structured_diff: Mapping[str, object],
+    *,
+    deterministic_diff: dict[str, Any],
+    camera_state: dict[str, Any],
+) -> dict[str, Any] | None:
+    accepted = False
+    sanitized = _json_clone(deterministic_diff)
+
+    raw_runtime_vocabulary = structured_diff.get("runtime_vocabulary")
+    if isinstance(raw_runtime_vocabulary, Mapping):
+        runtime_vocabulary = dict(sanitized.get("runtime_vocabulary") or {})
+        after = _normalize_terms(raw_runtime_vocabulary.get("after"))
+        additions = _normalize_terms(raw_runtime_vocabulary.get("add"))
+        if after or additions:
+            before = _extract_runtime_vocabulary(camera_state)
+            final_terms = after or [*before, *[term for term in additions if term not in before]]
+            runtime_vocabulary.update(
+                {
+                    "before": before,
+                    "add": [term for term in final_terms if term not in before],
+                    "after": final_terms,
+                }
+            )
+            sanitized["runtime_vocabulary"] = runtime_vocabulary
+            _set_scene_contract_after(sanitized, "runtime_vocabulary", final_terms)
+            accepted = True
+
+    raw_recording = structured_diff.get("recording_policy")
+    if isinstance(raw_recording, Mapping) and isinstance(raw_recording.get("after"), Mapping):
+        recording_after = EvidenceRecordingPolicy.model_validate(raw_recording["after"]).model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+        sanitized["recording_policy"] = {
+            "before": dict(camera_state.get("recording_policy") or {}),
+            "after": recording_after,
+        }
+        accepted = True
+
+    raw_rules = structured_diff.get("rule_changes")
+    if not isinstance(raw_rules, list):
+        raw_incident_rules = structured_diff.get("incident_rules")
+        if isinstance(raw_incident_rules, Mapping):
+            raw_rules = raw_incident_rules.get("add")
+    if raw_rules is not None:
+        rules = _sanitize_provider_rules(raw_rules, camera_state)
+        if rules is None:
+            return None
+        sanitized = _policy_diff_with_provider_rules(sanitized, rules)
+        accepted = True
+
+    return sanitized if accepted else None
+
+
+def _sanitize_provider_rules(
+    raw_rules: object,
+    camera_state: dict[str, Any],
+) -> list[dict[str, Any]] | None:
+    if not isinstance(raw_rules, list | tuple) or not raw_rules:
+        return None
+    rules: list[dict[str, Any]] = []
+    for raw_rule in raw_rules:
+        if not isinstance(raw_rule, Mapping):
+            return None
+        name = _clean_text(raw_rule.get("name")) or _clean_text(raw_rule.get("incident_type"))
+        if not name:
+            return None
+        raw_predicate = raw_rule.get("predicate")
+        predicate = raw_predicate if isinstance(raw_predicate, Mapping) else {}
+        class_names = _clean_strings(predicate.get("class_names"))
+        if not class_names:
+            class_names = _extract_runtime_vocabulary(camera_state) or _clean_strings(
+                camera_state.get("active_classes")
+            )
+        if not class_names:
+            class_names = ["person"]
+        zone_ids = _clean_strings(predicate.get("zone_ids"))
+        min_confidence = _bounded_float(predicate.get("min_confidence"), default=0.5)
+        attributes = predicate.get("attributes")
+        if not isinstance(attributes, dict):
+            attributes = {}
+
+        incident_type = _clean_text(raw_rule.get("incident_type")) or normalize_incident_type(name)
+        severity = IncidentRuleSeverity(
+            str(raw_rule.get("severity") or IncidentRuleSeverity.WARNING.value)
+        )
+        action = RuleAction(str(raw_rule.get("action") or RuleAction.ALERT.value))
+        cooldown_seconds = _bounded_int(
+            raw_rule.get("cooldown_seconds"),
+            default=60,
+            minimum=0,
+            maximum=86400,
+        )
+        payload = {
+            "name": name,
+            "incident_type": incident_type,
+            "severity": severity,
+            "predicate": {
+                "class_names": class_names,
+                "zone_ids": zone_ids,
+                "min_confidence": min_confidence,
+                "attributes": attributes,
+            },
+            "action": action,
+            "cooldown_seconds": cooldown_seconds,
+        }
+        IncidentRuleCreate.model_validate(payload)
+        rules.append(
+            {
+                "name": name,
+                "incident_type": incident_type,
+                "severity": severity.value,
+                "predicate": {
+                    "class_names": class_names,
+                    "zone_ids": zone_ids,
+                    "min_confidence": min_confidence,
+                    "attributes": attributes,
+                },
+                "action": action.value,
+                "cooldown_seconds": cooldown_seconds,
+            }
+        )
+    return rules
+
+
+def _policy_diff_with_provider_rules(
+    deterministic_diff: dict[str, Any],
+    rules: list[dict[str, Any]],
+) -> dict[str, Any]:
+    diff = _json_clone(deterministic_diff)
+    diff["rule_changes"] = rules
+    diff["incident_rules"] = {"add": rules}
+    _set_scene_contract_after(diff, "incident_rules", rules)
+    return diff
+
+
+def _set_scene_contract_after(diff: dict[str, Any], key: str, value: object) -> None:
+    scene_contract = dict(diff.get("scene_contract") or {})
+    after = dict(scene_contract.get("after") or {})
+    after[key] = value
+    scene_contract["after"] = after
+    diff["scene_contract"] = scene_contract
+
+
+def _clean_text(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
+
+
+def _bounded_float(value: object, *, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed < 0.0 or parsed > 1.0:
+        return default
+    return parsed
+
+
+def _bounded_int(
+    value: object,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, minimum), maximum)
+
+
+def _json_clone(value: object) -> dict[str, Any]:
+    return json.loads(json.dumps(value, sort_keys=True, default=str))
 
 
 def _camera_update_from_diff(diff: dict[str, Any]) -> CameraUpdate:

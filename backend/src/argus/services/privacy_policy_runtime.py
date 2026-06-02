@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from argus.api.contracts import (
     EvidenceRecordingPolicy,
     PrivacyPolicyProfileConfig,
+    TenantContext,
     WorkerEvidenceStorageSettings,
     WorkerPrivacyPolicySettings,
 )
@@ -22,7 +24,7 @@ from argus.models.enums import (
 )
 from argus.models.tables import Camera, EvidenceArtifact, Incident, Site
 from argus.services.evidence_ledger import EvidenceLedgerService
-from argus.services.runtime_configuration import RuntimeOperatorConfig
+from argus.services.runtime_configuration import RuntimeConfigurationService, RuntimeOperatorConfig
 
 
 class EvidenceLedgerWriter(Protocol):
@@ -38,6 +40,15 @@ class EvidenceLedgerWriter(Protocol):
         occurred_at: datetime | None = None,
         payload: Mapping[str, object] | None = None,
     ) -> Any: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PrivacyRetentionRunSummary:
+    tenant_id: UUID
+    ran_at: datetime
+    camera_count: int
+    expired_count: int
+    expired_by_camera: dict[UUID, int]
 
 
 def worker_privacy_policy_from_runtime_config(
@@ -94,6 +105,7 @@ class PrivacyPolicyRetentionService:
         *,
         tenant_id: UUID,
         privacy_policy: WorkerPrivacyPolicySettings,
+        camera_id: UUID | None = None,
         now: datetime | None = None,
     ) -> int:
         current_time = now or datetime.now(tz=UTC)
@@ -109,9 +121,14 @@ class PrivacyPolicyRetentionService:
                 .where(EvidenceArtifact.status != EvidenceArtifactStatus.EXPIRED)
                 .where(EvidenceArtifact.created_at <= cutoff)
             )
+            if camera_id is not None:
+                statement = statement.where(EvidenceArtifact.camera_id == camera_id)
             rows = (await session.execute(statement)).all()
             for row in rows:
                 artifact, incident = row[0], row[1]
+                artifact_camera_id = _artifact_camera_id(artifact, incident)
+                if camera_id is not None and artifact_camera_id != camera_id:
+                    continue
                 if getattr(artifact, "status", None) is EvidenceArtifactStatus.EXPIRED:
                     continue
                 created_at = getattr(artifact, "created_at", None)
@@ -126,7 +143,7 @@ class PrivacyPolicyRetentionService:
             await self.ledger.append_entry(
                 tenant_id=tenant_id,
                 incident_id=incident.id,
-                camera_id=incident.camera_id,
+                camera_id=_artifact_camera_id(artifact, incident),
                 action=EvidenceLedgerAction.EVIDENCE_EXPIRED,
                 actor_type="system",
                 actor_subject="privacy_retention",
@@ -143,6 +160,59 @@ class PrivacyPolicyRetentionService:
                 },
             )
         return len(expired)
+
+    async def mark_expired_artifacts_for_tenant(
+        self,
+        *,
+        tenant_context: TenantContext,
+        runtime_configuration: RuntimeConfigurationService,
+        now: datetime | None = None,
+    ) -> PrivacyRetentionRunSummary:
+        current_time = now or datetime.now(tz=UTC)
+        camera_ids = await self._load_unexpired_artifact_camera_ids(
+            tenant_context.tenant_id
+        )
+        expired_by_camera: dict[UUID, int] = {}
+        for camera_id in camera_ids:
+            runtime_config = await runtime_configuration.resolve_profile_for_runtime(
+                tenant_context,
+                OperatorConfigProfileKind.PRIVACY_POLICY,
+                camera_id=camera_id,
+            )
+            privacy_policy = worker_privacy_policy_from_runtime_config(runtime_config)
+            expired_by_camera[camera_id] = await self.mark_expired_artifacts(
+                tenant_id=tenant_context.tenant_id,
+                privacy_policy=privacy_policy,
+                camera_id=camera_id,
+                now=current_time,
+            )
+        return PrivacyRetentionRunSummary(
+            tenant_id=tenant_context.tenant_id,
+            ran_at=current_time,
+            camera_count=len(camera_ids),
+            expired_count=sum(expired_by_camera.values()),
+            expired_by_camera=expired_by_camera,
+        )
+
+    async def _load_unexpired_artifact_camera_ids(self, tenant_id: UUID) -> list[UUID]:
+        async with self.session_factory() as session:
+            statement = (
+                select(EvidenceArtifact.camera_id)
+                .join(Camera, Camera.id == EvidenceArtifact.camera_id)
+                .join(Site, Site.id == Camera.site_id)
+                .where(Site.tenant_id == tenant_id)
+                .where(EvidenceArtifact.status != EvidenceArtifactStatus.EXPIRED)
+            )
+            rows = (await session.execute(statement)).all()
+        camera_ids: list[UUID] = []
+        for row in rows:
+            try:
+                camera_id = row[0]
+            except (KeyError, TypeError):
+                camera_id = getattr(row, "camera_id", row)
+            if camera_id not in camera_ids:
+                camera_ids.append(camera_id)
+        return camera_ids
 
 
 def _storage_residency(
@@ -166,3 +236,7 @@ def _storage_residency(
 
 def _enum_value(value: object) -> str:
     return str(getattr(value, "value", value))
+
+
+def _artifact_camera_id(artifact: EvidenceArtifact, incident: Incident) -> UUID:
+    return getattr(artifact, "camera_id", None) or incident.camera_id

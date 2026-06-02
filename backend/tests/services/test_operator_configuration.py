@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 from argus.api.contracts import (
     EvidenceStorageProfileConfig,
@@ -27,9 +28,11 @@ from argus.models.enums import (
     RoleEnum,
 )
 from argus.models.tables import (
+    EdgeNode,
     OperatorConfigBinding,
     OperatorConfigProfile,
     OperatorConfigSecret,
+    Site,
 )
 from argus.services.operator_configuration import OperatorConfigurationService
 
@@ -153,6 +156,29 @@ def test_operator_config_binding_request_names_target_scope() -> None:
     assert binding.scope is OperatorConfigScope.CAMERA
     assert binding.scope_key == str(camera_id)
     assert binding.profile_id == profile_id
+
+
+@pytest.mark.asyncio
+async def test_configuration_catalog_exposes_field_support_states(tmp_path: Path) -> None:
+    service = OperatorConfigurationService(
+        session_factory=_OperatorConfigSessionFactory(),
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    catalog = await service.list_catalog()
+
+    kinds = {entry["kind"]: entry for entry in catalog["kinds"]}
+    operations = kinds["operations_mode"]
+    supervisor_mode = next(
+        field for field in operations["fields"] if field["name"] == "supervisor_mode"
+    )
+
+    values = {item["value"]: item for item in supervisor_mode["values"]}
+    assert operations["runtime_support"] == "active"
+    assert values["polling"]["support"] == "active"
+    assert values["push"]["support"] in {"active", "requires_service"}
+    assert values["push"]["operator_message"]
 
 
 @pytest.mark.asyncio
@@ -288,6 +314,18 @@ async def test_operator_config_service_resolution_order_and_bootstrap_default(
     camera_id = uuid4()
     site_id = uuid4()
     edge_node_id = uuid4()
+    session_factory.state["sites"].append(
+        Site(id=site_id, tenant_id=context.tenant_id, name="HQ", tz="UTC")
+    )
+    session_factory.state["edge_nodes"].append(
+        EdgeNode(
+            id=edge_node_id,
+            site_id=site_id,
+            hostname="edge-1",
+            public_key="test-key",
+            version="dev",
+        )
+    )
     session_factory.state["cameras"].append(
         SimpleNamespace(id=camera_id, site_id=site_id, edge_node_id=edge_node_id)
     )
@@ -306,6 +344,13 @@ async def test_operator_config_service_resolution_order_and_bootstrap_default(
     camera_profile = await service.create_profile(
         context,
         _storage_profile_create(slug="camera-profile", is_default=False),
+    )
+    _mark_profiles_valid(
+        session_factory,
+        tenant_profile.id,
+        site_profile.id,
+        edge_profile.id,
+        camera_profile.id,
     )
     await service.upsert_binding(
         context,
@@ -501,13 +546,19 @@ async def test_operator_config_service_audits_binding_and_delete(
     )
     context = _tenant_context()
     profile = await service.create_profile(context, _storage_profile_create(slug="dev-minio"))
+    camera_id = uuid4()
+    site_id = uuid4()
+    session_factory.state["cameras"].append(
+        SimpleNamespace(id=camera_id, site_id=site_id, edge_node_id=None)
+    )
+    _mark_profiles_valid(session_factory, profile.id)
 
     binding = await service.upsert_binding(
         context,
         OperatorConfigBindingRequest(
             kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
             scope=OperatorConfigScope.CAMERA,
-            scope_key=str(uuid4()),
+            scope_key=str(camera_id),
             profile_id=profile.id,
         ),
     )
@@ -516,6 +567,208 @@ async def test_operator_config_service_audits_binding_and_delete(
     assert binding.profile_id == profile.id
     assert "configuration.binding.upsert" in audit_logger.actions
     assert "configuration.profile.delete" in audit_logger.actions
+
+
+@pytest.mark.asyncio
+async def test_delete_default_profile_requires_replacement(tmp_path: Path) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    profile = await service.create_profile(
+        context,
+        _storage_profile_create(slug="tenant-default", is_default=True),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.delete_profile(context, profile.id)
+
+    assert exc_info.value.status_code == 409
+    assert "replacement default" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_list_and_delete_configuration_binding(tmp_path: Path) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    profile = await service.create_profile(
+        context,
+        _storage_profile_create(slug="tenant-default", is_default=True),
+    )
+    camera_id = uuid4()
+    site_id = uuid4()
+    session_factory.state["cameras"].append(
+        SimpleNamespace(id=camera_id, site_id=site_id, edge_node_id=None)
+    )
+    _mark_profiles_valid(session_factory, profile.id)
+    binding = await service.upsert_binding(
+        context,
+        OperatorConfigBindingRequest(
+            kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+            scope=OperatorConfigScope.CAMERA,
+            scope_key=str(camera_id),
+            profile_id=profile.id,
+        ),
+    )
+
+    bindings = await service.list_bindings(
+        context,
+        kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+    )
+    assert [item.id for item in bindings] == [binding.id]
+
+    await service.delete_binding(context, binding.id)
+
+    bindings_after = await service.list_bindings(
+        context,
+        kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+    )
+    assert bindings_after == []
+
+
+@pytest.mark.asyncio
+async def test_binding_rejects_unvalidated_profile(tmp_path: Path) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    camera_id = uuid4()
+    site_id = uuid4()
+    session_factory.state["cameras"].append(
+        SimpleNamespace(id=camera_id, site_id=site_id, edge_node_id=None)
+    )
+    profile = await service.create_profile(
+        context,
+        _storage_profile_create(slug="unvalidated-storage", is_default=False),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.upsert_binding(
+            context,
+            OperatorConfigBindingRequest(
+                kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+                scope=OperatorConfigScope.CAMERA,
+                scope_key=str(camera_id),
+                profile_id=profile.id,
+            ),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "test profile" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_binding_rejects_missing_camera_target(tmp_path: Path) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    profile = await service.create_profile(
+        context,
+        _storage_profile_create(slug="valid-storage", is_default=False),
+    )
+    _mark_profiles_valid(session_factory, profile.id)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.upsert_binding(
+            context,
+            OperatorConfigBindingRequest(
+                kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+                scope=OperatorConfigScope.CAMERA,
+                scope_key=str(uuid4()),
+                profile_id=profile.id,
+            ),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert "camera not found" in str(exc_info.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_binding_rejects_evidence_privacy_residency_mismatch(
+    tmp_path: Path,
+) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    camera_id = uuid4()
+    site_id = uuid4()
+    session_factory.state["cameras"].append(
+        SimpleNamespace(
+            id=camera_id,
+            site_id=site_id,
+            edge_node_id=None,
+            evidence_recording_policy={"storage_profile": "central"},
+        )
+    )
+    privacy_profile = await service.create_profile(
+        context,
+        OperatorConfigProfileCreate.model_validate(
+            {
+                "kind": "privacy_policy",
+                "scope": "tenant",
+                "name": "Cloud privacy",
+                "slug": "cloud-privacy",
+                "config": {
+                    "retention_days": 30,
+                    "storage_quota_bytes": 10_000,
+                    "plaintext_plate_storage": "blocked",
+                    "residency": "cloud",
+                },
+            }
+        ),
+    )
+    evidence_profile = await service.create_profile(
+        context,
+        _storage_profile_create(slug="central-storage", is_default=False),
+    )
+    _mark_profiles_valid(session_factory, privacy_profile.id, evidence_profile.id)
+    await service.upsert_binding(
+        context,
+        OperatorConfigBindingRequest(
+            kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+            scope=OperatorConfigScope.CAMERA,
+            scope_key=str(camera_id),
+            profile_id=evidence_profile.id,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.upsert_binding(
+            context,
+            OperatorConfigBindingRequest(
+                kind=OperatorConfigProfileKind.PRIVACY_POLICY,
+                scope=OperatorConfigScope.CAMERA,
+                scope_key=str(camera_id),
+                profile_id=privacy_profile.id,
+            ),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "Privacy policy residency does not match" in str(exc_info.value.detail)
+    assert [
+        binding
+        for binding in session_factory.state["bindings"]
+        if binding.kind is OperatorConfigProfileKind.PRIVACY_POLICY
+    ] == []
 
 
 def _tenant_context() -> TenantContext:
@@ -571,6 +824,17 @@ def _storage_profile_create(
             "secrets": secrets or {},
         }
     )
+
+
+def _mark_profiles_valid(
+    session_factory: _OperatorConfigSessionFactory,
+    *profile_ids,
+) -> None:
+    for profile in session_factory.state["profiles"]:
+        if profile.id in profile_ids:
+            profile.validation_status = OperatorConfigValidationStatus.VALID
+            profile.validation_message = "Validated by test."
+            profile.validated_at = datetime(2026, 5, 11, 12, 0, tzinfo=UTC)
 
 
 class _FakeAuditLogger:
@@ -629,8 +893,12 @@ class _OperatorConfigSession:
             return _OperatorConfigResult(list(self.state["secrets"]))
         if "operator_config_bindings" in sql:
             return _OperatorConfigResult(list(self.state["bindings"]))
+        if "edge_nodes" in sql:
+            return _OperatorConfigResult(list(self.state["edge_nodes"]))
         if "cameras" in sql:
             return _OperatorConfigResult(list(self.state["cameras"]))
+        if "sites" in sql:
+            return _OperatorConfigResult(list(self.state["sites"]))
         return _OperatorConfigResult(list(self.state["profiles"]))
 
     async def get(self, model, identifier):  # noqa: ANN001
@@ -638,6 +906,8 @@ class _OperatorConfigSession:
             OperatorConfigProfile: "profiles",
             OperatorConfigSecret: "secrets",
             OperatorConfigBinding: "bindings",
+            Site: "sites",
+            EdgeNode: "edge_nodes",
         }.get(model)
         if key is None:
             return None
@@ -679,6 +949,8 @@ class _OperatorConfigSessionFactory:
             "secrets": [],
             "bindings": [],
             "cameras": [],
+            "sites": [],
+            "edge_nodes": [],
             "commits": 0,
             "rollbacks": 0,
         }

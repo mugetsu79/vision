@@ -17,6 +17,10 @@ type StreamTransport =
   | "hls"
   | "mjpeg"
   | "error";
+type ForcedDeliveryTransport = Extract<
+  StreamTransport,
+  "webrtc" | "hls" | "mjpeg"
+>;
 
 const HLS_STARTUP_TIMEOUT_MS = 4_000;
 const HLS_RETRY_DELAY_MS = 1_000;
@@ -68,6 +72,7 @@ export function VideoStream({
   const reconnectAttemptRef = useRef(0);
   const heartbeatStatusRef = useRef<"unknown" | "fresh" | "stale">("unknown");
   const runtimeHints = useMemo(() => getStreamRuntimeHints(), []);
+  const forcedTransport = forcedTransportForDeliveryMode(deliveryMode);
   const [transport, setTransport] = useState<StreamTransport>("connecting");
   const [webrtcFailed, setWebrtcFailed] = useState(false);
   const [isVisible, setIsVisible] = useState(
@@ -278,6 +283,10 @@ export function VideoStream({
       return;
     }
 
+    if (forcedTransport === "hls" || forcedTransport === "mjpeg") {
+      return;
+    }
+
     firstFrameSentRef.current = false;
     playbackStartedAtRef.current = performance.now();
     hlsRetryCountRef.current = 0;
@@ -321,6 +330,11 @@ export function VideoStream({
 
             stopWebRtc?.();
             stopWebRtc = null;
+            if (forcedTransport === "webrtc") {
+              setTransport("error");
+              return;
+            }
+
             setWebrtcFailed(true);
           }, WEBRTC_FIRST_FRAME_TIMEOUT_MS);
         }
@@ -328,7 +342,17 @@ export function VideoStream({
         stopWebRtc?.();
         if (!disposed) {
           if (error instanceof StreamNotReadyError) {
+            if (forcedTransport === "webrtc") {
+              requestSessionRestart();
+              return;
+            }
+
             handleWebRtcNotReady();
+            return;
+          }
+
+          if (forcedTransport === "webrtc") {
+            setTransport("error");
             return;
           }
 
@@ -347,10 +371,13 @@ export function VideoStream({
       stopWebRtc?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- React 19 effect events are intentionally non-reactive.
-  }, [accessToken, cameraId, sessionToken, streamReady, tenantId]);
+  }, [accessToken, cameraId, forcedTransport, sessionToken, streamReady, tenantId]);
 
   useEffect(() => {
-    if (!accessToken || !webrtcFailed) {
+    const shouldStartHls =
+      forcedTransport === "hls" ||
+      (webrtcFailed && forcedTransport === null);
+    if (!accessToken || !shouldStartHls) {
       return;
     }
 
@@ -366,9 +393,11 @@ export function VideoStream({
     let retryTimer: number | null = null;
 
     const fallbackToMjpeg = () => {
-      if (!disposed) {
-        setTransport("mjpeg");
+      if (disposed) {
+        return;
       }
+
+      setTransport(forcedTransport === "hls" ? "error" : "mjpeg");
     };
 
     const scheduleHlsRetry = () => {
@@ -480,8 +509,33 @@ export function VideoStream({
     hlsUrl,
     runtimeHints.maxConcurrentHlsSessions,
     streamReady,
+    forcedTransport,
     webrtcFailed,
   ]);
+
+  useEffect(() => {
+    if (forcedTransport !== "mjpeg") {
+      return;
+    }
+
+    if (!accessToken) {
+      setTransport("error");
+      return;
+    }
+
+    if (!streamReady) {
+      setTransport("standby");
+      return;
+    }
+
+    clearReconnectTimer();
+    reconnectAttemptRef.current = 0;
+    firstFrameSentRef.current = false;
+    playbackStartedAtRef.current = performance.now();
+    setFirstFrameMs(null);
+    setWebrtcFailed(false);
+    setTransport("mjpeg");
+  }, [accessToken, clearReconnectTimer, forcedTransport, streamReady]);
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -908,6 +962,20 @@ function isStreamModeReadyForProfile(
     activeStreamMode === "annotated-whip" ||
     activeStreamMode === "filtered-preview"
   );
+}
+
+function forcedTransportForDeliveryMode(
+  deliveryMode: string | null,
+): ForcedDeliveryTransport | null {
+  if (
+    deliveryMode === "webrtc" ||
+    deliveryMode === "hls" ||
+    deliveryMode === "mjpeg"
+  ) {
+    return deliveryMode;
+  }
+
+  return null;
 }
 
 function transportLabel(transport: StreamTransport): string {

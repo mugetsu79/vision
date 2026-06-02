@@ -471,6 +471,9 @@ function ScenePortalCard({
       : "0 visible now";
   const heartbeatStatus = getHeartbeatStatus(frame);
   const deliveryProfileLabel = formatDeliveryProfile(camera);
+  const deliveryOperatorMessage = readBrowserDeliveryOperatorMessage(
+    camera.browser_delivery,
+  );
   const selectedRendition = renditionOptions.find(
     (option) => option.id === stagedProfile,
   );
@@ -551,6 +554,11 @@ function ScenePortalCard({
               {formatNativeAvailabilityReason(
                 camera.browser_delivery.native_status.reason,
               )}
+            </p>
+          ) : null}
+          {deliveryOperatorMessage ? (
+            <p className="mt-2 text-xs text-[#ffd28a]">
+              {deliveryOperatorMessage}
             </p>
           ) : null}
         </div>
@@ -900,6 +908,14 @@ function readProfileDescription(profile: BrowserDeliveryProfile): string | null 
   return typeof description === "string" && description.length > 0
     ? description
     : null;
+}
+
+function readBrowserDeliveryOperatorMessage(
+  browserDelivery: BrowserDeliverySettings | null | undefined,
+): string | null {
+  const message = (browserDelivery as { operator_message?: unknown } | null | undefined)
+    ?.operator_message;
+  return typeof message === "string" && message.length > 0 ? message : null;
 }
 
 function formatProfileId(

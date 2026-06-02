@@ -8,16 +8,27 @@ import {
   CONFIGURATION_KINDS,
   labelForKind,
 } from "@/components/configuration/configuration-copy";
+import { RuntimeImpactPanel } from "@/components/configuration/RuntimeImpactPanel";
+import {
+  supportForField,
+  valueCapability,
+  type ConfigurationFieldCapability,
+} from "@/components/configuration/configuration-capabilities";
 import type {
+  ConfigurationCatalog,
   OperatorConfigKind,
   OperatorConfigProfile,
   OperatorConfigProfileCreate,
 } from "@/hooks/use-configuration";
 
+const TRANSCODE_ROUTE_NORMALIZED_MESSAGE =
+  "Transcode route mode was normalized. Use camera live rendition profiles for output size and FPS.";
+
 type ProfileEditorProps = {
   kind: OperatorConfigKind;
   selectedProfile: OperatorConfigProfile | null;
   draftProfile?: OperatorConfigProfile | null;
+  catalog?: ConfigurationCatalog;
   onKindChange?: (kind: OperatorConfigKind) => void;
   onSave: (payload: OperatorConfigProfileCreate) => Promise<void> | void;
 };
@@ -61,6 +72,7 @@ export function ProfileEditor({
   kind,
   selectedProfile,
   draftProfile = null,
+  catalog,
   onKindChange,
   onSave,
 }: ProfileEditorProps) {
@@ -86,6 +98,10 @@ export function ProfileEditor({
   async function handleSave() {
     await onSave(buildPayload(state));
     update({ accessKey: "", secretKey: "", apiKey: "" });
+  }
+
+  function normalizeLegacyTransport() {
+    void onSave(buildPayload({ ...state, deliveryMode: "native" }));
   }
 
   return (
@@ -155,7 +171,12 @@ export function ProfileEditor({
         />
       ) : null}
       {state.kind === "stream_delivery" ? (
-        <StreamFields state={state} update={update} />
+        <StreamFields
+          state={state}
+          catalog={catalog}
+          onNormalizeLegacyTransport={normalizeLegacyTransport}
+          update={update}
+        />
       ) : null}
       {state.kind === "runtime_selection" ? (
         <RuntimeFields state={state} update={update} />
@@ -167,8 +188,9 @@ export function ProfileEditor({
         <LlmFields state={state} storedSecrets={storedSecrets} update={update} />
       ) : null}
       {state.kind === "operations_mode" ? (
-        <OperationsFields state={state} update={update} />
+        <OperationsFields state={state} catalog={catalog} update={update} />
       ) : null}
+      <RuntimeImpactPanel catalog={catalog} kind={state.kind} />
     </section>
   );
 }
@@ -246,28 +268,58 @@ function EvidenceStorageFields({
 
 function StreamFields({
   state,
+  catalog,
+  onNormalizeLegacyTransport,
   update,
 }: {
   state: EditorState;
+  catalog?: ConfigurationCatalog;
+  onNormalizeLegacyTransport: () => void;
   update: (patch: Partial<EditorState>) => void;
 }) {
+  const deliveryModeCapability = supportForField(
+    catalog,
+    "stream_delivery",
+    "delivery_mode",
+  );
+  const isLegacyTranscode = state.deliveryMode === "transcode";
   return (
     <div className="grid gap-3 md:grid-cols-3">
       <p className="md:col-span-3 text-xs text-[var(--vz-text-muted)]">
         Reusable relay and browser transport settings. Live rendition resolution,
         FPS, and overlays are selected per camera.
       </p>
+      {isLegacyTranscode ? (
+        <div className="md:col-span-3 rounded-[0.75rem] border border-[#6a4b1c] bg-[#24180d] p-3 text-sm text-[#ffd9a9]">
+          <p>{TRANSCODE_ROUTE_NORMALIZED_MESSAGE}</p>
+          <Button
+            className="mt-3"
+            type="button"
+            variant="secondary"
+            onClick={onNormalizeLegacyTransport}
+          >
+            Normalize transport
+          </Button>
+        </div>
+      ) : null}
       <Field label="Transport mode">
         <Select
           aria-label="Transport mode"
-          value={state.deliveryMode}
+          value={isLegacyTranscode ? "native" : state.deliveryMode}
           onChange={(event) => update({ deliveryMode: event.target.value })}
         >
-          <option value="native">Native/direct</option>
-          <option value="webrtc">WebRTC</option>
-          <option value="hls">HLS</option>
-          <option value="mjpeg">MJPEG</option>
-          <option value="transcode">Transcode</option>
+          <CapabilityOption field={deliveryModeCapability} value="native">
+            Native/direct
+          </CapabilityOption>
+          <CapabilityOption field={deliveryModeCapability} value="webrtc">
+            WebRTC
+          </CapabilityOption>
+          <CapabilityOption field={deliveryModeCapability} value="hls">
+            HLS
+          </CapabilityOption>
+          <CapabilityOption field={deliveryModeCapability} value="mjpeg">
+            MJPEG
+          </CapabilityOption>
         </Select>
       </Field>
       <TextInput
@@ -408,11 +460,18 @@ function LlmFields({
 
 function OperationsFields({
   state,
+  catalog,
   update,
 }: {
   state: EditorState;
+  catalog?: ConfigurationCatalog;
   update: (patch: Partial<EditorState>) => void;
 }) {
+  const supervisorModeCapability = supportForField(
+    catalog,
+    "operations_mode",
+    "supervisor_mode",
+  );
   return (
     <div className="grid gap-3 md:grid-cols-3">
       <Field label="Lifecycle owner">
@@ -432,9 +491,15 @@ function OperationsFields({
           value={state.supervisorMode}
           onChange={(event) => update({ supervisorMode: event.target.value })}
         >
-          <option value="disabled">Disabled</option>
-          <option value="polling">Polling</option>
-          <option value="push">Push</option>
+          <CapabilityOption field={supervisorModeCapability} value="disabled">
+            Disabled
+          </CapabilityOption>
+          <CapabilityOption field={supervisorModeCapability} value="polling">
+            Polling
+          </CapabilityOption>
+          <CapabilityOption field={supervisorModeCapability} value="push">
+            Push
+          </CapabilityOption>
         </Select>
       </Field>
       <Field label="Restart policy">
@@ -449,6 +514,27 @@ function OperationsFields({
         </Select>
       </Field>
     </div>
+  );
+}
+
+function CapabilityOption({
+  field,
+  value,
+  children,
+}: {
+  field: ConfigurationFieldCapability | undefined;
+  value: string;
+  children: ReactNode;
+}) {
+  const capability = valueCapability(field, value);
+  return (
+    <option
+      value={value}
+      disabled={capability?.support === "unsupported"}
+      title={capability?.operator_message ?? undefined}
+    >
+      {children}
+    </option>
   );
 }
 

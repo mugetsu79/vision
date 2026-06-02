@@ -35,6 +35,7 @@ The important split is:
 | Camera source | `camera_source` | Declare RTSP or edge USB/UVC capture source |
 | Recording policy | `recording_policy` | Define short event clip evidence windows and storage posture |
 | Privacy manifest | `privacy` and delivery fields | Explain what privacy controls were active for evidence review |
+| Runtime configuration profiles | Settings -> Configuration bindings | Reusable evidence, transport, runtime, privacy, LLM, and operations policy |
 
 The backend owns track truth. The frontend displays backend state; it should not
 invent identity, visible counts, or speed. The worker uses the same stabilized
@@ -181,6 +182,28 @@ Use `edge_local` when privacy, bandwidth, or site custody requires evidence to
 stay on the edge node. Use `central` when the master MinIO store is the review
 and retention point. Use `cloud` for S3-compatible remote custody, and
 `local_first` when the edge node should capture immediately and upload later.
+
+#### Runtime Configuration Bindings
+
+Scene setup chooses the camera source, model, privacy posture, recording policy,
+and browser rendition defaults. Settings -> Configuration owns reusable runtime
+profiles that can be bound at tenant, site, edge-node, or camera scope.
+
+Before calling a scene ready:
+
+1. Bind the intended evidence storage, transport, runtime selection, privacy
+   policy, and operations mode profiles.
+2. Test each profile and resolve validation failures before starting the worker.
+3. Check the Effective configuration panel for the scene target. The desired
+   profile hash should match the applied hash after the worker refreshes its
+   runtime passport.
+4. For Jetson scenes, confirm runtime selection reports the expected backend or
+   artifact and that Operations shows the correct supervisor mode and restart
+   policy.
+
+Use camera-level bindings only when the scene truly differs from its site or
+edge defaults. Site-level defaults are easier to audit and safer during worker
+replacement.
 
 ### 4. Calibration
 

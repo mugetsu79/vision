@@ -124,6 +124,7 @@ class _FakeOperationsService:
         self.assignment_payload: WorkerAssignmentCreate | None = None
         self.runtime_report_payload: SupervisorRuntimeReportCreate | None = None
         self.lifecycle_payload: OperationsLifecycleRequestCreate | None = None
+        self.lifecycle_conflict_detail: str | None = None
         self.poll_payload: SupervisorPollRequest | None = None
         self.claim_payload: LifecycleRequestClaim | None = None
         self.completion_payload: LifecycleRequestCompletion | None = None
@@ -283,6 +284,11 @@ class _FakeOperationsService:
         tenant_context: TenantContext,
         payload: OperationsLifecycleRequestCreate,
     ) -> OperationsLifecycleRequestResponse:
+        if self.lifecycle_conflict_detail is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=self.lifecycle_conflict_detail,
+            )
         self.lifecycle_payload = payload
         return OperationsLifecycleRequestResponse(
             id=UUID("00000000-0000-0000-0000-000000000813"),
@@ -744,6 +750,34 @@ async def test_lifecycle_request_route_records_intent_without_shelling_out() -> 
     assert body["request_payload"] == {"reason": "operator_test"}
     assert operations.lifecycle_payload is not None
     assert operations.lifecycle_payload.action == "restart"
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_request_route_returns_disabled_supervisor_conflict() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    operations.lifecycle_conflict_detail = (
+        "Supervisor mode is disabled by the resolved operations profile."
+    )
+    app = _create_app(context, operations)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/lifecycle-requests",
+            headers={"Authorization": "Bearer token"},
+            json={
+                "camera_id": str(uuid4()),
+                "action": "restart",
+                "request_payload": {"reason": "operator_test"},
+            },
+        )
+
+    assert response.status_code == 409
+    assert "supervisor mode is disabled" in response.json()["detail"].lower()
+    assert operations.lifecycle_payload is None
 
 
 @pytest.mark.asyncio

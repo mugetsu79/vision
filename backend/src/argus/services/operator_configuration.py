@@ -14,12 +14,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
+    EvidenceRecordingPolicy,
     EvidenceStorageConfigProvider,
     LLMProviderProfileConfig,
     OperationsModeProfileConfig,
     OperatorConfigBindingRequest,
     OperatorConfigBindingResponse,
     OperatorConfigProfileCreate,
+    OperatorConfigProfileImpactResponse,
     OperatorConfigProfileResponse,
     OperatorConfigProfileUpdate,
     OperatorConfigTestResponse,
@@ -46,18 +48,23 @@ from argus.models.enums import (
 )
 from argus.models.tables import (
     Camera,
+    EdgeNode,
     OperatorConfigBinding,
     OperatorConfigProfile,
     OperatorConfigSecret,
     Site,
 )
+from argus.services.configuration_capabilities import configuration_capabilities
 from argus.services.llm_provider_runtime import (
     LLMProviderRuntimeService,
     ResolvedLLMProviderSettings,
     resolved_llm_provider_from_runtime_config,
 )
 from argus.services.object_store import MinioObjectStore
-from argus.services.privacy_policy_runtime import worker_privacy_policy_from_runtime_config
+from argus.services.privacy_policy_runtime import (
+    validate_privacy_policy_residency,
+    worker_privacy_policy_from_runtime_config,
+)
 from argus.services.runtime_configuration import RuntimeConfigurationService
 
 RemoteStorageValidator = Callable[
@@ -100,36 +107,10 @@ class OperatorConfigurationService:
     async def list_catalog(self) -> dict[str, object]:
         return {
             "kinds": [
-                {
-                    "kind": OperatorConfigProfileKind.EVIDENCE_STORAGE.value,
-                    "label": "Evidence storage",
-                    "secret_keys": ["access_key", "secret_key"],
-                },
-                {
-                    "kind": OperatorConfigProfileKind.STREAM_DELIVERY.value,
-                    "label": "Transport profile",
-                    "secret_keys": [],
-                },
-                {
-                    "kind": OperatorConfigProfileKind.RUNTIME_SELECTION.value,
-                    "label": "Runtime selection",
-                    "secret_keys": [],
-                },
-                {
-                    "kind": OperatorConfigProfileKind.PRIVACY_POLICY.value,
-                    "label": "Privacy policy",
-                    "secret_keys": [],
-                },
-                {
-                    "kind": OperatorConfigProfileKind.LLM_PROVIDER.value,
-                    "label": "LLM provider",
-                    "secret_keys": ["api_key"],
-                },
-                {
-                    "kind": OperatorConfigProfileKind.OPERATIONS_MODE.value,
-                    "label": "Operations mode",
-                    "secret_keys": [],
-                },
+                item.model_dump(mode="json")
+                for item in configuration_capabilities(
+                    nats_enabled=self.settings.enable_nats,
+                )
             ]
         }
 
@@ -284,11 +265,44 @@ class OperatorConfigurationService:
         )
         return _profile_to_response(profile, secrets)
 
-    async def delete_profile(self, tenant_context: TenantContext, profile_id: UUID) -> None:
+    async def delete_profile(
+        self,
+        tenant_context: TenantContext,
+        profile_id: UUID,
+        *,
+        replacement_default_profile_id: UUID | None = None,
+    ) -> None:
         async with self.session_factory() as session:
             profile = await self._get_profile(session, tenant_context.tenant_id, profile_id)
             secrets = await self._load_secrets(session, profile.id)
             bindings = await self._load_bindings(session, tenant_context.tenant_id)
+            if profile.is_default:
+                if replacement_default_profile_id is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=(
+                            "Deleting a default profile requires a replacement "
+                            "default profile."
+                        ),
+                    )
+                replacement = await self._get_profile(
+                    session,
+                    tenant_context.tenant_id,
+                    replacement_default_profile_id,
+                )
+                if (
+                    replacement.id == profile.id
+                    or replacement.kind != profile.kind
+                    or not replacement.enabled
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            "Replacement default profile must be an enabled "
+                            "profile of the same kind."
+                        ),
+                    )
+                replacement.is_default = True
             for secret in secrets:
                 await session.delete(secret)
             for binding in bindings:
@@ -302,6 +316,30 @@ class OperatorConfigurationService:
             action="configuration.profile.delete",
             target=f"configuration-profile:{profile_id}",
             meta={"kind": profile.kind.value, "slug": profile.slug},
+        )
+
+    async def profile_impact(
+        self,
+        tenant_context: TenantContext,
+        profile_id: UUID,
+    ) -> OperatorConfigProfileImpactResponse:
+        async with self.session_factory() as session:
+            profile = await self._get_profile(session, tenant_context.tenant_id, profile_id)
+            secrets = await self._load_secrets(session, profile.id)
+            bindings = [
+                binding
+                for binding in await self._load_bindings(session, tenant_context.tenant_id)
+                if binding.profile_id == profile.id
+            ]
+        secret_state: dict[str, str] = {secret.key: "present" for secret in secrets}
+        return OperatorConfigProfileImpactResponse(
+            profile_id=profile.id,
+            kind=profile.kind,
+            is_default=profile.is_default,
+            direct_bindings=[_binding_to_response(binding) for binding in bindings],
+            affected_targets_count=len(bindings),
+            requires_replacement_default=profile.is_default,
+            secret_state=secret_state,
         )
 
     async def test_profile(
@@ -333,6 +371,48 @@ class OperatorConfigurationService:
             tested_at=tested_at,
         )
 
+    async def list_bindings(
+        self,
+        tenant_context: TenantContext,
+        *,
+        kind: OperatorConfigProfileKind | None = None,
+    ) -> list[OperatorConfigBindingResponse]:
+        async with self.session_factory() as session:
+            bindings = await self._load_bindings(
+                session,
+                tenant_context.tenant_id,
+                kind=kind,
+            )
+        return [_binding_to_response(binding) for binding in bindings]
+
+    async def delete_binding(
+        self,
+        tenant_context: TenantContext,
+        binding_id: UUID,
+    ) -> None:
+        async with self.session_factory() as session:
+            bindings = await self._load_bindings(session, tenant_context.tenant_id)
+            binding = next((item for item in bindings if item.id == binding_id), None)
+            if binding is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Configuration binding not found.",
+                )
+            await session.delete(binding)
+            await session.commit()
+
+        await self._record(
+            tenant_context,
+            action="configuration.binding.delete",
+            target=f"configuration-binding:{binding_id}",
+            meta={
+                "kind": binding.kind.value,
+                "scope": binding.scope.value,
+                "scope_key": binding.scope_key,
+                "profile_id": str(binding.profile_id),
+            },
+        )
+
     async def upsert_binding(
         self,
         tenant_context: TenantContext,
@@ -345,11 +425,19 @@ class OperatorConfigurationService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Configuration profile kind does not match binding kind.",
                 )
-            if not profile.enabled:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Disabled configuration profiles cannot be bound.",
-                )
+            self._assert_profile_bindable(profile)
+            await self._assert_binding_target_exists(
+                session,
+                tenant_context.tenant_id,
+                payload.scope,
+                payload.scope_key,
+            )
+            await self._assert_binding_privacy_residency_compatible(
+                session,
+                tenant_context,
+                profile,
+                payload,
+            )
 
             bindings = await self._load_bindings(session, tenant_context.tenant_id)
             binding = next(
@@ -390,14 +478,222 @@ class OperatorConfigurationService:
             },
         )
         return OperatorConfigBindingResponse(
-            id=binding.id,
-            tenant_id=binding.tenant_id,
-            kind=binding.kind,
-            scope=binding.scope,
-            scope_key=binding.scope_key,
-            profile_id=binding.profile_id,
-            created_at=_created_at(binding),
-            updated_at=_updated_at(binding),
+            **_binding_to_response(binding).model_dump(),
+        )
+
+    def _assert_profile_bindable(self, profile: OperatorConfigProfile) -> None:
+        if not profile.enabled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Disabled configuration profiles cannot be bound.",
+            )
+        if profile.validation_status is not OperatorConfigValidationStatus.VALID:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Test profile successfully before binding it.",
+            )
+
+    async def _assert_binding_target_exists(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        scope: OperatorConfigScope,
+        scope_key: str,
+    ) -> None:
+        if scope is OperatorConfigScope.TENANT:
+            return
+        try:
+            target_id = UUID(scope_key)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Configuration binding target must be a UUID.",
+            ) from exc
+
+        if scope is OperatorConfigScope.CAMERA:
+            site_id, _ = await self._camera_scope(session, tenant_id, target_id)
+            if site_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Camera not found.",
+                )
+            return
+
+        if scope is OperatorConfigScope.SITE:
+            result = await session.execute(select(Site).where(Site.id == target_id))
+            site = next(
+                (
+                    candidate
+                    for candidate in result.scalars().all()
+                    if isinstance(candidate, Site) and candidate.id == target_id
+                ),
+                None,
+            )
+            if site is None or site.tenant_id != tenant_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Site not found.",
+                )
+            return
+
+        if scope is OperatorConfigScope.EDGE_NODE:
+            result = await session.execute(select(EdgeNode).where(EdgeNode.id == target_id))
+            edge_node = next(
+                (
+                    candidate
+                    for candidate in result.scalars().all()
+                    if isinstance(candidate, EdgeNode) and candidate.id == target_id
+                ),
+                None,
+            )
+            if edge_node is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Edge node not found.",
+                )
+            site_result = await session.execute(
+                select(Site).where(Site.id == edge_node.site_id)
+            )
+            site = next(
+                (
+                    candidate
+                    for candidate in site_result.scalars().all()
+                    if isinstance(candidate, Site) and candidate.id == edge_node.site_id
+                ),
+                None,
+            )
+            if site is None or site.tenant_id != tenant_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Edge node not found.",
+                )
+
+    async def _assert_binding_privacy_residency_compatible(
+        self,
+        session: AsyncSession,
+        tenant_context: TenantContext,
+        profile: OperatorConfigProfile,
+        payload: OperatorConfigBindingRequest,
+    ) -> None:
+        if payload.kind not in {
+            OperatorConfigProfileKind.EVIDENCE_STORAGE,
+            OperatorConfigProfileKind.PRIVACY_POLICY,
+        }:
+            return
+        cameras = await self._binding_target_cameras(
+            session,
+            tenant_context.tenant_id,
+            payload.scope,
+            payload.scope_key,
+        )
+        for camera in cameras:
+            camera_id = camera.id
+            recording_policy = EvidenceRecordingPolicy.model_validate(
+                getattr(camera, "evidence_recording_policy", None) or {}
+            )
+            try:
+                if payload.kind is OperatorConfigProfileKind.EVIDENCE_STORAGE:
+                    evidence_storage = await self.resolve_worker_evidence_storage(
+                        tenant_context,
+                        camera_id=camera_id,
+                        profile_id=profile.id,
+                    )
+                    privacy_policy = await self._resolve_optional_worker_privacy_policy(
+                        tenant_context,
+                        camera_id,
+                    )
+                else:
+                    evidence_storage = await self._resolve_optional_worker_evidence_storage(
+                        tenant_context,
+                        camera_id,
+                    )
+                    privacy_policy = await self.resolve_worker_privacy_policy(
+                        tenant_context,
+                        camera_id=camera_id,
+                        profile_id=profile.id,
+                    )
+                validate_privacy_policy_residency(
+                    privacy_policy=privacy_policy,
+                    evidence_storage=evidence_storage,
+                    recording_policy=recording_policy,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=str(exc),
+                ) from exc
+
+    async def _resolve_optional_worker_evidence_storage(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+    ) -> WorkerEvidenceStorageSettings | None:
+        try:
+            return await self.resolve_worker_evidence_storage(
+                tenant_context,
+                camera_id=camera_id,
+            )
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                return None
+            raise
+
+    async def _resolve_optional_worker_privacy_policy(
+        self,
+        tenant_context: TenantContext,
+        camera_id: UUID,
+    ) -> WorkerPrivacyPolicySettings | None:
+        try:
+            return await self.resolve_worker_privacy_policy(
+                tenant_context,
+                camera_id=camera_id,
+            )
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                return None
+            raise
+
+    async def _binding_target_cameras(
+        self,
+        session: AsyncSession,
+        tenant_id: UUID,
+        scope: OperatorConfigScope,
+        scope_key: str,
+    ) -> list[Camera]:
+        if scope is OperatorConfigScope.CAMERA:
+            camera = await self._load_camera_for_binding(session, UUID(scope_key))
+            return [camera] if camera is not None else []
+
+        result = await session.execute(select(Camera))
+        cameras = list(result.scalars().all())
+        if scope is OperatorConfigScope.SITE:
+            site_id = UUID(scope_key)
+            return [camera for camera in cameras if camera.site_id == site_id]
+        if scope is OperatorConfigScope.EDGE_NODE:
+            edge_node_id = UUID(scope_key)
+            return [camera for camera in cameras if camera.edge_node_id == edge_node_id]
+
+        site_result = await session.execute(select(Site).where(Site.tenant_id == tenant_id))
+        site_ids = {
+            site.id
+            for site in site_result.scalars().all()
+            if isinstance(site, Site) and site.tenant_id == tenant_id
+        }
+        return [camera for camera in cameras if camera.site_id in site_ids]
+
+    async def _load_camera_for_binding(
+        self,
+        session: AsyncSession,
+        camera_id: UUID,
+    ) -> Camera | None:
+        result = await session.execute(select(Camera).where(Camera.id == camera_id))
+        return next(
+            (
+                camera
+                for camera in result.scalars().all()
+                if getattr(camera, "id", None) == camera_id
+            ),
+            None,
         )
 
     async def resolve_profile(
@@ -1042,6 +1338,19 @@ def _profile_to_response(
         config_hash=profile.config_hash,
         created_at=_created_at(profile),
         updated_at=_updated_at(profile),
+    )
+
+
+def _binding_to_response(binding: OperatorConfigBinding) -> OperatorConfigBindingResponse:
+    return OperatorConfigBindingResponse(
+        id=binding.id,
+        tenant_id=binding.tenant_id,
+        kind=binding.kind,
+        scope=binding.scope,
+        scope_key=binding.scope_key,
+        profile_id=binding.profile_id,
+        created_at=_created_at(binding),
+        updated_at=_updated_at(binding),
     )
 
 

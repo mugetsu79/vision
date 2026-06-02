@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   Brain,
-  Copy,
   Cpu,
   Database,
   Radio,
@@ -12,14 +11,19 @@ import {
 import { EffectiveConfigurationPanel } from "@/components/configuration/EffectiveConfigurationPanel";
 import { ProfileBindingPanel } from "@/components/configuration/ProfileBindingPanel";
 import { ProfileEditor } from "@/components/configuration/ProfileEditor";
+import { ProfileImpactDialog } from "@/components/configuration/ProfileImpactDialog";
+import { ProfileInventory } from "@/components/configuration/ProfileInventory";
 import {
   CONFIGURATION_KINDS,
   labelForKind,
 } from "@/components/configuration/configuration-copy";
 import {
+  useConfigurationBindings,
   useConfigurationCatalog,
+  useConfigurationProfileImpact,
   useConfigurationProfiles,
   useCreateConfigurationProfile,
+  useDeleteConfigurationBinding,
   useDeleteConfigurationProfile,
   useTestConfigurationProfile,
   useUpdateConfigurationProfile,
@@ -118,13 +122,18 @@ export function ConfigurationWorkspace({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [draftProfile, setDraftProfile] = useState<OperatorConfigProfile | null>(null);
+  const [pendingDeleteProfile, setPendingDeleteProfile] =
+    useState<OperatorConfigProfile | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [profileFeedback, setProfileFeedback] = useState<ConfigurationFeedback | null>(null);
   const [bindingFeedback, setBindingFeedback] = useState<ConfigurationFeedback | null>(null);
   const profilesQuery = useConfigurationProfiles(activeKind);
+  const bindingsQuery = useConfigurationBindings(activeKind);
+  const profileImpactQuery = useConfigurationProfileImpact(pendingDeleteProfile?.id);
   const createProfile = useCreateConfigurationProfile();
   const updateProfile = useUpdateConfigurationProfile();
   const deleteProfile = useDeleteConfigurationProfile();
+  const deleteBinding = useDeleteConfigurationBinding();
   const testProfile = useTestConfigurationProfile();
   const upsertBinding = useUpsertConfigurationBinding();
 
@@ -138,6 +147,14 @@ export function ConfigurationWorkspace({
   const catalogLabels = new Map(
     (catalog.data?.kinds ?? []).map((item) => [item.kind, item.label]),
   );
+  const bindings = bindingsQuery.data ?? [];
+  const bindingCountByProfileId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const binding of bindings) {
+      counts.set(binding.profile_id, (counts.get(binding.profile_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [bindings]);
 
   async function handleSave(payload: OperatorConfigProfileCreate) {
     setProfileFeedback(null);
@@ -175,26 +192,52 @@ export function ConfigurationWorkspace({
     setTestResult(`${result.status}${result.message ? ` - ${result.message}` : ""}`);
   }
 
-  async function handleDeleteProfile(profile: OperatorConfigProfile) {
-    const confirmed = window.confirm(
-      `Delete profile ${profile.name}? Existing bindings for this profile will be removed.`,
-    );
-    if (!confirmed) {
-      return;
-    }
-
+  async function handleSetDefault(profile: OperatorConfigProfile) {
     setProfileFeedback(null);
     try {
-      await deleteProfile.mutateAsync(profile.id);
-      if (selectedProfileId === profile.id) {
+      await updateProfile.mutateAsync({
+        profileId: profile.id,
+        payload: { is_default: true },
+      });
+      setProfileFeedback({
+        tone: "healthy",
+        message: "Default profile updated.",
+      });
+    } catch (error) {
+      setProfileFeedback({
+        tone: "danger",
+        message:
+          error instanceof Error ? error.message : "Failed to update default profile.",
+      });
+    }
+  }
+
+  function handleDuplicateProfile(profile: OperatorConfigProfile) {
+    setDraftProfile(createProfileDraft(activeKind, profiles, profile));
+    setIsCreating(true);
+    setSelectedProfileId(null);
+    setTestResult(null);
+    setProfileFeedback(null);
+    setBindingFeedback(null);
+  }
+
+  async function confirmDeleteProfile(payload: {
+    profileId: string;
+    replacementDefaultProfileId?: string | null;
+  }) {
+    setProfileFeedback(null);
+    try {
+      await deleteProfile.mutateAsync(payload);
+      if (selectedProfileId === payload.profileId) {
         setSelectedProfileId(null);
       }
+      setPendingDeleteProfile(null);
       setTestResult(null);
       setProfileFeedback({ tone: "healthy", message: "Profile deleted." });
     } catch (error) {
       setProfileFeedback({
         tone: "danger",
-        message: error instanceof Error ? error.message : "Failed to delete profile.",
+          message: error instanceof Error ? error.message : "Failed to delete profile.",
       });
     }
   }
@@ -262,90 +305,28 @@ export function ConfigurationWorkspace({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.8fr)]">
-        <div className="space-y-2">
-          {profiles.length === 0 ? (
-            <p className="rounded-[0.75rem] border border-white/10 px-3 py-3 text-sm text-[#93a7c5]">
-              No profiles yet.
-            </p>
-          ) : (
-            profiles.map((profile) => (
-              <div
-                key={profile.id}
-                className="rounded-[0.75rem] border border-white/10 bg-black/15 p-3"
-              >
-                <button
-                  type="button"
-                  className="block w-full text-left"
-                  onClick={() => {
-                    setIsCreating(false);
-                    setSelectedProfileId(profile.id);
-                    setTestResult(null);
-                    setProfileFeedback(null);
-                    setBindingFeedback(null);
-                  }}
-                >
-                  <span className="block text-sm font-semibold text-[#f4f8ff]">
-                    {profile.name}
-                  </span>
-                  <span className="mt-1 block text-xs text-[#93a7c5]">
-                    {profile.slug}
-                  </span>
-                </button>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {profile.is_default ? (
-                    <StatusToneBadge tone="accent">Default</StatusToneBadge>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="px-3 py-1.5 text-xs"
-                      onClick={() => {
-                        void (async () => {
-                          setProfileFeedback(null);
-                          try {
-                            await updateProfile.mutateAsync({
-                              profileId: profile.id,
-                              payload: { is_default: true },
-                            });
-                            setProfileFeedback({
-                              tone: "healthy",
-                              message: "Default profile updated.",
-                            });
-                          } catch (error) {
-                            setProfileFeedback({
-                              tone: "danger",
-                              message:
-                                error instanceof Error
-                                  ? error.message
-                                  : "Failed to update default profile.",
-                            });
-                          }
-                        })();
-                      }}
-                    >
-                      Set default
-                    </Button>
-                  )}
-                  {selectedProfile?.id === profile.id && !isCreating ? (
-                    <StatusToneBadge
-                      tone={profile.validation_status === "valid" ? "healthy" : "muted"}
-                    >
-                      {profile.validation_status === "unvalidated"
-                        ? "not tested"
-                        : profile.validation_status}
-                    </StatusToneBadge>
-                  ) : null}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <ProfileInventory
+          profiles={profiles}
+          selectedProfileId={isCreating ? null : selectedProfile?.id}
+          bindingCountByProfileId={bindingCountByProfileId}
+          onSelect={(profile) => {
+            setIsCreating(false);
+            setSelectedProfileId(profile.id);
+            setTestResult(null);
+            setProfileFeedback(null);
+            setBindingFeedback(null);
+          }}
+          onSetDefault={(profile) => void handleSetDefault(profile)}
+          onDuplicate={handleDuplicateProfile}
+          onDelete={(profile) => setPendingDeleteProfile(profile)}
+        />
 
         <div className="space-y-4">
           <ProfileEditor
             kind={activeKind}
             selectedProfile={isCreating ? null : selectedProfile}
             draftProfile={editorDraftProfile}
+            catalog={catalog.data}
             onKindChange={(kind) => {
               setActiveKind(kind);
               setSelectedProfileId(null);
@@ -372,22 +353,14 @@ export function ConfigurationWorkspace({
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => {
-                  setDraftProfile(createProfileDraft(activeKind, profiles, selectedProfile));
-                  setIsCreating(true);
-                  setSelectedProfileId(null);
-                  setTestResult(null);
-                  setProfileFeedback(null);
-                  setBindingFeedback(null);
-                }}
+                onClick={() => handleDuplicateProfile(selectedProfile)}
               >
-                <Copy className="mr-2 size-4" />
                 Duplicate profile
               </Button>
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => void handleDeleteProfile(selectedProfile)}
+                onClick={() => setPendingDeleteProfile(selectedProfile)}
               >
                 Delete profile
               </Button>
@@ -401,6 +374,7 @@ export function ConfigurationWorkspace({
           <ProfileBindingPanel
             kind={activeKind}
             profiles={profiles}
+            bindings={bindings}
             cameras={cameras.map((camera) => ({
               id: camera.id,
               label: camera.name ?? camera.id,
@@ -424,6 +398,20 @@ export function ConfigurationWorkspace({
                 throw error;
               }
             }}
+            onUnbind={async (bindingId) => {
+              setBindingFeedback(null);
+              try {
+                await deleteBinding.mutateAsync(bindingId);
+                setBindingFeedback({ tone: "healthy", message: "Binding removed." });
+              } catch (error) {
+                setBindingFeedback({
+                  tone: "danger",
+                  message:
+                    error instanceof Error ? error.message : "Failed to remove binding.",
+                });
+                throw error;
+              }
+            }}
           />
           {bindingFeedback ? (
             <div role="status" aria-live="polite">
@@ -433,6 +421,7 @@ export function ConfigurationWorkspace({
             </div>
           ) : null}
           <EffectiveConfigurationPanel
+            catalog={catalog.data}
             cameras={cameras.map((camera) => ({
               id: camera.id,
               label: camera.name ?? camera.id,
@@ -445,6 +434,16 @@ export function ConfigurationWorkspace({
           />
         </div>
       </div>
+      {pendingDeleteProfile ? (
+        <ProfileImpactDialog
+          profile={pendingDeleteProfile}
+          impact={profileImpactQuery.data}
+          isLoading={profileImpactQuery.isLoading}
+          replacementCandidates={profiles}
+          onCancel={() => setPendingDeleteProfile(null)}
+          onConfirm={confirmDeleteProfile}
+        />
+      ) : null}
     </WorkspaceSurface>
   );
 }

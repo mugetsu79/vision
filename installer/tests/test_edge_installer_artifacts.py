@@ -44,6 +44,7 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
         "--unpaired",
         "--manifest",
         "--version",
+        "--frontend-url",
         "--public-stream-host",
         "--public-mediamtx-rtsp-url",
         "--jetson-ort-wheel-url",
@@ -79,7 +80,10 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "master_nats_leaf_url" in script
     assert "write edge MediaMTX config" in script
     assert ".well-known/argus/mediamtx/jwks.json" in script
-    assert "f\"authJWTJWKS: {api_url}/.well-known/argus/mediamtx/jwks.json\"" in script
+    assert "render_mediamtx_config.py" in script
+    assert "--jwks-url \"${API_URL%/}/.well-known/argus/mediamtx/jwks.json\"" in script
+    assert "--frontend-origin \"$FRONTEND_URL\"" in script
+    assert "--webrtc-host \"$EDGE_STREAM_HOST\"" in script
     assert "$DATA_DIR/credentials" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert "VEZOR_MODEL_HOST_DIR=$MODEL_DIR" in script
@@ -94,6 +98,17 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert '--credential-path "$DATA_DIR/credentials/supervisor.credential"' in script
     assert "systemctl enable vezor-edge.service" in script
     assert "systemctl start vezor-edge.service" in script
+
+
+def test_edge_install_script_derives_network_reachable_mediamtx_inputs() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "frontend_url_from_api_url" in script
+    assert "public_hostname_from_url" in script
+    assert 'FRONTEND_URL="${2:?--frontend-url requires a value}"' in script
+    assert 'FRONTEND_URL="$(frontend_url_from_api_url)"' in script
+    assert 'EDGE_STREAM_HOST="$(public_hostname_from_url "$PUBLIC_MEDIAMTX_RTSP_URL")"' in script
+    assert "f\"authJWTJWKS: {api_url}/.well-known/argus/mediamtx/jwks.json\"" not in script
 
 
 def test_edge_install_script_claims_pairing_before_long_image_build() -> None:

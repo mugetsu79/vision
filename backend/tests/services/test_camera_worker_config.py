@@ -744,12 +744,13 @@ async def test_worker_config_includes_decrypted_evidence_storage_profile() -> No
             secrets={"access_key": "cloud-key", "secret_key": "cloud-secret"},
         )
     )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[],
+    )
     service = CameraService(
-        session_factory=_WorkerConfigSessionFactory(
-            camera=camera,
-            models={model.id: model},
-            artifacts=[],
-        ),
+        session_factory=session_factory,
         settings=settings,
         audit_logger=_FakeAuditLogger(),
         configuration_service=configuration_service,
@@ -798,12 +799,13 @@ async def test_worker_config_includes_resolved_stream_delivery_profile() -> None
             edge_override_url="https://edge-streams.example.com",
         )
     )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[],
+    )
     service = CameraService(
-        session_factory=_WorkerConfigSessionFactory(
-            camera=camera,
-            models={model.id: model},
-            artifacts=[],
-        ),
+        session_factory=session_factory,
         settings=settings,
         audit_logger=_FakeAuditLogger(),
         configuration_service=configuration_service,
@@ -1302,6 +1304,51 @@ def test_stream_delivery_profile_controls_playback_base_urls_and_mode_without_ch
 
 
 @pytest.mark.asyncio
+async def test_worker_config_normalizes_legacy_transcode_transport_mode() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    stream_profile_id = uuid4()
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        stream_delivery=WorkerStreamDeliverySettings(
+            profile_id=stream_profile_id,
+            profile_name="Legacy transcode transport",
+            profile_hash="e" * 64,
+            delivery_mode="transcode",
+            public_base_url="https://streams.example.com",
+            edge_override_url=None,
+        ),
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert config.stream_delivery is not None
+    assert config.stream_delivery.delivery_mode == "native"
+    assert config.stream_delivery.operator_message == (
+        "Transcode route mode was normalized. Use camera live rendition profiles "
+        "for output size and FPS."
+    )
+    assert (
+        config.configuration.stream_delivery.operator_message
+        == config.stream_delivery.operator_message
+    )
+
+
+@pytest.mark.asyncio
 async def test_worker_config_includes_resolved_runtime_selection_profile() -> None:
     settings = _settings()
     model = _model(uuid4())
@@ -1326,7 +1373,7 @@ async def test_worker_config_includes_resolved_runtime_selection_profile() -> No
         session_factory=_WorkerConfigSessionFactory(
             camera=camera,
             models={model.id: model},
-            artifacts=[],
+            artifacts=[_runtime_artifact(model_id=model.id)],
         ),
         settings=settings,
         audit_logger=_FakeAuditLogger(),
@@ -1343,6 +1390,124 @@ async def test_worker_config_includes_resolved_runtime_selection_profile() -> No
     assert config.runtime_selection.preferred_backend == "tensorrt_engine"
     assert config.runtime_selection.artifact_preference == "tensorrt_first"
     assert config.runtime_selection.fallback_allowed is False
+
+
+@pytest.mark.asyncio
+async def test_worker_config_blocks_runtime_selection_without_fallback_artifact() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        runtime_selection=WorkerRuntimeSelectionSettings(
+            profile_id=uuid4(),
+            profile_name="TensorRT required",
+            profile_hash="f" * 64,
+            preferred_backend="tensorrt_engine",
+            artifact_preference="tensorrt_first",
+            fallback_allowed=False,
+        ),
+    )
+    service = CameraService(
+        session_factory=_WorkerConfigSessionFactory(
+            camera=camera,
+            models={model.id: model},
+            artifacts=[],
+        ),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == (
+        "Runtime selection has no compatible artifact and fallback is disabled."
+    )
+
+
+@pytest.mark.asyncio
+async def test_worker_config_includes_applied_configuration_summary() -> None:
+    settings = _settings()
+    model = _model(uuid4())
+    evidence_profile_id = uuid4()
+    stream_profile_id = uuid4()
+    runtime_profile_id = uuid4()
+    privacy_profile_id = uuid4()
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    configuration_service = _FakeOperatorConfigurationService(
+        evidence_storage=WorkerEvidenceStorageSettings(
+            profile_id=evidence_profile_id,
+            profile_name="Edge local evidence",
+            profile_hash="d" * 64,
+            provider="local_filesystem",
+            storage_scope="edge",
+            config={"local_root": "/tmp/argus-incidents"},
+            secrets={},
+        ),
+        stream_delivery=WorkerStreamDeliverySettings(
+            profile_id=stream_profile_id,
+            profile_name="Edge HLS delivery",
+            profile_hash="e" * 64,
+            delivery_mode="hls",
+            public_base_url="https://streams.example.com",
+            edge_override_url=None,
+        ),
+        runtime_selection=WorkerRuntimeSelectionSettings(
+            profile_id=runtime_profile_id,
+            profile_name="TensorRT required",
+            profile_hash="f" * 64,
+            preferred_backend="tensorrt_engine",
+            artifact_preference="tensorrt_first",
+            fallback_allowed=False,
+        ),
+        privacy_policy=WorkerPrivacyPolicySettings(
+            profile_id=privacy_profile_id,
+            profile_name="Edge privacy",
+            profile_hash="a" * 64,
+            retention_days=7,
+            storage_quota_bytes=4096,
+            plaintext_plate_storage="blocked",
+            residency="edge",
+        ),
+    )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[_runtime_artifact(model_id=model.id)],
+    )
+    service = CameraService(
+        session_factory=session_factory,
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=configuration_service,
+    )
+
+    config = await service.get_worker_config(_tenant_context(), camera.id)
+
+    assert config.configuration.evidence_storage.profile_id == evidence_profile_id
+    assert config.configuration.evidence_storage.profile_hash == "d" * 64
+    assert config.configuration.stream_delivery.profile_id == stream_profile_id
+    assert config.configuration.stream_delivery.profile_hash == "e" * 64
+    assert config.configuration.runtime_selection.profile_id == runtime_profile_id
+    assert config.configuration.runtime_selection.profile_hash == "f" * 64
+    assert config.configuration.runtime_selection.selected_backend == "tensorrt_engine"
+    assert config.configuration.runtime_selection.selected_artifact_id is not None
+    assert config.configuration.runtime_selection.fallback_reason is None
+    assert config.configuration.privacy_policy.profile_id == privacy_profile_id
+    assert config.configuration.privacy_policy.profile_hash == "a" * 64
+    snapshot = session_factory.state["runtime_passport_snapshots"][0]
+    assert snapshot.passport["configuration"]["evidence_storage"]["profile_hash"] == "d" * 64
+    assert snapshot.passport["configuration"]["runtime_selection"]["profile_hash"] == "f" * 64
 
 
 @pytest.mark.asyncio

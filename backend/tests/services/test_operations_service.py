@@ -11,6 +11,7 @@ from argus.api.contracts import (
     FleetBootstrapRequest,
     TenantContext,
     WorkerDesiredState,
+    WorkerModelAdmissionRequest,
 )
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
@@ -20,6 +21,7 @@ from argus.models.enums import (
     DeploymentNodeKind,
     DeploymentServiceManager,
     IncidentRuleSeverity,
+    ModelAdmissionStatus,
     OperationsLifecycleAction,
     ProcessingMode,
     RoleEnum,
@@ -34,6 +36,7 @@ from argus.models.tables import (
     RuleEvent,
     Site,
     WorkerAssignment,
+    WorkerModelAdmissionReport,
 )
 from argus.services.app import OperationsService
 
@@ -650,6 +653,56 @@ async def test_fleet_overview_allows_central_start_when_supervisor_hardware_is_f
     assert worker.detail == "Central Supervisor owns this worker process."
 
 
+@pytest.mark.asyncio
+async def test_model_admission_uses_preferred_backend_as_effective_selection() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    central_report = EdgeNodeHardwareReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        supervisor_id="central-imac",
+        reported_at=datetime.now(tz=UTC),
+        host_profile="linux-aarch64-nvidia-jetson",
+        os_name="linux",
+        machine_arch="aarch64",
+        cpu_model=None,
+        cpu_cores=8,
+        memory_total_mb=32768,
+        accelerators=["tensorrt"],
+        provider_capabilities={"TensorrtExecutionProvider": True},
+        observed_performance=[],
+        thermal_state=None,
+        report_hash="e" * 64,
+        created_at=datetime.now(tz=UTC),
+    )
+    supervisor_operations = _FakeSupervisorOperations(central_report=central_report)
+    service = OperationsService(
+        session_factory=_FakeSessionFactory(),
+        settings=Settings(_env_file=None),
+        supervisor_operations=supervisor_operations,
+    )
+
+    response = await service.evaluate_worker_model_admission(
+        _tenant_context(tenant_id),
+        camera_id,
+        WorkerModelAdmissionRequest(
+            camera_id=uuid4(),
+            model_name="YOLO",
+            selected_backend=None,
+            preferred_backend="tensorrt_engine",
+            stream_profile={"width": 1280, "height": 720, "fps": 10},
+        ),
+    )
+
+    assert response.camera_id == camera_id
+    assert response.status is ModelAdmissionStatus.SUPPORTED
+    assert response.selected_backend == "tensorrt_engine"
+    assert response.recommended_backend == "tensorrt_engine"
+    assert supervisor_operations.model_admission_payload is not None
+    assert supervisor_operations.model_admission_payload.selected_backend == "tensorrt_engine"
+
+
 class _FakeEdgeService:
     def __init__(self) -> None:
         self.payload = None
@@ -679,6 +732,7 @@ class _FakeSupervisorOperations:
         self.assignments_by_camera = assignments_by_camera or {}
         self.central_report = central_report
         self.edge_reports = edge_reports or {}
+        self.model_admission_payload: WorkerModelAdmissionRequest | None = None
 
     async def latest_assignments_by_camera(self, **kwargs):  # noqa: ANN003
         camera_ids = kwargs.get("camera_ids", [])
@@ -711,6 +765,36 @@ class _FakeSupervisorOperations:
     async def latest_model_admissions_by_camera(self, **kwargs):  # noqa: ANN003
         del kwargs
         return {}
+
+    async def record_model_admission_decision(self, **kwargs):  # noqa: ANN003
+        payload = kwargs["payload"]
+        decision = kwargs["decision"]
+        self.model_admission_payload = payload
+        now = datetime.now(tz=UTC)
+        return WorkerModelAdmissionReport(
+            id=uuid4(),
+            tenant_id=kwargs["tenant_id"],
+            camera_id=payload.camera_id,
+            edge_node_id=payload.edge_node_id,
+            assignment_id=payload.assignment_id,
+            hardware_report_id=kwargs["hardware_report_id"],
+            model_id=payload.model_id,
+            model_name=payload.model_name,
+            model_capability=payload.model_capability,
+            runtime_artifact_id=payload.runtime_artifact_id,
+            runtime_selection_profile_id=payload.runtime_selection_profile_id,
+            stream_profile=dict(payload.stream_profile),
+            status=decision.status,
+            selected_backend=payload.selected_backend,
+            recommended_model_id=decision.recommended_model_id,
+            recommended_model_name=decision.recommended_model_name,
+            recommended_runtime_profile_id=decision.recommended_runtime_profile_id,
+            recommended_backend=decision.recommended_backend,
+            rationale=decision.rationale,
+            constraints=dict(decision.constraints),
+            evaluated_at=now,
+            created_at=now,
+        )
 
 
 class _FakeRuntimeConfiguration:

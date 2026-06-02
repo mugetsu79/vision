@@ -156,6 +156,7 @@ RuntimeArtifactPreference = Literal["tensorrt_first", "onnx_first", "dynamic_fir
 
 
 EvidenceStorageConfigProvider = EvidenceStorageProvider | Literal["local_first"]
+_FORCED_STREAM_DELIVERY_MODES = {"webrtc", "hls", "mjpeg"}
 
 
 class EvidenceStorageProfileConfig(BaseModel):
@@ -174,6 +175,17 @@ class StreamDeliveryProfileConfig(BaseModel):
     delivery_mode: StreamDeliveryMode = "native"
     public_base_url: str | None = Field(default=None, min_length=1)
     edge_override_url: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_forced_route_base_url(self) -> StreamDeliveryProfileConfig:
+        if (
+            self.delivery_mode in _FORCED_STREAM_DELIVERY_MODES
+            and self.public_base_url is None
+        ):
+            raise ValueError(
+                "Forced stream delivery modes require a public base URL."
+            )
+        return self
 
 
 class RuntimeSelectionProfileConfig(BaseModel):
@@ -256,6 +268,37 @@ class OperatorConfigProfileUpdate(BaseModel):
 
 OperatorSecretState = Literal["missing", "present"]
 OperatorConfigResolutionStatus = Literal["resolved", "unresolved"]
+OperatorConfigSupportState = Literal[
+    "active",
+    "advisory",
+    "requires_service",
+    "unsupported",
+]
+
+
+class OperatorConfigValueCapability(BaseModel):
+    value: str
+    support: OperatorConfigSupportState
+    requires: list[str] = Field(default_factory=list)
+    operator_message: str | None = None
+
+
+class OperatorConfigFieldCapability(BaseModel):
+    name: str
+    label: str
+    support: OperatorConfigSupportState
+    requires: list[str] = Field(default_factory=list)
+    operator_message: str | None = None
+    values: list[OperatorConfigValueCapability] = Field(default_factory=list)
+
+
+class OperatorConfigKindCapability(BaseModel):
+    kind: OperatorConfigProfileKind
+    label: str
+    runtime_support: OperatorConfigSupportState
+    operator_summary: str
+    secret_keys: list[str] = Field(default_factory=list)
+    fields: list[OperatorConfigFieldCapability] = Field(default_factory=list)
 
 
 class OperatorConfigProfileResponse(OperatorConfigProfileBase):
@@ -284,6 +327,24 @@ class OperatorConfigBindingResponse(OperatorConfigBindingRequest):
     tenant_id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class OperatorConfigBindingListResponse(BaseModel):
+    bindings: list[OperatorConfigBindingResponse] = Field(default_factory=list)
+
+
+class OperatorConfigProfileImpactResponse(BaseModel):
+    profile_id: UUID
+    kind: OperatorConfigProfileKind
+    is_default: bool
+    direct_bindings: list[OperatorConfigBindingResponse] = Field(default_factory=list)
+    affected_targets_count: int = 0
+    requires_replacement_default: bool = False
+    secret_state: dict[str, OperatorSecretState] = Field(default_factory=dict)
+
+
+class OperatorConfigProfileDeleteRequest(BaseModel):
+    replacement_default_profile_id: UUID | None = None
 
 
 class OperatorConfigTestResponse(BaseModel):
@@ -790,6 +851,7 @@ class BrowserDeliverySettings(BaseModel):
     delivery_mode: StreamDeliveryMode | None = None
     public_base_url: str | None = Field(default=None, min_length=1)
     edge_override_url: str | None = Field(default=None, min_length=1)
+    operator_message: str | None = None
     profiles: list[dict[str, Any]] = Field(default_factory=_default_browser_delivery_profiles)
     unsupported_profiles: list[dict[str, Any]] = Field(default_factory=list)
     native_status: NativeAvailability = Field(default_factory=NativeAvailability)
@@ -859,6 +921,7 @@ class WorkerStreamDeliverySettings(BaseModel):
     delivery_mode: StreamDeliveryMode = "native"
     public_base_url: str | None = Field(default=None, min_length=1)
     edge_override_url: str | None = Field(default=None, min_length=1)
+    operator_message: str | None = None
 
 
 class WorkerRuntimeSelectionSettings(BaseModel):
@@ -878,6 +941,31 @@ class WorkerPrivacyPolicySettings(BaseModel):
     storage_quota_bytes: int = Field(default=10 * 1024 * 1024 * 1024, ge=0)
     plaintext_plate_storage: Literal["blocked", "allowed"] = "blocked"
     residency: Literal["edge", "central", "cloud", "local_first"] = "central"
+
+
+class AppliedOperatorConfigRef(BaseModel):
+    profile_id: UUID | None = None
+    profile_name: str | None = None
+    profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    support: OperatorConfigSupportState = "active"
+    operator_message: str | None = None
+
+
+class AppliedRuntimeSelectionConfigRef(AppliedOperatorConfigRef):
+    selected_backend: str | None = None
+    selected_artifact_id: UUID | None = None
+    fallback_reason: str | None = None
+
+
+class AppliedOperatorConfigurationSummary(BaseModel):
+    evidence_storage: AppliedOperatorConfigRef = Field(default_factory=AppliedOperatorConfigRef)
+    stream_delivery: AppliedOperatorConfigRef = Field(default_factory=AppliedOperatorConfigRef)
+    runtime_selection: AppliedRuntimeSelectionConfigRef = Field(
+        default_factory=AppliedRuntimeSelectionConfigRef
+    )
+    privacy_policy: AppliedOperatorConfigRef = Field(default_factory=AppliedOperatorConfigRef)
+    llm_provider: AppliedOperatorConfigRef = Field(default_factory=AppliedOperatorConfigRef)
+    operations_mode: AppliedOperatorConfigRef = Field(default_factory=AppliedOperatorConfigRef)
 
 
 class WorkerEvidenceStorageSettings(BaseModel):
@@ -1121,6 +1209,9 @@ class WorkerConfigResponse(BaseModel):
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     runtime_passport_snapshot_id: UUID | None = None
     runtime_passport_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    configuration: AppliedOperatorConfigurationSummary = Field(
+        default_factory=AppliedOperatorConfigurationSummary
+    )
     recording_policy: EvidenceRecordingPolicy = Field(default_factory=EvidenceRecordingPolicy)
     evidence_storage: WorkerEvidenceStorageSettings | None = None
     camera: WorkerCameraSettings
@@ -1342,6 +1433,9 @@ class FleetNodeSummary(BaseModel):
 class RuntimePassportSummary(BaseModel):
     id: UUID
     passport_hash: str = Field(min_length=64, max_length=64)
+    configuration: AppliedOperatorConfigurationSummary = Field(
+        default_factory=AppliedOperatorConfigurationSummary
+    )
     selected_backend: str | None = None
     model_hash: str | None = Field(default=None, min_length=64, max_length=64)
     runtime_artifact_id: UUID | None = None
@@ -1773,6 +1867,9 @@ class FleetCameraWorkerSummary(BaseModel):
     lifecycle_owner: Literal["manual_dev", "central_supervisor", "edge_supervisor", "none"]
     dev_run_command: str | None = None
     detail: str | None = None
+    configuration: AppliedOperatorConfigurationSummary = Field(
+        default_factory=AppliedOperatorConfigurationSummary
+    )
     runtime_passport: RuntimePassportSummary | None = None
     rule_runtime: FleetRuleRuntimeSummary = Field(default_factory=FleetRuleRuntimeSummary)
     assignment: WorkerAssignmentResponse | None = None

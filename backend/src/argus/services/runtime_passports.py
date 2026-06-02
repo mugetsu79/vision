@@ -37,6 +37,7 @@ def build_runtime_passport(
     camera_id: object,
     scene_contract_hash: str,
     model_metadata: Mapping[str, object],
+    configuration: Mapping[str, object] | None = None,
     runtime_selection: Mapping[str, object] | None = None,
     runtime_artifact: Mapping[str, object] | None = None,
     selection_report: Mapping[str, object] | None = None,
@@ -69,6 +70,7 @@ def build_runtime_passport(
                 "tenant_id": tenant_id,
                 "camera_id": camera_id,
                 "scene_contract_hash": scene_contract_hash,
+                "configuration": dict(configuration or {}),
                 "model": model_payload,
                 "runtime_selection_profile": _runtime_selection_profile(
                     cast(dict[str, object], runtime_selection_payload)
@@ -196,6 +198,10 @@ def _runtime_selection_profile(
         "fallback_allowed": runtime_selection.get("fallback_allowed"),
         "preferred_backend": runtime_selection.get("preferred_backend")
         or runtime_selection.get("backend"),
+        "selected_backend": runtime_selection.get("selected_backend")
+        or runtime_selection.get("backend"),
+        "selected_artifact_id": runtime_selection.get("selected_artifact_id"),
+        "fallback_reason": runtime_selection.get("fallback_reason"),
     }
 
 

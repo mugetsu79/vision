@@ -11,14 +11,21 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from argus.api.contracts import EvidenceRecordingPolicy, WorkerPrivacyPolicySettings
+from argus.api.contracts import (
+    EvidenceRecordingPolicy,
+    TenantContext,
+    WorkerPrivacyPolicySettings,
+)
+from argus.core.security import AuthenticatedUser
 from argus.models import Base
 from argus.models.enums import (
     EvidenceArtifactStatus,
     EvidenceLedgerAction,
     ModelFormat,
     ModelTask,
+    OperatorConfigProfileKind,
     ProcessingMode,
+    RoleEnum,
     TrackerType,
 )
 from argus.models.tables import Camera, Model, PrivacyManifestSnapshot, Site, Tenant
@@ -29,6 +36,7 @@ from argus.services.privacy_manifests import (
     hash_manifest,
 )
 from argus.services.privacy_policy_runtime import PrivacyPolicyRetentionService
+from argus.services.runtime_configuration import RuntimeOperatorConfig
 
 
 def test_privacy_manifest_is_deterministic_and_disables_biometrics_by_default() -> None:
@@ -152,6 +160,64 @@ async def test_privacy_retention_marks_expired_artifacts_and_writes_ledger() -> 
     ]
 
 
+@pytest.mark.asyncio
+async def test_privacy_retention_uses_resolved_policy_per_camera() -> None:
+    tenant_id = uuid4()
+    short_camera_id = uuid4()
+    long_camera_id = uuid4()
+    now = datetime(2026, 5, 12, 12, 0, tzinfo=UTC)
+    short_artifact = SimpleNamespace(
+        id=uuid4(),
+        camera_id=short_camera_id,
+        status=EvidenceArtifactStatus.REMOTE_AVAILABLE,
+        created_at=now - timedelta(days=2),
+        size_bytes=1024,
+        privacy_manifest_hash="a" * 64,
+    )
+    long_artifact = SimpleNamespace(
+        id=uuid4(),
+        camera_id=long_camera_id,
+        status=EvidenceArtifactStatus.REMOTE_AVAILABLE,
+        created_at=now - timedelta(days=2),
+        size_bytes=2048,
+        privacy_manifest_hash="b" * 64,
+    )
+    session_factory = _RetentionSessionFactory(
+        rows=[
+            (short_artifact, SimpleNamespace(id=uuid4(), camera_id=short_camera_id)),
+            (long_artifact, SimpleNamespace(id=uuid4(), camera_id=long_camera_id)),
+        ]
+    )
+    ledger = _RetentionLedger()
+    service = PrivacyPolicyRetentionService(
+        session_factory=session_factory,
+        ledger=ledger,
+    )
+    runtime_configuration = _RetentionRuntimeConfiguration(
+        {
+            short_camera_id: 1,
+            long_camera_id: 30,
+        }
+    )
+
+    summary = await service.mark_expired_artifacts_for_tenant(
+        tenant_context=_tenant_context(tenant_id),
+        runtime_configuration=runtime_configuration,
+        now=now,
+    )
+
+    assert summary.camera_count == 2
+    assert summary.expired_count == 1
+    assert summary.expired_by_camera == {
+        short_camera_id: 1,
+        long_camera_id: 0,
+    }
+    assert short_artifact.status is EvidenceArtifactStatus.EXPIRED
+    assert long_artifact.status is EvidenceArtifactStatus.REMOTE_AVAILABLE
+    assert runtime_configuration.camera_ids == [short_camera_id, long_camera_id]
+    assert len(ledger.entries) == 1
+
+
 class _Result:
     def __init__(self, values: list[PrivacyManifestSnapshot]) -> None:
         self.values = values
@@ -252,9 +318,16 @@ class _RetentionSession:
         return None
 
     async def execute(self, statement):  # noqa: ANN001
-        del statement
+        sql = str(statement)
         rows = self.state["rows"]
         assert isinstance(rows, list)
+        if sql.lstrip().startswith("SELECT evidence_artifacts.camera_id"):
+            camera_ids: list[tuple[object]] = []
+            for artifact, _incident in rows:
+                if getattr(artifact, "status", None) is EvidenceArtifactStatus.EXPIRED:
+                    continue
+                camera_ids.append((artifact.camera_id,))
+            return _RetentionResult(camera_ids)
         return _RetentionResult(rows)
 
     async def commit(self) -> None:
@@ -269,12 +342,62 @@ class _RetentionSessionFactory:
         return _RetentionSession(self.state)
 
 
+class _RetentionRuntimeConfiguration:
+    def __init__(self, retention_by_camera: dict[object, int]) -> None:
+        self.retention_by_camera = retention_by_camera
+        self.camera_ids: list[object] = []
+
+    async def resolve_profile_for_runtime(
+        self,
+        tenant_context: TenantContext,
+        kind: OperatorConfigProfileKind,
+        *,
+        camera_id,
+        **_: object,
+    ) -> RuntimeOperatorConfig:
+        assert tenant_context.tenant_id
+        assert kind is OperatorConfigProfileKind.PRIVACY_POLICY
+        self.camera_ids.append(camera_id)
+        retention_days = self.retention_by_camera[camera_id]
+        return RuntimeOperatorConfig(
+            kind=OperatorConfigProfileKind.PRIVACY_POLICY,
+            profile_id=uuid4(),
+            profile_name=f"{retention_days} day privacy",
+            profile_slug=f"{retention_days}-day-privacy",
+            profile_hash=f"{retention_days:064d}",
+            config={
+                "retention_days": retention_days,
+                "storage_quota_bytes": 10_000,
+                "plaintext_plate_storage": "blocked",
+                "residency": "edge",
+            },
+            secrets={},
+        )
+
+
 class _RetentionLedger:
     def __init__(self) -> None:
         self.entries: list[dict[str, object]] = []
 
     async def append_entry(self, **entry: object) -> None:
         self.entries.append(dict(entry))
+
+
+def _tenant_context(tenant_id) -> TenantContext:  # noqa: ANN001
+    return TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject="operator-1",
+            email="operator@argus.local",
+            role=RoleEnum.ADMIN,
+            issuer="http://issuer",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=str(tenant_id),
+            claims={},
+        ),
+    )
 
 
 @pytest.mark.asyncio

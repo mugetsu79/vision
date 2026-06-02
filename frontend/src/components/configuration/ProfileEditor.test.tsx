@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ProfileEditor } from "@/components/configuration/ProfileEditor";
-import type { OperatorConfigProfileCreate } from "@/hooks/use-configuration";
+import type {
+  ConfigurationCatalog,
+  OperatorConfigProfileCreate,
+} from "@/hooks/use-configuration";
 
 const saveProfile = vi.fn();
 
@@ -82,6 +85,92 @@ describe("ProfileEditor", () => {
       storage_scope: "edge",
       local_root: "/var/lib/argus/evidence",
       path_prefix: "pending",
+    });
+  });
+
+  test("shows backend capability messages without offering legacy transcode as a new route", () => {
+    const catalog: ConfigurationCatalog = {
+      kinds: [
+        {
+          kind: "stream_delivery",
+          label: "Transport profile",
+          runtime_support: "active",
+          operator_summary: "Selects the browser stream route.",
+          fields: [
+            {
+              name: "delivery_mode",
+              label: "Transport mode",
+              support: "active",
+              values: [
+                { value: "native", support: "active" },
+                {
+                  value: "transcode",
+                  support: "unsupported",
+                  operator_message: "Use camera live rendition profiles for transcoding.",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <ProfileEditor
+        kind="stream_delivery"
+        selectedProfile={null}
+        catalog={catalog}
+        onSave={saveProfile}
+      />,
+    );
+
+    expect(screen.getByText(/selects the browser stream route/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/use camera live rendition profiles for transcoding/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /transcode/i })).not.toBeInTheDocument();
+  });
+
+  test("normalizes existing legacy transcode transport profiles", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProfileEditor
+        kind="stream_delivery"
+        selectedProfile={{
+          id: "profile-transport",
+          tenant_id: "tenant-1",
+          kind: "stream_delivery",
+          scope: "tenant",
+          name: "Legacy transcode",
+          slug: "legacy-transcode",
+          enabled: true,
+          is_default: false,
+          config: {
+            delivery_mode: "transcode",
+            public_base_url: "https://streams.example.test",
+          },
+          secret_state: {},
+          validation_status: "valid",
+          validation_message: null,
+          validated_at: "2026-05-11T10:00:00Z",
+          config_hash: "b".repeat(64),
+          created_at: "2026-05-11T10:00:00Z",
+          updated_at: "2026-05-11T10:00:00Z",
+        }}
+        onSave={saveProfile}
+      />,
+    );
+
+    expect(
+      screen.getByText(/transcode route mode was normalized/i),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /normalize transport/i }));
+
+    const savedPayload = saveProfile.mock.calls[0]?.[0] as OperatorConfigProfileCreate;
+    expect(savedPayload.config).toMatchObject({
+      delivery_mode: "native",
+      public_base_url: "https://streams.example.test",
     });
   });
 

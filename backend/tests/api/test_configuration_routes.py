@@ -12,6 +12,7 @@ from argus.api.contracts import (
     OperatorConfigBindingRequest,
     OperatorConfigBindingResponse,
     OperatorConfigProfileCreate,
+    OperatorConfigProfileImpactResponse,
     OperatorConfigProfileResponse,
     OperatorConfigProfileUpdate,
     OperatorConfigTestResponse,
@@ -75,8 +76,20 @@ class _FakeConfigurationService:
         self.updated_payload: OperatorConfigProfileUpdate | None = None
         self.binding_payload: OperatorConfigBindingRequest | None = None
         self.deleted_profile_id: UUID | None = None
+        self.deleted_replacement_default_profile_id: UUID | None = None
+        self.deleted_binding_id: UUID | None = None
         self.tested_profile_id: UUID | None = None
         self.profile = _profile_response(tenant_id=tenant_id)
+        self.binding = OperatorConfigBindingResponse(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            kind=OperatorConfigProfileKind.EVIDENCE_STORAGE,
+            scope=OperatorConfigScope.CAMERA,
+            scope_key=str(uuid4()),
+            profile_id=self.profile.id,
+            created_at=datetime(2026, 5, 11, 12, 0, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 11, 12, 0, tzinfo=UTC),
+        )
 
     async def list_catalog(self) -> dict[str, object]:
         return {
@@ -116,8 +129,30 @@ class _FakeConfigurationService:
         self.updated_payload = payload
         return self.profile.model_copy(update={"id": profile_id})
 
-    async def delete_profile(self, tenant_context: TenantContext, profile_id: UUID) -> None:
+    async def delete_profile(
+        self,
+        tenant_context: TenantContext,
+        profile_id: UUID,
+        *,
+        replacement_default_profile_id: UUID | None = None,
+    ) -> None:
         self.deleted_profile_id = profile_id
+        self.deleted_replacement_default_profile_id = replacement_default_profile_id
+
+    async def profile_impact(
+        self,
+        tenant_context: TenantContext,
+        profile_id: UUID,
+    ) -> OperatorConfigProfileImpactResponse:
+        return OperatorConfigProfileImpactResponse(
+            profile_id=profile_id,
+            kind=self.profile.kind,
+            is_default=True,
+            direct_bindings=[self.binding],
+            affected_targets_count=1,
+            requires_replacement_default=True,
+            secret_state=self.profile.secret_state,
+        )
 
     async def test_profile(
         self,
@@ -145,6 +180,23 @@ class _FakeConfigurationService:
             updated_at=datetime(2026, 5, 11, 12, 0, tzinfo=UTC),
             **payload.model_dump(),
         )
+
+    async def list_bindings(
+        self,
+        tenant_context: TenantContext,
+        *,
+        kind: OperatorConfigProfileKind | None = None,
+    ) -> list[OperatorConfigBindingResponse]:
+        if kind is not None and kind is not self.binding.kind:
+            return []
+        return [self.binding]
+
+    async def delete_binding(
+        self,
+        tenant_context: TenantContext,
+        binding_id: UUID,
+    ) -> None:
+        self.deleted_binding_id = binding_id
 
     async def resolve_all_for_camera(
         self,
@@ -337,6 +389,47 @@ async def test_configuration_routes_create_patch_test_bind_and_resolve() -> None
     assert "argus-dev-secret" not in resolved_response.text
     assert delete_response.status_code == 204
     assert configuration.deleted_profile_id == profile_id
+
+
+@pytest.mark.asyncio
+async def test_configuration_routes_expose_impact_binding_list_and_unbind() -> None:
+    context = _tenant_context()
+    configuration = _FakeConfigurationService(context.tenant_id)
+    app = _create_app(context, configuration)
+    replacement_profile_id = uuid4()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        impact_response = await client.get(
+            f"/api/v1/configuration/profiles/{configuration.profile.id}/impact",
+            headers={"Authorization": "Bearer token"},
+        )
+        bindings_response = await client.get(
+            "/api/v1/configuration/bindings?kind=evidence_storage",
+            headers={"Authorization": "Bearer token"},
+        )
+        delete_binding_response = await client.delete(
+            f"/api/v1/configuration/bindings/{configuration.binding.id}",
+            headers={"Authorization": "Bearer token"},
+        )
+        delete_profile_response = await client.request(
+            "DELETE",
+            f"/api/v1/configuration/profiles/{configuration.profile.id}",
+            headers={"Authorization": "Bearer token"},
+            json={"replacement_default_profile_id": str(replacement_profile_id)},
+        )
+
+    assert impact_response.status_code == 200
+    impact_payload = impact_response.json()
+    assert impact_payload["profile_id"] == str(configuration.profile.id)
+    assert impact_payload["direct_bindings"][0]["id"] == str(configuration.binding.id)
+    assert impact_payload["requires_replacement_default"] is True
+    assert bindings_response.status_code == 200
+    assert bindings_response.json()["bindings"][0]["id"] == str(configuration.binding.id)
+    assert delete_binding_response.status_code == 204
+    assert configuration.deleted_binding_id == configuration.binding.id
+    assert delete_profile_response.status_code == 204
+    assert configuration.deleted_profile_id == configuration.profile.id
+    assert configuration.deleted_replacement_default_profile_id == replacement_profile_id
 
 
 def _profile_response(

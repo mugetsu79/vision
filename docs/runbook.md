@@ -317,6 +317,42 @@ Current behavior:
 
 If a still preview is required for a deployment, add snapshot generation as a separate feature rather than assuming every incident row has one.
 
+## Configuration Validation And Runtime Wiring
+
+Settings -> Configuration is now the operator source of truth for evidence
+storage, transport, runtime selection, privacy policy, LLM provider, and
+operations mode profiles. Treat these as live runtime inputs, not cosmetic UI
+state.
+
+Normal validation flow:
+
+1. Create or edit the profile in Settings -> Configuration.
+2. Use `Test profile` before binding. Remote evidence profiles need stored
+   secrets; LLM profiles that require an API key fail closed when the key is
+   missing.
+3. Bind only validated, enabled profiles. The backend rejects missing targets,
+   disabled profiles, unvalidated profiles, unsupported transport modes, and
+   evidence/privacy residency conflicts.
+4. Use the profile inventory before deletion. Direct bindings can be unbound
+   from the UI, and deleting a default profile requires choosing an enabled
+   replacement default.
+5. Check the Runtime view for desired hash, applied hash, selected backend,
+   selected artifact, fallback reason, and transport/operator messages. A drift
+   badge means the worker has not yet reported the profile hash you expect.
+
+For a MacBook/iMac test build, the minimum smoke after pulling a branch is:
+
+- Settings -> Configuration: all six kinds load, profiles can be tested, bound,
+  unbound, duplicated, and deleted with impact warnings.
+- Live: forced transport profiles start on the configured route, legacy
+  `transcode` profiles are normalized to native with an operator message, and
+  Live does not show telemetry as live when no fresh worker heartbeat exists.
+- Operations: lifecycle actions reflect the resolved operations mode; disabled
+  mode blocks requests, polling mode queues for supervisor pickup, and push mode
+  shows dispatch state.
+- Worker config/passport: `/api/v1/cameras/{camera_id}/worker-config` and the
+  latest runtime passport both include the applied configuration summary.
+
 ## Incident Rule Authoring And Provenance
 
 Per-worker incident rules define what counts as an incident for one scene

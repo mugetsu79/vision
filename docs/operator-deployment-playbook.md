@@ -387,6 +387,26 @@ Before calling a site production-ready, the deployment needs:
 - backup and restore procedure for Postgres/TimescaleDB and incident object storage
 - scoped supervisor credentials with rotation path
 
+### Runtime Configuration Profiles
+
+Before assigning a site or camera to production workers, configure the six
+profile kinds in Settings -> Configuration:
+
+| Profile kind | Runtime path it affects | Required production check |
+|---|---|---|
+| Evidence storage | incident artifact capture and review URLs | profile test passes and storage/secret state is valid |
+| Transport profile | browser delivery route for Live | forced route has a reachable public URL; legacy `transcode` is normalized |
+| Runtime selection | backend/artifact choice before worker start | fallback policy matches the deployment risk |
+| Privacy policy | manifest, plate posture, retention, quota, residency | residency is compatible with evidence storage |
+| LLM provider | prompt-to-policy draft assistance | required API key is stored before use |
+| Operations mode | lifecycle ownership, supervisor mode, restart policy | polling/push/disabled behavior matches the supervisor deployment |
+
+The UI exposes binding inventory, unbind, impact-aware delete, default
+replacement, and effective runtime summaries. Use those controls instead of
+editing database rows. A profile is not production-ready until a worker passport
+or worker-config response reports the expected profile hash in the applied
+configuration summary.
+
 ### Camera Source And Evidence Storage Choices
 
 Choose RTSP for network cameras that the central or edge worker can reach over a

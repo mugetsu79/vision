@@ -214,8 +214,8 @@ describe("VideoStream", () => {
     expect(FakeRTCPeerConnection.instances[0]?.closed).toBe(true);
   });
 
-  test("adds the selected profile id to HLS requests and the profile badge", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
+  test("starts forced HLS without negotiating WebRTC first", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("upstream failed", { status: 502 }),
     );
     isSupportedMock.mockReturnValue(true);
@@ -247,6 +247,8 @@ describe("VideoStream", () => {
     const url = new URL(String(loadSourceMock.mock.calls[0]?.[0]));
 
     expect(url.searchParams.get("profile_id")).toBe("540p5");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(FakeRTCPeerConnection.instances).toHaveLength(0);
     expect(screen.getByText("540p5")).toBeInTheDocument();
   });
 
