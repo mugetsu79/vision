@@ -52,15 +52,16 @@ appliance profiles, first-run APIs, node pairing, credential storage, service
 status contracts, support bundle redaction, and UI surfaces. It is not yet a
 signed final package.
 
-Latest source checkpoint validated before the main-merge recommendation:
+Latest implementation checkpoint validated before the main merge:
 
 ```text
-ac2715c5 Fix edge scene startup and live scene deletion
+89a8be22 Tighten live rendition UX and Jetson guidance
 ```
 
 That checkpoint includes the installed Jetson NATS leaf path, LAN HTTP Keycloak
 compatibility, second-scene worker startup fixes, and the Live scene delete
-action. If Jetson worker logs show stale behavior such as
+action, plus live rendition switching, tile sizing, configuration guidance, and
+Jetson reduced-rendition handling. If Jetson worker logs show stale behavior such as
 `Connect call failed ('127.0.0.1', 4222)` or a second scene failing because the
 worker metrics port is already bound, update the checkout and rerun the relevant
 installer; the installed compose environment or image is stale.
@@ -686,9 +687,9 @@ register_model yolo26n-coco-onnx /models/yolo26n.onnx
 
 A successful registration prints a JSON model response that includes an `id`,
 `name`, `path`, `sha256`, and `size_bytes`. If the command prints nothing, the
-installed backend image is too old for this guide; pull this branch, rerun the
-master installer so the backend image is rebuilt, and run the registration
-command again.
+installed backend image is too old for this guide; pull the latest source ref or
+`main`, rerun the master installer so the backend image is rebuilt, and run the
+registration command again.
 
 Optional fixed-vocab models:
 
@@ -884,7 +885,7 @@ docker compose version
 nvidia-ctk --version
 ```
 
-Install `uv` for the branch installer tooling:
+Install `uv` for the source installer tooling:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -1462,7 +1463,7 @@ sudo ./installer/macos/install-master.sh \
   --data-dir /var/lib/vezor
 ```
 
-Jetson edge branch install:
+Jetson edge source update:
 
 ```bash
 sudo systemctl stop vezor-edge.service
@@ -1515,7 +1516,7 @@ sudo ./installer/linux/uninstall.sh --purge-data delete-vezor-data
 sudo ./installer/macos/uninstall.sh --purge-data delete-vezor-data
 ```
 
-For a Jetson edge branch install:
+For a Jetson edge source install:
 
 ```bash
 sudo systemctl stop vezor-edge.service
@@ -1528,6 +1529,10 @@ Preserve `/var/lib/vezor/models` unless you intentionally want to recopy model
 files.
 
 ## Troubleshooting
+
+For a short recovery checklist when Operations reports a running scene but the
+Live page is blank, or when a rendition change appears stuck, use
+[live-video-troubleshooting.md](/Users/yann.moren/vision/docs/live-video-troubleshooting.md).
 
 ### The installer service does not start
 
@@ -1603,13 +1608,13 @@ backend image is rebuilt.
 If the log says `extension "timescaledb" is not available`, the master was
 started with a plain PostgreSQL image. The installable master must use a
 TimescaleDB PostgreSQL image because the migrations create Timescale extensions,
-hypertables, and aggregates. Pull the latest branch and rerun the installer; the
-dev manifest now uses `timescale/timescaledb:latest-pg16`.
+hypertables, and aggregates. Pull the latest source ref or `main` and rerun the
+installer; the dev manifest now uses `timescale/timescaledb:latest-pg16`.
 
 If the PostgreSQL log says `extension "timescaledb" must be preloaded`, the data
 directory was created before the TimescaleDB preload setting was enforced. Pull
-the latest branch and rerun the installer; the master compose profile now starts
-PostgreSQL with `shared_preload_libraries=timescaledb`, so upgraded data
+the latest source ref or `main` and rerun the installer; the master compose
+profile now starts PostgreSQL with `shared_preload_libraries=timescaledb`, so upgraded data
 directories do not need manual `postgresql.conf` edits.
 
 ### Keycloak restarts on first boot
@@ -1621,8 +1626,8 @@ valid after a Keycloak build step.
 
 If the log says PostgreSQL requested SCRAM authentication but no password was
 provided, the Keycloak container is too old or using stale compose config that
-expects `KC_DB_PASSWORD_FILE`. Pull the latest branch and rerun the installer;
-Keycloak now exports the mounted secret file into `KC_DB_PASSWORD` before
+expects `KC_DB_PASSWORD_FILE`. Pull the latest source ref or `main` and rerun
+the installer; Keycloak now exports the mounted secret file into `KC_DB_PASSWORD` before
 starting.
 
 ### Supervisor is unhealthy before first-run pairing
@@ -1631,8 +1636,8 @@ Before first-run completes, the installed supervisor may not have a node
 credential yet. It should stay alive and report healthy while waiting for the
 credential store to be populated by first-run/pairing. If the health log says
 `unrecognized arguments: --healthcheck` or the supervisor restarts because
-`Supervisor API bearer token is not configured`, pull the latest branch and
-rerun the installer.
+`Supervisor API bearer token is not configured`, pull the latest source ref or
+`main` and rerun the installer.
 
 ### The Jetson says the TensorRT engine is invalid
 
@@ -1707,9 +1712,9 @@ longer blocks live workers on an unused evidence storage profile.
 The edge installer stops the existing `vezor-edge` appliance before Jetson
 preflight checks ports. During branch upgrades, an older `/etc/vezor/edge.env`
 may be missing new compose variables, which can prevent an old script from
-rendering the new edge compose file during `down`. Pull the latest branch and
-rerun the installer; current installers export transition-safe image variables
-and remove stale product-owned edge containers before preflight.
+rendering the new edge compose file during `down`. Pull the latest source ref or
+`main` and rerun the installer; current installers export transition-safe image
+variables and remove stale product-owned edge containers before preflight.
 
 If you need to clear the stale containers before pulling the fixed installer,
 run this on the Jetson:
@@ -1748,9 +1753,9 @@ Check:
 If an older installer expired the pairing session after a long Jetson image
 build, that attempt usually built `vezor/edge-worker:portable-demo` but did not
 claim a credential or complete the systemd service install. Pull the latest
-branch on the Jetson, create a fresh Pair Jetson edge session in the UI, and
-rerun `installer/linux/install-edge.sh` with the new session id, new pairing
-code, and required `--jetson-ort-wheel-url`.
+source ref or `main` on the Jetson, create a fresh Pair Jetson edge session in
+the UI, and rerun `installer/linux/install-edge.sh` with the new session id, new
+pairing code, and required `--jetson-ort-wheel-url`.
 
 ### The edge node pairs but has no heartbeat
 
@@ -1768,16 +1773,16 @@ The supervisor config should be world-readable because it contains no secret,
 and the credential file should be owned by container UID `10001` with mode
 `0600`. If the log says `edge supervisor config requires edge_node_id`, or if a
 normal `vezorctl status --json` cannot read `/etc/vezor/supervisor.json`, pull
-the latest branch, create a fresh Pair Jetson edge session, and rerun the edge
-installer without `--unpaired`. A current installer preserves the claimed
+the latest source ref or `main`, create a fresh Pair Jetson edge session, and
+rerun the edge installer without `--unpaired`. A current installer preserves the claimed
 `edge_node_id` during later unpaired updates, fixes config permissions, and
 makes the credential readable only to the non-root supervisor container user.
 
 If a rerun fails preflight because TCP ports `8554`, `8888`, or `8889`, or UDP
 port `8189`, are already in use, the previous edge MediaMTX container is still
-running. Pull the latest branch and rerun the installer; the updated installer
-stops the existing `vezor-edge.service` and Compose stack before preflight so
-the port checks see a clean host.
+running. Pull the latest source ref or `main` and rerun the installer; the
+updated installer stops the existing `vezor-edge.service` and Compose stack
+before preflight so the port checks see a clean host.
 
 ### A demo network change breaks the kit
 

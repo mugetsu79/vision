@@ -8,7 +8,7 @@ The project supports three processing modes:
 - `edge`: a site-local node performs inference and sends events, telemetry, clips, and optional preview streams back to the master
 - `hybrid`: edge handles primary detection while the master adds heavier downstream analytics
 
-Vezor separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, or `540p5`.
+Vezor separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, `540p5`, or `240p5`.
 
 The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, and support bundles. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
 
@@ -151,6 +151,7 @@ Start here if you are new to the repo:
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance
 - [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md): canonical installer-managed setup guide for MacBook Pro/Linux master, Jetson edge, models, first-run, pairing, validation, and operations
+- [docs/live-video-troubleshooting.md](/Users/yann.moren/vision/docs/live-video-troubleshooting.md): short recovery guide for blank Live video, stuck renditions, worker restart checks, and Jetson edge stream validation
 - [docs/macbook-jetson-cross-network-reinstall-guide.md](/Users/yann.moren/vision/docs/macbook-jetson-cross-network-reinstall-guide.md): short reinstall guide for a MacBook master and Jetson edge when they are reachable through different networks, VPNs, or forwarded addresses
 - [docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md): planned product installer band for macOS master, Linux master, and Jetson edge no-console operation
 
@@ -266,12 +267,12 @@ The most mature operational paths today are `central` and `edge`.
 
 Still missing for production hardening:
 
-- supervisor-backed Start/Stop/Restart/Drain actions in Operations
-- per-worker runtime heartbeat and last-error reporting from central and edge supervisors
-- persistent worker assignment/reassignment workflows
+- signed package upgrades, rollback metadata, and pinned production image manifests
+- backup/restore posture for installed data and credential stores
+- TLS/OIDC production configuration, certificate lifecycle, and hardened public endpoints
 - production edge credential rotation automation
 - first-site Jetson soak validation for registered TensorRT `.engine` artifacts and compiled scene open-vocab artifacts
-- accountable scene intelligence implementation: scene contract snapshots, privacy manifests, evidence ledger, artifact-aware short incident recording, edge local/cloud storage choices, and edge USB/UVC camera source support
+- broader edge hardware coverage beyond the current Jetson-focused packaged path
 - incident still snapshot generation, if still previews become required evidence rather than optional convenience
 
 ## Model And Camera Scope

@@ -104,13 +104,13 @@ order by c.updated_at desc;"
 
 If the Jetson was already paired and only the source checkout changed, rerun the
 edge installer as an unpaired update so the supervisor image, MediaMTX config,
-and local compose environment all match the branch:
+and local compose environment all match the current `main` checkout:
 
 ```sh
 cd /opt/vezor/current
 git fetch origin
-git switch codex/omnisight-live-video-window-sizing
-git pull --ff-only origin codex/omnisight-live-video-window-sizing
+git switch main
+git pull --ff-only origin main
 
 sudo ./installer/linux/install-edge.sh \
   --version "portable-demo" \

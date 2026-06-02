@@ -12,8 +12,8 @@
 
 ## Status
 
-Implemented on 2026-06-01 for branch
-`codex/omnisight-live-video-window-sizing`.
+Implemented on 2026-06-01 for `codex/omnisight-live-video-window-sizing` and
+included in the 2026-06-02 main merge closeout.
 
 This change stayed within the current Operations worker assignment contract and
 did not introduce a new worker deletion API.

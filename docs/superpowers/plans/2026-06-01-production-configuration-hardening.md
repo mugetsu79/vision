@@ -12,8 +12,9 @@
 
 ## Implementation Status - 2026-06-01
 
-Status: implemented locally on `codex/omnisight-live-video-window-sizing`.
-Manual MacBook/Jetson smoke remains the next operator validation step.
+Status: implemented on `codex/omnisight-live-video-window-sizing` and included
+in the 2026-06-02 main merge closeout. Manual MacBook/Jetson smoke remains the
+next operator validation step after updating installed hosts from `main`.
 
 Completed:
 

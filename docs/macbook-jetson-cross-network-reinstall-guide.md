@@ -48,7 +48,7 @@ Continue to the reinstall steps below only when one of these changed:
 
 - the MacBook address that the Jetson or browser must reach
 - the Jetson stream address that the MacBook or browser must reach
-- the branch needs to be updated before validation
+- the source ref needs to be updated before validation
 - the installed services are still stale after normal service restart checks
 - the Jetson needs to be re-paired or its credential is no longer active
 
@@ -150,7 +150,7 @@ docker ps --filter name=vezor-master
 When `$MASTER_PUBLIC_HOST` is not `localhost` or `127.0.0.1`, the Keycloak
 container should show `0.0.0.0:8080->8080/tcp` in `docker ps`. If it still
 shows `127.0.0.1:8080->8080/tcp`, browser sign-in cannot reach Keycloak from
-the remote address; rerun the master installer from the updated branch.
+the remote address; rerun the master installer from the updated source ref.
 After backend startup, the existing Keycloak frontend client is also reconciled
 to the current `$MASTER_PUBLIC_URL`, and the backend allows that frontend URL
 through CORS. This matters after IP changes because first-run may already be
@@ -376,7 +376,7 @@ In the UI:
   is reachable from the operator browser network and that `docker ps` exposes
   Keycloak on `0.0.0.0:8080` for non-loopback public URLs.
 - Seeing Keycloak metadata work but the Sign in button still does nothing.
-  Reinstall from the updated branch so backend startup repairs the existing
+  Reinstall from the updated source ref so backend startup repairs the existing
   Keycloak `argus-frontend` redirect URIs and web origins for
   `$MASTER_PUBLIC_URL`.
 - Omitting `--public-stream-host` after the Jetson changes networks. The
