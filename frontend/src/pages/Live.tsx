@@ -474,6 +474,16 @@ function ScenePortalCard({
   const deliveryOperatorMessage = readBrowserDeliveryOperatorMessage(
     camera.browser_delivery,
   );
+  const mediaGeometry = getLiveMediaGeometry(sourceSize);
+  const mediaFrameStyle = isFocused
+    ? {
+        aspectRatio: mediaGeometry.aspectRatio,
+        maxWidth: `${mediaGeometry.sourceWidth}px`,
+      }
+    : { aspectRatio: mediaGeometry.aspectRatio };
+  const focusedBodyStyle = isFocused
+    ? { maxWidth: `calc(${mediaGeometry.sourceWidth}px + 27rem)` }
+    : undefined;
   const selectedRendition = renditionOptions.find(
     (option) => option.id === stagedProfile,
   );
@@ -573,53 +583,62 @@ function ScenePortalCard({
             </Badge>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label={`Use compact tile for ${camera.name}`}
-              title="Compact tile"
-              onClick={() => onTileSizeChange("compact")}
-              className={tileToolButtonClass(tileSize === "compact")}
-            >
-              <Minimize2 className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label={`Use standard tile for ${camera.name}`}
-              title="Standard tile"
-              onClick={() => onTileSizeChange("standard")}
-              className={tileToolButtonClass(tileSize === "standard")}
-            >
-              <Square className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label={`Use large tile for ${camera.name}`}
-              title="Large tile"
-              onClick={() => onTileSizeChange("large")}
-              className={tileToolButtonClass(tileSize === "large")}
-            >
-              <PanelTopOpen className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label={`Focus scene ${camera.name}`}
-              title="Focus scene"
-              onClick={onFocus}
-              className={tileToolButtonClass(false)}
-            >
-              <Maximize2 className="size-4" />
-            </button>
             {isFocused ? (
               <button
                 type="button"
-                aria-label="Close focused scene"
-                title="Close focused scene"
-                onClick={onCloseFocus}
+                aria-label={`Return ${camera.name} to scene grid`}
+                title="Return to scene grid"
+                onClick={() => {
+                  onTileSizeChange("standard");
+                  onCloseFocus();
+                }}
                 className={tileToolButtonClass(false)}
               >
                 <Minimize2 className="size-4" />
               </button>
-            ) : null}
+            ) : (
+              <>
+                <button
+                  type="button"
+                  aria-label={`Use compact tile for ${camera.name}`}
+                  aria-pressed={tileSize === "compact"}
+                  title="Compact tile"
+                  onClick={() => onTileSizeChange("compact")}
+                  className={tileToolButtonClass(tileSize === "compact")}
+                >
+                  <Minimize2 className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Use standard tile for ${camera.name}`}
+                  aria-pressed={tileSize === "standard"}
+                  title="Standard tile"
+                  onClick={() => onTileSizeChange("standard")}
+                  className={tileToolButtonClass(tileSize === "standard")}
+                >
+                  <Square className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Use large tile for ${camera.name}`}
+                  aria-pressed={tileSize === "large"}
+                  title="Large tile"
+                  onClick={() => onTileSizeChange("large")}
+                  className={tileToolButtonClass(tileSize === "large")}
+                >
+                  <PanelTopOpen className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Focus scene ${camera.name}`}
+                  title="Focus scene"
+                  onClick={onFocus}
+                  className={tileToolButtonClass(false)}
+                >
+                  <Maximize2 className="size-4" />
+                </button>
+              </>
+            )}
             <button
               type="button"
               aria-label={`Delete scene ${camera.name}`}
@@ -645,22 +664,19 @@ function ScenePortalCard({
       </div>
 
       <div
+        style={focusedBodyStyle}
         className={
           isFocused
-            ? "grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]"
+            ? "mx-auto grid w-full gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]"
             : ""
         }
       >
         <div
           data-scene-portal-media
-          style={
-            isFocused
-              ? { aspectRatio: "auto", height: "min(58vh, 620px)" }
-              : undefined
-          }
+          style={mediaFrameStyle}
           className={[
-            "relative aspect-video bg-[color:var(--vz-media-black)]",
-            isFocused ? "lg:aspect-auto" : "",
+            "relative min-w-0 overflow-hidden bg-[color:var(--vz-media-black)]",
+            isFocused ? "mx-auto w-full" : "aspect-video",
           ].join(" ")}
         >
           <span data-bracket aria-hidden="true" />
@@ -712,18 +728,18 @@ function ScenePortalCard({
             </label>
 
             {renditionOptions.length > 0 ? (
-              <div className="grid gap-2 sm:min-w-[240px]">
+              <div className="grid min-w-0 gap-2">
                 <label
                   className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]"
                   htmlFor={`live-rendition-${camera.id}`}
                 >
                   Live rendition
                 </label>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <Select
                     id={`live-rendition-${camera.id}`}
                     aria-label={`${camera.name} live rendition`}
-                    className="min-w-[170px] flex-1 rounded-[0.65rem] px-3 py-2"
+                    className="w-full min-w-0 rounded-[0.65rem] px-3 py-2"
                     value={stagedProfile}
                     onChange={(event) =>
                       setStagedProfile(event.target.value)
@@ -737,8 +753,8 @@ function ScenePortalCard({
                   </Select>
                   <Button
                     className={[
-                      "px-3 py-2 text-xs",
-                      isFocused ? "w-full" : "",
+                      "w-full px-3 py-2 text-xs",
+                      isFocused ? "" : "sm:w-auto",
                     ].join(" ")}
                     disabled={!canApplyRendition}
                     onClick={() => void applyRendition()}
@@ -773,8 +789,8 @@ function ScenePortalCard({
 
 function tileSpanClass(size: LiveTileSize): string {
   if (size === "large") return "md:col-span-2 xl:col-span-6";
-  if (size === "compact") return "xl:col-span-2";
-  return "xl:col-span-3";
+  if (size === "compact") return "md:col-span-2 xl:col-span-3";
+  return "md:col-span-2 xl:col-span-4";
 }
 
 function tileToolButtonClass(
@@ -952,6 +968,18 @@ function getCameraSourceSize(camera: CameraResponse): { width: number; height: n
   }
 
   return { width: source.width, height: source.height };
+}
+
+function getLiveMediaGeometry(
+  sourceSize: { width: number; height: number } | null,
+): { aspectRatio: string; sourceWidth: number } {
+  const width = sourceSize?.width ?? 1280;
+  const height = sourceSize?.height ?? 720;
+
+  return {
+    aspectRatio: `${width} / ${height}`,
+    sourceWidth: width,
+  };
 }
 
 function formatNativeAvailabilityReason(

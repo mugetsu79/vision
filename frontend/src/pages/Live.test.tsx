@@ -636,6 +636,13 @@ describe("LivePage", () => {
               allow_native_on_demand: true,
               profiles: [],
             },
+            source_capability: {
+              width: 1920,
+              height: 1080,
+              fps: 20,
+              codec: "h264",
+              aspect_ratio: "16:9",
+            },
             frame_skip: 1,
             fps_cap: 25,
             created_at: "2026-04-18T10:00:00Z",
@@ -667,6 +674,13 @@ describe("LivePage", () => {
       within(portal).getByRole("button", { name: /use standard tile/i }),
     ).toBeInTheDocument();
     await user.click(
+      within(portal).getByRole("button", { name: /use compact tile/i }),
+    );
+    expect(portal).toHaveClass("md:col-span-2");
+    expect(portal).toHaveClass("xl:col-span-3");
+    expect(portal).not.toHaveClass("xl:col-span-2");
+
+    await user.click(
       within(portal).getByRole("button", { name: /use large tile/i }),
     );
     expect(portal).toHaveClass("md:col-span-2");
@@ -680,18 +694,26 @@ describe("LivePage", () => {
     });
     expect(focusedScene.parentElement).toBe(document.body);
     expect(within(focusedScene).getByTestId("terrain-North Gate")).toBeInTheDocument();
+    const focusedMedia = focusedScene.querySelector(
+      "[data-scene-portal-media]",
+    );
+    expect(focusedMedia).toHaveStyle("aspect-ratio: 1920 / 1080");
+    expect(focusedMedia).toHaveStyle("max-width: 1920px");
     expect(
+      within(focusedScene).queryByRole("button", { name: /use compact tile/i }),
+    ).not.toBeInTheDocument();
+    await user.click(
       within(focusedScene).getByRole("button", {
-        name: /close focused scene/i,
+        name: /return north gate to scene grid/i,
       }),
-    ).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
+    );
     await waitFor(() =>
       expect(
         screen.queryByRole("region", { name: /north gate focused scene/i }),
       ).not.toBeInTheDocument(),
     );
+    const returnedPortal = screen.getByTestId("scene-portal");
+    expect(returnedPortal).toHaveClass("xl:col-span-4");
   });
 
   test("deletes a live scene after confirmation, even when it is already absent server-side", async () => {
