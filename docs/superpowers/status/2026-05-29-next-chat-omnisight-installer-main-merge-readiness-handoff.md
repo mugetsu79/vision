@@ -1,12 +1,13 @@
-# Next Chat Handoff: Guidance Disclosure Merge And UI/UX Polish Start
+# Next Chat Handoff: Taste-Led UI/UX Polish Start
 
 Date: 2026-05-29
 Last updated: 2026-06-03
-Status: Main merge closeout for `codex/guidance-progressive-disclosure`.
+Status: Main merge closeout for `codex/guidance-progressive-disclosure` and
+next-chat seed for `codex/omnisight-ui-ux-polish`.
 
 Purpose: record the completed guidance progressive-disclosure and pre-polish
-operator-correction work before merging to `main`, and seed the next chat for
-the broader OmniSight UI/UX polish lane.
+operator-correction work after merging to `main`, then start the next chat in
+the correct design lineage for a taste-led OmniSight UI/UX polish pass.
 
 ## Branch And Repository State
 
@@ -22,21 +23,22 @@ Feature branch being merged:
 codex/guidance-progressive-disclosure
 ```
 
-Latest implementation checkpoint before this documentation closeout:
+Latest implementation checkpoint before the guidance documentation closeout:
 
 ```text
-bbb6390f fix(ui): apply pre-polish operator corrections
+7c431b51 docs: update guidance polish handoff
 ```
 
 The feature branch is preserved on `origin/codex/guidance-progressive-disclosure`;
 after merge, the source ref for operator updates is `origin/main`.
 
-Current branch commits after `main` at `69629c37`:
+Guidance branch commits merged after `main` at `69629c37`:
 
 ```text
 d29afc98 feat(config): add progressive guidance disclosure
 a1c7083c docs: plan pre-polish operator corrections
 bbb6390f fix(ui): apply pre-polish operator corrections
+7c431b51 docs: update guidance polish handoff
 ```
 
 Start the next chat/operator update from `main`:
@@ -61,7 +63,10 @@ Known local hygiene:
 
 - unrelated untracked scratch files may exist locally
 - `taste-skill/` may exist locally for later UI work
-- the configuration guidance and pre-polish correction docs are tracked project
+- `taste-skill/` is local design input only; do not stage it unless Yann
+  explicitly asks to version it
+- the configuration guidance, pre-polish correction, and taste-led polish docs
+  are tracked project
   history:
   - `docs/superpowers/specs/2026-06-02-configuration-guidance-ux-design.md`
   - `docs/superpowers/plans/2026-06-02-configuration-guidance-ux.md`
@@ -69,6 +74,8 @@ Known local hygiene:
   - `docs/superpowers/plans/2026-06-03-configuration-guidance-progressive-disclosure.md`
   - `docs/superpowers/specs/2026-06-03-pre-polish-operator-corrections-design.md`
   - `docs/superpowers/plans/2026-06-03-pre-polish-operator-corrections.md`
+  - `docs/superpowers/specs/2026-06-03-taste-led-omnisight-ui-ux-polish-design.md`
+  - `docs/superpowers/plans/2026-06-03-taste-led-omnisight-ui-ux-polish.md`
 - do not use `git add -A`
 - stage only files needed for the current task
 - keep unrelated untracked files untouched
@@ -161,9 +168,11 @@ Implemented and pushed on `codex/guidance-progressive-disclosure`:
   - installer cards now describe host targets: `MacBook local master`,
     `Linux host master`, and `Jetson edge`, while command paths remain unchanged
 - Broader UI/UX polish seed:
-  - `docs/superpowers/specs/2026-04-28-vezor-omnisight-ui-redesign-design.md`
-    now explicitly carries the overloaded Operations page into the later polish
-    lane as attention-first information architecture work.
+  - `docs/superpowers/specs/2026-06-03-taste-led-omnisight-ui-ux-polish-design.md`
+  - `docs/superpowers/plans/2026-06-03-taste-led-omnisight-ui-ux-polish.md`
+  - These explicitly treat the April redesign work as history, the April 30
+    distinctiveness/spec-sheet work as the prior taste layer, and the next pass
+    as a focused 2026 taste-led improvement over the current product.
 
 Validation before the 2026-06-03 guidance merge closeout:
 
@@ -331,15 +340,26 @@ Remaining product validation after the `main` merge:
 
 ## Immediate Next Work
 
-Start a new chat for the broader OmniSight UI/UX polish lane:
+Start a new chat for the taste-led OmniSight UI/UX polish lane:
 
 1. Create `codex/omnisight-ui-ux-polish` from updated `main`.
-2. Review `docs/superpowers/specs/2026-04-28-vezor-omnisight-ui-redesign-design.md`.
-3. Treat Operations page overload as a first-class design problem:
+2. Review the new taste-led polish spec and plan first:
+   - `docs/superpowers/specs/2026-06-03-taste-led-omnisight-ui-ux-polish-design.md`
+   - `docs/superpowers/plans/2026-06-03-taste-led-omnisight-ui-ux-polish.md`
+3. Then review the historical design lineage:
+   - `docs/superpowers/status/2026-04-28-omnisight-ui-redesign-followup-handoff.md`
+   - `docs/superpowers/specs/2026-04-28-vezor-omnisight-ui-redesign-design.md`
+   - `docs/superpowers/specs/2026-04-30-omnisight-ui-distinctiveness-followup-design.md`
+   - `docs/brand/omnisight-ui-spec-sheet.md`
+4. Treat Operations page overload as a first-class design problem:
    attention-first status, navigable sections, and progressive disclosure for
    diagnostics.
-4. Use `taste-skill/` as local inspiration/input if useful, but keep the
-   product operational, dense, and field-usable.
+5. Use `taste-skill/` through its router if present. Bias toward `dashboards`
+   blended with `dark-luxe` and `swiss-system`.
+6. Revisit logo/lens treatment early. Yann is not happy with the moving 3D
+   sphere/lens as the default brand expression. Prefer a stable 2D lockup in
+   app chrome and quieter, purposeful dimensional treatment only where it earns
+   attention.
 
 ## Configuration Guidance Density Feedback
 
@@ -395,19 +415,37 @@ Tracked planning artifacts:
 - `docs/superpowers/specs/2026-06-03-pre-polish-operator-corrections-design.md`
 - `docs/superpowers/plans/2026-06-03-pre-polish-operator-corrections.md`
 
-## Broader UI/UX Polish Later
+## Taste-Led UI/UX Polish Next
 
 The completed UX pass was configuration comprehension, not a general redesign.
-Use `taste-skill/` as local inspiration/input only after field validation is
-complete.
+The next pass should be a taste-led product UI polish over the current app.
 
-Later polish can still look at:
+Important correction: do not treat the 2026-04-28 redesign spec as the primary
+new polish spec. That was the historical app-wide redesign. The next chat
+should treat these as the current sources:
 
+- `docs/superpowers/specs/2026-06-03-taste-led-omnisight-ui-ux-polish-design.md`
+- `docs/superpowers/plans/2026-06-03-taste-led-omnisight-ui-ux-polish.md`
+
+Historical design lineage:
+
+- `047e04a Implement Approach C app-wide redesign`
+- `29224d27 test(e2e): expect restored dashboard overview`
+- `d5282c60 docs: refresh markdown cleanup and handoff`
+- `b6771f24 feat(dashboard): add deployment posture and attention stack`
+- `docs/superpowers/specs/2026-04-30-omnisight-ui-distinctiveness-followup-design.md`
+- `docs/brand/omnisight-ui-spec-sheet.md`
+
+Polish focus:
+
+- Operations overload and information architecture
+- logo/lens treatment, especially replacing the distracting moving 3D sphere
+  behavior with a calmer identity system
 - Live tile density and focus mode polish
 - rendition/profile control clarity
 - Deployment/Operations visual hierarchy
 - broader scene setup ergonomics
-- consistency with the OmniSight visual direction
+- consistency with the current OmniSight visual direction
 
 Suggested later branch after this work is merged:
 
@@ -415,9 +453,10 @@ Suggested later branch after this work is merged:
 git switch -c codex/omnisight-ui-ux-polish
 ```
 
-Primary polish spec:
+Primary polish spec/plan:
 
-- `docs/superpowers/specs/2026-04-28-vezor-omnisight-ui-redesign-design.md`
+- `docs/superpowers/specs/2026-06-03-taste-led-omnisight-ui-ux-polish-design.md`
+- `docs/superpowers/plans/2026-06-03-taste-led-omnisight-ui-ux-polish.md`
 
 ## Current Documentation State
 
