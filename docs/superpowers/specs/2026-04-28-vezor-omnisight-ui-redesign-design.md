@@ -267,6 +267,20 @@ Operations should feel like fleet control and runtime confidence:
 - Replace “desired state” with “planned state” where user-facing.
 - Preserve honest runtime semantics: if per-worker heartbeat is not reported, show `not reported`, `unknown`, `stale`, or `offline` explicitly.
 - Keep copied commands prominent and copyable.
+- Reduce page overload. The current Operations surface exposes deployment
+  nodes, scene readiness, worker lifecycle, delivery diagnostics, control-plane
+  profiles, bindings, effective runtime state, and installer package guidance in
+  one long dense workbench. Later polish should make Operations
+  attention-first: urgent fleet issues first, then navigable sections for
+  Workers, Stream Diagnostics, Deployment Nodes, Configuration, and Installer
+  Guidance.
+- Use progressive disclosure for secondary diagnostics. Hashes, desired/applied
+  details, copy diagnostics, hardware admission metadata, and low-level stream
+  facts should remain available, but they should not dominate the default
+  Operations scan path.
+- Separate "what needs action" from "what is configured." Operators should be
+  able to answer what is broken, which worker owns it, and what action to take
+  before reading profile or binding internals.
 
 ## Information Architecture
 
@@ -324,6 +338,10 @@ Implement in phases.
 - History & Patterns chart and drilldown polish.
 - Scene Setup calibration and event-boundary language.
 - Operations runtime and stream diagnostics language.
+- Operations information architecture: reduce the overloaded single-page
+  workbench into attention-first status plus navigable sections for workers,
+  stream diagnostics, deployment nodes, control-plane configuration, and
+  installer guidance.
 
 ## Testing and Verification
 
