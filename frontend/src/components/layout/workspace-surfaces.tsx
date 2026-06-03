@@ -2,6 +2,8 @@ import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+export { CommandBand, DetailDrawer, OperationalSection } from "./command-surfaces";
+
 type WorkspaceBandDensity = "standard" | "compact";
 type WorkspaceBandAccent = "neutral" | "cerulean" | "violet";
 
