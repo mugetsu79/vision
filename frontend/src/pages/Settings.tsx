@@ -17,6 +17,7 @@ import {
 } from "@/components/layout/workspace-surfaces";
 import { RuntimePassportPanel } from "@/components/evidence/RuntimePassportPanel";
 import { OperationalMemoryPanel } from "@/components/evidence/OperationalMemoryPanel";
+import { AttentionStack } from "@/components/operations/AttentionStack";
 import { HardwareAdmissionPanel } from "@/components/operations/HardwareAdmissionPanel";
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
 import { SupervisorLifecycleControls } from "@/components/operations/SupervisorLifecycleControls";
@@ -36,7 +37,11 @@ import {
   useOperationalMemoryPatterns,
 } from "@/hooks/use-operations";
 import { useSites } from "@/hooks/use-sites";
-import { deriveSceneReadinessRows } from "@/lib/operational-health";
+import {
+  deriveAttentionItems,
+  deriveFleetHealth,
+  deriveSceneReadinessRows,
+} from "@/lib/operational-health";
 
 type FleetSourceCapability = NonNullable<
   FleetOverview["delivery_diagnostics"][number]["source_capability"]
@@ -71,6 +76,16 @@ export function SettingsPage() {
     }
     return "Manual dev mode";
   }, [fleet.data?.mode]);
+  const fleetHealth = useMemo(() => deriveFleetHealth(fleet.data), [fleet.data]);
+  const attentionItems = useMemo(
+    () =>
+      deriveAttentionItems({
+        fleet: fleet.data,
+        cameras,
+        pendingIncidents: [],
+      }),
+    [cameras, fleet.data],
+  );
 
   if (fleet.isLoading) {
     return (
@@ -119,303 +134,389 @@ export function SettingsPage() {
 
       {needsOperationsSetup ? <OperationsSetupEmptyState /> : null}
 
+      <AttentionStack items={attentionItems} fleetHealth={fleetHealth} />
+
       <SceneIntelligenceMatrix rows={sceneHealthRows} />
 
-      <WorkspaceSurface className="px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Server className="size-5 text-[#8fd3ff]" />
-            <div>
-              <h2 className="text-base font-semibold text-[#f4f8ff]">
-                System setup
-              </h2>
-              <p className="mt-1 text-sm text-[#93a7c5]">
-                Installable supervisors, node pairing, credentials, service
-                health, and support bundles live in Deployment. Rotated
-                credentials must be picked up by connected supervisors before
-                polling resumes.
-              </p>
-            </div>
-          </div>
-          <Link
-            className="inline-flex items-center justify-center rounded-full border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,#161c26,#0d121a)] px-4 py-2.5 text-sm font-medium text-[var(--vz-text-primary)] shadow-[var(--vz-elev-1)] transition duration-200 hover:border-[color:var(--vz-hair-focus)]"
-            to="/deployment"
-          >
-            Open Deployment
-            <ArrowRight className="ml-2 size-4" />
-          </Link>
-        </div>
-      </WorkspaceSurface>
+      <OperationsSectionNav />
 
       <OperationalMemoryPanel
         patterns={operationalMemory.data ?? []}
         loading={operationalMemory.isLoading}
       />
 
-      <ConfigurationWorkspace
-        cameras={cameras}
-        sites={sites}
-        edgeNodes={edgeNodes}
-      />
+      <OperationsSection id="workers" title="Workers">
+        <Panel
+          title="Scene workers"
+          icon={<TerminalSquare className="size-4" />}
+          testId="worker-rail"
+        >
+          <div className="flex flex-col gap-3">
+            {fleet.data.camera_workers.length === 0 ? (
+              <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+                No scene workers yet.
+              </p>
+            ) : (
+              fleet.data.camera_workers.map((worker) => {
+                const camera = camerasById.get(worker.camera_id);
 
-      <section
-        data-testid="edge-fleet-grid"
-        className="grid gap-3 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-neutral)] p-4 md:grid-cols-5"
-      >
-        <SummaryTile
-          label="Planned workers"
-          value={fleet.data.summary.desired_workers}
-        />
-        <SummaryTile
-          label="Running workers"
-          value={fleet.data.summary.running_workers}
-        />
-        <SummaryTile
-          label="Stale nodes"
-          value={fleet.data.summary.stale_nodes}
-        />
-        <SummaryTile
-          label="Offline nodes"
-          value={fleet.data.summary.offline_nodes}
-        />
-        <SummaryTile
-          label="Direct streams unavailable"
-          value={fleet.data.summary.native_unavailable_cameras}
-        />
-      </section>
+                return (
+                  <div
+                    key={worker.camera_id}
+                    className="rounded-[1rem] border border-white/10 p-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-[#f4f8ff]">
+                          {worker.camera_name}
+                        </p>
+                        <p className="mt-1 text-xs text-[#93a7c5]">
+                          {worker.processing_mode} - {worker.lifecycle_owner}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <StatusToneBadge
+                          tone={statusTone(worker.desired_state)}
+                        >
+                          {worker.desired_state}
+                        </StatusToneBadge>
+                        <StatusToneBadge
+                          tone={statusTone(worker.runtime_status)}
+                        >
+                          {worker.runtime_status}
+                        </StatusToneBadge>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#93a7c5]">
+                      <p>
+                        <span className="font-semibold text-[#d8e2f2]">
+                          Source
+                        </span>{" "}
+                        {formatCameraSource(camera)}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-[#d8e2f2]">
+                          Recording
+                        </span>{" "}
+                        {formatRecordingPolicy(camera)}
+                      </p>
+                    </div>
+                    <details className="mt-3 rounded-[0.85rem] border border-white/10 bg-black/15 p-3">
+                      <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.16em] text-[#9fb7d8]">
+                        Runtime diagnostics
+                      </summary>
+                      <RuntimePassportPanel
+                        summary={worker.runtime_passport}
+                        compact
+                      />
+                      <HardwareAdmissionPanel worker={worker} />
+                      <RuleRuntimePanel summary={worker.rule_runtime} />
+                      {worker.detail ? (
+                        <p className="mt-2 text-sm text-[#93a7c5]">
+                          {worker.detail}
+                        </p>
+                      ) : null}
+                    </details>
+                    <SupervisorLifecycleControls
+                      worker={worker}
+                      edgeNodes={edgeNodes}
+                    />
+                    {worker.dev_run_command ? (
+                      <p className="mt-3 rounded-[0.75rem] border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100">
+                        Installable supervisors own production worker launch.
+                        Manual terminal commands live in local lab and
+                        break-glass documentation.
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Panel>
+      </OperationsSection>
 
-      <Panel
-        title="Model runtimes"
-        icon={<Cpu className="size-4" />}
-        testId="runtime-artifact-rail"
-      >
-        <div className="flex flex-col gap-3">
-          {models.length === 0 ? (
-            <p className="text-sm text-[#93a7c5]">
-              No registered models are available for runtime artifact checks.
-            </p>
-          ) : (
-            models.map((model) => {
-              const artifacts = runtimeArtifacts.data?.[model.id] ?? [];
-              const summary = summarizeModelRuntimeArtifacts(artifacts);
-
-              return (
+      <OperationsSection id="stream-diagnostics" title="Stream Diagnostics">
+        <Panel
+          title={omniLabels.streamDiagnosticsTitle}
+          icon={<Copy className="size-4" />}
+          testId="stream-diagnostics-rail"
+        >
+          <div className="flex flex-col gap-3">
+            {fleet.data.delivery_diagnostics.length === 0 ? (
+              <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+                No stream diagnostics yet.
+              </p>
+            ) : (
+              fleet.data.delivery_diagnostics.map((diagnostic) => (
                 <div
-                  key={model.id}
+                  key={diagnostic.camera_id}
                   className="rounded-[1rem] border border-white/10 p-3"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-[#f4f8ff]">{model.name}</p>
-                      <p className="mt-1 text-xs text-[#93a7c5]">
-                        {model.version} - {model.capability ?? "fixed_vocab"}
-                      </p>
-                    </div>
-                    <StatusToneBadge tone={summary.tone}>
-                      {summary.label}
-                    </StatusToneBadge>
-                  </div>
-                  <p className="mt-2 text-sm text-[#93a7c5]">
-                    {artifacts.length}{" "}
-                    {artifacts.length === 1 ? "artifact" : "artifacts"}
-                    {summary.detail ? ` - ${summary.detail}` : ""}
-                  </p>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Panel>
-
-      <WorkspaceSurface className="px-5 py-4">
-        <div className="flex items-center gap-3">
-          <TerminalSquare className="size-5 text-[#8fd3ff]" />
-          <div>
-            <h2 className="text-base font-semibold text-[#f4f8ff]">
-              {modeCopy}
-            </h2>
-            <p className="mt-1 text-sm text-[#93a7c5]">
-              Production worker launch is owned by installed supervisor
-              services. Terminal commands are limited to local development,
-              installer smoke tests, and break-glass support.
-            </p>
-          </div>
-        </div>
-      </WorkspaceSurface>
-
-      <section className="grid gap-4 xl:grid-cols-2">
-        <Panel title="Nodes" icon={<Server className="size-4" />}>
-          <div className="flex flex-col gap-3">
-            {fleet.data.nodes.length === 0 ? (
-              <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
-                No deployment nodes yet.
-              </p>
-            ) : (
-              fleet.data.nodes.map((node) => (
-                <div
-                  key={node.id ?? "central"}
-                  className="rounded-[1rem] border border-white/10 p-3"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
                       <p className="font-medium text-[#f4f8ff]">
-                        {node.hostname}
+                        {diagnostic.camera_name} scene delivery
                       </p>
                       <p className="mt-1 text-xs text-[#93a7c5]">
-                        {node.kind} - {node.assigned_camera_ids?.length ?? 0}{" "}
-                        assigned scenes
+                        {formatSource(diagnostic.source_capability)} -{" "}
+                        {diagnostic.default_profile}
                       </p>
                     </div>
-                    <StatusToneBadge tone={statusTone(node.status)}>
-                      {node.status}
+                    <StatusToneBadge tone="muted">
+                      {diagnostic.selected_stream_mode}
                     </StatusToneBadge>
                   </div>
+                  {diagnostic.native_status?.available === false ? (
+                    <p className="mt-2 text-sm text-amber-100">
+                      Direct stream unavailable:{" "}
+                      {formatReason(diagnostic.native_status?.reason)}
+                    </p>
+                  ) : null}
                 </div>
               ))
             )}
           </div>
         </Panel>
+      </OperationsSection>
 
-        <Panel title="Node pairing" icon={<Server className="size-4" />}>
-          <div className="flex flex-col gap-3 text-sm text-[#a9b9d3]">
-            <p>
-              Pair Jetson edge nodes and inspect installable supervisor
-              credentials from Deployment. Operations monitors runtime health
-              after nodes are paired.
-            </p>
+      <OperationsSection id="deployment-nodes" title="Deployment Nodes">
+        <section
+          data-testid="edge-fleet-grid"
+          className="grid gap-3 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-neutral)] p-4 md:grid-cols-5"
+        >
+          <SummaryTile
+            label="Planned workers"
+            value={fleet.data.summary.desired_workers}
+          />
+          <SummaryTile
+            label="Running workers"
+            value={fleet.data.summary.running_workers}
+          />
+          <SummaryTile
+            label="Stale nodes"
+            value={fleet.data.summary.stale_nodes}
+          />
+          <SummaryTile
+            label="Offline nodes"
+            value={fleet.data.summary.offline_nodes}
+          />
+          <SummaryTile
+            label="Direct streams unavailable"
+            value={fleet.data.summary.native_unavailable_cameras}
+          />
+        </section>
+
+        <section className="mt-4 grid gap-4 xl:grid-cols-2">
+          <Panel title="Nodes" icon={<Server className="size-4" />}>
+            <div className="flex flex-col gap-3">
+              {fleet.data.nodes.length === 0 ? (
+                <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+                  No deployment nodes yet.
+                </p>
+              ) : (
+                fleet.data.nodes.map((node) => (
+                  <div
+                    key={node.id ?? "central"}
+                    className="rounded-[1rem] border border-white/10 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-[#f4f8ff]">
+                          {node.hostname}
+                        </p>
+                        <p className="mt-1 text-xs text-[#93a7c5]">
+                          {node.kind} -{" "}
+                          {node.assigned_camera_ids?.length ?? 0} assigned
+                          scenes
+                        </p>
+                      </div>
+                      <StatusToneBadge tone={statusTone(node.status)}>
+                        {node.status}
+                      </StatusToneBadge>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Node pairing" icon={<Server className="size-4" />}>
+            <div className="flex flex-col gap-3 text-sm text-[#a9b9d3]">
+              <p>
+                Pair Jetson edge nodes and inspect installable supervisor
+                credentials from Deployment. Operations monitors runtime health
+                after nodes are paired.
+              </p>
+              <Link
+                to="/deployment"
+                className="inline-flex w-fit items-center rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-[#d8e2f2] transition hover:border-[#6ec6ff]/60 hover:text-white"
+              >
+                Open Deployment
+                <ArrowRight className="ml-2 size-4" />
+              </Link>
+            </div>
+          </Panel>
+        </section>
+      </OperationsSection>
+
+      <OperationsSection id="configuration" title="Configuration">
+        <ConfigurationWorkspace
+          cameras={cameras}
+          sites={sites}
+          edgeNodes={edgeNodes}
+        />
+
+        <div className="mt-4">
+          <Panel
+            title="Model runtimes"
+            icon={<Cpu className="size-4" />}
+            testId="runtime-artifact-rail"
+          >
+            <div className="flex flex-col gap-3">
+              {models.length === 0 ? (
+                <p className="text-sm text-[#93a7c5]">
+                  No registered models are available for runtime artifact
+                  checks.
+                </p>
+              ) : (
+                models.map((model) => {
+                  const artifacts = runtimeArtifacts.data?.[model.id] ?? [];
+                  const summary = summarizeModelRuntimeArtifacts(artifacts);
+
+                  return (
+                    <div
+                      key={model.id}
+                      className="rounded-[1rem] border border-white/10 p-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-[#f4f8ff]">
+                            {model.name}
+                          </p>
+                          <p className="mt-1 text-xs text-[#93a7c5]">
+                            {model.version} -{" "}
+                            {model.capability ?? "fixed_vocab"}
+                          </p>
+                        </div>
+                        <StatusToneBadge tone={summary.tone}>
+                          {summary.label}
+                        </StatusToneBadge>
+                      </div>
+                      <p className="mt-2 text-sm text-[#93a7c5]">
+                        {artifacts.length}{" "}
+                        {artifacts.length === 1 ? "artifact" : "artifacts"}
+                        {summary.detail ? ` - ${summary.detail}` : ""}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Panel>
+        </div>
+      </OperationsSection>
+
+      <OperationsSection id="installer-guidance" title="Installer Guidance">
+        <WorkspaceSurface className="px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Server className="size-5 text-[#8fd3ff]" />
+              <div>
+                <h2 className="text-base font-semibold text-[#f4f8ff]">
+                  System setup
+                </h2>
+                <p className="mt-1 text-sm text-[#93a7c5]">
+                  Installable supervisors, node pairing, credentials, service
+                  health, and support bundles live in Deployment. Rotated
+                  credentials must be picked up by connected supervisors before
+                  polling resumes.
+                </p>
+              </div>
+            </div>
             <Link
+              className="inline-flex items-center justify-center rounded-full border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,#161c26,#0d121a)] px-4 py-2.5 text-sm font-medium text-[var(--vz-text-primary)] shadow-[var(--vz-elev-1)] transition duration-200 hover:border-[color:var(--vz-hair-focus)]"
               to="/deployment"
-              className="inline-flex w-fit items-center rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-[#d8e2f2] transition hover:border-[#6ec6ff]/60 hover:text-white"
             >
               Open Deployment
               <ArrowRight className="ml-2 size-4" />
             </Link>
           </div>
-        </Panel>
-      </section>
+        </WorkspaceSurface>
 
-      <Panel
-        title="Scene workers"
-        icon={<TerminalSquare className="size-4" />}
-        testId="worker-rail"
-      >
-        <div className="flex flex-col gap-3">
-          {fleet.data.camera_workers.length === 0 ? (
-            <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
-              No scene workers yet.
-            </p>
-          ) : (
-            fleet.data.camera_workers.map((worker) => {
-              const camera = camerasById.get(worker.camera_id);
-
-              return (
-                <div
-                  key={worker.camera_id}
-                  className="rounded-[1rem] border border-white/10 p-3"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-[#f4f8ff]">
-                        {worker.camera_name}
-                      </p>
-                      <p className="mt-1 text-xs text-[#93a7c5]">
-                        {worker.processing_mode} - {worker.lifecycle_owner}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <StatusToneBadge tone={statusTone(worker.desired_state)}>
-                        {worker.desired_state}
-                      </StatusToneBadge>
-                      <StatusToneBadge tone={statusTone(worker.runtime_status)}>
-                        {worker.runtime_status}
-                      </StatusToneBadge>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#93a7c5]">
-                    <p>
-                      <span className="font-semibold text-[#d8e2f2]">
-                        Source
-                      </span>{" "}
-                      {formatCameraSource(camera)}
-                    </p>
-                    <p>
-                      <span className="font-semibold text-[#d8e2f2]">
-                        Recording
-                      </span>{" "}
-                      {formatRecordingPolicy(camera)}
-                    </p>
-                  </div>
-                  <RuntimePassportPanel
-                    summary={worker.runtime_passport}
-                    compact
-                  />
-                  <HardwareAdmissionPanel worker={worker} />
-                  <RuleRuntimePanel summary={worker.rule_runtime} />
-                  <SupervisorLifecycleControls
-                    worker={worker}
-                    edgeNodes={edgeNodes}
-                  />
-                  {worker.detail ? (
-                    <p className="mt-2 text-sm text-[#93a7c5]">
-                      {worker.detail}
-                    </p>
-                  ) : null}
-                  {worker.dev_run_command ? (
-                    <p className="mt-3 rounded-[0.75rem] border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100">
-                      Installable supervisors own production worker launch.
-                      Manual terminal commands live in local lab and break-glass
-                      documentation.
-                    </p>
-                  ) : null}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Panel>
-
-      <Panel
-        title={omniLabels.streamDiagnosticsTitle}
-        icon={<Copy className="size-4" />}
-        testId="stream-diagnostics-rail"
-      >
-        <div className="flex flex-col gap-3">
-          {fleet.data.delivery_diagnostics.length === 0 ? (
-            <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
-              No stream diagnostics yet.
-            </p>
-          ) : (
-            fleet.data.delivery_diagnostics.map((diagnostic) => (
-              <div
-                key={diagnostic.camera_id}
-                className="rounded-[1rem] border border-white/10 p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-[#f4f8ff]">
-                      {diagnostic.camera_name} scene delivery
-                    </p>
-                    <p className="mt-1 text-xs text-[#93a7c5]">
-                      {formatSource(diagnostic.source_capability)} -{" "}
-                      {diagnostic.default_profile}
-                    </p>
-                  </div>
-                  <StatusToneBadge tone="muted">
-                    {diagnostic.selected_stream_mode}
-                  </StatusToneBadge>
-                </div>
-                {diagnostic.native_status?.available === false ? (
-                  <p className="mt-2 text-sm text-amber-100">
-                    Direct stream unavailable:{" "}
-                    {formatReason(diagnostic.native_status?.reason)}
-                  </p>
-                ) : null}
-              </div>
-            ))
-          )}
-        </div>
-      </Panel>
+        <WorkspaceSurface className="mt-4 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <TerminalSquare className="size-5 text-[#8fd3ff]" />
+            <div>
+              <h2 className="text-base font-semibold text-[#f4f8ff]">
+                {modeCopy}
+              </h2>
+              <p className="mt-1 text-sm text-[#93a7c5]">
+                Production worker launch is owned by installed supervisor
+                services. Terminal commands are limited to local development,
+                installer smoke tests, and break-glass support.
+              </p>
+            </div>
+          </div>
+        </WorkspaceSurface>
+      </OperationsSection>
     </div>
+  );
+}
+
+const operationsSections = [
+  { id: "workers", label: "Workers" },
+  { id: "stream-diagnostics", label: "Stream Diagnostics" },
+  { id: "deployment-nodes", label: "Deployment Nodes" },
+  { id: "configuration", label: "Configuration" },
+  { id: "installer-guidance", label: "Installer Guidance" },
+] as const;
+
+function OperationsSectionNav() {
+  return (
+    <WorkspaceSurface className="px-4 py-3">
+      <nav
+        aria-label="Operations sections"
+        className="flex flex-wrap items-center gap-2"
+      >
+        {operationsSections.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            className="inline-flex items-center rounded-[var(--vz-r-sm)] border border-[color:var(--vz-hair)] bg-black/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-secondary)] transition hover:border-[color:var(--vz-hair-focus)] hover:text-[var(--vz-text-primary)]"
+          >
+            {section.label}
+          </a>
+        ))}
+      </nav>
+    </WorkspaceSurface>
+  );
+}
+
+function OperationsSection({
+  id,
+  title,
+  children,
+}: {
+  id: (typeof operationsSections)[number]["id"];
+  title: string;
+  children: ReactNode;
+}) {
+  const headingId = `${id}-heading`;
+
+  return (
+    <section id={id} aria-labelledby={headingId} className="scroll-mt-6">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="h-px flex-1 bg-[color:var(--vz-hair)]" />
+        <h2
+          id={headingId}
+          className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--vz-text-muted)]"
+        >
+          {title}
+        </h2>
+      </div>
+      {children}
+    </section>
   );
 }
 

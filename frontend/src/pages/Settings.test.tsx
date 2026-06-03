@@ -556,10 +556,35 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("operations-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("configuration-workspace")).toBeInTheDocument();
+    const attentionOverview = screen.getByTestId("attention-stack");
+    expect(attentionOverview).toBeInTheDocument();
+    expect(
+      attentionOverview.compareDocumentPosition(
+        screen.getByTestId("scene-intelligence-matrix"),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const sectionNav = screen.getByRole("navigation", {
+      name: /operations sections/i,
+    });
+    expect(
+      within(sectionNav).getByRole("link", { name: /workers/i }),
+    ).toHaveAttribute("href", "#workers");
+    expect(
+      within(sectionNav).getByRole("link", { name: /stream diagnostics/i }),
+    ).toHaveAttribute("href", "#stream-diagnostics");
+    expect(
+      within(sectionNav).getByRole("link", { name: /deployment nodes/i }),
+    ).toHaveAttribute("href", "#deployment-nodes");
+    expect(
+      within(sectionNav).getByRole("link", { name: /configuration/i }),
+    ).toHaveAttribute("href", "#configuration");
+    expect(
+      within(sectionNav).getByRole("link", { name: /installer guidance/i }),
+    ).toHaveAttribute("href", "#installer-guidance");
     expect(
       screen
-        .getByTestId("configuration-workspace")
-        .compareDocumentPosition(screen.getByTestId("worker-rail")) &
+        .getByTestId("worker-rail")
+        .compareDocumentPosition(screen.getByTestId("configuration-workspace")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
@@ -585,6 +610,11 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("edge-fleet-grid")).toBeInTheDocument();
     expect(screen.getByTestId("worker-rail")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getAllByText(
+        /runtime diagnostics/i,
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByTestId("stream-diagnostics-rail")).toBeInTheDocument();
     expect(screen.getAllByText(/stream diagnostics/i).length).toBeGreaterThan(
       0,
@@ -600,7 +630,11 @@ describe("SettingsPage operations workbench", () => {
       screen.getByText(/rotated credentials must be picked up/i),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/planned workers/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/direct streams unavailable/i)).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("edge-fleet-grid")).getByText(
+        /direct streams unavailable/i,
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByText(/direct stream unavailable/i).length,
     ).toBeGreaterThan(0);
