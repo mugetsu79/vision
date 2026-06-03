@@ -252,8 +252,20 @@ describe("DeploymentPage", () => {
     render(<DeploymentPage />);
 
     const workspace = screen.getByTestId("deployment-workspace");
-    expect(within(workspace).getByText(/macOS master/i)).toBeInTheDocument();
-    expect(within(workspace).getByText(/Linux master/i)).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/MacBook local master/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/Linux host master/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(/Docker-backed local master/i),
+    ).toBeInTheDocument();
+    expect(
+      within(workspace).getByText(
+        /launchd wrapper for Docker-backed master services/i,
+      ),
+    ).toBeInTheDocument();
     expect(within(workspace).getAllByText(/Jetson edge/i).length).toBeGreaterThan(
       0,
     );

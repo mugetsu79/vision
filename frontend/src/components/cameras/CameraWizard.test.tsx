@@ -156,8 +156,12 @@ describe("CameraWizard", () => {
       }),
     ).toBeInTheDocument();
 
-    expect(screen.getByText(/live delivery/i)).toBeInTheDocument();
+    expect(screen.getByText(/browser stream/i)).toBeInTheDocument();
+    expect(screen.queryByText(/live delivery/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/transport profile/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/processed custom/i)).toBeChecked();
+    expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("720p");
+    expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("10");
     expect(screen.getByRole("option", { name: "900p" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "240p" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "25 fps" })).toBeInTheDocument();
@@ -176,7 +180,7 @@ describe("CameraWizard", () => {
     expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("5");
   });
 
-  test("shows edge source probes in the live delivery controls", async () => {
+  test("shows edge source probes in the browser stream controls", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((_input, init) => {
       const rawBody = init?.body;
@@ -233,7 +237,8 @@ describe("CameraWizard", () => {
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    expect(await screen.findByText(/live delivery/i)).toBeInTheDocument();
+    expect(await screen.findByText(/browser stream/i)).toBeInTheDocument();
+    expect(screen.queryByText(/live delivery/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/processed custom/i)).toBeChecked();
     expect(screen.getByLabelText(/live rendition resolution/i)).toHaveValue("720p");
     expect(screen.getByLabelText(/live rendition fps cap/i)).toHaveValue("10");

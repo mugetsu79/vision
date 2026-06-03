@@ -39,17 +39,18 @@ import { useSites, type Site } from "@/hooks/use-sites";
 
 const installerTargets = [
   {
-    title: "macOS master",
-    platform: "Portable pilot master",
+    title: "MacBook local master",
+    platform: "Docker-backed local master",
     command: "installer/macos/install-master.sh",
-    detail: "Creates the local launchd service and opens first-run setup.",
+    detail:
+      "Creates a launchd wrapper for Docker-backed master services and opens first-run setup.",
     icon: Laptop,
   },
   {
-    title: "Linux master",
-    platform: "Production master",
+    title: "Linux host master",
+    platform: "Systemd Docker master",
     command: "installer/linux/install-master.sh",
-    detail: "Installs the systemd-owned master appliance on the host.",
+    detail: "Installs the systemd-owned Docker master appliance on the host.",
     icon: Server,
   },
   {

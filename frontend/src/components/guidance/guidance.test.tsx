@@ -83,13 +83,23 @@ test("CalibrationFlowIllustration shows source and destination point mapping", (
 });
 
 test("CalibrationFlowIllustration can show region guidance", () => {
-  render(<CalibrationFlowIllustration mode="regions" />);
+  const { container } = render(<CalibrationFlowIllustration mode="regions" />);
 
   expect(
     screen.getByRole("img", { name: /detection regions refine the calibrated plane/i }),
   ).toBeInTheDocument();
-  expect(screen.getByText(/^include region$/i)).toBeInTheDocument();
-  expect(screen.getByText(/^exclusion region$/i)).toBeInTheDocument();
+  const includeRegion = screen.getByText(/^include region$/i);
+  const exclusionRegion = screen.getByText(/^exclusion region$/i);
+  expect(includeRegion).toBeInTheDocument();
+  expect(exclusionRegion).toBeInTheDocument();
+
+  const includeShape = container.querySelector("[data-region='include']");
+  const exclusionShape = container.querySelector("[data-region='exclusion']");
+  expect(includeShape).toBeInTheDocument();
+  expect(exclusionShape).toBeInTheDocument();
+  const exclusionTop = Number(exclusionShape?.getAttribute("y"));
+  const exclusionHeight = Number(exclusionShape?.getAttribute("height"));
+  expect(exclusionTop + exclusionHeight).toBeLessThan(150);
 });
 
 test("CalibrationFlowIllustration can show event boundary guidance", () => {

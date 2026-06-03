@@ -18,16 +18,13 @@ export function SceneIntelligenceMatrix({
   rows,
 }: SceneIntelligenceMatrixProps) {
   return (
-    <WorkspaceSurface
-      data-testid="scene-intelligence-matrix"
-      className="overflow-hidden"
-    >
+    <WorkspaceSurface data-testid="scene-intelligence-matrix">
       <div className="border-b border-white/8 px-4 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--vz-text-muted)]">
           Operational readiness
         </p>
         <h2 className="mt-2 text-lg font-semibold text-[var(--vz-text-primary)]">
-          Scene intelligence matrix
+          Scene readiness
         </h2>
       </div>
 
@@ -36,79 +33,118 @@ export function SceneIntelligenceMatrix({
           No scenes configured.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-black/20 text-[11px] uppercase tracking-[0.16em] text-[var(--vz-text-muted)]">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Scene</th>
-                <th className="px-4 py-3 font-semibold">Site</th>
-                <th className="px-4 py-3 font-semibold">Mode</th>
-                <th className="px-4 py-3 font-semibold">Privacy</th>
-                <th className="px-4 py-3 font-semibold">Worker</th>
-                <th className="px-4 py-3 font-semibold">Rules</th>
-                <th className="px-4 py-3 font-semibold">Transport</th>
-                <th className="px-4 py-3 font-semibold">Live rendition</th>
-                <th className="px-4 py-3 font-semibold">Telemetry</th>
-                <th className="px-4 py-3 font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/8">
-              {rows.map((row) => (
-                <tr key={row.cameraId}>
-                  <td className="px-4 py-3 font-semibold text-[var(--vz-text-primary)]">
-                    {row.cameraName}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--vz-text-secondary)]">
-                    {row.siteName}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--vz-text-secondary)]">
-                    {row.processingMode} / {row.nodeLabel}
-                  </td>
-                  <td className="px-4 py-3">
-                    <HealthCell signal={row.privacy} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <HealthCell signal={row.worker} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <HealthCell signal={row.rules} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <HealthCell signal={row.transport} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <HealthCell signal={row.liveRendition} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <HealthCell signal={row.telemetry} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      to={row.actionHref}
-                      aria-label={`${row.actionLabel} for ${row.cameraName}`}
-                      className="text-sm font-semibold text-[var(--vz-lens-cerulean)] transition hover:text-[var(--vz-text-primary)]"
-                    >
-                      {row.actionLabel}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-3 p-4">
+          {rows.map((row) => (
+            <article
+              key={row.cameraId}
+              className="grid min-w-0 gap-4 rounded-lg border border-white/8 bg-white/[0.025] p-4 xl:grid-cols-[minmax(14rem,0.8fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-start"
+            >
+              <div className="min-w-0">
+                <h3 className="break-words text-base font-semibold text-[var(--vz-text-primary)]">
+                  {row.cameraName}
+                </h3>
+                <p className="mt-1 break-words text-sm text-[var(--vz-text-secondary)]">
+                  {row.siteName}
+                </p>
+                <p className="mt-2 break-words text-sm text-[var(--vz-text-muted)]">
+                  {placementLabel(row)}
+                </p>
+              </div>
+
+              <SignalGroup
+                title="Runtime"
+                signals={[
+                  { label: "Worker", signal: row.worker },
+                  { label: "Telemetry", signal: row.telemetry },
+                  { label: "Rules", signal: row.rules },
+                ]}
+              />
+
+              <SignalGroup
+                title="Stream"
+                signals={[
+                  { label: "Transport", signal: row.transport },
+                  { label: "Live rendition", signal: row.liveRendition },
+                  { label: "Privacy", signal: row.privacy },
+                ]}
+              />
+
+              <Link
+                to={row.actionHref}
+                aria-label={`${row.actionLabel} for ${row.cameraName}`}
+                className="min-w-0 self-start break-words text-sm font-semibold text-[var(--vz-lens-cerulean)] transition hover:text-[var(--vz-text-primary)]"
+              >
+                {row.actionLabel}
+              </Link>
+            </article>
+          ))}
         </div>
       )}
     </WorkspaceSurface>
   );
 }
 
+function placementLabel(row: SceneHealthRow) {
+  const mode = row.processingMode.toLowerCase();
+  const nodeLabel = row.nodeLabel.trim() || "assigned node";
+
+  if (mode === "edge") {
+    return `Edge processing on ${nodeLabel}`;
+  }
+
+  const centralLabel =
+    nodeLabel.toLowerCase() === "central" ? "master supervisor" : nodeLabel;
+
+  if (mode === "central") {
+    return `Central processing on ${centralLabel}`;
+  }
+
+  if (mode === "hybrid") {
+    return `Hybrid processing on ${centralLabel}`;
+  }
+
+  return `${row.processingMode} processing on ${nodeLabel}`;
+}
+
+function SignalGroup({
+  title,
+  signals,
+}: {
+  title: string;
+  signals: Array<{ label: string; signal: HealthSignal }>;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-white/8 bg-black/15 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--vz-text-muted)]">
+        {title}
+      </p>
+      <div className="mt-2 grid gap-2">
+        {signals.map(({ label, signal }) => (
+          <div key={label} className="grid min-w-0 gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
+              {label}
+            </span>
+            <HealthCell signal={signal} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function HealthCell({ signal }: { signal: HealthSignal }) {
   return (
-    <div className="space-y-1">
-      <StatusToneBadge tone={healthToTone(signal.health)}>
+    <div className="min-w-0 space-y-1">
+      <StatusToneBadge
+        tone={healthToTone(signal.health)}
+        className="max-w-full whitespace-normal break-words text-left leading-4"
+      >
         {signal.label}
       </StatusToneBadge>
       {signal.detail ? (
-        <p className="text-xs text-[var(--vz-text-muted)]">{signal.detail}</p>
+        <p className="break-words text-xs text-[var(--vz-text-muted)]">
+          {signal.detail}
+        </p>
       ) : null}
     </div>
   );

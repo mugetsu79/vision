@@ -170,29 +170,33 @@ export function CalibrationFlowIllustration({
         {mode === "regions" ? (
           <g>
             <rect
-              x="272"
-              y="82"
-              width="52"
-              height="44"
+              data-region="include"
+              x="284"
+              y="96"
+              width="48"
+              height="38"
               rx="8"
               fill="#6fe0c5"
-              opacity="0.16"
+              opacity="0.18"
               stroke="#6fe0c5"
+              strokeWidth="1.5"
             />
-            <text x="298" y="78" textAnchor="middle" fill="#bcefe3" fontSize="10">
+            <text x="308" y="88" textAnchor="middle" fill="#bcefe3" fontSize="10">
               include region
             </text>
             <rect
-              x="326"
-              y="126"
-              width="28"
-              height="24"
+              data-region="exclusion"
+              x="318"
+              y="108"
+              width="30"
+              height="28"
               rx="6"
               fill="#ffb86b"
-              opacity="0.16"
+              opacity="0.18"
               stroke="#ffb86b"
+              strokeWidth="1.5"
             />
-            <text x="340" y="164" textAnchor="middle" fill="#ffd9a1" fontSize="10">
+            <text x="333" y="148" textAnchor="middle" fill="#ffd9a1" fontSize="10">
               exclusion region
             </text>
           </g>

@@ -565,7 +565,7 @@ describe("SettingsPage operations workbench", () => {
     const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
     expect(sceneMatrix).toBeInTheDocument();
     expect(
-      within(sceneMatrix).getByText(/scene intelligence matrix/i),
+      within(sceneMatrix).getByText(/scene readiness/i),
     ).toBeInTheDocument();
     expect(
       within(sceneMatrix).getByText(/2 active rules/i),

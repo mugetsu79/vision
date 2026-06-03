@@ -65,7 +65,7 @@ const rows: SceneHealthRow[] = [
 ];
 
 describe("SceneIntelligenceMatrix", () => {
-  test("renders scene rows with site mode privacy worker delivery telemetry and actions", () => {
+  test("renders scene readiness rows with grouped runtime and stream signals", () => {
     render(
       <MemoryRouter>
         <SceneIntelligenceMatrix rows={rows} />
@@ -73,24 +73,30 @@ describe("SceneIntelligenceMatrix", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: /scene intelligence matrix/i }),
+      screen.getByRole("heading", { name: /scene readiness/i }),
     ).toBeInTheDocument();
     expect(screen.getByText("North Gate")).toBeInTheDocument();
     expect(screen.getByText("Depot Yard")).toBeInTheDocument();
     expect(screen.getAllByText("Zurich Lab")).toHaveLength(2);
-    expect(screen.getByText("central / central")).toBeInTheDocument();
-    expect(screen.getByText("edge / orin1")).toBeInTheDocument();
+    expect(
+      screen.getByText(/central processing on master supervisor/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/edge processing on orin1/i)).toBeInTheDocument();
+    expect(screen.queryByText("central / central")).not.toBeInTheDocument();
+    expect(screen.queryByText("edge / orin1")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Runtime")).toHaveLength(2);
+    expect(screen.getAllByText("Stream")).toHaveLength(2);
     expect(
       screen.getAllByText(/face\/plate filtering configured/i).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText("Rules")).toBeInTheDocument();
+    expect(screen.getAllByText("Rules")).toHaveLength(2);
     expect(screen.getByText("2 active rules")).toBeInTheDocument();
     expect(screen.getByText(/ffffffffffff/i)).toBeInTheDocument();
     expect(screen.getByText(/12 may 2026/i)).toBeInTheDocument();
     expect(screen.getByText(/no active rules/i)).toBeInTheDocument();
     expect(screen.getAllByText(/worker stale/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("Transport")).toBeInTheDocument();
-    expect(screen.getByText("Live rendition")).toBeInTheDocument();
+    expect(screen.getAllByText("Transport")).toHaveLength(2);
+    expect(screen.getAllByText("Live rendition")).toHaveLength(2);
     expect(screen.getByText(/webrtc relay ready/i)).toBeInTheDocument();
     expect(screen.getAllByText(/native clean/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/inherited transport/i)).toBeInTheDocument();

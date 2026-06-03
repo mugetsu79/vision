@@ -2524,13 +2524,13 @@ export function CameraWizard({
               <section className="space-y-3 rounded-[1.5rem] border border-[#243853] bg-[#09121c] p-4">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
-                    Live delivery
+                    Browser stream
                   </p>
-                  <p className="mt-1 text-sm text-[#9eb2cf]">
-                    Transport controls relay access. Rendition controls the video operators see.
+                  <p className="mt-1 max-w-2xl text-sm text-[#9eb2cf]">
+                    Choose the transport path and the video rendition operators will watch in Live.
                   </p>
                 </div>
-                <div className="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.4fr)]">
+                <div className="grid gap-4 xl:grid-cols-[minmax(14rem,0.9fr)_minmax(0,1.4fr)]">
                   <label className="grid gap-2 text-sm text-[#d8e2f2]">
                     <span>Transport profile</span>
                     <Select
@@ -2550,7 +2550,7 @@ export function CameraWizard({
                   </label>
                   <fieldset className="grid gap-2 text-sm text-[#d8e2f2]">
                     <legend className="font-medium">Live rendition</legend>
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="grid gap-2 md:grid-cols-3">
                       {[
                         ["native", "Native clean"],
                         ["annotated", "Annotated source"],
@@ -2567,7 +2567,7 @@ export function CameraWizard({
                         return (
                           <label
                             key={value}
-                            className={`flex items-center justify-center gap-2 rounded-[0.8rem] border px-3 py-2 text-xs font-semibold transition ${
+                            className={`flex min-h-12 items-center justify-center gap-2 rounded-[0.8rem] border px-3 py-2 text-center text-xs font-semibold leading-4 transition ${
                               selected
                                 ? "border-[#4d91ff] bg-[#132849] text-[#f4f8ff]"
                                 : "border-white/10 bg-white/[0.03] text-[#9eb2cf]"
@@ -2591,7 +2591,7 @@ export function CameraWizard({
                       })}
                     </div>
                     {parseProcessedBrowserDeliveryProfile(data.browserDeliveryProfile) ? (
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
                           <span className="text-xs text-[#9eb2cf]">Resolution</span>
                           <Select
