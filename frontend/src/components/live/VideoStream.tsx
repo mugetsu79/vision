@@ -659,7 +659,7 @@ export function VideoStream({
         />
       ) : null}
 
-      <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
+      <div className="pointer-events-none absolute right-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap justify-end gap-2">
         <Badge className="border-[#31538b] bg-[#081120]/80 text-[#eef4ff]">
           {defaultProfile}
         </Badge>

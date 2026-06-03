@@ -560,26 +560,34 @@ describe("SettingsPage operations workbench", () => {
     const workspace = screen.getByTestId("operations-workspace");
     expect(workspace).toBeInTheDocument();
     const attentionOverview = screen.getByTestId("attention-stack");
+    const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
+    const sectionNav = within(workspace).getByRole("navigation", {
+      name: /operations sections/i,
+    });
     const workerRail = screen.getByTestId("worker-rail");
     const configurationSection = screen.getByTestId("configuration-section");
 
     expect(attentionOverview).toBeInTheDocument();
     expect(
-      attentionOverview.compareDocumentPosition(
-        screen.getByTestId("scene-intelligence-matrix"),
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      attentionOverview.compareDocumentPosition(sceneMatrix) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       attentionOverview.compareDocumentPosition(workerRail) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
+      sceneMatrix.compareDocumentPosition(sectionNav) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      sectionNav.compareDocumentPosition(workerRail) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
       workerRail.compareDocumentPosition(configurationSection) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    const sectionNav = within(workspace).getByRole("navigation", {
-      name: /operations sections/i,
-    });
     expect(
       within(sectionNav).getByRole("link", { name: /workers/i }),
     ).toHaveAttribute("href", "#workers");
@@ -604,9 +612,13 @@ describe("SettingsPage operations workbench", () => {
       "aria-controls",
       "configuration-content",
     );
+    const configurationContent = document.getElementById(
+      "configuration-content",
+    );
+    expect(configurationContent).toBeInTheDocument();
+    expect(configurationContent).not.toBeVisible();
     expect(screen.queryByTestId("configuration-workspace")).not.toBeInTheDocument();
     expect(screen.queryByTestId("runtime-artifact-rail")).not.toBeInTheDocument();
-    const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
     expect(sceneMatrix).toBeInTheDocument();
     expect(
       within(sceneMatrix).getByText(/scene readiness/i),

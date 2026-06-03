@@ -1,7 +1,6 @@
 import { Camera, Cpu, ScanEye } from "lucide-react";
 
 import { productBrand } from "@/brand/product";
-import { OmniSightStaticMark } from "@/components/brand/OmniSightStaticMark";
 import { ProductLockup } from "@/components/layout/ProductLockup";
 import { WorkspaceHero } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
@@ -13,12 +12,18 @@ const proofSignals = [
   { icon: Cpu, label: "Operations", caption: "Edge-aware fleet" },
 ] as const;
 
+const entryPosture = [
+  ["Identity", "Provider ready"],
+  ["Workspace", "Control layer"],
+  ["Session", "Protected"],
+] as const;
+
 export function SignInPage() {
   const signIn = useAuthStore((state) => state.signIn);
   const brandName = productBrand.name;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(60%_60%_at_75%_30%,rgba(126,83,255,0.18),transparent_60%),linear-gradient(180deg,var(--vz-canvas-void)_0%,var(--vz-canvas-obsidian)_100%)] px-6 py-8 text-[var(--vz-text-primary)]">
+    <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(48%_52%_at_75%_30%,rgba(110,189,255,0.10),transparent_64%),linear-gradient(180deg,var(--vz-canvas-void)_0%,var(--vz-canvas-obsidian)_100%)] px-6 py-8 text-[var(--vz-text-primary)]">
       <div className="relative z-10 mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl grid-rows-[auto_1fr_auto] gap-8">
         <header className="flex items-center justify-between">
           <ProductLockup className="h-12 w-auto" />
@@ -31,10 +36,8 @@ export function SignInPage() {
           eyebrow={productBrand.descriptor}
           title="OmniSight for every live environment."
           description={`${brandName} connects scenes, models, events, evidence, and edge operations into one spatial intelligence layer.`}
-          tone="violet"
-          lens={
-            <OmniSightStaticMark className="w-[clamp(12rem,24vw,18rem)] object-contain drop-shadow-[0_24px_80px_rgba(118,224,255,0.22)]" />
-          }
+          tone="neutral"
+          lens={<SignInCommandPreview />}
           body={
             <ul className="grid max-w-xl grid-cols-3 gap-3 text-sm">
               {proofSignals.map(({ icon: Icon, label, caption }) => (
@@ -62,7 +65,7 @@ export function SignInPage() {
 
         <section
           data-testid="signin-auth-panel"
-          className="ml-auto w-full max-w-[25rem] rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,rgba(10,15,25,0.94),rgba(5,8,14,0.92))] p-6 text-[var(--vz-text-primary)] shadow-[var(--vz-elev-glow-violet)] backdrop-blur-xl sm:p-7"
+          className="ml-auto w-full max-w-[25rem] rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,rgba(10,15,25,0.94),rgba(5,8,14,0.92))] p-6 text-[var(--vz-text-primary)] shadow-[var(--vz-elev-1)] backdrop-blur-xl sm:p-7"
         >
           <p className="text-xs font-semibold uppercase tracking-normal text-[var(--vz-text-muted)]">
             Secure entry
@@ -88,5 +91,43 @@ export function SignInPage() {
         </footer>
       </div>
     </main>
+  );
+}
+
+function SignInCommandPreview() {
+  return (
+    <div
+      data-testid="signin-command-preview"
+      className="w-full max-w-sm rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[linear-gradient(180deg,rgba(9,15,24,0.92),rgba(5,8,14,0.88))] p-4 shadow-[var(--vz-elev-1)]"
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-white/8 pb-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--vz-text-muted)]">
+            Entry posture
+          </p>
+          <p className="mt-2 text-lg font-semibold text-[var(--vz-text-primary)]">
+            Operator session
+          </p>
+        </div>
+        <span className="rounded-full border border-[rgba(111,224,163,0.28)] bg-[rgba(10,36,24,0.72)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--vz-state-healthy)]">
+          Ready
+        </span>
+      </div>
+      <dl className="divide-y divide-white/8">
+        {entryPosture.map(([label, value]) => (
+          <div
+            key={label}
+            className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-3 text-sm"
+          >
+            <dt className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--vz-text-muted)]">
+              {label}
+            </dt>
+            <dd className="min-w-0 text-right font-medium text-[var(--vz-text-primary)]">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }

@@ -43,7 +43,7 @@ describe("SignInPage", () => {
     expect(signIn).toHaveBeenCalledTimes(1);
   });
 
-  test("renders the static mark hero and product lockup", () => {
+  test("renders the command preview hero and product lockup", () => {
     render(<SignInPage />);
 
     expect(
@@ -57,9 +57,7 @@ describe("SignInPage", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("omnisight-lens")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("img", { name: `${productBrand.name} mark` }),
-    ).toHaveAttribute("src", productBrand.runtimeAssets.logo2d);
+    expect(screen.getByTestId("signin-command-preview")).toBeInTheDocument();
     expect(document.querySelector('img[src*="3d_logo"]')).toBeNull();
     expect(screen.getByTestId("signin-auth-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("signin-animated-logo")).toBeNull();

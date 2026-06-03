@@ -146,6 +146,8 @@ export function SettingsPage() {
 
       <SceneIntelligenceMatrix rows={sceneHealthRows} />
 
+      <OperationsSectionNav />
+
       <OperationalSection
         id="workers"
         label="Workers"
@@ -246,8 +248,6 @@ export function SettingsPage() {
         patterns={operationalMemory.data ?? []}
         loading={operationalMemory.isLoading}
       />
-
-      <OperationsSectionNav />
 
       <OperationalSection
         id="stream-diagnostics"
@@ -399,20 +399,22 @@ export function SettingsPage() {
         >
           {configurationOpen ? "Hide configuration" : "Show configuration"}
         </Button>
-        {configurationHasOpened ? (
-          <div
-            id={configurationContentId}
-            hidden={!configurationOpen}
-            className="mt-4 space-y-4"
-          >
-            <ConfigurationWorkspace
-              cameras={cameras}
-              sites={sites}
-              edgeNodes={edgeNodes}
-            />
-            <ConfigurationRuntimeArtifacts />
-          </div>
-        ) : null}
+        <div
+          id={configurationContentId}
+          hidden={!configurationOpen}
+          className="mt-4 space-y-4"
+        >
+          {configurationHasOpened ? (
+            <>
+              <ConfigurationWorkspace
+                cameras={cameras}
+                sites={sites}
+                edgeNodes={edgeNodes}
+              />
+              <ConfigurationRuntimeArtifacts />
+            </>
+          ) : null}
+        </div>
         {!configurationOpen ? (
           <p className="mt-3 text-sm text-[var(--vz-text-secondary)]">
             Profiles, bindings, effective runtime hashes, and installer
