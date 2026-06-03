@@ -95,47 +95,99 @@ function SitesContent() {
           </Button>
         </section>
       ) : (
-        <section
-          data-testid="site-context-grid"
-          className="grid gap-4 lg:grid-cols-3"
-        >
-          {sites.map((site) => {
-            const sceneCount = sceneCountBySite.get(site.id) ?? 0;
-            return (
-              <WorkspaceSurface
-                key={site.id}
-                className="p-4 transition duration-200 hover:border-[color:var(--vz-hair-focus)] hover:shadow-[var(--vz-elev-2)]"
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-normal text-[var(--vz-text-muted)]">
-                  Deployment location
-                </p>
-                <h2 className="mt-2 font-[family-name:var(--vz-font-display)] text-xl font-semibold text-[var(--vz-text-primary)]">
-                  {site.name}
-                </h2>
-                <p className="mt-2 text-sm text-[var(--vz-text-secondary)]">
-                  {site.tz}
-                </p>
-                <p className="mt-3 text-sm font-medium text-[var(--vz-text-primary)]">
-                  {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
-                </p>
-                {site.description ? (
-                  <p className="mt-2 text-sm text-[var(--vz-text-muted)]">
-                    {site.description}
+        <section data-testid="site-context-grid" className="space-y-4">
+          <WorkspaceSurface className="hidden overflow-hidden md:block">
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-[color:var(--vz-hair)] text-left text-[11px] uppercase tracking-[0.18em] text-[var(--vz-text-muted)]">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Site</th>
+                  <th className="px-4 py-3 font-semibold">Timezone</th>
+                  <th className="px-4 py-3 font-semibold">Scenes</th>
+                  <th className="px-4 py-3 font-semibold">Description</th>
+                  <th className="px-4 py-3 text-right font-semibold">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[color:var(--vz-hair)]">
+                {sites.map((site) => {
+                  const sceneCount = sceneCountBySite.get(site.id) ?? 0;
+                  return (
+                    <tr
+                      key={site.id}
+                      className="transition hover:bg-white/[0.03]"
+                    >
+                      <th
+                        scope="row"
+                        className="px-4 py-4 text-left font-[family-name:var(--vz-font-display)] text-lg font-semibold text-[var(--vz-text-primary)]"
+                      >
+                        {site.name}
+                      </th>
+                      <td className="px-4 py-4 text-[var(--vz-text-secondary)]">
+                        {site.tz}
+                      </td>
+                      <td className="px-4 py-4 text-[var(--vz-text-primary)]">
+                        {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
+                      </td>
+                      <td className="px-4 py-4 text-[var(--vz-text-muted)]">
+                        {site.description ?? "No description"}
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <button
+                          className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722] disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={deleteSite.isPending}
+                          type="button"
+                          onClick={() => void handleDeleteSite(site)}
+                        >
+                          Delete site
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </WorkspaceSurface>
+
+          <div className="grid gap-4 md:hidden">
+            {sites.map((site) => {
+              const sceneCount = sceneCountBySite.get(site.id) ?? 0;
+              return (
+                <WorkspaceSurface
+                  key={site.id}
+                  className="p-4 transition duration-200 hover:border-[color:var(--vz-hair-focus)] hover:shadow-[var(--vz-elev-2)]"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-normal text-[var(--vz-text-muted)]">
+                    Deployment location
                   </p>
-                ) : null}
-                <div className="mt-4 flex justify-end">
-                  <button
-                    className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722] disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={deleteSite.isPending}
-                    type="button"
-                    onClick={() => void handleDeleteSite(site)}
-                  >
-                    Delete site
-                  </button>
-                </div>
-              </WorkspaceSurface>
-            );
-          })}
+                  <h2 className="mt-2 font-[family-name:var(--vz-font-display)] text-xl font-semibold text-[var(--vz-text-primary)]">
+                    {site.name}
+                  </h2>
+                  <p className="mt-2 text-sm text-[var(--vz-text-secondary)]">
+                    {site.tz}
+                  </p>
+                  <p className="mt-3 text-sm font-medium text-[var(--vz-text-primary)]">
+                    {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
+                  </p>
+                  {site.description ? (
+                    <p className="mt-2 text-sm text-[var(--vz-text-muted)]">
+                      {site.description}
+                    </p>
+                  ) : null}
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={deleteSite.isPending}
+                      type="button"
+                      onClick={() => void handleDeleteSite(site)}
+                    >
+                      Delete site
+                    </button>
+                  </div>
+                </WorkspaceSurface>
+              );
+            })}
+          </div>
         </section>
       )}
 

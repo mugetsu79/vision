@@ -584,7 +584,7 @@ function ScenePortalCard({
               {camera.tracker_type}
             </Badge>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 rounded-full bg-black/20 p-1">
             {isFocused ? (
               <button
                 type="button"
@@ -718,7 +718,7 @@ function ScenePortalCard({
               : "space-y-3 border-t border-white/8 px-5 py-4"
           }
         >
-          <div className="grid gap-3 rounded-[0.75rem] border border-white/8 bg-[#07101c]/80 p-3">
+          <div className="grid gap-3 rounded-[0.75rem] bg-[#07101c]/60 p-3">
             <label className="flex items-center gap-2 text-xs font-medium text-[#c7d8f2]">
               <input
                 type="checkbox"
@@ -800,20 +800,20 @@ function tileToolButtonClass(
   tone: "neutral" | "danger" = "neutral",
 ): string {
   const base =
-    "inline-flex size-8 items-center justify-center rounded-[var(--vz-r-sm)] border transition disabled:cursor-not-allowed disabled:opacity-50";
+    "inline-flex size-8 items-center justify-center rounded-[var(--vz-r-sm)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--vz-hair-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--vz-canvas-obsidian)] disabled:cursor-not-allowed disabled:opacity-50";
 
   if (tone === "danger") {
     return [
       base,
-      "border-[#5f2630] bg-[#2a0d14]/60 text-[#ffb4c2] hover:border-[#9b4052] hover:text-[#ffe6ea]",
+      "bg-[#2a0d14]/60 text-[#ffb4c2] hover:bg-[#3b131d]/70 hover:text-[#ffe6ea]",
     ].join(" ");
   }
 
   return [
     base,
     active
-      ? "border-[color:var(--vz-hair-focus)] bg-[rgba(110,189,255,0.12)] text-[var(--vz-text-primary)]"
-      : "border-[color:var(--vz-hair)] bg-white/[0.03] text-[var(--vz-text-secondary)] hover:border-[color:var(--vz-hair-focus)] hover:text-[var(--vz-text-primary)]",
+      ? "bg-[rgba(110,189,255,0.12)] text-[var(--vz-text-primary)]"
+      : "bg-white/[0.03] text-[var(--vz-text-secondary)] hover:bg-white/[0.07] hover:text-[var(--vz-text-primary)]",
   ].join(" ");
 }
 

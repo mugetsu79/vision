@@ -248,6 +248,30 @@ describe("DeploymentPage", () => {
     ).toBeGreaterThan(0);
   });
 
+  test("renders deployment nodes before installer packages when nodes exist", () => {
+    render(<DeploymentPage />);
+
+    const workspace = screen.getByTestId("deployment-workspace");
+    const nodesHeading = within(workspace).getByRole("heading", {
+      name: /deployment nodes/i,
+    });
+    const installerHeading = within(workspace).getByRole("heading", {
+      name: /installer packages/i,
+    });
+
+    const order = Array.from(
+      workspace.querySelectorAll("h1, h2, h3, h4, h5, h6"),
+    ).map((heading) => heading.textContent?.trim() ?? "");
+    const nodesIndex = order.indexOf(nodesHeading.textContent?.trim() ?? "");
+    const installerIndex = order.indexOf(
+      installerHeading.textContent?.trim() ?? "",
+    );
+
+    expect(nodesIndex).toBeGreaterThanOrEqual(0);
+    expect(installerIndex).toBeGreaterThanOrEqual(0);
+    expect(nodesIndex).toBeLessThan(installerIndex);
+  });
+
   test("shows installer package guidance for master and Jetson targets", () => {
     render(<DeploymentPage />);
 

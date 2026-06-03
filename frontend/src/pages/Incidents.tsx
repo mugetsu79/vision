@@ -156,7 +156,7 @@ export function IncidentsPage() {
 
       <section
         data-testid="evidence-filter-bar"
-        className="grid gap-4 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] px-5 py-5 lg:grid-cols-3"
+        className="grid gap-4 rounded-[0.9rem] bg-[color:var(--vezor-surface-rail)] px-5 py-5 lg:grid-cols-3"
       >
         <label className="space-y-2 text-sm text-[#d9e5f7]">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
@@ -487,13 +487,13 @@ function IncidentFactsPanel({
         <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
           Accountability
         </h4>
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-3">
           <IncidentRuleSummary
             triggerRule={incident.trigger_rule}
             detection={detectionContextFromPayload(incident.payload)}
           />
 
-          <details open className="rounded-md border border-white/8 px-3 py-2">
+          <details open className="rounded-md bg-white/[0.03] px-3 py-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
               Scene contract
             </summary>
@@ -515,7 +515,7 @@ function IncidentFactsPanel({
             </div>
           </details>
 
-          <details open className="rounded-md border border-white/8 px-3 py-2">
+          <details open className="rounded-md bg-white/[0.03] px-3 py-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
               Privacy manifest
             </summary>
@@ -568,7 +568,7 @@ function IncidentFactsPanel({
             onCameraSelect={onCameraSelect}
           />
 
-          <details open className="rounded-md border border-white/8 px-3 py-2">
+          <details open className="rounded-md bg-white/[0.03] px-3 py-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#eef4ff]">
               Ledger
             </summary>

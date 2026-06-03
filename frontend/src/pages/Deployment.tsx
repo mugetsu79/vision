@@ -202,8 +202,6 @@ export function DeploymentPage() {
         <CredentialRevocationNotice revocation={revocation} />
       ) : null}
 
-      <InstallerTargets />
-
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <WorkspaceSurface className="p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#f4f8ff]">
@@ -312,6 +310,8 @@ export function DeploymentPage() {
           loading={supportBundle.isLoading || supportBundle.isFetching}
         />
       </section>
+
+      <InstallerTargets />
     </div>
   );
 }

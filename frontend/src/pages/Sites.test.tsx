@@ -158,7 +158,7 @@ describe("SitesPage", () => {
     });
   });
 
-  test("renders one card per site without a duplicate table", async () => {
+  test("renders desktop rows and mobile cards for each site", async () => {
     mockSitesApi({
       sites: [hqSite, depotSite],
       cameras: [dockScene, yardScene],
@@ -167,9 +167,16 @@ describe("SitesPage", () => {
     renderSitesPage();
 
     expect(await screen.findByTestId("sites-workspace")).toBeInTheDocument();
-    expect(screen.queryByRole("table")).toBeNull();
 
     const grid = await screen.findByTestId("site-context-grid");
+    const table = within(grid).getByRole("table");
+    expect(table).toBeInTheDocument();
+    expect(within(table).getByRole("rowheader", { name: "HQ" })).toBeInTheDocument();
+    expect(
+      within(table).getByRole("rowheader", { name: "Depot" }),
+    ).toBeInTheDocument();
+    expect(within(table).getAllByText("1 scene")).toHaveLength(2);
+
     expect(within(grid).getAllByText(/deployment location/i)).toHaveLength(2);
     expect(
       within(grid).getByRole("heading", { name: "HQ" }),
@@ -177,7 +184,6 @@ describe("SitesPage", () => {
     expect(
       within(grid).getByRole("heading", { name: "Depot" }),
     ).toBeInTheDocument();
-    expect(within(grid).getAllByText("1 scene")).toHaveLength(2);
   });
 
   test("shows empty state when there are no sites", async () => {
@@ -189,7 +195,6 @@ describe("SitesPage", () => {
       await screen.findByText(/no deployment sites yet/i),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /add site/i }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByTestId("site-context-grid")).toBeNull();
   });
 
@@ -229,12 +234,12 @@ describe("SitesPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "HQ" })).toBeInTheDocument(),
     );
-    expect(screen.queryByRole("table")).toBeNull();
     const grid = screen.getByTestId("site-context-grid");
-    expect(
-      within(grid).getAllByText(/deployment location/i).length,
-    ).toBe(1);
-    expect(within(grid).getByText("1 scene")).toBeInTheDocument();
+    const table = within(grid).getByRole("table");
+    expect(within(table).getByRole("rowheader", { name: "HQ" })).toBeInTheDocument();
+    expect(within(grid).getAllByText(/deployment location/i)).toHaveLength(1);
+    expect(within(grid).getByRole("heading", { name: "HQ" })).toBeInTheDocument();
+    expect(within(grid).getAllByText("1 scene")).toHaveLength(2);
 
     const siteCreateRequest = fetchMock.mock.calls
       .map((call) => call[0])
@@ -292,7 +297,7 @@ describe("SitesPage", () => {
 
     expect(siteDeleteRequest).toBeInstanceOf(Request);
     expect(
-      within(grid).getByRole("heading", { name: "Depot" }),
+      within(grid).getByRole("rowheader", { name: "Depot" }),
     ).toBeInTheDocument();
   });
 
@@ -309,11 +314,18 @@ describe("SitesPage", () => {
     renderSitesPage();
 
     const grid = await screen.findByTestId("site-context-grid");
-    await user.click(within(grid).getByRole("button", { name: /delete site/i }));
+    const hqCard = within(grid)
+      .getByRole("heading", { name: "HQ" })
+      .closest("section");
+
+    expect(hqCard).not.toBeNull();
+    await user.click(
+      within(hqCard as HTMLElement).getByRole("button", { name: /delete site/i }),
+    );
 
     expect(
       await screen.findByText(/delete cameras and edge nodes before deleting this site/i),
     ).toBeInTheDocument();
-    expect(within(grid).getByRole("heading", { name: "HQ" })).toBeInTheDocument();
+    expect(within(grid).getByRole("rowheader", { name: "HQ" })).toBeInTheDocument();
   });
 });

@@ -43,9 +43,9 @@ export function HistoryToolbar({
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
             Pattern workbench
           </p>
-          <h1 className="mt-1 text-2xl font-semibold text-[#f4f8ff]">
+          <h2 className="mt-1 text-2xl font-semibold text-[#f4f8ff]">
             {historyMetricCopy(metric).label}
-          </h1>
+          </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-[0.75rem] border border-white/10 px-3 py-2 text-sm text-[#dce6f7]">

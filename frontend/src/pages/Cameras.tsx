@@ -209,31 +209,50 @@ function CamerasContent() {
         </div>
       ) : null}
 
-      <section
-        data-testid="scene-setup-sequence"
-        className="grid gap-3 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] p-4 sm:grid-cols-5"
-      >
-        {["Source", "Model", "Privacy", "Boundaries", "Calibration"].map(
-          (step, index) => (
-            <div
-              key={step}
-              className="rounded-[0.75rem] border border-white/8 bg-black/20 px-3 py-3"
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7f96b8]">
-                Step {index + 1}
-              </p>
-              <p className="mt-2 text-sm font-semibold text-[#f4f8ff]">
-                {step}
-              </p>
-            </div>
-          ),
-        )}
+      <section className="space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea4c7]">
+            Setup flow
+          </p>
+          <h2 className="mt-1 text-xl font-semibold text-[#f4f8ff]">
+            Guided setup flow
+          </h2>
+        </div>
+        <div
+          data-testid="scene-setup-sequence"
+          className="grid gap-3 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] p-4 sm:grid-cols-5"
+        >
+          {["Source", "Model", "Privacy", "Boundaries", "Calibration"].map(
+            (step, index) => (
+              <div
+                key={step}
+                className="rounded-[0.75rem] border border-white/8 bg-black/20 px-3 py-3"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7f96b8]">
+                  Step {index + 1}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[#f4f8ff]">
+                  {step}
+                </p>
+              </div>
+            ),
+          )}
+        </div>
       </section>
 
-      <section
-        data-testid="scene-inventory-table"
-        className="overflow-hidden rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
-      >
+      <section className="space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea4c7]">
+            Inventory
+          </p>
+          <h2 className="mt-1 text-xl font-semibold text-[#f4f8ff]">
+            Scene inventory
+          </h2>
+        </div>
+        <div
+          data-testid="scene-inventory-table"
+          className="overflow-hidden rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
+        >
         <Table>
           <THead>
             <TR>
@@ -356,6 +375,7 @@ function CamerasContent() {
             )}
           </TBody>
         </Table>
+        </div>
       </section>
 
       {rulesCamera ? (

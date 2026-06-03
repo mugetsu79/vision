@@ -197,8 +197,12 @@ describe("HistoryPage", () => {
       "/history?metric=observations&speed=1&speedThreshold=50&granularity=5m",
     );
     expect(
-      await screen.findByRole("heading", { name: /history & patterns/i }),
+      await screen.findByRole("heading", {
+        name: /history & patterns/i,
+        level: 1,
+      }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByTestId("patterns-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("patterns-workbench-toolbar")).toBeInTheDocument();
     expect(screen.getByTestId("patterns-instrument-rail")).toBeInTheDocument();
@@ -251,8 +255,10 @@ describe("HistoryPage", () => {
       ).toBeDefined();
     });
     expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
-    expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
-      "metric=count_events",
+    await waitFor(() =>
+      expect(screen.getByTestId("history-trend-chart")).toHaveTextContent(
+        "metric=count_events",
+      ),
     );
   });
 
