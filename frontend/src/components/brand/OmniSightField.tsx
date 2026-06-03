@@ -43,8 +43,8 @@ export function OmniSightField({
   variant = "shell",
   className,
 }: OmniSightFieldProps) {
-  const showNodes =
-    variant === "overview" || variant === "dashboard" || variant === "shell";
+  const showNodes = variant === "overview" || variant === "dashboard";
+  const showMarkStack = variant !== "shell";
 
   return (
     <div
@@ -59,20 +59,24 @@ export function OmniSightField({
       <div className="omnisight-field__orbital-map" />
       <div className="omnisight-field__ring omnisight-field__ring--primary" />
       <div className="omnisight-field__ring omnisight-field__ring--secondary" />
-      <div className="omnisight-field__mark-stack">
-        {markLayers.map((layer) => (
-          <img
-            key={layer}
-            alt=""
-            className={cn(
-              "omnisight-field__mark-layer",
-              `omnisight-field__mark-layer--${layer}`,
-            )}
-            draggable={false}
-            src={productBrand.runtimeAssets.logo3d}
-          />
-        ))}
-      </div>
+      {showMarkStack ? (
+        <div className="omnisight-field__mark-stack">
+          {markLayers.map((layer) => (
+            <img
+              key={layer}
+              alt=""
+              className={cn(
+                "omnisight-field__mark-layer",
+                `omnisight-field__mark-layer--${layer}`,
+              )}
+              draggable={false}
+              src={productBrand.runtimeAssets.logo3d}
+            />
+          ))}
+        </div>
+      ) : (
+        <div data-shell-watermark className="omnisight-field__shell-watermark" />
+      )}
       {showNodes
         ? orbitalNodes.map((node) => (
             <div

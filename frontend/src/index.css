@@ -254,6 +254,29 @@ select {
   transform: translate3d(0, 0, 0);
 }
 
+.omnisight-field__shell-watermark {
+  position: absolute;
+  right: clamp(1rem, 7vw, 6rem);
+  top: clamp(1rem, 5vw, 4rem);
+  width: clamp(14rem, 28vw, 28rem);
+  height: clamp(8rem, 16vw, 16rem);
+  border: 1px solid rgba(206, 224, 255, 0.055);
+  background:
+    linear-gradient(90deg, rgba(110, 189, 255, 0.08), transparent 58%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(206, 224, 255, 0.045) 0 1px,
+      transparent 1px 44px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(206, 224, 255, 0.035) 0 1px,
+      transparent 1px 36px
+    );
+  clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
+  opacity: 0.42;
+}
+
 .omnisight-field__node {
   position: absolute;
   display: flex;

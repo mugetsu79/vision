@@ -22,15 +22,16 @@ describe("OmniSightField", () => {
     expect(field.querySelectorAll(".omnisight-field__surface")).toHaveLength(0);
   });
 
-  test("renders shell variant with meaningful orbital nodes instead of empty rectangles", () => {
+  test("renders shell variant as a quiet workflow watermark without 3D logo motion", () => {
     render(<OmniSightField variant="shell" />);
 
     const field = screen.getByTestId("omnisight-field");
     expect(field).toHaveClass("omnisight-field--shell");
     expect(field.querySelector(".omnisight-field__lens")).toBeNull();
-    expect(field.querySelector(".omnisight-field__mark-stack")).not.toBeNull();
+    expect(field.querySelector(".omnisight-field__mark-stack")).toBeNull();
     expect(field.querySelectorAll(".omnisight-field__surface")).toHaveLength(0);
-    expect(field.querySelectorAll(".omnisight-field__node")).toHaveLength(4);
+    expect(field.querySelectorAll(".omnisight-field__node")).toHaveLength(0);
+    expect(field.querySelector("[data-shell-watermark]")).not.toBeNull();
   });
 
   test("renders stage variant without node labels competing with sign-in copy", () => {

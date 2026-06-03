@@ -84,6 +84,12 @@ describe("AppShell", () => {
     expect(screen.getByTestId("omnisight-field")).toHaveClass(
       "omnisight-field--shell",
     );
+    expect(
+      screen.getByTestId("omnisight-field").querySelector(".omnisight-field__mark-stack"),
+    ).toBeNull();
+    expect(
+      screen.getByAltText(/vezor 2d logo/i),
+    ).toHaveAttribute("src", "/brand/2d_logo_no_ring.png");
     expect(screen.getByTestId("workspace-transition")).toBeInTheDocument();
     const intelligenceNav = screen.getByRole("navigation", {
       name: /intelligence/i,
