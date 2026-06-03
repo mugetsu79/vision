@@ -1,12 +1,10 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
-import { OmniSightStaticMark } from "@/components/brand/OmniSightStaticMark";
-import { KpiTile } from "@/components/dashboard/KpiTile";
 import {
+  CommandBand,
   InstrumentRail,
   StatusToneBadge,
-  WorkspaceHero,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
 import { AttentionStack } from "@/components/operations/AttentionStack";
@@ -61,41 +59,55 @@ export function DashboardPage() {
   const evidenceCaption = `${incidents.length} pending evidence ${
     incidents.length === 1 ? "record" : "records"
   }`;
+  const commandMetrics = [
+    {
+      label: "Live scenes",
+      value: cameras.length,
+      detail: `${cameras.length === 1 ? "scene" : "scenes"} streaming`,
+    },
+    {
+      label: "Evidence queue",
+      value: incidents.length,
+      detail: evidenceCaption,
+    },
+    {
+      label: "Edge workers",
+      value: `${runningWorkers}/${desiredWorkers}`,
+      detail: "running / desired",
+    },
+  ];
 
   return (
     <div
       data-testid="omnisight-overview"
       className="grid gap-5 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_340px]"
     >
-      <WorkspaceHero
-        eyebrow="Dashboard"
-        title="OmniSight Overview"
-        description="A connected view of live scenes, evidence, patterns, deployment context, and edge operations."
-        tone="cerulean"
-        lens={
-          <OmniSightStaticMark className="w-[clamp(7rem,12vw,10rem)] object-contain drop-shadow-[0_18px_58px_rgba(118,224,255,0.18)]" />
-        }
-        className="xl:col-span-2"
-        body={
-          <div className="grid gap-3 sm:grid-cols-3">
-            <KpiTile
-              eyebrow="Live scenes"
-              value={cameras.length}
-              caption={`${cameras.length === 1 ? "scene" : "scenes"} streaming`}
-            />
-            <KpiTile
-              eyebrow="Evidence queue"
-              value={incidents.length}
-              caption={evidenceCaption}
-            />
-            <KpiTile
-              eyebrow="Edge workers"
-              value={`${runningWorkers}/${desiredWorkers}`}
-              caption="running / desired"
-            />
-          </div>
-        }
-      />
+      <section
+        data-testid="dashboard-command-overview"
+        className="grid gap-3 xl:col-span-2 xl:grid-cols-[minmax(0,1fr)_20rem]"
+      >
+        <CommandBand
+          eyebrow="Dashboard"
+          title="Command overview"
+          description="Live scenes, evidence, fleet state, and operational attention in one operator surface."
+        />
+        <div className="grid gap-2">
+          {commandMetrics.map((metric) => (
+            <div
+              key={metric.label}
+              className="border-t border-[color:var(--vz-hair)] py-3"
+            >
+              <p className="command-eyebrow">{metric.label}</p>
+              <p className="mt-1 text-2xl font-semibold text-[var(--vz-text-primary)]">
+                {metric.value}
+              </p>
+              <p className="text-sm text-[var(--vz-text-secondary)]">
+                {metric.detail}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="xl:col-span-2">
         <DeploymentPostureStrip posture={deploymentPosture} />

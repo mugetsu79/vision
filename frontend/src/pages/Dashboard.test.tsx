@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test, vi } from "vitest";
 
-import { productBrand } from "@/brand/product";
 import type { components } from "@/lib/api.generated";
 import { DashboardPage } from "@/pages/Dashboard";
 
@@ -164,7 +163,7 @@ vi.mock("@/hooks/use-operations", () => ({
 }));
 
 describe("DashboardPage", () => {
-  test("renders an OmniSight overview cockpit", () => {
+  test("renders a command overview before the attention stack", () => {
     render(
       <MemoryRouter>
         <DashboardPage />
@@ -172,16 +171,30 @@ describe("DashboardPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "OmniSight Overview" }),
+      screen.getByRole("heading", { name: "Command overview" }),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("omnisight-lens")).not.toBeInTheDocument();
+    const overview = screen.getByTestId("dashboard-command-overview");
+    const attention = screen.getByTestId("attention-stack");
+    expect(overview).toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: `${productBrand.name} mark` }),
-    ).toHaveAttribute("src", productBrand.runtimeAssets.logo2d);
-    expect(document.querySelector('img[src*="3d_logo"]')).toBeNull();
-    expect(screen.getByText("Live scenes")).toBeInTheDocument();
-    expect(screen.getByText("Evidence queue")).toBeInTheDocument();
-    expect(screen.getByText("Edge workers")).toBeInTheDocument();
+      overview.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByTestId("omnisight-lens")).not.toBeInTheDocument();
+    const liveScenesMetric = metricBlock(overview, "Live scenes");
+    expect(within(liveScenesMetric).getByText("2")).toBeInTheDocument();
+    expect(
+      within(liveScenesMetric).getByText("scenes streaming"),
+    ).toBeInTheDocument();
+    const evidenceQueueMetric = metricBlock(overview, "Evidence queue");
+    expect(within(evidenceQueueMetric).getByText("1")).toBeInTheDocument();
+    expect(
+      within(evidenceQueueMetric).getByText("1 pending evidence record"),
+    ).toBeInTheDocument();
+    const edgeWorkersMetric = metricBlock(overview, "Edge workers");
+    expect(within(edgeWorkersMetric).getByText("1/2")).toBeInTheDocument();
+    expect(
+      within(edgeWorkersMetric).getByText("running / desired"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("deployment-posture-strip")).toBeInTheDocument();
     expect(screen.getByTestId("attention-stack")).toBeInTheDocument();
     expect(
@@ -202,3 +215,14 @@ describe("DashboardPage", () => {
     ).toHaveAttribute("href", "/incidents");
   });
 });
+
+function metricBlock(container: HTMLElement, label: string) {
+  const metricLabel = within(container).getByText(label);
+  const block = metricLabel.parentElement;
+
+  if (!block) {
+    throw new Error(`Missing metric block for ${label}`);
+  }
+
+  return block;
+}
