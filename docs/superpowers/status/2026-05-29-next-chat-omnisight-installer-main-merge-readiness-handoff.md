@@ -1,12 +1,12 @@
-# Next Chat Handoff: Live Sizing And Configuration Guidance Follow-Up
+# Next Chat Handoff: Guidance Disclosure Merge And UI/UX Polish Start
 
 Date: 2026-05-29
 Last updated: 2026-06-03
-Status: Main merge closeout for `codex/omnisight-live-video-window-sizing`.
+Status: Main merge closeout for `codex/guidance-progressive-disclosure`.
 
-Purpose: record the current Live/configuration/installer state before merging
-the feature branch to `main`, and give the next chat/operator a clean `main`
-update path for MacBook and Jetson hosts.
+Purpose: record the completed guidance progressive-disclosure and pre-polish
+operator-correction work before merging to `main`, and seed the next chat for
+the broader OmniSight UI/UX polish lane.
 
 ## Branch And Repository State
 
@@ -19,35 +19,24 @@ main
 Feature branch being merged:
 
 ```text
-codex/omnisight-live-video-window-sizing
+codex/guidance-progressive-disclosure
 ```
 
 Latest implementation checkpoint before this documentation closeout:
 
 ```text
-89a8be22 Tighten live rendition UX and Jetson guidance
+bbb6390f fix(ui): apply pre-polish operator corrections
 ```
 
-The feature branch is preserved on `origin/codex/omnisight-live-video-window-sizing`;
-the merged source ref for operator updates is `origin/main`.
+The feature branch is preserved on `origin/codex/guidance-progressive-disclosure`;
+after merge, the source ref for operator updates is `origin/main`.
 
-Commit stack after the previous `main` merge base:
+Current branch commits after `main` at `69629c37`:
 
 ```text
-83176921 fix(live): preserve full video frame sizing
-84540396 fix(live): gate telemetry badge on scene heartbeat
-0510b26a feat(operations): remove configured scene workers
-5a514645 fix(operations): delete scenes with worker history
-15756c20 docs: specify production configuration hardening
-1d60f289 docs: plan production configuration hardening
-f6f3274a feat(config): harden runtime profiles and installer networking
-c6ca8cb1 docs(config): record guidance ux follow-up
-1caa1694 feat(config): add operator guidance ux
-0afa17f2 fix(cameras): clarify calibration speed guidance
-4fc0da54 fix(operations): backfill missing runtime defaults
-aadd1c3a fix(installer): wire central worker live streaming
-c9dc2e51 fix(live): refine scene tile sizing controls
-89a8be22 Tighten live rendition UX and Jetson guidance
+d29afc98 feat(config): add progressive guidance disclosure
+a1c7083c docs: plan pre-polish operator corrections
+bbb6390f fix(ui): apply pre-polish operator corrections
 ```
 
 Start the next chat/operator update from `main`:
@@ -61,8 +50,8 @@ git status -sb
 git log --oneline -12
 ```
 
-Do not create another branch unless the next chat is intentionally starting a
-new implementation lane. A reasonable follow-up branch for broader UI polish is:
+The next chat should intentionally start a new implementation lane for broad
+UI/UX polish:
 
 ```bash
 git switch -c codex/omnisight-ui-ux-polish
@@ -72,16 +61,21 @@ Known local hygiene:
 
 - unrelated untracked scratch files may exist locally
 - `taste-skill/` may exist locally for later UI work
-- the configuration guidance spec and plan are tracked project history:
+- the configuration guidance and pre-polish correction docs are tracked project
+  history:
   - `docs/superpowers/specs/2026-06-02-configuration-guidance-ux-design.md`
   - `docs/superpowers/plans/2026-06-02-configuration-guidance-ux.md`
+  - `docs/superpowers/specs/2026-06-03-configuration-guidance-progressive-disclosure-design.md`
+  - `docs/superpowers/plans/2026-06-03-configuration-guidance-progressive-disclosure.md`
+  - `docs/superpowers/specs/2026-06-03-pre-polish-operator-corrections-design.md`
+  - `docs/superpowers/plans/2026-06-03-pre-polish-operator-corrections.md`
 - do not use `git add -A`
 - stage only files needed for the current task
 - keep unrelated untracked files untouched
 
 ## Completed Since The 2026-05-29 Handoff
 
-Implemented and pushed on `codex/omnisight-live-video-window-sizing`:
+Implemented earlier and merged through `codex/omnisight-live-video-window-sizing`:
 
 - Live video sizing fix: tiles preserve the full video frame and keep video
   pixels aligned with overlays during resize/focus changes.
@@ -148,6 +142,38 @@ frontend build: passed
 git diff --check: passed
 ```
 
+Implemented and pushed on `codex/guidance-progressive-disclosure`:
+
+- Progressive guidance disclosure:
+  - reusable circular `i` guidance disclosure for field and section help
+  - compact help in Scene setup, Homography calibration, event boundaries,
+    detection regions, Control Plane profile editing, binding scope, and
+    effective runtime state
+  - reusable calibration flow SVG for source/destination mapping, measured
+    distance, boundaries, and regions
+  - click/tap open, Escape close, outside-click close, focus return, and
+    screen-reader summary text for existing `aria-describedby` consumers
+- Pre-polish operator corrections:
+  - Scene setup `Browser stream` controls now stack before medium-width overflow
+  - detection-region calibration help has clearer include/exclusion placement
+  - Operations scene intelligence matrix was simplified into `Scene readiness`
+    rows with Runtime and Stream groups
+  - installer cards now describe host targets: `MacBook local master`,
+    `Linux host master`, and `Jetson edge`, while command paths remain unchanged
+- Broader UI/UX polish seed:
+  - `docs/superpowers/specs/2026-04-28-vezor-omnisight-ui-redesign-design.md`
+    now explicitly carries the overloaded Operations page into the later polish
+    lane as attention-first information architecture work.
+
+Validation before the 2026-06-03 guidance merge closeout:
+
+```text
+focused correction + Settings vitest: 56 passed
+Settings/Live/operational-health regression vitest: 27 passed
+frontend build: passed
+git diff --check: passed
+```
+
 ## MacBook Test Build Update
 
 After the branch is merged, use `main` for MacBook source updates:
@@ -203,7 +229,8 @@ docs/superpowers/specs/2026-06-02-configuration-guidance-ux-design.md
 docs/superpowers/plans/2026-06-02-configuration-guidance-ux.md
 ```
 
-The next useful UX work is broader polish, not this configuration guidance pass.
+This configuration guidance work is complete. The next useful UX work is the
+broader OmniSight UI/UX polish lane.
 
 ## Field Validation Summary
 
@@ -217,6 +244,14 @@ Validated by Yann after the installer branch work:
 - Profile/rendition switching works; Yann confirmed the Live view looked correct
   after switching from `annotated` to `240p5`.
 - Live scene deletion exists for cleaning up old scenes such as `Room1`.
+
+Validated by Yann after the guidance progressive-disclosure branch work:
+
+- Progressive disclosure direction is acceptable after the pre-polish
+  corrections.
+- Scene setup browser stream layout, detection-region help, Scene readiness
+  rows, and installer target copy are good enough to merge before the larger
+  UI/UX polish lane.
 
 ## Carry-Forward Context From Older Handoffs
 
@@ -296,13 +331,15 @@ Remaining product validation after the `main` merge:
 
 ## Immediate Next Work
 
-The previous immediate field-smoke item has been completed and removed from the
-active queue. Current next choices:
+Start a new chat for the broader OmniSight UI/UX polish lane:
 
-1. Review, commit, and merge the focused guidance progressive-disclosure branch.
-2. Continue the remaining product validation list above, especially evidence
-   clip review, Operations worker lifecycle controls, reboot validation, and
-   Jetson soak evidence.
+1. Create `codex/omnisight-ui-ux-polish` from updated `main`.
+2. Review `docs/superpowers/specs/2026-04-28-vezor-omnisight-ui-redesign-design.md`.
+3. Treat Operations page overload as a first-class design problem:
+   attention-first status, navigable sections, and progressive disclosure for
+   diagnostics.
+4. Use `taste-skill/` as local inspiration/input if useful, but keep the
+   product operational, dense, and field-usable.
 
 ## Configuration Guidance Density Feedback
 
@@ -311,11 +348,8 @@ heavy in the interface. The preferred direction is to keep fields compact and
 hide richer guidance behind a circular `i` info affordance that reveals details
 on demand.
 
-Recommended next UX task: treat this as a focused guidance-density correction,
-not as part of the broader UI/UX polish bucket. It should get its own short
-spec/plan so the implementation can move quickly and replace always-visible
-guidance with consistent info triggers across Scene setup and Control Plane
-Configuration.
+Completed direction: this was treated as a focused guidance-density correction,
+not as part of the broader UI/UX polish bucket.
 
 Spec/plan created for this follow-up:
 
@@ -345,6 +379,22 @@ Live/Operations regression vitest: 24 passed
 frontend build: passed
 ```
 
+Pre-polish corrections completed on `codex/guidance-progressive-disclosure`:
+
+- `Browser stream` replaces the cramped `Live delivery` section copy in Scene
+  setup, and controls stack before they overlap the right-side wizard rail.
+- Detection-region help has clearer include/exclusion placement and less
+  cramped SVG layering.
+- Operations `Scene readiness` rows replace the dense matrix table for scene
+  status scanning.
+- Deployment installer target copy now describes host wrappers and
+  Docker-backed services more accurately.
+
+Tracked planning artifacts:
+
+- `docs/superpowers/specs/2026-06-03-pre-polish-operator-corrections-design.md`
+- `docs/superpowers/plans/2026-06-03-pre-polish-operator-corrections.md`
+
 ## Broader UI/UX Polish Later
 
 The completed UX pass was configuration comprehension, not a general redesign.
@@ -364,6 +414,10 @@ Suggested later branch after this work is merged:
 ```bash
 git switch -c codex/omnisight-ui-ux-polish
 ```
+
+Primary polish spec:
+
+- `docs/superpowers/specs/2026-04-28-vezor-omnisight-ui-redesign-design.md`
 
 ## Current Documentation State
 
