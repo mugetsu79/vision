@@ -84,4 +84,68 @@ describe("TelemetryTerrain", () => {
     expect(line?.getAttribute("d")).toContain(" V ");
     expect(line?.getAttribute("d")).not.toMatch(/\sL\s\d/);
   });
+
+  test("adds instrument grid and class lanes without changing the primary trend", () => {
+    const rows: SignalCountRow[] = [
+      {
+        className: "person",
+        color: colorForClass("person"),
+        liveCount: 2,
+        heldCount: 0,
+        totalCount: 2,
+        state: "live",
+      },
+      {
+        className: "car",
+        color: colorForClass("car"),
+        liveCount: 0,
+        heldCount: 1,
+        totalCount: 1,
+        state: "held",
+      },
+    ];
+
+    render(
+      <TelemetryTerrain
+        cameraId="camera-1"
+        cameraName="North Gate"
+        activeClasses={["person", "car"]}
+        signalRows={rows}
+      />,
+    );
+
+    const terrain = screen.getByTestId("telemetry-terrain");
+    expect(within(terrain).getByTestId("telemetry-terrain-grid")).toBeInTheDocument();
+    expect(within(terrain).getByTestId("signal-lane-person")).toHaveTextContent("2");
+    expect(within(terrain).getByTestId("signal-lane-car")).toHaveTextContent("1");
+  });
+
+  test("renders live-now activity when history buckets are empty for an active class", () => {
+    const rows: SignalCountRow[] = [
+      {
+        className: "truck",
+        color: colorForClass("truck"),
+        liveCount: 2,
+        heldCount: 0,
+        totalCount: 2,
+        state: "live",
+      },
+    ];
+
+    render(
+      <TelemetryTerrain
+        cameraId="camera-1"
+        cameraName="North Gate"
+        activeClasses={["truck"]}
+        signalRows={rows}
+      />,
+    );
+
+    const terrain = screen.getByTestId("telemetry-terrain");
+    const line = within(terrain)
+      .getByLabelText(/truck signal trend/i)
+      .querySelector('path[fill="none"]');
+    expect(line?.getAttribute("d")).toContain("V 37.00");
+    expect(line?.getAttribute("d")).toContain("V 12.00");
+  });
 });

@@ -1,6 +1,7 @@
-import type { EChartsOption } from "echarts";
+import type { EChartsOption, SeriesOption } from "echarts";
 
 import { colorForClass } from "@/lib/signal-colors";
+import type { HistoryMetric } from "@/lib/history-url-state";
 
 export type HistoryTrendPoint = {
   bucket: string;
@@ -39,6 +40,7 @@ export function bucketFromChartClick(
 
 export function buildHistoryChartOption(
   series: HistoryTrendSeries,
+  metric: HistoryMetric = "occupancy",
 ): EChartsOption {
   const buckets = series.points.map((p) => formatBucket(p.bucket));
   const selectedBucketLabel = series.selectedBucket
@@ -69,7 +71,7 @@ export function buildHistoryChartOption(
     {
       type: "category",
       gridIndex: 0,
-      boundaryGap: false,
+      boundaryGap: metric === "count_events",
       data: buckets,
       axisLine: { lineStyle: { color: "rgba(206, 224, 255, 0.16)" } },
       axisLabel: { color: "#8497b3", hideOverlap: true },
@@ -87,30 +89,15 @@ export function buildHistoryChartOption(
   ];
 
   const seriesList: NonNullable<EChartsOption["series"]> =
-    series.classNames.map((cls) => ({
-      name: cls,
-      type: "line",
-      smooth: true,
-      showSymbol: false,
-      color: paletteOf(cls),
-      lineStyle: { width: 3 },
-      areaStyle: { opacity: 0.12 },
-      emphasis: { focus: "series" },
-      xAxisIndex: 0,
-      yAxisIndex: 0,
-      data: series.points.map((p) => p.values[cls] ?? 0),
-      markLine: selectedBucketLabel
-        ? {
-          symbol: "none",
-            lineStyle: {
-              color: "rgba(110, 189, 255, 0.42)",
-              type: "dashed",
-              width: 1.5,
-            },
-            data: [{ xAxis: selectedBucketLabel, name: "selected bucket" }],
-          }
-        : undefined,
-    }));
+    series.classNames.map((cls) =>
+      buildPrimaryPatternSeries({
+        className: cls,
+        color: paletteOf(cls),
+        data: series.points.map((p) => p.values[cls] ?? 0),
+        metric,
+        selectedBucketLabel,
+      }),
+    );
 
   if (thresholdSet) {
     grids.push({
@@ -239,6 +226,82 @@ export function buildHistoryChartOption(
     xAxis: xAxes,
     yAxis: yAxes,
     series: seriesList,
+  };
+}
+
+function buildPrimaryPatternSeries({
+  className,
+  color,
+  data,
+  metric,
+  selectedBucketLabel,
+}: {
+  className: string;
+  color: string;
+  data: number[];
+  metric: HistoryMetric;
+  selectedBucketLabel: string | null;
+}): SeriesOption {
+  const markLine = selectedBucketLabel
+    ? {
+        symbol: "none",
+        lineStyle: {
+          color: "rgba(110, 189, 255, 0.42)",
+          type: "dashed" as const,
+          width: 1.5,
+        },
+        data: [{ xAxis: selectedBucketLabel, name: "selected bucket" }],
+      }
+    : undefined;
+
+  if (metric === "count_events") {
+    return {
+      name: className,
+      type: "bar",
+      color,
+      barMaxWidth: 18,
+      itemStyle: {
+        borderRadius: [4, 4, 0, 0],
+        opacity: 0.86,
+      },
+      emphasis: { focus: "series" },
+      xAxisIndex: 0,
+      yAxisIndex: 0,
+      data,
+      markLine,
+    };
+  }
+
+  if (metric === "observations") {
+    return {
+      name: className,
+      type: "line",
+      smooth: false,
+      showSymbol: false,
+      color,
+      lineStyle: { width: 2.2, type: "dotted", opacity: 0.78 },
+      areaStyle: { opacity: 0.05 },
+      emphasis: { focus: "series" },
+      xAxisIndex: 0,
+      yAxisIndex: 0,
+      data,
+      markLine,
+    };
+  }
+
+  return {
+    name: className,
+    type: "line",
+    smooth: true,
+    showSymbol: false,
+    color,
+    lineStyle: { width: 3 },
+    areaStyle: { opacity: 0.12 },
+    emphasis: { focus: "series" },
+    xAxisIndex: 0,
+    yAxisIndex: 0,
+    data,
+    markLine,
   };
 }
 

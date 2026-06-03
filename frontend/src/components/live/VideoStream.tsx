@@ -661,9 +661,6 @@ export function VideoStream({
 
       <div className="pointer-events-none absolute right-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap justify-end gap-2">
         <Badge className="border-[#31538b] bg-[#081120]/80 text-[#eef4ff]">
-          {defaultProfile}
-        </Badge>
-        <Badge className="border-[#31538b] bg-[#081120]/80 text-[#eef4ff]">
           {transportLabel(transport)}
         </Badge>
       </div>

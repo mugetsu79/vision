@@ -136,6 +136,39 @@ describe("buildHistoryChartOption", () => {
     );
     expect(carSeries?.lineStyle?.width).toBe(3);
   });
+
+  test("uses discrete bars for event-boundary pattern counts", () => {
+    const option = buildHistoryChartOption(
+      {
+        classNames: ["person", "car"],
+        points: [
+          {
+            bucket: "2026-04-23T00:00:00Z",
+            values: { person: 2, car: 1 },
+            total_count: 3,
+          },
+          {
+            bucket: "2026-04-23T01:00:00Z",
+            values: { person: 7, car: 2 },
+            total_count: 9,
+          },
+        ],
+      },
+      "count_events",
+    );
+
+    const seriesList = option.series as unknown as Array<{
+      name: string;
+      type?: string;
+      barMaxWidth?: number;
+      itemStyle?: { borderRadius?: number[] };
+    }>;
+
+    const personSeries = seriesList.find((entry) => entry.name === "person");
+    expect(personSeries?.type).toBe("bar");
+    expect(personSeries?.barMaxWidth).toBeLessThanOrEqual(18);
+    expect(personSeries?.itemStyle?.borderRadius).toEqual([4, 4, 0, 0]);
+  });
 });
 
 describe("bucketFromChartClick", () => {

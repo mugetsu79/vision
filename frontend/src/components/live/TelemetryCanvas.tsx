@@ -20,6 +20,13 @@ type CoordinateTransform = {
   offsetX: number;
   offsetY: number;
 };
+type TrailPoint = {
+  x: number;
+  y: number;
+};
+
+const MAX_TRAIL_POINTS = 18;
+const RESERVED_TOP_STATUS_BAND = 42;
 
 export function TelemetryCanvas({
   frame,
@@ -41,6 +48,7 @@ export function TelemetryCanvas({
   const tracksRef = useRef<SignalTrack[] | undefined>(tracks);
   const sourceSizeRef = useRef<SourceSize | null | undefined>(sourceSize);
   const disabledRef = useRef(disabled);
+  const trailPointsRef = useRef(new Map<string, TrailPoint[]>());
   const skippedInitialPropDrawRef = useRef(false);
   const drawFrameRef = useRef<() => void>(() => undefined);
 
@@ -64,6 +72,7 @@ export function TelemetryCanvas({
       disabledRef.current ||
       !shouldDrawBrowserTelemetryOverlay(frameRef.current?.stream_mode)
     ) {
+      trailPointsRef.current.clear();
       return;
     }
 
@@ -74,6 +83,7 @@ export function TelemetryCanvas({
     );
 
     if (visibleSignals.length === 0) {
+      trailPointsRef.current.clear();
       return;
     }
 
@@ -82,10 +92,16 @@ export function TelemetryCanvas({
       sourceSizeRef.current,
     );
     const transform = resolveCoordinateTransform(width, height, source);
+    updateSignalTrails(trailPointsRef.current, visibleSignals);
 
     context.lineWidth = 2;
     context.font = "12px ui-sans-serif, system-ui, sans-serif";
 
+    for (const signal of visibleSignals) {
+      drawSignalTrail(context, trailPointsRef.current.get(signal.key) ?? [], signal, transform);
+    }
+
+    context.lineWidth = 2;
     for (const signal of visibleSignals) {
       const { track } = signal;
       const x1 = projectCoordinate(
@@ -117,13 +133,18 @@ export function TelemetryCanvas({
         .join(" ");
       const labelWidth = context.measureText(label).width;
       const labelX = Math.max(4, Math.min(x1 + 4, width - labelWidth - 4));
-      const labelY = Math.min(height - 4, Math.max(14, y1 - 6));
+      const preferredLabelY = y1 - 6;
+      const labelY =
+        preferredLabelY < RESERVED_TOP_STATUS_BAND
+          ? Math.min(height - 4, y2 + 14)
+          : Math.min(height - 4, Math.max(14, preferredLabelY));
 
       context.globalAlpha = signal.state === "held" ? 0.55 : 1;
       context.setLineDash?.(signal.state === "held" ? [6, 5] : []);
       context.strokeStyle = signal.color.stroke;
-      context.fillStyle = signal.color.text;
       context.strokeRect(x1, y1, Math.max(4, x2 - x1), Math.max(4, y2 - y1));
+      drawLabelBacking(context, labelX - 4, labelY - 12, labelWidth + 8, 16);
+      context.fillStyle = signal.color.text;
       context.fillText(label, labelX, labelY);
     }
 
@@ -196,6 +217,98 @@ export function TelemetryCanvas({
       className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );
+}
+
+function drawLabelBacking(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  if (!("roundRect" in context)) {
+    return;
+  }
+
+  context.save();
+  context.globalAlpha = 0.72;
+  context.fillStyle = "rgba(3, 8, 14, 0.86)";
+  context.beginPath();
+  context.roundRect(x, y, width, height, 5);
+  context.fill();
+  context.restore();
+}
+
+function updateSignalTrails(
+  trails: Map<string, TrailPoint[]>,
+  visibleSignals: SignalTrack[],
+) {
+  const visibleKeys = new Set(visibleSignals.map((signal) => signal.key));
+
+  for (const key of trails.keys()) {
+    if (!visibleKeys.has(key)) {
+      trails.delete(key);
+    }
+  }
+
+  for (const signal of visibleSignals) {
+    const center = sourceCenterForTrack(signal.track);
+    const existing = trails.get(signal.key) ?? [];
+    const previous = existing.at(-1);
+    const hasMoved =
+      !previous ||
+      Math.abs(previous.x - center.x) > 0.5 ||
+      Math.abs(previous.y - center.y) > 0.5;
+    const next = hasMoved ? [...existing, center] : existing;
+    trails.set(signal.key, next.slice(-MAX_TRAIL_POINTS));
+  }
+}
+
+function drawSignalTrail(
+  context: CanvasRenderingContext2D,
+  trail: TrailPoint[],
+  signal: SignalTrack,
+  transform: CoordinateTransform,
+) {
+  if (trail.length === 0) {
+    return;
+  }
+
+  const projected = trail.map((point) => ({
+    x: projectCoordinate(point.x, transform.scaleX, transform.offsetX),
+    y: projectCoordinate(point.y, transform.scaleY, transform.offsetY),
+  }));
+  const latest = projected.at(-1);
+  if (!latest) {
+    return;
+  }
+
+  if (projected.length > 1) {
+    context.beginPath();
+    context.setLineDash?.(signal.state === "held" ? [3, 5] : []);
+    context.globalAlpha = signal.state === "held" ? 0.22 : 0.34;
+    context.lineWidth = 2.4;
+    context.strokeStyle = signal.color.stroke;
+    context.moveTo(projected[0].x, projected[0].y);
+    for (const point of projected.slice(1)) {
+      context.lineTo(point.x, point.y);
+    }
+    context.stroke();
+  }
+
+  context.beginPath();
+  context.setLineDash?.([]);
+  context.globalAlpha = signal.state === "held" ? 0.36 : 0.82;
+  context.fillStyle = signal.color.stroke;
+  context.arc(latest.x, latest.y, signal.state === "held" ? 2.2 : 3, 0, Math.PI * 2);
+  context.fill();
+}
+
+function sourceCenterForTrack(track: TelemetryFrame["tracks"][number]): TrailPoint {
+  return {
+    x: (getCoordinate(track.bbox, "x1") + getCoordinate(track.bbox, "x2")) / 2,
+    y: (getCoordinate(track.bbox, "y1") + getCoordinate(track.bbox, "y2")) / 2,
+  };
 }
 
 function resolveVisibleSignals(

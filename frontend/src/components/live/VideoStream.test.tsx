@@ -249,7 +249,6 @@ describe("VideoStream", () => {
     expect(url.searchParams.get("profile_id")).toBe("540p5");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(FakeRTCPeerConnection.instances).toHaveLength(0);
-    expect(screen.getByText("540p5")).toBeInTheDocument();
   });
 
   test("uses a fresh fallback stream URL after remounting", async () => {
@@ -344,7 +343,6 @@ describe("VideoStream", () => {
     expect(secondUrl).not.toBe(firstUrl);
     expect(new URL(firstUrl).searchParams.get("profile_id")).toBe("720p10");
     expect(new URL(secondUrl).searchParams.get("profile_id")).toBe("540p5");
-    expect(screen.getByText("540p5")).toBeInTheDocument();
   });
 
   test("sends the selected profile id in WebRTC offers", async () => {

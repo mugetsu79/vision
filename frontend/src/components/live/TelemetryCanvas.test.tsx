@@ -13,10 +13,16 @@ const clearRectMock = vi.fn();
 const scaleMock = vi.fn();
 const setTransformMock = vi.fn();
 const beginPathMock = vi.fn();
+const closePathMock = vi.fn();
+const moveToMock = vi.fn();
+const lineToMock = vi.fn();
+const arcMock = vi.fn();
 const roundRectMock = vi.fn();
 const fillMock = vi.fn();
 const strokeMock = vi.fn();
 const setLineDashMock = vi.fn();
+const saveMock = vi.fn();
+const restoreMock = vi.fn();
 
 describe("TelemetryCanvas", () => {
   beforeEach(() => {
@@ -26,9 +32,15 @@ describe("TelemetryCanvas", () => {
       scale: scaleMock,
       setTransform: setTransformMock,
       beginPath: beginPathMock,
+      closePath: closePathMock,
+      moveTo: moveToMock,
+      lineTo: lineToMock,
+      arc: arcMock,
       roundRect: roundRectMock,
       fill: fillMock,
       stroke: strokeMock,
+      save: saveMock,
+      restore: restoreMock,
       fillText: fillTextMock,
       strokeRect: strokeRectMock,
       setLineDash: setLineDashMock,
@@ -91,10 +103,16 @@ describe("TelemetryCanvas", () => {
     scaleMock.mockReset();
     setTransformMock.mockReset();
     beginPathMock.mockReset();
+    closePathMock.mockReset();
+    moveToMock.mockReset();
+    lineToMock.mockReset();
+    arcMock.mockReset();
     roundRectMock.mockReset();
     fillMock.mockReset();
     strokeMock.mockReset();
     setLineDashMock.mockReset();
+    saveMock.mockReset();
+    restoreMock.mockReset();
   });
 
   test("redraws overlays from explicit stable tracks with held-state styling", async () => {
@@ -234,7 +252,11 @@ describe("TelemetryCanvas", () => {
 
     render(
       <div style={{ width: 640, height: 360 }}>
-        <TelemetryCanvas frame={frame} activeClasses={null} />
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          sourceSize={{ width: 640, height: 360 }}
+        />
       </div>,
     );
 
@@ -355,6 +377,117 @@ describe("TelemetryCanvas", () => {
 
     await waitFor(() => expect(strokeRectMock).toHaveBeenCalled());
     expect(strokeRectMock).toHaveBeenCalledWith(320, 120, 160, 190);
+  });
+
+  test("draws scalable motion trails between stable object centers", async () => {
+    const firstFrame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
+      stream_profile_id: "native",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 100, y1: 100, x2: 200, y2: 200 },
+          track_id: 3,
+          stable_track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+    const nextFrame: TelemetryFrame = {
+      ...firstFrame,
+      ts: "2026-04-19T09:15:01Z",
+      tracks: [
+        {
+          ...firstFrame.tracks[0],
+          bbox: { x1: 200, y1: 120, x2: 300, y2: 220 },
+        },
+      ],
+    };
+
+    const view = render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={firstFrame}
+          activeClasses={null}
+          tracks={[signalTrack(firstFrame.tracks[0])]}
+          sourceSize={{ width: 400, height: 300 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(strokeRectMock).toHaveBeenCalled());
+
+    moveToMock.mockClear();
+    lineToMock.mockClear();
+    arcMock.mockClear();
+
+    view.rerender(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={nextFrame}
+          activeClasses={null}
+          tracks={[signalTrack(nextFrame.tracks[0])]}
+          sourceSize={{ width: 400, height: 300 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(lineToMock).toHaveBeenCalled());
+    expect(moveToMock).toHaveBeenCalledWith(260, 180);
+    expect(lineToMock).toHaveBeenCalledWith(380, 204);
+    expect(arcMock).toHaveBeenCalledWith(380, 204, expect.any(Number), 0, Math.PI * 2);
+  });
+
+  test("moves labels below top-band boxes to avoid stream status collisions", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
+      stream_profile_id: "native",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 100, y1: 24, x2: 200, y2: 80 },
+          track_id: 3,
+          stable_track_id: 3,
+          speed_kph: 5,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          sourceSize={{ width: 640, height: 360 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() =>
+      expect(fillTextMock.mock.calls.some(([label]) => String(label).includes("person"))).toBe(true),
+    );
+
+    const labelCall = fillTextMock.mock.calls
+      .filter(([label]) => String(label).includes("person"))
+      .at(-1);
+    expect(labelCall?.[2]).toBeGreaterThanOrEqual(94);
+    expect(roundRectMock).toHaveBeenCalled();
   });
 
   test("matches object-contain letterbox offsets for non-widescreen sources", async () => {

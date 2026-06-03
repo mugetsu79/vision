@@ -45,7 +45,10 @@ export function HistoryTrendChart({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<EChartsType | null>(null);
-  const option = useMemo(() => buildHistoryChartOption(series), [series]);
+  const option = useMemo(
+    () => buildHistoryChartOption(series, metric),
+    [metric, series],
+  );
   const metricCopy = historyMetricCopy(metric);
 
   useEffect(() => {

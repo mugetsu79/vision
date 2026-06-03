@@ -57,4 +57,42 @@ describe("OperationalMemoryPanel", () => {
     expect(within(panel).getByText("No observed patterns")).toBeInTheDocument();
     expect(within(panel).queryByText(/forecast/i)).not.toBeInTheDocument();
   });
+
+  test("renders a distinct scalable glyph for each operational pattern type", () => {
+    render(
+      <OperationalMemoryPanel
+        patterns={[
+          pattern({
+            id: "00000000-0000-0000-0000-000000000901",
+            pattern_type: "event_burst",
+            evidence: { incident_count: 5 },
+          }),
+          pattern({
+            id: "00000000-0000-0000-0000-000000000902",
+            pattern_type: "zone_hotspot",
+            dimensions: { zone_id: "forklift-gate", contract_count: 3 },
+            evidence: { incident_count: 8 },
+          }),
+          pattern({
+            id: "00000000-0000-0000-0000-000000000903",
+            pattern_type: "storage_failure",
+            severity: "critical",
+            dimensions: { provider: "minio", scope: "cloud" },
+            evidence: { artifact_count: 4, statuses: ["capture_failed"] },
+          }),
+        ]}
+      />,
+    );
+
+    const panel = screen.getByTestId("operational-memory-panel");
+    expect(
+      within(panel).getByTestId("pattern-glyph-event-burst"),
+    ).toHaveAccessibleName(/event burst pattern/i);
+    expect(
+      within(panel).getByTestId("pattern-glyph-zone-hotspot"),
+    ).toHaveAccessibleName(/zone hotspot pattern/i);
+    expect(
+      within(panel).getByTestId("pattern-glyph-storage-failure"),
+    ).toHaveAccessibleName(/storage failure pattern/i);
+  });
 });
