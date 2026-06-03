@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -11,6 +11,7 @@ import {
 
 import {
   InstrumentRail,
+  OperationalSection,
   StatusToneBadge,
   WorkspaceBand,
   WorkspaceSurface,
@@ -50,6 +51,8 @@ type FleetRuleRuntime = NonNullable<
   FleetOverview["camera_workers"][number]["rule_runtime"]
 >;
 
+const configurationContentId = "configuration-content";
+
 export function SettingsPage() {
   const fleet = useFleetOverview();
   const { data: cameras = [] } = useCameras();
@@ -57,15 +60,13 @@ export function SettingsPage() {
     cameras.map((camera) => camera.id),
   );
   const { data: sites = [] } = useSites();
-  const { data: models = [] } = useModels();
-  const runtimeArtifacts = useRuntimeArtifactsByModelId(
-    models.map((model) => model.id),
-  );
   const operationalMemory = useOperationalMemoryPatterns({ limit: 8 });
   const camerasById = useMemo(
     () => new Map(cameras.map((camera) => [camera.id, camera])),
     [cameras],
   );
+  const [configurationOpen, setConfigurationOpen] = useState(false);
+  const [configurationHasOpened, setConfigurationHasOpened] = useState(false);
 
   const modeCopy = useMemo(() => {
     if (fleet.data?.mode === "supervised") {
@@ -118,6 +119,13 @@ export function SettingsPage() {
   const needsOperationsSetup =
     sites.length === 0 || cameras.length === 0 || fleet.data.nodes.length === 0;
 
+  function toggleConfiguration() {
+    if (!configurationOpen) {
+      setConfigurationHasOpened(true);
+    }
+    setConfigurationOpen((current) => !current);
+  }
+
   return (
     <div data-testid="operations-workspace" className="space-y-5 p-4 sm:p-6">
       <WorkspaceBand
@@ -138,14 +146,12 @@ export function SettingsPage() {
 
       <SceneIntelligenceMatrix rows={sceneHealthRows} />
 
-      <OperationsSectionNav />
-
-      <OperationalMemoryPanel
-        patterns={operationalMemory.data ?? []}
-        loading={operationalMemory.isLoading}
-      />
-
-      <OperationsSection id="workers" title="Workers">
+      <OperationalSection
+        id="workers"
+        label="Workers"
+        eyebrow="Command surface"
+        className="scroll-mt-6"
+      >
         <Panel
           title="Scene workers"
           icon={<TerminalSquare className="size-4" />}
@@ -234,9 +240,21 @@ export function SettingsPage() {
             )}
           </div>
         </Panel>
-      </OperationsSection>
+      </OperationalSection>
 
-      <OperationsSection id="stream-diagnostics" title="Stream Diagnostics">
+      <OperationalMemoryPanel
+        patterns={operationalMemory.data ?? []}
+        loading={operationalMemory.isLoading}
+      />
+
+      <OperationsSectionNav />
+
+      <OperationalSection
+        id="stream-diagnostics"
+        label="Stream Diagnostics"
+        eyebrow="Delivery truth"
+        className="scroll-mt-6"
+      >
         <Panel
           title={omniLabels.streamDiagnosticsTitle}
           icon={<Copy className="size-4" />}
@@ -278,9 +296,14 @@ export function SettingsPage() {
             )}
           </div>
         </Panel>
-      </OperationsSection>
+      </OperationalSection>
 
-      <OperationsSection id="deployment-nodes" title="Deployment Nodes">
+      <OperationalSection
+        id="deployment-nodes"
+        label="Deployment Nodes"
+        eyebrow="Fleet topology"
+        className="scroll-mt-6"
+      >
         <section
           data-testid="edge-fleet-grid"
           className="grid gap-3 rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-neutral)] p-4 md:grid-cols-5"
@@ -358,66 +381,52 @@ export function SettingsPage() {
             </div>
           </Panel>
         </section>
-      </OperationsSection>
+      </OperationalSection>
 
-      <OperationsSection id="configuration" title="Configuration">
-        <ConfigurationWorkspace
-          cameras={cameras}
-          sites={sites}
-          edgeNodes={edgeNodes}
-        />
-
-        <div className="mt-4">
-          <Panel
-            title="Model runtimes"
-            icon={<Cpu className="size-4" />}
-            testId="runtime-artifact-rail"
+      <OperationalSection
+        id="configuration"
+        label="Configuration"
+        eyebrow="Control plane"
+        className="scroll-mt-6"
+        data-testid="configuration-section"
+      >
+        <Button
+          type="button"
+          aria-expanded={configurationOpen}
+          aria-controls={configurationContentId}
+          className="mt-1"
+          onClick={toggleConfiguration}
+        >
+          {configurationOpen ? "Hide configuration" : "Show configuration"}
+        </Button>
+        {configurationHasOpened ? (
+          <div
+            id={configurationContentId}
+            hidden={!configurationOpen}
+            className="mt-4 space-y-4"
           >
-            <div className="flex flex-col gap-3">
-              {models.length === 0 ? (
-                <p className="text-sm text-[#93a7c5]">
-                  No registered models are available for runtime artifact
-                  checks.
-                </p>
-              ) : (
-                models.map((model) => {
-                  const artifacts = runtimeArtifacts.data?.[model.id] ?? [];
-                  const summary = summarizeModelRuntimeArtifacts(artifacts);
+            <ConfigurationWorkspace
+              cameras={cameras}
+              sites={sites}
+              edgeNodes={edgeNodes}
+            />
+            <ConfigurationRuntimeArtifacts />
+          </div>
+        ) : null}
+        {!configurationOpen ? (
+          <p className="mt-3 text-sm text-[var(--vz-text-secondary)]">
+            Profiles, bindings, effective runtime hashes, and installer
+            defaults are available when needed.
+          </p>
+        ) : null}
+      </OperationalSection>
 
-                  return (
-                    <div
-                      key={model.id}
-                      className="rounded-[1rem] border border-white/10 p-3"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-[#f4f8ff]">
-                            {model.name}
-                          </p>
-                          <p className="mt-1 text-xs text-[#93a7c5]">
-                            {model.version} -{" "}
-                            {model.capability ?? "fixed_vocab"}
-                          </p>
-                        </div>
-                        <StatusToneBadge tone={summary.tone}>
-                          {summary.label}
-                        </StatusToneBadge>
-                      </div>
-                      <p className="mt-2 text-sm text-[#93a7c5]">
-                        {artifacts.length}{" "}
-                        {artifacts.length === 1 ? "artifact" : "artifacts"}
-                        {summary.detail ? ` - ${summary.detail}` : ""}
-                      </p>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </Panel>
-        </div>
-      </OperationsSection>
-
-      <OperationsSection id="installer-guidance" title="Installer Guidance">
+      <OperationalSection
+        id="installer-guidance"
+        label="Installer Guidance"
+        eyebrow="Deployment handoff"
+        className="scroll-mt-6"
+      >
         <WorkspaceSurface className="px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -459,7 +468,7 @@ export function SettingsPage() {
             </div>
           </div>
         </WorkspaceSurface>
-      </OperationsSection>
+      </OperationalSection>
     </div>
   );
 }
@@ -474,49 +483,20 @@ const operationsSections = [
 
 function OperationsSectionNav() {
   return (
-    <WorkspaceSurface className="px-4 py-3">
-      <nav
-        aria-label="Operations sections"
-        className="flex flex-wrap items-center gap-2"
-      >
-        {operationsSections.map((section) => (
-          <a
-            key={section.id}
-            href={`#${section.id}`}
-            className="inline-flex items-center rounded-[var(--vz-r-sm)] border border-[color:var(--vz-hair)] bg-black/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-secondary)] transition hover:border-[color:var(--vz-hair-focus)] hover:text-[var(--vz-text-primary)]"
-          >
-            {section.label}
-          </a>
-        ))}
-      </nav>
-    </WorkspaceSurface>
-  );
-}
-
-function OperationsSection({
-  id,
-  title,
-  children,
-}: {
-  id: (typeof operationsSections)[number]["id"];
-  title: string;
-  children: ReactNode;
-}) {
-  const headingId = `${id}-heading`;
-
-  return (
-    <section id={id} aria-labelledby={headingId} className="scroll-mt-6">
-      <div className="mb-3 flex items-center gap-3">
-        <div className="h-px flex-1 bg-[color:var(--vz-hair)]" />
-        <h2
-          id={headingId}
-          className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--vz-text-muted)]"
+    <nav
+      aria-label="Operations sections"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]"
+    >
+      {operationsSections.map((section) => (
+        <a
+          key={section.id}
+          href={`#${section.id}`}
+          className="inline-flex items-center text-[var(--vz-text-secondary)] underline-offset-4 transition hover:text-[var(--vz-text-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--vz-hair-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--vz-canvas-obsidian)]"
         >
-          {title}
-        </h2>
-      </div>
-      {children}
-    </section>
+          {section.label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -630,6 +610,58 @@ function Panel({
       </div>
       {children}
     </Surface>
+  );
+}
+
+function ConfigurationRuntimeArtifacts() {
+  const { data: models = [] } = useModels();
+  const runtimeArtifacts = useRuntimeArtifactsByModelId(
+    models.map((model) => model.id),
+  );
+
+  return (
+    <Panel
+      title="Model runtimes"
+      icon={<Cpu className="size-4" />}
+      testId="runtime-artifact-rail"
+    >
+      <div className="flex flex-col gap-3">
+        {models.length === 0 ? (
+          <p className="text-sm text-[#93a7c5]">
+            No registered models are available for runtime artifact checks.
+          </p>
+        ) : (
+          models.map((model) => {
+            const artifacts = runtimeArtifacts.data?.[model.id] ?? [];
+            const summary = summarizeModelRuntimeArtifacts(artifacts);
+
+            return (
+              <div
+                key={model.id}
+                className="rounded-[1rem] border border-white/10 p-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-[#f4f8ff]">{model.name}</p>
+                    <p className="mt-1 text-xs text-[#93a7c5]">
+                      {model.version} - {model.capability ?? "fixed_vocab"}
+                    </p>
+                  </div>
+                  <StatusToneBadge tone={summary.tone}>
+                    {summary.label}
+                  </StatusToneBadge>
+                </div>
+                <p className="mt-2 text-sm text-[#93a7c5]">
+                  {artifacts.length}{" "}
+                  {artifacts.length === 1 ? "artifact" : "artifacts"}
+                  {summary.detail ? ` - ${summary.detail}` : ""}
+                </p>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </Panel>
   );
 }
 

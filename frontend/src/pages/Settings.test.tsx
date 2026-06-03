@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -548,22 +549,35 @@ describe("SettingsPage operations workbench", () => {
     settingsMocks.framesByCamera = null;
   });
 
-  test("renders fleet operations instead of placeholder copy", () => {
+  test("renders fleet operations with attention-first order and deferred configuration details", async () => {
+    const user = userEvent.setup();
+
     renderPage();
 
     expect(
       screen.getByRole("heading", { name: /operations/i }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("operations-workspace")).toBeInTheDocument();
-    expect(screen.getByTestId("configuration-workspace")).toBeInTheDocument();
+    const workspace = screen.getByTestId("operations-workspace");
+    expect(workspace).toBeInTheDocument();
     const attentionOverview = screen.getByTestId("attention-stack");
+    const workerRail = screen.getByTestId("worker-rail");
+    const configurationSection = screen.getByTestId("configuration-section");
+
     expect(attentionOverview).toBeInTheDocument();
     expect(
       attentionOverview.compareDocumentPosition(
         screen.getByTestId("scene-intelligence-matrix"),
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    const sectionNav = screen.getByRole("navigation", {
+    expect(
+      attentionOverview.compareDocumentPosition(workerRail) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      workerRail.compareDocumentPosition(configurationSection) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const sectionNav = within(workspace).getByRole("navigation", {
       name: /operations sections/i,
     });
     expect(
@@ -581,12 +595,17 @@ describe("SettingsPage operations workbench", () => {
     expect(
       within(sectionNav).getByRole("link", { name: /installer guidance/i }),
     ).toHaveAttribute("href", "#installer-guidance");
-    expect(
-      screen
-        .getByTestId("worker-rail")
-        .compareDocumentPosition(screen.getByTestId("configuration-workspace")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    const configurationToggle = within(configurationSection).getByRole(
+      "button",
+      { name: /show configuration/i },
+    );
+    expect(configurationToggle).toHaveAttribute("aria-expanded", "false");
+    expect(configurationToggle).toHaveAttribute(
+      "aria-controls",
+      "configuration-content",
+    );
+    expect(screen.queryByTestId("configuration-workspace")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("runtime-artifact-rail")).not.toBeInTheDocument();
     const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
     expect(sceneMatrix).toBeInTheDocument();
     expect(
@@ -619,7 +638,6 @@ describe("SettingsPage operations workbench", () => {
     expect(screen.getAllByText(/stream diagnostics/i).length).toBeGreaterThan(
       0,
     );
-    expect(screen.queryByText(/delivery truth/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/native unavailable/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/desired state/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/camera workers/i)).not.toBeInTheDocument();
@@ -646,6 +664,40 @@ describe("SettingsPage operations workbench", () => {
     expect(
       screen.queryByText(/prompt 7 uses this route/i),
     ).not.toBeInTheDocument();
+
+    await user.click(configurationToggle);
+
+    expect(
+      within(configurationSection).getByRole("button", {
+        name: /hide configuration/i,
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    const configurationWorkspace = screen.getByTestId("configuration-workspace");
+    expect(configurationWorkspace).toBeVisible();
+    expect(screen.getByTestId("runtime-artifact-rail")).toBeVisible();
+
+    await user.click(
+      within(configurationSection).getByRole("button", {
+        name: /hide configuration/i,
+      }),
+    );
+
+    expect(
+      within(configurationSection).getByRole("button", {
+        name: /show configuration/i,
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("configuration-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("configuration-workspace")).not.toBeVisible();
+
+    await user.click(
+      within(configurationSection).getByRole("button", {
+        name: /show configuration/i,
+      }),
+    );
+
+    expect(screen.getByTestId("configuration-workspace")).toBeVisible();
+    expect(screen.getByTestId("runtime-artifact-rail")).toBeVisible();
   });
 
   test("shows live telemetry status when operations receives retained live frames", () => {
@@ -879,8 +931,16 @@ describe("SettingsPage operations workbench", () => {
     ).not.toBeDisabled();
   });
 
-  test("shows model runtime artifact status", () => {
+  test("shows model runtime artifact status", async () => {
+    const user = userEvent.setup();
+
     renderPage();
+
+    await user.click(
+      within(screen.getByTestId("configuration-section")).getByRole("button", {
+        name: /show configuration/i,
+      }),
+    );
 
     const artifactRail = screen.getByTestId("runtime-artifact-rail");
     expect(within(artifactRail).getByText("YOLO26n")).toBeInTheDocument();
