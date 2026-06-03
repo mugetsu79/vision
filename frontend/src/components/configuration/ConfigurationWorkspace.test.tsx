@@ -282,6 +282,46 @@ describe("ConfigurationWorkspace", () => {
     expect(screen.getAllByText("Central MinIO").length).toBeGreaterThan(0);
   });
 
+  test("keeps configuration guidance compact and discoverable", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    expect(
+      screen.getByText(/evidence storage profiles decide whether event clips/i),
+    ).toHaveClass("sr-only");
+    expect(screen.getByText(/camera binding wins/i)).toHaveClass("sr-only");
+    expect(
+      screen.getByText(/desired configuration is the profile set/i),
+    ).toHaveClass("sr-only");
+
+    await user.click(screen.getByRole("button", { name: /show evidence storage help/i }));
+    expect(
+      within(screen.getByRole("dialog", { name: /evidence storage help/i })).getByText(
+        /evidence storage profiles decide whether event clips/i,
+      ),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(
+      screen.getByRole("button", { name: /show evidence storage bindings help/i }),
+    );
+    expect(
+      within(
+        screen.getByRole("dialog", { name: /evidence storage bindings help/i }),
+      ).getByText(/tenant default is the fallback/i),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(
+      screen.getByRole("button", { name: /show effective configuration help/i }),
+    );
+    expect(
+      within(
+        screen.getByRole("dialog", { name: /effective configuration help/i }),
+      ).getByText(/runtime-applied hash/i),
+    ).toBeInTheDocument();
+  });
+
   test("creates a cloud S3-compatible evidence profile with write-only secrets", async () => {
     const user = userEvent.setup();
     renderWorkspace();

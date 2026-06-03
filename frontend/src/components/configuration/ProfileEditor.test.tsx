@@ -1,8 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { CONFIGURATION_KINDS } from "@/components/configuration/configuration-copy";
+import {
+  CONFIGURATION_KINDS,
+  labelForKind,
+} from "@/components/configuration/configuration-copy";
 import {
   PROFILE_COMMON_FIELD_GUIDANCE,
   PROFILE_FIELD_GUIDANCE,
@@ -23,16 +26,79 @@ describe("ProfileEditor", () => {
     saveProfile.mockResolvedValue(undefined);
   });
 
-  test("renders guidance for each configuration kind", () => {
+  test("shows profile-kind guidance on demand for each configuration kind", async () => {
+    const user = userEvent.setup();
+
     for (const kind of CONFIGURATION_KINDS) {
       const { unmount } = render(
         <ProfileEditor kind={kind} selectedProfile={null} onSave={saveProfile} />,
       );
+      const guidance = PROFILE_KIND_GUIDANCE[kind];
+      const helpLabel = kind === "stream_delivery" ? "Transport profile" : labelForKind(kind);
+      const summary = screen.getByText(guidance.summary);
 
-      expect(screen.getByText(PROFILE_KIND_GUIDANCE[kind].title)).toBeInTheDocument();
-      expect(screen.getByText(PROFILE_KIND_GUIDANCE[kind].summary)).toBeInTheDocument();
+      expect(screen.queryByText(guidance.title)).not.toBeInTheDocument();
+      expect(summary).toHaveClass("sr-only");
+
+      await user.click(
+        screen.getByRole("button", {
+          name: new RegExp(`show ${escapeRegExp(helpLabel)} help`, "i"),
+        }),
+      );
+
+      const dialog = screen.getByRole("dialog", {
+        name: new RegExp(`${escapeRegExp(helpLabel)} help`, "i"),
+      });
+      expect(within(dialog).getByText(guidance.title)).toBeInTheDocument();
+      expect(within(dialog).getByText(guidance.summary)).toBeInTheDocument();
       unmount();
     }
+  });
+
+  test("places field help in label rows while preserving control descriptions", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProfileEditor
+        kind="stream_delivery"
+        selectedProfile={null}
+        onSave={saveProfile}
+      />,
+    );
+
+    const transportMode = screen.getByLabelText("Transport mode");
+    const transportHelpId = transportMode.getAttribute("aria-describedby");
+    expect(transportHelpId).toBe("transport-mode-help-hint");
+    expect(
+      screen.getByText(PROFILE_FIELD_GUIDANCE.stream_delivery.delivery_mode.hint),
+    ).toHaveAttribute("id", transportHelpId);
+
+    const transportTrigger = screen.getByRole("button", {
+      name: /show transport mode help/i,
+    });
+    expect(transportTrigger.parentElement?.parentElement).toHaveClass("inline-flex");
+    expect(transportTrigger.parentElement?.parentElement).toHaveTextContent(
+      "Transport mode",
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Configuration kind"),
+      "runtime_selection",
+    );
+
+    const fallback = screen.getByLabelText("Allow fallback");
+    const fallbackHelpId = fallback.getAttribute("aria-describedby");
+    expect(fallbackHelpId).toBe("allow-fallback-help-hint");
+    expect(
+      screen.getByText(PROFILE_FIELD_GUIDANCE.runtime_selection.fallback_allowed.hint),
+    ).toHaveAttribute("id", fallbackHelpId);
+
+    const fallbackTrigger = screen.getByRole("button", {
+      name: /show allow fallback help/i,
+    });
+    expect(fallbackTrigger.closest("label")).toBeNull();
+    expect(fallbackTrigger.parentElement?.parentElement).toHaveTextContent(
+      "Allow fallback",
+    );
   });
 
   test("renders field guidance for every visible configuration field", () => {
@@ -278,3 +344,7 @@ describe("ProfileEditor", () => {
     expect(screen.queryByText("argus-dev-secret")).not.toBeInTheDocument();
   });
 });
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

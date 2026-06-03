@@ -12,8 +12,8 @@ import {
   SPEED_CALIBRATION_CHECKLIST,
   SPEED_CALIBRATION_WARNING,
 } from "@/components/cameras/scene-guidance";
-import { FieldHelp } from "@/components/guidance/FieldHelp";
-import { GuidancePanel } from "@/components/guidance/GuidancePanel";
+import { CalibrationFlowIllustration } from "@/components/guidance/CalibrationFlowIllustration";
+import { GuidanceDisclosure } from "@/components/guidance/GuidanceDisclosure";
 import { ReadinessChecklist } from "@/components/guidance/ReadinessChecklist";
 import type { ReadinessItem } from "@/components/guidance/guidance-types";
 import { Button } from "@/components/ui/button";
@@ -244,6 +244,10 @@ const steps = [
   "Calibration",
   "Review",
 ] as const;
+
+function slugForId(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
 
 function toPointTupleArray(points: number[][] | undefined): Point[] {
   if (!points) {
@@ -1970,7 +1974,7 @@ export function CameraWizard({
 
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="overflow-hidden rounded-[1.85rem] border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,29,0.95),rgba(8,11,18,0.92))] shadow-[0_24px_72px_-54px_rgba(0,0,0,0.9)]">
+      <div className="rounded-[1.85rem] border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,29,0.95),rgba(8,11,18,0.92))] shadow-[0_24px_72px_-54px_rgba(0,0,0,0.9)]">
         <div className="border-b border-white/8 px-6 py-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9db3d3]">
             {isEditMode ? "Edit camera" : "Camera setup"}
@@ -2718,18 +2722,25 @@ export function CameraWizard({
               </section>
               <section className="rounded-[1.5rem] border border-[#284066] bg-[#0c1522] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
-                      Speed accuracy
-                    </p>
-                    <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
-                      Calibrate speed on the floor where objects move
-                    </h3>
-                    <p className="mt-2 max-w-3xl text-sm text-[#9eb2cf]">
-                      Speed measurements use the four calibration marks and the measured
-                      distance to translate camera motion into meters per second. The better
-                      those marks match the real floor, the better the speed estimate.
-                    </p>
+                  <div className="flex items-start gap-2">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+                        Speed accuracy
+                      </p>
+                      <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
+                        Calibrate speed on the floor where objects move
+                      </h3>
+                    </div>
+                    <GuidanceDisclosure
+                      id="calibration-speed-guidance"
+                      label="calibration"
+                      guidance={SCENE_STEP_GUIDANCE.Calibration}
+                    >
+                      <CalibrationFlowIllustration />
+                      <p className="mt-3 rounded-[1rem] border border-[#5b4b28] bg-[#19150c] px-4 py-3 text-sm text-[#ffd9a1]">
+                        {SPEED_CALIBRATION_WARNING}
+                      </p>
+                    </GuidanceDisclosure>
                   </div>
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2]">
                     {data.visionProfile.speedEnabled ? "Speed metrics on" : "Speed metrics off"}
@@ -2745,9 +2756,6 @@ export function CameraWizard({
                     </li>
                   ))}
                 </ul>
-                <p className="mt-4 rounded-[1rem] border border-[#5b4b28] bg-[#19150c] px-4 py-3 text-sm text-[#ffd9a1]">
-                  {SPEED_CALIBRATION_WARNING}
-                </p>
               </section>
               <HomographyEditor
                 destinationFrameSize={DEFAULT_ANALYTICS_FRAME_SIZE}
@@ -2764,19 +2772,17 @@ export function CameraWizard({
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
                       Event boundaries
                     </p>
-                    <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
-                      Lines and zones
-                    </h3>
-                    <p className="mt-2 max-w-2xl text-sm text-[#9eb2cf]">
-                      Reuse the same analytics still from source-point setup to draw event
-                      boundaries directly on the analyzed frame. Lines emit crossings,
-                      while polygons emit entry and exit events.
-                    </p>
-                    <div className="mt-3 max-w-2xl">
-                      <FieldHelp
+                    <div className="mt-2 flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-[#f4f8ff]">
+                        Lines and zones
+                      </h3>
+                      <GuidanceDisclosure
                         id="event-boundaries-help"
+                        label="event boundaries"
                         guidance={SCENE_FIELD_GUIDANCE.eventBoundaries}
-                      />
+                      >
+                        <CalibrationFlowIllustration mode="boundaries" animated={false} />
+                      </GuidanceDisclosure>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -2944,18 +2950,17 @@ export function CameraWizard({
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
                       Detection regions
                     </p>
-                    <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
-                      Include and exclusion polygons
-                    </h3>
-                    <p className="mt-2 max-w-2xl text-sm text-[#9eb2cf]">
-                      Limit detector attention with include polygons or mask operational dead zones
-                      with exclusion polygons. Event boundaries above still publish count events.
-                    </p>
-                    <div className="mt-3 max-w-2xl">
-                      <FieldHelp
+                    <div className="mt-2 flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-[#f4f8ff]">
+                        Include and exclusion polygons
+                      </h3>
+                      <GuidanceDisclosure
                         id="detection-regions-help"
+                        label="detection regions"
                         guidance={SCENE_FIELD_GUIDANCE.detectionRegions}
-                      />
+                      >
+                        <CalibrationFlowIllustration mode="regions" animated={false} />
+                      </GuidanceDisclosure>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -3135,7 +3140,7 @@ export function CameraWizard({
         </div>
       </div>
 
-      <aside className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,16,26,0.96),rgba(7,10,17,0.94))] shadow-[0_24px_70px_-48px_rgba(0,0,0,0.92)]">
+      <aside className="rounded-[1.75rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,16,26,0.96),rgba(7,10,17,0.94))] shadow-[0_24px_70px_-48px_rgba(0,0,0,0.92)]">
         <div className="border-b border-white/8 px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8ea4c7]">
             Step context
@@ -3143,7 +3148,16 @@ export function CameraWizard({
           <h3 className="mt-3 text-xl font-semibold text-[#f4f8ff]">{stepTitle}</h3>
         </div>
         <div className="space-y-4 px-5 py-5 text-sm text-[#d8e2f2]">
-          {stepGuidance ? <GuidancePanel guidance={stepGuidance} /> : null}
+          {stepGuidance ? (
+            <div className="flex items-center justify-between gap-3 rounded-[1.1rem] border border-white/8 bg-white/[0.03] px-4 py-3">
+              <span className="text-sm font-medium text-[#d8e2f2]">Step help</span>
+              <GuidanceDisclosure
+                id={`step-help-${slugForId(stepTitle)}`}
+                label={`${stepTitle} step`}
+                guidance={stepGuidance}
+              />
+            </div>
+          ) : null}
           <p>{contextPanel}</p>
           {stepTitle === "Calibration" ? (
             <ReadinessChecklist items={calibrationReadinessItems(data)} />

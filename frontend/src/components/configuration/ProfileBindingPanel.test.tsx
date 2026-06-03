@@ -69,7 +69,8 @@ const bindings: OperatorConfigBindingResponse[] = [
 ];
 
 describe("ProfileBindingPanel", () => {
-  test("explains binding precedence before binding", () => {
+  test("shows binding precedence help on demand", async () => {
+    const user = userEvent.setup();
     render(
       <ProfileBindingPanel
         kind="operations_mode"
@@ -82,9 +83,22 @@ describe("ProfileBindingPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/camera binding wins/i)).toBeInTheDocument();
-    expect(screen.getByText(/tenant default is the fallback/i)).toBeInTheDocument();
-    expect(screen.getByText(/next config refresh or lifecycle action/i)).toBeInTheDocument();
+    expect(screen.getByText(/camera binding wins/i)).toHaveClass("sr-only");
+    expect(screen.queryByRole("dialog", { name: /operations mode bindings help/i }))
+      .not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /show operations mode bindings help/i }),
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: /operations mode bindings help/i,
+    });
+    expect(within(dialog).getByText(/camera binding wins/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/tenant default is the fallback/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/next config refresh or lifecycle action/i),
+    ).toBeInTheDocument();
   });
 
   test("previews the selected binding impact and direct replacement", async () => {

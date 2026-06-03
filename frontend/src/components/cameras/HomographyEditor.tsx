@@ -2,8 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { productBrand } from "@/brand/product";
 import { BoundaryAuthoringCanvas } from "@/components/cameras/BoundaryAuthoringCanvas";
-import { SCENE_FIELD_GUIDANCE } from "@/components/cameras/scene-guidance";
+import {
+  SCENE_FIELD_GUIDANCE,
+  SCENE_STEP_GUIDANCE,
+} from "@/components/cameras/scene-guidance";
+import { CalibrationFlowIllustration } from "@/components/guidance/CalibrationFlowIllustration";
 import { FieldHelp } from "@/components/guidance/FieldHelp";
+import { GuidanceDisclosure } from "@/components/guidance/GuidanceDisclosure";
 import {
   type FrameSize,
   denormalizePointList,
@@ -66,6 +71,23 @@ export function HomographyEditor({
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] border border-white/8 bg-[#0b1320] px-4 py-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+            Calibration map
+          </p>
+          <h3 className="mt-1 text-sm font-semibold text-[#f4f8ff]">
+            Match camera marks to a top-down floor plane
+          </h3>
+        </div>
+        <GuidanceDisclosure
+          id="homography-calibration-help"
+          label="calibration mapping"
+          guidance={SCENE_STEP_GUIDANCE.Calibration}
+        >
+          <CalibrationFlowIllustration />
+        </GuidanceDisclosure>
+      </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="rounded-[1.5rem] border border-[#243853] bg-[#09121c] p-4">
           <div className="flex items-center justify-between gap-3">
@@ -73,8 +95,8 @@ export function HomographyEditor({
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
                 Analytics still
               </p>
-              <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">Source points</h3>
-              <div className="mt-2 max-w-md">
+              <div className="mt-2 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-[#f4f8ff]">Source points</h3>
                 <FieldHelp
                   id="source-points-help"
                   guidance={SCENE_FIELD_GUIDANCE.sourcePoints}
@@ -137,10 +159,10 @@ export function HomographyEditor({
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
                 World plane
               </p>
-              <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
-                Destination points
-              </h3>
-              <div className="mt-2 max-w-md">
+              <div className="mt-2 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-[#f4f8ff]">
+                  Destination points
+                </h3>
                 <FieldHelp
                   id="destination-points-help"
                   guidance={SCENE_FIELD_GUIDANCE.destinationPoints}
@@ -201,7 +223,13 @@ export function HomographyEditor({
 
       <div className="grid gap-4 rounded-[1.5rem] border border-white/8 bg-[#0b1320] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="grid gap-2 text-sm text-[#d8e2f2]">
-          <label htmlFor="reference-distance-m">Reference distance (m)</label>
+          <span className="inline-flex items-center gap-2">
+            <label htmlFor="reference-distance-m">Reference distance (m)</label>
+            <FieldHelp
+              id="reference-distance-help"
+              guidance={SCENE_FIELD_GUIDANCE.referenceDistance}
+            />
+          </span>
           <Input
             id="reference-distance-m"
             aria-label="Reference distance (m)"
@@ -210,10 +238,6 @@ export function HomographyEditor({
             type="number"
             value={refDistanceM}
             onChange={(event) => updateRefDistance(event.target.value)}
-          />
-          <FieldHelp
-            id="reference-distance-help"
-            guidance={SCENE_FIELD_GUIDANCE.referenceDistance}
           />
         </div>
         <div className="flex flex-wrap gap-3">

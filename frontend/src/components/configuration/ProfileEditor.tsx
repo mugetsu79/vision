@@ -20,7 +20,7 @@ import {
   type ConfigurationFieldCapability,
 } from "@/components/configuration/configuration-capabilities";
 import { FieldHelp } from "@/components/guidance/FieldHelp";
-import { GuidancePanel } from "@/components/guidance/GuidancePanel";
+import { GuidanceDisclosure } from "@/components/guidance/GuidanceDisclosure";
 import type { FieldGuidance } from "@/components/guidance/guidance-types";
 import type {
   ConfigurationCatalog,
@@ -124,9 +124,16 @@ export function ProfileEditor({
     <section className="space-y-4" data-testid="configuration-profile-editor">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-[var(--vz-text-primary)]">
-            {title}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-[var(--vz-text-primary)]">
+              {title}
+            </h3>
+            <GuidanceDisclosure
+              id={`profile-kind-help-${state.kind}`}
+              label={kindLabel}
+              guidance={PROFILE_KIND_GUIDANCE[state.kind]}
+            />
+          </div>
           <p className="mt-1 text-xs text-[var(--vz-text-muted)]">
             {kindLabel}
           </p>
@@ -136,8 +143,6 @@ export function ProfileEditor({
           Save profile
         </Button>
       </div>
-
-      <GuidancePanel guidance={PROFILE_KIND_GUIDANCE[state.kind]} />
 
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Configuration kind" help={PROFILE_COMMON_FIELD_GUIDANCE.kind}>
@@ -657,9 +662,11 @@ function Field({
   const helpId = help ? helpIdForLabel(label) : undefined;
   return (
     <div className="flex flex-col gap-1 text-sm font-medium text-[#d8e2f2]">
-      <span>{label}</span>
+      <span className="inline-flex items-center gap-2">
+        {label}
+        {help && helpId ? <FieldHelp id={helpId} guidance={help} /> : null}
+      </span>
       {typeof children === "function" ? children(helpId) : children}
-      {help && helpId ? <FieldHelp id={helpId} guidance={help} /> : null}
     </div>
   );
 }
@@ -750,17 +757,19 @@ function CheckboxField({
 
   return (
     <div className="space-y-1 text-sm font-medium text-[#d8e2f2]">
-      <label className="flex items-center gap-2">
-        <input
-          aria-describedby={helpId}
-          aria-label={label}
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        {label}
-      </label>
-      {help && helpId ? <FieldHelp id={helpId} guidance={help} /> : null}
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2">
+          <input
+            aria-describedby={helpId}
+            aria-label={label}
+            type="checkbox"
+            checked={checked}
+            onChange={(event) => onChange(event.target.checked)}
+          />
+          <span>{label}</span>
+        </label>
+        {help && helpId ? <FieldHelp id={helpId} guidance={help} /> : null}
+      </div>
     </div>
   );
 }

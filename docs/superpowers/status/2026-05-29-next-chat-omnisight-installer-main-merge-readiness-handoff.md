@@ -1,7 +1,7 @@
 # Next Chat Handoff: Live Sizing And Configuration Guidance Follow-Up
 
 Date: 2026-05-29
-Last updated: 2026-06-02
+Last updated: 2026-06-03
 Status: Main merge closeout for `codex/omnisight-live-video-window-sizing`.
 
 Purpose: record the current Live/configuration/installer state before merging
@@ -296,26 +296,54 @@ Remaining product validation after the `main` merge:
 
 ## Immediate Next Work
 
-Primary choices for the next chat:
+The previous immediate field-smoke item has been completed and removed from the
+active queue. Current next choices:
 
-1. Update installed hosts from `main`:
-   - MacBook master: pull `main` and rerun `installer/macos/install-master.sh`.
-   - Jetson edge: pull `main` and rerun `installer/linux/install-edge.sh`;
-     a git pull alone does not refresh the dev edge image or rendered compose
-     environment.
-   - If the Jetson is already paired and `/etc/vezor/supervisor.json` contains
-     an `edge_node_id`, use the `--unpaired` update path.
-2. Field-smoke the installed pair:
-   - confirm local and LAN health endpoints
-   - confirm MediaMTX origins/hosts are rendered from the configured MacBook
-     and Jetson private IP/DNS values
-   - check Live when Jetson/cameras are offline so `Telemetry live` stays hidden
-   - switch Live rendition from `annotated` to `240p5` and confirm the
-     profile-specific path is ready
-   - check scene/profile/worker deletion behavior
-   - check runtime configuration panels for effective desired/applied state
-3. If product stability is the priority, continue the remaining validation list
-   above before starting a broader UI/UX polish branch.
+1. Review, commit, and merge the focused guidance progressive-disclosure branch.
+2. Continue the remaining product validation list above, especially evidence
+   clip review, Operations worker lifecycle controls, reboot validation, and
+   Jetson soak evidence.
+
+## Configuration Guidance Density Feedback
+
+Yann's 2026-06-03 feedback: the newly added configuration descriptions are too
+heavy in the interface. The preferred direction is to keep fields compact and
+hide richer guidance behind a circular `i` info affordance that reveals details
+on demand.
+
+Recommended next UX task: treat this as a focused guidance-density correction,
+not as part of the broader UI/UX polish bucket. It should get its own short
+spec/plan so the implementation can move quickly and replace always-visible
+guidance with consistent info triggers across Scene setup and Control Plane
+Configuration.
+
+Spec/plan created for this follow-up:
+
+- `docs/superpowers/specs/2026-06-03-configuration-guidance-progressive-disclosure-design.md`
+- `docs/superpowers/plans/2026-06-03-configuration-guidance-progressive-disclosure.md`
+
+Implementation completed on `codex/guidance-progressive-disclosure`:
+
+- added reusable circular `i` guidance disclosure with click/tap open, Escape
+  close, outside-click close, focus return, and screen-reader summary text for
+  existing `aria-describedby` consumers.
+- converted Scene setup, Homography calibration, event boundaries, detection
+  regions, Control Plane profile editing, binding scope, and effective runtime
+  guidance from always-visible prose to on-demand help.
+- added the reusable calibration flow illustration for source points,
+  destination points, measured distance, event boundaries, and detection
+  regions, with reduced-motion-safe connector animation.
+- preserved runtime semantics; this pass changes guidance density and visual
+  explanation only.
+
+Focused verification:
+
+```text
+frontend guidance vitest: 9 passed
+combined guidance/Scene/Control Plane focused vitest: 62 passed
+Live/Operations regression vitest: 24 passed
+frontend build: passed
+```
 
 ## Broader UI/UX Polish Later
 

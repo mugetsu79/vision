@@ -6,6 +6,8 @@ import {
   labelForKind,
 } from "@/components/configuration/configuration-copy";
 import { kindCapability } from "@/components/configuration/configuration-capabilities";
+import { GuidanceDisclosure } from "@/components/guidance/GuidanceDisclosure";
+import type { SectionGuidance } from "@/components/guidance/guidance-types";
 import { StatusToneBadge } from "@/components/layout/workspace-surfaces";
 import {
   useResolvedConfiguration,
@@ -34,6 +36,18 @@ type EffectiveConfigurationPanelProps = {
   sites?: NamedTarget[];
   edgeNodes?: NamedTarget[];
   catalog?: ConfigurationCatalog;
+};
+
+const EFFECTIVE_CONFIGURATION_GUIDANCE: SectionGuidance = {
+  title: "Desired and runtime-applied state",
+  summary:
+    "Desired configuration is the profile set resolved by binding precedence. Runtime-applied hash shows what a worker has actually reported.",
+  steps: [
+    "Direct camera binding means the camera won; inherited means an edge node, site, or tenant binding supplied the profile.",
+    "Validation status shows tested state: valid, invalid, or unvalidated.",
+    "Desired-only rows are saved intent without a worker report.",
+    "Applied hash and aligned mean the worker reported the same profile hash.",
+  ],
 };
 
 export function EffectiveConfigurationPanel({
@@ -81,28 +95,16 @@ export function EffectiveConfigurationPanel({
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#7894bd]">
             Runtime view
           </p>
-          <h3 className="mt-1 text-sm font-semibold text-[#f4f8ff]">
-            Effective configuration
-          </h3>
-          <p className="mt-2 max-w-2xl text-xs leading-5 text-[#9fb2cf]">
-            Desired configuration is the profile set resolved by binding precedence.
-            Runtime-applied hash shows what a worker has actually reported. A mismatch
-            means the UI has saved intent that the runtime has not applied yet.
-          </p>
-          <ul className="mt-2 grid max-w-2xl gap-1 text-xs leading-5 text-[#9fb2cf]">
-            <li>
-              Direct camera binding means the camera won; inherited from edge node, site,
-              or tenant default means a broader binding supplied the profile.
-            </li>
-            <li>
-              Validation status shows tested state: valid, invalid, or unvalidated before
-              operators rely on the binding.
-            </li>
-            <li>
-              Desired-only rows are saved intent without a worker report; applied hash
-              and aligned mean the worker reported the same profile hash.
-            </li>
-          </ul>
+          <div className="mt-1 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-[#f4f8ff]">
+              Effective configuration
+            </h3>
+            <GuidanceDisclosure
+              id="effective-configuration-help"
+              label="effective configuration"
+              guidance={EFFECTIVE_CONFIGURATION_GUIDANCE}
+            />
+          </div>
         </div>
         <label className="grid gap-1 text-xs font-semibold text-[#9fb2cf]">
           <span>Resolved target</span>

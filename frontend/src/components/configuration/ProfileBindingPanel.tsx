@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { labelForKind } from "@/components/configuration/configuration-copy";
+import { GuidanceDisclosure } from "@/components/guidance/GuidanceDisclosure";
+import type { SectionGuidance } from "@/components/guidance/guidance-types";
 import { StatusToneBadge } from "@/components/layout/workspace-surfaces";
 import type {
   OperatorConfigBindingResponse,
@@ -31,6 +33,18 @@ type ProfileBindingPanelProps = {
     profile_id: string;
   }) => Promise<void> | void;
   onUnbind?: (bindingId: string) => Promise<void> | void;
+};
+
+const BINDING_SCOPE_GUIDANCE: SectionGuidance = {
+  title: "Binding precedence",
+  summary:
+    "Camera binding wins, then edge node, then site. Tenant default is the fallback.",
+  steps: [
+    "Bind at camera scope for an explicit one-camera override.",
+    "Bind at edge node or site scope for groups of cameras.",
+    "Bind at tenant scope only for the default fallback.",
+    "Workers apply the resolved profile after their next config refresh or lifecycle action.",
+  ],
 };
 
 export function ProfileBindingPanel({
@@ -84,6 +98,7 @@ export function ProfileBindingPanel({
   const directReplacementProfile = directReplacement
     ? profiles.find((profile) => profile.id === directReplacement.profile_id)
     : undefined;
+  const bindingHelpLabel = bindingGuidanceLabel(kind);
 
   async function handleBind() {
     if (!profileId || !resolvedTargetId) {
@@ -105,6 +120,11 @@ export function ProfileBindingPanel({
       <div className="flex items-center gap-2 text-sm font-semibold text-[var(--vz-text-primary)]">
         <Link2 className="size-4 text-[#8fd3ff]" />
         <h3>{labelForKind(kind)} bindings</h3>
+        <GuidanceDisclosure
+          id={`binding-help-${kind}`}
+          label={`${bindingHelpLabel} bindings`}
+          guidance={BINDING_SCOPE_GUIDANCE}
+        />
       </div>
       {bindings.length > 0 ? (
         <div className="grid gap-2">
@@ -150,15 +170,6 @@ export function ProfileBindingPanel({
           No direct bindings for this profile kind.
         </p>
       )}
-      <div className="rounded-lg border border-white/10 bg-[#07101b] px-3 py-3 text-xs leading-5 text-[#9fb2cf]">
-        <p>
-          Camera binding wins, then edge node, then site. Tenant default is the fallback.
-        </p>
-        <p className="mt-1">
-          Test profiles before binding; workers apply the resolved profile after their
-          next config refresh or lifecycle action.
-        </p>
-      </div>
       <BindingImpactPreview
         profile={selectedProfile}
         scope={scope}
@@ -222,6 +233,10 @@ export function ProfileBindingPanel({
       </div>
     </section>
   );
+}
+
+function bindingGuidanceLabel(kind: OperatorConfigKind) {
+  return kind === "operations_mode" ? "operations mode" : labelForKind(kind);
 }
 
 function BindingImpactPreview({

@@ -519,7 +519,7 @@ describe("CameraWizard", () => {
     expect(screen.getByText(/analytics frame 1920×1080/i)).toBeInTheDocument();
   });
 
-  test("calibration explains point setup, speed accuracy, and detection regions", async () => {
+  test("calibration keeps dense guidance behind help while readiness stays visible", async () => {
     const user = userEvent.setup();
 
     renderWizard();
@@ -527,17 +527,17 @@ describe("CameraWizard", () => {
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    expect(
-      screen.getByText(/calibrate the floor plane for events and speed/i),
-    ).toBeInTheDocument();
     expect(screen.getAllByText(/camera image points/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/top-down points/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/speed measurements use the four calibration marks/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/the better those marks match the real floor/i),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/camera is fixed and not zooming/i)).toBeInTheDocument();
     expect(screen.getByText(/known walk, cart, or vehicle pass/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /show calibration help/i }));
+    expect(screen.getByText(/source points map to top-down points/i)).toBeInTheDocument();
     expect(screen.getByText(/ramp, stairs, raised platform/i)).toBeInTheDocument();
-    expect(screen.getByText(/line boundaries/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/include or exclusion regions/i).length).toBeGreaterThan(0);
   });
 
   test("reprobes an existing camera before showing stale stored browser profiles", async () => {

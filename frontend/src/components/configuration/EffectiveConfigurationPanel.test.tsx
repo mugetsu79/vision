@@ -91,15 +91,28 @@ const catalog = {
 };
 
 describe("EffectiveConfigurationPanel", () => {
-  test("explains desired and runtime applied configuration states", () => {
+  test("shows desired and runtime applied configuration help on demand", async () => {
+    const user = userEvent.setup();
     render(<EffectiveConfigurationPanel cameras={cameras} catalog={catalog} />);
 
-    expect(screen.getByText(/desired configuration/i)).toBeInTheDocument();
-    expect(screen.getByText(/runtime-applied hash/i)).toBeInTheDocument();
-    expect(screen.getByText(/direct camera binding/i)).toBeInTheDocument();
-    expect(screen.getByText(/inherited from edge node, site, or tenant default/i)).toBeInTheDocument();
-    expect(screen.getByText(/validation status shows tested state/i)).toBeInTheDocument();
-    expect(screen.getByText(/desired-only/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/desired configuration is the profile set/i),
+    ).toHaveClass("sr-only");
+    expect(screen.queryByRole("dialog", { name: /effective configuration help/i }))
+      .not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /show effective configuration help/i }),
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: /effective configuration help/i,
+    });
+    expect(within(dialog).getByText(/desired configuration/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/runtime-applied hash/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/direct camera binding/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/validation status shows tested state/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/desired-only/i)).toBeInTheDocument();
   });
 
   test("shows effective profile winners and redacted secret state", async () => {
