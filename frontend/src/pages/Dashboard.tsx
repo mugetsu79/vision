@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
-import { OmniSightLens } from "@/components/brand/OmniSightLens";
+import { OmniSightStaticMark } from "@/components/brand/OmniSightStaticMark";
 import { KpiTile } from "@/components/dashboard/KpiTile";
 import {
   InstrumentRail,
@@ -72,7 +72,9 @@ export function DashboardPage() {
         title="OmniSight Overview"
         description="A connected view of live scenes, evidence, patterns, deployment context, and edge operations."
         tone="cerulean"
-        lens={<OmniSightLens variant="dashboard" />}
+        lens={
+          <OmniSightStaticMark className="w-[clamp(7rem,12vw,10rem)] object-contain drop-shadow-[0_18px_58px_rgba(118,224,255,0.18)]" />
+        }
         className="xl:col-span-2"
         body={
           <div className="grid gap-3 sm:grid-cols-3">

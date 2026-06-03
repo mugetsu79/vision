@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test, vi } from "vitest";
 
+import { productBrand } from "@/brand/product";
 import type { components } from "@/lib/api.generated";
 import { DashboardPage } from "@/pages/Dashboard";
 
@@ -173,7 +174,11 @@ describe("DashboardPage", () => {
     expect(
       screen.getByRole("heading", { name: "OmniSight Overview" }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("omnisight-lens")).toBeInTheDocument();
+    expect(screen.queryByTestId("omnisight-lens")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: `${productBrand.name} mark` }),
+    ).toHaveAttribute("src", productBrand.runtimeAssets.logo2d);
+    expect(document.querySelector('img[src*="3d_logo"]')).toBeNull();
     expect(screen.getByText("Live scenes")).toBeInTheDocument();
     expect(screen.getByText("Evidence queue")).toBeInTheDocument();
     expect(screen.getByText("Edge workers")).toBeInTheDocument();

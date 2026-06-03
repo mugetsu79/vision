@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from "react";
 
-const MAX_TILT_DEG = 8;
+const MAX_TILT_DEG = 0;
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) {

@@ -1,7 +1,7 @@
 import { Camera, Cpu, ScanEye } from "lucide-react";
 
 import { productBrand } from "@/brand/product";
-import { OmniSightLens } from "@/components/brand/OmniSightLens";
+import { OmniSightStaticMark } from "@/components/brand/OmniSightStaticMark";
 import { ProductLockup } from "@/components/layout/ProductLockup";
 import { WorkspaceHero } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,9 @@ export function SignInPage() {
           title="OmniSight for every live environment."
           description={`${brandName} connects scenes, models, events, evidence, and edge operations into one spatial intelligence layer.`}
           tone="violet"
-          lens={<OmniSightLens variant="signin" />}
+          lens={
+            <OmniSightStaticMark className="w-[clamp(12rem,24vw,18rem)] object-contain drop-shadow-[0_24px_80px_rgba(118,224,255,0.22)]" />
+          }
           body={
             <ul className="grid max-w-xl grid-cols-3 gap-3 text-sm">
               {proofSignals.map(({ icon: Icon, label, caption }) => (

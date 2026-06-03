@@ -17,13 +17,14 @@ describe("OmniSightLens", () => {
     expect(img).toHaveAttribute("alt", "");
   });
 
-  test("renders a halo and kinetic fragments without full orbital rings", () => {
+  test("renders a halo and static fragments without full orbital rings", () => {
     render(<OmniSightLens variant="signin" />);
 
     const lens = screen.getByTestId("omnisight-lens");
     expect(lens.querySelector("[data-lens-halo]")).not.toBeNull();
     expect(lens.querySelectorAll("[data-lens-energy]")).toHaveLength(3);
     expect(lens.querySelectorAll("[data-lens-ring]")).toHaveLength(0);
+    expect(lens.querySelector(".motion-safe\\:animate-pulse")).toBeNull();
   });
 
   test("variant=dashboard scales the lens down for cockpit context", () => {

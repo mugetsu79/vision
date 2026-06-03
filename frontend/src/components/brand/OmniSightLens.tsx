@@ -1,9 +1,5 @@
-import { useRef } from "react";
-
 import { productBrand } from "@/brand/product";
 import { cn } from "@/lib/utils";
-
-import { useLensTilt } from "./use-lens-tilt";
 
 type OmniSightLensVariant = "signin" | "dashboard";
 
@@ -27,12 +23,8 @@ export function OmniSightLens({
   variant = "signin",
   className,
 }: OmniSightLensProps) {
-  const stageRef = useRef<HTMLDivElement>(null);
-  useLensTilt(stageRef);
-
   return (
     <div
-      ref={stageRef}
       data-testid="omnisight-lens"
       data-variant={variant}
       aria-hidden="true"
@@ -43,7 +35,7 @@ export function OmniSightLens({
       )}
     >
       <span data-lens-halo className="lens-halo" />
-      {energyFragments.map((fragmentClassName, index) => (
+      {energyFragments.map((fragmentClassName) => (
         <span
           // The fragments imply lens energy without restoring full orbital guide lines.
           data-lens-energy
@@ -51,10 +43,9 @@ export function OmniSightLens({
           className={cn(
             "pointer-events-none absolute z-[1] rounded-full bg-gradient-to-r",
             "from-transparent via-[rgba(118,224,255,0.82)] to-transparent",
-            "shadow-[0_0_18px_rgba(118,224,255,0.42)] motion-safe:animate-pulse",
+            "shadow-[0_0_18px_rgba(118,224,255,0.42)]",
             fragmentClassName,
           )}
-          style={{ animationDelay: `${index * -1.6}s` }}
         />
       ))}
       <img
