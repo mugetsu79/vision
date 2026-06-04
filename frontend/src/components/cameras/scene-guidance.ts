@@ -198,23 +198,23 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     label: "Event boundaries",
     hint: "Draw lines or zones on the analytics still where tracked anchors move.",
     details: [
-      "Line boundaries emit crossing events when a tracked bottom-center anchor changes sides.",
-      "Polygon zones emit enter and exit events when a track moves into or out of the marked area.",
+      "Line boundaries emit crossing events when a tracked anchor changes sides.",
+      "Polygon zones emit enter and exit events when a tracked anchor moves into or out of the marked area.",
       "Draw both shapes on the camera analytics still, not on the destination point sketch.",
-      "Use line boundaries for directional counts through doors, lanes, gates, and thresholds.",
-      "Use polygon zones for restricted areas, occupancy areas, staging areas, and dwell regions.",
+      "Use line boundaries for any transition path where crossing matters.",
+      "Use polygon zones for bounded areas where enter and exit matters.",
       "Class scope on line boundaries narrows which tracked classes emit events.",
     ],
     examples: [
       {
-        label: "Doorway crossing",
+        label: "Transition crossing",
         description:
-          "Draw a line across the threshold to count direction changes.",
+          "Draw a line across the path where crossing direction should become an event.",
       },
       {
-        label: "Restricted zone",
+        label: "Controlled zone",
         description:
-          "Draw a polygon around the area to emit enter and exit events.",
+          "Draw a polygon around any bounded area that should emit enter and exit events.",
       },
     ],
   },
@@ -223,20 +223,20 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     hint: "Include polygons keep detections eligible; exclusion polygons suppress detections.",
     details: [
       "Draw detection regions on the camera analytics still, not on the destination point sketch.",
-      "Use include regions to focus detection on the operational area; if any include region exists, detections outside include regions are ignored.",
-      "Use exclusion regions to ignore reflections, screens, public roads, or background motion.",
+      "Use include regions to focus detection on the observation area; if any include region exists, detections outside include regions are ignored.",
+      "Use exclusion regions to ignore reflections, screens, repeated background motion, or irrelevant scene areas.",
       "Detection regions are applied before event boundaries are evaluated, so masked detections cannot create line or zone events.",
     ],
     examples: [
       {
-        label: "Loading bay include",
+        label: "Observation area include",
         description:
-          "Keep detections inside the working bay and ignore adjacent background.",
+          "Keep detections inside the useful part of the scene and ignore adjacent background.",
       },
       {
-        label: "Road exclusion",
+        label: "Noise pocket exclusion",
         description:
-          "Mask a public road that creates irrelevant vehicle detections.",
+          "Mask a repeated reflection, display, surface, or background area that creates irrelevant detections.",
       },
     ],
   },

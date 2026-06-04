@@ -25,6 +25,17 @@ const destinationPoints = [
   { label: "D4", x: 260, y: 150 },
 ];
 
+const neutralAnchors = [
+  { id: "alpha", x: 118, y: 128, envelope: "circle" },
+  { id: "bravo", x: 218, y: 104, envelope: "capsule" },
+  { id: "charlie", x: 310, y: 134, envelope: "diamond" },
+] as const;
+
+const neutralMotionPaths = [
+  "M84 154 C118 132 146 124 190 138",
+  "M188 90 C224 108 260 126 326 130",
+] as const;
+
 const illustrationCopy = {
   "source-destination": {
     title: "Source points map to top-down points",
@@ -36,7 +47,7 @@ const illustrationCopy = {
   boundaries: {
     title: "Event lines and zones use the analytics still",
     description:
-      "A line crossing and a polygon event zone are drawn on the camera analytics still where tracked anchors move.",
+      "A line crossing and a polygon event zone are drawn on the camera analytics still where tracked motion passes.",
     caption:
       "Line boundaries emit crossing events; polygon zones emit enter and exit events as tracks move through the marked shape.",
   },
@@ -176,6 +187,85 @@ export function CalibrationFlowIllustration({
         {copy.caption}
       </figcaption>
     </figure>
+  );
+}
+
+function NeutralTrackLayer() {
+  return (
+    <g data-scene-glyph="neutral-tracks" opacity="0.96">
+      {neutralMotionPaths.map((path, index) => (
+        <path
+          key={path}
+          data-motion-path={`path-${index + 1}`}
+          d={path}
+          fill="none"
+          stroke="#9fb2cf"
+          strokeDasharray="5 7"
+          strokeLinecap="round"
+          strokeWidth="1.8"
+          opacity="0.72"
+        />
+      ))}
+
+      {neutralAnchors.map((anchor) => (
+        <g key={anchor.id}>
+          {anchor.envelope === "capsule" ? (
+            <rect
+              data-object-envelope={anchor.id}
+              x={anchor.x - 20}
+              y={anchor.y - 10}
+              width="40"
+              height="20"
+              rx="10"
+              fill="#c5d6e8"
+              opacity="0.16"
+              stroke="#c5d6e8"
+              strokeWidth="1.5"
+            />
+          ) : null}
+          {anchor.envelope === "circle" ? (
+            <circle
+              data-object-envelope={anchor.id}
+              cx={anchor.x}
+              cy={anchor.y}
+              r="15"
+              fill="#c5d6e8"
+              opacity="0.14"
+              stroke="#c5d6e8"
+              strokeWidth="1.5"
+            />
+          ) : null}
+          {anchor.envelope === "diamond" ? (
+            <path
+              data-object-envelope={anchor.id}
+              d={`M${anchor.x} ${anchor.y - 16} L${anchor.x + 18} ${anchor.y} L${anchor.x} ${
+                anchor.y + 16
+              } L${anchor.x - 18} ${anchor.y} Z`}
+              fill="#c5d6e8"
+              opacity="0.14"
+              stroke="#c5d6e8"
+              strokeWidth="1.5"
+            />
+          ) : null}
+          <circle
+            data-track-anchor={anchor.id}
+            cx={anchor.x}
+            cy={anchor.y}
+            r="4.5"
+            fill="#f4f8ff"
+            stroke="#08111a"
+            strokeWidth="1.5"
+          />
+        </g>
+      ))}
+
+      <text x="112" y="116" textAnchor="middle" fill="#d8e2f2" fontSize="9">
+        tracked anchor
+      </text>
+      <text x="232" y="84" textAnchor="middle" fill="#9fb2cf" fontSize="9">
+        object path
+      </text>
+    </g>
   );
 }
 
@@ -356,14 +446,7 @@ function SceneAuthoringIllustration({
           </g>
         ) : null}
 
-        <g opacity="0.95">
-          <rect x="206" y="84" width="42" height="24" rx="6" fill="#c5d6e8" />
-          <circle cx="216" cy="112" r="5" fill="#08111a" />
-          <circle cx="238" cy="112" r="5" fill="#08111a" />
-          <circle cx="118" cy="128" r="7" fill="#ffc978" />
-          <line x1="118" x2="118" y1="135" y2="158" stroke="#ffc978" strokeWidth="3" />
-          <line x1="106" x2="130" y1="150" y2="150" stroke="#ffc978" strokeWidth="3" />
-        </g>
+        <NeutralTrackLayer />
       </svg>
       <figcaption className="mt-2 text-xs leading-5 text-[#9fb2cf]">
         {copy.caption}

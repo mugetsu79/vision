@@ -19,7 +19,6 @@ import type { ReadinessItem } from "@/components/guidance/guidance-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { omniPlaceExamples } from "@/copy/omnisight";
 import { useCameraSetupPreview } from "@/hooks/use-camera-setup-preview";
 import type {
   Camera,
@@ -1602,7 +1601,6 @@ export function CameraWizard({
       frameLabel: defaultFrameLabel,
     };
   }, [
-    brandName,
     isEditMode,
     setupFrameSize.height,
     setupFrameSize.width,
@@ -2864,7 +2862,7 @@ export function CameraWizard({
                               <span>Boundary {index + 1} classes</span>
                               <Input
                                 aria-label={`Boundary ${index + 1} classes`}
-                                placeholder={omniPlaceExamples.eventClasses}
+                                placeholder="optional tracked classes"
                                 value={boundary.classNames}
                                 onChange={(event) =>
                                   updateBoundary(index, { classNames: event.target.value })
@@ -2884,15 +2882,15 @@ export function CameraWizard({
                             backgroundContent={
                               <p className="max-w-sm text-sm text-[#bcefe3]">
                                 {boundary.type === "line"
-                                  ? "Click two points across a door, lane, or threshold. Crossings generate events."
+                                  ? "Click two points across the path where tracked anchors should cross. Crossings generate events."
                                   : "Draw a zone on the analytics still. Entering and exiting generate events."}
                               </p>
                             }
                             frameSize={setupFrameSize}
                             helperText={
                               boundary.type === "line"
-                                ? "Line = crossing trigger. Place it where tracked motion should cross."
-                                : "Polygon zone = event area. Enter and exit events fire when tracks move through the zone."
+                                ? "Line = crossing trigger. Place it where tracked anchors should cross."
+                                : "Polygon zone = event area. Enter and exit events fire when tracked anchors move through the zone."
                             }
                             mode={boundary.type === "line" ? "line" : "polygon"}
                             pointLabelPrefix={`Boundary ${index + 1}`}
@@ -3044,7 +3042,7 @@ export function CameraWizard({
                             <span>Detection region {index + 1} classes</span>
                             <Input
                               aria-label={`Detection region ${index + 1} classes`}
-                              placeholder={omniPlaceExamples.eventClasses}
+                              placeholder="optional tracked classes"
                               value={region.classNames}
                               onChange={(event) =>
                                 updateDetectionRegion(index, {
@@ -3061,15 +3059,15 @@ export function CameraWizard({
                             backgroundContent={
                               <p className="max-w-sm text-sm text-[#bcefe3]">
                                 {region.mode === "include"
-                                  ? "Draw the valid operating space. Outside include polygons is ignored when any include exists."
+                                  ? "Draw the observation area. Outside include polygons is ignored when any include exists."
                                   : "Draw a noisy or irrelevant pocket. Detections inside are suppressed before events."}
                               </p>
                             }
                             frameSize={setupFrameSize}
                             helperText={
                               region.mode === "include"
-                                ? "Include = detector gate. Keep detections inside the operating area."
-                                : "Exclude = detector mask. Remove reflections, public road, screens, or background motion."
+                                ? "Include = detector gate. Keep eligible detections inside the observation area."
+                                : "Exclude = detector mask. Remove reflections, screens, repeated background motion, or irrelevant scene areas."
                             }
                             mode="polygon"
                             pointLabelPrefix={`Detection region ${index + 1}`}

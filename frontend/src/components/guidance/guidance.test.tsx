@@ -168,6 +168,34 @@ test("CalibrationFlowIllustration can show event boundary guidance", () => {
   expect(container.querySelector("[data-boundary='event-zone']")).toBeInTheDocument();
 });
 
+test("CalibrationFlowIllustration uses neutral tracked anchors for event guidance", () => {
+  const { container } = render(<CalibrationFlowIllustration mode="boundaries" />);
+
+  expect(screen.getByText(/tracked anchor/i)).toBeInTheDocument();
+  expect(screen.getByText(/object path/i)).toBeInTheDocument();
+  expect(container.querySelectorAll("[data-track-anchor]").length).toBeGreaterThanOrEqual(3);
+  expect(container.querySelectorAll("[data-motion-path]").length).toBeGreaterThanOrEqual(2);
+  expect(container.querySelectorAll("[data-object-envelope]").length).toBeGreaterThanOrEqual(2);
+  expect(container.querySelector("[data-scene-glyph='vehicle']")).not.toBeInTheDocument();
+  expect(container.querySelector("[data-scene-glyph='person']")).not.toBeInTheDocument();
+  expect(container.querySelector("[data-scene-glyph='boat']")).not.toBeInTheDocument();
+  expect(container.querySelector("[data-scene-glyph='animal']")).not.toBeInTheDocument();
+});
+
+test("CalibrationFlowIllustration uses neutral tracked anchors for region guidance", () => {
+  const { container } = render(<CalibrationFlowIllustration mode="regions" />);
+
+  expect(screen.getByText(/tracked anchor/i)).toBeInTheDocument();
+  expect(screen.getByText(/object path/i)).toBeInTheDocument();
+  expect(container.querySelectorAll("[data-track-anchor]").length).toBeGreaterThanOrEqual(3);
+  expect(container.querySelectorAll("[data-motion-path]").length).toBeGreaterThanOrEqual(2);
+  expect(container.querySelectorAll("[data-object-envelope]").length).toBeGreaterThanOrEqual(2);
+  expect(container.querySelector("[data-scene-glyph='vehicle']")).not.toBeInTheDocument();
+  expect(container.querySelector("[data-scene-glyph='person']")).not.toBeInTheDocument();
+  expect(container.querySelector("[data-scene-glyph='boat']")).not.toBeInTheDocument();
+  expect(container.querySelector("[data-scene-glyph='animal']")).not.toBeInTheDocument();
+});
+
 test("CalibrationFlowIllustration keeps SVG ids unique across instances", () => {
   const { container } = render(
     <>

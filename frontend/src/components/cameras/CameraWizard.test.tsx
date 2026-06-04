@@ -1060,7 +1060,15 @@ describe("CameraWizard", () => {
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /add include region/i }));
-    expect(screen.getByText(/include = detector gate/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /include = detector gate\. Keep eligible detections inside the observation area/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/detection region 1 classes/i)).toHaveAttribute(
+      "placeholder",
+      "optional tracked classes",
+    );
     const regionCanvas = screen.getByLabelText(/detection region 1 canvas/i);
     stubRect(regionCanvas, 640, 360);
     fireEvent.click(regionCanvas, { clientX: 0, clientY: 0 });
@@ -1085,7 +1093,12 @@ describe("CameraWizard", () => {
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /add exclusion region/i }));
-    expect(screen.getByText(/exclude = detector mask/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /exclude = detector mask\. Remove reflections, screens, repeated background motion, or irrelevant scene areas/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/public road/i)).not.toBeInTheDocument();
     const regionCanvas = screen.getByLabelText(/detection region 1 canvas/i);
     stubRect(regionCanvas, 640, 360);
     fireEvent.click(regionCanvas, { clientX: 0, clientY: 0 });
@@ -1110,7 +1123,16 @@ describe("CameraWizard", () => {
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /add line boundary/i }));
-    expect(screen.getByText(/line = crossing trigger/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /line = crossing trigger\. Place it where tracked anchors should cross/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/boundary 1 classes/i)).toHaveAttribute(
+      "placeholder",
+      "optional tracked classes",
+    );
+    expect(screen.queryByText(/door, lane, or threshold/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/boundary 1 id/i), "door-line");
     const lineCanvas = screen.getByLabelText(/boundary 1 canvas/i);
     stubRect(lineCanvas, 640, 360);
@@ -1137,7 +1159,9 @@ describe("CameraWizard", () => {
 
     expect(screen.getByText(/polygon zone = event area/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/enter and exit events fire when tracks move through the zone/i),
+      screen.getByText(
+        /enter and exit events fire when tracked anchors move through the zone/i,
+      ),
     ).toBeInTheDocument();
   });
 
