@@ -11,14 +11,6 @@ type IllustrationCopy = {
   caption: string;
 };
 
-type LegendItem = {
-  id: string;
-  number: string;
-  label: string;
-  detail: string;
-  tone: "blue" | "green" | "amber" | "neutral";
-};
-
 const SVG_FONT_FAMILY =
   'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
@@ -35,91 +27,6 @@ const destinationPoints = [
   { label: "D3", x: 342, y: 150 },
   { label: "D4", x: 260, y: 150 },
 ];
-
-const eventLegend: LegendItem[] = [
-  {
-    id: "line-crossing",
-    number: "1",
-    label: "Line boundary",
-    detail: "crossing trigger",
-    tone: "green",
-  },
-  {
-    id: "crossing-event",
-    number: "2",
-    label: "Crossing event",
-    detail: "anchor changes side",
-    tone: "green",
-  },
-  {
-    id: "event-zone",
-    number: "3",
-    label: "Event zone",
-    detail: "enter/exit event",
-    tone: "blue",
-  },
-  {
-    id: "tracked-anchor",
-    number: "4",
-    label: "Tracked anchor",
-    detail: "object path point",
-    tone: "neutral",
-  },
-];
-
-const regionLegend: LegendItem[] = [
-  {
-    id: "include-region",
-    number: "1",
-    label: "Include area",
-    detail: "detections stay eligible",
-    tone: "green",
-  },
-  {
-    id: "exclusion-region",
-    number: "2",
-    label: "Exclude mask",
-    detail: "noisy motion ignored",
-    tone: "amber",
-  },
-  {
-    id: "tracked-anchor",
-    number: "3",
-    label: "Tracked anchor",
-    detail: "object path after mask",
-    tone: "neutral",
-  },
-];
-
-const toneColors = {
-  blue: {
-    bg: "#0d2235",
-    fill: "#102339",
-    stroke: "#8fd3ff",
-    text: "#d3efff",
-  },
-  green: {
-    bg: "#092823",
-    fill: "#0a2a2c",
-    stroke: "#6fe0c5",
-    text: "#c3fff1",
-  },
-  amber: {
-    bg: "#2a1c0e",
-    fill: "#352414",
-    stroke: "#ffb86b",
-    text: "#ffe2ad",
-  },
-  neutral: {
-    bg: "#111b2d",
-    fill: "#162235",
-    stroke: "#9fb2cf",
-    text: "#d8e2f2",
-  },
-} satisfies Record<
-  LegendItem["tone"],
-  { bg: string; fill: string; stroke: string; text: string }
->;
 
 const illustrationCopy = {
   "source-destination": {
@@ -314,150 +221,116 @@ function SceneAuthoringIllustration({
   idPrefix: string;
   mode: "boundaries" | "regions";
 }) {
-  const stillGradientId = `${idPrefix}-analytics-still`;
-  const sceneGlowId = `${idPrefix}-scene-glow`;
+  const planeGradientId = `${idPrefix}-analytics-plane`;
   const includeGradientId = `${idPrefix}-include-region`;
   const exclusionGradientId = `${idPrefix}-exclusion-region`;
+  const exclusionHatchId = `${idPrefix}-exclusion-hatch`;
   const eventZoneGradientId = `${idPrefix}-event-zone`;
-  const legend = mode === "boundaries" ? eventLegend : regionLegend;
 
   return (
-    <figure className="rounded-lg border border-white/10 bg-[#050b13] p-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_15rem]">
-        <div className="min-w-0 rounded-[0.9rem] border border-[#253a5b] bg-[#06101a] p-3">
-          <div className="mb-3 flex items-baseline justify-between gap-3">
-            <p className="text-sm font-semibold text-[#e6eefc]">
-              Analytics still
-            </p>
-            <p className="text-[0.68rem] font-medium uppercase tracking-[0.18em] text-[#7f93b2]">
-              camera coordinates
-            </p>
-          </div>
-          <svg
-            role="img"
-            aria-label={copy.title}
-            className="block h-auto w-full overflow-visible"
-            height="360"
-            shapeRendering="geometricPrecision"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 640 360"
-            width="640"
+    <figure className="rounded-lg border border-white/10 bg-[#050b13] p-3">
+      <svg
+        role="img"
+        aria-label={copy.title}
+        className="block h-auto w-full"
+        data-guidance-scene={mode}
+        height="450"
+        shapeRendering="geometricPrecision"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 800 450"
+        width="800"
+      >
+        <desc>{copy.description}</desc>
+        <defs>
+          <linearGradient id={planeGradientId} x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#10233a" />
+            <stop offset="64%" stopColor="#0c1a2b" />
+            <stop offset="100%" stopColor="#07111d" />
+          </linearGradient>
+          <linearGradient id={eventZoneGradientId} x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.1" />
+          </linearGradient>
+          <linearGradient id={includeGradientId} x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#4ade80" stopOpacity="0.23" />
+            <stop offset="100%" stopColor="#6fe0c5" stopOpacity="0.1" />
+          </linearGradient>
+          <linearGradient id={exclusionGradientId} x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#ff7a7a" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#ffb86b" stopOpacity="0.08" />
+          </linearGradient>
+          <pattern
+            id={exclusionHatchId}
+            width="12"
+            height="12"
+            patternTransform="rotate(45 0 0)"
+            patternUnits="userSpaceOnUse"
           >
-            <desc>{copy.description}</desc>
-            <defs>
-              <radialGradient id={sceneGlowId} cx="48%" cy="52%" r="62%">
-                <stop offset="0%" stopColor="#1c3352" stopOpacity="0.5" />
-                <stop offset="70%" stopColor="#0c1829" stopOpacity="0.18" />
-                <stop offset="100%" stopColor="#06101a" stopOpacity="0" />
-              </radialGradient>
-              <linearGradient id={stillGradientId} x1="0" x2="1" y1="0" y2="1">
-                <stop offset="0%" stopColor="#132a44" />
-                <stop offset="62%" stopColor="#0d2034" />
-                <stop offset="100%" stopColor="#071321" />
-              </linearGradient>
-              <linearGradient
-                id={eventZoneGradientId}
-                x1="0"
-                x2="1"
-                y1="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="#8fd3ff" stopOpacity="0.34" />
-                <stop offset="100%" stopColor="#8fd3ff" stopOpacity="0.08" />
-              </linearGradient>
-              <linearGradient
-                id={includeGradientId}
-                x1="0"
-                x2="1"
-                y1="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="#7ee7a8" stopOpacity="0.34" />
-                <stop offset="100%" stopColor="#7ee7a8" stopOpacity="0.1" />
-              </linearGradient>
-              <linearGradient
-                id={exclusionGradientId}
-                x1="0"
-                x2="1"
-                y1="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="#ffb86b" stopOpacity="0.36" />
-                <stop offset="100%" stopColor="#ffb86b" stopOpacity="0.1" />
-              </linearGradient>
-              <clipPath id={`${idPrefix}-still-clip`}>
-                <path d="M76 82 L528 58 L568 280 L48 304 Z" />
-              </clipPath>
-            </defs>
-
-            <rect x="0" y="0" width="640" height="360" rx="18" fill="#06101a" />
-            <ellipse
-              cx="300"
-              cy="190"
-              rx="300"
-              ry="172"
-              fill={`url(#${sceneGlowId})`}
-            />
-            <path
-              d="M76 82 L528 58 L568 280 L48 304 Z"
-              fill={`url(#${stillGradientId})`}
-              stroke="#355372"
-              strokeWidth="3"
+            <line
+              x1="0"
+              x2="0"
+              y1="0"
+              y2="12"
+              stroke="#ff7a7a"
+              strokeOpacity="0.35"
+              strokeWidth="2"
               vectorEffect="non-scaling-stroke"
             />
-            <g clipPath={`url(#${idPrefix}-still-clip)`}>
-              <path
-                d="M124 88 L104 300 M256 72 L260 302 M392 66 L432 300 M64 176 L560 164 M82 228 L570 218"
-                fill="none"
-                stroke="#7b91af"
-                strokeDasharray="9 14"
-                strokeWidth="2"
-                opacity="0.5"
-                vectorEffect="non-scaling-stroke"
-              />
-              <path
-                d="M86 250 C150 204 214 208 272 218 C330 228 386 230 484 198"
-                data-motion-path="path-1"
-                fill="none"
-                stroke="#9fb2cf"
-                strokeDasharray="9 13"
-                strokeLinecap="round"
-                strokeWidth="3"
-                opacity="0.7"
-                vectorEffect="non-scaling-stroke"
-              />
-              <path
-                d="M260 156 C318 194 374 224 486 236"
-                data-motion-path="path-2"
-                fill="none"
-                stroke="#9fb2cf"
-                strokeDasharray="9 13"
-                strokeLinecap="round"
-                strokeWidth="3"
-                opacity="0.62"
-                vectorEffect="non-scaling-stroke"
-              />
-            </g>
+          </pattern>
+        </defs>
 
-            {mode === "boundaries" ? (
-              <EventGeometry eventZoneGradientId={eventZoneGradientId} />
-            ) : (
-              <RegionGeometry
-                exclusionGradientId={exclusionGradientId}
-                includeGradientId={includeGradientId}
-              />
-            )}
+        <rect width="800" height="450" rx="18" fill="#07101b" />
+        <ScenePerspectivePlane planeGradientId={planeGradientId} />
 
-            <NeutralTrackLayer />
-          </svg>
-        </div>
-
-        <LegendPanel items={legend} mode={mode} />
-      </div>
-      <figcaption className="mt-4 border-t border-white/10 pt-3 text-sm leading-6 text-[#a8bad6]">
+        {mode === "boundaries" ? (
+          <EventGeometry eventZoneGradientId={eventZoneGradientId} />
+        ) : (
+          <RegionGeometry
+            exclusionGradientId={exclusionGradientId}
+            exclusionHatchId={exclusionHatchId}
+            includeGradientId={includeGradientId}
+          />
+        )}
+      </svg>
+      <figcaption className="mt-3 text-sm leading-6 text-[#a8bad6]">
         {copy.caption}
       </figcaption>
     </figure>
+  );
+}
+
+function ScenePerspectivePlane({
+  planeGradientId,
+}: {
+  planeGradientId: string;
+}) {
+  return (
+    <g aria-label="Analytics still perspective plane">
+      <polygon
+        data-camera-plane=""
+        points="120,380 680,380 580,120 220,120"
+        fill={`url(#${planeGradientId})`}
+        stroke="#334b6c"
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M265 120 L195 380 M355 120 L340 380 M445 120 L460 380 M535 120 L605 380"
+        fill="none"
+        stroke="#29415f"
+        strokeDasharray="4 12"
+        strokeWidth="2"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M200 180 L600 180 M175 250 L625 250 M150 320 L650 320"
+        fill="none"
+        stroke="#203852"
+        strokeDasharray="4 12"
+        strokeWidth="2"
+        vectorEffect="non-scaling-stroke"
+      />
+    </g>
   );
 }
 
@@ -467,230 +340,290 @@ function EventGeometry({
   eventZoneGradientId: string;
 }) {
   return (
-    <g>
-      <line
-        data-boundary="line-crossing"
-        x1="116"
-        x2="302"
-        y1="252"
-        y2="232"
-        stroke="#6fe0c5"
-        strokeLinecap="round"
-        strokeWidth="11"
-        vectorEffect="non-scaling-stroke"
-      />
+    <g aria-label="Event boundary schematic">
       <polygon
         data-boundary="event-zone"
-        points="350,132 500,146 524,242 322,262"
+        points="450,170 580,200 540,330 400,300"
         fill={`url(#${eventZoneGradientId})`}
-        stroke="#8fd3ff"
+        stroke="#38bdf8"
         strokeLinejoin="round"
         strokeWidth="4"
         vectorEffect="non-scaling-stroke"
       />
-      <SceneCallout label="1" tone="green" x={112} y={232} />
-      <SceneCallout label="2" tone="green" x={252} y={226} />
-      <SceneCallout label="3" tone="blue" x={422} y={150} />
-      <SceneCallout label="4" tone="neutral" x={174} y={180} />
+      <line
+        x1="180"
+        x2="350"
+        y1="270"
+        y2="310"
+        stroke="#34d399"
+        strokeLinecap="round"
+        strokeOpacity="0.22"
+        strokeWidth="18"
+        vectorEffect="non-scaling-stroke"
+      />
+      <line
+        data-boundary="line-crossing"
+        x1="180"
+        x2="350"
+        y1="270"
+        y2="310"
+        stroke="#34d399"
+        strokeLinecap="round"
+        strokeWidth="8"
+        vectorEffect="non-scaling-stroke"
+      />
+
+      <MotionTrack
+        anchorId="line-crossing"
+        dataMotionPath="event-path-1"
+        d="M220 210 Q270 270 260 350"
+        endX={260}
+        endY={350}
+        startX={220}
+        startY={210}
+      />
+      <MotionTrack
+        anchorId="zone-entry"
+        dataMotionPath="event-path-2"
+        d="M350 190 Q420 220 480 290"
+        endX={480}
+        endY={290}
+        startX={350}
+        startY={190}
+      />
+
+      <SceneLabel
+        dataLabel="line-boundary"
+        detail="Crossing trigger"
+        detailX={220}
+        detailY={335}
+        title="Line Boundary"
+        titleX={190}
+        titleY={255}
+      />
+      <SceneLabel
+        dataLabel="event-zone"
+        detail="Enter/Exit events"
+        detailX={502}
+        detailY={263}
+        textAnchor="middle"
+        title="Event Zone"
+        titleX={520}
+        titleY={242}
+      />
     </g>
   );
 }
 
 function RegionGeometry({
   exclusionGradientId,
+  exclusionHatchId,
   includeGradientId,
 }: {
   exclusionGradientId: string;
+  exclusionHatchId: string;
   includeGradientId: string;
 }) {
   return (
-    <g>
+    <g aria-label="Detection region schematic">
       <polygon
         data-region="include"
-        points="118,150 394,124 462,250 82,284"
+        points="170,340 610,350 510,150 250,140"
         fill={`url(#${includeGradientId})`}
-        stroke="#7ee7a8"
+        stroke="#4ade80"
         strokeLinejoin="round"
         strokeWidth="4"
         vectorEffect="non-scaling-stroke"
       />
       <polygon
         data-region="exclusion"
-        points="432,158 526,148 540,224 450,238"
+        points="450,220 560,240 540,320 420,290"
         fill={`url(#${exclusionGradientId})`}
-        stroke="#ffb86b"
-        strokeDasharray="10 8"
+        stroke="#ff7a7a"
+        strokeDasharray="8 6"
         strokeLinejoin="round"
-        strokeWidth="4"
+        strokeWidth="3.5"
         vectorEffect="non-scaling-stroke"
       />
-      <SceneCallout label="1" tone="green" x={154} y={164} />
-      <SceneCallout label="2" tone="amber" x={470} y={174} />
-      <SceneCallout label="3" tone="neutral" x={300} y={218} />
+      <polygon
+        points="450,220 560,240 540,320 420,290"
+        fill={`url(#${exclusionHatchId})`}
+        pointerEvents="none"
+      />
+
+      <MotionTrack
+        anchorId="included"
+        dataMotionPath="region-path-1"
+        d="M240 270 Q300 250 330 310"
+        endX={330}
+        endY={310}
+        startX={240}
+        startY={270}
+      />
+      <IgnoredAnchorMark x={500} y={285} />
+
+      <SceneLabel
+        dataLabel="include-region"
+        detail="Detections eligible"
+        detailX={210}
+        detailY={200}
+        title="Include Area"
+        titleX={210}
+        titleY={180}
+      />
+      <SceneLabel
+        dataLabel="exclusion-region"
+        detail="Noisy motion ignored"
+        detailX={502}
+        detailY={282}
+        textAnchor="middle"
+        title="Exclude Mask"
+        titleX={502}
+        titleY={262}
+      />
     </g>
   );
 }
 
-function NeutralTrackLayer() {
+function MotionTrack({
+  anchorId,
+  dataMotionPath,
+  d,
+  endX,
+  endY,
+  startX,
+  startY,
+}: {
+  anchorId: string;
+  dataMotionPath: string;
+  d: string;
+  endX: number;
+  endY: number;
+  startX: number;
+  startY: number;
+}) {
   return (
-    <g data-scene-glyph="neutral-tracks">
-      <g>
-        <circle
-          data-object-envelope="alpha"
-          cx="172"
-          cy="212"
-          r="42"
-          fill="#c5d6e8"
-          opacity="0.12"
-          stroke="#c5d6e8"
-          strokeWidth="2"
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle
-          data-track-anchor="alpha"
-          cx="172"
-          cy="212"
-          r="10"
-          fill="#f4f8ff"
-          stroke="#08111a"
-          strokeWidth="4"
-          vectorEffect="non-scaling-stroke"
-        />
-      </g>
-      <g>
-        <rect
-          data-object-envelope="bravo"
-          x="290"
-          y="154"
-          width="88"
-          height="42"
-          rx="21"
-          fill="#c5d6e8"
-          opacity="0.13"
-          stroke="#c5d6e8"
-          strokeWidth="2"
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle
-          data-track-anchor="bravo"
-          cx="334"
-          cy="176"
-          r="10"
-          fill="#f4f8ff"
-          stroke="#08111a"
-          strokeWidth="4"
-          vectorEffect="non-scaling-stroke"
-        />
-      </g>
-      <g>
-        <path
-          data-object-envelope="charlie"
-          d="M474 190 L536 240 L474 290 L412 240 Z"
-          fill="#c5d6e8"
-          opacity="0.13"
-          stroke="#c5d6e8"
-          strokeWidth="2"
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle
-          data-track-anchor="charlie"
-          cx="474"
-          cy="240"
-          r="10"
-          fill="#f4f8ff"
-          stroke="#08111a"
-          strokeWidth="4"
-          vectorEffect="non-scaling-stroke"
-        />
-      </g>
+    <g data-scene-glyph="neutral-track">
+      <path
+        data-motion-path={dataMotionPath}
+        d={d}
+        fill="none"
+        stroke="#94a3b8"
+        strokeDasharray="4 6"
+        strokeLinecap="round"
+        strokeOpacity="0.72"
+        strokeWidth="2.4"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx={startX} cy={startY} fill="#f8fafc" opacity="0.32" r="4" />
+      <AnchorMark id={anchorId} x={endX} y={endY} />
     </g>
   );
 }
 
-function LegendPanel({
-  items,
-  mode,
-}: {
-  items: LegendItem[];
-  mode: "boundaries" | "regions";
-}) {
+function AnchorMark({ id, x, y }: { id: string; x: number; y: number }) {
   return (
-    <aside className="rounded-[0.9rem] border border-[#284066] bg-[#07111d] p-3">
-      <p className="mb-3 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#8da3c2]">
-        {mode === "boundaries" ? "Event semantics" : "Detection mask order"}
-      </p>
-      <ol className="space-y-2">
-        {items.map((item) => {
-          const colors = toneColors[item.tone];
-          return (
-            <li
-              key={item.id}
-              data-annotation-label={item.id}
-              data-annotation-rail=""
-              className="grid grid-cols-[2.2rem_minmax(0,1fr)] items-center gap-2 rounded-[0.7rem] border border-[#284066] bg-[#0c1522] px-2.5 py-2"
-            >
-              <span
-                className="grid size-8 place-items-center rounded-full border-2 text-sm font-bold"
-                style={{
-                  backgroundColor: colors.fill,
-                  borderColor: colors.stroke,
-                  color: "#f6faff",
-                }}
-              >
-                {item.number}
-              </span>
-              <span className="min-w-0">
-                <span
-                  className="block text-sm font-semibold leading-5"
-                  style={{ color: colors.text }}
-                >
-                  {item.label}
-                </span>
-                <span className="block text-xs leading-4 text-[#9fb2cf]">
-                  {item.detail}
-                </span>
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </aside>
-  );
-}
-
-function SceneCallout({
-  label,
-  tone,
-  x,
-  y,
-}: {
-  label: string;
-  tone: LegendItem["tone"];
-  x: number;
-  y: number;
-}) {
-  const colors = toneColors[tone];
-  return (
-    <g data-scene-callout={label}>
+    <g>
+      <circle
+        data-track-anchor={id}
+        cx={x}
+        cy={y}
+        fill="#f8fafc"
+        r="7"
+        vectorEffect="non-scaling-stroke"
+      />
       <circle
         cx={x}
         cy={y}
-        r="23"
-        fill={colors.fill}
-        stroke={colors.stroke}
-        strokeWidth="5"
+        fill="none"
+        opacity="0.58"
+        r="16"
+        stroke="#f8fafc"
+        strokeWidth="2"
         vectorEffect="non-scaling-stroke"
       />
+    </g>
+  );
+}
+
+function IgnoredAnchorMark({ x, y }: { x: number; y: number }) {
+  return (
+    <g data-track-anchor="ignored" data-track-anchor-state="ignored">
+      <circle cx={x} cy={y} fill="#64748b" r="6" />
+      <line
+        x1={x - 8}
+        x2={x + 8}
+        y1={y - 8}
+        y2={y + 8}
+        stroke="#ff7a7a"
+        strokeLinecap="round"
+        strokeWidth="2.8"
+        vectorEffect="non-scaling-stroke"
+      />
+      <line
+        x1={x + 8}
+        x2={x - 8}
+        y1={y - 8}
+        y2={y + 8}
+        stroke="#ff7a7a"
+        strokeLinecap="round"
+        strokeWidth="2.8"
+        vectorEffect="non-scaling-stroke"
+      />
+    </g>
+  );
+}
+
+function SceneLabel({
+  dataLabel,
+  detail,
+  detailX,
+  detailY,
+  textAnchor = "start",
+  title,
+  titleX,
+  titleY,
+}: {
+  dataLabel: string;
+  detail: string;
+  detailX: number;
+  detailY: number;
+  textAnchor?: "start" | "middle";
+  title: string;
+  titleX: number;
+  titleY: number;
+}) {
+  return (
+    <g data-scene-label={dataLabel}>
       <text
-        x={x}
-        y={y + 8}
-        textAnchor="middle"
-        fill="#f6faff"
+        x={titleX}
+        y={titleY}
+        fill="#f8fafc"
         fontFamily={SVG_FONT_FAMILY}
-        fontSize="24"
+        fontSize="18"
         fontWeight="700"
+        paintOrder="stroke fill"
+        stroke="#07101b"
+        strokeLinejoin="round"
+        strokeWidth="4"
+        textAnchor={textAnchor}
       >
-        {label}
+        {title}
+      </text>
+      <text
+        x={detailX}
+        y={detailY}
+        fill="#a8bad6"
+        fontFamily={SVG_FONT_FAMILY}
+        fontSize="14"
+        fontWeight="500"
+        paintOrder="stroke fill"
+        stroke="#07101b"
+        strokeLinejoin="round"
+        strokeWidth="3"
+        textAnchor={textAnchor}
+      >
+        {detail}
       </text>
     </g>
   );

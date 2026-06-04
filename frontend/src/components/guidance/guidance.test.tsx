@@ -179,17 +179,13 @@ test("CalibrationFlowIllustration uses neutral tracked anchors for event guidanc
     <CalibrationFlowIllustration mode="boundaries" />,
   );
 
-  expect(screen.getByText(/tracked anchor/i)).toBeInTheDocument();
-  expect(screen.getByText(/object path/i)).toBeInTheDocument();
   expect(
     container.querySelectorAll("[data-track-anchor]").length,
-  ).toBeGreaterThanOrEqual(3);
+  ).toBeGreaterThanOrEqual(2);
   expect(
     container.querySelectorAll("[data-motion-path]").length,
   ).toBeGreaterThanOrEqual(2);
-  expect(
-    container.querySelectorAll("[data-object-envelope]").length,
-  ).toBeGreaterThanOrEqual(2);
+  expect(container.querySelectorAll("[data-object-envelope]").length).toBe(0);
   expect(
     container.querySelector("[data-scene-glyph='vehicle']"),
   ).not.toBeInTheDocument();
@@ -207,17 +203,16 @@ test("CalibrationFlowIllustration uses neutral tracked anchors for event guidanc
 test("CalibrationFlowIllustration uses neutral tracked anchors for region guidance", () => {
   const { container } = render(<CalibrationFlowIllustration mode="regions" />);
 
-  expect(screen.getByText(/tracked anchor/i)).toBeInTheDocument();
-  expect(screen.getByText(/object path/i)).toBeInTheDocument();
   expect(
     container.querySelectorAll("[data-track-anchor]").length,
-  ).toBeGreaterThanOrEqual(3);
+  ).toBeGreaterThanOrEqual(2);
   expect(
     container.querySelectorAll("[data-motion-path]").length,
-  ).toBeGreaterThanOrEqual(2);
+  ).toBeGreaterThanOrEqual(1);
+  expect(container.querySelectorAll("[data-object-envelope]").length).toBe(0);
   expect(
-    container.querySelectorAll("[data-object-envelope]").length,
-  ).toBeGreaterThanOrEqual(2);
+    container.querySelector("[data-track-anchor-state='ignored']"),
+  ).toBeInTheDocument();
   expect(
     container.querySelector("[data-scene-glyph='vehicle']"),
   ).not.toBeInTheDocument();
@@ -232,47 +227,36 @@ test("CalibrationFlowIllustration uses neutral tracked anchors for region guidan
   ).not.toBeInTheDocument();
 });
 
-test("CalibrationFlowIllustration uses external event annotation rails", () => {
+test("CalibrationFlowIllustration uses direct event labels without annotation rails", () => {
   const { container } = render(
     <CalibrationFlowIllustration mode="boundaries" />,
   );
 
   const labelIds = Array.from(
-    container.querySelectorAll("[data-annotation-rail]"),
-  ).map((label) => label.getAttribute("data-annotation-label"));
+    container.querySelectorAll("[data-scene-label]"),
+  ).map((label) => label.getAttribute("data-scene-label"));
 
   expect(labelIds).toEqual(
-    expect.arrayContaining([
-      "line-crossing",
-      "crossing-event",
-      "event-zone",
-      "tracked-anchor",
-    ]),
+    expect.arrayContaining(["line-boundary", "event-zone"]),
   );
-  expect(
-    container.querySelectorAll("[data-scene-callout]").length,
-  ).toBeGreaterThanOrEqual(4);
+  expect(container.querySelectorAll("[data-annotation-rail]").length).toBe(0);
+  expect(container.querySelectorAll("[data-scene-callout]").length).toBe(0);
   expect(container.querySelectorAll("[data-label-leader]").length).toBe(0);
   expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
 });
 
-test("CalibrationFlowIllustration uses external detection annotation rails", () => {
+test("CalibrationFlowIllustration uses direct detection labels without annotation rails", () => {
   const { container } = render(<CalibrationFlowIllustration mode="regions" />);
 
   const labelIds = Array.from(
-    container.querySelectorAll("[data-annotation-rail]"),
-  ).map((label) => label.getAttribute("data-annotation-label"));
+    container.querySelectorAll("[data-scene-label]"),
+  ).map((label) => label.getAttribute("data-scene-label"));
 
   expect(labelIds).toEqual(
-    expect.arrayContaining([
-      "include-region",
-      "exclusion-region",
-      "tracked-anchor",
-    ]),
+    expect.arrayContaining(["include-region", "exclusion-region"]),
   );
-  expect(
-    container.querySelectorAll("[data-scene-callout]").length,
-  ).toBeGreaterThanOrEqual(3);
+  expect(container.querySelectorAll("[data-annotation-rail]").length).toBe(0);
+  expect(container.querySelectorAll("[data-scene-callout]").length).toBe(0);
   expect(container.querySelectorAll("[data-label-leader]").length).toBe(0);
   expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
 });
