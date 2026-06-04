@@ -22,10 +22,10 @@ export function CalibrationScaleExample({
         role="img"
         viewBox="0 0 760 360"
       >
-        <title id={titleId}>Parking bay measured distance example</title>
+        <title id={titleId}>Calibrated span measured distance example</title>
         <desc id={descId}>
-          A camera still and a drawn top-down world plane show the same parking
-          bay width used as the D1 to D2 measured distance.
+          A camera still and a drawn top-down world plane show the same known
+          mark-to-mark span used as the D1 to D2 measured distance.
         </desc>
 
         <rect width="760" height="360" fill="#050b13" />
@@ -53,21 +53,19 @@ export function CalibrationScaleExample({
             stroke="#5ea8ff"
             strokeWidth="2"
           />
-          <polygon
-            points="74,222 174,229 165,106 98,112"
-            fill="#22324a"
-            opacity="0.72"
-            stroke="#86bfff"
-            strokeDasharray="7 7"
+          <path
+            d="M78 212 L306 229 M82 176 L300 192 M88 140 L294 156"
+            stroke="#4d7cad"
+            strokeDasharray="6 8"
             strokeWidth="1.5"
+            opacity="0.58"
           />
-          <polygon
-            points="174,229 318,240 288,92 165,106"
-            fill="#17283d"
-            opacity="0.82"
+          <path
+            d="M98 222 L96 112 M164 228 L158 106 M224 236 L212 100 M288 240 L274 94"
             stroke="#86bfff"
-            strokeDasharray="7 7"
+            strokeDasharray="7 8"
             strokeWidth="1.5"
+            opacity="0.62"
           />
           <path
             d="M122 226 L115 110"
@@ -90,33 +88,28 @@ export function CalibrationScaleExample({
             strokeLinecap="round"
             strokeWidth="5"
           />
-          <text x="84" y="212" fill="#9ef8e7" fontSize="12" fontWeight="700">
-            measure this real span
+          <text x="94" y="205" fill="#9ef8e7" fontSize="12" fontWeight="700">
+            known physical span
           </text>
-
-          <g transform="translate(246 153) rotate(-6)">
-            <rect
-              x="0"
-              y="0"
-              width="58"
-              height="26"
-              rx="7"
-              fill="#c9d7e9"
-              opacity="0.92"
-            />
-            <rect x="9" y="5" width="20" height="10" rx="3" fill="#42566f" />
-            <circle cx="14" cy="27" r="5" fill="#07101b" />
-            <circle cx="47" cy="27" r="5" fill="#07101b" />
-          </g>
-          <g transform="translate(201 187)">
-            <circle cx="0" cy="0" r="7" fill="#f3c68b" />
-            <path
-              d="M0 7 L0 26 M0 14 L-10 23 M0 14 L10 23"
-              stroke="#f3c68b"
-              strokeLinecap="round"
-              strokeWidth="4"
-            />
-          </g>
+          <path
+            d="M74 222 L74 206 M174 229 L174 213"
+            stroke="#6ce3d0"
+            strokeLinecap="round"
+            strokeWidth="3"
+          />
+          <circle cx="74" cy="222" r="5" fill="#9ef8e7" />
+          <circle cx="174" cy="229" r="5" fill="#9ef8e7" />
+          <path
+            d="M120 146 C164 128 208 136 252 116"
+            fill="none"
+            stroke="#9fb2cf"
+            strokeDasharray="7 8"
+            strokeLinecap="round"
+            strokeWidth="2"
+            opacity="0.62"
+          />
+          <circle cx="206" cy="132" r="13" fill="#c5d6e8" opacity="0.13" />
+          <circle cx="206" cy="132" r="4.5" fill="#f4f8ff" stroke="#08111a" strokeWidth="1.5" />
 
           <SourcePoint label="S1" x={74} y={222} />
           <SourcePoint label="S2" x={174} y={229} />
@@ -152,29 +145,21 @@ export function CalibrationScaleExample({
             strokeWidth="2"
           />
           <path
-            d="M503 106 L503 236 M565 106 L565 236 M628 106 L628 236"
+            d="M503 106 L503 236 M565 106 L565 236 M628 106 L628 236 M440 150 L690 150 M440 193 L690 193"
             stroke="#342a55"
             strokeWidth="2"
           />
           <path
-            d="M440 171 L690 171"
-            stroke="#e7edf8"
-            strokeDasharray="13 10"
+            d="M485 142 C528 124 584 136 640 118"
+            fill="none"
+            stroke="#9fb2cf"
+            strokeDasharray="7 8"
             strokeLinecap="round"
-            strokeWidth="4"
-            opacity="0.9"
+            strokeWidth="2"
+            opacity="0.62"
           />
-          <rect x="488" y="128" width="64" height="32" rx="9" fill="#c9d7e9" />
-          <rect x="496" y="135" width="24" height="12" rx="3" fill="#42566f" />
-          <circle cx="502" cy="163" r="5" fill="#07101b" />
-          <circle cx="540" cy="163" r="5" fill="#07101b" />
-          <circle cx="606" cy="210" r="7" fill="#f3c68b" />
-          <path
-            d="M606 217 L606 235 M606 224 L595 232 M606 224 L617 232"
-            stroke="#f3c68b"
-            strokeLinecap="round"
-            strokeWidth="4"
-          />
+          <rect x="522" y="126" width="48" height="24" rx="12" fill="#c5d6e8" opacity="0.13" />
+          <circle cx="546" cy="138" r="4.5" fill="#f4f8ff" stroke="#08111a" strokeWidth="1.5" />
 
           <path
             d="M440 236 L690 236"
@@ -194,6 +179,8 @@ export function CalibrationScaleExample({
             strokeLinecap="round"
             strokeWidth="4"
           />
+          <circle cx="440" cy="236" r="5" fill="#9ef8e7" />
+          <circle cx="690" cy="236" r="5" fill="#9ef8e7" />
           <text
             x="565"
             y="268"
@@ -236,8 +223,9 @@ export function CalibrationScaleExample({
 
       <figcaption className="border-t border-white/10 p-3 text-xs leading-5 text-[#9eb2cf]">
         <p className="font-semibold text-[#f4f8ff]">
-          Example: parking bay width = 2.5 m. Put S1 and S2 on the two painted
-          bay corners, draw those same corners as D1 and D2, then enter 2.5.
+          Example: known reference span = 2.5 m. Put S1 and S2 on two fixed
+          marks you physically measured, draw those same marks as D1 and D2,
+          then enter 2.5.
         </p>
         <div className={`mt-2 grid gap-2 ${compact ? "" : "sm:grid-cols-3"}`}>
           <p>
@@ -250,7 +238,7 @@ export function CalibrationScaleExample({
             from another camera still.
           </p>
           <p>
-            S1 is D1 and S2 is D2 because they are the same physical floor
+            S1 is D1 and S2 is D2 because they are the same physical reference
             marks. The coordinates do not need to match.
           </p>
         </div>
@@ -267,6 +255,7 @@ function SourcePoint({ label, x, y }: { label: string; x: number; y: number }) {
   return (
     <g>
       <circle
+        data-reference-mark={label.toLowerCase()}
         cx={x}
         cy={y}
         fill="#071b2f"
@@ -300,6 +289,7 @@ function DestinationPoint({
   return (
     <g>
       <circle
+        data-reference-mark={label.toLowerCase()}
         cx={x}
         cy={y}
         fill="#1a1430"

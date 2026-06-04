@@ -89,7 +89,7 @@ export function HomographyEditor({
             Calibration map
           </p>
           <h3 className="mt-1 text-sm font-semibold text-[#f4f8ff]">
-            Match camera marks to a top-down floor plane
+            Match camera marks to a top-down movement plane
           </h3>
         </div>
         <GuidanceDisclosure
@@ -112,10 +112,10 @@ export function HomographyEditor({
             id="measured-distance-heading"
             className="mt-1 text-sm font-semibold text-[#f4f8ff]"
           >
-            Measure D1 to D2 on the same floor plane
+            Measure D1 to D2 on the same calibrated plane
           </h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9eb2cf]">
-            Use one measured floor-plane span: S1/S2 in the camera still,
+            Use one measured mark-to-mark span: S1/S2 in the camera still,
             D1/D2 in the drawn world plane.
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#c7d5eb]">
@@ -126,7 +126,7 @@ export function HomographyEditor({
               Same physical marks
             </span>
             <span className="rounded-full border border-white/8 bg-black/20 px-3 py-1.5">
-              Meters on the moving floor
+              Meters on the movement plane
             </span>
           </div>
         </div>
@@ -191,13 +191,13 @@ export function HomographyEditor({
               ariaLabel="Source points canvas"
               backgroundContent={
                 <p className="max-w-sm text-sm text-[#9eb2cf]">
-                  Click four fixed floor marks in the camera image. If this is a
-                  new camera, use this temporary plane now and refresh the still
-                  after saving.
+                  Click four fixed reference marks in the camera image. If this
+                  is a new camera, use this temporary plane now and refresh the
+                  still after saving.
                 </p>
               }
               frameSize={resolvedSourceFrameSize}
-              helperText="These camera image points should sit on the same flat floor plane where people or vehicles move."
+              helperText="These camera image points should sit on the same calibrated plane where tracked anchors move."
               maxPoints={4}
               mode="points"
               pointLabelPrefix="Source"

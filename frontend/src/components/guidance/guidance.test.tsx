@@ -196,6 +196,46 @@ test("CalibrationFlowIllustration uses neutral tracked anchors for region guidan
   expect(container.querySelector("[data-scene-glyph='animal']")).not.toBeInTheDocument();
 });
 
+test("CalibrationFlowIllustration separates event annotation labels with leaders", () => {
+  const { container } = render(<CalibrationFlowIllustration mode="boundaries" />);
+
+  const labelIds = Array.from(
+    container.querySelectorAll("[data-annotation-label]"),
+  ).map((label) => label.getAttribute("data-annotation-label"));
+
+  expect(labelIds).toEqual(
+    expect.arrayContaining([
+      "line-crossing",
+      "crossing-event",
+      "event-zone",
+      "enter-exit-event",
+      "tracked-anchor",
+      "object-path",
+    ]),
+  );
+  expect(container.querySelectorAll("[data-label-leader]").length).toBeGreaterThanOrEqual(4);
+  expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
+});
+
+test("CalibrationFlowIllustration separates detection annotation labels with leaders", () => {
+  const { container } = render(<CalibrationFlowIllustration mode="regions" />);
+
+  const labelIds = Array.from(
+    container.querySelectorAll("[data-annotation-label]"),
+  ).map((label) => label.getAttribute("data-annotation-label"));
+
+  expect(labelIds).toEqual(
+    expect.arrayContaining([
+      "include-region",
+      "exclusion-region",
+      "tracked-anchor",
+      "object-path",
+    ]),
+  );
+  expect(container.querySelectorAll("[data-label-leader]").length).toBeGreaterThanOrEqual(4);
+  expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
+});
+
 test("CalibrationFlowIllustration keeps SVG ids unique across instances", () => {
   const { container } = render(
     <>
@@ -215,8 +255,10 @@ test("CalibrationScaleExample maps S1 to D1 and S2 to D2", () => {
   const { container } = render(<CalibrationScaleExample />);
 
   expect(
-    screen.getByRole("img", { name: /parking bay measured distance example/i }),
+    screen.getByRole("img", { name: /calibrated span measured distance example/i }),
   ).toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/\b(parking|bay|car|vehicle|person)\b/i);
+  expect(container.querySelectorAll("[data-reference-mark]").length).toBeGreaterThanOrEqual(4);
   expect(
     container.querySelector("[data-calibration-link='s1-d1']"),
   ).toHaveAttribute("d", expect.stringMatching(/^M74 222 C.*440 236$/));

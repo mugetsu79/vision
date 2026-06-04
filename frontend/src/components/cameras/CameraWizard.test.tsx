@@ -538,11 +538,14 @@ describe("CameraWizard", () => {
       screen.queryByText(/the better those marks match the real floor/i),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/camera is fixed and not zooming/i)).toBeInTheDocument();
-    expect(screen.getByText(/known walk, cart, or vehicle pass/i)).toBeInTheDocument();
+    expect(screen.getByText(/known test pass has been checked/i)).toBeInTheDocument();
+    expect(screen.queryByText(/people or vehicles/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /show calibration help/i }));
     expect(screen.getByText(/source points map to top-down points/i)).toBeInTheDocument();
-    expect(screen.getByText(/ramp, stairs, raised platform/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/different plane or outside the marked area/i),
+    ).toBeInTheDocument();
   });
 
   test("reprobes an existing camera before showing stale stored browser profiles", async () => {
@@ -1059,6 +1062,12 @@ describe("CameraWizard", () => {
 
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(
+      screen.getByText(
+        /add include polygons to keep detections inside the observation area/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/valid operating space/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /add include region/i }));
     expect(
       screen.getByText(

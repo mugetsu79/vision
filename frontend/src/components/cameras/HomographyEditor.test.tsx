@@ -64,7 +64,7 @@ describe("HomographyEditor", () => {
     );
 
     expect(
-      screen.getByText(/measure d1 to d2 on the same floor plane/i),
+      screen.getByText(/measure d1 to d2 on the same calibrated plane/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -76,7 +76,7 @@ describe("HomographyEditor", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("img", {
-        name: /parking bay measured distance example/i,
+        name: /calibrated span measured distance example/i,
       }),
     ).not.toBeInTheDocument();
 
@@ -89,7 +89,7 @@ describe("HomographyEditor", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("img", {
-        name: /parking bay measured distance example/i,
+        name: /calibrated span measured distance example/i,
       }),
     ).toBeInTheDocument();
   });
@@ -122,12 +122,13 @@ describe("HomographyEditor", () => {
 
     expect(
       screen.getByRole("img", {
-        name: /parking bay measured distance example/i,
+        name: /calibrated span measured distance example/i,
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/example: parking bay width = 2.5 m/i),
+      screen.getByText(/example: known reference span = 2.5 m/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/parking bay/i)).not.toBeInTheDocument();
     expect(screen.getByText(/s points are camera pixels/i)).toBeInTheDocument();
     expect(
       screen.getByText(/d points are a top-down sketch/i),

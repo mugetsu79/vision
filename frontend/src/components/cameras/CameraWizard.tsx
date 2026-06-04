@@ -2726,7 +2726,7 @@ export function CameraWizard({
                         Speed accuracy
                       </p>
                       <h3 className="mt-2 text-lg font-semibold text-[#f4f8ff]">
-                        Calibrate speed on the floor where objects move
+                        Calibrate speed on the calibrated movement plane
                       </h3>
                     </div>
                     <GuidanceDisclosure
@@ -2988,8 +2988,8 @@ export function CameraWizard({
                 {data.detectionRegions.length === 0 ? (
                   <p className="mt-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
                     No detector masks configured. Add include polygons to keep
-                    valid operating space, or exclusion polygons to suppress
-                    noisy areas.
+                    detections inside the observation area, or exclusion
+                    polygons to suppress noisy areas.
                   </p>
                 ) : (
                   <div className="mt-5 space-y-4">

@@ -54,9 +54,9 @@ const illustrationCopy = {
   regions: {
     title: "Detection regions gate the analytics still",
     description:
-      "Include polygons keep detections eligible in the operating area; exclusion polygons suppress noisy pockets before events run.",
+      "Include polygons keep detections eligible in the observation area; exclusion polygons suppress noisy pockets before events run.",
     caption:
-      "Include keeps detections eligible inside operating space; exclude suppresses noisy motion before event boundaries run.",
+      "Include keeps detections eligible inside the observation area; exclude suppresses noisy motion before event boundaries run.",
   },
 } satisfies Record<NonNullable<CalibrationFlowIllustrationProps["mode"]>, IllustrationCopy>;
 
@@ -259,12 +259,6 @@ function NeutralTrackLayer() {
         </g>
       ))}
 
-      <text x="112" y="116" textAnchor="middle" fill="#d8e2f2" fontSize="9">
-        tracked anchor
-      </text>
-      <text x="232" y="84" textAnchor="middle" fill="#9fb2cf" fontSize="9">
-        object path
-      </text>
     </g>
   );
 }
@@ -374,10 +368,50 @@ function SceneAuthoringIllustration({
               strokeLinejoin="round"
               strokeWidth="2.4"
             />
-            <text x="292" y="66" textAnchor="middle" fill="#c5e9ff" fontSize="10">
+            <path
+              data-label-leader="event-zone"
+              d="M304 64 L304 82"
+              fill="none"
+              stroke="#8fd3ff"
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              strokeWidth="1.4"
+              opacity="0.82"
+            />
+            <text
+              data-annotation-label="event-zone"
+              x="304"
+              y="60"
+              textAnchor="middle"
+              fill="#c5e9ff"
+              fontSize="8"
+              paintOrder="stroke"
+              stroke="#050b13"
+              strokeWidth="2.4"
+            >
               polygon event zone
             </text>
-            <text x="294" y="116" textAnchor="middle" fill="#eef9ff" fontSize="9">
+            <path
+              data-label-leader="enter-exit-event"
+              d="M318 176 L316 146"
+              fill="none"
+              stroke="#8fd3ff"
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              strokeWidth="1.4"
+              opacity="0.72"
+            />
+            <text
+              data-annotation-label="enter-exit-event"
+              x="318"
+              y="186"
+              textAnchor="middle"
+              fill="#eef9ff"
+              fontSize="8"
+              paintOrder="stroke"
+              stroke="#050b13"
+              strokeWidth="2.4"
+            >
               enter/exit event
             </text>
 
@@ -402,10 +436,50 @@ function SceneAuthoringIllustration({
               strokeWidth="1.8"
               opacity="0.75"
             />
-            <text x="146" y="166" textAnchor="middle" fill="#bcefe3" fontSize="10">
+            <path
+              data-label-leader="line-crossing"
+              d="M102 190 L108 148"
+              fill="none"
+              stroke="#6fe0c5"
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              strokeWidth="1.4"
+              opacity="0.82"
+            />
+            <text
+              data-annotation-label="line-crossing"
+              x="102"
+              y="202"
+              textAnchor="middle"
+              fill="#bcefe3"
+              fontSize="8"
+              paintOrder="stroke"
+              stroke="#050b13"
+              strokeWidth="2.4"
+            >
               line crossing
             </text>
-            <text x="164" y="112" textAnchor="middle" fill="#effff9" fontSize="9">
+            <path
+              data-label-leader="crossing-event"
+              d="M206 186 L178 154"
+              fill="none"
+              stroke="#6fe0c5"
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              strokeWidth="1.4"
+              opacity="0.72"
+            />
+            <text
+              data-annotation-label="crossing-event"
+              x="206"
+              y="198"
+              textAnchor="middle"
+              fill="#effff9"
+              fontSize="8"
+              paintOrder="stroke"
+              stroke="#050b13"
+              strokeWidth="2.4"
+            >
               crossing event
             </text>
           </g>
@@ -421,11 +495,28 @@ function SceneAuthoringIllustration({
               strokeLinejoin="round"
               strokeWidth="2.4"
             />
-            <text x="154" y="54" textAnchor="middle" fill="#c8f7d6" fontSize="10">
+            <path
+              data-label-leader="include-region"
+              d="M154 54 L164 86"
+              fill="none"
+              stroke="#7ee7a8"
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              strokeWidth="1.4"
+              opacity="0.82"
+            />
+            <text
+              data-annotation-label="include-region"
+              x="154"
+              y="50"
+              textAnchor="middle"
+              fill="#c8f7d6"
+              fontSize="8"
+              paintOrder="stroke"
+              stroke="#050b13"
+              strokeWidth="2.4"
+            >
               include detection area
-            </text>
-            <text x="144" y="112" textAnchor="middle" fill="#f0fff6" fontSize="9">
-              include keeps detections eligible
             </text>
 
             <polygon
@@ -437,16 +528,81 @@ function SceneAuthoringIllustration({
               strokeLinejoin="round"
               strokeWidth="2.4"
             />
-            <text x="310" y="68" textAnchor="middle" fill="#ffd9a1" fontSize="10">
+            <path
+              data-label-leader="exclusion-region"
+              d="M326 72 L328 92"
+              fill="none"
+              stroke="#ffb86b"
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              strokeWidth="1.4"
+              opacity="0.82"
+            />
+            <text
+              data-annotation-label="exclusion-region"
+              x="326"
+              y="68"
+              textAnchor="middle"
+              fill="#ffd9a1"
+              fontSize="8"
+              paintOrder="stroke"
+              stroke="#050b13"
+              strokeWidth="2.4"
+            >
               exclusion mask
-            </text>
-            <text x="310" y="150" textAnchor="middle" fill="#fff1d6" fontSize="9">
-              exclude suppresses noisy motion
             </text>
           </g>
         ) : null}
 
         <NeutralTrackLayer />
+        <g aria-label="Track annotation labels">
+          <path
+            data-label-leader="tracked-anchor"
+            d="M78 112 L116 128"
+            fill="none"
+            stroke="#d8e2f2"
+            strokeDasharray="4 5"
+            strokeLinecap="round"
+            strokeWidth="1.3"
+            opacity="0.58"
+          />
+          <text
+            data-annotation-label="tracked-anchor"
+            x="72"
+            y="110"
+            textAnchor="middle"
+            fill="#d8e2f2"
+            fontSize="8"
+            paintOrder="stroke"
+            stroke="#050b13"
+            strokeWidth="2.4"
+          >
+            tracked anchor
+          </text>
+          <path
+            data-label-leader="object-path"
+            d="M224 86 L214 104"
+            fill="none"
+            stroke="#9fb2cf"
+            strokeDasharray="4 5"
+            strokeLinecap="round"
+            strokeWidth="1.3"
+            opacity="0.58"
+          />
+          <text
+            data-annotation-label="object-path"
+            x="224"
+            y="82"
+            textAnchor="middle"
+            fill="#9fb2cf"
+            fontSize="8"
+            paintOrder="stroke"
+            stroke="#050b13"
+            strokeWidth="2.4"
+          >
+            object path
+          </text>
+        </g>
       </svg>
       <figcaption className="mt-2 text-xs leading-5 text-[#9fb2cf]">
         {copy.caption}

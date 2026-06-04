@@ -96,14 +96,14 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
   },
   Calibration: {
     eyebrow: "Geometry",
-    title: "Calibrate the floor plane for events and speed",
+    title: "Calibrate the movement plane for events and speed",
     summary:
-      "Pick four fixed floor marks in the camera view, draw the same marks from above, then enter the real D1 to D2 distance so motion can be mapped to real space.",
+      "Pick four fixed reference marks in the camera view, draw the same marks from above, then enter the real D1 to D2 distance so motion can be mapped to real space.",
     concepts: [
       {
         term: "Camera image points",
         definition:
-          "The four fixed floor marks you click in the camera view. These are also called source points.",
+          "The four fixed reference marks you click in the camera view. These are also called source points.",
       },
       {
         term: "Top-down points",
@@ -118,7 +118,7 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
     ],
     steps: [
       "If this is a new camera, use the temporary plane now and refresh the still after saving.",
-      "Click four fixed floor marks in the camera image.",
+      "Click four fixed reference marks in the camera image.",
       "Draw those same four marks from above in the same order.",
       "Enter the real D1 to D2 measured distance in meters.",
       "Draw line boundaries or polygon zones for events after calibration lines up.",
@@ -126,8 +126,8 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
     ],
     commonMistakes: [
       "Mixing the point order between the camera image and top-down drawing.",
-      "Using shadows, people, vehicles, wall corners, or moved objects as reference marks.",
-      "Measuring a distance on a different floor level from where objects move.",
+      "Using shadows, moving subjects, wall corners off the movement plane, or temporary equipment as reference marks.",
+      "Measuring a distance on a different plane from where tracked anchors move.",
     ],
   },
   Review: {
@@ -141,13 +141,13 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
 export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
   sourcePoints: {
     label: "Camera image points",
-    hint: "Click four fixed floor marks in the camera view. These are the source points.",
+    hint: "Click four fixed reference marks in the camera view. These are the source points.",
     details: [
-      "Use marks that will not move: floor paint, lane marks, doorway floor corners, or loading-bay corners.",
-      "Avoid shadows, people, vehicles, wall corners above the floor, and temporary equipment.",
+      "Use marks that will not move and that sit on the same calibrated movement plane.",
+      "Avoid shadows, moving subjects, wall corners off the movement plane, and temporary equipment.",
       "Click the points in the same order you will draw them in the top-down view.",
     ],
-    safeDefault: "Four corners of a visible rectangle on the floor or ground.",
+    safeDefault: "Four corners of a visible fixed rectangle on the movement plane.",
     runtimeEffect:
       "Completed camera image points and top-down points let speed and direction use the camera perspective.",
     required: true,
@@ -173,20 +173,20 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
       "S1 and S2 must be the same two physical marks in the camera still; their pixel coordinates will usually differ from the D1 and D2 world-plane coordinates.",
       "D1 and D2 are drawn on the destination plane; the destination plane is not another camera capture.",
       "No third still capture is needed; refresh the analytics still after saving only to verify the points still line up with the real video frame.",
-      "Measure a lane width, doorway width, floor stripe, parking bay, or loading-bay span, then make that measured span points 1 and 2.",
+      "Measure a known mark-to-mark span on the same movement plane, then make that measured span points 1 and 2.",
       "Use a longer measured span when possible; it usually gives better speed estimates than a short guessed distance.",
-      "The measured distance should be on the same flat plane where feet or wheels move.",
+      "The measured distance should be on the same calibrated plane where tracked anchors move.",
     ],
     examples: [
       {
-        label: "Parking bay",
+        label: "Known reference span",
         description:
-          "If the painted bay width is 2.5 m, click those two visible bay corners as S1 and S2, draw the same corners as D1 and D2, then enter 2.5.",
+          "If two fixed marks are 2.5 m apart, click those marks as S1 and S2, draw the same marks as D1 and D2, then enter 2.5.",
       },
       {
-        label: "Doorway or lane",
+        label: "Alternate measured side",
         description:
-          "If a doorway threshold or lane stripe is the known span, make that span points 1 and 2 before saving.",
+          "If another side of the four-mark shape is the known span, make that side points 1 and 2 before saving.",
       },
     ],
     safeDefault:
@@ -244,12 +244,12 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
 
 export const SPEED_CALIBRATION_CHECKLIST = [
   "Camera is fixed and not zooming.",
-  "The four camera image points sit on the same flat floor plane where people or vehicles move.",
+  "The four camera image points sit on the same calibrated plane where tracked anchors move.",
   "Top-down points match the same four marks in the same order.",
-  "Measured distance is real, in meters, and on that same floor plane.",
+  "Measured distance is real, in meters, and on that same calibrated plane.",
   "Objects used for speed testing move through the calibrated area.",
-  "A known walk, cart, or vehicle pass has been checked against the reported speed.",
+  "A known test pass has been checked against the reported speed.",
 ];
 
 export const SPEED_CALIBRATION_WARNING =
-  "Speed is only as accurate as the calibrated floor plane. If objects move on a ramp, stairs, raised platform, or outside the marked area, treat speed as an estimate.";
+  "Speed is only as accurate as the calibrated movement plane. If objects move on a different plane or outside the marked area, treat speed as an estimate.";
