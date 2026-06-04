@@ -1132,6 +1132,59 @@ describe("VideoStream", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test("keeps native WebRTC through a short RTSP fallback disconnect pulse", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ sdp_answer: "v=0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await act(async () => {
+      render(
+        <VideoStream
+          activeProfileId="native"
+          activeStreamMode="passthrough"
+          cameraId="68686868-6868-6868-6868-686868686868"
+          cameraName="Native Passthrough"
+          defaultProfile="native"
+          heartbeatTs={new Date().toISOString()}
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByText(/webrtc live/i)).toBeInTheDocument(),
+    );
+    const peerConnection = FakeRTCPeerConnection.instances[0];
+    expect(peerConnection).toBeDefined();
+
+    vi.useFakeTimers();
+
+    act(() => {
+      peerConnection?.emitConnectionState("disconnected");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_500);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      peerConnection?.emitConnectionState("connected");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test("closes WebRTC peer when unmounted before negotiation finishes", async () => {
     let releaseRemoteDescription!: () => void;
     FakeRTCPeerConnection.remoteDescriptionBlocker = new Promise<void>((resolve) => {
