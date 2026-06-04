@@ -25,7 +25,7 @@ const illustrationCopy = {
     description:
       "Four source points in the camera image connect to four destination points in the top-down plane with a real-world ruler marker.",
     caption:
-      "Match the same four real marks in the same order, then measure a real distance on that plane.",
+      "Match the same four real marks in the same order, then enter the real D1 to D2 distance.",
   },
   boundaries: {
     title: "Event boundaries belong on the calibrated plane",
@@ -155,7 +155,7 @@ export function CalibrationFlowIllustration({
         <line x1="260" x2="260" y1="177" y2="191" stroke="#6fe0c5" strokeWidth="2" />
         <line x1="342" x2="342" y1="177" y2="191" stroke="#6fe0c5" strokeWidth="2" />
         <text x="301" y="202" textAnchor="middle" fill="#bcefe3" fontSize="11">
-          measured distance
+          D1-D2 measured distance
         </text>
 
         {mode === "boundaries" ? (

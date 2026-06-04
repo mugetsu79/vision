@@ -92,7 +92,7 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
     eyebrow: "Geometry",
     title: "Calibrate the floor plane for events and speed",
     summary:
-      "Pick four fixed floor marks in the camera view, draw the same marks from above, then add a measured distance so motion can be mapped to real space.",
+      "Pick four fixed floor marks in the camera view, draw the same marks from above, then enter the real D1 to D2 distance so motion can be mapped to real space.",
     concepts: [
       {
         term: "Camera image points",
@@ -104,14 +104,14 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
       },
       {
         term: "Measured distance",
-        definition: "A real distance in meters between visible marks on the same floor plane.",
+        definition: "The real distance in meters between destination points D1 and D2. In the camera still, these are the same physical marks as S1 and S2.",
       },
     ],
     steps: [
       "If this is a new camera, use the temporary plane now and refresh the still after saving.",
       "Click four fixed floor marks in the camera image.",
       "Draw those same four marks from above in the same order.",
-      "Enter a real measured distance in meters.",
+      "Enter the real D1 to D2 measured distance in meters.",
       "Draw line boundaries or polygon zones for events after calibration lines up.",
       "Add include or exclusion regions only when the detector needs masking.",
     ],
@@ -156,14 +156,16 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
   },
   referenceDistance: {
     label: "Measured distance",
-    hint: "Enter a real distance in meters between two visible floor marks.",
+    hint: "Enter the real D1 to D2 distance in meters.",
     details: [
-      "Measure a lane width, doorway width, floor stripe, parking bay, or loading-bay span.",
+      "The runtime uses D1 to D2, the first two top-down destination points, as the scale segment.",
+      "S1 and S2 must be the same two physical marks in the camera still.",
+      "Measure a lane width, doorway width, floor stripe, parking bay, or loading-bay span, then make that measured span points 1 and 2.",
       "Use a longer measured span when possible; it usually gives better speed estimates than a short guessed distance.",
       "The measured distance should be on the same flat plane where feet or wheels move.",
     ],
     safeDefault:
-      "Use a tape-measured distance, not an estimate, whenever speed matters.",
+      "Use a tape-measured D1 to D2 distance, not an estimate, whenever speed matters.",
     runtimeEffect:
       "Speed should not be trusted until the measured distance is set and verified with known movement.",
   },

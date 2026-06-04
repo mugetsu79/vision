@@ -40,6 +40,31 @@ describe("HomographyEditor", () => {
     ).toBeTruthy();
   });
 
+  test("explains that measured distance is the D1 to D2 scale segment", () => {
+    render(
+      <HomographyEditor
+        dst={[
+          [0, 0],
+          [0, 2],
+          [4, 2],
+          [4, 0],
+        ]}
+        onChange={vi.fn()}
+        refDistanceM={2}
+        src={[
+          [10, 90],
+          [10, 10],
+          [90, 10],
+          [90, 90],
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/measure d1 to d2 on the same floor plane/i)).toBeInTheDocument();
+    expect(screen.getByText(/s1 and s2 are the same two marks in the camera still/i)).toBeInTheDocument();
+    expect(screen.getByText(/no third still capture is needed/i)).toBeInTheDocument();
+  });
+
   test("reuses the authoring canvas for draggable source points", () => {
     const onChange = vi.fn();
 

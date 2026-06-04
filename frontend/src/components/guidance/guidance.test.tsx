@@ -49,26 +49,30 @@ test("GuidanceDisclosure hides rich guidance until opened", async () => {
   expect(screen.getByText(/safe default/i)).toBeInTheDocument();
 });
 
-test("GuidanceDisclosure opens help in a viewport-fixed readable panel", async () => {
+test("GuidanceDisclosure opens help in a portaled readable panel", async () => {
   const user = userEvent.setup();
   render(
-    <GuidanceDisclosure
-      id="source-points-disclosure"
-      label="source points"
-      guidance={{
-        label: "Source points",
-        hint: "Pick fixed marks in the camera view.",
-        details: ["Use marks that sit on the same floor plane."],
-      }}
-    />,
+    <div data-testid="clipping-root" className="overflow-hidden">
+      <GuidanceDisclosure
+        id="source-points-disclosure"
+        label="source points"
+        guidance={{
+          label: "Source points",
+          hint: "Pick fixed marks in the camera view.",
+          details: ["Use marks that sit on the same floor plane."],
+        }}
+      />
+    </div>,
   );
 
   await user.click(screen.getByRole("button", { name: /show source points help/i }));
 
   const panel = screen.getByRole("dialog", { name: /source points help/i });
-  expect(panel).toHaveClass("fixed");
-  expect(panel).toHaveClass("z-50");
+  expect(panel.closest("[data-testid='clipping-root']")).toBeNull();
+  expect(panel).toHaveAttribute("aria-modal", "true");
   expect(panel).toHaveClass("overflow-y-auto");
+  expect(screen.getByTestId("source-points-disclosure-portal")).toHaveClass("fixed");
+  expect(screen.getByTestId("source-points-disclosure-portal")).toHaveClass("z-50");
 });
 
 test("GuidanceDisclosure closes with Escape", async () => {

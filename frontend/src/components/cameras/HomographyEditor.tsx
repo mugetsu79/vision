@@ -100,10 +100,26 @@ export function HomographyEditor({
             id="measured-distance-heading"
             className="mt-1 text-sm font-semibold text-[#f4f8ff]"
           >
-            Enter a real floor-plane distance
+            Measure D1 to D2 on the same floor plane
           </h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9eb2cf]">
-            Use meters between two visible marks on the same calibrated floor plane.
+            The runtime uses destination points D1 and D2 as the scale segment.
+            S1 and S2 are the same two marks in the camera still.
+          </p>
+          <div className="mt-3 grid gap-2 text-sm text-[#c7d5eb] lg:grid-cols-3">
+            <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              Put S1 and S2 on two fixed floor marks you can physically measure.
+            </p>
+            <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              Draw those same marks as D1 and D2 on the world plane.
+            </p>
+            <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              Enter the real D1 to D2 distance in meters.
+            </p>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-[#8ea4c7]">
+            No third still capture is needed. Refresh the analytics still after saving
+            only to verify the points still line up with the real video frame.
           </p>
         </div>
         <div className="grid gap-2 text-sm text-[#d8e2f2]">
@@ -123,6 +139,10 @@ export function HomographyEditor({
             value={refDistanceM}
             onChange={(event) => updateRefDistance(event.target.value)}
           />
+          <p className="text-xs leading-5 text-[#8ea4c7]">
+            Scale segment: D1-D2. If your known length is another side, make that
+            side points 1 and 2 before saving.
+          </p>
         </div>
       </section>
       <div className="grid gap-4 xl:grid-cols-2">

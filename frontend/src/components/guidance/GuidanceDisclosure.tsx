@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Info, X } from "lucide-react";
 
 import type {
@@ -28,6 +29,7 @@ export function GuidanceDisclosure({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLSpanElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const panelId = `${id}-panel`;
   const triggerId = `${id}-trigger`;
   const title = isFieldGuidance(guidance) ? guidance.label : guidance.title;
@@ -55,6 +57,8 @@ export function GuidanceDisclosure({
         event.target instanceof Node
         && rootRef.current
         && !rootRef.current.contains(event.target)
+        && panelRef.current
+        && !panelRef.current.contains(event.target)
       ) {
         setOpen(false);
       }
@@ -68,28 +72,19 @@ export function GuidanceDisclosure({
     };
   }, [open]);
 
-  return (
-    <span ref={rootRef} className="relative inline-flex align-middle">
-      <span id={id} className="sr-only">
-        {summary}
-      </span>
-      <button
-        id={triggerId}
-        ref={triggerRef}
-        type="button"
-        className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-[#8fd3ff] transition hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8fd3ff]"
-        aria-controls={panelId}
-        aria-expanded={open}
-        aria-label={`${open ? "Hide" : "Show"} ${label} help`}
-        onClick={() => setOpen((current) => !current)}
+  const portalRoot = typeof document === "undefined" ? null : document.body;
+  const panel = open && portalRoot
+    ? createPortal(
+      <div
+        className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#02050a]/70 p-4 pt-6 backdrop-blur-sm sm:pt-20"
+        data-testid={`${id}-portal`}
       >
-        <Info className="size-3.5" aria-hidden="true" />
-      </button>
-      {open ? (
         <div
           id={panelId}
-          className="fixed left-4 right-4 top-6 z-50 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-lg border border-white/10 bg-[#07101b] p-4 text-left text-xs leading-5 text-[#9fb2cf] shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)] sm:left-1/2 sm:right-auto sm:top-20 sm:w-[min(42rem,calc(100vw-2rem))] sm:max-h-[calc(100vh-8rem)] sm:-translate-x-1/2"
+          ref={panelRef}
+          className="max-h-[calc(100dvh-3rem)] w-full max-w-[42rem] overflow-y-auto rounded-lg border border-white/10 bg-[#07101b] p-4 text-left text-xs leading-5 text-[#9fb2cf] shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)] sm:max-h-[calc(100vh-8rem)]"
           role="dialog"
+          aria-modal="true"
           aria-label={`${label} help`}
         >
           <div className="flex items-start justify-between gap-3">
@@ -177,7 +172,31 @@ export function GuidanceDisclosure({
             </div>
           ) : null}
         </div>
-      ) : null}
-    </span>
+      </div>,
+      portalRoot,
+    )
+    : null;
+
+  return (
+    <>
+      <span ref={rootRef} className="relative inline-flex align-middle">
+        <span id={id} className="sr-only">
+          {summary}
+        </span>
+        <button
+          id={triggerId}
+          ref={triggerRef}
+          type="button"
+          className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-[#8fd3ff] transition hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8fd3ff]"
+          aria-controls={panelId}
+          aria-expanded={open}
+          aria-label={`${open ? "Hide" : "Show"} ${label} help`}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <Info className="size-3.5" aria-hidden="true" />
+        </button>
+      </span>
+      {panel}
+    </>
   );
 }
