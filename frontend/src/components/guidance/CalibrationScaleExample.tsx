@@ -32,97 +32,70 @@ export function CalibrationScaleExample({
 
         <g aria-label="Camera still source points">
           <rect
-            x="26"
+            x="24"
             y="28"
-            width="338"
-            height="246"
+            width="340"
+            height="248"
             rx="18"
             fill="#081421"
             stroke="#284066"
           />
-          <text x="50" y="58" fill="#f4f8ff" fontSize="16" fontWeight="700">
-            Camera still
+          <text x="48" y="58" fill="#f4f8ff" fontSize="16" fontWeight="700">
+            1 Camera still
           </text>
-          <text x="50" y="78" fill="#8ea4c7" fontSize="12">
+          <text x="48" y="78" fill="#8ea4c7" fontSize="12">
             Source pixels S1-S4
           </text>
 
           <polygon
-            points="62,232 330,250 302,86 91,104"
+            points="70,224 328,238 304,92 104,106"
             fill="#122339"
             stroke="#5ea8ff"
             strokeWidth="2"
           />
           <path
-            d="M78 212 L306 229 M82 176 L300 192 M88 140 L294 156"
+            d="M84 204 L314 216 M88 166 L310 178 M94 130 L306 142 M112 218 L112 112 M178 222 L170 104 M244 228 L232 98"
+            fill="none"
             stroke="#4d7cad"
             strokeDasharray="6 8"
-            strokeWidth="1.5"
+            strokeWidth="1.4"
             opacity="0.58"
           />
           <path
-            d="M98 222 L96 112 M164 228 L158 106 M224 236 L212 100 M288 240 L274 94"
-            stroke="#86bfff"
-            strokeDasharray="7 8"
-            strokeWidth="1.5"
-            opacity="0.62"
-          />
-          <path
-            d="M122 226 L115 110"
-            stroke="#e7edf8"
-            strokeDasharray="12 9"
-            strokeLinecap="round"
-            strokeWidth="4"
-          />
-          <path
-            d="M226 235 L210 101"
-            stroke="#e7edf8"
-            strokeDasharray="12 9"
-            strokeLinecap="round"
-            strokeWidth="4"
-            opacity="0.88"
-          />
-          <path
-            d="M74 222 L174 229"
+            d="M92 220 L202 224"
             stroke="#6ce3d0"
             strokeLinecap="round"
             strokeWidth="5"
           />
-          <text x="94" y="205" fill="#9ef8e7" fontSize="12" fontWeight="700">
-            known physical span
-          </text>
           <path
-            d="M74 222 L74 206 M174 229 L174 213"
+            d="M92 220 L92 205 M202 224 L202 209"
             stroke="#6ce3d0"
             strokeLinecap="round"
             strokeWidth="3"
           />
-          <circle cx="74" cy="222" r="5" fill="#9ef8e7" />
-          <circle cx="174" cy="229" r="5" fill="#9ef8e7" />
-          <path
-            d="M120 146 C164 128 208 136 252 116"
-            fill="none"
-            stroke="#9fb2cf"
-            strokeDasharray="7 8"
-            strokeLinecap="round"
-            strokeWidth="2"
-            opacity="0.62"
-          />
-          <circle cx="206" cy="132" r="13" fill="#c5d6e8" opacity="0.13" />
-          <circle cx="206" cy="132" r="4.5" fill="#f4f8ff" stroke="#08111a" strokeWidth="1.5" />
+          <text
+            x="147"
+            y="203"
+            fill="#9ef8e7"
+            fontSize="12"
+            fontWeight="700"
+            textAnchor="middle"
+          >
+            measured physical span
+          </text>
 
-          <SourcePoint label="S1" x={74} y={222} />
-          <SourcePoint label="S2" x={174} y={229} />
-          <SourcePoint label="S3" x={288} y={92} />
-          <SourcePoint label="S4" x={98} y={112} />
+          <SourcePoint label="S1" x={92} y={220} />
+          <SourcePoint label="S2" x={202} y={224} />
+          <SourcePoint label="S3" x={316} y={94} />
+          <SourcePoint label="S4" x={104} y={106} />
         </g>
 
         <g aria-label="Drawn world plane destination points">
           <rect
             x="396"
             y="28"
-            width="338"
-            height="246"
+            width="340"
+            height="248"
             rx="18"
             fill="#0a1020"
             stroke="#3e3566"
@@ -135,9 +108,9 @@ export function CalibrationScaleExample({
           </text>
 
           <rect
-            x="440"
+            x="430"
             y="106"
-            width="250"
+            width="240"
             height="130"
             rx="8"
             fill="#17142a"
@@ -145,63 +118,44 @@ export function CalibrationScaleExample({
             strokeWidth="2"
           />
           <path
-            d="M503 106 L503 236 M565 106 L565 236 M628 106 L628 236 M440 150 L690 150 M440 193 L690 193"
+            d="M490 106 L490 236 M550 106 L550 236 M610 106 L610 236 M430 150 L670 150 M430 193 L670 193"
+            fill="none"
             stroke="#342a55"
             strokeWidth="2"
           />
           <path
-            d="M485 142 C528 124 584 136 640 118"
-            fill="none"
-            stroke="#9fb2cf"
-            strokeDasharray="7 8"
-            strokeLinecap="round"
-            strokeWidth="2"
-            opacity="0.62"
-          />
-          <rect x="522" y="126" width="48" height="24" rx="12" fill="#c5d6e8" opacity="0.13" />
-          <circle cx="546" cy="138" r="4.5" fill="#f4f8ff" stroke="#08111a" strokeWidth="1.5" />
-
-          <path
-            d="M440 236 L690 236"
+            d="M430 236 L670 236"
             stroke="#6ce3d0"
             strokeLinecap="round"
             strokeWidth="5"
           />
           <path
-            d="M440 250 L690 250"
+            d="M430 250 L670 250 M430 240 L430 260 M670 240 L670 260"
             stroke="#6ce3d0"
             strokeLinecap="round"
             strokeWidth="3"
           />
-          <path
-            d="M440 240 L440 260 M690 240 L690 260"
-            stroke="#6ce3d0"
-            strokeLinecap="round"
-            strokeWidth="4"
-          />
-          <circle cx="440" cy="236" r="5" fill="#9ef8e7" />
-          <circle cx="690" cy="236" r="5" fill="#9ef8e7" />
           <text
-            x="565"
+            x="550"
             y="268"
             fill="#9ef8e7"
             fontSize="13"
             fontWeight="700"
             textAnchor="middle"
           >
-            D1-D2 = 2.5 m
+            D1-D2 = measured meters
           </text>
 
-          <DestinationPoint label="D1" x={440} y={236} />
-          <DestinationPoint label="D2" x={690} y={236} />
-          <DestinationPoint label="D3" x={690} y={106} />
-          <DestinationPoint label="D4" x={440} y={106} />
+          <DestinationPoint label="D1" x={430} y={236} />
+          <DestinationPoint label="D2" x={670} y={236} />
+          <DestinationPoint label="D3" x={670} y={106} />
+          <DestinationPoint label="D4" x={430} y={106} />
         </g>
 
         <g aria-label="Mapping explanation">
           <path
             data-calibration-link="s1-d1"
-            d="M74 222 C230 310 330 310 440 236"
+            d="M92 220 C214 304 336 304 430 236"
             fill="none"
             stroke="#6ce3d0"
             strokeDasharray="8 8"
@@ -210,14 +164,20 @@ export function CalibrationScaleExample({
           />
           <path
             data-calibration-link="s2-d2"
-            d="M174 229 C330 334 500 334 690 236"
+            d="M202 224 C350 328 514 328 670 236"
             fill="none"
             stroke="#6ce3d0"
             strokeDasharray="8 8"
             strokeLinecap="round"
             strokeWidth="2"
-            opacity="0.65"
+            opacity="0.66"
           />
+        </g>
+
+        <g aria-label="Calibration rules">
+          <RuleChip x={40} text="S1 = D1; S2 = D2" />
+          <RuleChip x={280} text="Coordinates can differ" />
+          <RuleChip x={520} text="Enter the real D1-D2 span" />
         </g>
       </svg>
 
@@ -248,6 +208,32 @@ export function CalibrationScaleExample({
         </p>
       </figcaption>
     </figure>
+  );
+}
+
+function RuleChip({ text, x }: { text: string; x: number }) {
+  return (
+    <g>
+      <rect
+        x={x}
+        y="302"
+        width="200"
+        height="34"
+        rx="10"
+        fill="#0c1522"
+        stroke="#253a5b"
+      />
+      <text
+        x={x + 100}
+        y="323"
+        fill="#c8d7ee"
+        fontSize="12"
+        fontWeight="700"
+        textAnchor="middle"
+      >
+        {text}
+      </text>
+    </g>
   );
 }
 

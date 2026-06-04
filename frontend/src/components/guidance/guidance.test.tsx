@@ -133,8 +133,8 @@ test("CalibrationFlowIllustration can show region guidance", () => {
       name: /detection regions gate the analytics still/i,
     }),
   ).toBeInTheDocument();
-  const includeRegion = screen.getByText(/^include detection area$/i);
-  const exclusionRegion = screen.getByText(/^exclusion mask$/i);
+  const includeRegion = screen.getByText(/^include area$/i);
+  const exclusionRegion = screen.getByText(/^exclude mask$/i);
   expect(includeRegion).toBeInTheDocument();
   expect(exclusionRegion).toBeInTheDocument();
   expect(
@@ -160,8 +160,8 @@ test("CalibrationFlowIllustration can show event boundary guidance", () => {
       name: /event lines and zones use the analytics still/i,
     }),
   ).toBeInTheDocument();
-  expect(screen.getByText(/^line crossing$/i)).toBeInTheDocument();
-  expect(screen.getByText(/^polygon event zone$/i)).toBeInTheDocument();
+  expect(screen.getByText(/^line boundary$/i)).toBeInTheDocument();
+  expect(screen.getByText(/^event zone$/i)).toBeInTheDocument();
   expect(screen.getAllByText(/crossing event/i).length).toBeGreaterThan(0);
   expect(screen.getByText(/enter\/exit event/i)).toBeInTheDocument();
   expect(container.querySelector("[data-boundary='line-crossing']")).toBeInTheDocument();
@@ -196,11 +196,11 @@ test("CalibrationFlowIllustration uses neutral tracked anchors for region guidan
   expect(container.querySelector("[data-scene-glyph='animal']")).not.toBeInTheDocument();
 });
 
-test("CalibrationFlowIllustration separates event annotation labels with leaders", () => {
+test("CalibrationFlowIllustration uses external event annotation rails", () => {
   const { container } = render(<CalibrationFlowIllustration mode="boundaries" />);
 
   const labelIds = Array.from(
-    container.querySelectorAll("[data-annotation-label]"),
+    container.querySelectorAll("[data-annotation-rail]"),
   ).map((label) => label.getAttribute("data-annotation-label"));
 
   expect(labelIds).toEqual(
@@ -208,20 +208,20 @@ test("CalibrationFlowIllustration separates event annotation labels with leaders
       "line-crossing",
       "crossing-event",
       "event-zone",
-      "enter-exit-event",
       "tracked-anchor",
       "object-path",
     ]),
   );
-  expect(container.querySelectorAll("[data-label-leader]").length).toBeGreaterThanOrEqual(4);
+  expect(container.querySelectorAll("[data-scene-callout]").length).toBeGreaterThanOrEqual(5);
+  expect(container.querySelectorAll("[data-label-leader]").length).toBe(0);
   expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
 });
 
-test("CalibrationFlowIllustration separates detection annotation labels with leaders", () => {
+test("CalibrationFlowIllustration uses external detection annotation rails", () => {
   const { container } = render(<CalibrationFlowIllustration mode="regions" />);
 
   const labelIds = Array.from(
-    container.querySelectorAll("[data-annotation-label]"),
+    container.querySelectorAll("[data-annotation-rail]"),
   ).map((label) => label.getAttribute("data-annotation-label"));
 
   expect(labelIds).toEqual(
@@ -232,7 +232,8 @@ test("CalibrationFlowIllustration separates detection annotation labels with lea
       "object-path",
     ]),
   );
-  expect(container.querySelectorAll("[data-label-leader]").length).toBeGreaterThanOrEqual(4);
+  expect(container.querySelectorAll("[data-scene-callout]").length).toBeGreaterThanOrEqual(4);
+  expect(container.querySelectorAll("[data-label-leader]").length).toBe(0);
   expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
 });
 
@@ -259,12 +260,14 @@ test("CalibrationScaleExample maps S1 to D1 and S2 to D2", () => {
   ).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/\b(parking|bay|car|vehicle|person)\b/i);
   expect(container.querySelectorAll("[data-reference-mark]").length).toBeGreaterThanOrEqual(4);
+  expect(screen.getByText(/coordinates can differ/i)).toBeInTheDocument();
+  expect(screen.getByText(/enter the real d1-d2 span/i)).toBeInTheDocument();
   expect(
     container.querySelector("[data-calibration-link='s1-d1']"),
-  ).toHaveAttribute("d", expect.stringMatching(/^M74 222 C.*440 236$/));
+  ).toHaveAttribute("d", expect.stringMatching(/^M92 220 C.*430 236$/));
   expect(
     container.querySelector("[data-calibration-link='s2-d2']"),
-  ).toHaveAttribute("d", expect.stringMatching(/^M174 229 C.*690 236$/));
+  ).toHaveAttribute("d", expect.stringMatching(/^M202 224 C.*670 236$/));
 });
 
 test("CalibrationScaleExample labels destination as a drawn plane", () => {
