@@ -542,7 +542,9 @@ describe("CameraWizard", () => {
     expect(screen.queryByText(/people or vehicles/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /show calibration help/i }));
-    expect(screen.getByText(/source points map to top-down points/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /source points map to top-down points/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/different plane or outside the marked area/i),
     ).toBeInTheDocument();

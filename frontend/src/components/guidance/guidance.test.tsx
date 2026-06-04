@@ -153,7 +153,9 @@ test("CalibrationFlowIllustration can show region guidance", () => {
 });
 
 test("CalibrationFlowIllustration can show event boundary guidance", () => {
-  const { container } = render(<CalibrationFlowIllustration mode="boundaries" />);
+  const { container } = render(
+    <CalibrationFlowIllustration mode="boundaries" />,
+  );
 
   expect(
     screen.getByRole("img", {
@@ -164,22 +166,42 @@ test("CalibrationFlowIllustration can show event boundary guidance", () => {
   expect(screen.getByText(/^event zone$/i)).toBeInTheDocument();
   expect(screen.getAllByText(/crossing event/i).length).toBeGreaterThan(0);
   expect(screen.getByText(/enter\/exit event/i)).toBeInTheDocument();
-  expect(container.querySelector("[data-boundary='line-crossing']")).toBeInTheDocument();
-  expect(container.querySelector("[data-boundary='event-zone']")).toBeInTheDocument();
+  expect(
+    container.querySelector("[data-boundary='line-crossing']"),
+  ).toBeInTheDocument();
+  expect(
+    container.querySelector("[data-boundary='event-zone']"),
+  ).toBeInTheDocument();
 });
 
 test("CalibrationFlowIllustration uses neutral tracked anchors for event guidance", () => {
-  const { container } = render(<CalibrationFlowIllustration mode="boundaries" />);
+  const { container } = render(
+    <CalibrationFlowIllustration mode="boundaries" />,
+  );
 
   expect(screen.getByText(/tracked anchor/i)).toBeInTheDocument();
   expect(screen.getByText(/object path/i)).toBeInTheDocument();
-  expect(container.querySelectorAll("[data-track-anchor]").length).toBeGreaterThanOrEqual(3);
-  expect(container.querySelectorAll("[data-motion-path]").length).toBeGreaterThanOrEqual(2);
-  expect(container.querySelectorAll("[data-object-envelope]").length).toBeGreaterThanOrEqual(2);
-  expect(container.querySelector("[data-scene-glyph='vehicle']")).not.toBeInTheDocument();
-  expect(container.querySelector("[data-scene-glyph='person']")).not.toBeInTheDocument();
-  expect(container.querySelector("[data-scene-glyph='boat']")).not.toBeInTheDocument();
-  expect(container.querySelector("[data-scene-glyph='animal']")).not.toBeInTheDocument();
+  expect(
+    container.querySelectorAll("[data-track-anchor]").length,
+  ).toBeGreaterThanOrEqual(3);
+  expect(
+    container.querySelectorAll("[data-motion-path]").length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(
+    container.querySelectorAll("[data-object-envelope]").length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(
+    container.querySelector("[data-scene-glyph='vehicle']"),
+  ).not.toBeInTheDocument();
+  expect(
+    container.querySelector("[data-scene-glyph='person']"),
+  ).not.toBeInTheDocument();
+  expect(
+    container.querySelector("[data-scene-glyph='boat']"),
+  ).not.toBeInTheDocument();
+  expect(
+    container.querySelector("[data-scene-glyph='animal']"),
+  ).not.toBeInTheDocument();
 });
 
 test("CalibrationFlowIllustration uses neutral tracked anchors for region guidance", () => {
@@ -187,17 +209,33 @@ test("CalibrationFlowIllustration uses neutral tracked anchors for region guidan
 
   expect(screen.getByText(/tracked anchor/i)).toBeInTheDocument();
   expect(screen.getByText(/object path/i)).toBeInTheDocument();
-  expect(container.querySelectorAll("[data-track-anchor]").length).toBeGreaterThanOrEqual(3);
-  expect(container.querySelectorAll("[data-motion-path]").length).toBeGreaterThanOrEqual(2);
-  expect(container.querySelectorAll("[data-object-envelope]").length).toBeGreaterThanOrEqual(2);
-  expect(container.querySelector("[data-scene-glyph='vehicle']")).not.toBeInTheDocument();
-  expect(container.querySelector("[data-scene-glyph='person']")).not.toBeInTheDocument();
-  expect(container.querySelector("[data-scene-glyph='boat']")).not.toBeInTheDocument();
-  expect(container.querySelector("[data-scene-glyph='animal']")).not.toBeInTheDocument();
+  expect(
+    container.querySelectorAll("[data-track-anchor]").length,
+  ).toBeGreaterThanOrEqual(3);
+  expect(
+    container.querySelectorAll("[data-motion-path]").length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(
+    container.querySelectorAll("[data-object-envelope]").length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(
+    container.querySelector("[data-scene-glyph='vehicle']"),
+  ).not.toBeInTheDocument();
+  expect(
+    container.querySelector("[data-scene-glyph='person']"),
+  ).not.toBeInTheDocument();
+  expect(
+    container.querySelector("[data-scene-glyph='boat']"),
+  ).not.toBeInTheDocument();
+  expect(
+    container.querySelector("[data-scene-glyph='animal']"),
+  ).not.toBeInTheDocument();
 });
 
 test("CalibrationFlowIllustration uses external event annotation rails", () => {
-  const { container } = render(<CalibrationFlowIllustration mode="boundaries" />);
+  const { container } = render(
+    <CalibrationFlowIllustration mode="boundaries" />,
+  );
 
   const labelIds = Array.from(
     container.querySelectorAll("[data-annotation-rail]"),
@@ -209,10 +247,11 @@ test("CalibrationFlowIllustration uses external event annotation rails", () => {
       "crossing-event",
       "event-zone",
       "tracked-anchor",
-      "object-path",
     ]),
   );
-  expect(container.querySelectorAll("[data-scene-callout]").length).toBeGreaterThanOrEqual(5);
+  expect(
+    container.querySelectorAll("[data-scene-callout]").length,
+  ).toBeGreaterThanOrEqual(4);
   expect(container.querySelectorAll("[data-label-leader]").length).toBe(0);
   expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
 });
@@ -229,10 +268,11 @@ test("CalibrationFlowIllustration uses external detection annotation rails", () 
       "include-region",
       "exclusion-region",
       "tracked-anchor",
-      "object-path",
     ]),
   );
-  expect(container.querySelectorAll("[data-scene-callout]").length).toBeGreaterThanOrEqual(4);
+  expect(
+    container.querySelectorAll("[data-scene-callout]").length,
+  ).toBeGreaterThanOrEqual(3);
   expect(container.querySelectorAll("[data-label-leader]").length).toBe(0);
   expect(screen.queryByText(/operating space/i)).not.toBeInTheDocument();
 });
@@ -256,10 +296,16 @@ test("CalibrationScaleExample maps S1 to D1 and S2 to D2", () => {
   const { container } = render(<CalibrationScaleExample />);
 
   expect(
-    screen.getByRole("img", { name: /calibrated span measured distance example/i }),
+    screen.getByRole("img", {
+      name: /calibrated span measured distance example/i,
+    }),
   ).toBeInTheDocument();
-  expect(container.textContent).not.toMatch(/\b(parking|bay|car|vehicle|person)\b/i);
-  expect(container.querySelectorAll("[data-reference-mark]").length).toBeGreaterThanOrEqual(4);
+  expect(container.textContent).not.toMatch(
+    /\b(parking|bay|car|vehicle|person)\b/i,
+  );
+  expect(
+    container.querySelectorAll("[data-reference-mark]").length,
+  ).toBeGreaterThanOrEqual(4);
   expect(screen.getByText(/coordinates can differ/i)).toBeInTheDocument();
   expect(screen.getByText(/enter the real d1-d2 span/i)).toBeInTheDocument();
   expect(

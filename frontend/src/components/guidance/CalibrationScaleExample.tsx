@@ -4,10 +4,12 @@ type CalibrationScaleExampleProps = {
   compact?: boolean;
 };
 
+const SVG_FONT_FAMILY =
+  'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
 export function CalibrationScaleExample({
   compact = false,
 }: CalibrationScaleExampleProps) {
-  const titleId = useId();
   const descId = useId();
 
   return (
@@ -17,12 +19,16 @@ export function CalibrationScaleExample({
       }`}
     >
       <svg
-        aria-labelledby={`${titleId} ${descId}`}
+        aria-describedby={descId}
+        aria-label="Calibrated span measured distance example"
         className="block h-auto w-full"
+        height="360"
         role="img"
+        shapeRendering="geometricPrecision"
+        xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 760 360"
+        width="760"
       >
-        <title id={titleId}>Calibrated span measured distance example</title>
         <desc id={descId}>
           A camera still and a drawn top-down world plane show the same known
           mark-to-mark span used as the D1 to D2 measured distance.
@@ -40,10 +46,23 @@ export function CalibrationScaleExample({
             fill="#081421"
             stroke="#284066"
           />
-          <text x="48" y="58" fill="#f4f8ff" fontSize="16" fontWeight="700">
+          <text
+            x="48"
+            y="58"
+            fill="#f4f8ff"
+            fontFamily={SVG_FONT_FAMILY}
+            fontSize="16"
+            fontWeight="700"
+          >
             1 Camera still
           </text>
-          <text x="48" y="78" fill="#8ea4c7" fontSize="12">
+          <text
+            x="48"
+            y="78"
+            fill="#8ea4c7"
+            fontFamily={SVG_FONT_FAMILY}
+            fontSize="12"
+          >
             Source pixels S1-S4
           </text>
 
@@ -77,6 +96,7 @@ export function CalibrationScaleExample({
             x="147"
             y="203"
             fill="#9ef8e7"
+            fontFamily={SVG_FONT_FAMILY}
             fontSize="12"
             fontWeight="700"
             textAnchor="middle"
@@ -100,10 +120,23 @@ export function CalibrationScaleExample({
             fill="#0a1020"
             stroke="#3e3566"
           />
-          <text x="420" y="58" fill="#f4f8ff" fontSize="16" fontWeight="700">
+          <text
+            x="420"
+            y="58"
+            fill="#f4f8ff"
+            fontFamily={SVG_FONT_FAMILY}
+            fontSize="16"
+            fontWeight="700"
+          >
             Drawn world plane
           </text>
-          <text x="420" y="78" fill="#aa9ad8" fontSize="12">
+          <text
+            x="420"
+            y="78"
+            fill="#aa9ad8"
+            fontFamily={SVG_FONT_FAMILY}
+            fontSize="12"
+          >
             Operator sketch D1-D4
           </text>
 
@@ -139,6 +172,7 @@ export function CalibrationScaleExample({
             x="550"
             y="268"
             fill="#9ef8e7"
+            fontFamily={SVG_FONT_FAMILY}
             fontSize="13"
             fontWeight="700"
             textAnchor="middle"
@@ -227,6 +261,7 @@ function RuleChip({ text, x }: { text: string; x: number }) {
         x={x + 100}
         y="323"
         fill="#c8d7ee"
+        fontFamily={SVG_FONT_FAMILY}
         fontSize="12"
         fontWeight="700"
         textAnchor="middle"
@@ -253,6 +288,7 @@ function SourcePoint({ label, x, y }: { label: string; x: number; y: number }) {
         x={x}
         y={y + 5}
         fill="#f4f8ff"
+        fontFamily={SVG_FONT_FAMILY}
         fontSize="14"
         fontWeight="700"
         textAnchor="middle"
@@ -287,6 +323,7 @@ function DestinationPoint({
         x={x}
         y={y + 5}
         fill="#f7f2ff"
+        fontFamily={SVG_FONT_FAMILY}
         fontSize="14"
         fontWeight="700"
         textAnchor="middle"

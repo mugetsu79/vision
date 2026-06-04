@@ -11,13 +11,16 @@ type IllustrationCopy = {
   caption: string;
 };
 
-type RailItem = {
+type LegendItem = {
   id: string;
   number: string;
   label: string;
   detail: string;
   tone: "blue" | "green" | "amber" | "neutral";
 };
+
+const SVG_FONT_FAMILY =
+  'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 const sourcePoints = [
   { label: "S1", x: 52, y: 74 },
@@ -33,23 +36,12 @@ const destinationPoints = [
   { label: "D4", x: 260, y: 150 },
 ];
 
-const neutralAnchors = [
-  { id: "alpha", x: 78, y: 140, envelope: "circle" },
-  { id: "bravo", x: 154, y: 122, envelope: "capsule" },
-  { id: "charlie", x: 220, y: 150, envelope: "diamond" },
-] as const;
-
-const neutralMotionPaths = [
-  "M48 170 C84 146 112 136 150 148",
-  "M130 106 C164 124 192 140 226 146",
-] as const;
-
-const eventRails: RailItem[] = [
+const eventLegend: LegendItem[] = [
   {
     id: "line-crossing",
     number: "1",
     label: "Line boundary",
-    detail: "crossing events",
+    detail: "crossing trigger",
     tone: "green",
   },
   {
@@ -70,48 +62,64 @@ const eventRails: RailItem[] = [
     id: "tracked-anchor",
     number: "4",
     label: "Tracked anchor",
-    detail: "event position",
-    tone: "neutral",
-  },
-  {
-    id: "object-path",
-    number: "5",
-    label: "Object path",
-    detail: "motion path",
+    detail: "object path point",
     tone: "neutral",
   },
 ];
 
-const regionRails: RailItem[] = [
+const regionLegend: LegendItem[] = [
   {
     id: "include-region",
     number: "1",
     label: "Include area",
-    detail: "detections in scope",
+    detail: "detections stay eligible",
     tone: "green",
   },
   {
     id: "exclusion-region",
     number: "2",
     label: "Exclude mask",
-    detail: "noisy motion off",
+    detail: "noisy motion ignored",
     tone: "amber",
   },
   {
     id: "tracked-anchor",
     number: "3",
     label: "Tracked anchor",
-    detail: "after masking",
-    tone: "neutral",
-  },
-  {
-    id: "object-path",
-    number: "4",
-    label: "Object path",
-    detail: "through still",
+    detail: "object path after mask",
     tone: "neutral",
   },
 ];
+
+const toneColors = {
+  blue: {
+    bg: "#0d2235",
+    fill: "#102339",
+    stroke: "#8fd3ff",
+    text: "#d3efff",
+  },
+  green: {
+    bg: "#092823",
+    fill: "#0a2a2c",
+    stroke: "#6fe0c5",
+    text: "#c3fff1",
+  },
+  amber: {
+    bg: "#2a1c0e",
+    fill: "#352414",
+    stroke: "#ffb86b",
+    text: "#ffe2ad",
+  },
+  neutral: {
+    bg: "#111b2d",
+    fill: "#162235",
+    stroke: "#9fb2cf",
+    text: "#d8e2f2",
+  },
+} satisfies Record<
+  LegendItem["tone"],
+  { bg: string; fill: string; stroke: string; text: string }
+>;
 
 const illustrationCopy = {
   "source-destination": {
@@ -140,29 +148,6 @@ const illustrationCopy = {
   IllustrationCopy
 >;
 
-const toneColors = {
-  blue: {
-    fill: "#102339",
-    stroke: "#8fd3ff",
-    text: "#c5e9ff",
-  },
-  green: {
-    fill: "#0a2a2c",
-    stroke: "#6fe0c5",
-    text: "#bcefe3",
-  },
-  amber: {
-    fill: "#352414",
-    stroke: "#ffb86b",
-    text: "#ffd9a1",
-  },
-  neutral: {
-    fill: "#162235",
-    stroke: "#9fb2cf",
-    text: "#d8e2f2",
-  },
-} satisfies Record<RailItem["tone"], { fill: string; stroke: string; text: string }>;
-
 export function CalibrationFlowIllustration({
   mode = "source-destination",
   animated = true,
@@ -174,11 +159,7 @@ export function CalibrationFlowIllustration({
 
   if (mode === "boundaries" || mode === "regions") {
     return (
-      <SceneAuthoringIllustration
-        copy={copy}
-        idPrefix={idPrefix}
-        mode={mode}
-      />
+      <SceneAuthoringIllustration copy={copy} idPrefix={idPrefix} mode={mode} />
     );
   }
 
@@ -188,9 +169,11 @@ export function CalibrationFlowIllustration({
         role="img"
         aria-label={copy.title}
         className="h-auto w-full"
+        height="210"
+        xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 400 210"
+        width="400"
       >
-        <title>{copy.title}</title>
         <desc>{copy.description}</desc>
 
         <defs>
@@ -210,7 +193,13 @@ export function CalibrationFlowIllustration({
           stroke="#6cb0ff"
           strokeWidth="2"
         />
-        <text x="24" y="28" fill="#d8e2f2" fontSize="11">
+        <text
+          x="24"
+          y="28"
+          fill="#d8e2f2"
+          fontFamily={SVG_FONT_FAMILY}
+          fontSize="11"
+        >
           Camera image
         </text>
 
@@ -224,7 +213,13 @@ export function CalibrationFlowIllustration({
           stroke="#b28fff"
           strokeWidth="2"
         />
-        <text x="248" y="28" fill="#d8e2f2" fontSize="11">
+        <text
+          x="248"
+          y="28"
+          fill="#d8e2f2"
+          fontFamily={SVG_FONT_FAMILY}
+          fontSize="11"
+        >
           Top-down plane
         </text>
 
@@ -276,9 +271,30 @@ export function CalibrationFlowIllustration({
           stroke="#6fe0c5"
           strokeWidth="3"
         />
-        <line x1="260" x2="260" y1="177" y2="191" stroke="#6fe0c5" strokeWidth="2" />
-        <line x1="342" x2="342" y1="177" y2="191" stroke="#6fe0c5" strokeWidth="2" />
-        <text x="301" y="202" textAnchor="middle" fill="#bcefe3" fontSize="11">
+        <line
+          x1="260"
+          x2="260"
+          y1="177"
+          y2="191"
+          stroke="#6fe0c5"
+          strokeWidth="2"
+        />
+        <line
+          x1="342"
+          x2="342"
+          y1="177"
+          y2="191"
+          stroke="#6fe0c5"
+          strokeWidth="2"
+        />
+        <text
+          x="301"
+          y="202"
+          textAnchor="middle"
+          fill="#bcefe3"
+          fontFamily={SVG_FONT_FAMILY}
+          fontSize="11"
+        >
           D1-D2 measured distance
         </text>
       </svg>
@@ -299,113 +315,183 @@ function SceneAuthoringIllustration({
   mode: "boundaries" | "regions";
 }) {
   const stillGradientId = `${idPrefix}-analytics-still`;
+  const sceneGlowId = `${idPrefix}-scene-glow`;
   const includeGradientId = `${idPrefix}-include-region`;
   const exclusionGradientId = `${idPrefix}-exclusion-region`;
   const eventZoneGradientId = `${idPrefix}-event-zone`;
-  const rails = mode === "boundaries" ? eventRails : regionRails;
+  const legend = mode === "boundaries" ? eventLegend : regionLegend;
 
   return (
-    <figure className="rounded-lg border border-white/10 bg-[#050b13] p-3">
-      <svg
-        role="img"
-        aria-label={copy.title}
-        className="h-auto w-full"
-        viewBox="0 0 440 260"
-      >
-        <title>{copy.title}</title>
-        <desc>{copy.description}</desc>
+    <figure className="rounded-lg border border-white/10 bg-[#050b13] p-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_15rem]">
+        <div className="min-w-0 rounded-[0.9rem] border border-[#253a5b] bg-[#06101a] p-3">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <p className="text-sm font-semibold text-[#e6eefc]">
+              Analytics still
+            </p>
+            <p className="text-[0.68rem] font-medium uppercase tracking-[0.18em] text-[#7f93b2]">
+              camera coordinates
+            </p>
+          </div>
+          <svg
+            role="img"
+            aria-label={copy.title}
+            className="block h-auto w-full overflow-visible"
+            height="360"
+            shapeRendering="geometricPrecision"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 640 360"
+            width="640"
+          >
+            <desc>{copy.description}</desc>
+            <defs>
+              <radialGradient id={sceneGlowId} cx="48%" cy="52%" r="62%">
+                <stop offset="0%" stopColor="#1c3352" stopOpacity="0.5" />
+                <stop offset="70%" stopColor="#0c1829" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="#06101a" stopOpacity="0" />
+              </radialGradient>
+              <linearGradient id={stillGradientId} x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0%" stopColor="#132a44" />
+                <stop offset="62%" stopColor="#0d2034" />
+                <stop offset="100%" stopColor="#071321" />
+              </linearGradient>
+              <linearGradient
+                id={eventZoneGradientId}
+                x1="0"
+                x2="1"
+                y1="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor="#8fd3ff" stopOpacity="0.34" />
+                <stop offset="100%" stopColor="#8fd3ff" stopOpacity="0.08" />
+              </linearGradient>
+              <linearGradient
+                id={includeGradientId}
+                x1="0"
+                x2="1"
+                y1="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor="#7ee7a8" stopOpacity="0.34" />
+                <stop offset="100%" stopColor="#7ee7a8" stopOpacity="0.1" />
+              </linearGradient>
+              <linearGradient
+                id={exclusionGradientId}
+                x1="0"
+                x2="1"
+                y1="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor="#ffb86b" stopOpacity="0.36" />
+                <stop offset="100%" stopColor="#ffb86b" stopOpacity="0.1" />
+              </linearGradient>
+              <clipPath id={`${idPrefix}-still-clip`}>
+                <path d="M76 82 L528 58 L568 280 L48 304 Z" />
+              </clipPath>
+            </defs>
 
-        <defs>
-          <linearGradient id={stillGradientId} x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#10233a" />
-            <stop offset="62%" stopColor="#0a1826" />
-            <stop offset="100%" stopColor="#060b12" />
-          </linearGradient>
-          <linearGradient id={eventZoneGradientId} x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#8fd3ff" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#8fd3ff" stopOpacity="0.08" />
-          </linearGradient>
-          <linearGradient id={includeGradientId} x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#7ee7a8" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#7ee7a8" stopOpacity="0.08" />
-          </linearGradient>
-          <linearGradient id={exclusionGradientId} x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#ffb86b" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#ffb86b" stopOpacity="0.08" />
-          </linearGradient>
-        </defs>
-
-        <rect x="8" y="12" width="424" height="236" rx="12" fill="#050b13" />
-        <text x="22" y="31" fill="#d8e2f2" fontSize="11" fontWeight="700">
-          Analytics still
-        </text>
-        <text x="278" y="31" fill="#8ea4c7" fontSize="9">
-          annotation rail
-        </text>
-
-        <g aria-label="Neutral camera analytics still">
-          <path
-            d="M26 72 L238 60 L252 184 L16 194 Z"
-            fill={`url(#${stillGradientId})`}
-            stroke="#314966"
-            strokeWidth="2"
-          />
-          <path
-            d="M58 78 L50 186 M124 72 L128 188 M194 68 L212 186 M24 146 L248 138 M36 104 L240 98"
-            fill="none"
-            stroke="#7b91af"
-            strokeDasharray="5 7"
-            strokeWidth="1.4"
-            opacity="0.55"
-          />
-
-          {mode === "boundaries" ? (
-            <EventGeometry eventZoneGradientId={eventZoneGradientId} />
-          ) : (
-            <RegionGeometry
-              exclusionGradientId={exclusionGradientId}
-              includeGradientId={includeGradientId}
+            <rect x="0" y="0" width="640" height="360" rx="18" fill="#06101a" />
+            <ellipse
+              cx="300"
+              cy="190"
+              rx="300"
+              ry="172"
+              fill={`url(#${sceneGlowId})`}
             />
-          )}
+            <path
+              d="M76 82 L528 58 L568 280 L48 304 Z"
+              fill={`url(#${stillGradientId})`}
+              stroke="#355372"
+              strokeWidth="3"
+              vectorEffect="non-scaling-stroke"
+            />
+            <g clipPath={`url(#${idPrefix}-still-clip)`}>
+              <path
+                d="M124 88 L104 300 M256 72 L260 302 M392 66 L432 300 M64 176 L560 164 M82 228 L570 218"
+                fill="none"
+                stroke="#7b91af"
+                strokeDasharray="9 14"
+                strokeWidth="2"
+                opacity="0.5"
+                vectorEffect="non-scaling-stroke"
+              />
+              <path
+                d="M86 250 C150 204 214 208 272 218 C330 228 386 230 484 198"
+                data-motion-path="path-1"
+                fill="none"
+                stroke="#9fb2cf"
+                strokeDasharray="9 13"
+                strokeLinecap="round"
+                strokeWidth="3"
+                opacity="0.7"
+                vectorEffect="non-scaling-stroke"
+              />
+              <path
+                d="M260 156 C318 194 374 224 486 236"
+                data-motion-path="path-2"
+                fill="none"
+                stroke="#9fb2cf"
+                strokeDasharray="9 13"
+                strokeLinecap="round"
+                strokeWidth="3"
+                opacity="0.62"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
 
-          <NeutralTrackLayer />
-        </g>
+            {mode === "boundaries" ? (
+              <EventGeometry eventZoneGradientId={eventZoneGradientId} />
+            ) : (
+              <RegionGeometry
+                exclusionGradientId={exclusionGradientId}
+                includeGradientId={includeGradientId}
+              />
+            )}
 
-        <AnnotationRail items={rails} />
-      </svg>
-      <figcaption className="mt-2 text-xs leading-5 text-[#9fb2cf]">
+            <NeutralTrackLayer />
+          </svg>
+        </div>
+
+        <LegendPanel items={legend} mode={mode} />
+      </div>
+      <figcaption className="mt-4 border-t border-white/10 pt-3 text-sm leading-6 text-[#a8bad6]">
         {copy.caption}
       </figcaption>
     </figure>
   );
 }
 
-function EventGeometry({ eventZoneGradientId }: { eventZoneGradientId: string }) {
+function EventGeometry({
+  eventZoneGradientId,
+}: {
+  eventZoneGradientId: string;
+}) {
   return (
     <g>
       <line
         data-boundary="line-crossing"
-        x1="58"
-        x2="158"
-        y1="172"
-        y2="162"
+        x1="116"
+        x2="302"
+        y1="252"
+        y2="232"
         stroke="#6fe0c5"
         strokeLinecap="round"
-        strokeWidth="5"
+        strokeWidth="11"
+        vectorEffect="non-scaling-stroke"
       />
       <polygon
         data-boundary="event-zone"
-        points="176,98 236,104 246,162 164,170"
+        points="350,132 500,146 524,242 322,262"
         fill={`url(#${eventZoneGradientId})`}
         stroke="#8fd3ff"
         strokeLinejoin="round"
-        strokeWidth="2.4"
+        strokeWidth="4"
+        vectorEffect="non-scaling-stroke"
       />
-      <SceneCallout label="1" tone="green" x={54} y={156} />
-      <SceneCallout label="2" tone="green" x={116} y={148} />
-      <SceneCallout label="3" tone="blue" x={204} y={102} />
-      <SceneCallout label="4" tone="neutral" x={76} y={118} />
-      <SceneCallout label="5" tone="neutral" x={178} y={132} />
+      <SceneCallout label="1" tone="green" x={112} y={232} />
+      <SceneCallout label="2" tone="green" x={252} y={226} />
+      <SceneCallout label="3" tone="blue" x={422} y={150} />
+      <SceneCallout label="4" tone="neutral" x={174} y={180} />
     </g>
   );
 }
@@ -421,165 +507,154 @@ function RegionGeometry({
     <g>
       <polygon
         data-region="include"
-        points="52,104 184,92 224,170 42,184"
+        points="118,150 394,124 462,250 82,284"
         fill={`url(#${includeGradientId})`}
         stroke="#7ee7a8"
         strokeLinejoin="round"
-        strokeWidth="2.4"
+        strokeWidth="4"
+        vectorEffect="non-scaling-stroke"
       />
       <polygon
         data-region="exclusion"
-        points="198,108 240,104 248,150 204,156"
+        points="432,158 526,148 540,224 450,238"
         fill={`url(#${exclusionGradientId})`}
         stroke="#ffb86b"
-        strokeDasharray="6 5"
+        strokeDasharray="10 8"
         strokeLinejoin="round"
-        strokeWidth="2.4"
+        strokeWidth="4"
+        vectorEffect="non-scaling-stroke"
       />
-      <SceneCallout label="1" tone="green" x={70} y={112} />
-      <SceneCallout label="2" tone="amber" x={214} y={116} />
-      <SceneCallout label="3" tone="neutral" x={132} y={144} />
-      <SceneCallout label="4" tone="neutral" x={182} y={122} />
+      <SceneCallout label="1" tone="green" x={154} y={164} />
+      <SceneCallout label="2" tone="amber" x={470} y={174} />
+      <SceneCallout label="3" tone="neutral" x={300} y={218} />
     </g>
   );
 }
 
 function NeutralTrackLayer() {
   return (
-    <g data-scene-glyph="neutral-tracks" opacity="0.96">
-      {neutralMotionPaths.map((path, index) => (
-        <path
-          key={path}
-          data-motion-path={`path-${index + 1}`}
-          d={path}
-          fill="none"
-          stroke="#9fb2cf"
-          strokeDasharray="5 7"
-          strokeLinecap="round"
-          strokeWidth="1.8"
-          opacity="0.68"
+    <g data-scene-glyph="neutral-tracks">
+      <g>
+        <circle
+          data-object-envelope="alpha"
+          cx="172"
+          cy="212"
+          r="42"
+          fill="#c5d6e8"
+          opacity="0.12"
+          stroke="#c5d6e8"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
         />
-      ))}
-
-      {neutralAnchors.map((anchor) => (
-        <g key={anchor.id}>
-          {anchor.envelope === "capsule" ? (
-            <rect
-              data-object-envelope={anchor.id}
-              x={anchor.x - 19}
-              y={anchor.y - 9}
-              width="38"
-              height="18"
-              rx="9"
-              fill="#c5d6e8"
-              opacity="0.15"
-              stroke="#c5d6e8"
-              strokeWidth="1.4"
-            />
-          ) : null}
-          {anchor.envelope === "circle" ? (
-            <circle
-              data-object-envelope={anchor.id}
-              cx={anchor.x}
-              cy={anchor.y}
-              r="14"
-              fill="#c5d6e8"
-              opacity="0.14"
-              stroke="#c5d6e8"
-              strokeWidth="1.4"
-            />
-          ) : null}
-          {anchor.envelope === "diamond" ? (
-            <path
-              data-object-envelope={anchor.id}
-              d={`M${anchor.x} ${anchor.y - 15} L${anchor.x + 17} ${anchor.y} L${anchor.x} ${
-                anchor.y + 15
-              } L${anchor.x - 17} ${anchor.y} Z`}
-              fill="#c5d6e8"
-              opacity="0.14"
-              stroke="#c5d6e8"
-              strokeWidth="1.4"
-            />
-          ) : null}
-          <circle
-            data-track-anchor={anchor.id}
-            cx={anchor.x}
-            cy={anchor.y}
-            r="4.3"
-            fill="#f4f8ff"
-            stroke="#08111a"
-            strokeWidth="1.5"
-          />
-        </g>
-      ))}
+        <circle
+          data-track-anchor="alpha"
+          cx="172"
+          cy="212"
+          r="10"
+          fill="#f4f8ff"
+          stroke="#08111a"
+          strokeWidth="4"
+          vectorEffect="non-scaling-stroke"
+        />
+      </g>
+      <g>
+        <rect
+          data-object-envelope="bravo"
+          x="290"
+          y="154"
+          width="88"
+          height="42"
+          rx="21"
+          fill="#c5d6e8"
+          opacity="0.13"
+          stroke="#c5d6e8"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle
+          data-track-anchor="bravo"
+          cx="334"
+          cy="176"
+          r="10"
+          fill="#f4f8ff"
+          stroke="#08111a"
+          strokeWidth="4"
+          vectorEffect="non-scaling-stroke"
+        />
+      </g>
+      <g>
+        <path
+          data-object-envelope="charlie"
+          d="M474 190 L536 240 L474 290 L412 240 Z"
+          fill="#c5d6e8"
+          opacity="0.13"
+          stroke="#c5d6e8"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle
+          data-track-anchor="charlie"
+          cx="474"
+          cy="240"
+          r="10"
+          fill="#f4f8ff"
+          stroke="#08111a"
+          strokeWidth="4"
+          vectorEffect="non-scaling-stroke"
+        />
+      </g>
     </g>
   );
 }
 
-function AnnotationRail({ items }: { items: RailItem[] }) {
+function LegendPanel({
+  items,
+  mode,
+}: {
+  items: LegendItem[];
+  mode: "boundaries" | "regions";
+}) {
   return (
-    <g aria-label="Annotation rail">
-      <rect
-        x="270"
-        y="44"
-        width="154"
-        height="184"
-        rx="10"
-        fill="#07101b"
-        stroke="#253a5b"
-      />
-      {items.map((item, index) => {
-        const colors = toneColors[item.tone];
-        const y = 56 + index * 34;
-        return (
-          <g
-            key={item.id}
-            data-annotation-label={item.id}
-            data-annotation-rail=""
-          >
-            <rect
-              x="278"
-              y={y}
-              width="138"
-              height="28"
-              rx="7"
-              fill="#0c1522"
-              stroke="#253a5b"
-            />
-            <circle
-              cx="291"
-              cy={y + 14}
-              r="9"
-              fill={colors.fill}
-              stroke={colors.stroke}
-              strokeWidth="1.4"
-            />
-            <text
-              x="291"
-              y={y + 18}
-              textAnchor="middle"
-              fill="#f6faff"
-              fontSize="8"
-              fontWeight="700"
+    <aside className="rounded-[0.9rem] border border-[#284066] bg-[#07111d] p-3">
+      <p className="mb-3 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#8da3c2]">
+        {mode === "boundaries" ? "Event semantics" : "Detection mask order"}
+      </p>
+      <ol className="space-y-2">
+        {items.map((item) => {
+          const colors = toneColors[item.tone];
+          return (
+            <li
+              key={item.id}
+              data-annotation-label={item.id}
+              data-annotation-rail=""
+              className="grid grid-cols-[2.2rem_minmax(0,1fr)] items-center gap-2 rounded-[0.7rem] border border-[#284066] bg-[#0c1522] px-2.5 py-2"
             >
-              {item.number}
-            </text>
-            <text
-              x="304"
-              y={y + 12}
-              fill={colors.text}
-              fontSize="8.4"
-              fontWeight="700"
-            >
-              {item.label}
-            </text>
-            <text x="304" y={y + 23} fill="#9fb2cf" fontSize="7.2">
-              {item.detail}
-            </text>
-          </g>
-        );
-      })}
-    </g>
+              <span
+                className="grid size-8 place-items-center rounded-full border-2 text-sm font-bold"
+                style={{
+                  backgroundColor: colors.fill,
+                  borderColor: colors.stroke,
+                  color: "#f6faff",
+                }}
+              >
+                {item.number}
+              </span>
+              <span className="min-w-0">
+                <span
+                  className="block text-sm font-semibold leading-5"
+                  style={{ color: colors.text }}
+                >
+                  {item.label}
+                </span>
+                <span className="block text-xs leading-4 text-[#9fb2cf]">
+                  {item.detail}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </aside>
   );
 }
 
@@ -590,7 +665,7 @@ function SceneCallout({
   y,
 }: {
   label: string;
-  tone: RailItem["tone"];
+  tone: LegendItem["tone"];
   x: number;
   y: number;
 }) {
@@ -600,17 +675,19 @@ function SceneCallout({
       <circle
         cx={x}
         cy={y}
-        r="10"
+        r="23"
         fill={colors.fill}
         stroke={colors.stroke}
-        strokeWidth="1.7"
+        strokeWidth="5"
+        vectorEffect="non-scaling-stroke"
       />
       <text
         x={x}
-        y={y + 4}
+        y={y + 8}
         textAnchor="middle"
         fill="#f6faff"
-        fontSize="9.5"
+        fontFamily={SVG_FONT_FAMILY}
+        fontSize="24"
         fontWeight="700"
       >
         {label}
@@ -640,6 +717,7 @@ function PointMarker({
         y={y + 4}
         textAnchor="middle"
         fill="#eef6ff"
+        fontFamily={SVG_FONT_FAMILY}
         fontSize="10"
         fontWeight="700"
       >
