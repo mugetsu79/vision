@@ -88,7 +88,7 @@ export function GuidanceDisclosure({
       {open ? (
         <div
           id={panelId}
-          className="absolute left-0 top-8 z-30 w-[min(28rem,calc(100vw-2rem))] rounded-lg border border-white/10 bg-[#07101b] p-4 text-left text-xs leading-5 text-[#9fb2cf] shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)] sm:left-auto sm:right-0"
+          className="fixed left-4 right-4 top-6 z-50 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-lg border border-white/10 bg-[#07101b] p-4 text-left text-xs leading-5 text-[#9fb2cf] shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)] sm:left-1/2 sm:right-auto sm:top-20 sm:w-[min(42rem,calc(100vw-2rem))] sm:max-h-[calc(100vh-8rem)] sm:-translate-x-1/2"
           role="dialog"
           aria-label={`${label} help`}
         >

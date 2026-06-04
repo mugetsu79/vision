@@ -1442,8 +1442,8 @@ describe("CamerasPage", () => {
       );
     }
 
-    await user.clear(screen.getByLabelText(/reference distance \(m\)/i));
-    await user.type(screen.getByLabelText(/reference distance \(m\)/i), "12.5");
+    await user.clear(screen.getByLabelText(/measured distance \(m\)/i));
+    await user.type(screen.getByLabelText(/measured distance \(m\)/i), "12.5");
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /create camera/i }));
 

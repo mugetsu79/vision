@@ -878,7 +878,7 @@ function validateHomographyForSave(data: CameraWizardData["homography"]) {
     return `Calibration started but destination points are ${data.dst.length} of 4. Add four destination points in the same order, or reset source and destination if you do not want to save calibration.`;
   }
   if (data.refDistanceM <= 0) {
-    return "Calibration started but reference distance is missing. Add a measured distance in meters, or reset source and destination if you do not want to save calibration.";
+    return "Calibration started but measured distance is missing. Add a measured distance in meters, or reset source and destination if you do not want to save calibration.";
   }
   return null;
 }
@@ -904,11 +904,11 @@ function calibrationReadinessItems(data: CameraWizardData): ReadinessItem[] {
       tone: data.homography.dst.length === 4 ? "success" : "warning",
     },
     {
-      id: "reference-distance",
-      label: "Reference distance",
+      id: "measured-distance",
+      label: "Measured distance",
       detail:
         data.homography.refDistanceM > 0
-          ? `${data.homography.refDistanceM} m reference distance set.`
+          ? `${data.homography.refDistanceM} m measured distance set.`
           : "Add a measured distance in meters before trusting speed or distance.",
       tone: data.homography.refDistanceM > 0 ? "success" : "warning",
     },

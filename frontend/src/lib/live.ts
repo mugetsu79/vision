@@ -4,6 +4,8 @@ export type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 export type TelemetryTrack = components["schemas"]["TelemetryTrack"];
 export type HeartbeatStatus = "unknown" | "fresh" | "stale";
 
+const HEARTBEAT_LIVE_LABEL_MAX_AGE_MS = 5_000;
+
 export function parseTelemetryPayload(payload: unknown): TelemetryFrame[] {
   if (isTelemetryFrame(payload)) {
     return [payload];
@@ -82,10 +84,12 @@ export function formatHeartbeat(frame: TelemetryFrame | null | undefined): strin
     return "Awaiting heartbeat";
   }
 
-  const deltaSeconds = Math.max(0, Math.round((Date.now() - ts) / 1000));
-  if (deltaSeconds < 2) {
+  const deltaMs = Math.max(0, Date.now() - ts);
+  if (deltaMs < HEARTBEAT_LIVE_LABEL_MAX_AGE_MS) {
     return "Heartbeat live";
   }
+
+  const deltaSeconds = Math.floor(deltaMs / 1000);
   if (deltaSeconds < 60) {
     return `Heartbeat ${deltaSeconds}s ago`;
   }

@@ -21,6 +21,25 @@ function stubRect(element: HTMLElement, width: number, height: number) {
 }
 
 describe("HomographyEditor", () => {
+  test("puts measured distance before the point canvases", () => {
+    render(
+      <HomographyEditor
+        dst={[]}
+        onChange={vi.fn()}
+        refDistanceM={12.5}
+        src={[]}
+      />,
+    );
+
+    const distanceInput = screen.getByLabelText(/measured distance \(m\)/i);
+    const sourceCanvas = screen.getByLabelText(/source points canvas/i);
+
+    expect(
+      distanceInput.compareDocumentPosition(sourceCanvas)
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   test("reuses the authoring canvas for draggable source points", () => {
     const onChange = vi.fn();
 

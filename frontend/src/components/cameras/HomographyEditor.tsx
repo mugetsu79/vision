@@ -88,6 +88,43 @@ export function HomographyEditor({
           <CalibrationFlowIllustration />
         </GuidanceDisclosure>
       </div>
+      <section
+        aria-labelledby="measured-distance-heading"
+        className="grid gap-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] p-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] md:items-end"
+      >
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
+            Measured distance
+          </p>
+          <h3
+            id="measured-distance-heading"
+            className="mt-1 text-sm font-semibold text-[#f4f8ff]"
+          >
+            Enter a real floor-plane distance
+          </h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9eb2cf]">
+            Use meters between two visible marks on the same calibrated floor plane.
+          </p>
+        </div>
+        <div className="grid gap-2 text-sm text-[#d8e2f2]">
+          <span className="inline-flex items-center gap-2">
+            <label htmlFor="measured-distance-m">Measured distance (m)</label>
+            <FieldHelp
+              id="measured-distance-help"
+              guidance={SCENE_FIELD_GUIDANCE.referenceDistance}
+            />
+          </span>
+          <Input
+            id="measured-distance-m"
+            aria-label="Measured distance (m)"
+            min={0}
+            step="0.1"
+            type="number"
+            value={refDistanceM}
+            onChange={(event) => updateRefDistance(event.target.value)}
+          />
+        </div>
+      </section>
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="rounded-[1.5rem] border border-[#243853] bg-[#09121c] p-4">
           <div className="flex items-center justify-between gap-3">
@@ -221,45 +258,25 @@ export function HomographyEditor({
         </section>
       </div>
 
-      <div className="grid gap-4 rounded-[1.5rem] border border-white/8 bg-[#0b1320] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <div className="grid gap-2 text-sm text-[#d8e2f2]">
-          <span className="inline-flex items-center gap-2">
-            <label htmlFor="reference-distance-m">Reference distance (m)</label>
-            <FieldHelp
-              id="reference-distance-help"
-              guidance={SCENE_FIELD_GUIDANCE.referenceDistance}
-            />
-          </span>
-          <Input
-            id="reference-distance-m"
-            aria-label="Reference distance (m)"
-            min={0}
-            step="0.1"
-            type="number"
-            value={refDistanceM}
-            onChange={(event) => updateRefDistance(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Button
-            className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
-            onClick={() => onChange({ src: [], dst, refDistanceM })}
-          >
-            Reset source
-          </Button>
-          <Button
-            className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
-            onClick={() => onChange({ src, dst: [], refDistanceM })}
-          >
-            Reset destination
-          </Button>
-          <Button
-            className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
-            onClick={() => onChange({ src: [], dst: [], refDistanceM: 0 })}
-          >
-            Clear calibration
-          </Button>
-        </div>
+      <div className="flex flex-wrap gap-3 rounded-[1.15rem] border border-white/8 bg-[#0b1320] p-4 sm:justify-end">
+        <Button
+          className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+          onClick={() => onChange({ src: [], dst, refDistanceM })}
+        >
+          Reset source
+        </Button>
+        <Button
+          className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+          onClick={() => onChange({ src, dst: [], refDistanceM })}
+        >
+          Reset destination
+        </Button>
+        <Button
+          className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+          onClick={() => onChange({ src: [], dst: [], refDistanceM: 0 })}
+        >
+          Clear calibration
+        </Button>
       </div>
 
       <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">

@@ -993,7 +993,7 @@ describe("CameraWizard", () => {
     });
   });
 
-  test("enabling speed requires four source points, four destination points, and a reference distance before save", async () => {
+  test("enabling speed requires four source points, four destination points, and a measured distance before save", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
@@ -1027,7 +1027,7 @@ describe("CameraWizard", () => {
     await user.click(screen.getByRole("button", { name: /next/i }));
 
     expect(
-      screen.getByText(/calibration started but reference distance is missing/i),
+      screen.getByText(/calibration started but measured distance is missing/i),
     ).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -1149,8 +1149,8 @@ describe("CameraWizard", () => {
         screen.getByRole("button", { name: /add destination point/i }),
       );
     }
-    await user.clear(screen.getByLabelText(/reference distance \(m\)/i));
-    await user.type(screen.getByLabelText(/reference distance \(m\)/i), "12.5");
+    await user.clear(screen.getByLabelText(/measured distance \(m\)/i));
+    await user.type(screen.getByLabelText(/measured distance \(m\)/i), "12.5");
     await user.click(screen.getByRole("button", { name: /add line boundary/i }));
     await user.type(screen.getByLabelText(/boundary 1 id/i), "door-line");
     await user.type(screen.getByLabelText(/boundary 1 classes/i), "person,car");
