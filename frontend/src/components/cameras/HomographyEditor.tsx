@@ -7,6 +7,7 @@ import {
   SCENE_STEP_GUIDANCE,
 } from "@/components/cameras/scene-guidance";
 import { CalibrationFlowIllustration } from "@/components/guidance/CalibrationFlowIllustration";
+import { CalibrationScaleExample } from "@/components/guidance/CalibrationScaleExample";
 import { FieldHelp } from "@/components/guidance/FieldHelp";
 import { GuidanceDisclosure } from "@/components/guidance/GuidanceDisclosure";
 import {
@@ -33,7 +34,11 @@ export function HomographyEditor({
   src: Point[];
   dst: Point[];
   refDistanceM: number;
-  onChange: (value: { src: Point[]; dst: Point[]; refDistanceM: number }) => void;
+  onChange: (value: {
+    src: Point[];
+    dst: Point[];
+    refDistanceM: number;
+  }) => void;
   sourceFrameSize?: FrameSize;
   sourcePreviewSrc?: string | null;
   destinationFrameSize?: FrameSize;
@@ -53,7 +58,9 @@ export function HomographyEditor({
     });
   }
 
-  function updateSourcePoints(pointsNormalized: readonly (readonly [number, number])[]) {
+  function updateSourcePoints(
+    pointsNormalized: readonly (readonly [number, number])[],
+  ) {
     onChange({
       src: denormalizePointList(pointsNormalized, resolvedSourceFrameSize),
       dst,
@@ -61,10 +68,15 @@ export function HomographyEditor({
     });
   }
 
-  function updateDestinationPoints(pointsNormalized: readonly (readonly [number, number])[]) {
+  function updateDestinationPoints(
+    pointsNormalized: readonly (readonly [number, number])[],
+  ) {
     onChange({
       src,
-      dst: denormalizeDestinationPointList(pointsNormalized, resolvedDestinationFrameSize),
+      dst: denormalizeDestinationPointList(
+        pointsNormalized,
+        resolvedDestinationFrameSize,
+      ),
       refDistanceM,
     });
   }
@@ -90,7 +102,7 @@ export function HomographyEditor({
       </div>
       <section
         aria-labelledby="measured-distance-heading"
-        className="grid gap-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] p-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] md:items-end"
+        className="grid gap-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] p-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] md:items-start"
       >
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8ea4c7]">
@@ -118,9 +130,11 @@ export function HomographyEditor({
             </p>
           </div>
           <p className="mt-3 text-sm leading-6 text-[#8ea4c7]">
-            No third still capture is needed. Refresh the analytics still after saving
-            only to verify the points still line up with the real video frame.
+            No third still capture is needed. Refresh the analytics still after
+            saving only to verify the points still line up with the real video
+            frame.
           </p>
+          <CalibrationScaleExample />
         </div>
         <div className="grid gap-2 text-sm text-[#d8e2f2]">
           <span className="inline-flex items-center gap-2">
@@ -128,7 +142,9 @@ export function HomographyEditor({
             <FieldHelp
               id="measured-distance-help"
               guidance={SCENE_FIELD_GUIDANCE.referenceDistance}
-            />
+            >
+              <CalibrationScaleExample compact />
+            </FieldHelp>
           </span>
           <Input
             id="measured-distance-m"
@@ -140,8 +156,8 @@ export function HomographyEditor({
             onChange={(event) => updateRefDistance(event.target.value)}
           />
           <p className="text-xs leading-5 text-[#8ea4c7]">
-            Scale segment: D1-D2. If your known length is another side, make that
-            side points 1 and 2 before saving.
+            Scale segment: D1-D2. If your known length is another side, make
+            that side points 1 and 2 before saving.
           </p>
         </div>
       </section>
@@ -153,7 +169,9 @@ export function HomographyEditor({
                 Analytics still
               </p>
               <div className="mt-2 flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-[#f4f8ff]">Source points</h3>
+                <h3 className="text-lg font-semibold text-[#f4f8ff]">
+                  Source points
+                </h3>
                 <FieldHelp
                   id="source-points-help"
                   guidance={SCENE_FIELD_GUIDANCE.sourcePoints}
@@ -179,8 +197,9 @@ export function HomographyEditor({
               ariaLabel="Source points canvas"
               backgroundContent={
                 <p className="max-w-sm text-sm text-[#9eb2cf]">
-                  Click four fixed floor marks in the camera image. If this is a new
-                  camera, use this temporary plane now and refresh the still after saving.
+                  Click four fixed floor marks in the camera image. If this is a
+                  new camera, use this temporary plane now and refresh the still
+                  after saving.
                 </p>
               }
               frameSize={resolvedSourceFrameSize}
@@ -196,7 +215,9 @@ export function HomographyEditor({
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {src.length === 0 ? (
-              <p className="text-sm text-[#8ea4c7]">Add four source points from the camera frame.</p>
+              <p className="text-sm text-[#8ea4c7]">
+                Add four source points from the camera frame.
+              </p>
             ) : (
               src.map((point, index) => (
                 <span
@@ -245,8 +266,9 @@ export function HomographyEditor({
               ariaLabel="Destination points canvas"
               backgroundContent={
                 <p className="max-w-sm text-sm text-[#cbbaf4]">
-                  Draw the same four marks as if you were looking straight down from above.
-                  Keep the order the same as the camera image points.
+                  Draw the same four marks as if you were looking straight down
+                  from above. Keep the order the same as the camera image
+                  points.
                 </p>
               }
               frameSize={resolvedDestinationFrameSize}
@@ -254,7 +276,10 @@ export function HomographyEditor({
               maxPoints={4}
               mode="points"
               pointLabelPrefix="Destination"
-              value={normalizeDestinationPointList(dst, resolvedDestinationFrameSize)}
+              value={normalizeDestinationPointList(
+                dst,
+                resolvedDestinationFrameSize,
+              )}
               variant="destination"
               onChange={updateDestinationPoints}
             />
@@ -300,8 +325,10 @@ export function HomographyEditor({
       </div>
 
       <p className="rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-        Camera image points: {src.length} / 4. Top-down points: {dst.length} / 4. {brandName}
-        saves calibration only when all four pairs and a measured distance are set.
+        Camera image points: {src.length} / 4. Top-down points: {dst.length} /
+        4. {brandName}
+        saves calibration only when all four pairs and a measured distance are
+        set.
       </p>
     </div>
   );

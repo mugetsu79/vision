@@ -23,11 +23,13 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
     examples: [
       {
         label: "Central",
-        description: "Start here when the master can reliably pull the RTSP stream.",
+        description:
+          "Start here when the master can reliably pull the RTSP stream.",
       },
       {
         label: "Edge",
-        description: "Use for USB capture, weak uplink, or privacy-sensitive sites.",
+        description:
+          "Use for USB capture, weak uplink, or privacy-sensitive sites.",
       },
       {
         label: "Hybrid",
@@ -66,11 +68,13 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
     concepts: [
       {
         term: "Transport profile",
-        definition: "How browsers reach a stream through native, WebRTC, HLS, or MJPEG routes.",
+        definition:
+          "How browsers reach a stream through native, WebRTC, HLS, or MJPEG routes.",
       },
       {
         term: "Live rendition",
-        definition: "The clean, annotated, or reduced stream variant selected for this camera.",
+        definition:
+          "The clean, annotated, or reduced stream variant selected for this camera.",
       },
     ],
     examples: [
@@ -80,11 +84,13 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
       },
       {
         label: "Low latency",
-        description: "Use WebRTC when the WebRTC host and UDP path are reachable.",
+        description:
+          "Use WebRTC when the WebRTC host and UDP path are reachable.",
       },
       {
         label: "Privacy-heavy site",
-        description: "Blur faces and plates, then prefer edge or local-first evidence storage.",
+        description:
+          "Blur faces and plates, then prefer edge or local-first evidence storage.",
       },
     ],
   },
@@ -96,15 +102,18 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
     concepts: [
       {
         term: "Camera image points",
-        definition: "The four fixed floor marks you click in the camera view. These are also called source points.",
+        definition:
+          "The four fixed floor marks you click in the camera view. These are also called source points.",
       },
       {
         term: "Top-down points",
-        definition: "The same four marks drawn as if you were looking straight down from above. These are also called destination points.",
+        definition:
+          "The same four marks drawn as if you were looking straight down from above. These are also called destination points.",
       },
       {
         term: "Measured distance",
-        definition: "The real distance in meters between destination points D1 and D2. In the camera still, these are the same physical marks as S1 and S2.",
+        definition:
+          "The real distance in meters between destination points D1 and D2. In the camera still, these are the same physical marks as S1 and S2.",
       },
     ],
     steps: [
@@ -151,7 +160,8 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
       "They do not need to be GPS coordinates or perfectly scaled.",
       "Keep the point order identical to the camera image points.",
     ],
-    safeDefault: "A simple rectangle with the same corner order as the camera image points.",
+    safeDefault:
+      "A simple rectangle with the same corner order as the camera image points.",
     required: true,
   },
   referenceDistance: {
@@ -159,10 +169,22 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     hint: "Enter the real D1 to D2 distance in meters.",
     details: [
       "The runtime uses D1 to D2, the first two top-down destination points, as the scale segment.",
-      "S1 and S2 must be the same two physical marks in the camera still.",
+      "S1 and S2 must be the same two physical marks in the camera still; their pixel coordinates will usually differ from the D1 and D2 world-plane coordinates.",
       "Measure a lane width, doorway width, floor stripe, parking bay, or loading-bay span, then make that measured span points 1 and 2.",
       "Use a longer measured span when possible; it usually gives better speed estimates than a short guessed distance.",
       "The measured distance should be on the same flat plane where feet or wheels move.",
+    ],
+    examples: [
+      {
+        label: "Parking bay",
+        description:
+          "If the painted bay width is 2.5 m, click those two visible bay corners as S1 and S2, draw the same corners as D1 and D2, then enter 2.5.",
+      },
+      {
+        label: "Doorway or lane",
+        description:
+          "If a doorway threshold or lane stripe is the known span, make that span points 1 and 2 before saving.",
+      },
     ],
     safeDefault:
       "Use a tape-measured D1 to D2 distance, not an estimate, whenever speed matters.",
@@ -180,11 +202,13 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     examples: [
       {
         label: "Doorway crossing",
-        description: "Draw a line across the threshold to count direction changes.",
+        description:
+          "Draw a line across the threshold to count direction changes.",
       },
       {
         label: "Restricted zone",
-        description: "Draw a polygon around the area to emit enter and exit events.",
+        description:
+          "Draw a polygon around the area to emit enter and exit events.",
       },
     ],
   },
@@ -199,11 +223,13 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     examples: [
       {
         label: "Loading bay include",
-        description: "Keep detections inside the working bay and ignore adjacent background.",
+        description:
+          "Keep detections inside the working bay and ignore adjacent background.",
       },
       {
         label: "Road exclusion",
-        description: "Mask a public road that creates irrelevant vehicle detections.",
+        description:
+          "Mask a public road that creates irrelevant vehicle detections.",
       },
     ],
   },

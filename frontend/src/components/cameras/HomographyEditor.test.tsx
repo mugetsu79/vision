@@ -35,8 +35,8 @@ describe("HomographyEditor", () => {
     const sourceCanvas = screen.getByLabelText(/source points canvas/i);
 
     expect(
-      distanceInput.compareDocumentPosition(sourceCanvas)
-        & Node.DOCUMENT_POSITION_FOLLOWING,
+      distanceInput.compareDocumentPosition(sourceCanvas) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -60,9 +60,50 @@ describe("HomographyEditor", () => {
       />,
     );
 
-    expect(screen.getByText(/measure d1 to d2 on the same floor plane/i)).toBeInTheDocument();
-    expect(screen.getByText(/s1 and s2 are the same two marks in the camera still/i)).toBeInTheDocument();
-    expect(screen.getByText(/no third still capture is needed/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/measure d1 to d2 on the same floor plane/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/s1 and s2 are the same two marks in the camera still/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no third still capture is needed/i),
+    ).toBeInTheDocument();
+  });
+
+  test("shows a real-world example for setting the measured distance", () => {
+    render(
+      <HomographyEditor
+        dst={[
+          [0, 0],
+          [2.5, 0],
+          [2.5, 5],
+          [0, 5],
+        ]}
+        onChange={vi.fn()}
+        refDistanceM={2.5}
+        src={[
+          [180, 620],
+          [920, 610],
+          [860, 260],
+          [230, 250],
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", {
+        name: /parking bay measured distance example/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/example: parking bay width = 2.5 m/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/s points are camera pixels/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/d points are a top-down sketch/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/s1 is d1 and s2 is d2/i)).toBeInTheDocument();
   });
 
   test("reuses the authoring canvas for draggable source points", () => {
@@ -108,11 +149,15 @@ describe("HomographyEditor", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /destination point 1/i })).toHaveStyle({
+    expect(
+      screen.getByRole("button", { name: /destination point 1/i }),
+    ).toHaveStyle({
       left: "0%",
       top: "100%",
     });
-    expect(screen.getByRole("button", { name: /destination point 2/i })).toHaveStyle({
+    expect(
+      screen.getByRole("button", { name: /destination point 2/i }),
+    ).toHaveStyle({
       left: "100%",
       top: "0%",
     });
