@@ -2812,7 +2812,8 @@ export function CameraWizard({
 
                 {data.zones.length === 0 ? (
                   <p className="mt-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-                    No event boundaries configured yet. Add a line for crossing events or a zone for enter and exit events.
+                    No event boundaries configured yet. Add a line for crossings
+                    or a polygon event zone for enter and exit events.
                   </p>
                 ) : (
                   <div className="mt-5 space-y-4">
@@ -2882,14 +2883,16 @@ export function CameraWizard({
                             ariaLabel={`Boundary ${index + 1} canvas`}
                             backgroundContent={
                               <p className="max-w-sm text-sm text-[#bcefe3]">
-                                Click to place {boundary.type === "line" ? "two points" : "polygon vertices"}, then drag handles to refine them on the analytics plane.
+                                {boundary.type === "line"
+                                  ? "Click two points across a door, lane, or threshold. Crossings generate events."
+                                  : "Draw a zone on the analytics still. Entering and exiting generate events."}
                               </p>
                             }
                             frameSize={setupFrameSize}
                             helperText={
                               boundary.type === "line"
-                                ? "Lines count side-to-side crossings. Start on one side of the path and end on the other."
-                                : "Zones create enter and exit events whenever the tracked footpoint crosses the boundary."
+                                ? "Line = crossing trigger. Place it where tracked motion should cross."
+                                : "Polygon zone = event area. Enter and exit events fire when tracks move through the zone."
                             }
                             mode={boundary.type === "line" ? "line" : "polygon"}
                             pointLabelPrefix={`Boundary ${index + 1}`}
@@ -2898,6 +2901,9 @@ export function CameraWizard({
                               boundaryPointsForFrame(boundary, setupFrameSize),
                               setupFrameSize,
                             )}
+                            variant={
+                              boundary.type === "line" ? "eventLine" : "eventZone"
+                            }
                             onChange={(pointsNormalized) =>
                               updateBoundaryFromCanvas(index, pointsNormalized)
                             }
@@ -2983,7 +2989,9 @@ export function CameraWizard({
 
                 {data.detectionRegions.length === 0 ? (
                   <p className="mt-4 rounded-[1.15rem] border border-[#284066] bg-[#0c1522] px-4 py-3 text-sm text-[#9eb2cf]">
-                    No detection regions configured.
+                    No detector masks configured. Add include polygons to keep
+                    valid operating space, or exclusion polygons to suppress
+                    noisy areas.
                   </p>
                 ) : (
                   <div className="mt-5 space-y-4">
@@ -3052,14 +3060,16 @@ export function CameraWizard({
                             ariaLabel={`Detection region ${index + 1} canvas`}
                             backgroundContent={
                               <p className="max-w-sm text-sm text-[#bcefe3]">
-                                Click to place polygon vertices, then drag handles to refine the detection region.
+                                {region.mode === "include"
+                                  ? "Draw the valid operating space. Outside include polygons is ignored when any include exists."
+                                  : "Draw a noisy or irrelevant pocket. Detections inside are suppressed before events."}
                               </p>
                             }
                             frameSize={setupFrameSize}
                             helperText={
                               region.mode === "include"
-                                ? "Only detections inside include regions stay eligible when at least one include region exists."
-                                : "Detections inside exclusion regions are ignored before event boundaries are evaluated."
+                                ? "Include = detector gate. Keep detections inside the operating area."
+                                : "Exclude = detector mask. Remove reflections, public road, screens, or background motion."
                             }
                             mode="polygon"
                             pointLabelPrefix={`Detection region ${index + 1}`}
@@ -3068,6 +3078,11 @@ export function CameraWizard({
                               detectionRegionPointsForFrame(region, setupFrameSize),
                               setupFrameSize,
                             )}
+                            variant={
+                              region.mode === "include"
+                                ? "includeRegion"
+                                : "excludeRegion"
+                            }
                             onChange={(pointsNormalized) =>
                               updateDetectionRegionFromCanvas(index, pointsNormalized)
                             }

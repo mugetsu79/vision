@@ -115,28 +115,20 @@ export function HomographyEditor({
             Measure D1 to D2 on the same floor plane
           </h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9eb2cf]">
-            The runtime uses drawn destination points D1 and D2 as the scale
-            segment. S1 and S2 are the same two marks in the camera still; D1
-            and D2 are where you draw those marks on the top-down world plane.
+            Use one measured floor-plane span: S1/S2 in the camera still,
+            D1/D2 in the drawn world plane.
           </p>
-          <div className="mt-3 grid gap-2 text-sm text-[#c7d5eb] lg:grid-cols-3">
-            <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
-              Put S1 and S2 on two fixed floor marks you can physically measure.
-            </p>
-            <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
-              Draw those same marks as D1 and D2 on the world plane. The
-              destination plane is not another camera capture.
-            </p>
-            <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
-              Enter the real D1 to D2 distance in meters.
-            </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#c7d5eb]">
+            <span className="rounded-full border border-white/8 bg-black/20 px-3 py-1.5">
+              Scale segment D1-D2
+            </span>
+            <span className="rounded-full border border-white/8 bg-black/20 px-3 py-1.5">
+              Same physical marks
+            </span>
+            <span className="rounded-full border border-white/8 bg-black/20 px-3 py-1.5">
+              Meters on the moving floor
+            </span>
           </div>
-          <p className="mt-3 text-sm leading-6 text-[#8ea4c7]">
-            No third still capture is needed. Refresh the analytics still after
-            saving only to verify the points still line up with the real video
-            frame.
-          </p>
-          <CalibrationScaleExample />
         </div>
         <div className="grid gap-2 text-sm text-[#d8e2f2]">
           <span className="inline-flex items-center gap-2">

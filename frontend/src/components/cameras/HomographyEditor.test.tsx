@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
 import { HomographyEditor } from "@/components/cameras/HomographyEditor";
@@ -40,7 +41,9 @@ describe("HomographyEditor", () => {
     ).toBeTruthy();
   });
 
-  test("explains that measured distance is the D1 to D2 scale segment", () => {
+  test("keeps measured distance compact with the full tutorial behind help", async () => {
+    const user = userEvent.setup();
+
     render(
       <HomographyEditor
         dst={[
@@ -64,14 +67,36 @@ describe("HomographyEditor", () => {
       screen.getByText(/measure d1 to d2 on the same floor plane/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/s1 and s2 are the same two marks in the camera still/i),
+      screen.getByText(
+        /s1\/s2 in the camera still, d1\/d2 in the drawn world plane/i,
+      ),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/put s1 and s2 on two fixed floor marks/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", {
+        name: /parking bay measured distance example/i,
+      }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /show measured distance help/i }),
+    );
+
     expect(
       screen.getByText(/no third still capture is needed/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: /parking bay measured distance example/i,
+      }),
+    ).toBeInTheDocument();
   });
 
-  test("shows a real-world example for setting the measured distance", () => {
+  test("shows a real-world example for setting the measured distance", async () => {
+    const user = userEvent.setup();
+
     render(
       <HomographyEditor
         dst={[
@@ -89,6 +114,10 @@ describe("HomographyEditor", () => {
           [230, 250],
         ]}
       />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /show measured distance help/i }),
     );
 
     expect(
@@ -127,12 +156,13 @@ describe("HomographyEditor", () => {
     );
 
     expect(
-      screen.getByText(/d1 and d2 are where you draw those marks/i),
+      screen.getByText(
+        /s1\/s2 in the camera still, d1\/d2 in the drawn world plane/i,
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText(/destination plane is not another camera capture/i)
-        .length,
-    ).toBeGreaterThan(0);
+      screen.getByText(/top-down drawing is not captured from the camera/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/this is a drawn world plane, not a camera still/i),
     ).toBeInTheDocument();

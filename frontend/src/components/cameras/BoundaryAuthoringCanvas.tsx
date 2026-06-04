@@ -9,7 +9,14 @@ import {
 } from "@/components/cameras/boundary-geometry";
 
 type BoundaryAuthoringMode = "line" | "points" | "polygon";
-type BoundaryCanvasVariant = "boundary" | "destination" | "source";
+type BoundaryCanvasVariant =
+  | "boundary"
+  | "destination"
+  | "eventLine"
+  | "eventZone"
+  | "excludeRegion"
+  | "includeRegion"
+  | "source";
 
 const DEFAULT_MAX_POINTS: Partial<Record<BoundaryAuthoringMode, number>> = {
   line: 2,
@@ -47,6 +54,38 @@ const VARIANT_STYLES: Record<
     shapeClassName: "stroke-[#6fe0c5] fill-[#6fe0c5]/10",
     surfaceClassName:
       "border-[#24594f] bg-[radial-gradient(circle_at_top,_rgba(50,168,142,0.18),_transparent_35%),linear-gradient(180deg,#0d1717_0%,#081113_100%)]",
+  },
+  eventLine: {
+    handleClassName:
+      "border-[#6fe0c5] bg-[#0d1f1a] text-[#effff9] shadow-[0_0_0_4px_rgba(73,197,164,0.18)]",
+    helperClassName: "border-[#24594f] bg-[#0d1717]/90 text-[#bcefe3]",
+    shapeClassName: "stroke-[#6fe0c5] fill-none",
+    surfaceClassName:
+      "border-[#24594f] bg-[radial-gradient(circle_at_top,_rgba(50,168,142,0.16),_transparent_35%),linear-gradient(180deg,#0d1717_0%,#081113_100%)]",
+  },
+  eventZone: {
+    handleClassName:
+      "border-[#8fd3ff] bg-[#0b1d2b] text-[#eef9ff] shadow-[0_0_0_4px_rgba(93,177,231,0.16)]",
+    helperClassName: "border-[#2d5269] bg-[#0c1620]/90 text-[#c5e9ff]",
+    shapeClassName: "stroke-[#8fd3ff] fill-[#8fd3ff]/12",
+    surfaceClassName:
+      "border-[#2d5269] bg-[radial-gradient(circle_at_top,_rgba(93,177,231,0.16),_transparent_35%),linear-gradient(180deg,#0b1520_0%,#081019_100%)]",
+  },
+  includeRegion: {
+    handleClassName:
+      "border-[#7ee7a8] bg-[#0e2218] text-[#f0fff6] shadow-[0_0_0_4px_rgba(74,222,128,0.15)]",
+    helperClassName: "border-[#2c6043] bg-[#0c1712]/90 text-[#c8f7d6]",
+    shapeClassName: "stroke-[#7ee7a8] fill-[#7ee7a8]/12",
+    surfaceClassName:
+      "border-[#2c6043] bg-[radial-gradient(circle_at_top,_rgba(74,222,128,0.14),_transparent_35%),linear-gradient(180deg,#0c1712_0%,#07110d_100%)]",
+  },
+  excludeRegion: {
+    handleClassName:
+      "border-[#ffb86b] bg-[#25170b] text-[#fff7ed] shadow-[0_0_0_4px_rgba(255,184,107,0.15)]",
+    helperClassName: "border-[#6a4a24] bg-[#1a1209]/90 text-[#ffd9a1]",
+    shapeClassName: "stroke-[#ffb86b] fill-[#ffb86b]/12",
+    surfaceClassName:
+      "border-[#6a4a24] bg-[radial-gradient(circle_at_top,_rgba(255,184,107,0.14),_transparent_35%),linear-gradient(180deg,#17110c_0%,#100d08_100%)]",
   },
 };
 

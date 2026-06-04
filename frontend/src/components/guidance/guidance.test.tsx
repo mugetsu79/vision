@@ -130,32 +130,42 @@ test("CalibrationFlowIllustration can show region guidance", () => {
 
   expect(
     screen.getByRole("img", {
-      name: /detection regions refine the calibrated plane/i,
+      name: /detection regions gate the analytics still/i,
     }),
   ).toBeInTheDocument();
-  const includeRegion = screen.getByText(/^include region$/i);
-  const exclusionRegion = screen.getByText(/^exclusion region$/i);
+  const includeRegion = screen.getByText(/^include detection area$/i);
+  const exclusionRegion = screen.getByText(/^exclusion mask$/i);
   expect(includeRegion).toBeInTheDocument();
   expect(exclusionRegion).toBeInTheDocument();
+  expect(
+    screen.getAllByText(/include keeps detections eligible/i).length,
+  ).toBeGreaterThan(0);
+  expect(
+    screen.getAllByText(/exclude suppresses noisy motion/i).length,
+  ).toBeGreaterThan(0);
 
   const includeShape = container.querySelector("[data-region='include']");
   const exclusionShape = container.querySelector("[data-region='exclusion']");
   expect(includeShape).toBeInTheDocument();
   expect(exclusionShape).toBeInTheDocument();
-  const exclusionTop = Number(exclusionShape?.getAttribute("y"));
-  const exclusionHeight = Number(exclusionShape?.getAttribute("height"));
-  expect(exclusionTop + exclusionHeight).toBeLessThan(150);
+  expect(includeShape?.tagName.toLowerCase()).toBe("polygon");
+  expect(exclusionShape?.tagName.toLowerCase()).toBe("polygon");
 });
 
 test("CalibrationFlowIllustration can show event boundary guidance", () => {
-  render(<CalibrationFlowIllustration mode="boundaries" />);
+  const { container } = render(<CalibrationFlowIllustration mode="boundaries" />);
 
   expect(
     screen.getByRole("img", {
-      name: /event boundaries belong on the calibrated plane/i,
+      name: /event lines and zones use the analytics still/i,
     }),
   ).toBeInTheDocument();
-  expect(screen.getByText(/^event line$/i)).toBeInTheDocument();
+  expect(screen.getByText(/^line crossing$/i)).toBeInTheDocument();
+  expect(screen.getByText(/^polygon event zone$/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/crossing event/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/enter\/exit event/i)).toBeInTheDocument();
+  expect(container.querySelector("[data-boundary='line-crossing']")).toBeInTheDocument();
+  expect(container.querySelector("[data-boundary='event-zone']")).toBeInTheDocument();
 });
 
 test("CalibrationFlowIllustration keeps SVG ids unique across instances", () => {

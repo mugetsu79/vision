@@ -172,6 +172,7 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
       "The runtime uses D1 to D2, the first two top-down destination points, as the scale segment.",
       "S1 and S2 must be the same two physical marks in the camera still; their pixel coordinates will usually differ from the D1 and D2 world-plane coordinates.",
       "D1 and D2 are drawn on the destination plane; the destination plane is not another camera capture.",
+      "No third still capture is needed; refresh the analytics still after saving only to verify the points still line up with the real video frame.",
       "Measure a lane width, doorway width, floor stripe, parking bay, or loading-bay span, then make that measured span points 1 and 2.",
       "Use a longer measured span when possible; it usually gives better speed estimates than a short guessed distance.",
       "The measured distance should be on the same flat plane where feet or wheels move.",
@@ -195,8 +196,11 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
   },
   eventBoundaries: {
     label: "Event boundaries",
-    hint: "Lines emit crossing events; polygon zones emit enter and exit events.",
+    hint: "Draw lines or zones on the analytics still where tracked anchors move.",
     details: [
+      "Line boundaries emit crossing events when a tracked bottom-center anchor changes sides.",
+      "Polygon zones emit enter and exit events when a track moves into or out of the marked area.",
+      "Draw both shapes on the camera analytics still, not on the destination point sketch.",
       "Use line boundaries for directional counts through doors, lanes, gates, and thresholds.",
       "Use polygon zones for restricted areas, occupancy areas, staging areas, and dwell regions.",
       "Class scope on line boundaries narrows which tracked classes emit events.",
@@ -216,11 +220,12 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
   },
   detectionRegions: {
     label: "Detection regions",
-    hint: "Include regions keep detections inside; exclusion regions suppress detections inside.",
+    hint: "Include polygons keep detections eligible; exclusion polygons suppress detections.",
     details: [
-      "Use include regions to focus detection on the operational area.",
+      "Draw detection regions on the camera analytics still, not on the destination point sketch.",
+      "Use include regions to focus detection on the operational area; if any include region exists, detections outside include regions are ignored.",
       "Use exclusion regions to ignore reflections, screens, public roads, or background motion.",
-      "Detection regions are applied before event boundaries are evaluated.",
+      "Detection regions are applied before event boundaries are evaluated, so masked detections cannot create line or zone events.",
     ],
     examples: [
       {

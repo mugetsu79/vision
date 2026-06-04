@@ -1060,6 +1060,7 @@ describe("CameraWizard", () => {
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /add include region/i }));
+    expect(screen.getByText(/include = detector gate/i)).toBeInTheDocument();
     const regionCanvas = screen.getByLabelText(/detection region 1 canvas/i);
     stubRect(regionCanvas, 640, 360);
     fireEvent.click(regionCanvas, { clientX: 0, clientY: 0 });
@@ -1084,6 +1085,7 @@ describe("CameraWizard", () => {
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /add exclusion region/i }));
+    expect(screen.getByText(/exclude = detector mask/i)).toBeInTheDocument();
     const regionCanvas = screen.getByLabelText(/detection region 1 canvas/i);
     stubRect(regionCanvas, 640, 360);
     fireEvent.click(regionCanvas, { clientX: 0, clientY: 0 });
@@ -1108,6 +1110,7 @@ describe("CameraWizard", () => {
     await completeRequiredCreateSteps(user);
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.click(screen.getByRole("button", { name: /add line boundary/i }));
+    expect(screen.getByText(/line = crossing trigger/i)).toBeInTheDocument();
     await user.type(screen.getByLabelText(/boundary 1 id/i), "door-line");
     const lineCanvas = screen.getByLabelText(/boundary 1 canvas/i);
     stubRect(lineCanvas, 640, 360);
@@ -1121,6 +1124,21 @@ describe("CameraWizard", () => {
     expect(submittedPayload?.zones).toHaveLength(1);
     expect(submittedPayload?.zones?.[0]?.id).toBe("door-line");
     expect(submittedPayload?.detection_regions).toEqual([]);
+  });
+
+  test("polygon event zones show enter and exit guidance before submit", async () => {
+    const user = userEvent.setup();
+
+    renderWizard();
+
+    await completeRequiredCreateSteps(user);
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /add polygon zone/i }));
+
+    expect(screen.getByText(/polygon zone = event area/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/enter and exit events fire when tracks move through the zone/i),
+    ).toBeInTheDocument();
   });
 
   test("submits the completed create payload with homography and browser delivery settings", async () => {
