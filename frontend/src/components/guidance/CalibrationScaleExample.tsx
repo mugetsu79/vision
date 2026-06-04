@@ -24,7 +24,7 @@ export function CalibrationScaleExample({
       >
         <title id={titleId}>Parking bay measured distance example</title>
         <desc id={descId}>
-          A street camera view and a top-down world plane show the same parking
+          A camera still and a drawn top-down world plane show the same parking
           bay width used as the D1 to D2 measured distance.
         </desc>
 
@@ -124,7 +124,7 @@ export function CalibrationScaleExample({
           <SourcePoint label="S4" x={98} y={112} />
         </g>
 
-        <g aria-label="World plane destination points">
+        <g aria-label="Drawn world plane destination points">
           <rect
             x="396"
             y="28"
@@ -135,10 +135,10 @@ export function CalibrationScaleExample({
             stroke="#3e3566"
           />
           <text x="420" y="58" fill="#f4f8ff" fontSize="16" fontWeight="700">
-            World plane
+            Drawn world plane
           </text>
           <text x="420" y="78" fill="#aa9ad8" fontSize="12">
-            Top-down destination sketch
+            Operator sketch D1-D4
           </text>
 
           <rect
@@ -246,7 +246,8 @@ export function CalibrationScaleExample({
           </p>
           <p>
             D points are a top-down sketch. Their coordinates are the world
-            plane you draw.
+            plane you draw. The destination plane is drawn by you, not captured
+            from another camera still.
           </p>
           <p>
             S1 is D1 and S2 is D2 because they are the same physical floor

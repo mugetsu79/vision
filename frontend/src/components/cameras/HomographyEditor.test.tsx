@@ -106,6 +106,38 @@ describe("HomographyEditor", () => {
     expect(screen.getByText(/s1 is d1 and s2 is d2/i)).toBeInTheDocument();
   });
 
+  test("clarifies that destination points are drawn, not captured from another still", () => {
+    render(
+      <HomographyEditor
+        dst={[
+          [0, 0],
+          [2.5, 0],
+          [2.5, 5],
+          [0, 5],
+        ]}
+        onChange={vi.fn()}
+        refDistanceM={2.5}
+        src={[
+          [180, 620],
+          [920, 610],
+          [860, 260],
+          [230, 250],
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByText(/d1 and d2 are where you draw those marks/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/destination plane is not another camera capture/i)
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/this is a drawn world plane, not a camera still/i),
+    ).toBeInTheDocument();
+  });
+
   test("reuses the authoring canvas for draggable source points", () => {
     const onChange = vi.fn();
 

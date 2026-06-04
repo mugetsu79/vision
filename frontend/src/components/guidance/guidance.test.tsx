@@ -187,6 +187,17 @@ test("CalibrationScaleExample maps S1 to D1 and S2 to D2", () => {
   ).toHaveAttribute("d", expect.stringMatching(/^M174 229 C.*690 236$/));
 });
 
+test("CalibrationScaleExample labels destination as a drawn plane", () => {
+  render(<CalibrationScaleExample />);
+
+  expect(screen.getByText("Drawn world plane")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      /destination plane is drawn by you, not captured from another camera still/i,
+    ),
+  ).toBeInTheDocument();
+});
+
 test("GuidancePanel renders steps and common mistakes", () => {
   render(
     <GuidancePanel

@@ -108,7 +108,7 @@ export const SCENE_STEP_GUIDANCE: Record<string, SectionGuidance> = {
       {
         term: "Top-down points",
         definition:
-          "The same four marks drawn as if you were looking straight down from above. These are also called destination points.",
+          "The same four marks drawn by the operator as if looking straight down from above. These are also called destination points, and they are not captured from a second camera still.",
       },
       {
         term: "Measured distance",
@@ -157,6 +157,7 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     hint: "Draw the same four real-world marks as if looking straight down from above.",
     details: [
       "These points represent the same marks you clicked in the camera image.",
+      "Destination points are hand-drawn top-down coordinates, not another still captured from the camera.",
       "They do not need to be GPS coordinates or perfectly scaled.",
       "Keep the point order identical to the camera image points.",
     ],
@@ -170,6 +171,7 @@ export const SCENE_FIELD_GUIDANCE: Record<string, FieldGuidance> = {
     details: [
       "The runtime uses D1 to D2, the first two top-down destination points, as the scale segment.",
       "S1 and S2 must be the same two physical marks in the camera still; their pixel coordinates will usually differ from the D1 and D2 world-plane coordinates.",
+      "D1 and D2 are drawn on the destination plane; the destination plane is not another camera capture.",
       "Measure a lane width, doorway width, floor stripe, parking bay, or loading-bay span, then make that measured span points 1 and 2.",
       "Use a longer measured span when possible; it usually gives better speed estimates than a short guessed distance.",
       "The measured distance should be on the same flat plane where feet or wheels move.",

@@ -115,15 +115,17 @@ export function HomographyEditor({
             Measure D1 to D2 on the same floor plane
           </h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9eb2cf]">
-            The runtime uses destination points D1 and D2 as the scale segment.
-            S1 and S2 are the same two marks in the camera still.
+            The runtime uses drawn destination points D1 and D2 as the scale
+            segment. S1 and S2 are the same two marks in the camera still; D1
+            and D2 are where you draw those marks on the top-down world plane.
           </p>
           <div className="mt-3 grid gap-2 text-sm text-[#c7d5eb] lg:grid-cols-3">
             <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
               Put S1 and S2 on two fixed floor marks you can physically measure.
             </p>
             <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
-              Draw those same marks as D1 and D2 on the world plane.
+              Draw those same marks as D1 and D2 on the world plane. The
+              destination plane is not another camera capture.
             </p>
             <p className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
               Enter the real D1 to D2 distance in meters.
@@ -266,13 +268,13 @@ export function HomographyEditor({
               ariaLabel="Destination points canvas"
               backgroundContent={
                 <p className="max-w-sm text-sm text-[#cbbaf4]">
-                  Draw the same four marks as if you were looking straight down
-                  from above. Keep the order the same as the camera image
-                  points.
+                  Draw the same four marks from above. This is a drawn world
+                  plane, not a camera still. Keep the order the same as the
+                  camera image points.
                 </p>
               }
               frameSize={resolvedDestinationFrameSize}
-              helperText="The top-down drawing does not need GPS coordinates; it only needs to preserve the same mark order and shape."
+              helperText="The top-down drawing is not captured from the camera; it only needs to preserve the same mark order and shape."
               maxPoints={4}
               mode="points"
               pointLabelPrefix="Destination"
