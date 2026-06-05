@@ -184,6 +184,15 @@ def test_load_pack_manifests_returns_expected_repo_packs() -> None:
     assert ids == {"maritime-fleet", "traffic-public-space"}
 
 
+def test_manifest_entities_extend_declared_core_dependencies() -> None:
+    manifests = load_pack_manifests(PACKS_ROOT)
+
+    for manifest in manifests:
+        allowed = set(manifest.allowed_core_dependencies)
+        entity_extensions = {entity.extends for entity in manifest.entities}
+        assert entity_extensions <= allowed
+
+
 def test_maritime_pack_is_planned_mvp() -> None:
     manifest = load_pack_manifest(PACKS_ROOT / "maritime-fleet" / "pack.yaml")
 
@@ -257,6 +266,50 @@ forbidden_dependencies: [invalid_dependency]
         load_pack_manifest(manifest_path)
 
 
+def test_entity_extends_must_be_declared_core_dependency(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "pack.yaml"
+    manifest_path.write_text(
+        """
+api_version: vezor.io/v1alpha1
+kind: Pack
+metadata:
+  id: invalid-extension-pack
+  name: Invalid Extension Pack
+  product_name: Invalid Pack
+  owner: product
+  status: planned_mvp
+  wedge: invalid
+  sales_motion: test
+  implementation_commitment: true
+engine:
+  min_version: 0.1.0
+  required_capabilities: [scenes, pack_registry]
+entities:
+  - name: InvalidEntity
+    extends: Vessel
+    storage: pack
+    purpose: should not extend a vertical noun
+scene_templates: []
+model_presets:
+  fixed_vocab: []
+  open_vocab: []
+integrations: []
+evidence_context:
+  fields: []
+billing:
+  meters: []
+ui_extensions:
+  panels: []
+allowed_core_dependencies: [Scene]
+forbidden_dependencies: [invalid_dependency]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PackRegistryError, match="entity extends values"):
+        load_pack_manifest(manifest_path)
+
+
 def test_registry_get_pack_returns_by_id_and_raises_for_unknown_pack() -> None:
     registry = PackRegistry(PACKS_ROOT)
 
@@ -321,6 +374,28 @@ RuntimePackStatus = Literal["planned_mvp", "active"]
 RUNTIME_ENABLED_STATUSES: set[str] = {"planned_mvp", "active"}
 DESIGNED_ONLY_STATUSES: set[str] = {"designed_not_implemented"}
 DESIGNED_ONLY_INTEGRATION_STATUSES: set[str] = {"design_only", "research_only"}
+KNOWN_CORE_EXTENSION_POINTS: set[str] = {
+    "BillingNode",
+    "Evidence",
+    "EvidenceCollection",
+    "EvidenceExport",
+    "LinkContext",
+    "LinkPassport",
+    "PrivacyPolicy",
+    "RoleLabel",
+    "RotationGroup",
+    "Scene",
+    "SceneContract",
+    "SceneZoneLabel",
+    "Signal",
+    "SignalContext",
+    "SignalDimension",
+    "Site",
+    "SiteContext",
+    "SiteGroup",
+    "SiteSubdivision",
+    "RuntimePassport",
+}
 
 
 class PackRegistryError(ValueError):
@@ -471,6 +546,20 @@ class PackManifest(BaseModel):
 
     @model_validator(mode="after")
     def validate_status_semantics(self) -> PackManifest:
+        unknown_core_dependencies = sorted(
+            set(self.allowed_core_dependencies) - KNOWN_CORE_EXTENSION_POINTS
+        )
+        if unknown_core_dependencies:
+            joined = ", ".join(unknown_core_dependencies)
+            raise PackRegistryError(f"unknown core extension points: {joined}")
+        undeclared_entity_extensions = sorted(
+            {entity.extends for entity in self.entities} - set(self.allowed_core_dependencies)
+        )
+        if undeclared_entity_extensions:
+            joined = ", ".join(undeclared_entity_extensions)
+            raise PackRegistryError(
+                f"entity extends values must be declared core dependencies: {joined}"
+            )
         if self.metadata.status in DESIGNED_ONLY_STATUSES:
             if self.metadata.implementation_commitment:
                 raise PackRegistryError("designed-only packs cannot commit to implementation")
@@ -1101,6 +1190,11 @@ CORE_FILES = [
     REPO_ROOT / "backend/src/argus/models/tables.py",
 ]
 
+PACK_RUNTIME_MODULE_PATHS = [
+    REPO_ROOT / "backend/src/argus/maritime",
+    REPO_ROOT / "backend/src/argus/traffic_public_space",
+]
+
 FORBIDDEN_VERTICAL_NOUNS = [
     "Vessel",
     "Voyage",
@@ -1127,6 +1221,16 @@ def test_core_contracts_do_not_define_pack_vertical_nouns() -> None:
                 offenders.append(f"{path.relative_to(REPO_ROOT)} contains {noun}")
 
     assert offenders == []
+
+
+def test_phase_one_does_not_create_vertical_pack_runtime_modules() -> None:
+    existing_modules = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in PACK_RUNTIME_MODULE_PATHS
+        if path.exists()
+    ]
+
+    assert existing_modules == []
 ```
 
 - [ ] **Step 2: Run the governance test**
@@ -1236,18 +1340,18 @@ maritime-fleet planned_mvp True
 traffic-public-space designed_not_implemented False
 ```
 
-- [ ] **Step 5: Confirm no accidental traffic or maritime runtime modules were added**
+- [ ] **Step 5: Confirm the automated boundary test covers runtime module absence**
 
 Run:
 
 ```bash
-cd /Users/yann.moren/vision
-find backend/src/argus -maxdepth 2 -type d \( -name 'maritime*' -o -name 'traffic*' \) -print
+cd /Users/yann.moren/vision/backend
+uv run pytest tests/core/test_pack_boundaries.py::test_phase_one_does_not_create_vertical_pack_runtime_modules -q
 ```
 
 Expected:
 
-- No output.
+- The test passes.
 
 - [ ] **Step 6: Review staged scope before final commit**
 

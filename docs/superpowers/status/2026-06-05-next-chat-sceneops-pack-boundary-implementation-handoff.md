@@ -10,6 +10,12 @@ This handoff closes the strategy/spec/planning slice that followed the OmniSight
 UI/UX polish work. The next chat should start a new development branch from
 `main` and implement the pack-registry plan.
 
+The spec and plan were tightened after review to automate the no-runtime-pack
+directory check, validate `extends` against declared core extension points,
+document how `forbidden_dependencies` are enforced, and clarify that
+`pack_registry` in `required_capabilities` is an intentional bootstrap
+capability.
+
 The strategic decision is now:
 
 - Sell one focused product first: Vezor FleetOps for satellite-connected fleet
@@ -55,9 +61,8 @@ packs/maritime-fleet/pack.yaml maritime-fleet planned_mvp true
 packs/traffic-public-space/pack.yaml traffic-public-space designed_not_implemented false
 ```
 
-A text scan found no `TBD`, `TODO`, `FIXME`, `implement later`, `fill in
-details`, or `similar to task` markers in the new strategy/spec/plan/manifest
-documents.
+A marker scan found no unresolved planning markers in the new
+strategy/spec/plan/manifest documents.
 
 Backend `uv` verification was not run in this closeout because `uv` was not on
 the shell PATH and system Python did not have PyYAML installed. The
@@ -80,6 +85,8 @@ The plan builds:
 - route registration in `backend/src/argus/api/v1/__init__.py`
 - `AppServices.packs` wiring in `backend/src/argus/services/app.py`
 - tests for registry, routes, and core noun-boundary governance
+- automated assertion that Phase 1 does not create
+  `backend/src/argus/maritime` or `backend/src/argus/traffic_public_space`
 
 ## Explicit Non-Goals
 

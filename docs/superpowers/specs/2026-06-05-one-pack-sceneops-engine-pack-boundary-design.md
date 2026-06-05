@@ -268,6 +268,40 @@ Each entity must declare:
 `storage` must be `pack` for vertical-specific entities. Core storage is not
 allowed for vertical entities.
 
+For Phase 1, `extends` is a validated relationship label, not ORM inheritance
+and not a Python base class. The registry should verify that every entity's
+`extends` value appears in `allowed_core_dependencies` and in the known core
+extension-point allowlist. Phase 3 maritime runtime work must then decide how
+each extension point is represented in code: relationship contract, adapter
+interface, database relationship, or service-level projection. Runtime work
+must not reinterpret `extends` as permission to add vertical columns to core
+tables.
+
+`pack_registry` appearing in `engine.required_capabilities` is intentionally
+self-referential. It means "this manifest requires an engine version that has a
+pack registry before the pack can be understood." The registry may still load
+the manifest because manifest parsing is the bootstrap operation that makes
+that capability visible.
+
+### Forbidden Dependency Enforcement
+
+`forbidden_dependencies` are a mix of enforceable code boundaries and strategic
+guardrails. The implementation must make that distinction explicit.
+
+| Token family | Examples | Phase 1 enforcement |
+|---|---|---|
+| Vertical entity in core | `maritime_entity_in_core_contract`, `traffic_entity_in_core_contract`, `vessel_schema_in_core`, `voyage_schema_in_core` | automated boundary test scans scoped core files for vertical nouns |
+| Accidental runtime pack creation | `traffic_runtime_code_before_activation` | automated boundary test asserts `backend/src/argus/maritime` and `backend/src/argus/traffic_public_space` do not exist in Phase 1 |
+| Core depends on vertical integrations | `ais_required_by_core`, `nmea_required_by_core`, `atspm_required_by_core`, `cds_required_by_core`, `v2x_required_by_core` | plan scope forbids adding adapters; future adapter work must add import/dependency tests |
+| Commercial or hierarchy drift | `speedcast_hierarchy_in_core`, `public_agency_sales_motion_before_activation` | documented decision rule and code review in Phase 1; future billing/UI work must add tests before these surfaces exist |
+| Public-space privacy defaults | `face_recognition`, `biometric_identification_default`, `plate_recognition_enabled_by_default` | manifest default review in Phase 1; future activated pack work must add privacy-policy and UI tests |
+
+The Phase 1 noun-boundary test is a denylist because it protects the specific
+entities in the two current manifests. A broader import/module allowlist should
+be added when real pack runtime modules exist; adding it too early risks noisy
+false positives against the current backend structure. The directory-absence
+assertion makes Phase 1 fail closed for accidental pack implementation.
+
 ### Designed-Only Pack Rules
 
 When `metadata.status` is `designed_not_implemented`:
