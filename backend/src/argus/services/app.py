@@ -212,6 +212,7 @@ from argus.services.model_admission import evaluate_worker_model_admission
 from argus.services.model_catalog import resolve_catalog_status
 from argus.services.operational_memory import OperationalMemoryService
 from argus.services.operator_configuration import OperatorConfigurationService
+from argus.services.pack_registry import PackRegistry
 from argus.services.policy_drafts import PolicyDraftService
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.privacy_policy_runtime import validate_privacy_policy_residency
@@ -316,6 +317,7 @@ class AppServices:
     sites: SiteService
     cameras: CameraService
     models: ModelService
+    packs: PackRegistry
     runtime_artifacts: RuntimeArtifactService
     runtime_soak: RuntimeSoakService
     privacy_manifests: PrivacyManifestService
@@ -4456,6 +4458,7 @@ def build_app_services(
         sites=SiteService(db.session_factory, audit_logger),
         cameras=camera_service,
         models=ModelService(db.session_factory, audit_logger),
+        packs=PackRegistry(),
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         runtime_soak=RuntimeSoakService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),

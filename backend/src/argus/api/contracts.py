@@ -519,6 +519,102 @@ class ModelCatalogEntryResponse(BaseModel):
     note: str
 
 
+class PackStatus(StrEnum):
+    PLANNED_MVP = "planned_mvp"
+    DESIGNED_NOT_IMPLEMENTED = "designed_not_implemented"
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+class PackMetadataResponse(BaseModel):
+    id: str
+    name: str
+    product_name: str
+    owner: str
+    status: PackStatus
+    wedge: str
+    sales_motion: str
+    implementation_commitment: bool
+
+
+class PackEngineRequirementsResponse(BaseModel):
+    min_version: str
+    required_capabilities: list[str] = Field(default_factory=list)
+
+
+class PackEntityResponse(BaseModel):
+    name: str
+    extends: str
+    storage: str
+    purpose: str
+
+
+class PackSceneTemplateResponse(BaseModel):
+    id: str
+    name: str
+    outcome: str
+    primitives: list[str] = Field(default_factory=list)
+
+
+class PackModelPresetResponse(BaseModel):
+    id: str
+    status: str | None = None
+    classes: list[str] = Field(default_factory=list)
+    scenes: list[str] = Field(default_factory=list)
+    max_terms: int | None = None
+    terms: list[str] = Field(default_factory=list)
+
+
+class PackModelPresetsResponse(BaseModel):
+    fixed_vocab: list[PackModelPresetResponse] = Field(default_factory=list)
+    open_vocab: list[PackModelPresetResponse] = Field(default_factory=list)
+
+
+class PackIntegrationResponse(BaseModel):
+    id: str
+    status: str
+    protocol: str
+
+
+class PackEvidenceContextResponse(BaseModel):
+    fields: list[str] = Field(default_factory=list)
+
+
+class PackBillingResponse(BaseModel):
+    hierarchy_labels: list[str] = Field(default_factory=list)
+    meters: list[str] = Field(default_factory=list)
+    status: str | None = None
+
+
+class PackUiExtensionsResponse(BaseModel):
+    navigation_labels: dict[str, str] = Field(default_factory=dict)
+    panels: list[str] = Field(default_factory=list)
+    status: str | None = None
+
+
+class PackManifestResponse(BaseModel):
+    api_version: str
+    kind: str
+    metadata: PackMetadataResponse
+    activation_conditions: list[str] = Field(default_factory=list)
+    engine: PackEngineRequirementsResponse
+    entities: list[PackEntityResponse] = Field(default_factory=list)
+    scene_templates: list[PackSceneTemplateResponse] = Field(default_factory=list)
+    model_presets: PackModelPresetsResponse
+    integrations: list[PackIntegrationResponse] = Field(default_factory=list)
+    privacy_defaults: dict[str, Any] = Field(default_factory=dict)
+    evidence_context: PackEvidenceContextResponse
+    billing: PackBillingResponse
+    ui_extensions: PackUiExtensionsResponse
+    allowed_core_dependencies: list[str] = Field(default_factory=list)
+    forbidden_dependencies: list[str] = Field(default_factory=list)
+    is_runtime_enabled: bool
+
+
+class PackListResponse(BaseModel):
+    packs: list[PackManifestResponse]
+
+
 class HomographyPayload(BaseModel):
     src: list[list[float]]
     dst: list[list[float]]
