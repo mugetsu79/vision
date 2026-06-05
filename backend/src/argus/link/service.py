@@ -8,6 +8,7 @@ from typing import cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.compat import UTC
@@ -775,8 +776,18 @@ class LinkService:
             created_at=now,
         )
         async with self.session_factory() as session:
+            existing = await self._find_passport_row_by_hash(session, passport_hash)
+            if existing is not None:
+                return _passport_record(existing)
             session.add(passport)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                existing = await self._find_passport_row_by_hash(session, passport_hash)
+                if existing is not None:
+                    return _passport_record(existing)
+                raise
             await session.refresh(passport)
         return _passport_record(passport)
 
@@ -949,6 +960,22 @@ class LinkService:
         if incident_id is not None:
             queue_items = [item for item in queue_items if item.incident_id == incident_id]
         return queue_items
+
+    async def _find_passport_row_by_hash(
+        self,
+        session: AsyncSession,
+        passport_hash: str,
+    ) -> LinkPassportSnapshot | None:
+        result = await session.execute(select(LinkPassportSnapshot))
+        passports = cast(list[LinkPassportSnapshot], result.scalars().all())
+        return next(
+            (
+                passport
+                for passport in passports
+                if passport.passport_hash == passport_hash
+            ),
+            None,
+        )
 
     async def _update_queue_status(
         self,

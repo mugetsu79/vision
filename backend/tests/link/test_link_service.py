@@ -140,6 +140,13 @@ async def test_session_backed_link_service_persists_core_state() -> None:
         incident_id=incident_id,
         evidence_artifact_id=evidence_artifact_id,
     )
+    duplicate_passport = await restored.abuild_passport(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        camera_id=camera_id,
+        incident_id=incident_id,
+        evidence_artifact_id=evidence_artifact_id,
+    )
 
     assert restored_budget is not None
     assert restored_budget.id == budget.id
@@ -150,6 +157,8 @@ async def test_session_backed_link_service_persists_core_state() -> None:
     assert restored_passport.payload["latest_probe"] is not None
     assert restored_passport.last_sync_at is not None
     assert first_passport.passport_hash == restored_passport.passport_hash
+    assert duplicate_passport.id == first_passport.id
+    assert len(session_factory.rows[LinkPassportSnapshot]) == 1
 
 
 def test_priority_order_is_safety_evidence_telemetry_bulk(link_service: LinkService) -> None:
