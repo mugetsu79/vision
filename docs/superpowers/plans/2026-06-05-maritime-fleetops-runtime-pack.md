@@ -31,6 +31,10 @@ Execution rules:
 
 - Run each task with TDD: write the test, run it red, implement the smallest
   product code that satisfies the expected behavior, run it green, then commit.
+- If executing a task requires relaxing a `CC-*` constraint, changing a
+  cross-cutting decision, or moving a vertical noun into core to make the task
+  pass, stop and surface the conflict. Do not silently work around the
+  constraint.
 - Keep core tests packless unless the task is explicitly a maritime task.
 - Do not stage unrelated scratch files, `.claude/`, `.codex/`, `.superpowers/`,
   `.vite/`, screenshots, or `taste-skill/`.
@@ -41,6 +45,47 @@ Execution rules:
 - Frontend verification uses the existing package scripts:
   `corepack pnpm test --run`, `corepack pnpm build`, and
   `corepack pnpm lint`.
+
+Atomic commit policy:
+
+- Small tasks can use the single commit command shown at the end of the task.
+- Large tasks must split into atomic commits even when the task header stays
+  intact. Use these checkpoints unless the implementation naturally produces an
+  even smaller reviewable commit:
+  - Task 1: `test: define core link baseline`, `feat: add link schema`,
+    `feat: add link service`, `feat: add link api`.
+  - Task 4: `test: define maritime entity behavior`,
+    `feat: add maritime entity schema`, `feat: add maritime entity api`.
+  - Task 6: `test: define maritime telemetry adapters`,
+    `feat: add maritime telemetry schema`, `feat: add maritime telemetry ingest`,
+    `feat: add carrier-aware link selection`.
+  - Task 7: `test: define maritime evidence context`,
+    `feat: add maritime evidence context`, `feat: add maritime evidence export`.
+  - Task 8: `test: define billing baseline`, `feat: add billing schema`,
+    `feat: add billing service api`, `feat: add maritime billing rollups`.
+  - Task 9: `test: define support baseline`, `feat: add support schema`,
+    `feat: add support service api`, `feat: add supervisor tunnel handoff`,
+    `feat: add maritime support diagnostics`.
+  - Task 11: `test: define fleetops ui states`, `feat: add fleetops routes`,
+    `feat: add fleetops operations surfaces`,
+    `feat: add fleetops billing support surfaces`.
+
+Migration numbering:
+
+- Migration filenames in this plan use `0030` through `0034` as examples because
+  the branch currently has migrations through `0029`. Before writing Task 1
+  implementation code, read the highest existing migration number and allocate
+  the next five free numbers for `core_link`, `core_fleet`, `core_billing`,
+  `core_support`, and `maritime_pack`.
+- Use this command from the repository root:
+
+```bash
+ls backend/src/argus/migrations/versions/*.py | sed -E 's#.*/([0-9]+).*#\1#' | sort -n | tail -1
+```
+
+- If the result is not `0029`, replace every migration filename in the task with
+  the computed free number before committing. Do not overwrite or reuse an
+  existing migration number.
 
 ## File Structure
 
@@ -83,6 +128,8 @@ Modify backend integration points:
 - `backend/src/argus/services/app.py`: construct services without embedding domain logic.
 - `backend/src/argus/core/events.py`: add support tunnel and link transfer streams if needed.
 - `backend/src/argus/models/enums.py`: add only domain-neutral core enums; maritime enums stay in `argus.maritime.contracts` unless SQL enum reuse is required.
+- `backend/src/argus/scripts/export_openapi_schema.py`: export OpenAPI to a
+  file without requiring a running backend server.
 - `backend/src/argus/migrations/versions/0030_core_link.py`
 - `backend/src/argus/migrations/versions/0031_core_fleet.py`
 - `backend/src/argus/migrations/versions/0032_core_billing.py`
@@ -106,7 +153,9 @@ Create backend tests:
 - `backend/tests/maritime/test_evidence.py`
 - `backend/tests/maritime/test_billing_support.py`
 - `backend/tests/api/test_maritime_routes.py`
+- `backend/tests/api/test_openapi_export.py`
 - `backend/tests/core/test_full_product_boundaries.py`
+- `backend/tests/core/test_packless_empty_registry.py`
 - `backend/tests/e2e/test_maritime_fleetops_smoke.py`
 
 Create frontend files:
@@ -136,6 +185,10 @@ Modify frontend integration points:
 - `frontend/src/app/router.tsx`: add FleetOps routes.
 - `frontend/src/components/layout/workspace-nav.ts`: add FleetOps nav while keeping traffic hidden.
 - `frontend/src/lib/api.generated.ts`: regenerate after backend OpenAPI is complete.
+- `frontend/src/lib/openapi.json`: generated OpenAPI file artifact consumed by
+  `openapi-typescript`.
+- `frontend/package.json`: change `generate:api` to read
+  `src/lib/openapi.json` rather than `http://127.0.0.1:8000/openapi.json`.
 
 ## Gate 1: Core Generality
 
@@ -154,6 +207,20 @@ Modify frontend integration points:
 - Modify: `backend/src/argus/services/app.py`
 - Test: `backend/tests/link/test_link_service.py`
 - Test: `backend/tests/api/test_link_routes.py`
+- Test: `backend/tests/core/test_packless_empty_registry.py`
+
+- [ ] **Step 0: Reserve migration filenames**
+
+Run:
+
+```bash
+cd /Users/yann.moren/vision
+ls backend/src/argus/migrations/versions/*.py | sed -E 's#.*/([0-9]+).*#\1#' | sort -n | tail -1
+```
+
+Expected today: `0029`. If the command prints a larger number, reserve the next
+five free numbers and update the migration filenames in Tasks 1, 2, 8, 9, and
+4 before writing migrations.
 
 - [ ] **Step 1: Write failing link service tests**
 
@@ -315,6 +382,24 @@ async def test_queue_pause_resume_retry_routes_are_tenant_scoped(client: AsyncCl
         assert response.status_code == 404
 ```
 
+Add the first empty-registry integration test in
+`backend/tests/core/test_packless_empty_registry.py`:
+
+```python
+async def test_link_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=empty_pack_app), base_url="http://test") as client:
+        response = await client.get("/api/v1/link/sites/00000000-0000-4000-8000-000000000002/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["site_id"] == "00000000-0000-4000-8000-000000000002"
+    assert payload.get("pack_id") is None
+```
+
+The `empty_pack_app` fixture must construct the full FastAPI app with a
+`PackRegistry` pointed at an empty temporary `packs/` directory. This proves
+`CC-1` at the API/app-composition layer, not only inside the service.
+
 Implement routes:
 
 - `GET /api/v1/link/sites/{site_id}/status`
@@ -336,8 +421,8 @@ Run:
 
 ```bash
 cd /Users/yann.moren/vision/backend
-python3 -m uv run pytest tests/link/test_link_service.py tests/api/test_link_routes.py -q
-python3 -m uv run ruff check src/argus/link tests/link tests/api/test_link_routes.py
+python3 -m uv run pytest tests/link/test_link_service.py tests/api/test_link_routes.py tests/core/test_packless_empty_registry.py::test_link_routes_work_with_empty_pack_registry -q
+python3 -m uv run ruff check src/argus/link tests/link tests/api/test_link_routes.py tests/core/test_packless_empty_registry.py
 python3 -m uv run mypy src/argus/link
 ```
 
@@ -347,7 +432,7 @@ Expected: all pass.
 
 ```bash
 cd /Users/yann.moren/vision
-git add backend/src/argus/link backend/src/argus/migrations/versions/0030_core_link.py backend/src/argus/models/__init__.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/link backend/tests/api/test_link_routes.py
+git add backend/src/argus/link backend/src/argus/migrations/versions/0030_core_link.py backend/src/argus/models/__init__.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/link backend/tests/api/test_link_routes.py backend/tests/core/test_packless_empty_registry.py
 git commit -m "feat: add core link baseline"
 ```
 
@@ -366,6 +451,7 @@ git commit -m "feat: add core link baseline"
 - Modify: `backend/src/argus/services/app.py`
 - Test: `backend/tests/fleet/test_fleet_service.py`
 - Test: `backend/tests/api/test_fleet_routes.py`
+- Test: `backend/tests/core/test_packless_empty_registry.py`
 
 - [ ] **Step 1: Write failing fleet tests**
 
@@ -440,6 +526,20 @@ async def test_fleet_exceptions_route_is_packless_and_tenant_scoped(client: Asyn
     assert all(item["tenant_id"] == "00000000-0000-4000-8000-000000000001" for item in payload["items"])
 ```
 
+Append this empty-registry API test to
+`backend/tests/core/test_packless_empty_registry.py`:
+
+```python
+async def test_fleet_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=empty_pack_app), base_url="http://test") as client:
+        response = await client.get("/api/v1/fleet/exceptions")
+
+    assert response.status_code == 200
+    serialized = json.dumps(response.json()).lower()
+    assert "vessel" not in serialized
+    assert "voyage" not in serialized
+```
+
 Assertions:
 
 - Generic sites can belong to generic groups and hierarchy nodes.
@@ -497,8 +597,8 @@ Routes:
 
 ```bash
 cd /Users/yann.moren/vision/backend
-python3 -m uv run pytest tests/fleet/test_fleet_service.py tests/api/test_fleet_routes.py -q
-python3 -m uv run ruff check src/argus/fleet tests/fleet tests/api/test_fleet_routes.py
+python3 -m uv run pytest tests/fleet/test_fleet_service.py tests/api/test_fleet_routes.py tests/core/test_packless_empty_registry.py::test_fleet_routes_work_with_empty_pack_registry -q
+python3 -m uv run ruff check src/argus/fleet tests/fleet tests/api/test_fleet_routes.py tests/core/test_packless_empty_registry.py
 python3 -m uv run mypy src/argus/fleet
 ```
 
@@ -506,7 +606,7 @@ python3 -m uv run mypy src/argus/fleet
 
 ```bash
 cd /Users/yann.moren/vision
-git add backend/src/argus/fleet backend/src/argus/migrations/versions/0031_core_fleet.py backend/src/argus/models/__init__.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/fleet backend/tests/api/test_fleet_routes.py
+git add backend/src/argus/fleet backend/src/argus/migrations/versions/0031_core_fleet.py backend/src/argus/models/__init__.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/fleet backend/tests/api/test_fleet_routes.py backend/tests/core/test_packless_empty_registry.py
 git commit -m "feat: add core fleet baseline"
 ```
 
@@ -549,7 +649,20 @@ def test_traffic_has_no_runtime_module_or_route(app: FastAPI) -> None:
 
 
 def test_core_contracts_do_not_contain_maritime_nouns() -> None:
-    forbidden = {"vessel", "voyage", "port_call", "port call", "ais", "nmea", "mmsi", "imo_number"}
+    forbidden_identifier_patterns = [
+        r"\bVessel\b",
+        r"\bVoyage\b",
+        r"\bPortCall\b",
+        r"\bAIS\b",
+        r"\bNMEA\b",
+        r"\bMMSI\b",
+        r"\bIMO\b",
+        r"\bvessel_id\b",
+        r"\bvoyage_id\b",
+        r"\bport_call_id\b",
+        r"\bmmsi\b",
+        r"\bimo_number\b",
+    ]
     scanned_paths = [
         Path("backend/src/argus/link"),
         Path("backend/src/argus/fleet"),
@@ -558,8 +671,8 @@ def test_core_contracts_do_not_contain_maritime_nouns() -> None:
         Path("backend/src/argus/api/contracts.py"),
     ]
     text = "\n".join(path.read_text() for root in scanned_paths for path in ([root] if root.is_file() else root.rglob("*.py")))
-    lowered = text.lower()
-    assert not forbidden & {word for word in forbidden if word in lowered}
+    hits = [pattern for pattern in forbidden_identifier_patterns if re.search(pattern, text)]
+    assert hits == []
 ```
 
 Core noun scan must inspect:
@@ -570,7 +683,7 @@ Core noun scan must inspect:
 - `backend/src/argus/support`
 - `backend/src/argus/api/contracts.py`
 
-Allowed exceptions: opaque `pack_id`, `pack_metadata`, tests, and the `argus.maritime` package.
+Allowed exceptions: opaque `pack_id`, `pack_metadata`, tests, and the `argus.maritime` package. Use word-boundary or identifier-pattern matching, not broad lowercase substring matching; broad matching can falsely fail on unrelated words.
 
 - [ ] **Step 2: Implement runtime contribution**
 
@@ -1037,6 +1150,7 @@ git commit -m "feat: add maritime evidence context export"
 - Test: `backend/tests/billing/test_billing_service.py`
 - Test: `backend/tests/api/test_billing_routes.py`
 - Test: `backend/tests/maritime/test_billing_support.py`
+- Test: `backend/tests/core/test_packless_empty_registry.py`
 
 - [ ] **Step 1: Write failing billing tests**
 
@@ -1098,6 +1212,23 @@ async def test_maritime_rollups_label_reseller_owner_charterer_and_vessel(client
     assert response.json()["meters"]["base_commercial_unit"] == "vessel_month"
 ```
 
+Append this empty-registry API test to
+`backend/tests/core/test_packless_empty_registry.py`:
+
+```python
+async def test_billing_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=empty_pack_app), base_url="http://test") as client:
+        account_response = await client.post(
+            "/api/v1/billing/accounts",
+            json={"name": "Packless account", "node_ids": []},
+        )
+        meter_response = await client.get("/api/v1/billing/meters")
+
+    assert account_response.status_code == 201
+    assert meter_response.status_code == 200
+    assert all(meter.get("pack_id") is None or meter["pack_id"] != "maritime-fleet" for meter in meter_response.json()["items"])
+```
+
 - [ ] **Step 2: Implement billing core**
 
 Tables:
@@ -1142,11 +1273,11 @@ Routes:
 
 ```bash
 cd /Users/yann.moren/vision/backend
-python3 -m uv run pytest tests/billing/test_billing_service.py tests/api/test_billing_routes.py tests/maritime/test_billing_support.py -q
-python3 -m uv run ruff check src/argus/billing src/argus/maritime/billing.py tests/billing tests/api/test_billing_routes.py tests/maritime/test_billing_support.py
+python3 -m uv run pytest tests/billing/test_billing_service.py tests/api/test_billing_routes.py tests/maritime/test_billing_support.py tests/core/test_packless_empty_registry.py::test_billing_routes_work_with_empty_pack_registry -q
+python3 -m uv run ruff check src/argus/billing src/argus/maritime/billing.py tests/billing tests/api/test_billing_routes.py tests/maritime/test_billing_support.py tests/core/test_packless_empty_registry.py
 python3 -m uv run mypy src/argus/billing src/argus/maritime/billing.py
 cd /Users/yann.moren/vision
-git add backend/src/argus/billing backend/src/argus/maritime/billing.py backend/src/argus/migrations/versions/0032_core_billing.py backend/src/argus/models/__init__.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/billing backend/tests/api/test_billing_routes.py backend/tests/maritime/test_billing_support.py
+git add backend/src/argus/billing backend/src/argus/maritime/billing.py backend/src/argus/migrations/versions/0032_core_billing.py backend/src/argus/models/__init__.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/billing backend/tests/api/test_billing_routes.py backend/tests/maritime/test_billing_support.py backend/tests/core/test_packless_empty_registry.py
 git commit -m "feat: add billing baseline and maritime rollups"
 ```
 
@@ -1160,6 +1291,7 @@ git commit -m "feat: add billing baseline and maritime rollups"
 - Create: `backend/src/argus/support/service.py`
 - Create: `backend/src/argus/support/tunnel_transport.py`
 - Create: `backend/src/argus/support/api.py`
+- Create: `backend/src/argus/supervisor/support_tunnel.py`
 - Create: `backend/src/argus/migrations/versions/0033_core_support.py`
 - Create: `backend/src/argus/maritime/support.py`
 - Modify: `backend/src/argus/core/events.py`
@@ -1167,6 +1299,8 @@ git commit -m "feat: add billing baseline and maritime rollups"
 - Modify: `backend/src/argus/services/app.py`
 - Test: `backend/tests/support/test_support_service.py`
 - Test: `backend/tests/api/test_support_routes.py`
+- Test: `backend/tests/supervisor/test_support_tunnel_handoff.py`
+- Test: `backend/tests/core/test_packless_empty_registry.py`
 
 - [ ] **Step 1: Write failing support tests**
 
@@ -1206,6 +1340,29 @@ def test_ssh_reverse_tunnel_transport_uses_node_local_credential_references() ->
     assert "IdentityFile" not in json.dumps(request.model_dump())
 
 
+def test_backend_does_not_invoke_ssh_directly(support_service: SupportService, monkeypatch: pytest.MonkeyPatch) -> None:
+    invoked = False
+
+    def fake_run(*args: object, **kwargs: object) -> None:
+        nonlocal invoked
+        invoked = True
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    tunnel = support_service.request_tunnel(
+        tenant_id=TENANT_ID,
+        site_id=SITE_ID,
+        node_id=NODE_ID,
+        transport="ssh_reverse",
+        credential_ref="node-local:ssh/support-tunnel",
+        relay_host="noc-relay.mugetsu.tech",
+        allowed_ports=[22, 8000],
+    )
+
+    assert tunnel.status == "requested"
+    assert tunnel.dispatch_method in {"supervisor_poll", "nats_push"}
+    assert invoked is False
+
+
 def test_break_glass_records_reason_scope_actor_and_closure(support_service: SupportService) -> None:
     record = support_service.open_break_glass(reason="restore camera access", scope={"site_id": str(SITE_ID)}, actor_id="captain", approver_id="fleet-admin")
     closed = support_service.close_break_glass(record.id, closure_notes="rotated temporary credential")
@@ -1232,6 +1389,50 @@ def test_onboarding_checks_cover_identity_master_edge_camera_model_link_evidence
 async def test_support_routes_are_tenant_scoped(client: AsyncClient, foreign_bundle_id: UUID) -> None:
     response = await client.get(f"/api/v1/support/bundles/{foreign_bundle_id}")
     assert response.status_code == 404
+```
+
+Create `backend/tests/supervisor/test_support_tunnel_handoff.py` with the
+supervisor-side counterpart:
+
+```python
+def test_supervisor_resolves_node_local_credential_and_invokes_ssh_reverse_transport(
+    credential_store: NodeCredentialStore,
+    process_adapter: FakeProcessAdapter,
+) -> None:
+    credential_store.put_reference("node-local:ssh/support-tunnel", private_key_path="/var/lib/vezor/ssh/support_tunnel")
+    request = SupportTunnelRequest(
+        tunnel_id=UUID("00000000-0000-4000-8000-000000000031"),
+        node_id=NODE_ID,
+        transport="ssh_reverse",
+        relay_host="noc-relay.mugetsu.tech",
+        allowed_ports=[22, 8000],
+        credential_ref="node-local:ssh/support-tunnel",
+        expires_at=datetime(2026, 6, 5, 12, 0, tzinfo=UTC),
+    )
+
+    result = SupervisorSupportTunnelRunner(credential_store=credential_store, process_adapter=process_adapter).open(request)
+
+    assert result.status == "active"
+    assert process_adapter.commands[0][:3] == ["ssh", "-N", "-R"]
+    assert "/var/lib/vezor/ssh/support_tunnel" in process_adapter.commands[0]
+    assert "PRIVATE KEY" not in " ".join(process_adapter.commands[0])
+```
+
+Append this empty-registry API test to
+`backend/tests/core/test_packless_empty_registry.py`:
+
+```python
+async def test_support_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI) -> None:
+    async with AsyncClient(transport=ASGITransport(app=empty_pack_app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/support/bundles",
+            json={"site_id": "00000000-0000-4000-8000-000000000002", "include_logs": True},
+        )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload.get("pack_id") is None
+    assert "vessel" not in json.dumps(payload).lower()
 ```
 
 - [ ] **Step 2: Implement support core**
@@ -1271,11 +1472,11 @@ Routes:
 
 ```bash
 cd /Users/yann.moren/vision/backend
-python3 -m uv run pytest tests/support/test_support_service.py tests/api/test_support_routes.py -q
-python3 -m uv run ruff check src/argus/support src/argus/maritime/support.py tests/support tests/api/test_support_routes.py
-python3 -m uv run mypy src/argus/support src/argus/maritime/support.py
+python3 -m uv run pytest tests/support/test_support_service.py tests/api/test_support_routes.py tests/supervisor/test_support_tunnel_handoff.py tests/core/test_packless_empty_registry.py::test_support_routes_work_with_empty_pack_registry -q
+python3 -m uv run ruff check src/argus/support src/argus/supervisor/support_tunnel.py src/argus/maritime/support.py tests/support tests/api/test_support_routes.py tests/supervisor/test_support_tunnel_handoff.py tests/core/test_packless_empty_registry.py
+python3 -m uv run mypy src/argus/support src/argus/supervisor/support_tunnel.py src/argus/maritime/support.py
 cd /Users/yann.moren/vision
-git add backend/src/argus/support backend/src/argus/maritime/support.py backend/src/argus/migrations/versions/0033_core_support.py backend/src/argus/core/events.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/support backend/tests/api/test_support_routes.py
+git add backend/src/argus/support backend/src/argus/supervisor/support_tunnel.py backend/src/argus/maritime/support.py backend/src/argus/migrations/versions/0033_core_support.py backend/src/argus/core/events.py backend/src/argus/api/v1/__init__.py backend/src/argus/services/app.py backend/tests/support backend/tests/api/test_support_routes.py backend/tests/supervisor/test_support_tunnel_handoff.py backend/tests/core/test_packless_empty_registry.py
 git commit -m "feat: add support baseline and maritime diagnostics"
 ```
 
@@ -1286,7 +1487,11 @@ git commit -m "feat: add support baseline and maritime diagnostics"
 **Constraints:** `CC-9`
 
 **Files:**
+- Create: `backend/src/argus/scripts/export_openapi_schema.py`
+- Test: `backend/tests/api/test_openapi_export.py`
+- Create: `frontend/src/lib/openapi.json`
 - Modify: `frontend/src/lib/api.generated.ts`
+- Modify: `frontend/package.json`
 - Create: `frontend/src/hooks/use-link.ts`
 - Create: `frontend/src/hooks/use-fleet.ts`
 - Create: `frontend/src/hooks/use-billing.ts`
@@ -1296,16 +1501,58 @@ git commit -m "feat: add support baseline and maritime diagnostics"
 - Test: `frontend/src/hooks/use-billing.test.ts`
 - Test: `frontend/src/hooks/use-support.test.ts`
 
-- [ ] **Step 1: Regenerate API types**
+- [ ] **Step 1: Export OpenAPI as a file artifact**
 
-Run backend, then:
+Create `backend/tests/api/test_openapi_export.py`:
+
+```python
+def test_openapi_export_writes_fleetops_schema(tmp_path: Path) -> None:
+    output_path = tmp_path / "openapi.json"
+
+    export_openapi_schema(output_path)
+
+    schema = json.loads(output_path.read_text())
+    paths = schema["paths"]
+    assert "/api/v1/maritime/runtime" in paths
+    assert "/api/v1/link/sites/{site_id}/status" in paths
+    assert "/api/v1/billing/invoice-runs" in paths
+    assert "/api/v1/support/bundles" in paths
+```
+
+Implement `backend/src/argus/scripts/export_openapi_schema.py` so it imports
+the FastAPI app factory, builds the app without starting a server, and writes a
+deterministic sorted JSON schema.
+
+Run:
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_openapi_export.py -q
+python3 -m uv run python -m argus.scripts.export_openapi_schema ../frontend/src/lib/openapi.json
+```
+
+Expected:
+
+- `frontend/src/lib/openapi.json` exists.
+- The file includes `/api/v1/link`, `/api/v1/fleet`, `/api/v1/billing`,
+  `/api/v1/support`, and `/api/v1/maritime` paths.
+
+- [ ] **Step 2: Regenerate API types from the file artifact**
+
+Modify `frontend/package.json`:
+
+```json
+"generate:api": "openapi-typescript src/lib/openapi.json -o src/lib/api.generated.ts"
+```
+
+Run:
 
 ```bash
 cd /Users/yann.moren/vision/frontend
 corepack pnpm generate:api
 ```
 
-- [ ] **Step 2: Write hook tests and implement hooks**
+- [ ] **Step 3: Write hook tests and implement hooks**
 
 Write hook tests that mock `apiClient` and assert exact endpoint families:
 
@@ -1336,14 +1583,16 @@ test("billing and support hooks keep core routes generic", async () => {
 });
 ```
 
-- [ ] **Step 3: Verify and commit**
+- [ ] **Step 4: Verify and commit**
 
 ```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_openapi_export.py -q
 cd /Users/yann.moren/vision/frontend
 corepack pnpm test -- use-maritime use-billing use-support --run
 corepack pnpm build
 cd /Users/yann.moren/vision
-git add frontend/src/lib/api.generated.ts frontend/src/hooks/use-link.ts frontend/src/hooks/use-fleet.ts frontend/src/hooks/use-billing.ts frontend/src/hooks/use-support.ts frontend/src/hooks/use-maritime.ts frontend/src/hooks/*.test.ts
+git add backend/src/argus/scripts/export_openapi_schema.py backend/tests/api/test_openapi_export.py frontend/package.json frontend/src/lib/openapi.json frontend/src/lib/api.generated.ts frontend/src/hooks/use-link.ts frontend/src/hooks/use-fleet.ts frontend/src/hooks/use-billing.ts frontend/src/hooks/use-support.ts frontend/src/hooks/use-maritime.ts frontend/src/hooks/*.test.ts
 git commit -m "feat: add fleetops frontend hooks"
 ```
 
@@ -1475,13 +1724,48 @@ Test flow:
 
 - [ ] **Step 2: Write frontend Playwright smoke**
 
-Test route `/fleetops` with mocked API fixtures or local dev API:
+Use the real development stack, not mocked API fixtures. The smoke should catch
+frontend/backend/OpenAPI/auth wiring issues, so it must run against
+`infra/docker-compose.dev.yml`.
 
-- overview loads
-- vessel detail opens
-- evidence export builder renders metadata
-- billing page shows value meters and export action
-- support page shows onboarding and tunnel lifecycle
+Start the stack:
+
+```bash
+cd /Users/yann.moren/vision
+docker compose -f infra/docker-compose.dev.yml up -d postgres redis nats minio keycloak backend frontend
+```
+
+Wait for health:
+
+```bash
+curl -fsS http://127.0.0.1:8000/healthz
+curl -fsS http://127.0.0.1:3000
+```
+
+Create `frontend/e2e/fleetops.spec.ts` so it logs in through the dev realm or
+loads an existing authenticated storage state, then tests route `/fleetops`
+against the real backend:
+
+```typescript
+test("FleetOps product smoke covers overview detail evidence billing and support", async ({ page }) => {
+  await page.goto("/fleetops");
+  await expect(page.getByRole("heading", { name: /FleetOps/i })).toBeVisible();
+  await page.getByRole("link", { name: /MV Resolute/i }).click();
+  await expect(page.getByText(/Voyage timeline/i)).toBeVisible();
+  await page.getByRole("link", { name: /Evidence/i }).click();
+  await expect(page.getByText(/scene contract/i)).toBeVisible();
+  await expect(page.getByText(/link passport/i)).toBeVisible();
+  await page.getByRole("link", { name: /Billing/i }).click();
+  await expect(page.getByText(/vessel month/i)).toBeVisible();
+  await expect(page.getByText(/evidence pack export/i)).toBeVisible();
+  await page.getByRole("link", { name: /Support/i }).click();
+  await expect(page.getByText(/Onboarding checks/i)).toBeVisible();
+  await expect(page.getByText(/Tunnel lifecycle/i)).toBeVisible();
+});
+```
+
+Do not switch this smoke to route-level mocking. Mocked UI tests belong in Task
+11; Task 12 is the real product integration check.
 
 - [ ] **Step 3: Update docs and installer checks**
 
@@ -1525,6 +1809,7 @@ Run:
 ```bash
 cd /Users/yann.moren/vision/backend
 python3 -m uv run pytest tests/link tests/fleet tests/billing tests/support tests/maritime tests/core/test_full_product_boundaries.py -q
+python3 -m uv run pytest tests/core/test_packless_empty_registry.py -q
 python3 -m uv run ruff check src/argus/link src/argus/fleet src/argus/billing src/argus/support src/argus/maritime tests/link tests/fleet tests/billing tests/support tests/maritime
 python3 -m uv run mypy src/argus/link src/argus/fleet src/argus/billing src/argus/support src/argus/maritime
 cd /Users/yann.moren/vision/frontend
@@ -1541,6 +1826,8 @@ Expected:
 - No traffic runtime files exist.
 - No home-lab pack exists.
 - Core link/fleet/billing/support tests include packless variants.
+- Empty-registry app tests prove core link/fleet/billing/support APIs run with
+  no runtime-enabled packs.
 - Only intended files are staged or committed.
 
 ## Spec Traceability
@@ -1561,6 +1848,21 @@ Expected:
 - FleetOps workspace UI, including link, evidence, billing, support, and
   onboarding surfaces: Task 11.
 - Installer, docs, product runbooks, and end-to-end smoke: Task 12.
+
+## Constraint Traceability
+
+| Constraint | Enforced by |
+|---|---|
+| `CC-1 Packless Core Compatibility` | Task 1 link service/API no-pack tests; Task 2 fleet no-pack tests; Task 8 billing no-pack tests; Task 9 support no-pack tests; `tests/core/test_packless_empty_registry.py`; final verification empty-registry run. |
+| `CC-2 Pack Boundary` | Task 3 runtime/boundary scanner; Task 4 maritime-only entity tables; Task 5 template mapping; Task 7 evidence metadata; Task 8 maritime billing rollups; Task 9 maritime diagnostics. |
+| `CC-3 Traffic Boundary` | Task 3 route/module absence test; Task 11 navigation absence test; Task 12 docs and smoke checks. |
+| `CC-4 Link Is Core` | Task 1 `argus.link` service/API; Task 6 carrier selection composes link state without owning link queue semantics; Task 7 link passport integration. |
+| `CC-5 Fleet Is Core` | Task 2 `argus.fleet` service/API; Task 4 vessel-to-site projection; Task 11 FleetOps labels over generic site/fleet primitives. |
+| `CC-6 Billing Positioning` | Task 8 meter catalog tests and invoice/export behavior; Task 11 FleetOps billing UI tests. |
+| `CC-7 Support Tunnel` | Task 9 backend-does-not-ssh test, supervisor handoff test, node-local credential reference test, and support route tests. |
+| `CC-8 Evidence Integrity` | Task 1 link passport hash tests; Task 5 scene template/core primitive tests; Task 7 no-rehash evidence export tests. |
+| `CC-9 Frontend Reuse` | Task 10 OpenAPI file generation and hooks; Task 11 AppShell/workspace/TanStack Query reuse tests. |
+| `CC-10 Full Product Scope` | Task 12 backend e2e, frontend Playwright smoke, installer checks, and docs updates. |
 
 ## Self-Review
 
