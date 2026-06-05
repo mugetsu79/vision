@@ -7,7 +7,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
-from argus.api.contracts import SiteCreate, SiteResponse, TenantContext
+from argus.api.contracts import (
+    CameraUpdate,
+    IncidentRuleCreate,
+    SiteCreate,
+    SiteResponse,
+    TenantContext,
+)
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
 from argus.maritime.contracts import (
@@ -21,6 +27,7 @@ from argus.maritime.service import (
     MaritimeError,
     MaritimeNotFoundError,
 )
+from argus.maritime.templates import MaritimeTemplateError, MaritimeTemplateService
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
 
@@ -28,6 +35,7 @@ router = APIRouter(tags=["maritime"])
 
 ViewerUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.VIEWER))]
 OperatorUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.OPERATOR))]
+AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 
@@ -103,6 +111,10 @@ class PortCallUpdate(BaseModel):
     metadata: JsonObject | None = None
 
 
+class TemplateApplyRequest(BaseModel):
+    template_id: str = Field(min_length=1, max_length=128)
+
+
 @router.get("/api/v1/maritime/runtime")
 async def get_maritime_runtime(
     current_user: ViewerUser,
@@ -117,6 +129,81 @@ async def get_maritime_pack_runtime(
     services: ServicesDependency,
 ) -> JsonObject:
     return _runtime_payload(services)
+
+
+@router.get("/api/v1/maritime/scene-templates")
+async def list_maritime_scene_templates(
+    current_user: ViewerUser,
+    services: ServicesDependency,
+) -> list[JsonObject]:
+    template_service = MaritimeTemplateService(pack_registry=services.packs)
+    return [
+        template_service.template_payload(template)
+        for template in template_service.list_templates()
+    ]
+
+
+@router.post("/api/v1/maritime/cameras/{camera_id}/apply-template")
+async def apply_maritime_scene_template(
+    camera_id: UUID,
+    payload: TemplateApplyRequest,
+    current_user: AdminUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    template_service = MaritimeTemplateService(pack_registry=services.packs)
+    try:
+        template = template_service.get_template(payload.template_id)
+        update_payload = template_service.to_camera_update_payload(template)
+        camera_update = CameraUpdate.model_validate(update_payload)
+        original_camera = await services.cameras.get_camera(tenant_context, camera_id)
+        template_applied = False
+        created_rule_ids: list[UUID] = []
+        try:
+            await services.cameras.update_camera(tenant_context, camera_id, camera_update)
+            template_applied = True
+            created_rule_ids = await _apply_template_incident_rules(
+                services,
+                tenant_context=tenant_context,
+                camera_id=camera_id,
+                rule_payloads=template_service.incident_rule_payloads(template),
+            )
+            worker_config = await services.cameras.get_worker_config(tenant_context, camera_id)
+            scene_contract_hash = worker_config.scene_contract_hash
+            if scene_contract_hash is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Scene contract snapshot was not generated.",
+                )
+            snapshot = await services.scene_contracts.get_snapshot_by_hash(
+                tenant_id=tenant_context.tenant_id,
+                camera_id=camera_id,
+                contract_hash=scene_contract_hash,
+            )
+            if snapshot is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Scene contract snapshot was not found.",
+                )
+        except Exception:
+            for rule_id in created_rule_ids:
+                await services.incident_rules.delete_rule(tenant_context, camera_id, rule_id)
+            if template_applied:
+                await services.cameras.update_camera(
+                    tenant_context,
+                    camera_id,
+                    _camera_template_restore_update(original_camera),
+                )
+            raise
+        return {
+            "template_id": template.id,
+            "camera_id": str(camera_id),
+            "scene_contract_snapshot_id": str(snapshot.id),
+            "scene_contract_hash": scene_contract_hash,
+            "applied_core_fields": sorted(update_payload.keys()),
+        }
+    except MaritimeTemplateError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/api/v1/maritime/vessels")
@@ -473,6 +560,47 @@ def _runtime_payload(services: AppServices) -> JsonObject:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+
+
+async def _apply_template_incident_rules(
+    services: AppServices,
+    *,
+    tenant_context: TenantContext,
+    camera_id: UUID,
+    rule_payloads: list[JsonObject],
+) -> list[UUID]:
+    existing_rules = await services.incident_rules.list_rules(tenant_context, camera_id)
+    existing_incident_types = {
+        str(rule.incident_type)
+        for rule in existing_rules
+        if getattr(rule, "incident_type", None) is not None
+    }
+    created_rule_ids: list[UUID] = []
+    for rule_payload in rule_payloads:
+        rule = IncidentRuleCreate.model_validate(rule_payload)
+        if rule.incident_type is not None and rule.incident_type in existing_incident_types:
+            continue
+        created_rule = await services.incident_rules.create_rule(tenant_context, camera_id, rule)
+        rule_id = getattr(created_rule, "id", None)
+        if isinstance(rule_id, UUID):
+            created_rule_ids.append(rule_id)
+    return created_rule_ids
+
+
+def _camera_template_restore_update(camera: object) -> CameraUpdate:
+    payload: JsonObject = {}
+    for field_name in (
+        "active_classes",
+        "runtime_vocabulary",
+        "detection_regions",
+        "zones",
+        "privacy",
+        "recording_policy",
+    ):
+        value = getattr(camera, field_name, None)
+        if value is not None:
+            payload[field_name] = value
+    return CameraUpdate.model_validate(payload)
 
 
 async def _resolve_vessel_site(

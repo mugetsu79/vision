@@ -108,6 +108,21 @@ class SceneContractService:
             await session.refresh(snapshot)
             return snapshot
 
+    async def get_snapshot_by_hash(
+        self,
+        *,
+        tenant_id: UUID,
+        camera_id: UUID,
+        contract_hash: str,
+    ) -> SceneContractSnapshot | None:
+        async with self.session_factory() as session:
+            statement = select(SceneContractSnapshot).where(
+                SceneContractSnapshot.tenant_id == tenant_id,
+                SceneContractSnapshot.camera_id == camera_id,
+                SceneContractSnapshot.contract_hash == contract_hash,
+            )
+            return (await session.execute(statement)).scalar_one_or_none()
+
 
 async def _load_snapshot_by_hash(
     session: AsyncSession,
