@@ -1,0 +1,188 @@
+api_version: vezor.io/v1alpha1
+kind: Pack
+metadata:
+  id: maritime-fleet
+  name: Maritime Fleet Pack
+  product_name: Vezor FleetOps
+  owner: product
+  status: planned_mvp
+  wedge: satellite-connected fleet operations
+  sales_motion: fleet operators, vessel managers, offshore operators, and satellite managed-service channels
+  implementation_commitment: true
+engine:
+  min_version: 0.1.0
+  required_capabilities:
+    - scenes
+    - scene_contracts
+    - signals
+    - evidence
+    - runtime_passports
+    - link_passports
+    - model_catalog
+    - pack_registry
+entities:
+  - name: Vessel
+    extends: Site
+    storage: pack
+    purpose: maritime projection of a generic site
+  - name: Voyage
+    extends: SiteContext
+    storage: pack
+    purpose: time-bound maritime operating context for a vessel
+  - name: PortCall
+    extends: SiteContext
+    storage: pack
+    purpose: arrival, port, and departure context used for evidence and link posture
+  - name: AISPosition
+    extends: SignalContext
+    storage: pack
+    purpose: position context from AIS used to enrich evidence and fleet state
+  - name: NMEAReading
+    extends: SignalContext
+    storage: pack
+    purpose: bridge and vessel telemetry attached to scene evidence
+  - name: CarrierTerminal
+    extends: LinkContext
+    storage: pack
+    purpose: maritime connectivity terminal and carrier state
+  - name: MaritimeRole
+    extends: RoleLabel
+    storage: pack
+    purpose: shipboard and fleet operations role labels
+  - name: WatchRotation
+    extends: RotationGroup
+    storage: pack
+    purpose: crew and operations rotation context
+scene_templates:
+  - id: gangway-access
+    name: Gangway Access
+    outcome: boarding and exit events with after-hours evidence
+    primitives:
+      - line_crossing
+      - zone_occupancy
+      - evidence_trigger
+  - id: deck-presence
+    name: Deck Presence
+    outcome: person, vehicle, or asset presence on exposed deck areas
+    primitives:
+      - detection_region
+      - dwell_time
+      - incident_trigger
+  - id: engine-room-safety
+    name: Engine Room Safety
+    outcome: person presence and restricted-zone evidence in machinery spaces
+    primitives:
+      - include_region
+      - restricted_zone
+      - evidence_trigger
+  - id: cargo-work-area
+    name: Cargo Or Work Area
+    outcome: zone occupancy, movement, and restricted access in work areas
+    primitives:
+      - zone_occupancy
+      - line_crossing
+      - count_event
+  - id: port-call-evidence
+    name: Port Call Evidence
+    outcome: evidence backlog drain and high-bandwidth sync posture during port calls
+    primitives:
+      - link_passport
+      - evidence_queue
+      - export_package
+model_presets:
+  fixed_vocab:
+    - id: maritime-person-flow
+      classes:
+        - person
+      scenes:
+        - gangway-access
+        - deck-presence
+        - engine-room-safety
+    - id: maritime-port-and-yard-flow
+      classes:
+        - person
+        - boat
+        - car
+        - truck
+      scenes:
+        - cargo-work-area
+        - port-call-evidence
+  open_vocab:
+    - id: maritime-asset-discovery
+      status: discovery_only
+      max_terms: 12
+      terms:
+        - gangway
+        - life raft
+        - cargo net
+        - pallet
+        - mooring line
+        - safety cone
+integrations:
+  - id: ais-ingest
+    status: planned_mvp
+    protocol: AIS
+  - id: nmea-0183-bridge
+    status: planned_mvp
+    protocol: NMEA-0183
+  - id: nmea-2000-bridge
+    status: planned_later
+    protocol: NMEA-2000
+  - id: carrier-terminal-state
+    status: planned_mvp
+    protocol: partner_api
+evidence_context:
+  fields:
+    - vessel_id
+    - vessel_name
+    - voyage_id
+    - port_call_id
+    - ais_position
+    - carrier_terminal_state
+    - link_state
+    - maritime_reviewer_role
+billing:
+  hierarchy_labels:
+    - reseller
+    - fleet_manager
+    - owner
+    - charterer
+    - vessel
+  meters:
+    - vessel_month
+    - managed_edge_node
+    - camera_capacity_tier
+    - retained_evidence_gb
+    - evidence_pack_export
+    - support_session_hour
+    - managed_link_gb
+ui_extensions:
+  navigation_labels:
+    site: Vessel
+    site_group: Fleet
+  panels:
+    - fleet_exception_dashboard
+    - vessel_runtime_passport
+    - maritime_evidence_context
+    - link_aware_evidence_queue
+allowed_core_dependencies:
+  - Site
+  - SiteGroup
+  - SiteContext
+  - Signal
+  - SignalContext
+  - Scene
+  - SceneContract
+  - Evidence
+  - RuntimePassport
+  - LinkPassport
+  - BillingNode
+  - RoleLabel
+  - RotationGroup
+forbidden_dependencies:
+  - maritime_entity_in_core_contract
+  - vessel_schema_in_core
+  - voyage_schema_in_core
+  - speedcast_hierarchy_in_core
+  - ais_required_by_core
+  - nmea_required_by_core

@@ -1,0 +1,221 @@
+api_version: vezor.io/v1alpha1
+kind: Pack
+metadata:
+  id: traffic-public-space
+  name: Traffic And Public-Space Pack
+  product_name: Vezor TrafficOps
+  owner: product
+  status: designed_not_implemented
+  wedge: privacy-governed multimodal street and public-space operations
+  sales_motion: none
+  implementation_commitment: false
+activation_conditions:
+  - Maritime FleetOps has at least one paying customer that renewed at least once.
+  - A named traffic or public-space customer has budget, procurement path, and timeline.
+  - A dated strategy decision explicitly authorizes implementation.
+engine:
+  min_version: 0.1.0
+  required_capabilities:
+    - scenes
+    - scene_contracts
+    - signals
+    - evidence
+    - runtime_passports
+    - model_catalog
+    - pack_registry
+entities:
+  - name: Intersection
+    extends: Site
+    storage: pack
+    purpose: public-road operating site composed from generic site primitives
+  - name: Approach
+    extends: SiteSubdivision
+    storage: pack
+    purpose: directional leg of an intersection or corridor
+  - name: Movement
+    extends: SignalDimension
+    storage: pack
+    purpose: turn, through, crossing, or path dimension for counts and events
+  - name: Crosswalk
+    extends: SceneZoneLabel
+    storage: pack
+    purpose: public-space label for pedestrian crossing areas
+  - name: BikeLane
+    extends: SceneZoneLabel
+    storage: pack
+    purpose: public-space label for bicycle operating areas
+  - name: BusLane
+    extends: SceneZoneLabel
+    storage: pack
+    purpose: public-space label for transit priority areas
+  - name: CurbZone
+    extends: SiteSubdivision
+    storage: pack
+    purpose: curb, loading, pickup, and right-of-way management zone
+  - name: TransitStop
+    extends: SiteContext
+    storage: pack
+    purpose: public-transit context attached to a scene or corridor
+  - name: SignalPhase
+    extends: SignalContext
+    storage: pack
+    purpose: traffic signal phase context used for later ATSPM-style analytics
+  - name: TrafficStudy
+    extends: EvidenceCollection
+    storage: pack
+    purpose: bounded export of aggregated observations and supporting evidence
+  - name: ConflictEvent
+    extends: Signal
+    storage: pack
+    purpose: candidate near-conflict or vulnerable-road-user event requiring review
+  - name: PublicSpacePolicy
+    extends: PrivacyPolicy
+    storage: pack
+    purpose: public-space retention, redaction, and acceptable-use constraints
+  - name: CivicTransparencyReport
+    extends: EvidenceExport
+    storage: pack
+    purpose: public reporting package for aggregate metrics and policy compliance
+scene_templates:
+  - id: multimodal-counts
+    name: Multimodal Counts
+    outcome: binned counts by class, movement, approach, and time window
+    primitives:
+      - line_crossing
+      - count_event
+      - class_filter
+  - id: vulnerable-road-user-safety
+    name: Vulnerable Road User Safety
+    outcome: pedestrian and cyclist exposure plus reviewable conflict candidates
+    primitives:
+      - event_boundary
+      - zone_occupancy
+      - track_path
+      - review_queue
+  - id: curb-and-loading-zone
+    name: Curb And Loading Zone
+    outcome: occupancy, blockage, dwell, and turnover for curb or loading spaces
+    primitives:
+      - detection_region
+      - dwell_time
+      - occupancy_metric
+  - id: bus-and-bike-lane-priority
+    name: Bus And Bike Lane Priority
+    outcome: lane blockage and eligible movement evidence
+    primitives:
+      - include_region
+      - exclusion_region
+      - line_crossing
+  - id: queue-and-spillback
+    name: Queue And Spillback
+    outcome: queue length proxy and downstream spillback candidate events
+    primitives:
+      - occupancy_metric
+      - event_boundary
+      - time_bin
+  - id: work-zone-awareness
+    name: Work Zone Awareness
+    outcome: temporary operating-space occupancy and conflict candidates
+    primitives:
+      - include_region
+      - restricted_zone
+      - evidence_trigger
+model_presets:
+  fixed_vocab:
+    - id: multimodal-road-user-counts
+      classes:
+        - person
+        - bicycle
+        - car
+        - motorcycle
+        - bus
+        - truck
+      scenes:
+        - multimodal-counts
+        - vulnerable-road-user-safety
+        - queue-and-spillback
+  open_vocab:
+    - id: public-space-discovery
+      status: discovery_only
+      max_terms: 12
+      terms:
+        - stroller
+        - scooter
+        - delivery cart
+        - bollard
+        - road cone
+        - debris
+integrations:
+  - id: atspm-export
+    status: design_only
+    protocol: CSV_OR_API
+  - id: curb-data-specification
+    status: design_only
+    protocol: CDS
+  - id: gtfs-context
+    status: design_only
+    protocol: GTFS
+  - id: gis-geojson
+    status: design_only
+    protocol: GeoJSON
+  - id: v2x-spat-map-context
+    status: research_only
+    protocol: SPAT_MAP
+privacy_defaults:
+  face_recognition: forbidden
+  biometric_identification: forbidden
+  plate_recognition: disabled_by_default
+  raw_video_retention: short
+  aggregate_metrics_default: true
+  redacted_evidence_default: true
+  public_transparency_report: required_if_activated
+evidence_context:
+  fields:
+    - site_id
+    - scene_contract_id
+    - time_bin
+    - aggregate_metric_window
+    - privacy_policy_id
+    - redaction_state
+    - review_state
+billing:
+  status: design_artifact_only
+  meters:
+    - intersection_month
+    - corridor_mile_month
+    - traffic_study_export
+    - aggregate_metric_retention
+ui_extensions:
+  status: design_artifact_only
+  panels:
+    - study_export_builder
+    - public_space_privacy_policy
+    - aggregate_counts_report
+    - conflict_review_queue
+allowed_core_dependencies:
+  - Site
+  - SiteGroup
+  - SiteSubdivision
+  - SiteContext
+  - Signal
+  - SignalContext
+  - SignalDimension
+  - Scene
+  - SceneZoneLabel
+  - SceneContract
+  - Evidence
+  - EvidenceCollection
+  - EvidenceExport
+  - PrivacyPolicy
+  - RuntimePassport
+  - BillingNode
+forbidden_dependencies:
+  - traffic_entity_in_core_contract
+  - traffic_runtime_code_before_activation
+  - public_agency_sales_motion_before_activation
+  - biometric_identification_default
+  - face_recognition
+  - plate_recognition_enabled_by_default
+  - atspm_required_by_core
+  - cds_required_by_core
+  - v2x_required_by_core
