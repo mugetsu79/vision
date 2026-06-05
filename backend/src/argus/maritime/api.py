@@ -18,7 +18,12 @@ from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
 from argus.maritime.contracts import (
     JsonObject,
+    MaritimeAISPositionRecord,
+    MaritimeCarrierTerminalRecord,
+    MaritimeNMEAReadingRecord,
     MaritimePortCallRecord,
+    MaritimeTelemetryIngestEventRecord,
+    MaritimeTelemetrySnapshot,
     MaritimeVesselRecord,
     MaritimeVoyageRecord,
 )
@@ -26,6 +31,15 @@ from argus.maritime.service import (
     MaritimeConflictError,
     MaritimeError,
     MaritimeNotFoundError,
+)
+from argus.maritime.telemetry import (
+    AisCsvFileAdapter,
+    AISJsonAdapter,
+    CarrierWebhookAdapter,
+    Nmea0183Adapter,
+    Nmea0183FileAdapter,
+    ParseFailure,
+    TransferLaneDecision,
 )
 from argus.maritime.templates import MaritimeTemplateError, MaritimeTemplateService
 from argus.models.enums import RoleEnum
@@ -113,6 +127,29 @@ class PortCallUpdate(BaseModel):
 
 class TemplateApplyRequest(BaseModel):
     template_id: str = Field(min_length=1, max_length=128)
+
+
+class TelemetryObjectIngestRequest(BaseModel):
+    vessel_id: UUID
+    payload: JsonObject
+    source: str = Field(default="ais_json", min_length=1, max_length=80)
+
+
+class NMEAIngestRequest(BaseModel):
+    vessel_id: UUID
+    lines: list[str] = Field(min_length=1)
+    source: str = Field(default="nmea_0183", min_length=1, max_length=80)
+
+
+class TelemetryFileImportRequest(BaseModel):
+    vessel_id: UUID
+    content: str = Field(min_length=1)
+    source: str = Field(default="file_import", min_length=1, max_length=80)
+
+
+class CarrierTerminalIngestRequest(BaseModel):
+    vessel_id: UUID
+    payload: JsonObject
 
 
 @router.get("/api/v1/maritime/runtime")
@@ -206,6 +243,150 @@ async def apply_maritime_scene_template(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
+@router.post("/api/v1/maritime/ingest/ais", status_code=status.HTTP_201_CREATED)
+async def ingest_maritime_ais_position(
+    payload: TelemetryObjectIngestRequest,
+    current_user: OperatorUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    try:
+        reading = AISJsonAdapter(source=payload.source).parse(payload.payload)
+        position = await services.maritime.aingest_ais_position(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=payload.vessel_id,
+            reading=reading,
+            source=payload.source,
+        )
+        return {"position": _ais_position_payload(position)}
+    except (MaritimeError, ValueError) as exc:
+        _raise_maritime_http_error(_to_maritime_error(exc))
+
+
+@router.post("/api/v1/maritime/ingest/nmea", status_code=status.HTTP_201_CREATED)
+async def ingest_maritime_nmea_readings(
+    payload: NMEAIngestRequest,
+    current_user: OperatorUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    try:
+        readings = Nmea0183Adapter().parse_lines(payload.lines)
+        records = await services.maritime.aingest_nmea_readings(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=payload.vessel_id,
+            source=payload.source,
+            sentences=readings.sentences,
+        )
+        return {
+            "readings": [_nmea_reading_payload(record) for record in records],
+            "speed_over_ground": readings.speed_over_ground,
+            "course_over_ground": readings.course_over_ground,
+            "heading": readings.heading,
+        }
+    except (MaritimeError, ValueError) as exc:
+        _raise_maritime_http_error(_to_maritime_error(exc))
+
+
+@router.post(
+    "/api/v1/maritime/ingest/carrier-terminal",
+    status_code=status.HTTP_201_CREATED,
+)
+async def ingest_maritime_carrier_terminal(
+    payload: CarrierTerminalIngestRequest,
+    current_user: OperatorUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    try:
+        reading = CarrierWebhookAdapter().parse(payload.payload)
+        terminal = await services.maritime.aupsert_carrier_terminal(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=payload.vessel_id,
+            reading=reading,
+        )
+        return {"carrier_terminal": _carrier_terminal_payload(terminal)}
+    except (MaritimeError, ValueError) as exc:
+        _raise_maritime_http_error(_to_maritime_error(exc))
+
+
+@router.post("/api/v1/maritime/import/ais-file", status_code=status.HTTP_201_CREATED)
+async def import_maritime_ais_file(
+    payload: TelemetryFileImportRequest,
+    current_user: OperatorUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    try:
+        result = AisCsvFileAdapter().parse(payload.content)
+        positions = [
+            await services.maritime.aingest_ais_position(
+                tenant_id=tenant_context.tenant_id,
+                vessel_id=payload.vessel_id,
+                reading=reading,
+                source=payload.source,
+            )
+            for reading in result.positions
+        ]
+        if result.failures:
+            await services.maritime.arecord_telemetry_ingest_event(
+                tenant_id=tenant_context.tenant_id,
+                vessel_id=payload.vessel_id,
+                source=payload.source,
+                event_type="ais_file_import",
+                status="partial",
+                raw_payload={
+                    "failure_count": len(result.failures),
+                    "failures": [_parse_failure_payload(failure) for failure in result.failures],
+                },
+                summary="AIS file import completed with parse failures.",
+                failure_count=len(result.failures),
+            )
+        return {
+            "positions": [_ais_position_payload(position) for position in positions],
+            "failures": [_parse_failure_payload(failure) for failure in result.failures],
+        }
+    except (MaritimeError, ValueError) as exc:
+        _raise_maritime_http_error(_to_maritime_error(exc))
+
+
+@router.post("/api/v1/maritime/import/nmea-file", status_code=status.HTTP_201_CREATED)
+async def import_maritime_nmea_file(
+    payload: TelemetryFileImportRequest,
+    current_user: OperatorUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    try:
+        result = Nmea0183FileAdapter().parse_lines(payload.content.splitlines())
+        records = await services.maritime.aingest_nmea_readings(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=payload.vessel_id,
+            source=payload.source,
+            sentences=result.readings.sentences,
+        )
+        if result.failures:
+            await services.maritime.arecord_telemetry_ingest_event(
+                tenant_id=tenant_context.tenant_id,
+                vessel_id=payload.vessel_id,
+                source=payload.source,
+                event_type="nmea_file_import",
+                status="partial",
+                raw_payload={
+                    "failure_count": len(result.failures),
+                    "failures": [_parse_failure_payload(failure) for failure in result.failures],
+                },
+                summary="NMEA file import completed with parse failures.",
+                failure_count=len(result.failures),
+            )
+        return {
+            "readings": [_nmea_reading_payload(record) for record in records],
+            "failures": [_parse_failure_payload(failure) for failure in result.failures],
+        }
+    except (MaritimeError, ValueError) as exc:
+        _raise_maritime_http_error(_to_maritime_error(exc))
+
+
 @router.get("/api/v1/maritime/vessels")
 async def list_maritime_vessels(
     current_user: ViewerUser,
@@ -274,6 +455,44 @@ async def get_maritime_vessel(
             vessel,
             await _lookup_site(services, tenant_context, vessel.site_id),
         )
+    except MaritimeError as exc:
+        _raise_maritime_http_error(exc)
+
+
+@router.get("/api/v1/maritime/vessels/{vessel_id}/telemetry")
+async def get_maritime_vessel_telemetry(
+    vessel_id: UUID,
+    current_user: ViewerUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    try:
+        snapshot = await services.maritime.aget_vessel_telemetry(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=vessel_id,
+        )
+        return _telemetry_payload(snapshot)
+    except MaritimeError as exc:
+        _raise_maritime_http_error(exc)
+
+
+@router.get("/api/v1/maritime/vessels/{vessel_id}/carrier-selection")
+async def get_maritime_carrier_selection(
+    vessel_id: UUID,
+    current_user: ViewerUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+    priority_lane: str = "bulk",
+    remaining_budget_bytes: int = 0,
+) -> JsonObject:
+    try:
+        decision = await services.maritime.aget_carrier_selection(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=vessel_id,
+            priority_lane=priority_lane,
+            remaining_budget_bytes=remaining_budget_bytes,
+        )
+        return _transfer_lane_payload(decision)
     except MaritimeError as exc:
         _raise_maritime_http_error(exc)
 
@@ -700,10 +919,124 @@ def _port_call_payload(port_call: MaritimePortCallRecord) -> JsonObject:
     }
 
 
+def _telemetry_payload(snapshot: MaritimeTelemetrySnapshot) -> JsonObject:
+    return {
+        "vessel_id": str(snapshot.vessel_id),
+        "latest_ais_position": (
+            _ais_position_payload(snapshot.latest_ais_position)
+            if snapshot.latest_ais_position is not None
+            else None
+        ),
+        "carrier_terminal": (
+            _carrier_terminal_payload(snapshot.carrier_terminal)
+            if snapshot.carrier_terminal is not None
+            else None
+        ),
+        "recent_nmea_readings": [
+            _nmea_reading_payload(reading) for reading in snapshot.recent_nmea_readings
+        ],
+        "recent_ingest_events": [
+            _telemetry_event_payload(event) for event in snapshot.recent_ingest_events
+        ],
+    }
+
+
+def _ais_position_payload(position: MaritimeAISPositionRecord) -> JsonObject:
+    return {
+        "id": str(position.id),
+        "tenant_id": str(position.tenant_id),
+        "vessel_id": str(position.vessel_id),
+        "source": position.source,
+        "received_at": position.received_at.isoformat(),
+        "reported_at": position.reported_at.isoformat(),
+        "mmsi": position.mmsi,
+        "latitude": position.latitude,
+        "longitude": position.longitude,
+        "speed_over_ground": position.speed_over_ground,
+        "course_over_ground": position.course_over_ground,
+        "heading": position.heading,
+        "navigational_status": position.navigational_status,
+        "raw_payload": position.raw_payload,
+        "created_at": position.created_at.isoformat(),
+    }
+
+
+def _nmea_reading_payload(reading: MaritimeNMEAReadingRecord) -> JsonObject:
+    return {
+        "id": str(reading.id),
+        "tenant_id": str(reading.tenant_id),
+        "vessel_id": str(reading.vessel_id),
+        "source": reading.source,
+        "received_at": reading.received_at.isoformat(),
+        "sentence_type": reading.sentence_type,
+        "timestamp": _iso(reading.timestamp),
+        "values": reading.values,
+        "raw_sentence": reading.raw_sentence,
+        "created_at": reading.created_at.isoformat(),
+    }
+
+
+def _carrier_terminal_payload(terminal: MaritimeCarrierTerminalRecord) -> JsonObject:
+    return {
+        "id": str(terminal.id),
+        "tenant_id": str(terminal.tenant_id),
+        "vessel_id": str(terminal.vessel_id),
+        "terminal_id": terminal.terminal_id,
+        "provider": terminal.provider,
+        "status": terminal.status,
+        "link_state": terminal.link_state,
+        "downlink_mbps": terminal.downlink_mbps,
+        "uplink_mbps": terminal.uplink_mbps,
+        "latency_ms": terminal.latency_ms,
+        "packet_loss_percent": terminal.packet_loss_percent,
+        "last_seen_at": terminal.last_seen_at.isoformat(),
+        "raw_payload": terminal.raw_payload,
+        "created_at": terminal.created_at.isoformat(),
+        "updated_at": terminal.updated_at.isoformat(),
+    }
+
+
+def _telemetry_event_payload(event: MaritimeTelemetryIngestEventRecord) -> JsonObject:
+    return {
+        "id": str(event.id),
+        "tenant_id": str(event.tenant_id),
+        "vessel_id": str(event.vessel_id) if event.vessel_id is not None else None,
+        "source": event.source,
+        "event_type": event.event_type,
+        "status": event.status,
+        "summary": event.summary,
+        "failure_count": event.failure_count,
+        "raw_payload": event.raw_payload,
+        "created_at": event.created_at.isoformat(),
+    }
+
+
+def _transfer_lane_payload(decision: TransferLaneDecision) -> JsonObject:
+    return {
+        "transport": decision.transport,
+        "defer": decision.defer,
+        "reason": decision.reason,
+    }
+
+
+def _parse_failure_payload(failure: ParseFailure) -> JsonObject:
+    return {
+        "line_number": failure.line_number,
+        "message": failure.message,
+        "raw_payload": failure.raw_payload,
+    }
+
+
 def _iso(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.isoformat()
+
+
+def _to_maritime_error(exc: MaritimeError | ValueError) -> MaritimeError:
+    if isinstance(exc, MaritimeError):
+        return exc
+    return MaritimeError(str(exc))
 
 
 def _raise_maritime_http_error(exc: MaritimeError) -> NoReturn:

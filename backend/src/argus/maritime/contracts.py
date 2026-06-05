@@ -8,6 +8,15 @@ from uuid import UUID
 JsonObject = dict[str, object]
 VoyageStatus = Literal["planned", "active", "completed", "cancelled"]
 PortCallStatus = Literal["scheduled", "arrived", "alongside", "departed", "cancelled"]
+CarrierStatus = Literal["unknown", "online", "degraded", "offline", "blocked"]
+CarrierLinkState = Literal[
+    "unknown",
+    "satellite_good",
+    "satellite_degraded",
+    "port_wifi",
+    "dark",
+    "recovering",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,3 +119,80 @@ class MaritimeWatchRotationRecord:
     vessel_id: UUID | None = None
     member_user_ids: list[str] = field(default_factory=list)
     metadata: JsonObject = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class MaritimeAISPositionRecord:
+    id: UUID
+    tenant_id: UUID
+    vessel_id: UUID
+    source: str
+    received_at: datetime
+    reported_at: datetime
+    mmsi: str
+    latitude: float
+    longitude: float
+    raw_payload: JsonObject
+    created_at: datetime
+    speed_over_ground: float | None = None
+    course_over_ground: float | None = None
+    heading: float | None = None
+    navigational_status: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MaritimeNMEAReadingRecord:
+    id: UUID
+    tenant_id: UUID
+    vessel_id: UUID
+    source: str
+    received_at: datetime
+    sentence_type: str
+    values: JsonObject
+    raw_sentence: str
+    created_at: datetime
+    timestamp: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MaritimeCarrierTerminalRecord:
+    id: UUID
+    tenant_id: UUID
+    vessel_id: UUID
+    terminal_id: str
+    provider: str
+    status: CarrierStatus
+    link_state: CarrierLinkState
+    last_seen_at: datetime
+    raw_payload: JsonObject
+    created_at: datetime
+    updated_at: datetime
+    downlink_mbps: float | None = None
+    uplink_mbps: float | None = None
+    latency_ms: float | None = None
+    packet_loss_percent: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MaritimeTelemetryIngestEventRecord:
+    id: UUID
+    tenant_id: UUID
+    source: str
+    event_type: str
+    status: str
+    raw_payload: JsonObject
+    created_at: datetime
+    vessel_id: UUID | None = None
+    summary: str | None = None
+    failure_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class MaritimeTelemetrySnapshot:
+    vessel_id: UUID
+    latest_ais_position: MaritimeAISPositionRecord | None = None
+    carrier_terminal: MaritimeCarrierTerminalRecord | None = None
+    recent_nmea_readings: list[MaritimeNMEAReadingRecord] = field(default_factory=list)
+    recent_ingest_events: list[MaritimeTelemetryIngestEventRecord] = field(
+        default_factory=list
+    )

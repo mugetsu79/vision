@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime
 from typing import cast
@@ -12,15 +12,37 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.compat import UTC
 from argus.maritime.contracts import (
+    CarrierLinkState,
+    CarrierStatus,
     JsonObject,
+    MaritimeAISPositionRecord,
+    MaritimeCarrierTerminalRecord,
+    MaritimeNMEAReadingRecord,
     MaritimePortCallRecord,
     MaritimeRuntimeContribution,
+    MaritimeTelemetryIngestEventRecord,
+    MaritimeTelemetrySnapshot,
     MaritimeVesselRecord,
     MaritimeVoyageRecord,
     PortCallStatus,
     VoyageStatus,
 )
-from argus.maritime.tables import MaritimePortCall, MaritimeVessel, MaritimeVoyage
+from argus.maritime.tables import (
+    MaritimeAISPosition,
+    MaritimeCarrierTerminal,
+    MaritimeNMEAReading,
+    MaritimePortCall,
+    MaritimeTelemetryIngestEvent,
+    MaritimeVessel,
+    MaritimeVoyage,
+)
+from argus.maritime.telemetry import (
+    AISPositionReading,
+    CarrierTerminalReading,
+    NmeaSentenceReading,
+    TransferLaneDecision,
+    select_transfer_lane,
+)
 from argus.models.tables import Site
 from argus.services.pack_registry import PackManifest, PackRegistry
 
@@ -33,6 +55,16 @@ MARITIME_REQUIRED_CORE_CAPABILITIES = [
 ]
 VOYAGE_STATUSES = {"planned", "active", "completed", "cancelled"}
 PORT_CALL_STATUSES = {"scheduled", "arrived", "alongside", "departed", "cancelled"}
+CARRIER_STATUSES = {"unknown", "online", "degraded", "offline", "blocked"}
+CARRIER_LINK_STATES = {
+    "unknown",
+    "satellite_good",
+    "satellite_degraded",
+    "port_wifi",
+    "dark",
+    "recovering",
+}
+TELEMETRY_EVENT_STATUSES = {"succeeded", "partial", "failed"}
 
 
 class MaritimeError(ValueError):
@@ -63,6 +95,10 @@ class MaritimeRuntimeService:
         self._vessels: dict[UUID, MaritimeVesselRecord] = {}
         self._voyages: dict[UUID, MaritimeVoyageRecord] = {}
         self._port_calls: dict[UUID, MaritimePortCallRecord] = {}
+        self._ais_positions: list[MaritimeAISPositionRecord] = []
+        self._nmea_readings: list[MaritimeNMEAReadingRecord] = []
+        self._carrier_terminals: dict[tuple[UUID, str], MaritimeCarrierTerminalRecord] = {}
+        self._telemetry_events: list[MaritimeTelemetryIngestEventRecord] = []
 
     def runtime(self) -> MaritimeRuntimeContribution:
         manifest = self._manifest()
@@ -922,6 +958,639 @@ class MaritimeRuntimeService:
             await session.refresh(row)
         return _port_call_record(row)
 
+    def ingest_ais_position(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        reading: AISPositionReading,
+        source: str | None = None,
+    ) -> MaritimeAISPositionRecord:
+        self._ensure_memory_mode()
+        self.get_vessel(tenant_id=tenant_id, vessel_id=vessel_id)
+        source_value = source or reading.source
+        duplicate = self._find_memory_ais_duplicate(
+            tenant_id=tenant_id,
+            source=source_value,
+            reading=reading,
+        )
+        if duplicate is not None:
+            return duplicate
+        now = _now()
+        record = MaritimeAISPositionRecord(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            vessel_id=vessel_id,
+            source=source_value,
+            received_at=now,
+            reported_at=reading.reported_at,
+            mmsi=reading.mmsi,
+            latitude=reading.latitude,
+            longitude=reading.longitude,
+            speed_over_ground=reading.speed_over_ground,
+            course_over_ground=reading.course_over_ground,
+            heading=reading.heading,
+            navigational_status=reading.navigational_status,
+            raw_payload=dict(reading.raw_payload),
+            created_at=now,
+        )
+        self._ais_positions.append(record)
+        self.record_telemetry_ingest_event(
+            tenant_id=tenant_id,
+            vessel_id=vessel_id,
+            source=source_value,
+            event_type="ais_position",
+            status="succeeded",
+            raw_payload=reading.raw_payload,
+            summary="AIS position ingested.",
+        )
+        return record
+
+    async def aingest_ais_position(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        reading: AISPositionReading,
+        source: str | None = None,
+    ) -> MaritimeAISPositionRecord:
+        if self.session_factory is None:
+            return self.ingest_ais_position(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                reading=reading,
+                source=source,
+            )
+        source_value = source or reading.source
+        async with self.session_factory() as session:
+            await self._aget_vessel_row(session, tenant_id=tenant_id, vessel_id=vessel_id)
+            now = _now()
+            row = MaritimeAISPosition(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                source=source_value,
+                received_at=now,
+                reported_at=reading.reported_at,
+                mmsi=reading.mmsi,
+                latitude=reading.latitude,
+                longitude=reading.longitude,
+                speed_over_ground=reading.speed_over_ground,
+                course_over_ground=reading.course_over_ground,
+                heading=reading.heading,
+                navigational_status=reading.navigational_status,
+                raw_payload=dict(reading.raw_payload),
+                created_at=now,
+            )
+            session.add(row)
+            session.add(
+                _telemetry_event_row(
+                    tenant_id=tenant_id,
+                    vessel_id=vessel_id,
+                    source=source_value,
+                    event_type="ais_position",
+                    status="succeeded",
+                    raw_payload=reading.raw_payload,
+                    summary="AIS position ingested.",
+                    failure_count=0,
+                    created_at=now,
+                )
+            )
+            try:
+                await session.commit()
+                await session.refresh(row)
+            except IntegrityError:
+                await session.rollback()
+                existing = await self._afind_ais_duplicate(
+                    session,
+                    tenant_id=tenant_id,
+                    source=source_value,
+                    reading=reading,
+                )
+                if existing is None:
+                    raise
+                row = existing
+        return _ais_position_record(row)
+
+    def ingest_nmea_readings(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        source: str,
+        sentences: Sequence[NmeaSentenceReading],
+    ) -> list[MaritimeNMEAReadingRecord]:
+        self._ensure_memory_mode()
+        self.get_vessel(tenant_id=tenant_id, vessel_id=vessel_id)
+        records: list[MaritimeNMEAReadingRecord] = []
+        for sentence in sentences:
+            now = _now()
+            record = MaritimeNMEAReadingRecord(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                source=source,
+                received_at=now,
+                sentence_type=sentence.sentence_type,
+                timestamp=sentence.timestamp,
+                values=dict(sentence.values),
+                raw_sentence=sentence.raw_sentence,
+                created_at=now,
+            )
+            self._nmea_readings.append(record)
+            records.append(record)
+        if records:
+            self.record_telemetry_ingest_event(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                source=source,
+                event_type="nmea_readings",
+                status="succeeded",
+                raw_payload={"sentence_count": len(records)},
+                summary="NMEA readings ingested.",
+            )
+        return records
+
+    async def aingest_nmea_readings(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        source: str,
+        sentences: Sequence[NmeaSentenceReading],
+    ) -> list[MaritimeNMEAReadingRecord]:
+        if self.session_factory is None:
+            return self.ingest_nmea_readings(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                source=source,
+                sentences=sentences,
+            )
+        async with self.session_factory() as session:
+            await self._aget_vessel_row(session, tenant_id=tenant_id, vessel_id=vessel_id)
+            rows: list[MaritimeNMEAReading] = []
+            for sentence in sentences:
+                now = _now()
+                row = MaritimeNMEAReading(
+                    id=uuid4(),
+                    tenant_id=tenant_id,
+                    vessel_id=vessel_id,
+                    source=source,
+                    received_at=now,
+                    sentence_type=sentence.sentence_type,
+                    timestamp=sentence.timestamp,
+                    values=dict(sentence.values),
+                    raw_sentence=sentence.raw_sentence,
+                    created_at=now,
+                )
+                rows.append(row)
+                session.add(row)
+            if rows:
+                session.add(
+                    _telemetry_event_row(
+                        tenant_id=tenant_id,
+                        vessel_id=vessel_id,
+                        source=source,
+                        event_type="nmea_readings",
+                        status="succeeded",
+                        raw_payload={"sentence_count": len(rows)},
+                        summary="NMEA readings ingested.",
+                        failure_count=0,
+                        created_at=_now(),
+                    )
+                )
+            await session.commit()
+            for row in rows:
+                await session.refresh(row)
+        return [_nmea_reading_record(row) for row in rows]
+
+    def upsert_carrier_terminal(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        reading: CarrierTerminalReading,
+    ) -> MaritimeCarrierTerminalRecord:
+        self._ensure_memory_mode()
+        self.get_vessel(tenant_id=tenant_id, vessel_id=vessel_id)
+        now = _now()
+        existing = self._carrier_terminals.get((tenant_id, reading.terminal_id))
+        record = MaritimeCarrierTerminalRecord(
+            id=existing.id if existing is not None else uuid4(),
+            tenant_id=tenant_id,
+            vessel_id=vessel_id,
+            terminal_id=reading.terminal_id,
+            provider=reading.provider,
+            status=reading.status,
+            link_state=reading.link_state,
+            downlink_mbps=reading.downlink_mbps,
+            uplink_mbps=reading.uplink_mbps,
+            latency_ms=reading.latency_ms,
+            packet_loss_percent=reading.packet_loss_percent,
+            last_seen_at=reading.last_seen_at,
+            raw_payload=dict(reading.raw_payload),
+            created_at=existing.created_at if existing is not None else now,
+            updated_at=now,
+        )
+        self._carrier_terminals[(tenant_id, reading.terminal_id)] = record
+        self.record_telemetry_ingest_event(
+            tenant_id=tenant_id,
+            vessel_id=vessel_id,
+            source="carrier_terminal",
+            event_type="carrier_terminal_state",
+            status="succeeded",
+            raw_payload=_carrier_event_payload(reading, previous=existing),
+            summary="Carrier terminal state ingested.",
+        )
+        return record
+
+    async def aupsert_carrier_terminal(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        reading: CarrierTerminalReading,
+    ) -> MaritimeCarrierTerminalRecord:
+        if self.session_factory is None:
+            return self.upsert_carrier_terminal(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                reading=reading,
+            )
+        async with self.session_factory() as session:
+            await self._aget_vessel_row(session, tenant_id=tenant_id, vessel_id=vessel_id)
+            row = await self._afind_carrier_terminal(
+                session,
+                tenant_id=tenant_id,
+                terminal_id=reading.terminal_id,
+            )
+            now = _now()
+            previous = _carrier_terminal_record(row) if row is not None else None
+            if row is None:
+                row = MaritimeCarrierTerminal(
+                    id=uuid4(),
+                    tenant_id=tenant_id,
+                    vessel_id=vessel_id,
+                    terminal_id=reading.terminal_id,
+                    provider=reading.provider,
+                    status=reading.status,
+                    link_state=reading.link_state,
+                    downlink_mbps=reading.downlink_mbps,
+                    uplink_mbps=reading.uplink_mbps,
+                    latency_ms=reading.latency_ms,
+                    packet_loss_percent=reading.packet_loss_percent,
+                    last_seen_at=reading.last_seen_at,
+                    raw_payload=dict(reading.raw_payload),
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+            else:
+                row.vessel_id = vessel_id
+                row.provider = reading.provider
+                row.status = reading.status
+                row.link_state = reading.link_state
+                row.downlink_mbps = reading.downlink_mbps
+                row.uplink_mbps = reading.uplink_mbps
+                row.latency_ms = reading.latency_ms
+                row.packet_loss_percent = reading.packet_loss_percent
+                row.last_seen_at = reading.last_seen_at
+                row.raw_payload = dict(reading.raw_payload)
+                row.updated_at = now
+            session.add(
+                _telemetry_event_row(
+                    tenant_id=tenant_id,
+                    vessel_id=vessel_id,
+                    source="carrier_terminal",
+                    event_type="carrier_terminal_state",
+                    status="succeeded",
+                    raw_payload=_carrier_event_payload(reading, previous=previous),
+                    summary="Carrier terminal state ingested.",
+                    failure_count=0,
+                    created_at=now,
+                )
+            )
+            try:
+                await session.commit()
+                await session.refresh(row)
+            except IntegrityError:
+                await session.rollback()
+                row = await self._afind_carrier_terminal(
+                    session,
+                    tenant_id=tenant_id,
+                    terminal_id=reading.terminal_id,
+                )
+                if row is None:
+                    raise
+                previous = _carrier_terminal_record(row)
+                now = _now()
+                row.vessel_id = vessel_id
+                row.provider = reading.provider
+                row.status = reading.status
+                row.link_state = reading.link_state
+                row.downlink_mbps = reading.downlink_mbps
+                row.uplink_mbps = reading.uplink_mbps
+                row.latency_ms = reading.latency_ms
+                row.packet_loss_percent = reading.packet_loss_percent
+                row.last_seen_at = reading.last_seen_at
+                row.raw_payload = dict(reading.raw_payload)
+                row.updated_at = now
+                session.add(
+                    _telemetry_event_row(
+                        tenant_id=tenant_id,
+                        vessel_id=vessel_id,
+                        source="carrier_terminal",
+                        event_type="carrier_terminal_state",
+                        status="succeeded",
+                        raw_payload=_carrier_event_payload(reading, previous=previous),
+                        summary="Carrier terminal state ingested.",
+                        failure_count=0,
+                        created_at=now,
+                    )
+                )
+                await session.commit()
+                await session.refresh(row)
+        return _carrier_terminal_record(row)
+
+    def get_vessel_telemetry(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        nmea_limit: int = 20,
+    ) -> MaritimeTelemetrySnapshot:
+        self._ensure_memory_mode()
+        self.get_vessel(tenant_id=tenant_id, vessel_id=vessel_id)
+        ais_positions = [
+            position
+            for position in self._ais_positions
+            if position.tenant_id == tenant_id and position.vessel_id == vessel_id
+        ]
+        carrier_terminals = [
+            terminal
+            for terminal in self._carrier_terminals.values()
+            if terminal.tenant_id == tenant_id and terminal.vessel_id == vessel_id
+        ]
+        nmea_readings = [
+            reading
+            for reading in self._nmea_readings
+            if reading.tenant_id == tenant_id and reading.vessel_id == vessel_id
+        ]
+        telemetry_events = [
+            event
+            for event in self._telemetry_events
+            if event.tenant_id == tenant_id and event.vessel_id == vessel_id
+        ]
+        return MaritimeTelemetrySnapshot(
+            vessel_id=vessel_id,
+            latest_ais_position=max(
+                ais_positions,
+                key=lambda item: (item.reported_at, item.created_at),
+                default=None,
+            ),
+            carrier_terminal=max(
+                carrier_terminals,
+                key=lambda item: item.updated_at,
+                default=None,
+            ),
+            recent_nmea_readings=sorted(
+                nmea_readings,
+                key=lambda item: item.created_at,
+                reverse=True,
+            )[:nmea_limit],
+            recent_ingest_events=sorted(
+                telemetry_events,
+                key=lambda item: item.created_at,
+                reverse=True,
+            )[:20],
+        )
+
+    async def aget_vessel_telemetry(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        nmea_limit: int = 20,
+    ) -> MaritimeTelemetrySnapshot:
+        if self.session_factory is None:
+            return self.get_vessel_telemetry(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                nmea_limit=nmea_limit,
+            )
+        async with self.session_factory() as session:
+            await self._aget_vessel_row(session, tenant_id=tenant_id, vessel_id=vessel_id)
+            ais_result = await session.execute(
+                select(MaritimeAISPosition)
+                .where(
+                    MaritimeAISPosition.tenant_id == tenant_id,
+                    MaritimeAISPosition.vessel_id == vessel_id,
+                )
+                .order_by(
+                    MaritimeAISPosition.reported_at.desc(),
+                    MaritimeAISPosition.created_at.desc(),
+                )
+                .limit(1)
+            )
+            carrier_result = await session.execute(
+                select(MaritimeCarrierTerminal)
+                .where(
+                    MaritimeCarrierTerminal.tenant_id == tenant_id,
+                    MaritimeCarrierTerminal.vessel_id == vessel_id,
+                )
+                .order_by(MaritimeCarrierTerminal.updated_at.desc())
+                .limit(1)
+            )
+            nmea_result = await session.execute(
+                select(MaritimeNMEAReading)
+                .where(
+                    MaritimeNMEAReading.tenant_id == tenant_id,
+                    MaritimeNMEAReading.vessel_id == vessel_id,
+                )
+                .order_by(MaritimeNMEAReading.created_at.desc())
+                .limit(nmea_limit)
+            )
+            event_result = await session.execute(
+                select(MaritimeTelemetryIngestEvent)
+                .where(
+                    MaritimeTelemetryIngestEvent.tenant_id == tenant_id,
+                    MaritimeTelemetryIngestEvent.vessel_id == vessel_id,
+                )
+                .order_by(MaritimeTelemetryIngestEvent.created_at.desc())
+                .limit(20)
+            )
+        ais_row = ais_result.scalar_one_or_none()
+        carrier_row = carrier_result.scalar_one_or_none()
+        return MaritimeTelemetrySnapshot(
+            vessel_id=vessel_id,
+            latest_ais_position=_ais_position_record(ais_row) if ais_row is not None else None,
+            carrier_terminal=(
+                _carrier_terminal_record(carrier_row) if carrier_row is not None else None
+            ),
+            recent_nmea_readings=[
+                _nmea_reading_record(row) for row in nmea_result.scalars().all()
+            ],
+            recent_ingest_events=[
+                _telemetry_event_record(row) for row in event_result.scalars().all()
+            ],
+        )
+
+    def get_carrier_selection(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        priority_lane: str,
+        remaining_budget_bytes: int,
+    ) -> TransferLaneDecision:
+        snapshot = self.get_vessel_telemetry(tenant_id=tenant_id, vessel_id=vessel_id)
+        terminal = snapshot.carrier_terminal
+        return select_transfer_lane(
+            link_state=terminal.link_state if terminal is not None else "unknown",
+            terminal_status=terminal.status if terminal is not None else "unknown",
+            priority_lane=priority_lane,
+            remaining_budget_bytes=remaining_budget_bytes,
+        )
+
+    async def aget_carrier_selection(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID,
+        priority_lane: str,
+        remaining_budget_bytes: int,
+    ) -> TransferLaneDecision:
+        if self.session_factory is None:
+            return self.get_carrier_selection(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                priority_lane=priority_lane,
+                remaining_budget_bytes=remaining_budget_bytes,
+            )
+        snapshot = await self.aget_vessel_telemetry(tenant_id=tenant_id, vessel_id=vessel_id)
+        terminal = snapshot.carrier_terminal
+        return select_transfer_lane(
+            link_state=terminal.link_state if terminal is not None else "unknown",
+            terminal_status=terminal.status if terminal is not None else "unknown",
+            priority_lane=priority_lane,
+            remaining_budget_bytes=remaining_budget_bytes,
+        )
+
+    def record_telemetry_ingest_event(
+        self,
+        *,
+        tenant_id: UUID,
+        source: str,
+        event_type: str,
+        status: str,
+        raw_payload: Mapping[str, object],
+        vessel_id: UUID | None = None,
+        summary: str | None = None,
+        failure_count: int = 0,
+    ) -> MaritimeTelemetryIngestEventRecord:
+        self._ensure_memory_mode()
+        if vessel_id is not None:
+            self.get_vessel(tenant_id=tenant_id, vessel_id=vessel_id)
+        _validate_telemetry_event_status(status)
+        now = _now()
+        event = MaritimeTelemetryIngestEventRecord(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            vessel_id=vessel_id,
+            source=source,
+            event_type=event_type,
+            status=status,
+            summary=summary,
+            failure_count=failure_count,
+            raw_payload=_json_object(raw_payload),
+            created_at=now,
+        )
+        self._telemetry_events.append(event)
+        return event
+
+    async def arecord_telemetry_ingest_event(
+        self,
+        *,
+        tenant_id: UUID,
+        source: str,
+        event_type: str,
+        status: str,
+        raw_payload: Mapping[str, object],
+        vessel_id: UUID | None = None,
+        summary: str | None = None,
+        failure_count: int = 0,
+    ) -> MaritimeTelemetryIngestEventRecord:
+        if self.session_factory is None:
+            return self.record_telemetry_ingest_event(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                source=source,
+                event_type=event_type,
+                status=status,
+                summary=summary,
+                failure_count=failure_count,
+                raw_payload=raw_payload,
+            )
+        _validate_telemetry_event_status(status)
+        async with self.session_factory() as session:
+            if vessel_id is not None:
+                await self._aget_vessel_row(session, tenant_id=tenant_id, vessel_id=vessel_id)
+            row = _telemetry_event_row(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+                source=source,
+                event_type=event_type,
+                status=status,
+                raw_payload=raw_payload,
+                summary=summary,
+                failure_count=failure_count,
+                created_at=_now(),
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return _telemetry_event_record(row)
+
+    def list_telemetry_ingest_events(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID | None = None,
+    ) -> list[MaritimeTelemetryIngestEventRecord]:
+        self._ensure_memory_mode()
+        return sorted(
+            (
+                event
+                for event in self._telemetry_events
+                if event.tenant_id == tenant_id
+                and (vessel_id is None or event.vessel_id == vessel_id)
+            ),
+            key=lambda event: event.created_at,
+        )
+
+    async def alist_telemetry_ingest_events(
+        self,
+        *,
+        tenant_id: UUID,
+        vessel_id: UUID | None = None,
+        limit: int = 50,
+    ) -> list[MaritimeTelemetryIngestEventRecord]:
+        if self.session_factory is None:
+            return self.list_telemetry_ingest_events(
+                tenant_id=tenant_id,
+                vessel_id=vessel_id,
+            )[-limit:]
+        async with self.session_factory() as session:
+            query = select(MaritimeTelemetryIngestEvent).where(
+                MaritimeTelemetryIngestEvent.tenant_id == tenant_id,
+            )
+            if vessel_id is not None:
+                query = query.where(MaritimeTelemetryIngestEvent.vessel_id == vessel_id)
+            result = await session.execute(
+                query.order_by(MaritimeTelemetryIngestEvent.created_at.desc()).limit(limit)
+            )
+        return [_telemetry_event_record(row) for row in result.scalars().all()]
+
     def _manifest(self) -> PackManifest:
         try:
             manifest = self.pack_registry.get_pack(MARITIME_PACK_ID)
@@ -936,6 +1605,25 @@ class MaritimeRuntimeService:
         if port_call is None or port_call.tenant_id != tenant_id:
             raise MaritimeNotFoundError("Port call not found.")
         return port_call
+
+    def _find_memory_ais_duplicate(
+        self,
+        *,
+        tenant_id: UUID,
+        source: str,
+        reading: AISPositionReading,
+    ) -> MaritimeAISPositionRecord | None:
+        for position in self._ais_positions:
+            if (
+                position.tenant_id == tenant_id
+                and position.source == source
+                and position.mmsi == reading.mmsi
+                and position.reported_at == reading.reported_at
+                and position.latitude == reading.latitude
+                and position.longitude == reading.longitude
+            ):
+                return position
+        return None
 
     def _validate_vessel_identity(
         self,
@@ -1124,6 +1812,41 @@ class MaritimeRuntimeService:
         if row is not None and row.id != excluded_voyage_id:
             raise MaritimeConflictError("Vessel already has an active voyage.")
 
+    async def _afind_ais_duplicate(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        source: str,
+        reading: AISPositionReading,
+    ) -> MaritimeAISPosition | None:
+        result = await session.execute(
+            select(MaritimeAISPosition).where(
+                MaritimeAISPosition.tenant_id == tenant_id,
+                MaritimeAISPosition.source == source,
+                MaritimeAISPosition.mmsi == reading.mmsi,
+                MaritimeAISPosition.reported_at == reading.reported_at,
+                MaritimeAISPosition.latitude == reading.latitude,
+                MaritimeAISPosition.longitude == reading.longitude,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def _afind_carrier_terminal(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        terminal_id: str,
+    ) -> MaritimeCarrierTerminal | None:
+        result = await session.execute(
+            select(MaritimeCarrierTerminal).where(
+                MaritimeCarrierTerminal.tenant_id == tenant_id,
+                MaritimeCarrierTerminal.terminal_id == terminal_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     def _ensure_memory_mode(self) -> None:
         if self.session_factory is not None:
             raise RuntimeError(
@@ -1151,6 +1874,11 @@ def _port_call_status(value: str) -> PortCallStatus:
     if value not in PORT_CALL_STATUSES:
         raise MaritimeError(f"Invalid port call status: {value}")
     return cast(PortCallStatus, value)
+
+
+def _validate_telemetry_event_status(value: str) -> None:
+    if value not in TELEMETRY_EVENT_STATUSES:
+        raise MaritimeError(f"Invalid telemetry event status: {value}")
 
 
 def _replace_voyage(
@@ -1268,3 +1996,129 @@ def _port_call_record(row: MaritimePortCall) -> MaritimePortCallRecord:
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _ais_position_record(row: MaritimeAISPosition) -> MaritimeAISPositionRecord:
+    return MaritimeAISPositionRecord(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        vessel_id=row.vessel_id,
+        source=row.source,
+        received_at=row.received_at,
+        reported_at=row.reported_at,
+        mmsi=row.mmsi,
+        latitude=row.latitude,
+        longitude=row.longitude,
+        speed_over_ground=row.speed_over_ground,
+        course_over_ground=row.course_over_ground,
+        heading=row.heading,
+        navigational_status=row.navigational_status,
+        raw_payload=dict(row.raw_payload or {}),
+        created_at=row.created_at,
+    )
+
+
+def _nmea_reading_record(row: MaritimeNMEAReading) -> MaritimeNMEAReadingRecord:
+    return MaritimeNMEAReadingRecord(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        vessel_id=row.vessel_id,
+        source=row.source,
+        received_at=row.received_at,
+        sentence_type=row.sentence_type,
+        timestamp=row.timestamp,
+        values=dict(row.values or {}),
+        raw_sentence=row.raw_sentence,
+        created_at=row.created_at,
+    )
+
+
+def _telemetry_event_record(
+    row: MaritimeTelemetryIngestEvent,
+) -> MaritimeTelemetryIngestEventRecord:
+    return MaritimeTelemetryIngestEventRecord(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        vessel_id=row.vessel_id,
+        source=row.source,
+        event_type=row.event_type,
+        status=row.status,
+        summary=row.summary,
+        failure_count=row.failure_count,
+        raw_payload=dict(row.raw_payload or {}),
+        created_at=row.created_at,
+    )
+
+
+def _telemetry_event_row(
+    *,
+    tenant_id: UUID,
+    source: str,
+    event_type: str,
+    status: str,
+    raw_payload: Mapping[str, object],
+    created_at: datetime,
+    vessel_id: UUID | None = None,
+    summary: str | None = None,
+    failure_count: int = 0,
+) -> MaritimeTelemetryIngestEvent:
+    _validate_telemetry_event_status(status)
+    return MaritimeTelemetryIngestEvent(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        vessel_id=vessel_id,
+        source=source,
+        event_type=event_type,
+        status=status,
+        summary=summary,
+        failure_count=failure_count,
+        raw_payload=_json_object(raw_payload),
+        created_at=created_at,
+    )
+
+
+def _carrier_terminal_record(row: MaritimeCarrierTerminal) -> MaritimeCarrierTerminalRecord:
+    return MaritimeCarrierTerminalRecord(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        vessel_id=row.vessel_id,
+        terminal_id=row.terminal_id,
+        provider=row.provider,
+        status=_carrier_status(row.status),
+        link_state=_carrier_link_state(row.link_state),
+        downlink_mbps=row.downlink_mbps,
+        uplink_mbps=row.uplink_mbps,
+        latency_ms=row.latency_ms,
+        packet_loss_percent=row.packet_loss_percent,
+        last_seen_at=row.last_seen_at,
+        raw_payload=dict(row.raw_payload or {}),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _carrier_status(value: str) -> CarrierStatus:
+    if value not in CARRIER_STATUSES:
+        raise MaritimeError(f"Invalid carrier status: {value}")
+    return cast(CarrierStatus, value)
+
+
+def _carrier_link_state(value: str) -> CarrierLinkState:
+    if value not in CARRIER_LINK_STATES:
+        raise MaritimeError(f"Invalid carrier link_state: {value}")
+    return cast(CarrierLinkState, value)
+
+
+def _carrier_event_payload(
+    reading: CarrierTerminalReading,
+    *,
+    previous: MaritimeCarrierTerminalRecord | None,
+) -> JsonObject:
+    payload = _json_object(reading.raw_payload)
+    payload["terminal_id"] = reading.terminal_id
+    payload["status"] = reading.status
+    payload["link_state"] = reading.link_state
+    if previous is not None:
+        payload["previous_status"] = previous.status
+        payload["previous_link_state"] = previous.link_state
+    return payload

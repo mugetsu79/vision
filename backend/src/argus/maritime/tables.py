@@ -7,8 +7,10 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -209,3 +211,156 @@ class MaritimeWatchRotation(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin,
         nullable=False,
         default=dict,
     )
+
+
+class MaritimeAISPosition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "maritime_ais_positions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "source",
+            "mmsi",
+            "reported_at",
+            "latitude",
+            "longitude",
+            name="uq_maritime_ais_positions_tenant_source_mmsi_reported_position",
+        ),
+        Index(
+            "ix_maritime_ais_positions_tenant_vessel_reported",
+            "tenant_id",
+            "vessel_id",
+            "reported_at",
+        ),
+        CheckConstraint("latitude >= -90 AND latitude <= 90", name="latitude"),
+        CheckConstraint("longitude >= -180 AND longitude <= 180", name="longitude"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    vessel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maritime_vessels.id"),
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    mmsi: Mapped[str] = mapped_column(String(16), nullable=False)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    speed_over_ground: Mapped[float | None] = mapped_column(Float, nullable=True)
+    course_over_ground: Mapped[float | None] = mapped_column(Float, nullable=True)
+    heading: Mapped[float | None] = mapped_column(Float, nullable=True)
+    navigational_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    raw_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class MaritimeNMEAReading(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "maritime_nmea_readings"
+    __table_args__ = (
+        Index(
+            "ix_maritime_nmea_readings_tenant_vessel_created",
+            "tenant_id",
+            "vessel_id",
+            "created_at",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    vessel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maritime_vessels.id"),
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sentence_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    values: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    raw_sentence: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class MaritimeCarrierTerminal(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "maritime_carrier_terminals"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "terminal_id",
+            name="uq_maritime_carrier_terminals_tenant_terminal",
+        ),
+        Index(
+            "ix_maritime_carrier_terminals_tenant_vessel",
+            "tenant_id",
+            "vessel_id",
+        ),
+        CheckConstraint(
+            "status IN ('unknown', 'online', 'degraded', 'offline', 'blocked')",
+            name="status",
+        ),
+        CheckConstraint(
+            (
+                "link_state IN ("
+                "'unknown', 'satellite_good', 'satellite_degraded', "
+                "'port_wifi', 'dark', 'recovering'"
+                ")"
+            ),
+            name="link_state",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    vessel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maritime_vessels.id"),
+        nullable=False,
+    )
+    terminal_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False, default="generic")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    link_state: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    downlink_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    uplink_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    packet_loss_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    raw_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class MaritimeTelemetryIngestEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "maritime_telemetry_ingest_events"
+    __table_args__ = (
+        Index(
+            "ix_maritime_telemetry_ingest_events_tenant_created",
+            "tenant_id",
+            "created_at",
+        ),
+        CheckConstraint("status IN ('succeeded', 'partial', 'failed')", name="status"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    vessel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maritime_vessels.id"),
+        nullable=True,
+    )
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    summary: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    raw_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
