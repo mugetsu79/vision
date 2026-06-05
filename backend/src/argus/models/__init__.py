@@ -58,6 +58,8 @@ if "argus.fleet.tables" not in sys.modules:
         FleetSiteGroup,
         FleetSiteState,
     )
+if "argus.maritime.tables" not in sys.modules:
+    importlib.import_module("argus.maritime.tables")
 
 _LINK_TABLE_EXPORTS = {
     "LinkBudget",

@@ -4510,7 +4510,10 @@ def build_app_services(
         ),
         link=LinkService(db.session_factory),
         fleet=FleetService(db.session_factory),
-        maritime=MaritimeRuntimeService(pack_registry=pack_registry),
+        maritime=MaritimeRuntimeService(
+            pack_registry=pack_registry,
+            session_factory=db.session_factory,
+        ),
     )
 
 
