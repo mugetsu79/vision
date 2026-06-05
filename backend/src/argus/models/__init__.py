@@ -1,3 +1,10 @@
+from argus.link.tables import (
+    LinkBudget,
+    LinkHealthProbe,
+    LinkPassportSnapshot,
+    LinkQueueItem,
+    LinkTransferAttempt,
+)
 from argus.models.base import Base
 from argus.models.enums import RoleEnum
 from argus.models.tables import (
@@ -54,6 +61,11 @@ __all__ = [
     "EvidenceArtifact",
     "EvidenceLedgerEntry",
     "Incident",
+    "LinkBudget",
+    "LinkHealthProbe",
+    "LinkPassportSnapshot",
+    "LinkQueueItem",
+    "LinkTransferAttempt",
     "LocalFirstSyncAttempt",
     "Model",
     "ModelRuntimeArtifact",

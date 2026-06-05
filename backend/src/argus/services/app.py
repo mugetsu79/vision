@@ -137,6 +137,7 @@ from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.logging import redact_url_secrets
 from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.inference.publisher import TelemetryFrame
+from argus.link.service import LinkService
 from argus.models.enums import (
     CameraSourceKind,
     CountEventType,
@@ -334,6 +335,7 @@ class AppServices:
     streams: StreamService
     query: QueryService
     telemetry: NatsTelemetryService
+    link: LinkService
 
     async def close(self) -> None:
         await self.streams.close()
@@ -4501,6 +4503,7 @@ def build_app_services(
             event_client=events,
             settings=settings,
         ),
+        link=LinkService(db.session_factory),
     )
 
 
