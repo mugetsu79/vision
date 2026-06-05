@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -230,17 +231,37 @@ class PackRegistry:
             raise PackRegistryError("pack manifest ids must be unique")
 
     def list_packs(self) -> list[PackManifest]:
-        return list(self._manifests)
+        return [_copy_manifest(manifest) for manifest in self._manifests]
 
     def list_runtime_enabled_packs(self) -> list[PackManifest]:
-        return [manifest for manifest in self._manifests if manifest.is_runtime_enabled]
+        return [
+            _copy_manifest(manifest)
+            for manifest in self._manifests
+            if manifest.is_runtime_enabled
+        ]
 
     def get_pack(self, pack_id: str) -> PackManifest:
-        return self._by_id[pack_id]
+        return _copy_manifest(self._by_id[pack_id])
 
 
 def default_packs_root() -> Path:
-    return Path(__file__).resolve().parents[4] / "packs"
+    configured_root = os.environ.get("ARGUS_PACKS_ROOT")
+    if configured_root is not None:
+        return Path(configured_root)
+
+    service_path = Path(__file__).resolve()
+    candidates = [
+        service_path.parents[3] / "packs",
+        service_path.parents[4] / "packs",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _copy_manifest(manifest: PackManifest) -> PackManifest:
+    return manifest.model_copy(deep=True)
 
 
 def load_pack_manifests(packs_root: Path) -> list[PackManifest]:

@@ -1,0 +1,10 @@
+*
+!backend/
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/alembic.ini
+!backend/README.md
+!backend/src/
+!backend/src/**
+!packs/
+!packs/**

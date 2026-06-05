@@ -40,7 +40,7 @@ build-central:
 		--platform linux/amd64 \
 		-f backend/Dockerfile \
 		-t $(REGISTRY)/argus-backend:$(TAG) \
-		backend
+		.
 
 build-edge:
 	docker buildx build \
@@ -62,7 +62,7 @@ build-multiarch:
 		--platform linux/amd64 \
 		-f backend/Dockerfile \
 		-t $(REGISTRY)/argus-backend:$(TAG) \
-		backend
+		.
 	docker buildx build \
 		--platform linux/arm64 \
 		-f backend/Dockerfile.edge \

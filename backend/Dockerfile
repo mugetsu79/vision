@@ -11,8 +11,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock alembic.ini README.md ./
-COPY src ./src
+COPY backend/pyproject.toml backend/uv.lock backend/alembic.ini backend/README.md ./
+COPY backend/src ./src
+COPY packs ./packs
 
 RUN pip install --no-cache-dir uv \
     && uv sync --locked --no-dev --group runtime --group llm --group vision

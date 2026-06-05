@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from argus.services import pack_registry as pack_registry_module
 from argus.services.pack_registry import (
     PackRegistry,
     PackRegistryError,
@@ -18,6 +19,19 @@ PACKS_ROOT = REPO_ROOT / "packs"
 
 def test_default_packs_root_points_to_repo_packs_directory() -> None:
     assert default_packs_root() == PACKS_ROOT
+
+
+def test_default_packs_root_prefers_packaged_app_packs_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_service_file = tmp_path / "app" / "src" / "argus" / "services" / "pack_registry.py"
+    fake_service_file.parent.mkdir(parents=True)
+    packaged_packs_root = tmp_path / "app" / "packs"
+    packaged_packs_root.mkdir()
+    monkeypatch.setattr(pack_registry_module, "__file__", str(fake_service_file))
+
+    assert default_packs_root() == packaged_packs_root
 
 
 def test_load_pack_manifests_returns_expected_repo_packs() -> None:
@@ -169,3 +183,14 @@ def test_registry_lists_runtime_enabled_packs() -> None:
     runtime_ids = {manifest.metadata.id for manifest in registry.list_runtime_enabled_packs()}
 
     assert runtime_ids == {"maritime-fleet"}
+
+
+def test_registry_returns_defensive_manifest_copies() -> None:
+    registry = PackRegistry(PACKS_ROOT)
+    manifest = registry.get_pack("traffic-public-space")
+
+    manifest.metadata.status = "active"
+
+    stored_manifest = registry.get_pack("traffic-public-space")
+    assert stored_manifest.metadata.status == "designed_not_implemented"
+    assert stored_manifest.is_runtime_enabled is False

@@ -150,6 +150,7 @@ services:
       - "8000:8000"
     volumes:
       - ../backend:/workspace/backend
+      - ../packs:/workspace/packs:ro
       - ${PWD}/models:${PWD}/models:ro
       - ${PWD}/models:/models:ro
     depends_on:

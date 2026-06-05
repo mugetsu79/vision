@@ -13,7 +13,11 @@ CORE_FILES = [
 PACK_RUNTIME_MODULE_PATHS = [
     REPO_ROOT / "backend/src/argus/maritime",
     REPO_ROOT / "backend/src/argus/traffic_public_space",
+    REPO_ROOT / "backend/src/argus/home_lab",
 ]
+
+HOME_LAB_PACK_PATH = REPO_ROOT / "packs/home-lab/pack.yaml"
+PACK_REGISTRY_PATH = REPO_ROOT / "backend/src/argus/services/pack_registry.py"
 
 FORBIDDEN_VERTICAL_NOUNS = [
     "Vessel",
@@ -51,3 +55,13 @@ def test_phase_one_does_not_create_vertical_pack_runtime_modules() -> None:
     ]
 
     assert existing_modules == []
+
+
+def test_home_lab_engine_validation_stays_packless() -> None:
+    assert not HOME_LAB_PACK_PATH.exists()
+
+
+def test_pack_registry_does_not_define_lab_only_status() -> None:
+    registry_text = PACK_REGISTRY_PATH.read_text(encoding="utf-8")
+
+    assert "lab_only" not in registry_text
