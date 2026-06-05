@@ -130,6 +130,7 @@ from argus.api.contracts import (
     WorkerStreamSettings,
     WorkerTrackerSettings,
 )
+from argus.billing.service import BillingService
 from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.db import DatabaseManager
@@ -337,6 +338,7 @@ class AppServices:
     streams: StreamService
     query: QueryService
     telemetry: NatsTelemetryService
+    billing: BillingService
     link: LinkService
     fleet: FleetService
     maritime: MaritimeRuntimeService
@@ -4508,6 +4510,7 @@ def build_app_services(
             event_client=events,
             settings=settings,
         ),
+        billing=BillingService(db.session_factory),
         link=LinkService(db.session_factory),
         fleet=FleetService(db.session_factory),
         maritime=MaritimeRuntimeService(

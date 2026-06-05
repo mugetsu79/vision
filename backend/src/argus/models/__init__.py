@@ -58,6 +58,8 @@ if "argus.fleet.tables" not in sys.modules:
         FleetSiteGroup,
         FleetSiteState,
     )
+if "argus.billing.tables" not in sys.modules:
+    importlib.import_module("argus.billing.tables")
 if "argus.maritime.tables" not in sys.modules:
     importlib.import_module("argus.maritime.tables")
 
@@ -75,6 +77,17 @@ _FLEET_TABLE_EXPORTS = {
     "FleetSiteGroup",
     "FleetSiteState",
 }
+_BILLING_TABLE_EXPORTS = {
+    "BillingAccount",
+    "BillingExport",
+    "BillingNode",
+    "Entitlement",
+    "InvoiceLineItem",
+    "InvoiceRun",
+    "PriceBook",
+    "UsageMeter",
+    "UsageRecord",
+}
 
 
 def __getattr__(name: str) -> Any:
@@ -88,12 +101,20 @@ def __getattr__(name: str) -> Any:
         value = getattr(fleet_tables, name)
         globals()[name] = value
         return value
+    if name in _BILLING_TABLE_EXPORTS:
+        billing_tables = importlib.import_module("argus.billing.tables")
+        value = getattr(billing_tables, name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "APIKey",
     "AuditLog",
     "Base",
+    "BillingAccount",
+    "BillingExport",
+    "BillingNode",
     "Camera",
     "CameraVocabularySnapshot",
     "CountEvent",
@@ -103,6 +124,7 @@ __all__ = [
     "DeploymentNode",
     "EdgeNode",
     "EdgeNodeHardwareReport",
+    "Entitlement",
     "EvidenceArtifact",
     "EvidenceLedgerEntry",
     "FleetHierarchyNode",
@@ -111,6 +133,8 @@ __all__ = [
     "FleetSiteGroup",
     "FleetSiteState",
     "Incident",
+    "InvoiceLineItem",
+    "InvoiceRun",
     "LinkBudget",
     "LinkHealthProbe",
     "LinkPassportSnapshot",
@@ -125,6 +149,7 @@ __all__ = [
     "OperatorConfigProfile",
     "OperatorConfigSecret",
     "PrivacyManifestSnapshot",
+    "PriceBook",
     "RoleEnum",
     "RuleEvent",
     "RuntimePassportSnapshot",
@@ -134,6 +159,8 @@ __all__ = [
     "SupervisorServiceStatusReport",
     "Tenant",
     "TrackingEvent",
+    "UsageMeter",
+    "UsageRecord",
     "User",
     "WorkerAssignment",
     "WorkerModelAdmissionReport",

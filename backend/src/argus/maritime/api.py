@@ -16,6 +16,10 @@ from argus.api.contracts import (
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
+from argus.maritime.billing import (
+    maritime_billing_rollups_payload,
+    maritime_billing_usage_payload,
+)
 from argus.maritime.contracts import (
     JsonObject,
     MaritimeAISPositionRecord,
@@ -163,6 +167,32 @@ class EvidenceExportCreate(BaseModel):
     incident_id: UUID
     include_maritime_context: bool = True
     include_link_passport: bool = True
+
+
+@router.get("/api/v1/maritime/billing/usage")
+async def get_maritime_billing_usage(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> JsonObject:
+    records = await services.billing.alist_usage(
+        tenant_id=tenant_context.tenant_id,
+        pack_id="maritime-fleet",
+    )
+    return maritime_billing_usage_payload(records)
+
+
+@router.get("/api/v1/maritime/billing/rollups")
+async def get_maritime_billing_rollups(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> JsonObject:
+    records = await services.billing.alist_usage(
+        tenant_id=tenant_context.tenant_id,
+        pack_id="maritime-fleet",
+    )
+    return maritime_billing_rollups_payload(usage_records=records)
 
 
 @router.get("/api/v1/maritime/runtime")

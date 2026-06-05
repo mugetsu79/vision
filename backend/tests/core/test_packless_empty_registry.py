@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from argus.api.contracts import SiteResponse, TenantContext
+from argus.billing.service import BillingService
 from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, get_current_user
@@ -85,6 +86,7 @@ def empty_pack_app(tmp_path) -> FastAPI:  # noqa: ANN001
     app.state.services = SimpleNamespace(
         tenancy=_FakeTenancyService(user),
         packs=PackRegistry(empty_packs_root),
+        billing=BillingService(),
         link=LinkService(),
         fleet=FleetService(),
         sites=_FakeSiteService(),
@@ -133,3 +135,23 @@ async def test_fleet_routes_work_with_empty_pack_registry(empty_pack_app: FastAP
     serialized = json.dumps(response.json()).lower()
     assert "vessel" not in serialized
     assert "voyage" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_billing_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=empty_pack_app),
+        base_url="http://test",
+    ) as client:
+        account_response = await client.post(
+            "/api/v1/billing/accounts",
+            json={"name": "Packless account", "node_ids": []},
+        )
+        meter_response = await client.get("/api/v1/billing/meters")
+
+    assert account_response.status_code == 201
+    assert meter_response.status_code == 200
+    assert all(
+        meter.get("pack_id") is None or meter["pack_id"] != "maritime-fleet"
+        for meter in meter_response.json()["items"]
+    )

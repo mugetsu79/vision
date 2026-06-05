@@ -24,6 +24,7 @@ from argus.api.v1 import (
     system,
     telemetry_ws,
 )
+from argus.billing import api as billing
 from argus.fleet import api as fleet
 from argus.link import api as link
 from argus.maritime import api as maritime
@@ -49,6 +50,7 @@ router.include_router(incident_rules.router)
 router.include_router(streams.router)
 router.include_router(query.router)
 router.include_router(telemetry_ws.router)
+router.include_router(billing.router)
 router.include_router(link.router)
 router.include_router(fleet.router)
 router.include_router(maritime.router)
