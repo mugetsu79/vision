@@ -83,6 +83,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["site_id"], ["sites.id"]),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),
         sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint(
+            "priority_lane IN ('safety', 'evidence', 'telemetry', 'bulk')",
+            name="ck_link_queue_items_priority_lane",
+        ),
+        sa.CheckConstraint(
+            "status IN ('queued', 'paused', 'interrupted', 'succeeded', 'failed')",
+            name="ck_link_queue_items_status",
+        ),
     )
     op.create_index(
         "ix_link_queue_items_tenant_site_lane",
@@ -107,6 +115,10 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["queue_item_id"], ["link_queue_items.id"]),
         sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint(
+            "status IN ('interrupted', 'succeeded', 'failed')",
+            name="ck_link_transfer_attempts_status",
+        ),
     )
     op.create_index(
         "ix_link_transfer_attempts_queue_item",
@@ -160,6 +172,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["site_id"], ["sites.id"]),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),
         sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint(
+            "link_state IN ('unknown', 'healthy', 'degraded', 'dark', 'recovering', 'port_wifi')",
+            name="ck_link_passport_snapshots_link_state",
+        ),
     )
     op.create_index(
         "ix_link_passports_tenant_site_created",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -7,7 +8,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from argus.api.contracts import TenantContext
+from argus.api.contracts import SiteResponse, TenantContext
+from argus.compat import UTC
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, get_current_user
 from argus.link.service import LinkService
@@ -16,6 +18,7 @@ from argus.models.enums import RoleEnum
 from argus.services.pack_registry import PackRegistry
 
 TENANT_ID = UUID("00000000-0000-4000-8000-000000000001")
+SITE_ID = UUID("00000000-0000-4000-8000-000000000002")
 
 
 def _user() -> AuthenticatedUser:
@@ -50,6 +53,19 @@ class _FakeTenancyService:
         return self.context.model_copy(update={"tenant_id": explicit_tenant_id})
 
 
+class _FakeSiteService:
+    async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
+        return SiteResponse(
+            id=SITE_ID if site_id == SITE_ID else site_id,
+            tenant_id=tenant_context.tenant_id,
+            name="Packless Site",
+            description=None,
+            tz="UTC",
+            geo_point=None,
+            created_at=datetime.now(tz=UTC),
+        )
+
+
 @pytest.fixture
 def empty_pack_app(tmp_path) -> FastAPI:  # noqa: ANN001
     user = _user()
@@ -68,6 +84,7 @@ def empty_pack_app(tmp_path) -> FastAPI:  # noqa: ANN001
         tenancy=_FakeTenancyService(user),
         packs=PackRegistry(empty_packs_root),
         link=LinkService(),
+        sites=_FakeSiteService(),
     )
     app.dependency_overrides[get_current_user] = lambda: user
     return app

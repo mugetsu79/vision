@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import UUID
 
 import pytest
+from sqlalchemy import CheckConstraint
+from sqlalchemy.exc import IntegrityError
 
 from argus.link.service import LinkService
 from argus.link.tables import (
@@ -161,6 +164,135 @@ async def test_session_backed_link_service_persists_core_state() -> None:
     assert len(session_factory.rows[LinkPassportSnapshot]) == 1
 
 
+def test_sync_methods_raise_when_session_factory_is_configured() -> None:
+    service = LinkService(_PersistentLinkSessionFactory())
+
+    with pytest.raises(RuntimeError, match="Use async LinkService methods"):
+        service.upsert_budget(
+            tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+            site_id=UUID("00000000-0000-4000-8000-000000000002"),
+            monthly_bytes=50_000_000_000,
+            bulk_daily_bytes=5_000_000_000,
+        )
+
+
+def test_link_state_unknown_without_probe_and_healthy_with_good_probe(
+    link_service: LinkService,
+) -> None:
+    assert link_service.derive_link_state(None) == "unknown"
+
+    probe = link_service.record_probe(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        site_id=UUID("00000000-0000-4000-8000-000000000002"),
+        latency_ms=80,
+        throughput_mbps=25.0,
+        packet_loss_percent=0.0,
+        reachable=True,
+        source="packless-lab",
+    )
+
+    assert link_service.derive_link_state(probe) == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_session_backed_policy_requires_existing_budget_and_persists() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+    service = LinkService(_PersistentLinkSessionFactory())
+
+    with pytest.raises(ValueError, match="Link budget not found"):
+        await service.aput_policy(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            policy={"priority_order": ["safety", "evidence", "telemetry", "bulk"]},
+        )
+
+    await service.aupsert_budget(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        monthly_bytes=50_000_000_000,
+        bulk_daily_bytes=5_000_000_000,
+    )
+    policy = {"priority_order": ["safety", "evidence", "telemetry", "bulk"]}
+
+    await service.aput_policy(tenant_id=tenant_id, site_id=site_id, policy=policy)
+
+    assert await service.aget_policy(tenant_id=tenant_id, site_id=site_id) == policy
+
+
+@pytest.mark.asyncio
+async def test_invalid_lanes_and_statuses_fail_before_mutation() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+    session_factory = _PersistentLinkSessionFactory()
+    service = LinkService(session_factory)
+
+    with pytest.raises(ValueError, match="Invalid link priority lane"):
+        await service.aenqueue_transfer(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            priority_lane="archive",  # type: ignore[arg-type]
+            byte_size=100,
+            source_object_type="evidence_artifact",
+            source_object_id=UUID("00000000-0000-4000-8000-000000000003"),
+        )
+    assert session_factory.rows[LinkQueueItem] == []
+
+    item = await service.aenqueue_transfer(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        priority_lane="evidence",
+        byte_size=100,
+        source_object_type="evidence_artifact",
+        source_object_id=UUID("00000000-0000-4000-8000-000000000004"),
+    )
+    with pytest.raises(ValueError, match="Invalid transfer status"):
+        await service.arecord_transfer_attempt(
+            queue_item_id=item.id,
+            status="mystery",
+            bytes_transferred=0,
+        )
+    assert session_factory.rows[LinkTransferAttempt] == []
+
+
+@pytest.mark.asyncio
+async def test_budget_upsert_recovers_from_unique_conflict() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+    session_factory = _BudgetConflictSessionFactory(tenant_id=tenant_id, site_id=site_id)
+    service = LinkService(session_factory)
+
+    budget = await service.aupsert_budget(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        monthly_bytes=50_000_000_000,
+        bulk_daily_bytes=5_000_000_000,
+    )
+
+    assert budget.monthly_bytes == 50_000_000_000
+    assert budget.bulk_daily_bytes == 5_000_000_000
+    assert session_factory.rollback_count == 1
+    assert len(session_factory.rows[LinkBudget]) == 1
+
+
+def test_link_tables_and_migration_constrain_domain_neutral_literals() -> None:
+    queue_constraints = _check_constraint_names(LinkQueueItem)
+    attempt_constraints = _check_constraint_names(LinkTransferAttempt)
+    passport_constraints = _check_constraint_names(LinkPassportSnapshot)
+    migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "src/argus/migrations/versions/0030_core_link.py"
+    )
+
+    assert "ck_link_queue_items_priority_lane" in queue_constraints
+    assert "ck_link_queue_items_status" in queue_constraints
+    assert "ck_link_transfer_attempts_status" in attempt_constraints
+    assert "ck_link_passport_snapshots_link_state" in passport_constraints
+    text = migration_path.read_text(encoding="utf-8")
+    assert "ck_link_queue_items_priority_lane" in text
+    assert "ck_link_passport_snapshots_link_state" in text
+
+
 def test_priority_order_is_safety_evidence_telemetry_bulk(link_service: LinkService) -> None:
     items = [
         link_service.make_queue_item_for_test(priority_lane="bulk", byte_size=100),
@@ -238,6 +370,7 @@ class _Result:
 class _PersistentLinkSession:
     def __init__(self, rows: dict[type[object], list[object]]) -> None:
         self.rows = rows
+        self.rollback_count = 0
 
     async def __aenter__(self) -> _PersistentLinkSession:
         return self
@@ -251,6 +384,9 @@ class _PersistentLinkSession:
     async def commit(self) -> None:
         return None
 
+    async def rollback(self) -> None:
+        self.rollback_count += 1
+
     async def refresh(self, row: object) -> None:
         return None
 
@@ -261,6 +397,14 @@ class _PersistentLinkSession:
         )
 
     async def execute(self, statement: object) -> _Result:
+        entity = statement.column_descriptions[0]["entity"]
+        if entity in {
+            LinkBudget,
+            LinkHealthProbe,
+            LinkPassportSnapshot,
+            LinkQueueItem,
+        }:
+            assert statement.whereclause is not None
         entity = statement.column_descriptions[0]["entity"]
         rows = list(self.rows.get(entity, []))
         return _Result(rows)
@@ -278,3 +422,45 @@ class _PersistentLinkSessionFactory:
 
     def __call__(self) -> _PersistentLinkSession:
         return _PersistentLinkSession(self.rows)
+
+
+class _BudgetConflictSession(_PersistentLinkSession):
+    def __init__(self, factory: _BudgetConflictSessionFactory) -> None:
+        super().__init__(factory.rows)
+        self.factory = factory
+
+    async def commit(self) -> None:
+        if self.factory.raise_conflict_once:
+            self.factory.raise_conflict_once = False
+            self.rows[LinkBudget].clear()
+            self.rows[LinkBudget].append(self.factory.concurrent_budget)
+            raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    async def rollback(self) -> None:
+        self.factory.rollback_count += 1
+
+
+class _BudgetConflictSessionFactory(_PersistentLinkSessionFactory):
+    def __init__(self, *, tenant_id: UUID, site_id: UUID) -> None:
+        super().__init__()
+        self.raise_conflict_once = True
+        self.rollback_count = 0
+        self.concurrent_budget = LinkBudget(
+            id=UUID("00000000-0000-4000-8000-000000000099"),
+            tenant_id=tenant_id,
+            site_id=site_id,
+            monthly_bytes=1,
+            bulk_daily_bytes=1,
+            policy={},
+        )
+
+    def __call__(self) -> _BudgetConflictSession:
+        return _BudgetConflictSession(self)
+
+
+def _check_constraint_names(model_cls: type[object]) -> set[str]:
+    return {
+        constraint.name
+        for constraint in model_cls.__table__.constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name is not None
+    }

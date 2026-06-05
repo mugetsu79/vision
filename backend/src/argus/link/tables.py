@@ -3,7 +3,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,6 +46,14 @@ class LinkQueueItem(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __table_args__ = (
         Index("ix_link_queue_items_tenant_site_lane", "tenant_id", "site_id", "priority_lane"),
         Index("ix_link_queue_items_incident", "incident_id"),
+        CheckConstraint(
+            "priority_lane IN ('safety', 'evidence', 'telemetry', 'bulk')",
+            name="priority_lane",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'paused', 'interrupted', 'succeeded', 'failed')",
+            name="status",
+        ),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -80,6 +98,10 @@ class LinkTransferAttempt(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "link_transfer_attempts"
     __table_args__ = (
         Index("ix_link_transfer_attempts_queue_item", "queue_item_id", "created_at"),
+        CheckConstraint(
+            "status IN ('interrupted', 'succeeded', 'failed')",
+            name="status",
+        ),
     )
 
     queue_item_id: Mapped[uuid.UUID] = mapped_column(
@@ -123,6 +145,10 @@ class LinkPassportSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_link_passports_tenant_site_created", "tenant_id", "site_id", "created_at"),
         Index("ix_link_passports_incident", "incident_id"),
         Index("ix_link_passports_hash", "passport_hash", unique=True),
+        CheckConstraint(
+            "link_state IN ('unknown', 'healthy', 'degraded', 'dark', 'recovering', 'port_wifi')",
+            name="link_state",
+        ),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(

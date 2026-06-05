@@ -32,6 +32,10 @@ from argus.link.tables import (
     LinkTransferAttempt,
 )
 
+LINK_STATES = {"unknown", "healthy", "degraded", "dark", "recovering", "port_wifi"}
+QUEUE_STATUSES = {"queued", "paused", "interrupted", "succeeded", "failed"}
+TRANSFER_ATTEMPT_STATUSES = {"interrupted", "succeeded", "failed"}
+
 
 class LinkService:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:
@@ -51,6 +55,7 @@ class LinkService:
         monthly_bytes: int,
         bulk_daily_bytes: int,
     ) -> LinkBudgetSnapshot:
+        self._ensure_memory_mode()
         now = _now()
         existing = self._budgets.get((tenant_id, site_id))
         budget = LinkBudgetSnapshot(
@@ -66,6 +71,7 @@ class LinkService:
         return budget
 
     def get_budget(self, *, tenant_id: UUID, site_id: UUID) -> LinkBudgetSnapshot | None:
+        self._ensure_memory_mode()
         return self._budgets.get((tenant_id, site_id))
 
     async def aupsert_budget(
@@ -106,7 +112,21 @@ class LinkService:
                 budget.monthly_bytes = monthly_bytes
                 budget.bulk_daily_bytes = bulk_daily_bytes
                 budget.updated_at = now
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                budget = await self._find_budget_row(
+                    session,
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                )
+                if budget is None:
+                    raise
+                budget.monthly_bytes = monthly_bytes
+                budget.bulk_daily_bytes = bulk_daily_bytes
+                budget.updated_at = now
+                await session.commit()
             await session.refresh(budget)
             return _budget_record(budget)
 
@@ -139,6 +159,8 @@ class LinkService:
         incident_id: UUID | None = None,
         evidence_artifact_id: UUID | None = None,
     ) -> LinkQueueItemRecord:
+        self._ensure_memory_mode()
+        _validate_priority_lane(priority_lane)
         item = self._make_queue_item(
             tenant_id=tenant_id,
             site_id=site_id,
@@ -166,6 +188,7 @@ class LinkService:
         incident_id: UUID | None = None,
         evidence_artifact_id: UUID | None = None,
     ) -> LinkQueueItemRecord:
+        _validate_priority_lane(priority_lane)
         if self.session_factory is None:
             return self.enqueue_transfer(
                 tenant_id=tenant_id,
@@ -209,6 +232,8 @@ class LinkService:
         priority_lane: LinkPriorityLane,
         byte_size: int,
     ) -> LinkQueueItemRecord:
+        self._ensure_memory_mode()
+        _validate_priority_lane(priority_lane)
         item = self._make_queue_item(
             tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
             site_id=UUID("00000000-0000-4000-8000-000000000002"),
@@ -261,6 +286,7 @@ class LinkService:
         reachable: bool,
         source: str,
     ) -> LinkHealthProbeRecord:
+        self._ensure_memory_mode()
         probe = LinkHealthProbeRecord(
             id=uuid4(),
             tenant_id=tenant_id,
@@ -314,6 +340,7 @@ class LinkService:
         return _probe_record(probe)
 
     def list_probes(self, *, tenant_id: UUID, site_id: UUID) -> list[LinkHealthProbeRecord]:
+        self._ensure_memory_mode()
         return [
             probe
             for probe in self._probes
@@ -333,6 +360,7 @@ class LinkService:
         return [_probe_record(probe) for probe in probes]
 
     def latest_probe(self, *, tenant_id: UUID, site_id: UUID) -> LinkHealthProbeRecord | None:
+        self._ensure_memory_mode()
         probes = self.list_probes(tenant_id=tenant_id, site_id=site_id)
         if not probes:
             return None
@@ -350,6 +378,7 @@ class LinkService:
         return max(probes, key=lambda probe: probe.recorded_at)
 
     def get_policy(self, *, tenant_id: UUID, site_id: UUID) -> JsonObject:
+        self._ensure_memory_mode()
         return self._policies.get(
             (tenant_id, site_id),
             {
@@ -362,6 +391,7 @@ class LinkService:
         )
 
     def put_policy(self, *, tenant_id: UUID, site_id: UUID, policy: JsonObject) -> JsonObject:
+        self._ensure_memory_mode()
         self._policies[(tenant_id, site_id)] = policy
         return policy
 
@@ -393,22 +423,10 @@ class LinkService:
                 tenant_id=tenant_id,
                 site_id=site_id,
             )
-            now = _now()
             if budget is None:
-                budget = LinkBudget(
-                    id=uuid4(),
-                    tenant_id=tenant_id,
-                    site_id=site_id,
-                    monthly_bytes=0,
-                    bulk_daily_bytes=0,
-                    policy=policy,
-                    created_at=now,
-                    updated_at=now,
-                )
-                session.add(budget)
-            else:
-                budget.policy = policy
-                budget.updated_at = now
+                raise ValueError("Link budget not found.")
+            budget.policy = policy
+            budget.updated_at = _now()
             await session.commit()
         return policy
 
@@ -419,6 +437,7 @@ class LinkService:
         site_id: UUID | None = None,
         incident_id: UUID | None = None,
     ) -> list[LinkQueueItemRecord]:
+        self._ensure_memory_mode()
         items = list(self._queue_items.values())
         if tenant_id is not None:
             items = [item for item in items if item.tenant_id == tenant_id]
@@ -462,6 +481,7 @@ class LinkService:
         remaining_daily_bulk_bytes: int,
         queue_depth_by_lane: Mapping[LinkPriorityLane, int],
     ) -> BackpressureDecision:
+        _validate_link_state(link_state)
         lanes = set(queue_depth_by_lane)
         if link_state == "dark":
             return BackpressureDecision(
@@ -490,6 +510,8 @@ class LinkService:
         resume_token: str | None = None,
         interruption_reason: str | None = None,
     ) -> LinkTransferAttemptRecord:
+        self._ensure_memory_mode()
+        _validate_transfer_attempt_status(status)
         queue_item = self.get_queue_item(queue_item_id)
         now = _now()
         attempt = LinkTransferAttemptRecord(
@@ -518,6 +540,7 @@ class LinkService:
         resume_token: str | None = None,
         interruption_reason: str | None = None,
     ) -> LinkTransferAttemptRecord:
+        _validate_transfer_attempt_status(status)
         if self.session_factory is None:
             return self.record_transfer_attempt(
                 queue_item_id=queue_item_id,
@@ -551,6 +574,7 @@ class LinkService:
         return _attempt_record(attempt)
 
     def get_queue_item(self, queue_item_id: UUID) -> LinkQueueItemRecord:
+        self._ensure_memory_mode()
         try:
             return self._queue_items[queue_item_id]
         except KeyError as exc:
@@ -572,6 +596,7 @@ class LinkService:
         queue_item_id: UUID,
         reason: str = "manual_pause",
     ) -> LinkQueueItemRecord | None:
+        self._ensure_memory_mode()
         item = self._queue_items.get(queue_item_id)
         if item is None or item.tenant_id != tenant_id:
             return None
@@ -608,6 +633,7 @@ class LinkService:
         tenant_id: UUID,
         queue_item_id: UUID,
     ) -> LinkQueueItemRecord | None:
+        self._ensure_memory_mode()
         item = self._queue_items.get(queue_item_id)
         if item is None or item.tenant_id != tenant_id:
             return None
@@ -638,6 +664,7 @@ class LinkService:
         tenant_id: UUID,
         queue_item_id: UUID,
     ) -> LinkQueueItemRecord | None:
+        self._ensure_memory_mode()
         item = self._queue_items.get(queue_item_id)
         if item is None or item.tenant_id != tenant_id:
             return None
@@ -669,6 +696,7 @@ class LinkService:
         incident_id: UUID | None = None,
         evidence_artifact_id: UUID | None = None,
     ) -> LinkPassportSnapshotRecord:
+        self._ensure_memory_mode()
         budget = self.get_budget(tenant_id=tenant_id, site_id=site_id)
         latest_probe = self.latest_probe(tenant_id=tenant_id, site_id=site_id)
         queue = self.list_queue(tenant_id=tenant_id, site_id=site_id, incident_id=incident_id)
@@ -797,6 +825,7 @@ class LinkService:
         tenant_id: UUID,
         incident_id: UUID,
     ) -> LinkPassportSnapshotRecord | None:
+        self._ensure_memory_mode()
         item = next(
             (
                 queue_item
@@ -838,7 +867,11 @@ class LinkService:
         items: Sequence[LinkQueueItemRecord],
     ) -> dict[LinkPriorityLane, int]:
         return {
-            lane: sum(1 for item in items if item.priority_lane == lane)
+            lane: sum(
+                1
+                for item in items
+                if item.priority_lane == lane and item.status not in {"paused", "succeeded"}
+            )
             for lane in LINK_PRIORITY_ORDER
         }
 
@@ -849,6 +882,7 @@ class LinkService:
         site_id: UUID,
         incident_id: UUID | None = None,
     ) -> datetime | None:
+        self._ensure_memory_mode()
         transfers = [
             item.last_successful_transfer_at
             for item in self._queue_items.values()
@@ -890,7 +924,7 @@ class LinkService:
 
     def derive_link_state(self, probe: LinkHealthProbeRecord | None) -> LinkState:
         if probe is None:
-            return "healthy"
+            return "unknown"
         if not probe.reachable:
             return "dark"
         if (
@@ -917,16 +951,12 @@ class LinkService:
         tenant_id: UUID,
         site_id: UUID,
     ) -> LinkBudget | None:
-        result = await session.execute(select(LinkBudget))
-        budgets = cast(list[LinkBudget], result.scalars().all())
-        return next(
-            (
-                budget
-                for budget in budgets
-                if budget.tenant_id == tenant_id and budget.site_id == site_id
-            ),
-            None,
+        result = await session.execute(
+            select(LinkBudget)
+            .where(LinkBudget.tenant_id == tenant_id, LinkBudget.site_id == site_id)
+            .limit(1)
         )
+        return result.scalars().first()
 
     async def _list_probe_rows(
         self,
@@ -935,13 +965,12 @@ class LinkService:
         tenant_id: UUID,
         site_id: UUID,
     ) -> list[LinkHealthProbe]:
-        result = await session.execute(select(LinkHealthProbe))
-        probes = cast(list[LinkHealthProbe], result.scalars().all())
-        return [
-            probe
-            for probe in probes
-            if probe.tenant_id == tenant_id and probe.site_id == site_id
-        ]
+        result = await session.execute(
+            select(LinkHealthProbe)
+            .where(LinkHealthProbe.tenant_id == tenant_id, LinkHealthProbe.site_id == site_id)
+            .order_by(LinkHealthProbe.recorded_at.desc())
+        )
+        return cast(list[LinkHealthProbe], result.scalars().all())
 
     async def _list_queue_rows(
         self,
@@ -951,31 +980,29 @@ class LinkService:
         site_id: UUID | None = None,
         incident_id: UUID | None = None,
     ) -> list[LinkQueueItem]:
-        result = await session.execute(select(LinkQueueItem))
-        queue_items = cast(list[LinkQueueItem], result.scalars().all())
+        statement = select(LinkQueueItem)
+        if tenant_id is None and site_id is None and incident_id is None:
+            raise ValueError("Session-backed queue listing requires at least one scope.")
         if tenant_id is not None:
-            queue_items = [item for item in queue_items if item.tenant_id == tenant_id]
+            statement = statement.where(LinkQueueItem.tenant_id == tenant_id)
         if site_id is not None:
-            queue_items = [item for item in queue_items if item.site_id == site_id]
+            statement = statement.where(LinkQueueItem.site_id == site_id)
         if incident_id is not None:
-            queue_items = [item for item in queue_items if item.incident_id == incident_id]
-        return queue_items
+            statement = statement.where(LinkQueueItem.incident_id == incident_id)
+        result = await session.execute(statement.order_by(LinkQueueItem.created_at))
+        return cast(list[LinkQueueItem], result.scalars().all())
 
     async def _find_passport_row_by_hash(
         self,
         session: AsyncSession,
         passport_hash: str,
     ) -> LinkPassportSnapshot | None:
-        result = await session.execute(select(LinkPassportSnapshot))
-        passports = cast(list[LinkPassportSnapshot], result.scalars().all())
-        return next(
-            (
-                passport
-                for passport in passports
-                if passport.passport_hash == passport_hash
-            ),
-            None,
+        result = await session.execute(
+            select(LinkPassportSnapshot)
+            .where(LinkPassportSnapshot.passport_hash == passport_hash)
+            .limit(1)
         )
+        return result.scalars().first()
 
     async def _update_queue_status(
         self,
@@ -985,6 +1012,7 @@ class LinkService:
         status: str,
         pause_reason: str | None,
     ) -> LinkQueueItemRecord | None:
+        _validate_queue_status(status)
         if self.session_factory is None:
             return None
         async with self.session_factory() as session:
@@ -1000,9 +1028,33 @@ class LinkService:
             await session.refresh(queue_item)
             return _queue_item_record(queue_item)
 
+    def _ensure_memory_mode(self) -> None:
+        if self.session_factory is not None:
+            raise RuntimeError("Use async LinkService methods when session_factory is configured.")
+
 
 def _now() -> datetime:
     return datetime.now(tz=UTC)
+
+
+def _validate_priority_lane(priority_lane: str) -> None:
+    if priority_lane not in LINK_PRIORITY_ORDER:
+        raise ValueError(f"Invalid link priority lane: {priority_lane}")
+
+
+def _validate_link_state(link_state: str) -> None:
+    if link_state not in LINK_STATES:
+        raise ValueError(f"Invalid link state: {link_state}")
+
+
+def _validate_queue_status(status: str) -> None:
+    if status not in QUEUE_STATUSES:
+        raise ValueError(f"Invalid queue status: {status}")
+
+
+def _validate_transfer_attempt_status(status: str) -> None:
+    if status not in TRANSFER_ATTEMPT_STATUSES:
+        raise ValueError(f"Invalid transfer status: {status}")
 
 
 def _default_policy() -> JsonObject:

@@ -51,6 +51,7 @@ async def get_link_status(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
+    await _ensure_tenant_site(services, tenant_context, site_id)
     passport = await services.link.abuild_passport(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -65,6 +66,7 @@ async def get_link_budget(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject | None:
+    await _ensure_tenant_site(services, tenant_context, site_id)
     budget = await services.link.aget_budget(tenant_id=tenant_context.tenant_id, site_id=site_id)
     if budget is None:
         return None
@@ -79,6 +81,7 @@ async def put_link_budget(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
+    await _ensure_tenant_site(services, tenant_context, site_id)
     budget = await services.link.aupsert_budget(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -95,6 +98,7 @@ async def get_link_queue(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[JsonObject]:
+    await _ensure_tenant_site(services, tenant_context, site_id)
     return [
         _queue_item_payload(item)
         for item in await services.link.alist_queue(
@@ -111,6 +115,7 @@ async def get_link_probes(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[JsonObject]:
+    await _ensure_tenant_site(services, tenant_context, site_id)
     return [
         _probe_payload(probe)
         for probe in await services.link.alist_probes(
@@ -128,6 +133,7 @@ async def post_link_probe(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
+    await _ensure_tenant_site(services, tenant_context, site_id)
     probe = await services.link.arecord_probe(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -147,6 +153,7 @@ async def get_link_policies(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
+    await _ensure_tenant_site(services, tenant_context, site_id)
     return await services.link.aget_policy(tenant_id=tenant_context.tenant_id, site_id=site_id)
 
 
@@ -158,11 +165,18 @@ async def put_link_policies(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    return await services.link.aput_policy(
-        tenant_id=tenant_context.tenant_id,
-        site_id=site_id,
-        policy=payload.policy,
-    )
+    await _ensure_tenant_site(services, tenant_context, site_id)
+    try:
+        return await services.link.aput_policy(
+            tenant_id=tenant_context.tenant_id,
+            site_id=site_id,
+            policy=payload.policy,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Link budget not found.",
+        ) from exc
 
 
 @router.get("/evidence/{incident_id}/passport")
@@ -233,6 +247,17 @@ def _status_payload(passport: LinkPassportSnapshotRecord) -> JsonObject:
     payload = passport.payload.copy()
     payload["passport_hash"] = passport.passport_hash
     return payload
+
+
+async def _ensure_tenant_site(
+    services: AppServices,
+    tenant_context: TenantContext,
+    site_id: UUID,
+) -> None:
+    try:
+        await services.sites.get_site(tenant_context, site_id)
+    except HTTPException:
+        raise
 
 
 def _budget_payload(budget: LinkBudgetSnapshot) -> JsonObject:
