@@ -60,6 +60,8 @@ if "argus.fleet.tables" not in sys.modules:
     )
 if "argus.billing.tables" not in sys.modules:
     importlib.import_module("argus.billing.tables")
+if "argus.support.tables" not in sys.modules:
+    importlib.import_module("argus.support.tables")
 if "argus.maritime.tables" not in sys.modules:
     importlib.import_module("argus.maritime.tables")
 
@@ -88,6 +90,13 @@ _BILLING_TABLE_EXPORTS = {
     "UsageMeter",
     "UsageRecord",
 }
+_SUPPORT_TABLE_EXPORTS = {
+    "BreakGlassAccessRecord",
+    "OnboardingCheckRun",
+    "SupportBundle",
+    "SupportSession",
+    "SupportTunnel",
+}
 
 
 def __getattr__(name: str) -> Any:
@@ -106,6 +115,11 @@ def __getattr__(name: str) -> Any:
         value = getattr(billing_tables, name)
         globals()[name] = value
         return value
+    if name in _SUPPORT_TABLE_EXPORTS:
+        support_tables = importlib.import_module("argus.support.tables")
+        value = getattr(support_tables, name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
@@ -115,6 +129,7 @@ __all__ = [
     "BillingAccount",
     "BillingExport",
     "BillingNode",
+    "BreakGlassAccessRecord",
     "Camera",
     "CameraVocabularySnapshot",
     "CountEvent",
@@ -144,6 +159,7 @@ __all__ = [
     "Model",
     "ModelRuntimeArtifact",
     "NodePairingSession",
+    "OnboardingCheckRun",
     "OperationsLifecycleRequest",
     "OperatorConfigBinding",
     "OperatorConfigProfile",
@@ -157,6 +173,9 @@ __all__ = [
     "Site",
     "SupervisorNodeCredential",
     "SupervisorServiceStatusReport",
+    "SupportBundle",
+    "SupportSession",
+    "SupportTunnel",
     "Tenant",
     "TrackingEvent",
     "UsageMeter",

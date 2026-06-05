@@ -19,6 +19,7 @@ from argus.link.service import LinkService
 from argus.main import create_app
 from argus.models.enums import RoleEnum
 from argus.services.pack_registry import PackRegistry
+from argus.support.service import SupportService
 
 TENANT_ID = UUID("00000000-0000-4000-8000-000000000001")
 SITE_ID = UUID("00000000-0000-4000-8000-000000000002")
@@ -87,6 +88,7 @@ def empty_pack_app(tmp_path) -> FastAPI:  # noqa: ANN001
         tenancy=_FakeTenancyService(user),
         packs=PackRegistry(empty_packs_root),
         billing=BillingService(),
+        support=SupportService(),
         link=LinkService(),
         fleet=FleetService(),
         sites=_FakeSiteService(),
@@ -155,3 +157,23 @@ async def test_billing_routes_work_with_empty_pack_registry(empty_pack_app: Fast
         meter.get("pack_id") is None or meter["pack_id"] != "maritime-fleet"
         for meter in meter_response.json()["items"]
     )
+
+
+@pytest.mark.asyncio
+async def test_support_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=empty_pack_app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/support/bundles",
+            json={
+                "site_id": "00000000-0000-4000-8000-000000000002",
+                "include_logs": True,
+            },
+        )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload.get("pack_id") is None
+    assert "vessel" not in json.dumps(payload).lower()

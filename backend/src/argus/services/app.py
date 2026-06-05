@@ -249,6 +249,7 @@ from argus.streaming.webrtc import (
     WebRTCNegotiator,
     resolve_stream_access,
 )
+from argus.support.service import SupportService
 from argus.vision.model_metadata import resolve_model_classes
 from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
@@ -341,6 +342,7 @@ class AppServices:
     billing: BillingService
     link: LinkService
     fleet: FleetService
+    support: SupportService
     maritime: MaritimeRuntimeService
 
     async def close(self) -> None:
@@ -4513,6 +4515,7 @@ def build_app_services(
         billing=BillingService(db.session_factory),
         link=LinkService(db.session_factory),
         fleet=FleetService(db.session_factory),
+        support=SupportService(db.session_factory),
         maritime=MaritimeRuntimeService(
             pack_registry=pack_registry,
             session_factory=db.session_factory,

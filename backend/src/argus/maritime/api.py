@@ -43,6 +43,10 @@ from argus.maritime.service import (
     MaritimeError,
     MaritimeNotFoundError,
 )
+from argus.maritime.support import (
+    maritime_support_checklist_payload,
+    maritime_support_diagnostics_payload,
+)
 from argus.maritime.telemetry import (
     AisCsvFileAdapter,
     AISJsonAdapter,
@@ -193,6 +197,20 @@ async def get_maritime_billing_rollups(
         pack_id="maritime-fleet",
     )
     return maritime_billing_rollups_payload(usage_records=records)
+
+
+@router.get("/api/v1/maritime/support/checklist")
+async def get_maritime_support_checklist(
+    current_user: ViewerUser,
+) -> JsonObject:
+    return maritime_support_checklist_payload()
+
+
+@router.get("/api/v1/maritime/support/diagnostics")
+async def get_maritime_support_diagnostics(
+    current_user: ViewerUser,
+) -> JsonObject:
+    return maritime_support_diagnostics_payload()
 
 
 @router.get("/api/v1/maritime/runtime")

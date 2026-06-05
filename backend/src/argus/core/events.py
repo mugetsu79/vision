@@ -46,6 +46,11 @@ STREAM_DEFINITIONS = (
         subjects=["incident.triggered.*"],
         description="Incident trigger messages",
     ),
+    js_api.StreamConfig(
+        name="ARGUS_SUPPORT_TUNNELS",
+        subjects=["support.tunnel.*"],
+        description="Support tunnel lifecycle messages",
+    ),
 )
 
 
