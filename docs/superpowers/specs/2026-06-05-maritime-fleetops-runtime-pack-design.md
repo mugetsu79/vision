@@ -17,13 +17,15 @@ satellite-connected fleet operations: vessels, voyages, port calls, maritime
 telemetry, link-aware evidence movement, maritime scene templates, and fleet
 operator workflows.
 
-The implementation must be product-complete enough to run a credible FleetOps
-pilot without making core maritime-shaped. Core continues to own tenants, users,
-generic sites, cameras, scene contracts, incidents, evidence artifacts, runtime
-passports, link/runtime delivery primitives, operator configuration, and the
-pack registry. The Maritime FleetOps pack owns maritime entities, maritime
+The implementation must be product-complete enough to install, operate,
+support, bill, and renew FleetOps without making core maritime-shaped. Core
+continues to own tenants, users, generic sites, cameras, scene contracts,
+incidents, evidence artifacts, runtime passports, link/runtime delivery
+primitives, operator configuration, billing primitives, support primitives, and
+the pack registry. The Maritime FleetOps pack owns maritime entities, maritime
 telemetry context, scene template application, evidence enrichment, FleetOps UI
-surfaces, and pack-specific billing labels.
+surfaces, shipboard support contributions, and pack-specific billing labels,
+meters, and rollups.
 
 This design expands beyond the read-only registry. It builds a real
 `argus.maritime` runtime module and a frontend FleetOps workspace. It does not
@@ -38,7 +40,8 @@ Build Vezor FleetOps as a usable pack for remote maritime operations:
 
 An operator should be able to create vessels, assign cameras, define voyages and
 port calls, apply maritime scene templates, ingest maritime telemetry, review
-evidence with vessel/voyage/position/link context, and monitor fleet exceptions
+evidence with vessel/voyage/position/link context, monitor fleet exceptions,
+export evidence packs, generate support diagnostics, and inspect billable usage
 from one workspace.
 
 ## Scope
@@ -54,21 +57,38 @@ from one workspace.
 - A minimum core `argus.fleet` baseline required by the FleetOps workspace:
   site groups, site hierarchy nodes, site state, site assignments, rotation
   groups, and exception-first fleet summaries.
+- A core `argus.billing` baseline required by a working product: billing nodes,
+  accounts, entitlements, usage meters, invoice line items, pack discriminators,
+  and billable usage exports.
+- A core `argus.support` baseline required by a working product: diagnostic
+  bundles, support sessions, NOC tunnel lifecycle, break-glass access records,
+  and no-laptop onboarding checks.
 - Maritime APIs under `/api/v1/maritime`.
 - Link-state APIs under `/api/v1/link` using domain-neutral core contracts.
 - Fleet-state APIs under `/api/v1/fleet` using domain-neutral core contracts.
+- Billing APIs under `/api/v1/billing` using domain-neutral core contracts.
+- Support APIs under `/api/v1/support` using domain-neutral core contracts.
 - Runtime contribution APIs connected to the existing pack registry.
 - Maritime scene templates based on the `maritime-fleet` manifest.
 - Template application that creates or updates core camera scene configuration
   using existing core primitives.
 - Ingest APIs for AIS, NMEA, and carrier terminal telemetry.
-- File or fixture import paths for pilot/demo telemetry when live integrations
-  are unavailable.
+- File or fixture import paths for operational bootstrap, demos, support
+  reproduction, and offline telemetry loading when live integrations are
+  unavailable.
+- Generic carrier telemetry adapters that work without proprietary SDKs: HTTP
+  polling, webhook ingest, and file import.
+- Carrier-aware link selection policies that choose direct, satellite, port WiFi,
+  or deferred transfer lanes based on link state and budget.
 - Evidence enrichment that links core incidents and artifacts to maritime
   context without changing core incident storage semantics.
+- Evidence pack export with scene contract, runtime passport, link passport,
+  maritime context, ledger summary, and retention/time-source metadata.
+- Shipboard install checklist, support diagnostics, and FleetOps runbook
+  surfaces.
 - FleetOps frontend pages for fleet overview, vessel detail, voyage and port
   call timeline, telemetry state, maritime evidence context, and link-aware
-  evidence queue.
+  evidence queue, billing usage, and support diagnostics.
 - Governance tests that keep traffic/public-space manifest-only and prevent
   maritime nouns from entering core contracts.
 - OpenAPI regeneration for typed frontend hooks once backend contracts exist.
@@ -78,15 +98,20 @@ from one workspace.
 - Traffic/public-space runtime code, APIs, UI, migrations, demos, or sales
   motion.
 - A home-lab pack, home-lab dashboard, or home-lab customer demo.
-- Billing migrations that create invoice or payment behavior.
-- Proprietary carrier, AIS vendor, or NMEA hardware integrations that require
-  unavailable credentials or closed protocol documents.
+- Payment collection through a card processor or accounting-system integration.
+- Proprietary carrier, AIS vendor, or NMEA hardware integrations that cannot be
+  implemented from available protocol documentation, sample payloads, or generic
+  HTTP/file ingest contracts. The product must still ship working generic
+  adapters and documented adapter seams.
 - Runtime detector semantics that bypass current scene contracts, camera
   configuration, evidence, or runtime passport behavior.
 - Face recognition, biometric identification, or public-space surveillance
   features.
 - Moving `Vessel`, `Voyage`, `PortCall`, AIS, NMEA, owner, manager, or
   charterer concepts into core contracts.
+- Formal maritime regulatory certification. The product must provide
+  certification-ready notes, evidence/export metadata, and audit trails, but
+  external certification itself is not a software feature.
 
 ## Source Decisions
 
@@ -130,14 +155,16 @@ items where they are required for the first functional product.
 | Fleet exception dashboard | core fleet layer plus FleetOps UI | in scope |
 | Hash-linked evidence, signed artifacts, audit log | core chain-of-custody layer | already partly implemented; preserved and extended through metadata |
 | Evidence pack export with scene contract context | core evidence/export layer plus maritime metadata | in scope |
-| Time-source provenance and retention hooks | core chain-of-custody layer | in scope for evidence context/export metadata, not a full compliance suite |
-| Remote support bundle, NOC tunnel, break-glass | core support layer | limited to diagnostics surfacing; tunnel implementation is follow-up |
+| Time-source provenance and retention hooks | core chain-of-custody layer | in scope |
+| Remote support bundle, NOC tunnel, break-glass | core support layer | in scope as working support primitives |
+| No-laptop onboarding checks | core support/deployment layer plus maritime checklist | in scope |
 | Shipboard support wording and install checklist | maritime pack | in scope as docs/UI copy |
 | Marine-grade hardware recommendations | maritime pack docs | in scope as docs, not hardware certification |
-| DNV or cybersecurity certification | maritime pack docs | out of scope beyond notes |
+| DNV or cybersecurity certification | maritime pack docs | certification-ready notes, audit metadata, and evidence exports in scope; external certification is not a software deliverable |
 | Camera onboarding defaults and bandwidth assumptions | maritime pack plus core camera ecosystem | in scope |
-| Billing node tree and invoices | core billing | out of scope for migrations/invoices |
-| Maritime billing labels and meters | maritime pack | in scope as labels/counters |
+| Carrier-aware link selection | core link layer plus maritime carrier telemetry | in scope |
+| Billing node tree, accounts, entitlements, usage meters, invoice line items | core billing | in scope |
+| Maritime billing labels, meters, and rollups | maritime pack | in scope |
 | Traffic/public-space runtime | traffic pack | explicitly out of scope |
 
 ## Architecture
@@ -153,6 +180,10 @@ Core owns the stable SceneOps platform:
 - operator configuration profiles
 - model catalog and runtime artifacts
 - pack registry and manifest validation
+- `argus.billing` billing nodes, accounts, entitlements, usage meters, invoice
+  line items, pack discriminators, and usage exports
+- `argus.support` diagnostic bundles, support sessions, NOC tunnel lifecycle,
+  local break-glass records, and no-laptop onboarding checks
 - `argus.fleet` site groups, hierarchy, site state, site assignments,
   rotation groups, and exception-first fleet summaries
 - `argus.link` link passports, budgets, priority lanes, transfer queues,
@@ -231,6 +262,76 @@ The baseline must support:
 Maritime pack code may project vessels, owners, managers, charterers, shipboard
 roles, and watch rotations onto these generic primitives. It must not move those
 labels into core fleet contracts.
+
+### Core Argus-Billing Baseline
+
+`argus.billing` is a core engine layer. It must be generic enough to support
+future packs, while FleetOps supplies maritime labels and rollups.
+
+The working-product baseline owns these domain-neutral concepts:
+
+- `BillingNode`: adjacency-tree node with tenant, parent, label, kind, and pack
+  discriminator.
+- `BillingAccount`: bill-to entity linked to one or more billing nodes.
+- `Entitlement`: enabled pack, feature, usage limit, and effective time window.
+- `UsageMeter`: typed meter definition with unit, aggregation cadence, and pack
+  discriminator.
+- `PriceBook`: active pricing catalog with currency, effective time window, and
+  meter prices.
+- `UsageRecord`: append-only usage event with source object, quantity, time
+  window, and metadata.
+- `InvoiceLineItem`: generated line item with meter, quantity, unit label,
+  unit price, currency, account, billing period, and source records.
+- `BillingExport`: CSV/JSON export of accounts, usage, and line items for manual
+  invoicing or accounting-system import.
+
+The baseline must support:
+
+- generic billing hierarchy without maritime labels in core contracts
+- entitlement checks for pack availability and feature access
+- usage recording for vessel months, managed edge nodes, camera capacity tiers,
+  retained evidence GB, evidence exports, support sessions, and managed link GB
+- price-book configuration for FleetOps meters
+- invoice line item generation for a billing period
+- usage and invoice export without payment collection
+
+Maritime pack code contributes labels such as reseller, fleet manager, owner,
+charterer, vessel, and meter names. Payment processing, tax calculation, and
+accounting-system sync are external commercial integrations, but the product
+must generate priced billable records, invoice lines, and exports.
+
+### Core Argus-Support Baseline
+
+`argus.support` is a core engine layer. FleetOps needs it because shipboard
+deployments must be operable without a developer terminal.
+
+The working-product baseline owns these domain-neutral concepts:
+
+- `SupportBundle`: redacted diagnostic package with node, camera, runtime,
+  link, evidence queue, configuration, logs summary, and artifact manifests.
+- `SupportSession`: support case/session record with tenant, site, node,
+  operator, status, timestamps, and billable duration.
+- `SupportTunnel`: lifecycle state for a NOC tunnel or remote diagnostic
+  channel, including requested, active, expired, revoked, and failed states.
+- `SupportTunnelTransport`: configured transport adapter that can open and stop
+  an approved reverse tunnel command or managed tunnel endpoint.
+- `BreakGlassAccessRecord`: local emergency access record with reason,
+  approver/operator, scope, started/ended times, and audit payload.
+- `OnboardingCheck`: install validation check for master, edge, camera,
+  identity, model, link, evidence storage, and support readiness.
+
+The baseline must support:
+
+- generating a redacted support bundle from installed product state
+- opening, expiring, and revoking a support tunnel through a configured
+  transport and lifecycle record
+- recording local break-glass access without weakening normal auth flows
+- running no-laptop onboarding checks after install
+- recording billable support session duration for billing usage
+
+Maritime pack code contributes shipboard wording, ETO-oriented troubleshooting
+labels, satellite-link diagnostic grouping, vessel install checklist sections,
+and maritime support roles.
 
 ### Maritime Pack Boundary
 
@@ -485,8 +586,38 @@ Link states:
 Rules:
 
 - Latest state is mutable by terminal id.
-- Historical changes should be recorded through telemetry events or audit
-  metadata if later product needs require timeline playback.
+- Historical changes are recorded through telemetry events so the vessel detail
+  page, support bundle, evidence context, and billing/export logic can explain
+  link posture over time.
+
+### Maritime Integration Adapters
+
+The working product must ship with adapter seams and generic adapters that can
+run without proprietary SDKs:
+
+- `AISJsonAdapter`: accepts normalized AIS JSON from HTTP, webhook, or file
+  import.
+- `AisCsvFileAdapter`: imports common CSV exports containing MMSI, position,
+  timestamp, course, speed, and heading.
+- `Nmea0183Adapter`: parses core NMEA 0183 sentences needed for position,
+  heading, and speed context.
+- `CarrierWebhookAdapter`: accepts normalized carrier terminal state via
+  authenticated webhook.
+- `CarrierHttpPollingAdapter`: polls a configured HTTP JSON endpoint for
+  terminal state where a partner exposes one.
+- `CarrierFileImportAdapter`: imports fixture or operational CSV/JSON carrier
+  state exports.
+
+Adapter rules:
+
+- All adapters normalize into pack-owned telemetry tables.
+- Adapter credentials must use existing secret/profile mechanisms, not plain
+  fields in maritime tables.
+- Unsupported vendor-specific fields are preserved in `raw_payload`.
+- Failed parses are visible in ingest results and support bundles.
+- No proprietary SDK is required for the product to work end to end.
+- Adding a partner-specific adapter later must not change the core link or
+  maritime evidence contracts.
 
 ### Maritime Roles And Watch Rotations
 
@@ -538,6 +669,8 @@ Link routes use core contracts and are available outside Maritime FleetOps:
 - `GET /api/v1/link/sites/{site_id}/queue`
 - `GET /api/v1/link/sites/{site_id}/probes`
 - `POST /api/v1/link/sites/{site_id}/probes`
+- `GET /api/v1/link/sites/{site_id}/policies`
+- `PUT /api/v1/link/sites/{site_id}/policies`
 - `GET /api/v1/link/evidence/{incident_id}/passport`
 - `POST /api/v1/link/queue/{queue_item_id}/retry`
 - `POST /api/v1/link/queue/{queue_item_id}/pause`
@@ -547,6 +680,7 @@ FleetOps routes may compose these into maritime summaries:
 
 - `GET /api/v1/maritime/vessels/{vessel_id}/link-status`
 - `GET /api/v1/maritime/vessels/{vessel_id}/evidence-backlog`
+- `GET /api/v1/maritime/vessels/{vessel_id}/carrier-selection`
 
 The maritime responses may include vessel, voyage, port-call, and carrier
 terminal context. The core link responses must remain generic.
@@ -573,6 +707,57 @@ FleetOps routes may compose these into maritime summaries:
 
 The maritime responses may label a site as a vessel and a site group as a fleet.
 The core fleet responses must remain generic.
+
+### Argus-Billing
+
+Billing routes use core contracts and are available outside Maritime FleetOps:
+
+- `GET /api/v1/billing/nodes`
+- `POST /api/v1/billing/nodes`
+- `GET /api/v1/billing/accounts`
+- `POST /api/v1/billing/accounts`
+- `GET /api/v1/billing/entitlements`
+- `POST /api/v1/billing/entitlements`
+- `GET /api/v1/billing/meters`
+- `GET /api/v1/billing/price-books`
+- `POST /api/v1/billing/price-books`
+- `GET /api/v1/billing/usage`
+- `POST /api/v1/billing/usage`
+- `POST /api/v1/billing/invoice-runs`
+- `GET /api/v1/billing/invoice-runs/{invoice_run_id}`
+- `GET /api/v1/billing/exports/{export_id}`
+
+FleetOps routes may compose these into maritime billing summaries:
+
+- `GET /api/v1/maritime/billing/usage`
+- `GET /api/v1/maritime/billing/rollups`
+
+The maritime responses may label billing nodes as reseller, fleet manager,
+owner, charterer, or vessel. The core billing responses must remain generic.
+
+### Argus-Support
+
+Support routes use core contracts and are available outside Maritime FleetOps:
+
+- `POST /api/v1/support/bundles`
+- `GET /api/v1/support/bundles/{bundle_id}`
+- `POST /api/v1/support/sessions`
+- `PATCH /api/v1/support/sessions/{session_id}`
+- `POST /api/v1/support/tunnels`
+- `POST /api/v1/support/tunnels/{tunnel_id}/revoke`
+- `POST /api/v1/support/break-glass`
+- `POST /api/v1/support/break-glass/{record_id}/close`
+- `GET /api/v1/support/onboarding-checks`
+- `POST /api/v1/support/onboarding-checks/run`
+
+FleetOps routes may compose these into maritime support summaries:
+
+- `GET /api/v1/maritime/support/checklist`
+- `GET /api/v1/maritime/support/diagnostics`
+
+The maritime responses may group checks by vessel, shipboard network, satellite
+link, camera deck/space, or ETO task. The core support responses must remain
+generic.
 
 ### Vessels
 
@@ -631,7 +816,8 @@ opinionated setup payloads over the core camera and scene contract model.
 - `POST /api/v1/maritime/import/nmea-file`
 
 The live ingest routes accept normalized JSON payloads. File import routes
-support pilot fixtures and lab validation without vendor credentials.
+support operational fixtures, demos, support reproduction, and offline loading
+without vendor credentials.
 
 Ingest behavior:
 
@@ -647,6 +833,8 @@ Ingest behavior:
 - `GET /api/v1/maritime/vessels/{vessel_id}/runtime-summary`
 - `GET /api/v1/maritime/vessels/{vessel_id}/telemetry`
 - `GET /api/v1/maritime/evidence-context`
+- `GET /api/v1/maritime/evidence-exports`
+- `POST /api/v1/maritime/evidence-exports`
 
 Overview includes:
 
@@ -659,6 +847,9 @@ Overview includes:
 - degraded links
 - cameras without scene templates
 - vessels without recent telemetry
+- evidence export queue
+- open support sessions
+- current billable usage summary
 
 ## Evidence Context
 
@@ -724,6 +915,9 @@ Routes:
 - `/fleetops/vessels`
 - `/fleetops/vessels/:vesselId`
 - `/fleetops/evidence`
+- `/fleetops/billing`
+- `/fleetops/support`
+- `/fleetops/onboarding`
 
 Navigation labels may be contributed from the pack runtime response:
 
@@ -741,14 +935,37 @@ Primary surfaces:
   calls, latest telemetry, and evidence context.
 - Maritime evidence queue filtered to incidents that resolve to a vessel.
 - Template application panel for camera setup.
+- Link operations panel with budget, lane, queue, backpressure, recovery, and
+  carrier-selection state.
+- Evidence export builder with scene contract, runtime passport, link passport,
+  and maritime metadata preview.
+- Billing usage surface with account hierarchy, entitlement state, usage meters,
+  invoice-run line items, and export actions.
+- Support diagnostics surface with onboarding checks, support bundles, tunnel
+  lifecycle, break-glass records, and shipboard checklist.
 
 The UI should reuse existing shell, query hooks, cards/surfaces, auth guards,
 and generated OpenAPI types. It should not create a separate marketing landing
 page.
 
-## Billing Labels
+## Billing And Entitlements
 
-The pack may expose billing labels and counters for product readiness:
+The product must produce billable usage records and invoice line items. It does
+not need to collect payment inside the app.
+
+Core billing entities:
+
+- billing node
+- billing account
+- entitlement
+- usage meter
+- price book
+- usage record
+- invoice run
+- invoice line item
+- billing export
+
+Maritime labels and counters:
 
 - reseller
 - fleet manager
@@ -763,9 +980,41 @@ The pack may expose billing labels and counters for product readiness:
 - support session hour
 - managed link GB
 
-This design does not implement invoices, payment flows, entitlement gates, or
-billing migrations. Counters can be returned as product telemetry and future
-billing inputs.
+FleetOps billing behavior:
+
+- Entitlements enable `maritime-fleet` per tenant or billing account.
+- Usage records are generated from vessel activity, camera capacity, managed
+  edge nodes, retained evidence, evidence exports, support sessions, and managed
+  link transfer.
+- Invoice runs aggregate usage records into line items for a billing period.
+- Price books provide currency and unit prices for FleetOps meters.
+- Billing exports produce CSV and JSON artifacts suitable for manual invoice
+  review or accounting-system import.
+- Charter handover can close one billing window and open another for the same
+  vessel without moving core site ownership.
+- Billing hierarchy labels stay in maritime responses; core billing records
+  keep generic node kinds plus pack discriminator metadata.
+
+## Support And Onboarding
+
+FleetOps must be installable and supportable without requiring a developer to
+run foreground terminal commands after installation.
+
+Support behavior:
+
+- Support bundles redact secrets and include master, edge, camera, model,
+  runtime, link, evidence, configuration, and maritime context summaries.
+- Support sessions record status, duration, operator, tenant, site, and linked
+  vessel where FleetOps context exists.
+- NOC tunnel lifecycle can be requested, activated through configured transport,
+  expired, revoked, and audited.
+- Break-glass records capture reason, scope, actor, approver, start/end time,
+  and closure notes.
+- Onboarding checks verify identity, master readiness, edge pairing, camera
+  reachability, model/runtime readiness, evidence storage, link state, billing
+  entitlement, and support readiness.
+- Maritime checklist sections cover vessel network assumptions, satellite-link
+  notes, ETO handoff, camera naming defaults, and shipboard support roles.
 
 ## Error Handling
 
@@ -801,12 +1050,22 @@ Backend tests:
   backpressure, resume state, last sync, and link passport hashing
 - core link API tests for site status, budget updates, probe reporting, queue
   pause/resume/retry, and cross-tenant isolation
+- core billing service tests for billing node trees, entitlements, usage record
+  aggregation, price books, invoice line item generation, billing exports, and
+  cross-tenant isolation
+- core support service tests for redacted bundles, support sessions, tunnel
+  lifecycle, tunnel transport adapter, break-glass records, onboarding checks,
+  and cross-tenant isolation
 - pack activation tests for `maritime-fleet`
 - traffic/public-space non-activation tests
 - table and migration smoke tests
 - service tests for vessel CRUD and tenant scoping
 - service tests for voyage and port-call state transitions
 - telemetry parser and ingest tests
+- generic carrier adapter tests for HTTP polling, webhook ingest, file import,
+  parse failures, and credential redaction
+- carrier-aware link selection tests for direct, satellite, port WiFi, deferred,
+  and degraded states
 - scene template application tests proving generated payloads use core
   primitives
 - evidence context resolution tests with complete and partial telemetry
@@ -822,17 +1081,23 @@ Frontend tests:
 - vessel list, vessel detail, and evidence queue render loading, empty, error,
   and populated states
 - template application interactions call the correct API route
+- billing usage, invoice-run, and export views render populated, empty, and
+  error states
+- support diagnostics, support bundle, tunnel, break-glass, and onboarding
+  surfaces render populated, empty, and error states
 - navigation keeps traffic/public-space hidden
 
 End-to-end smoke:
 
 - create vessel with linked site
 - place that site into a generic site group and hierarchy
+- create billing account, entitlement, and billing hierarchy for the vessel
 - add camera to the vessel site
 - read fleet exceptions ordered by attention
 - set a site bandwidth budget
 - queue evidence work in safety, evidence, telemetry, and bulk lanes
 - simulate degraded link probes and verify lower-priority backpressure
+- evaluate carrier-aware link selection
 - apply gangway template
 - create active voyage and port call
 - ingest AIS and carrier terminal state
@@ -840,6 +1105,10 @@ End-to-end smoke:
 - resolve maritime evidence context
 - export an evidence pack with scene contract, runtime passport, link passport,
   maritime metadata, and intact chain-of-custody hashes
+- generate usage records and an invoice run for vessel, evidence, support, and
+  link meters
+- create support bundle, run onboarding checks, open and revoke configured
+  support tunnel, and record break-glass access
 - view vessel dashboard, link posture, and maritime evidence queue
 - simulate recovery and verify evidence transfer resumes with last-sync state
 
@@ -879,8 +1148,8 @@ payloads, and apply them through existing camera/scene contract behavior.
 
 ### Phase 6: Telemetry Ingest
 
-Implement AIS, NMEA, and carrier terminal normalized ingest plus pilot fixture
-imports. Add latest-state and recent-track APIs.
+Implement AIS, NMEA, and carrier terminal normalized ingest plus operational
+fixture imports. Add latest-state and recent-track APIs.
 
 ### Phase 7: Evidence Enrichment And Export
 
@@ -890,19 +1159,37 @@ render partial-context freshness information. The first FleetOps evidence pack
 export must include scene contract, runtime passport, link passport, maritime
 context, and chain-of-custody metadata without changing existing artifact hashes.
 
-### Phase 8: FleetOps UI
+### Phase 8: Billing And Entitlements
+
+Create the core billing layer and Maritime FleetOps billing contribution:
+billing nodes, billing accounts, entitlements, usage meters, price books, usage
+records, invoice runs, invoice line items, CSV/JSON exports, maritime hierarchy
+labels, vessel rollups, charter handover windows, and tests.
+
+### Phase 9: Support And Onboarding
+
+Create the core support layer and Maritime FleetOps support contribution:
+redacted support bundles, support sessions, NOC tunnel lifecycle records,
+configured support tunnel transport, break-glass access records, onboarding
+checks, shipboard install checklist, satellite-link diagnostics grouping,
+support usage meters, and tests.
+
+### Phase 10: FleetOps UI
 
 Add frontend routes, hooks, dashboard, vessel pages, template panel, and
 maritime evidence queue using generated OpenAPI types. The dashboard must show
 degraded, dark, port WiFi, and recovering link states, evidence backlog, queue
 depth, fleet exceptions, site/vessel hierarchy, and last successful evidence
-transfer.
+transfer. The workspace must also include billing usage, invoice-run exports,
+support diagnostics, onboarding checks, tunnel lifecycle, and break-glass
+records.
 
-### Phase 9: Support, Installer, And Product Hardening
+### Phase 11: Installer And Product Hardening
 
-Add support diagnostics surfacing, shipboard install checklist/docs, end-to-end
-smoke tests, installer packaging checks, operational fixtures, and performance
-checks for fleet hierarchy, telemetry, link queues, and dashboard queries.
+Add end-to-end smoke tests, installer packaging checks, operational fixtures,
+runbooks, API docs, product docs, generated OpenAPI/client artifacts, and
+performance checks for fleet hierarchy, telemetry, link queues, evidence export,
+billing runs, support bundles, and dashboard queries.
 
 ## Acceptance Criteria
 
@@ -913,6 +1200,10 @@ The pack is functionally complete when:
   by attention.
 - `GET /api/v1/link/sites/{site_id}/status` returns budget, queue depth, probes,
   last sync, and link state using generic core contracts.
+- `POST /api/v1/billing/invoice-runs` generates invoice line items from
+  FleetOps usage records.
+- `POST /api/v1/support/bundles` generates a redacted support bundle for a
+  FleetOps deployment.
 - Traffic/public-space has no runtime module or UI route.
 - A tenant admin can create a vessel and linked site.
 - A tenant admin can create and transition voyages and port calls.
@@ -923,12 +1214,25 @@ The pack is functionally complete when:
 - Interrupted evidence movement can resume and records last successful transfer.
 - AIS, NMEA, and carrier terminal state can be ingested through documented
   routes or fixture imports.
+- Generic carrier telemetry adapters work for authenticated HTTP polling,
+  webhook ingest, and file import.
+- Carrier-aware link selection chooses direct, satellite, port WiFi, or deferred
+  transfer posture from budget, probe, and terminal state.
 - FleetOps evidence export includes scene contract, runtime passport, link
   passport, maritime context, and evidence ledger summary without changing
   existing artifact hashes.
+- Entitlements gate FleetOps availability and feature access.
+- Usage records, price books, and invoice line items cover vessel month, managed
+  edge node, camera capacity tier, retained evidence GB, evidence export,
+  support session hour, and managed link GB.
+- Billing exports are available as CSV and JSON.
+- Support sessions, support tunnels, break-glass records, and onboarding checks
+  are visible and auditable.
 - A vessel dashboard shows current voyage, port call, telemetry, link posture,
   budget state, evidence backlog, queue depth, camera/template coverage, and
   pending evidence.
+- FleetOps UI exposes billing usage, invoice exports, support diagnostics,
+  onboarding checks, support tunnel lifecycle, and break-glass records.
 - Evidence context resolves vessel, voyage, port call, latest AIS, latest link
   state, link passport, and reviewer role where available.
 - Missing telemetry degrades gracefully and visibly.
@@ -942,9 +1246,9 @@ The pack is functionally complete when:
 
 - `argus.link` is core work, not pack work, so the implementation plan must keep
   the link layer generic while still delivering the FleetOps wedge.
-- Vendor-specific carrier telemetry will likely require adapter-specific follow
-  up work once credentials and protocol documents exist.
-- Exact AIS/NMEA parser depth may need to grow after pilot data is captured.
+- Partner-specific carrier SDKs may still require future adapters, but the
+  product must ship with working generic HTTP/webhook/file carrier telemetry.
+- Exact AIS/NMEA parser depth may need to grow as more vessel data is captured.
 - Current core services are concentrated in `argus.services.app`; the plan must
   keep maritime service code in the pack and avoid worsening that file.
 - Evidence export integration needs careful testing so maritime metadata does
@@ -952,5 +1256,10 @@ The pack is functionally complete when:
 - Resume-on-interrupt support may vary by storage provider. The first
   implementation should record resumable offsets when supported and fall back to
   retry-from-start with an explicit capability flag when not supported.
+- Billing produces priced invoice line items and exports, but payment collection
+  and accounting-system sync remain external commercial integrations.
+- NOC tunnel lifecycle must be implemented safely around the existing deployment
+  model. A configured tunnel transport must be testable without storing secrets
+  in tunnel records.
 - UI navigation must avoid making the whole product look maritime-only when the
   user is outside FleetOps routes.
