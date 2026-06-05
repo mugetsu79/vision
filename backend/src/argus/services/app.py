@@ -136,6 +136,7 @@ from argus.core.db import DatabaseManager
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.logging import redact_url_secrets
 from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
+from argus.fleet.service import FleetService
 from argus.inference.publisher import TelemetryFrame
 from argus.link.service import LinkService
 from argus.models.enums import (
@@ -336,6 +337,7 @@ class AppServices:
     query: QueryService
     telemetry: NatsTelemetryService
     link: LinkService
+    fleet: FleetService
 
     async def close(self) -> None:
         await self.streams.close()
@@ -4504,6 +4506,7 @@ def build_app_services(
             settings=settings,
         ),
         link=LinkService(db.session_factory),
+        fleet=FleetService(db.session_factory),
     )
 
 
