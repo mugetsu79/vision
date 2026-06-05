@@ -196,3 +196,35 @@ class MaritimeTelemetrySnapshot:
     recent_ingest_events: list[MaritimeTelemetryIngestEventRecord] = field(
         default_factory=list
     )
+
+
+@dataclass(frozen=True, slots=True)
+class MaritimeEvidenceContextRecord:
+    id: UUID
+    tenant_id: UUID
+    incident_id: UUID | None
+    camera_id: UUID | None
+    incident_time: datetime | None
+    resolution_source: str
+    telemetry_freshness: JsonObject
+    partial: bool
+    created_at: datetime
+    updated_at: datetime
+    vessel_id: UUID | None = None
+    voyage_id: UUID | None = None
+    port_call_id: UUID | None = None
+    vessel_name: str | None = None
+    port_name: str | None = None
+    ais_position: JsonObject | None = None
+    carrier_terminal: JsonObject | None = None
+    metadata: JsonObject = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class MaritimeEvidenceExportRecord:
+    id: UUID
+    tenant_id: UUID
+    incident_id: UUID
+    metadata: JsonObject
+    artifact_hashes: dict[str, str]
+    created_at: datetime

@@ -364,3 +364,105 @@ class MaritimeTelemetryIngestEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     summary: Mapped[str | None] = mapped_column(String(255), nullable=True)
     failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     raw_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class MaritimeEvidenceContext(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "maritime_evidence_contexts"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "incident_id",
+            name="uq_maritime_evidence_contexts_tenant_incident",
+        ),
+        Index(
+            "ix_maritime_evidence_contexts_tenant_camera",
+            "tenant_id",
+            "camera_id",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id"),
+        nullable=True,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    incident_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    vessel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maritime_vessels.id"),
+        nullable=True,
+    )
+    voyage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maritime_voyages.id"),
+        nullable=True,
+    )
+    port_call_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maritime_port_calls.id"),
+        nullable=True,
+    )
+    resolution_source: Mapped[str] = mapped_column(String(80), nullable=False)
+    vessel_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    port_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ais_position: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    carrier_terminal: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    telemetry_freshness: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attributes: Mapped[dict[str, object]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+
+
+class MaritimeEvidenceExport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "maritime_evidence_exports"
+    __table_args__ = (
+        Index(
+            "ix_maritime_evidence_exports_tenant_incident_created",
+            "tenant_id",
+            "incident_id",
+            "created_at",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    incident_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id", name="fk_maritime_evidence_exports_incident"),
+        nullable=False,
+    )
+    export_metadata: Mapped[dict[str, object]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    artifact_hashes: Mapped[dict[str, str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )

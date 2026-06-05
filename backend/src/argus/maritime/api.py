@@ -20,12 +20,19 @@ from argus.maritime.contracts import (
     JsonObject,
     MaritimeAISPositionRecord,
     MaritimeCarrierTerminalRecord,
+    MaritimeEvidenceContextRecord,
+    MaritimeEvidenceExportRecord,
     MaritimeNMEAReadingRecord,
     MaritimePortCallRecord,
     MaritimeTelemetryIngestEventRecord,
     MaritimeTelemetrySnapshot,
     MaritimeVesselRecord,
     MaritimeVoyageRecord,
+)
+from argus.maritime.evidence import (
+    MaritimeEvidenceError,
+    MaritimeEvidenceNotFoundError,
+    MaritimeEvidenceService,
 )
 from argus.maritime.service import (
     MaritimeConflictError,
@@ -150,6 +157,12 @@ class TelemetryFileImportRequest(BaseModel):
 class CarrierTerminalIngestRequest(BaseModel):
     vessel_id: UUID
     payload: JsonObject
+
+
+class EvidenceExportCreate(BaseModel):
+    incident_id: UUID
+    include_maritime_context: bool = True
+    include_link_passport: bool = True
 
 
 @router.get("/api/v1/maritime/runtime")
@@ -385,6 +398,61 @@ async def import_maritime_nmea_file(
         }
     except (MaritimeError, ValueError) as exc:
         _raise_maritime_http_error(_to_maritime_error(exc))
+
+
+@router.get("/api/v1/maritime/evidence-context")
+async def get_maritime_evidence_context(
+    current_user: ViewerUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+    incident_id: UUID | None = None,
+    camera_id: UUID | None = None,
+    incident_time: datetime | None = None,
+) -> JsonObject:
+    evidence_service = _maritime_evidence_service(services, tenant_context)
+    try:
+        context = await evidence_service.resolve_context(
+            incident_id=incident_id,
+            camera_id=camera_id,
+            incident_time=incident_time,
+        )
+        return _evidence_context_payload(context)
+    except MaritimeEvidenceError as exc:
+        _raise_maritime_evidence_http_error(exc)
+
+
+@router.get("/api/v1/maritime/evidence-exports")
+async def list_maritime_evidence_exports(
+    current_user: ViewerUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+    incident_id: UUID | None = None,
+) -> list[JsonObject]:
+    evidence_service = _maritime_evidence_service(services, tenant_context)
+    try:
+        exports = await evidence_service.list_exports(incident_id=incident_id)
+        return [_evidence_export_payload(item) for item in exports]
+    except MaritimeEvidenceError as exc:
+        _raise_maritime_evidence_http_error(exc)
+
+
+@router.post("/api/v1/maritime/evidence-exports", status_code=status.HTTP_201_CREATED)
+async def create_maritime_evidence_export(
+    payload: EvidenceExportCreate,
+    current_user: OperatorUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> JsonObject:
+    evidence_service = _maritime_evidence_service(services, tenant_context)
+    try:
+        export = await evidence_service.create_export(
+            incident_id=payload.incident_id,
+            include_maritime_context=payload.include_maritime_context,
+            include_link_passport=payload.include_link_passport,
+        )
+        return _evidence_export_payload(export)
+    except MaritimeEvidenceError as exc:
+        _raise_maritime_evidence_http_error(exc)
 
 
 @router.get("/api/v1/maritime/vessels")
@@ -1027,6 +1095,57 @@ def _parse_failure_payload(failure: ParseFailure) -> JsonObject:
     }
 
 
+def _evidence_context_payload(context: MaritimeEvidenceContextRecord) -> JsonObject:
+    return {
+        "id": str(context.id),
+        "tenant_id": str(context.tenant_id),
+        "incident_id": str(context.incident_id) if context.incident_id is not None else None,
+        "camera_id": str(context.camera_id) if context.camera_id is not None else None,
+        "incident_time": _iso(context.incident_time),
+        "vessel_id": str(context.vessel_id) if context.vessel_id is not None else None,
+        "voyage_id": str(context.voyage_id) if context.voyage_id is not None else None,
+        "port_call_id": (
+            str(context.port_call_id) if context.port_call_id is not None else None
+        ),
+        "resolution_source": context.resolution_source,
+        "vessel_name": context.vessel_name,
+        "port_name": context.port_name,
+        "ais_position": context.ais_position,
+        "carrier_terminal": context.carrier_terminal,
+        "telemetry_freshness": context.telemetry_freshness,
+        "partial": context.partial,
+        "metadata": context.metadata,
+        "created_at": context.created_at.isoformat(),
+        "updated_at": context.updated_at.isoformat(),
+    }
+
+
+def _evidence_export_payload(export: MaritimeEvidenceExportRecord) -> JsonObject:
+    return {
+        "id": str(export.id),
+        "tenant_id": str(export.tenant_id),
+        "incident_id": str(export.incident_id),
+        "metadata": export.metadata,
+        "artifact_hashes": export.artifact_hashes,
+        "created_at": export.created_at.isoformat(),
+    }
+
+
+def _maritime_evidence_service(
+    services: AppServices,
+    tenant_context: TenantContext,
+) -> MaritimeEvidenceService:
+    configured = getattr(services, "maritime_evidence", None)
+    if isinstance(configured, MaritimeEvidenceService):
+        return configured
+    return MaritimeEvidenceService(
+        maritime_service=services.maritime,
+        link_service=services.link,
+        tenant_id=tenant_context.tenant_id,
+        session_factory=getattr(services.maritime, "session_factory", None),
+    )
+
+
 def _iso(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -1044,4 +1163,10 @@ def _raise_maritime_http_error(exc: MaritimeError) -> NoReturn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(exc, MaritimeConflictError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+def _raise_maritime_evidence_http_error(exc: MaritimeEvidenceError) -> NoReturn:
+    if isinstance(exc, MaritimeEvidenceNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
