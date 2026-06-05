@@ -359,8 +359,9 @@ occupied by another service. That is intentional; otherwise the browser may
 open an old development backend and skip first-run.
 
 When using `installer/manifests/dev-example.json`, the installer builds the
-local master images from `/opt/vezor/current/backend` and
-`/opt/vezor/current/frontend` before launchd starts the appliance. This avoids
+local backend image from `/opt/vezor/current` with `backend/Dockerfile` so
+repo-level pack manifests are included, and builds the frontend image from
+`/opt/vezor/current/frontend`, before launchd starts the appliance. This avoids
 pulling private or unpublished development images. The first run can take
 several minutes because Docker has to build the backend and frontend images.
 

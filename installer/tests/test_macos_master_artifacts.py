@@ -190,7 +190,14 @@ def test_macos_dev_installer_builds_local_master_images_before_launchd_start() -
     assert "manifest_release_channel" in script
     assert "build_local_master_images" in script
     assert '[[ "$(manifest_release_channel)" != "dev" ]]' in script
-    assert 'docker build -f /opt/vezor/current/backend/Dockerfile -t "$BACKEND_IMAGE"' in script
+    assert (
+        'docker build -f /opt/vezor/current/backend/Dockerfile '
+        '-t "$BACKEND_IMAGE" /opt/vezor/current'
+    ) in script
+    assert (
+        'docker build -f /opt/vezor/current/backend/Dockerfile '
+        '-t "$BACKEND_IMAGE" /opt/vezor/current/backend'
+    ) not in script
     assert 'docker build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE"' in script
     assert 'docker tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"' in script
     assert "build_local_master_images" in script.split("run launchctl bootstrap system")[0]

@@ -246,7 +246,7 @@ build_local_master_images() {
   fi
 
   echo "Building local Vezor master images for dev manifest..."
-  run $CONTAINER_ENGINE build -f /opt/vezor/current/backend/Dockerfile -t "$BACKEND_IMAGE" /opt/vezor/current/backend
+  run $CONTAINER_ENGINE build -f /opt/vezor/current/backend/Dockerfile -t "$BACKEND_IMAGE" /opt/vezor/current
   if [[ "$SUPERVISOR_IMAGE" != "$BACKEND_IMAGE" ]]; then
     run $CONTAINER_ENGINE tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"
   fi

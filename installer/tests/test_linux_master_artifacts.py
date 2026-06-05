@@ -253,8 +253,12 @@ def test_linux_dev_installer_builds_local_master_images_before_systemd_start() -
     assert '[[ "$(manifest_release_channel)" != "dev" ]]' in script
     assert (
         '$CONTAINER_ENGINE build -f /opt/vezor/current/backend/Dockerfile '
-        '-t "$BACKEND_IMAGE"'
+        '-t "$BACKEND_IMAGE" /opt/vezor/current'
     ) in script
+    assert (
+        '$CONTAINER_ENGINE build -f /opt/vezor/current/backend/Dockerfile '
+        '-t "$BACKEND_IMAGE" /opt/vezor/current/backend'
+    ) not in script
     assert (
         '$CONTAINER_ENGINE build -f /opt/vezor/current/frontend/Dockerfile '
         '-t "$FRONTEND_IMAGE"'
