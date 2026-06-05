@@ -32,6 +32,11 @@ This design expands beyond the read-only registry. It builds a real
 activate traffic/public-space, does not create home-lab packs, and does not put
 maritime nouns into core contracts.
 
+The implementation plan may use delivery gates to make progress reviewable, but
+those gates do not reduce the target scope. A complete implementation means the
+core baselines, Maritime FleetOps pack, FleetOps UI, evidence export, billing,
+support, onboarding, and installer hardening are all working.
+
 ## Product Goal
 
 Build Vezor FleetOps as a usable pack for remote maritime operations:
@@ -128,6 +133,31 @@ manifest status is `planned_mvp` and `implementation_commitment` is true.
 Traffic/public-space is not allowed to implement runtime code because its
 manifest status is `designed_not_implemented` and `implementation_commitment`
 is false.
+
+## Home/Lab Engine Validation Compatibility
+
+The global core baselines must function without any product pack registered.
+This is not a separate product surface, but it is a required compatibility
+property of the engine.
+
+Required packless behavior:
+
+- `argus.link` can create budgets, queue work, record probes, apply
+  backpressure, resume transfers, and produce link passport snapshots for a
+  generic site with no maritime context.
+- `argus.fleet` can group generic sites, compute site state, create
+  assignments, maintain rotation groups, and produce exceptions for a generic
+  deployment with no maritime context.
+- `argus.billing` can create accounts, nodes, entitlements, price books, usage
+  records, invoice line items, and exports for a generic tenant with no
+  maritime entitlement.
+- `argus.support` can generate redacted support bundles, support sessions,
+  onboarding checks, tunnel lifecycle records, and break-glass records for a
+  generic tenant with no maritime context.
+
+Each core phase must include tests where no pack is active. If a core test needs
+`Vessel`, `Voyage`, `PortCall`, AIS, NMEA, carrier terminal, owner, manager, or
+charterer fields, the core baseline has failed the engine boundary.
 
 ## Blueprint Coverage
 
@@ -332,6 +362,23 @@ The baseline must support:
 Maritime pack code contributes shipboard wording, ETO-oriented troubleshooting
 labels, satellite-link diagnostic grouping, vessel install checklist sections,
 and maritime support roles.
+
+Support tunnel transport choice:
+
+- The product uses an outbound-initiated, supervisor-managed reverse tunnel.
+- The backend records tunnel requests, approvals, expiry, revocation, and audit
+  state.
+- A central or edge supervisor receives tunnel lifecycle intent through the
+  existing supervisor polling path or NATS push path.
+- The supervisor opens the configured reverse tunnel transport from the node to a
+  configured NOC relay endpoint. The first transport implementation is
+  `ssh_reverse`, with command, relay host, allowed ports, and credential
+  references controlled by node-local supervisor configuration.
+- Tunnel secrets and private keys stay in the node-local credential boundary or
+  approved platform credential store. Database records store only references,
+  hashes, state, timestamps, and redacted diagnostics.
+- WireGuard or Tailscale may remain deployment-network options, but they are not
+  the application-managed support tunnel for this product slice.
 
 ### Maritime Pack Boundary
 
@@ -944,9 +991,20 @@ Primary surfaces:
 - Support diagnostics surface with onboarding checks, support bundles, tunnel
   lifecycle, break-glass records, and shipboard checklist.
 
-The UI should reuse existing shell, query hooks, cards/surfaces, auth guards,
-and generated OpenAPI types. It should not create a separate marketing landing
-page.
+The UI should reuse existing shell, query hooks, workspace surfaces, table/form
+primitives, auth guards, and generated OpenAPI types. It should not create a
+separate marketing landing page or a new component system.
+
+Frontend implementation notes:
+
+- FleetOps pages should reuse `AppShell`, workspace navigation patterns,
+  existing auth guards, TanStack Query hooks, and generated OpenAPI types.
+- New components should be domain surfaces over existing primitives: vessel
+  summary, voyage timeline, link operations, evidence export builder, billing
+  rollup, and support diagnostics.
+- Route groups should be introduced incrementally with loading, empty, error,
+  and populated states tested before full API integration.
+- Traffic/public-space navigation remains hidden.
 
 ## Billing And Entitlements
 
@@ -995,6 +1053,18 @@ FleetOps billing behavior:
 - Billing hierarchy labels stay in maritime responses; core billing records
   keep generic node kinds plus pack discriminator metadata.
 
+Meter positioning:
+
+- Capacity guardrails: `camera_capacity_tier`, `managed_edge_node`,
+  `retained_evidence_gb`, and `managed_link_gb`. These explain operating cost
+  and entitlement boundaries; they should not be the lead customer value story.
+- Base commercial unit: `vessel_month`. This anchors contract sizing and fleet
+  rollups.
+- Value meters: `evidence_pack_export`, `support_session_hour`, link-governed
+  evidence movement, fleet runtime health, and operational incidents resolved.
+  These are the differentiating FleetOps story and should lead product copy,
+  dashboard rollups, and invoice explanations.
+
 ## Support And Onboarding
 
 FleetOps must be installable and supportable without requiring a developer to
@@ -1042,6 +1112,8 @@ State transition examples:
 
 Backend tests:
 
+- packless compatibility tests for `argus.link`, `argus.fleet`,
+  `argus.billing`, and `argus.support`
 - core fleet service tests for site groups, hierarchy nodes, site state,
   rotation groups, assignments, and exception ordering
 - core fleet API tests for hierarchy updates, state reads, assignments, rotation
@@ -1114,7 +1186,15 @@ End-to-end smoke:
 
 ## Implementation Phases
 
+Effort bands are relative implementation size for planning, not a reduced
+scope. `S` is a few focused tasks, `M` is a small subsystem, `L` is a major
+subsystem, and `XL` is a multi-subsystem product slice. The detailed
+implementation plan must break every phase into TDD tasks with its own
+acceptance gate.
+
 ### Phase 1: Core Argus-Link Baseline
+
+Effort band: `L`.
 
 Create a domain-neutral core link layer with tables, contracts, services, API
 routes, and tests for bandwidth budgets, priority lanes, backlog/queue depth,
@@ -1124,6 +1204,8 @@ claim link-aware evidence movement.
 
 ### Phase 2: Core Argus-Fleet Baseline
 
+Effort band: `M`.
+
 Create a domain-neutral core fleet layer with tables, contracts, services, API
 routes, and tests for site groups, site hierarchy nodes, site state, site
 assignments, rotation groups, and exception-first fleet summaries. This phase
@@ -1132,26 +1214,36 @@ owner, manager, charterer, or voyage labels in core.
 
 ### Phase 3: Pack Runtime Skeleton
 
+Effort band: `S`.
+
 Create `argus.maritime` with contracts, tables imported into metadata, service
 construction, router inclusion, runtime contribution response, and governance
 tests. No UI depends on this phase yet.
 
 ### Phase 4: Vessels, Voyages, And Port Calls
 
+Effort band: `L`.
+
 Add migrations, models, service methods, APIs, and tests for FleetOps domain
 entities. Vessel creation supports linked core site creation.
 
 ### Phase 5: Scene Templates
+
+Effort band: `M`.
 
 Expose templates from the manifest, map them into core camera configuration
 payloads, and apply them through existing camera/scene contract behavior.
 
 ### Phase 6: Telemetry Ingest
 
+Effort band: `L`.
+
 Implement AIS, NMEA, and carrier terminal normalized ingest plus operational
 fixture imports. Add latest-state and recent-track APIs.
 
 ### Phase 7: Evidence Enrichment And Export
+
+Effort band: `L`.
 
 Resolve maritime and link context for incidents, attach metadata to
 evidence/export responses, create link passport snapshots where needed, and
@@ -1161,12 +1253,16 @@ context, and chain-of-custody metadata without changing existing artifact hashes
 
 ### Phase 8: Billing And Entitlements
 
+Effort band: `L`.
+
 Create the core billing layer and Maritime FleetOps billing contribution:
 billing nodes, billing accounts, entitlements, usage meters, price books, usage
 records, invoice runs, invoice line items, CSV/JSON exports, maritime hierarchy
 labels, vessel rollups, charter handover windows, and tests.
 
 ### Phase 9: Support And Onboarding
+
+Effort band: `L`.
 
 Create the core support layer and Maritime FleetOps support contribution:
 redacted support bundles, support sessions, NOC tunnel lifecycle records,
@@ -1175,6 +1271,8 @@ checks, shipboard install checklist, satellite-link diagnostics grouping,
 support usage meters, and tests.
 
 ### Phase 10: FleetOps UI
+
+Effort band: `XL`.
 
 Add frontend routes, hooks, dashboard, vessel pages, template panel, and
 maritime evidence queue using generated OpenAPI types. The dashboard must show
@@ -1186,10 +1284,77 @@ records.
 
 ### Phase 11: Installer And Product Hardening
 
+Effort band: `M`.
+
 Add end-to-end smoke tests, installer packaging checks, operational fixtures,
 runbooks, API docs, product docs, generated OpenAPI/client artifacts, and
 performance checks for fleet hierarchy, telemetry, link queues, evidence export,
 billing runs, support bundles, and dashboard queries.
+
+## Delivery Gates
+
+These gates make progress observable. They are not scope cuts; the product is
+complete only after Gate 4.
+
+### Gate 1: Core Generality
+
+Phases:
+
+- Phase 1: Core Argus-Link Baseline
+- Phase 2: Core Argus-Fleet Baseline
+
+Acceptance:
+
+- Link and fleet APIs pass packless home/lab compatibility tests.
+- Link and fleet APIs pass FleetOps composition tests.
+- No maritime nouns appear in core link or fleet contracts.
+
+### Gate 2: Maritime Runtime
+
+Phases:
+
+- Phase 3: Pack Runtime Skeleton
+- Phase 4: Vessels, Voyages, And Port Calls
+- Phase 5: Scene Templates
+- Phase 6: Telemetry Ingest
+- Phase 7: Evidence Enrichment And Export
+
+Acceptance:
+
+- A tenant can create a vessel, voyage, port call, camera template, telemetry
+  ingest, evidence context, and evidence export end to end.
+- Missing telemetry degrades to partial context rather than errors.
+- Traffic/public-space remains manifest-only.
+
+### Gate 3: Commercial Operations
+
+Phases:
+
+- Phase 8: Billing And Entitlements
+- Phase 9: Support And Onboarding
+
+Acceptance:
+
+- Entitlements gate FleetOps features.
+- Usage records, price books, invoice line items, and exports work.
+- Support bundles, tunnel transport, break-glass records, and onboarding checks
+  work from installed-product state.
+- Billing and support APIs pass packless compatibility tests.
+
+### Gate 4: Full Working Product
+
+Phases:
+
+- Phase 10: FleetOps UI
+- Phase 11: Installer And Product Hardening
+
+Acceptance:
+
+- FleetOps UI exposes runtime, evidence, link, billing, support, and onboarding
+  workflows.
+- The installer and runbooks support MacBook/Linux master plus edge operation.
+- End-to-end smoke passes from install through evidence export, billing export,
+  support diagnostics, and link recovery.
 
 ## Acceptance Criteria
 
