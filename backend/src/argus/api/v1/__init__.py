@@ -26,6 +26,7 @@ from argus.api.v1 import (
 )
 from argus.fleet import api as fleet
 from argus.link import api as link
+from argus.maritime import api as maritime
 
 router = APIRouter()
 router.include_router(system.router)
@@ -50,5 +51,6 @@ router.include_router(query.router)
 router.include_router(telemetry_ws.router)
 router.include_router(link.router)
 router.include_router(fleet.router)
+router.include_router(maritime.router)
 
 __all__ = ["router"]

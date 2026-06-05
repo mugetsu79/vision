@@ -139,6 +139,7 @@ from argus.core.security import decrypt_rtsp_url, encrypt_rtsp_url, hash_api_key
 from argus.fleet.service import FleetService
 from argus.inference.publisher import TelemetryFrame
 from argus.link.service import LinkService
+from argus.maritime.service import MaritimeRuntimeService
 from argus.models.enums import (
     CameraSourceKind,
     CountEventType,
@@ -338,6 +339,7 @@ class AppServices:
     telemetry: NatsTelemetryService
     link: LinkService
     fleet: FleetService
+    maritime: MaritimeRuntimeService
 
     async def close(self) -> None:
         await self.streams.close()
@@ -4422,6 +4424,7 @@ def build_app_services(
     query_service: QueryService,
     configuration_service: OperatorConfigurationService | None = None,
 ) -> AppServices:
+    pack_registry = PackRegistry()
     audit_logger = DatabaseAuditLogger(db.session_factory)
     mediamtx = MediaMTXClient(
         api_base_url=settings.mediamtx_api_url,
@@ -4462,7 +4465,7 @@ def build_app_services(
         sites=SiteService(db.session_factory, audit_logger),
         cameras=camera_service,
         models=ModelService(db.session_factory, audit_logger),
-        packs=PackRegistry(),
+        packs=pack_registry,
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         runtime_soak=RuntimeSoakService(db.session_factory),
         privacy_manifests=PrivacyManifestService(db.session_factory),
@@ -4507,6 +4510,7 @@ def build_app_services(
         ),
         link=LinkService(db.session_factory),
         fleet=FleetService(db.session_factory),
+        maritime=MaritimeRuntimeService(pack_registry=pack_registry),
     )
 
 

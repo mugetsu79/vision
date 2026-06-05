@@ -11,7 +11,6 @@ CORE_FILES = [
 ]
 
 PACK_RUNTIME_MODULE_PATHS = [
-    REPO_ROOT / "backend/src/argus/maritime",
     REPO_ROOT / "backend/src/argus/traffic_public_space",
     REPO_ROOT / "backend/src/argus/home_lab",
 ]
@@ -47,7 +46,7 @@ def test_core_contracts_do_not_define_pack_vertical_nouns() -> None:
     assert offenders == []
 
 
-def test_phase_one_does_not_create_vertical_pack_runtime_modules() -> None:
+def test_unimplemented_vertical_pack_runtime_modules_remain_absent() -> None:
     existing_modules = [
         path.relative_to(REPO_ROOT).as_posix()
         for path in PACK_RUNTIME_MODULE_PATHS
