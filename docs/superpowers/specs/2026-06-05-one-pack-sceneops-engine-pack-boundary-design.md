@@ -102,6 +102,8 @@ This design resolves both risks:
    step.
 7. Preserve open-world model flexibility while requiring every production use to
    be framed as a scene outcome.
+8. Preserve home/lab road, driveway, car, person, and object testing as
+   packless engine validation.
 
 ## Non-Goals
 
@@ -112,6 +114,9 @@ This design resolves both risks:
 - Do not change detection, streaming, evidence, runtime passport, or scene
   execution semantics.
 - Do not present the 80-class model or open vocabulary as the product itself.
+- Do not create a `home-lab` pack. Home/lab testing must use core engine
+  primitives without adding a pack manifest, pack status, UI surface, or
+  product route.
 
 ## Design Principles
 
@@ -485,6 +490,27 @@ Open vocabulary should be treated as controlled discovery:
 
 Open vocabulary should not be sold as "detect anything." It is a way to find
 domain-specific terms before deciding whether they deserve product support.
+
+## Home-Lab Engine Validation
+
+Home/lab testing is the positive proof that the SceneOps Engine can handle
+non-maritime scenes through generic primitives. The canonical engineering note
+is:
+
+- `docs/engineering/home-lab-engine-validation.md`
+
+Cars, people, bicycles, trucks, and similar local test objects may be used today
+with the current COCO model, line crossings, detection regions, include/exclude
+polygons, count events, scene contracts, and runtime passports.
+
+No pack is required for this. The absence of a home-lab pack is intentional:
+home/lab validation should not become a third product-shaped artifact in the
+registry. The future automated harness should prove that generic scenes produce
+signals with no traffic, public-space, maritime, or lab pack registered.
+
+The registry implementation plan stays scoped to pack manifests and governance.
+The home-lab harness should be a follow-up implementation slice after the
+registry exists.
 
 ## 2027 Traffic/Public-Space Feature Direction
 

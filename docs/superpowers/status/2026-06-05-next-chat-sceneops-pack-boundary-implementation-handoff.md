@@ -33,11 +33,12 @@ The strategic decision is now:
 Read these in order:
 
 1. `docs/strategy/2026-06-05-vezor-fleetops-wedge-and-scene-engine-blueprint.md`
-2. `docs/superpowers/specs/2026-06-05-one-pack-sceneops-engine-pack-boundary-design.md`
-3. `docs/superpowers/plans/2026-06-05-one-pack-sceneops-pack-boundary.md`
-4. `packs/README.md`
-5. `packs/maritime-fleet/pack.yaml`
-6. `packs/traffic-public-space/pack.yaml`
+2. `docs/engineering/home-lab-engine-validation.md`
+3. `docs/superpowers/specs/2026-06-05-one-pack-sceneops-engine-pack-boundary-design.md`
+4. `docs/superpowers/plans/2026-06-05-one-pack-sceneops-pack-boundary.md`
+5. `packs/README.md`
+6. `packs/maritime-fleet/pack.yaml`
+7. `packs/traffic-public-space/pack.yaml`
 
 Older strategy drafts can be used as lineage, but the 2026-06-05 blueprint is
 the canonical document for this work.
@@ -45,6 +46,8 @@ the canonical document for this work.
 ## What Was Added In This Closeout
 
 - Canonical one-pack SceneOps/FleetOps blueprint.
+- Home-lab engine-validation guidance that confirms car/person/road testing is
+  allowed through core primitives without creating a `home-lab` pack.
 - Full pack-boundary design spec.
 - Detailed implementation plan for a read-only pack registry and API.
 - Actual repo-native pack manifests:
@@ -88,6 +91,11 @@ The plan builds:
 - automated assertion that Phase 1 does not create
   `backend/src/argus/maritime` or `backend/src/argus/traffic_public_space`
 
+The plan also records a follow-up slice for a packless home-lab engine
+validation harness. Do not implement that harness in the registry branch unless
+the user explicitly expands scope. You can test cars manually today through the
+existing core scene primitives; the harness is future positive-proof automation.
+
 ## Explicit Non-Goals
 
 Do not implement:
@@ -97,6 +105,9 @@ Do not implement:
 - AIS, NMEA, carrier telemetry, ATSPM, CDS, GTFS, V2X, or GIS adapters
 - traffic/public-space UI, demos, pricing, or sales surfaces
 - new billing migrations or entity database migrations
+- `packs/home-lab/pack.yaml`
+- `lab_only` pack status
+- home-lab UI, dashboards, panels, or product surfaces
 - changes to detection, streaming, evidence, scene execution, or runtime
   semantics beyond the read-only pack registry/API
 
@@ -118,15 +129,16 @@ Start from main at the commit containing that handoff or newer, then create bran
 
 Read first:
 - /Users/yann.moren/vision/docs/strategy/2026-06-05-vezor-fleetops-wedge-and-scene-engine-blueprint.md
+- /Users/yann.moren/vision/docs/engineering/home-lab-engine-validation.md
 - /Users/yann.moren/vision/docs/superpowers/specs/2026-06-05-one-pack-sceneops-engine-pack-boundary-design.md
 - /Users/yann.moren/vision/docs/superpowers/plans/2026-06-05-one-pack-sceneops-pack-boundary.md
 - /Users/yann.moren/vision/packs/README.md
 - /Users/yann.moren/vision/packs/maritime-fleet/pack.yaml
 - /Users/yann.moren/vision/packs/traffic-public-space/pack.yaml
 
-Use Superpowers, preferably subagent-driven-development, and implement the plan task by task with TDD. Build only the read-only SceneOps pack registry and pack API described in the plan.
+Use Superpowers, preferably subagent-driven-development, and implement Tasks 1-8 in the plan with TDD. Build only the read-only SceneOps pack registry and pack API described in the plan.
 
-Do not implement maritime runtime entities, traffic/public-space runtime entities, new vertical integrations, billing migrations, traffic UI, public-space demos, or runtime semantic changes. Keep Traffic/Public-Space manifest-only with status designed_not_implemented.
+Do not implement maritime runtime entities, traffic/public-space runtime entities, home-lab packs, lab_only status, new vertical integrations, billing migrations, traffic UI, public-space demos, home-lab dashboards, or runtime semantic changes. Keep Traffic/Public-Space manifest-only with status designed_not_implemented. Treat home-lab car/person/road testing as packless engine validation; the follow-up harness in the plan is not part of this branch unless I explicitly ask for it.
 
 Do not stage unrelated scratch files or taste-skill/. Commit focused changes and push the development branch when complete.
 ```

@@ -23,5 +23,8 @@ dependencies are forbidden.
   dated decision records the scope change.
 - Home/lab scenes with roads, cars, people, or other objects validate the engine
   through generic primitives. They do not create a traffic pack.
+- Do not add a `home-lab` pack for local validation. Home/lab testing is
+  documented in `docs/engineering/home-lab-engine-validation.md` and must stay
+  packless unless a later dated decision changes the architecture.
 - If a vertical noun needs to be added to a core contract, the pack boundary has
   failed and the engine design must be fixed before implementation continues.

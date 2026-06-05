@@ -40,6 +40,7 @@ Modify:
 Existing strategy artifacts used as input:
 
 - `docs/strategy/2026-06-05-vezor-fleetops-wedge-and-scene-engine-blueprint.md`
+- `docs/engineering/home-lab-engine-validation.md`
 - `docs/superpowers/specs/2026-06-05-one-pack-sceneops-engine-pack-boundary-design.md`
 - `packs/README.md`
 - `packs/maritime-fleet/pack.yaml`
@@ -65,6 +66,9 @@ Runtime-enabled statuses:
 Designed-only status:
 
 - `designed_not_implemented`
+
+No `lab_only` status is part of this plan. Home/lab road, driveway, car, person,
+and object testing is packless engine validation, not a pack manifest.
 
 ## Task 1: Declare YAML Dependencies
 
@@ -1272,6 +1276,7 @@ git commit -m "test: protect core from pack vertical nouns"
 **Files:**
 
 - Verify: `docs/strategy/2026-06-05-vezor-fleetops-wedge-and-scene-engine-blueprint.md`
+- Verify: `docs/engineering/home-lab-engine-validation.md`
 - Verify: `docs/superpowers/specs/2026-06-05-one-pack-sceneops-engine-pack-boundary-design.md`
 - Verify: `docs/superpowers/plans/2026-06-05-one-pack-sceneops-pack-boundary.md`
 - Verify: `packs/README.md`
@@ -1390,6 +1395,50 @@ git commit -m "docs: lock one-pack SceneOps pack boundary"
   vertical pack nouns.
 - The strategy blueprint, design spec, implementation plan, and pack manifests
   agree on one commercial pack and one designed-only future target.
+- Home/lab testing remains documented as packless engine validation, not as a
+  `home-lab` pack or new registry status.
+
+## Follow-Up Slice: Packless Home-Lab Engine Validation Harness
+
+This follow-up is not part of Tasks 1-8. Do not implement it while executing the
+read-only pack registry plan unless the user explicitly expands scope.
+
+Goal:
+
+- prove the core scene/signal/event path can process non-maritime scenes such as
+  a driveway or street count using COCO classes with no pack registered
+
+Future files:
+
+- Create: `backend/tests/engine_validation/test_engine_handles_generic_scenes.py`
+- Reuse: existing scene, signal, count-event, and runtime-passport services
+- Reuse: canned frames, synthetic boxes, or a tiny fixture video
+
+Future test shape:
+
+```python
+from __future__ import annotations
+
+
+def test_generic_scene_pipeline_counts_cars_without_pack_registered() -> None:
+    # Arrange a generic scene contract with a line boundary, an include region,
+    # and COCO classes such as car and person.
+    # Feed deterministic fixture observations through the existing core
+    # scene/signal/count-event path.
+    # Assert count events are produced without creating or loading any
+    # maritime, traffic-public-space, or home-lab pack.
+    assert True
+```
+
+Acceptance criteria for that future slice:
+
+- no `packs/home-lab/pack.yaml`
+- no `lab_only` pack status
+- no `backend/src/argus/home_lab` module
+- no traffic/public-space entities
+- no home-lab UI or dashboard
+- only logs, existing count events, existing scene contracts, existing runtime
+  passport state, and optional Prometheus metrics
 
 ## Execution Notes For Subagents
 
