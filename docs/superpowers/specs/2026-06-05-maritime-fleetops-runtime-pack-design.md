@@ -48,7 +48,11 @@ from one workspace.
 - A backend `argus.maritime` pack module.
 - Pack-owned database tables for vessels, voyages, port calls, AIS positions,
   NMEA readings, carrier terminal state, maritime roles, and watch rotations.
+- A minimum core `argus.link` baseline required by the FleetOps wedge:
+  bandwidth budgets, priority lanes, evidence backlog, resume-on-interrupt,
+  backpressure, link health probes, last sync, and link passport snapshots.
 - Maritime APIs under `/api/v1/maritime`.
+- Link-state APIs under `/api/v1/link` using domain-neutral core contracts.
 - Runtime contribution APIs connected to the existing pack registry.
 - Maritime scene templates based on the `maritime-fleet` manifest.
 - Template application that creates or updates core camera scene configuration
@@ -96,6 +100,36 @@ Traffic/public-space is not allowed to implement runtime code because its
 manifest status is `designed_not_implemented` and `implementation_commitment`
 is false.
 
+## Blueprint Coverage
+
+The FleetOps blueprint includes more than maritime pack entities. A credible
+FleetOps runtime also requires the baseline `argus-link` layer and selected
+support, edge, camera, and billing extension points. This spec includes those
+items where they are required for the first functional product.
+
+| Blueprint item | Owner | This spec |
+|---|---|---|
+| Pack registry and manifest enforcement | core | already implemented by prior branch; used as runtime gate |
+| `argus.maritime` pack | maritime pack | in scope |
+| Vessel, voyage, port-call entities | maritime pack | in scope |
+| AIS, NMEA, carrier telemetry | maritime pack | in scope |
+| Maritime scene templates | maritime pack using core scene primitives | in scope |
+| Maritime evidence context | maritime pack plus core evidence seams | in scope |
+| `argus-link` bandwidth budgets | core link layer | in scope as minimum baseline |
+| Priority lanes: safety, evidence, telemetry, bulk | core link layer | in scope as minimum baseline |
+| Evidence backlog and queue depth | core link layer | in scope as minimum baseline |
+| Resume-on-interrupt and backpressure | core link layer | in scope as minimum baseline |
+| Link probes and last successful sync | core link layer | in scope as minimum baseline |
+| Runtime UI for degraded, dark, port WiFi, recovering | core link layer plus FleetOps UI | in scope |
+| Remote support bundle, NOC tunnel, break-glass | core support layer | limited to diagnostics surfacing; tunnel implementation is follow-up |
+| Shipboard support wording and install checklist | maritime pack | in scope as docs/UI copy |
+| Marine-grade hardware recommendations | maritime pack docs | in scope as docs, not hardware certification |
+| DNV or cybersecurity certification | maritime pack docs | out of scope beyond notes |
+| Camera onboarding defaults and bandwidth assumptions | maritime pack plus core camera ecosystem | in scope |
+| Billing node tree and invoices | core billing | out of scope for migrations/invoices |
+| Maritime billing labels and meters | maritime pack | in scope as labels/counters |
+| Traffic/public-space runtime | traffic pack | explicitly out of scope |
+
 ## Architecture
 
 ### Core Engine Boundary
@@ -109,10 +143,51 @@ Core owns the stable SceneOps platform:
 - operator configuration profiles
 - model catalog and runtime artifacts
 - pack registry and manifest validation
+- `argus.link` link passports, budgets, priority lanes, transfer queues,
+  backpressure, probes, and last-sync state
 
 Core may expose extension seams, but it must not contain maritime entity names
 in shared contracts or route payloads unless they are opaque pack metadata
 inside a pack-owned response.
+
+### Core Argus-Link Baseline
+
+`argus.link` is a core engine layer, not a maritime pack. It is still required
+for the FleetOps product because the wedge depends on evidence movement over
+bad links.
+
+The minimum baseline owns these domain-neutral concepts:
+
+- `LinkState`: `unknown`, `healthy`, `degraded`, `dark`, `recovering`,
+  `port_wifi`
+- `LinkPriorityLane`: `safety`, `evidence`, `telemetry`, `bulk`
+- `LinkBudget`: tenant/site/camera bandwidth and byte-budget policy
+- `LinkQueueItem`: queued transfer work with lane, byte size, status, attempts,
+  and resume token
+- `LinkTransferAttempt`: append-only transfer attempts with start/end time,
+  bytes moved, error, and interruption reason
+- `LinkHealthProbe`: latency, throughput, packet loss, reachability, and probe
+  source
+- `LinkPassportSnapshot`: immutable link posture attached to incidents,
+  evidence exports, and runtime summaries
+
+The baseline must support:
+
+- site bandwidth budget checks before bulk transfer
+- priority ordering: safety before evidence before telemetry before bulk
+- evidence backlog and queue depth by site, vessel, camera, and priority lane
+- resume-on-interrupt using byte offsets or object-part markers where the
+  storage provider supports it
+- backpressure decisions that pause lower-priority transfer work under degraded
+  or exhausted budget conditions
+- link health probes that mark state as healthy, degraded, dark, port WiFi, or
+  recovering
+- last sync and last successful evidence transfer timestamps
+- UI-ready summaries for degraded, dark, port WiFi, and recovering states
+
+Maritime pack code may contribute carrier terminal telemetry and vessel/port
+context to link summaries. It must not own the core queue, budget, backpressure,
+or link passport semantics.
 
 ### Maritime Pack Boundary
 
@@ -410,6 +485,29 @@ Response includes:
 - UI labels and panels
 - billing labels and meters
 
+### Argus-Link
+
+Link routes use core contracts and are available outside Maritime FleetOps:
+
+- `GET /api/v1/link/sites/{site_id}/status`
+- `GET /api/v1/link/sites/{site_id}/budget`
+- `PUT /api/v1/link/sites/{site_id}/budget`
+- `GET /api/v1/link/sites/{site_id}/queue`
+- `GET /api/v1/link/sites/{site_id}/probes`
+- `POST /api/v1/link/sites/{site_id}/probes`
+- `GET /api/v1/link/evidence/{incident_id}/passport`
+- `POST /api/v1/link/queue/{queue_item_id}/retry`
+- `POST /api/v1/link/queue/{queue_item_id}/pause`
+- `POST /api/v1/link/queue/{queue_item_id}/resume`
+
+FleetOps routes may compose these into maritime summaries:
+
+- `GET /api/v1/maritime/vessels/{vessel_id}/link-status`
+- `GET /api/v1/maritime/vessels/{vessel_id}/evidence-backlog`
+
+The maritime responses may include vessel, voyage, port-call, and carrier
+terminal context. The core link responses must remain generic.
+
 ### Vessels
 
 - `GET /api/v1/maritime/vessels`
@@ -614,6 +712,10 @@ State transition examples:
 
 Backend tests:
 
+- core link service tests for budgets, priority ordering, queue depth,
+  backpressure, resume state, last sync, and link passport hashing
+- core link API tests for site status, budget updates, probe reporting, queue
+  pause/resume/retry, and cross-tenant isolation
 - pack activation tests for `maritime-fleet`
 - traffic/public-space non-activation tests
 - table and migration smoke tests
@@ -639,73 +741,99 @@ End-to-end smoke:
 
 - create vessel with linked site
 - add camera to the vessel site
+- set a site bandwidth budget
+- queue evidence work in safety, evidence, telemetry, and bulk lanes
+- simulate degraded link probes and verify lower-priority backpressure
 - apply gangway template
 - create active voyage and port call
 - ingest AIS and carrier terminal state
 - create or fixture an incident
 - resolve maritime evidence context
-- view vessel dashboard and maritime evidence queue
+- view vessel dashboard, link posture, and maritime evidence queue
+- simulate recovery and verify evidence transfer resumes with last-sync state
 
 ## Implementation Phases
 
-### Phase 1: Pack Runtime Skeleton
+### Phase 1: Core Argus-Link Baseline
+
+Create a domain-neutral core link layer with tables, contracts, services, API
+routes, and tests for bandwidth budgets, priority lanes, backlog/queue depth,
+resume-on-interrupt, backpressure, link probes, last-sync state, and link
+passport snapshots. This phase is required before the FleetOps UI can honestly
+claim link-aware evidence movement.
+
+### Phase 2: Pack Runtime Skeleton
 
 Create `argus.maritime` with contracts, tables imported into metadata, service
 construction, router inclusion, runtime contribution response, and governance
 tests. No UI depends on this phase yet.
 
-### Phase 2: Vessels, Voyages, And Port Calls
+### Phase 3: Vessels, Voyages, And Port Calls
 
 Add migrations, models, service methods, APIs, and tests for FleetOps domain
 entities. Vessel creation supports linked core site creation.
 
-### Phase 3: Scene Templates
+### Phase 4: Scene Templates
 
 Expose templates from the manifest, map them into core camera configuration
 payloads, and apply them through existing camera/scene contract behavior.
 
-### Phase 4: Telemetry Ingest
+### Phase 5: Telemetry Ingest
 
 Implement AIS, NMEA, and carrier terminal normalized ingest plus pilot fixture
 imports. Add latest-state and recent-track APIs.
 
-### Phase 5: Evidence Enrichment
+### Phase 6: Evidence Enrichment
 
-Resolve maritime context for incidents, attach metadata to evidence/export
-responses, and render partial-context freshness information.
+Resolve maritime and link context for incidents, attach metadata to
+evidence/export responses, create link passport snapshots where needed, and
+render partial-context freshness information.
 
-### Phase 6: FleetOps UI
+### Phase 7: FleetOps UI
 
 Add frontend routes, hooks, dashboard, vessel pages, template panel, and
-maritime evidence queue using generated OpenAPI types.
+maritime evidence queue using generated OpenAPI types. The dashboard must show
+degraded, dark, port WiFi, and recovering link states, evidence backlog, queue
+depth, and last successful evidence transfer.
 
-### Phase 7: Product Hardening
+### Phase 8: Support, Installer, And Product Hardening
 
-Add end-to-end smoke tests, installer packaging checks, docs, operational
-fixtures, and performance checks for telemetry and dashboard queries.
+Add support diagnostics surfacing, shipboard install checklist/docs, end-to-end
+smoke tests, installer packaging checks, operational fixtures, and performance
+checks for telemetry, link queues, and dashboard queries.
 
 ## Acceptance Criteria
 
 The pack is functionally complete when:
 
 - `GET /api/v1/maritime/runtime` shows Maritime FleetOps runtime enabled.
+- `GET /api/v1/link/sites/{site_id}/status` returns budget, queue depth, probes,
+  last sync, and link state using generic core contracts.
 - Traffic/public-space has no runtime module or UI route.
 - A tenant admin can create a vessel and linked site.
 - A tenant admin can create and transition voyages and port calls.
 - A camera assigned to a vessel site can receive a maritime scene template.
+- Link queue behavior prioritizes safety, evidence, telemetry, and bulk lanes in
+  that order.
+- Degraded or exhausted link budgets backpressure lower-priority transfers.
+- Interrupted evidence movement can resume and records last successful transfer.
 - AIS, NMEA, and carrier terminal state can be ingested through documented
   routes or fixture imports.
 - A vessel dashboard shows current voyage, port call, telemetry, link posture,
-  camera/template coverage, and pending evidence.
+  budget state, evidence backlog, queue depth, camera/template coverage, and
+  pending evidence.
 - Evidence context resolves vessel, voyage, port call, latest AIS, latest link
-  state, and reviewer role where available.
+  state, link passport, and reviewer role where available.
 - Missing telemetry degrades gracefully and visibly.
 - Core contracts do not contain maritime entities.
+- Core link contracts remain domain-neutral and reusable for home/lab validation.
 - Home/lab validation remains packless.
 - All targeted backend, frontend, and smoke tests pass.
 
 ## Open Risks
 
+- `argus.link` is core work, not pack work, so the implementation plan must keep
+  the link layer generic while still delivering the FleetOps wedge.
 - Vendor-specific carrier telemetry will likely require adapter-specific follow
   up work once credentials and protocol documents exist.
 - Exact AIS/NMEA parser depth may need to grow after pilot data is captured.
@@ -713,5 +841,8 @@ The pack is functionally complete when:
   keep maritime service code in the pack and avoid worsening that file.
 - Evidence export integration needs careful testing so maritime metadata does
   not alter existing artifact hashes or ledger semantics.
+- Resume-on-interrupt support may vary by storage provider. The first
+  implementation should record resumable offsets when supported and fall back to
+  retry-from-start with an explicit capability flag when not supported.
 - UI navigation must avoid making the whole product look maritime-only when the
   user is outside FleetOps routes.
