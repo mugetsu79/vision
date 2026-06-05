@@ -51,7 +51,7 @@ async def get_link_status(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    passport = services.link.build_passport(
+    passport = await services.link.abuild_passport(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
     )
@@ -65,7 +65,7 @@ async def get_link_budget(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject | None:
-    budget = services.link.get_budget(tenant_id=tenant_context.tenant_id, site_id=site_id)
+    budget = await services.link.aget_budget(tenant_id=tenant_context.tenant_id, site_id=site_id)
     if budget is None:
         return None
     return _budget_payload(budget)
@@ -79,7 +79,7 @@ async def put_link_budget(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    budget = services.link.upsert_budget(
+    budget = await services.link.aupsert_budget(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
         monthly_bytes=payload.monthly_bytes,
@@ -97,7 +97,7 @@ async def get_link_queue(
 ) -> list[JsonObject]:
     return [
         _queue_item_payload(item)
-        for item in services.link.list_queue(
+        for item in await services.link.alist_queue(
             tenant_id=tenant_context.tenant_id,
             site_id=site_id,
         )
@@ -113,7 +113,7 @@ async def get_link_probes(
 ) -> list[JsonObject]:
     return [
         _probe_payload(probe)
-        for probe in services.link.list_probes(
+        for probe in await services.link.alist_probes(
             tenant_id=tenant_context.tenant_id,
             site_id=site_id,
         )
@@ -128,7 +128,7 @@ async def post_link_probe(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    probe = services.link.record_probe(
+    probe = await services.link.arecord_probe(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
         latency_ms=payload.latency_ms,
@@ -147,7 +147,7 @@ async def get_link_policies(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    return services.link.get_policy(tenant_id=tenant_context.tenant_id, site_id=site_id)
+    return await services.link.aget_policy(tenant_id=tenant_context.tenant_id, site_id=site_id)
 
 
 @router.put("/sites/{site_id}/policies")
@@ -158,7 +158,7 @@ async def put_link_policies(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    return services.link.put_policy(
+    return await services.link.aput_policy(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
         policy=payload.policy,
@@ -172,7 +172,7 @@ async def get_incident_link_passport(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    passport = services.link.build_incident_passport(
+    passport = await services.link.abuild_incident_passport(
         tenant_id=tenant_context.tenant_id,
         incident_id=incident_id,
     )
@@ -188,7 +188,7 @@ async def retry_link_queue_item(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    item = services.link.retry_queue_item(
+    item = await services.link.aretry_queue_item(
         tenant_id=tenant_context.tenant_id,
         queue_item_id=queue_item_id,
     )
@@ -204,7 +204,7 @@ async def pause_link_queue_item(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    item = services.link.pause_queue_item(
+    item = await services.link.apause_queue_item(
         tenant_id=tenant_context.tenant_id,
         queue_item_id=queue_item_id,
     )
@@ -220,7 +220,7 @@ async def resume_link_queue_item(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    item = services.link.resume_queue_item(
+    item = await services.link.aresume_queue_item(
         tenant_id=tenant_context.tenant_id,
         queue_item_id=queue_item_id,
     )

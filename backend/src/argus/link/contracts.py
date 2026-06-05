@@ -82,6 +82,9 @@ class LinkPassportSnapshotRecord:
     passport_hash: str
     payload: JsonObject
     created_at: datetime
+    camera_id: UUID | None = None
+    incident_id: UUID | None = None
+    evidence_artifact_id: UUID | None = None
     pack_id: str | None = None
     last_sync_at: datetime | None = None
 
