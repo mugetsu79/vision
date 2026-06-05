@@ -36,6 +36,7 @@ runtime = [
   "pyarrow>=23.0.1",
   "minio>=7.2.20",
   "opencv-python-headless>=4.10",
+  "PyYAML>=6.0",
 ]
 dev = [
   "ruff>=0.8",
@@ -44,6 +45,7 @@ dev = [
   "pytest-asyncio>=0.24",
   "testcontainers[postgres,redis,nats]>=4.8",
   "playwright>=1.49",
+  "types-PyYAML>=6.0",
 ]
 model-metadata = [
   "onnxruntime>=1.20; sys_platform == 'linux'",
