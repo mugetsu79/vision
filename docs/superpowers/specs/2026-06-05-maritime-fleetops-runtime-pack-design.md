@@ -51,8 +51,12 @@ from one workspace.
 - A minimum core `argus.link` baseline required by the FleetOps wedge:
   bandwidth budgets, priority lanes, evidence backlog, resume-on-interrupt,
   backpressure, link health probes, last sync, and link passport snapshots.
+- A minimum core `argus.fleet` baseline required by the FleetOps workspace:
+  site groups, site hierarchy nodes, site state, site assignments, rotation
+  groups, and exception-first fleet summaries.
 - Maritime APIs under `/api/v1/maritime`.
 - Link-state APIs under `/api/v1/link` using domain-neutral core contracts.
+- Fleet-state APIs under `/api/v1/fleet` using domain-neutral core contracts.
 - Runtime contribution APIs connected to the existing pack registry.
 - Maritime scene templates based on the `maritime-fleet` manifest.
 - Template application that creates or updates core camera scene configuration
@@ -121,6 +125,12 @@ items where they are required for the first functional product.
 | Resume-on-interrupt and backpressure | core link layer | in scope as minimum baseline |
 | Link probes and last successful sync | core link layer | in scope as minimum baseline |
 | Runtime UI for degraded, dark, port WiFi, recovering | core link layer plus FleetOps UI | in scope |
+| `argus.fleet` generic site hierarchy | core fleet layer | in scope as minimum baseline |
+| Site state, site assignment, rotation groups | core fleet layer | in scope as minimum baseline |
+| Fleet exception dashboard | core fleet layer plus FleetOps UI | in scope |
+| Hash-linked evidence, signed artifacts, audit log | core chain-of-custody layer | already partly implemented; preserved and extended through metadata |
+| Evidence pack export with scene contract context | core evidence/export layer plus maritime metadata | in scope |
+| Time-source provenance and retention hooks | core chain-of-custody layer | in scope for evidence context/export metadata, not a full compliance suite |
 | Remote support bundle, NOC tunnel, break-glass | core support layer | limited to diagnostics surfacing; tunnel implementation is follow-up |
 | Shipboard support wording and install checklist | maritime pack | in scope as docs/UI copy |
 | Marine-grade hardware recommendations | maritime pack docs | in scope as docs, not hardware certification |
@@ -143,6 +153,8 @@ Core owns the stable SceneOps platform:
 - operator configuration profiles
 - model catalog and runtime artifacts
 - pack registry and manifest validation
+- `argus.fleet` site groups, hierarchy, site state, site assignments,
+  rotation groups, and exception-first fleet summaries
 - `argus.link` link passports, budgets, priority lanes, transfer queues,
   backpressure, probes, and last-sync state
 
@@ -188,6 +200,37 @@ The baseline must support:
 Maritime pack code may contribute carrier terminal telemetry and vessel/port
 context to link summaries. It must not own the core queue, budget, backpressure,
 or link passport semantics.
+
+### Core Argus-Fleet Baseline
+
+`argus.fleet` is also a core engine layer, not the Maritime FleetOps pack. The
+name "fleet" here means a generic deployed-site fleet, not vessels.
+
+The minimum baseline owns these domain-neutral concepts:
+
+- `SiteGroup`: a tenant-scoped grouping for deployed sites.
+- `SiteHierarchyNode`: a generic adjacency node that can model reseller,
+  operator, region, owner, fleet, or other product-neutral groupings.
+- `SiteState`: latest runtime, link, evidence, and attention state for a site.
+- `SiteAssignment`: assignment of sites to users, roles, groups, or support
+  queues.
+- `RotationGroup`: a generic operator/reviewer rotation primitive that packs can
+  label for their domain.
+- `FleetException`: a computed summary item for stale heartbeat, degraded link,
+  evidence backlog, stopped worker, privacy mismatch, model/artifact mismatch,
+  or active incident.
+
+The baseline must support:
+
+- grouping sites without maritime names
+- resolving a site hierarchy without owner/manager/charterer hardcoding
+- reporting site runtime state and link state through generic fields
+- assigning sites to operator or support rotations
+- producing an exception-first dashboard ordered by operational attention
+
+Maritime pack code may project vessels, owners, managers, charterers, shipboard
+roles, and watch rotations onto these generic primitives. It must not move those
+labels into core fleet contracts.
 
 ### Maritime Pack Boundary
 
@@ -508,6 +551,29 @@ FleetOps routes may compose these into maritime summaries:
 The maritime responses may include vessel, voyage, port-call, and carrier
 terminal context. The core link responses must remain generic.
 
+### Argus-Fleet
+
+Fleet routes use core contracts and are available outside Maritime FleetOps:
+
+- `GET /api/v1/fleet/site-groups`
+- `POST /api/v1/fleet/site-groups`
+- `GET /api/v1/fleet/hierarchy`
+- `PUT /api/v1/fleet/hierarchy`
+- `GET /api/v1/fleet/sites/{site_id}/state`
+- `GET /api/v1/fleet/exceptions`
+- `GET /api/v1/fleet/rotation-groups`
+- `POST /api/v1/fleet/rotation-groups`
+- `GET /api/v1/fleet/site-assignments`
+- `POST /api/v1/fleet/site-assignments`
+
+FleetOps routes may compose these into maritime summaries:
+
+- `GET /api/v1/maritime/fleet-overview`
+- `GET /api/v1/maritime/vessels/{vessel_id}/runtime-summary`
+
+The maritime responses may label a site as a vessel and a site group as a fleet.
+The core fleet responses must remain generic.
+
 ### Vessels
 
 - `GET /api/v1/maritime/vessels`
@@ -632,6 +698,21 @@ Evidence export should include maritime context as an additional metadata block
 while preserving the existing core evidence artifact hashes, ledger entries,
 and scene contract references.
 
+The first FleetOps evidence pack export must include:
+
+- incident and artifact IDs
+- scene contract hash and privacy manifest hash
+- runtime passport hash
+- link passport hash
+- evidence ledger summary
+- vessel, voyage, port-call, AIS, terminal, and reviewer-role metadata when
+  available
+- time-source provenance fields where available
+- retention/export policy fields where available
+
+Adding maritime or link metadata must not recompute existing artifact hashes or
+break evidence ledger chaining.
+
 ## Frontend Design
 
 The frontend should add a FleetOps workspace without turning the whole product
@@ -712,6 +793,10 @@ State transition examples:
 
 Backend tests:
 
+- core fleet service tests for site groups, hierarchy nodes, site state,
+  rotation groups, assignments, and exception ordering
+- core fleet API tests for hierarchy updates, state reads, assignments, rotation
+  groups, exceptions, and cross-tenant isolation
 - core link service tests for budgets, priority ordering, queue depth,
   backpressure, resume state, last sync, and link passport hashing
 - core link API tests for site status, budget updates, probe reporting, queue
@@ -725,6 +810,8 @@ Backend tests:
 - scene template application tests proving generated payloads use core
   primitives
 - evidence context resolution tests with complete and partial telemetry
+- evidence export tests proving maritime/link metadata is added without
+  changing artifact hashes or ledger chaining
 - API route tests for auth, validation, and cross-tenant isolation
 - governance tests proving maritime nouns stay out of core contracts
 
@@ -740,7 +827,9 @@ Frontend tests:
 End-to-end smoke:
 
 - create vessel with linked site
+- place that site into a generic site group and hierarchy
 - add camera to the vessel site
+- read fleet exceptions ordered by attention
 - set a site bandwidth budget
 - queue evidence work in safety, evidence, telemetry, and bulk lanes
 - simulate degraded link probes and verify lower-priority backpressure
@@ -749,6 +838,8 @@ End-to-end smoke:
 - ingest AIS and carrier terminal state
 - create or fixture an incident
 - resolve maritime evidence context
+- export an evidence pack with scene contract, runtime passport, link passport,
+  maritime metadata, and intact chain-of-custody hashes
 - view vessel dashboard, link posture, and maritime evidence queue
 - simulate recovery and verify evidence transfer resumes with last-sync state
 
@@ -762,51 +853,64 @@ resume-on-interrupt, backpressure, link probes, last-sync state, and link
 passport snapshots. This phase is required before the FleetOps UI can honestly
 claim link-aware evidence movement.
 
-### Phase 2: Pack Runtime Skeleton
+### Phase 2: Core Argus-Fleet Baseline
+
+Create a domain-neutral core fleet layer with tables, contracts, services, API
+routes, and tests for site groups, site hierarchy nodes, site state, site
+assignments, rotation groups, and exception-first fleet summaries. This phase
+gives Maritime FleetOps a real operational workspace without putting vessel,
+owner, manager, charterer, or voyage labels in core.
+
+### Phase 3: Pack Runtime Skeleton
 
 Create `argus.maritime` with contracts, tables imported into metadata, service
 construction, router inclusion, runtime contribution response, and governance
 tests. No UI depends on this phase yet.
 
-### Phase 3: Vessels, Voyages, And Port Calls
+### Phase 4: Vessels, Voyages, And Port Calls
 
 Add migrations, models, service methods, APIs, and tests for FleetOps domain
 entities. Vessel creation supports linked core site creation.
 
-### Phase 4: Scene Templates
+### Phase 5: Scene Templates
 
 Expose templates from the manifest, map them into core camera configuration
 payloads, and apply them through existing camera/scene contract behavior.
 
-### Phase 5: Telemetry Ingest
+### Phase 6: Telemetry Ingest
 
 Implement AIS, NMEA, and carrier terminal normalized ingest plus pilot fixture
 imports. Add latest-state and recent-track APIs.
 
-### Phase 6: Evidence Enrichment
+### Phase 7: Evidence Enrichment And Export
 
 Resolve maritime and link context for incidents, attach metadata to
 evidence/export responses, create link passport snapshots where needed, and
-render partial-context freshness information.
+render partial-context freshness information. The first FleetOps evidence pack
+export must include scene contract, runtime passport, link passport, maritime
+context, and chain-of-custody metadata without changing existing artifact hashes.
 
-### Phase 7: FleetOps UI
+### Phase 8: FleetOps UI
 
 Add frontend routes, hooks, dashboard, vessel pages, template panel, and
 maritime evidence queue using generated OpenAPI types. The dashboard must show
 degraded, dark, port WiFi, and recovering link states, evidence backlog, queue
-depth, and last successful evidence transfer.
+depth, fleet exceptions, site/vessel hierarchy, and last successful evidence
+transfer.
 
-### Phase 8: Support, Installer, And Product Hardening
+### Phase 9: Support, Installer, And Product Hardening
 
 Add support diagnostics surfacing, shipboard install checklist/docs, end-to-end
 smoke tests, installer packaging checks, operational fixtures, and performance
-checks for telemetry, link queues, and dashboard queries.
+checks for fleet hierarchy, telemetry, link queues, and dashboard queries.
 
 ## Acceptance Criteria
 
 The pack is functionally complete when:
 
 - `GET /api/v1/maritime/runtime` shows Maritime FleetOps runtime enabled.
+- `GET /api/v1/fleet/exceptions` returns domain-neutral site exceptions ordered
+  by attention.
 - `GET /api/v1/link/sites/{site_id}/status` returns budget, queue depth, probes,
   last sync, and link state using generic core contracts.
 - Traffic/public-space has no runtime module or UI route.
@@ -819,6 +923,9 @@ The pack is functionally complete when:
 - Interrupted evidence movement can resume and records last successful transfer.
 - AIS, NMEA, and carrier terminal state can be ingested through documented
   routes or fixture imports.
+- FleetOps evidence export includes scene contract, runtime passport, link
+  passport, maritime context, and evidence ledger summary without changing
+  existing artifact hashes.
 - A vessel dashboard shows current voyage, port call, telemetry, link posture,
   budget state, evidence backlog, queue depth, camera/template coverage, and
   pending evidence.
@@ -826,6 +933,7 @@ The pack is functionally complete when:
   state, link passport, and reviewer role where available.
 - Missing telemetry degrades gracefully and visibly.
 - Core contracts do not contain maritime entities.
+- Core fleet contracts remain domain-neutral and reusable outside maritime.
 - Core link contracts remain domain-neutral and reusable for home/lab validation.
 - Home/lab validation remains packless.
 - All targeted backend, frontend, and smoke tests pass.
