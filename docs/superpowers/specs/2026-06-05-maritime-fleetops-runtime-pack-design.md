@@ -1428,3 +1428,42 @@ The pack is functionally complete when:
   in tunnel records.
 - UI navigation must avoid making the whole product look maritime-only when the
   user is outside FleetOps routes.
+
+## Cross-Cutting Constraints
+
+Implementation plan tasks should reference these stable IDs when a step must
+preserve a rule that crosses phase boundaries.
+
+- `CC-1 Packless Core Compatibility`
+  ([body](#homelab-engine-validation-compatibility)): `argus.link`,
+  `argus.fleet`, `argus.billing`, and `argus.support` must pass no-pack tests
+  for generic sites, tenants, support flows, billing flows, and link flows.
+- `CC-2 Pack Boundary` ([body](#core-engine-boundary),
+  [body](#maritime-pack-boundary)): maritime nouns stay in `argus.maritime`
+  contracts, tables, APIs, UI copy, and metadata. Core contracts remain
+  domain-neutral.
+- `CC-3 Traffic Boundary` ([body](#source-decisions)): `traffic-public-space`
+  remains manifest-only with `designed_not_implemented`; no traffic runtime
+  module, UI route, migration, or product demo ships in this workstream.
+- `CC-4 Link Is Core` ([body](#core-argus-link-baseline)): budgets, lanes,
+  queues, backpressure, probes, transfer attempts, resume state, and link
+  passports belong to `argus.link`, not the maritime pack.
+- `CC-5 Fleet Is Core` ([body](#core-argus-fleet-baseline)): site groups,
+  hierarchy, site state, assignments, rotation groups, and exceptions belong to
+  `argus.fleet`, not the maritime pack.
+- `CC-6 Billing Positioning` ([body](#meter-positioning)): capacity guardrails,
+  base commercial units, and value meters remain distinct in API labels, UI
+  copy, exports, and tests.
+- `CC-7 Support Tunnel` ([body](#core-argus-support-baseline)): support tunnels
+  use supervisor-managed outbound `ssh_reverse` transport through polling or
+  NATS push; secrets remain in the node-local credential boundary.
+- `CC-8 Evidence Integrity` ([body](#evidence-context)): maritime and link
+  metadata must not recompute existing artifact hashes or break evidence ledger
+  chaining.
+- `CC-9 Frontend Reuse` ([body](#frontend-design)): FleetOps UI reuses the
+  existing shell, workspace primitives, TanStack Query hooks, auth guards, and
+  generated OpenAPI types.
+- `CC-10 Full Product Scope` ([body](#summary),
+  [body](#delivery-gates)): delivery gates make progress visible, but the
+  product is complete only after runtime, evidence, link, billing, support,
+  onboarding, UI, installer, docs, and smoke tests are all working.
