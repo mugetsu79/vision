@@ -46,22 +46,115 @@ def maritime_support_checklist_payload() -> JsonObject:
 def maritime_support_diagnostics_payload() -> JsonObject:
     return {
         "pack_id": "maritime-fleet",
-        "groups": {
-            "satellite_link": {
-                "label": "Satellite link",
-                "checks": ["link_state", "managed_link_gb", "last_successful_sync"],
+        "label": "Support readiness",
+        "groups": [
+            {
+                "id": "connectivity",
+                "label": "Connectivity readiness",
+                "status": "attention",
+                "source": "core link",
+                "checks": [
+                    {
+                        "key": "link_state",
+                        "label": "Link state",
+                        "status": "attention",
+                        "source": "link passport",
+                    },
+                    {
+                        "key": "active_connection",
+                        "label": "Active connection",
+                        "status": "ready",
+                        "source": "core link connections",
+                    },
+                    {
+                        "key": "queued_evidence",
+                        "label": "Queued evidence work",
+                        "status": "attention",
+                        "source": "link queue",
+                    },
+                ],
+                "next_action": "Review active connection and queued evidence work.",
             },
-            "shipboard_network": {
-                "label": "Shipboard network",
-                "checks": ["master_readiness", "edge_pairing", "camera_reachability"],
+            {
+                "id": "shipboard_network",
+                "label": "Shipboard network readiness",
+                "status": "ready",
+                "source": "fleet runtime",
+                "checks": [
+                    {
+                        "key": "master_readiness",
+                        "label": "Master readiness",
+                        "status": "ready",
+                        "source": "fleet supervisor",
+                    },
+                    {
+                        "key": "edge_pairing",
+                        "label": "Edge pairing",
+                        "status": "ready",
+                        "source": "fleet nodes",
+                    },
+                    {
+                        "key": "camera_reachability",
+                        "label": "Camera reachability",
+                        "status": "ready",
+                        "source": "camera runtime",
+                    },
+                ],
+                "next_action": "Confirm node and camera reachability before opening access.",
             },
-            "evidence_path": {
-                "label": "Evidence path",
-                "checks": ["evidence_storage", "link_state", "support_readiness"],
+            {
+                "id": "evidence_path",
+                "label": "Evidence path readiness",
+                "status": "attention",
+                "source": "evidence export",
+                "checks": [
+                    {
+                        "key": "evidence_storage",
+                        "label": "Evidence storage",
+                        "status": "ready",
+                        "source": "evidence service",
+                    },
+                    {
+                        "key": "link_passport",
+                        "label": "Link passport",
+                        "status": "attention",
+                        "source": "runtime passport",
+                    },
+                    {
+                        "key": "export_context",
+                        "label": "Export context",
+                        "status": "ready",
+                        "source": "maritime evidence context",
+                    },
+                ],
+                "next_action": "Confirm evidence context and retry stalled transfer work.",
             },
-            "support_roles": {
-                "label": "Support roles",
-                "checks": ["identity", "billing_entitlement", "support_readiness"],
+            {
+                "id": "access_and_roles",
+                "label": "Access and roles readiness",
+                "status": "ready",
+                "source": "core support",
+                "checks": [
+                    {
+                        "key": "identity",
+                        "label": "Identity",
+                        "status": "ready",
+                        "source": "tenant identity",
+                    },
+                    {
+                        "key": "billing_entitlement",
+                        "label": "Billing entitlement",
+                        "status": "ready",
+                        "source": "core billing",
+                    },
+                    {
+                        "key": "credential_boundary",
+                        "label": "Credential boundary",
+                        "status": "ready",
+                        "source": "support tunnel",
+                    },
+                ],
+                "next_action": "Confirm support contacts and credential references.",
             },
-        },
+        ],
     }

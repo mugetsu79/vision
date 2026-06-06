@@ -20,13 +20,25 @@ export type BillingUsagePayload = JsonRecord & {
   items?: BillingUsageItem[];
 };
 
-export type DiagnosticsGroup = JsonRecord & {
+export type SupportReadinessCheck = JsonRecord & {
+  key?: string;
   label?: string;
-  checks?: string[];
+  status?: string;
+  source?: string;
+};
+
+export type DiagnosticsGroup = JsonRecord & {
+  id?: string;
+  label?: string;
+  status?: string;
+  source?: string;
+  checks?: Array<SupportReadinessCheck | string>;
+  next_action?: string;
 };
 
 export type SupportDiagnosticsPayload = JsonRecord & {
-  groups?: Record<string, DiagnosticsGroup>;
+  label?: string;
+  groups?: DiagnosticsGroup[] | Record<string, DiagnosticsGroup>;
 };
 
 export type OnboardingCheck = JsonRecord & {

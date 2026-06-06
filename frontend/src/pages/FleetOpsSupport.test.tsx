@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -7,6 +8,10 @@ import { FleetOpsSupport } from "@/pages/FleetOpsSupport";
 
 const supportMocks = vi.hoisted(() => ({
   onboardingCheckSiteIds: [] as Array<string | null | undefined>,
+  createBundle: vi.fn(),
+  createSession: vi.fn(),
+  requestTunnel: vi.fn(),
+  openBreakGlass: vi.fn(),
   bundles: [
     {
       id: "00000000-0000-4000-8000-000000000030",
@@ -16,12 +21,23 @@ const supportMocks = vi.hoisted(() => ({
     },
   ],
   diagnostics: {
-    groups: {
-      satellite_link: {
-        label: "Satellite link",
-        checks: ["link_state"],
+    label: "Support readiness",
+    groups: [
+      {
+        id: "connectivity",
+        label: "Connectivity readiness",
+        status: "attention",
+        checks: [
+          {
+            key: "link_state",
+            label: "Link state",
+            status: "attention",
+            source: "core link",
+          },
+        ],
+        next_action: "Review active connection and queued evidence work.",
       },
-    },
+    ],
   },
   onboardingChecks: {
     checks: [
@@ -46,6 +62,22 @@ vi.mock("@/hooks/use-support", () => ({
     data: supportMocks.bundles,
     isLoading: false,
     isError: false,
+  }),
+  useCreateSupportBundle: () => ({
+    mutateAsync: supportMocks.createBundle,
+    isPending: false,
+  }),
+  useCreateSupportSession: () => ({
+    mutateAsync: supportMocks.createSession,
+    isPending: false,
+  }),
+  useRequestSupportTunnel: () => ({
+    mutateAsync: supportMocks.requestTunnel,
+    isPending: false,
+  }),
+  useOpenBreakGlass: () => ({
+    mutateAsync: supportMocks.openBreakGlass,
+    isPending: false,
   }),
   useMaritimeSupportDiagnostics: () => ({
     data: supportMocks.diagnostics,
@@ -78,17 +110,30 @@ describe("FleetOpsSupport", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     supportMocks.onboardingCheckSiteIds = [];
+    supportMocks.createBundle.mockResolvedValue({
+      id: "bundle-1",
+    });
   });
 
-  test("Support page renders bundles, tunnel lifecycle, break-glass, and onboarding checks", async () => {
+  test("FleetOps support renders support readiness and support actions", async () => {
+    const user = userEvent.setup();
     renderWithProviders(<FleetOpsSupport />);
 
-    expect(await screen.findByText(/Support bundles/i)).toBeInTheDocument();
-    expect(screen.getByText(/Tunnel lifecycle/i)).toBeInTheDocument();
-    expect(screen.getByText(/Break-glass/i)).toBeInTheDocument();
-    expect(screen.getByText(/Onboarding checks/i)).toBeInTheDocument();
-    expect(supportMocks.onboardingCheckSiteIds).toContain(
-      "00000000-0000-4000-8000-000000000020",
+    expect(
+      await screen.findByRole("heading", { name: /^Support$/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Support readiness/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /generate bundle/i }));
+    expect(supportMocks.createBundle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include_logs: true,
+        pack_id: "maritime-fleet",
+        site_id: "00000000-0000-4000-8000-000000000020",
+      }),
     );
+    expect(screen.getByText(/Tunnel lifecycle/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Break-glass/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/setup checks/i)).not.toBeInTheDocument();
+    expect(supportMocks.onboardingCheckSiteIds).toEqual([]);
   });
 });

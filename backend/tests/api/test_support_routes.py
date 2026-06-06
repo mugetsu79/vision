@@ -189,7 +189,7 @@ async def test_onboarding_routes_return_core_checks(client: AsyncClient) -> None
 
 
 @pytest.mark.asyncio
-async def test_maritime_support_routes_contribute_shipboard_grouping(
+async def test_maritime_support_diagnostics_expose_readiness_groups(
     client: AsyncClient,
 ) -> None:
     checklist = await client.get("/api/v1/maritime/support/checklist")
@@ -197,7 +197,11 @@ async def test_maritime_support_routes_contribute_shipboard_grouping(
 
     assert checklist.status_code == 200
     assert diagnostics.status_code == 200
-    assert "satellite_link" in diagnostics.json()["groups"]
+    payload = diagnostics.json()
+    assert payload["label"] == "Support readiness"
+    first_group = payload["groups"][0]
+    assert set(first_group) >= {"id", "label", "status", "checks", "next_action"}
+    assert first_group["label"] != "Satellite link"
     assert "eto_handoff" in checklist.json()["sections"]
 
 
