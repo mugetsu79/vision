@@ -94,6 +94,51 @@ export const router = createBrowserRouter(
             Component: (await import("@/pages/Cameras")).CamerasPage,
           }),
         },
+        {
+          path: "fleetops",
+          lazy: async () => ({
+            Component: (await import("@/pages/FleetOps")).FleetOpsPage,
+          }),
+        },
+        {
+          path: "fleetops/vessels",
+          lazy: async () => ({
+            Component: (await import("@/pages/FleetOpsVessels")).FleetOpsVesselsPage,
+          }),
+        },
+        {
+          path: "fleetops/vessels/:vesselId",
+          lazy: async () => ({
+            Component: (await import("@/pages/FleetOpsVesselDetail"))
+              .FleetOpsVesselDetailPage,
+          }),
+        },
+        {
+          path: "fleetops/evidence",
+          lazy: async () => ({
+            Component: (await import("@/pages/FleetOpsEvidence"))
+              .FleetOpsEvidencePage,
+          }),
+        },
+        {
+          path: "fleetops/billing",
+          lazy: async () => ({
+            Component: (await import("@/pages/FleetOpsBilling")).FleetOpsBillingPage,
+          }),
+        },
+        {
+          path: "fleetops/support",
+          lazy: async () => ({
+            Component: (await import("@/pages/FleetOpsSupport")).FleetOpsSupportPage,
+          }),
+        },
+        {
+          path: "fleetops/onboarding",
+          lazy: async () => ({
+            Component: (await import("@/pages/FleetOpsOnboarding"))
+              .FleetOpsOnboardingPage,
+          }),
+        },
       ],
     },
     { path: "*", element: <Navigate to="/signin" replace /> },

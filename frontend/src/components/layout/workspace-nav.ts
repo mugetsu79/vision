@@ -9,6 +9,7 @@ import {
   ServerCog,
   Settings2,
   ShieldAlert,
+  Ship,
   Video,
 } from "lucide-react";
 
@@ -26,7 +27,7 @@ export type WorkspaceNavGroup = {
   items: readonly WorkspaceNavItem[];
 };
 
-export const workspaceNavGroups = omniNavGroups.map((group) => ({
+const baseWorkspaceNavGroups = omniNavGroups.map((group) => ({
   label: group.label,
   items: group.items.map((item) => ({
     ...item,
@@ -48,6 +49,22 @@ export const workspaceNavGroups = omniNavGroups.map((group) => ({
                     : Settings2,
   })),
 })) as readonly WorkspaceNavGroup[];
+
+export const workspaceNavGroups = [
+  ...baseWorkspaceNavGroups,
+  {
+    label: "Packs",
+    items: [
+      {
+        label: "FleetOps",
+        to: "/fleetops",
+        icon: Ship,
+      },
+    ],
+  },
+] as const satisfies readonly WorkspaceNavGroup[];
+
+export const workspaceNavItems = workspaceNavGroups.flatMap((group) => group.items);
 
 async function prefetchHistoryQuery(queryClient: QueryClient) {
   const { createDefaultHistoryFilters, historySeriesQueryOptions } =
@@ -81,6 +98,10 @@ export function prefetchWorkspaceRoute(
 
   if (route === "/deployment") {
     void import("@/pages/Deployment");
+  }
+
+  if (route === "/fleetops") {
+    void import("@/pages/FleetOps");
   }
 }
 
