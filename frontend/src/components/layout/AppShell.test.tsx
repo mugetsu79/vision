@@ -149,6 +149,56 @@ describe("AppShell", () => {
     );
   });
 
+  test("exposes FleetOps child pages in the expanded section rail", () => {
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <MemoryRouter
+          initialEntries={["/fleetops/vessels"]}
+          future={{
+            v7_relativeSplatPath: true,
+            v7_startTransition: true,
+          }}
+        >
+          <AppShell>
+            <div>FleetOps page</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const packsNav = screen.getByRole("navigation", { name: /packs/i });
+    const primaryWorkspaceNav = screen.getByRole("navigation", {
+      name: /primary workspace/i,
+    });
+    const fleetOpsIconLinks = within(primaryWorkspaceNav).getAllByRole("link", {
+      name: "FleetOps",
+    });
+
+    expect(fleetOpsIconLinks).toHaveLength(1);
+    expect(fleetOpsIconLinks[0]).toHaveAttribute("aria-current", "page");
+    expect(
+      within(primaryWorkspaceNav).queryByRole("link", { name: "Vessels" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(packsNav).getByRole("link", { name: "FleetOps" }),
+    ).toBeInTheDocument();
+    expect(
+      within(packsNav).getByRole("link", { name: "Vessels" }),
+    ).toHaveAttribute("href", "/fleetops/vessels");
+    expect(
+      within(packsNav).getByRole("link", { name: "Evidence" }),
+    ).toHaveAttribute("href", "/fleetops/evidence");
+    expect(
+      within(packsNav).getByRole("link", { name: "Billing" }),
+    ).toHaveAttribute("href", "/fleetops/billing");
+    expect(
+      within(packsNav).getByRole("link", { name: "Support" }),
+    ).toHaveAttribute("href", "/fleetops/support");
+    expect(
+      within(packsNav).getByRole("link", { name: "Onboarding" }),
+    ).toHaveAttribute("href", "/fleetops/onboarding");
+  });
+
   test("lets operators collapse the grouped section rail without losing the icon rail", async () => {
     const user = userEvent.setup();
 

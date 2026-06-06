@@ -20,6 +20,12 @@ export type WorkspaceNavItem = {
   label: string;
   to: string;
   icon: LucideIcon;
+  children?: readonly WorkspaceNavChildItem[];
+};
+
+export type WorkspaceNavChildItem = {
+  label: string;
+  to: string;
 };
 
 export type WorkspaceNavGroup = {
@@ -50,6 +56,14 @@ const baseWorkspaceNavGroups = omniNavGroups.map((group) => ({
   })),
 })) as readonly WorkspaceNavGroup[];
 
+const fleetOpsChildren = [
+  { label: "Vessels", to: "/fleetops/vessels" },
+  { label: "Evidence", to: "/fleetops/evidence" },
+  { label: "Billing", to: "/fleetops/billing" },
+  { label: "Support", to: "/fleetops/support" },
+  { label: "Onboarding", to: "/fleetops/onboarding" },
+] as const satisfies readonly WorkspaceNavChildItem[];
+
 export const workspaceNavGroups = [
   ...baseWorkspaceNavGroups,
   {
@@ -59,6 +73,7 @@ export const workspaceNavGroups = [
         label: "FleetOps",
         to: "/fleetops",
         icon: Ship,
+        children: fleetOpsChildren,
       },
     ],
   },
@@ -102,6 +117,26 @@ export function prefetchWorkspaceRoute(
 
   if (route === "/fleetops") {
     void import("@/pages/FleetOps");
+  }
+
+  if (route === "/fleetops/vessels") {
+    void import("@/pages/FleetOpsVessels");
+  }
+
+  if (route === "/fleetops/evidence") {
+    void import("@/pages/FleetOpsEvidence");
+  }
+
+  if (route === "/fleetops/billing") {
+    void import("@/pages/FleetOpsBilling");
+  }
+
+  if (route === "/fleetops/support") {
+    void import("@/pages/FleetOpsSupport");
+  }
+
+  if (route === "/fleetops/onboarding") {
+    void import("@/pages/FleetOpsOnboarding");
   }
 }
 
