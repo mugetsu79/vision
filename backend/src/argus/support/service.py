@@ -188,6 +188,24 @@ class SupportService:
         row = result.scalar_one_or_none()
         return _bundle_record(row) if row is not None else None
 
+    def list_bundles(self, *, tenant_id: UUID) -> list[SupportBundleRecord]:
+        return sorted(
+            (bundle for bundle in self._bundles.values() if bundle.tenant_id == tenant_id),
+            key=lambda bundle: bundle.created_at,
+            reverse=True,
+        )
+
+    async def alist_bundles(self, *, tenant_id: UUID) -> list[SupportBundleRecord]:
+        if self.session_factory is None:
+            return self.list_bundles(tenant_id=tenant_id)
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(SupportBundle)
+                .where(SupportBundle.tenant_id == tenant_id)
+                .order_by(SupportBundle.created_at.desc())
+            )
+        return [_bundle_record(row) for row in result.scalars().all()]
+
     def create_session(
         self,
         *,

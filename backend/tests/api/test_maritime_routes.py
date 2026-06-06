@@ -15,6 +15,7 @@ from argus.api.contracts import SiteCreate, SiteResponse, TenantContext
 from argus.api.v1 import router
 from argus.compat import UTC
 from argus.core.security import AuthenticatedUser
+from argus.link.service import LinkService
 from argus.maritime.service import MaritimeConflictError, MaritimeRuntimeService
 from argus.models.enums import RoleEnum
 from argus.services.pack_registry import PackRegistry
@@ -112,6 +113,7 @@ def _create_app(user: AuthenticatedUser, *, tenant_id: UUID = TENANT_ID) -> Fast
         tenancy=_FakeTenancyService(user, tenant_id=tenant_id),
         packs=pack_registry,
         maritime=MaritimeRuntimeService(pack_registry=pack_registry),
+        link=LinkService(),
         sites=_FakeSiteService(),
     )
     app.state.security = _FakeSecurity(user)
@@ -260,6 +262,32 @@ async def test_linked_site_create_is_compensated_when_vessel_create_conflicts() 
 
     assert response.status_code == 409
     assert len(app.state.services.sites.sites) == site_count
+
+
+@pytest.mark.asyncio
+async def test_vessel_link_status_composes_core_link_status(
+    seeded_app: FastAPI,
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    seeded_app.state.services.link.record_probe(
+        tenant_id=TENANT_ID,
+        site_id=SITE_ID,
+        latency_ms=900,
+        throughput_mbps=0.4,
+        packet_loss_percent=2.5,
+        reachable=True,
+        source="satellite",
+    )
+
+    response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/link-status"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["vessel_id"] == str(vessel_id)
+    assert response.json()["site_id"] == str(SITE_ID)
+    assert response.json()["link_state"] == "degraded"
 
 
 @pytest.mark.asyncio

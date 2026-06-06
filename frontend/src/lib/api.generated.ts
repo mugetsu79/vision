@@ -4,15 +4,51 @@
  */
 
 export interface paths {
-    "/healthz": {
+    "/api/v1/billing/accounts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Healthcheck */
-        get: operations["healthcheck_healthz_get"];
+        /** Get Billing Accounts */
+        get: operations["get_billing_accounts_api_v1_billing_accounts_get"];
+        put?: never;
+        /** Post Billing Account */
+        post: operations["post_billing_account_api_v1_billing_accounts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Entitlements */
+        get: operations["get_entitlements_api_v1_billing_entitlements_get"];
+        put?: never;
+        /** Post Entitlement */
+        post: operations["post_entitlement_api_v1_billing_entitlements_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/exports/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Billing Export */
+        get: operations["get_billing_export_api_v1_billing_exports__export_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -21,15 +57,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/readyz": {
+    "/api/v1/billing/invoice-runs": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Readiness */
-        get: operations["readiness_readyz_get"];
+        /** Get Invoice Runs */
+        get: operations["get_invoice_runs_api_v1_billing_invoice_runs_get"];
+        put?: never;
+        /** Post Invoice Run */
+        post: operations["post_invoice_run_api_v1_billing_invoice_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/invoice-runs/{invoice_run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Invoice Run */
+        get: operations["get_invoice_run_api_v1_billing_invoice_runs__invoice_run_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38,15 +92,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/metrics": {
+    "/api/v1/billing/meters": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Metrics */
-        get: operations["metrics_metrics_get"];
+        /** Get Usage Meters */
+        get: operations["get_usage_meters_api_v1_billing_meters_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55,75 +109,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/debug/protected": {
+    "/api/v1/billing/nodes": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Debug Protected */
-        get: operations["debug_protected_api_v1_debug_protected_get"];
+        /** Get Billing Nodes */
+        get: operations["get_billing_nodes_api_v1_billing_nodes_get"];
         put?: never;
-        post?: never;
+        /** Post Billing Node */
+        post: operations["post_billing_node_api_v1_billing_nodes_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/edge/ping": {
+    "/api/v1/billing/price-books": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Price Books */
+        get: operations["get_price_books_api_v1_billing_price_books_get"];
         put?: never;
-        /** Edge Ping */
-        post: operations["edge_ping_api_v1_edge_ping_post"];
+        /** Post Price Book */
+        post: operations["post_price_book_api_v1_billing_price_books_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sites": {
+    "/api/v1/billing/usage": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Sites */
-        get: operations["list_sites_api_v1_sites_get"];
+        /** Get Usage */
+        get: operations["get_usage_api_v1_billing_usage_get"];
         put?: never;
-        /** Create Site */
-        post: operations["create_site_api_v1_sites_post"];
+        /** Post Usage */
+        post: operations["post_usage_api_v1_billing_usage_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sites/{site_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Site */
-        get: operations["get_site_api_v1_sites__site_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Site */
-        delete: operations["delete_site_api_v1_sites__site_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Site */
-        patch: operations["update_site_api_v1_sites__site_id__patch"];
         trace?: never;
     };
     "/api/v1/cameras": {
@@ -180,21 +217,58 @@ export interface paths {
         patch: operations["update_camera_api_v1_cameras__camera_id__patch"];
         trace?: never;
     };
-    "/api/v1/cameras/{camera_id}/worker-config": {
+    "/api/v1/cameras/{camera_id}/incident-rules": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Camera Worker Config */
-        get: operations["get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get"];
+        /** List Incident Rules */
+        get: operations["list_incident_rules_api_v1_cameras__camera_id__incident_rules_get"];
         put?: never;
-        post?: never;
+        /** Create Incident Rule */
+        post: operations["create_incident_rule_api_v1_cameras__camera_id__incident_rules_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/incident-rules/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Incident Rule */
+        post: operations["validate_incident_rule_api_v1_cameras__camera_id__incident_rules_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/incident-rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Rule */
+        get: operations["get_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Incident Rule */
+        delete: operations["delete_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Incident Rule */
+        patch: operations["update_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__patch"];
         trace?: never;
     };
     "/api/v1/cameras/{camera_id}/setup-preview": {
@@ -226,6 +300,58 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/worker-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Camera Worker Config */
+        get: operations["get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuration/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Configuration Bindings */
+        get: operations["list_configuration_bindings_api_v1_configuration_bindings_get"];
+        put?: never;
+        /** Upsert Configuration Binding */
+        post: operations["upsert_configuration_binding_api_v1_configuration_bindings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuration/bindings/{binding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Configuration Binding */
+        delete: operations["delete_configuration_binding_api_v1_configuration_bindings__binding_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -318,41 +444,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/configuration/bindings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Configuration Bindings */
-        get: operations["list_configuration_bindings_api_v1_configuration_bindings_get"];
-        put?: never;
-        /** Upsert Configuration Binding */
-        post: operations["upsert_configuration_binding_api_v1_configuration_bindings_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/configuration/bindings/{binding_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Configuration Binding */
-        delete: operations["delete_configuration_binding_api_v1_configuration_bindings__binding_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/configuration/resolved": {
         parameters: {
             query?: never;
@@ -370,34 +461,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/deployment/bootstrap/status": {
+    "/api/v1/debug/protected": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Master Bootstrap Status */
-        get: operations["get_master_bootstrap_status_api_v1_deployment_bootstrap_status_get"];
+        /** Debug Protected */
+        get: operations["debug_protected_api_v1_debug_protected_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/deployment/bootstrap/rotate-local-token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rotate Local Bootstrap Token */
-        post: operations["rotate_local_bootstrap_token_api_v1_deployment_bootstrap_rotate_local_token_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -421,6 +495,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/deployment/bootstrap/rotate-local-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Local Bootstrap Token */
+        post: operations["rotate_local_bootstrap_token_api_v1_deployment_bootstrap_rotate_local_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/bootstrap/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Master Bootstrap Status */
+        get: operations["get_master_bootstrap_status_api_v1_deployment_bootstrap_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/deployment/nodes": {
         parameters: {
             query?: never;
@@ -430,6 +538,57 @@ export interface paths {
         };
         /** List Deployment Nodes */
         get: operations["list_deployment_nodes_api_v1_deployment_nodes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/credentials/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Node Credentials */
+        post: operations["revoke_node_credentials_api_v1_deployment_nodes__node_id__credentials_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/credentials/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Node Credentials */
+        post: operations["rotate_node_credentials_api_v1_deployment_nodes__node_id__credentials_rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/support-bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Node Support Bundle */
+        get: operations["get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -489,57 +648,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/deployment/nodes/{node_id}/credentials/revoke": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Revoke Node Credentials */
-        post: operations["revoke_node_credentials_api_v1_deployment_nodes__node_id__credentials_revoke_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/deployment/nodes/{node_id}/credentials/rotate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rotate Node Credentials */
-        post: operations["rotate_node_credentials_api_v1_deployment_nodes__node_id__credentials_rotate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/deployment/nodes/{node_id}/support-bundle": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Node Support Bundle */
-        get: operations["get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/deployment/supervisors/{supervisor_id}/service-reports": {
         parameters: {
             query?: never;
@@ -551,6 +659,1023 @@ export interface paths {
         put?: never;
         /** Record Supervisor Service Report */
         post: operations["record_supervisor_service_report_api_v1_deployment_supervisors__supervisor_id__service_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/edge/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Edge Heartbeat */
+        post: operations["edge_heartbeat_api_v1_edge_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/edge/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Edge Ping */
+        post: operations["edge_ping_api_v1_edge_ping_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/edge/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register Edge Node */
+        post: operations["register_edge_node_api_v1_edge_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/edge/telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Edge Telemetry */
+        post: operations["ingest_edge_telemetry_api_v1_edge_telemetry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export History */
+        get: operations["export_history_api_v1_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Exceptions */
+        get: operations["get_exceptions_api_v1_fleet_exceptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/hierarchy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Hierarchy */
+        get: operations["get_hierarchy_api_v1_fleet_hierarchy_get"];
+        /** Put Hierarchy */
+        put: operations["put_hierarchy_api_v1_fleet_hierarchy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/rotation-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Rotation Groups */
+        get: operations["get_rotation_groups_api_v1_fleet_rotation_groups_get"];
+        put?: never;
+        /** Post Rotation Group */
+        post: operations["post_rotation_group_api_v1_fleet_rotation_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/site-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Site Assignments */
+        get: operations["get_site_assignments_api_v1_fleet_site_assignments_get"];
+        put?: never;
+        /** Post Site Assignment */
+        post: operations["post_site_assignment_api_v1_fleet_site_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/site-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Site Groups */
+        get: operations["get_site_groups_api_v1_fleet_site_groups_get"];
+        put?: never;
+        /** Post Site Group */
+        post: operations["post_site_group_api_v1_fleet_site_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/sites/{site_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Site State */
+        get: operations["get_site_state_api_v1_fleet_sites__site_id__state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History */
+        get: operations["get_history_api_v1_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/history/classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History Classes */
+        get: operations["get_history_classes_api_v1_history_classes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/history/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History Series */
+        get: operations["get_history_series_api_v1_history_series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Incidents */
+        get: operations["list_incidents_api_v1_incidents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Artifact Content */
+        get: operations["get_incident_artifact_content_api_v1_incidents__incident_id__artifacts__artifact_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/cross-camera-threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Incident Cross Camera Threads */
+        get: operations["list_incident_cross_camera_threads_api_v1_incidents__incident_id__cross_camera_threads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Incident Ledger */
+        get: operations["list_incident_ledger_api_v1_incidents__incident_id__ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/privacy-manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Privacy Manifest */
+        get: operations["get_incident_privacy_manifest_api_v1_incidents__incident_id__privacy_manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Incident Review */
+        patch: operations["update_incident_review_api_v1_incidents__incident_id__review_patch"];
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/runtime-passport": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Runtime Passport */
+        get: operations["get_incident_runtime_passport_api_v1_incidents__incident_id__runtime_passport_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/scene-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Scene Contract */
+        get: operations["get_incident_scene_contract_api_v1_incidents__incident_id__scene_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/evidence/{incident_id}/passport": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident Link Passport */
+        get: operations["get_incident_link_passport_api_v1_link_evidence__incident_id__passport_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/queue/{queue_item_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Link Queue Item */
+        post: operations["pause_link_queue_item_api_v1_link_queue__queue_item_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/queue/{queue_item_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Link Queue Item */
+        post: operations["resume_link_queue_item_api_v1_link_queue__queue_item_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/queue/{queue_item_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Link Queue Item */
+        post: operations["retry_link_queue_item_api_v1_link_queue__queue_item_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Budget */
+        get: operations["get_link_budget_api_v1_link_sites__site_id__budget_get"];
+        /** Put Link Budget */
+        put: operations["put_link_budget_api_v1_link_sites__site_id__budget_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Policies */
+        get: operations["get_link_policies_api_v1_link_sites__site_id__policies_get"];
+        /** Put Link Policies */
+        put: operations["put_link_policies_api_v1_link_sites__site_id__policies_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/probes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Probes */
+        get: operations["get_link_probes_api_v1_link_sites__site_id__probes_get"];
+        put?: never;
+        /** Post Link Probe */
+        post: operations["post_link_probe_api_v1_link_sites__site_id__probes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Queue */
+        get: operations["get_link_queue_api_v1_link_sites__site_id__queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Status */
+        get: operations["get_link_status_api_v1_link_sites__site_id__status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/billing/rollups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Billing Rollups */
+        get: operations["get_maritime_billing_rollups_api_v1_maritime_billing_rollups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/billing/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Billing Usage */
+        get: operations["get_maritime_billing_usage_api_v1_maritime_billing_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/cameras/{camera_id}/apply-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Maritime Scene Template */
+        post: operations["apply_maritime_scene_template_api_v1_maritime_cameras__camera_id__apply_template_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/evidence-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Evidence Context */
+        get: operations["get_maritime_evidence_context_api_v1_maritime_evidence_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/evidence-exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maritime Evidence Exports */
+        get: operations["list_maritime_evidence_exports_api_v1_maritime_evidence_exports_get"];
+        put?: never;
+        /** Create Maritime Evidence Export */
+        post: operations["create_maritime_evidence_export_api_v1_maritime_evidence_exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/import/ais-file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Maritime Ais File */
+        post: operations["import_maritime_ais_file_api_v1_maritime_import_ais_file_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/import/nmea-file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Maritime Nmea File */
+        post: operations["import_maritime_nmea_file_api_v1_maritime_import_nmea_file_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/ingest/ais": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Maritime Ais Position */
+        post: operations["ingest_maritime_ais_position_api_v1_maritime_ingest_ais_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/ingest/carrier-terminal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Maritime Carrier Terminal */
+        post: operations["ingest_maritime_carrier_terminal_api_v1_maritime_ingest_carrier_terminal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/ingest/nmea": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Maritime Nmea Readings */
+        post: operations["ingest_maritime_nmea_readings_api_v1_maritime_ingest_nmea_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/port-calls/{port_call_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Maritime Port Call */
+        patch: operations["update_maritime_port_call_api_v1_maritime_port_calls__port_call_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/maritime/port-calls/{port_call_id}/arrive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Arrive Maritime Port Call */
+        post: operations["arrive_maritime_port_call_api_v1_maritime_port_calls__port_call_id__arrive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/port-calls/{port_call_id}/depart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Depart Maritime Port Call */
+        post: operations["depart_maritime_port_call_api_v1_maritime_port_calls__port_call_id__depart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Runtime */
+        get: operations["get_maritime_runtime_api_v1_maritime_runtime_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/scene-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maritime Scene Templates */
+        get: operations["list_maritime_scene_templates_api_v1_maritime_scene_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/support/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Support Checklist */
+        get: operations["get_maritime_support_checklist_api_v1_maritime_support_checklist_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/support/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Support Diagnostics */
+        get: operations["get_maritime_support_diagnostics_api_v1_maritime_support_diagnostics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/vessels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maritime Vessels */
+        get: operations["list_maritime_vessels_api_v1_maritime_vessels_get"];
+        put?: never;
+        /** Create Maritime Vessel */
+        post: operations["create_maritime_vessel_api_v1_maritime_vessels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/vessels/{vessel_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Vessel */
+        get: operations["get_maritime_vessel_api_v1_maritime_vessels__vessel_id__get"];
+        put?: never;
+        post?: never;
+        /** Deactivate Maritime Vessel */
+        delete: operations["deactivate_maritime_vessel_api_v1_maritime_vessels__vessel_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Maritime Vessel */
+        patch: operations["update_maritime_vessel_api_v1_maritime_vessels__vessel_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/maritime/vessels/{vessel_id}/carrier-selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Carrier Selection */
+        get: operations["get_maritime_carrier_selection_api_v1_maritime_vessels__vessel_id__carrier_selection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/vessels/{vessel_id}/link-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Vessel Link Status */
+        get: operations["get_maritime_vessel_link_status_api_v1_maritime_vessels__vessel_id__link_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/vessels/{vessel_id}/telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Vessel Telemetry */
+        get: operations["get_maritime_vessel_telemetry_api_v1_maritime_vessels__vessel_id__telemetry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/vessels/{vessel_id}/voyages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maritime Voyages */
+        get: operations["list_maritime_voyages_api_v1_maritime_vessels__vessel_id__voyages_get"];
+        put?: never;
+        /** Create Maritime Voyage */
+        post: operations["create_maritime_voyage_api_v1_maritime_vessels__vessel_id__voyages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/voyages/{voyage_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Voyage */
+        get: operations["get_maritime_voyage_api_v1_maritime_voyages__voyage_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Maritime Voyage */
+        patch: operations["update_maritime_voyage_api_v1_maritime_voyages__voyage_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/maritime/voyages/{voyage_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Maritime Voyage */
+        post: operations["activate_maritime_voyage_api_v1_maritime_voyages__voyage_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/voyages/{voyage_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Maritime Voyage */
+        post: operations["complete_maritime_voyage_api_v1_maritime_voyages__voyage_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maritime/voyages/{voyage_id}/port-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maritime Port Calls */
+        get: operations["list_maritime_port_calls_api_v1_maritime_voyages__voyage_id__port_calls_get"];
+        put?: never;
+        /** Create Maritime Port Call */
+        post: operations["create_maritime_port_call_api_v1_maritime_voyages__voyage_id__port_calls_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/model-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Model Catalog */
+        get: operations["list_model_catalog_api_v1_model_catalog_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -644,86 +1769,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/runtime-artifacts/soak-runs": {
+    "/api/v1/operations/bootstrap": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Runtime Artifact Soak Runs */
-        get: operations["list_runtime_artifact_soak_runs_api_v1_runtime_artifacts_soak_runs_get"];
+        get?: never;
         put?: never;
-        /** Create Runtime Artifact Soak Run */
-        post: operations["create_runtime_artifact_soak_run_api_v1_runtime_artifacts_soak_runs_post"];
+        /** Create Bootstrap Material */
+        post: operations["create_bootstrap_material_api_v1_operations_bootstrap_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/model-catalog": {
+    "/api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Model Catalog */
-        get: operations["list_model_catalog_api_v1_model_catalog_get"];
+        get?: never;
+        put?: never;
+        /** Rotate Edge Node Credentials */
+        post: operations["rotate_edge_node_credentials_api_v1_operations_edge_nodes__edge_node_id__credentials_rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/edge-nodes/{edge_node_id}/hardware-reports/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Latest Edge Hardware Report */
+        get: operations["get_latest_edge_hardware_report_api_v1_operations_edge_nodes__edge_node_id__hardware_reports_latest_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/edge/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Register Edge Node */
-        post: operations["register_edge_node_api_v1_edge_register_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/edge/telemetry": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ingest Edge Telemetry */
-        post: operations["ingest_edge_telemetry_api_v1_edge_telemetry_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/edge/heartbeat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Edge Heartbeat */
-        post: operations["edge_heartbeat_api_v1_edge_heartbeat_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -747,74 +1837,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/operations/memory-patterns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Operational Memory Patterns */
-        get: operations["list_operational_memory_patterns_api_v1_operations_memory_patterns_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/operations/bootstrap": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Bootstrap Material */
-        post: operations["create_bootstrap_material_api_v1_operations_bootstrap_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/operations/worker-assignments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Worker Assignment */
-        post: operations["create_worker_assignment_api_v1_operations_worker_assignments_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/operations/runtime-reports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Record Worker Runtime Report */
-        post: operations["record_worker_runtime_report_api_v1_operations_runtime_reports_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/operations/lifecycle-requests": {
         parameters: {
             query?: never;
@@ -826,23 +1848,6 @@ export interface paths {
         put?: never;
         /** Create Lifecycle Request */
         post: operations["create_lifecycle_request_api_v1_operations_lifecycle_requests_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/operations/supervisors/{supervisor_id}/poll": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Poll Supervisor Lifecycle Requests */
-        post: operations["poll_supervisor_lifecycle_requests_api_v1_operations_supervisors__supervisor_id__poll_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -883,6 +1888,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/memory-patterns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Operational Memory Patterns */
+        get: operations["list_operational_memory_patterns_api_v1_operations_memory_patterns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/runtime-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Worker Runtime Report */
+        post: operations["record_worker_runtime_report_api_v1_operations_runtime_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/operations/supervisors/{supervisor_id}/hardware-reports": {
         parameters: {
             query?: never;
@@ -917,24 +1956,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/operations/edge-nodes/{edge_node_id}/hardware-reports/latest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Latest Edge Hardware Report */
-        get: operations["get_latest_edge_hardware_report_api_v1_operations_edge_nodes__edge_node_id__hardware_reports_latest_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/operations/edge-nodes/{edge_node_id}/credentials/rotate": {
+    "/api/v1/operations/supervisors/{supervisor_id}/poll": {
         parameters: {
             query?: never;
             header?: never;
@@ -943,8 +1965,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rotate Edge Node Credentials */
-        post: operations["rotate_edge_node_credentials_api_v1_operations_edge_nodes__edge_node_id__credentials_rotate_post"];
+        /** Poll Supervisor Lifecycle Requests */
+        post: operations["poll_supervisor_lifecycle_requests_api_v1_operations_supervisors__supervisor_id__poll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/worker-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Worker Assignment */
+        post: operations["create_worker_assignment_api_v1_operations_worker_assignments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -962,6 +2001,57 @@ export interface paths {
         put?: never;
         /** Evaluate Worker Model Admission */
         post: operations["evaluate_worker_model_admission_api_v1_operations_workers__camera_id__model_admission_evaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Packs */
+        get: operations["list_packs_api_v1_packs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/packs/maritime-fleet/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maritime Pack Runtime */
+        get: operations["get_maritime_pack_runtime_api_v1_packs_maritime_fleet_runtime_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/packs/{pack_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Pack */
+        get: operations["get_pack_api_v1_packs__pack_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1002,6 +2092,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/policy-drafts/{draft_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Policy Draft */
+        post: operations["apply_policy_draft_api_v1_policy_drafts__draft_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/policy-drafts/{draft_id}/approve": {
         parameters: {
             query?: never;
@@ -1036,7 +2143,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/policy-drafts/{draft_id}/apply": {
+    "/api/v1/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -1045,287 +2152,67 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply Policy Draft */
-        post: operations["apply_policy_draft_api_v1_policy_drafts__draft_id__apply_post"];
+        /** Resolve Query */
+        post: operations["resolve_query_api_v1_query_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/history": {
+    "/api/v1/runtime-artifacts/soak-runs": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get History */
-        get: operations["get_history_api_v1_history_get"];
+        /** List Runtime Artifact Soak Runs */
+        get: operations["list_runtime_artifact_soak_runs_api_v1_runtime_artifacts_soak_runs_get"];
+        put?: never;
+        /** Create Runtime Artifact Soak Run */
+        post: operations["create_runtime_artifact_soak_run_api_v1_runtime_artifacts_soak_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sites */
+        get: operations["list_sites_api_v1_sites_get"];
+        put?: never;
+        /** Create Site */
+        post: operations["create_site_api_v1_sites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Site */
+        get: operations["get_site_api_v1_sites__site_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Site */
+        delete: operations["delete_site_api_v1_sites__site_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/history/series": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get History Series */
-        get: operations["get_history_series_api_v1_history_series_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/history/classes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get History Classes */
-        get: operations["get_history_classes_api_v1_history_classes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Export History */
-        get: operations["export_history_api_v1_export_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Incidents */
-        get: operations["list_incidents_api_v1_incidents_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents/{incident_id}/scene-contract": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Incident Scene Contract */
-        get: operations["get_incident_scene_contract_api_v1_incidents__incident_id__scene_contract_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents/{incident_id}/privacy-manifest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Incident Privacy Manifest */
-        get: operations["get_incident_privacy_manifest_api_v1_incidents__incident_id__privacy_manifest_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents/{incident_id}/runtime-passport": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Incident Runtime Passport */
-        get: operations["get_incident_runtime_passport_api_v1_incidents__incident_id__runtime_passport_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents/{incident_id}/ledger": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Incident Ledger */
-        get: operations["list_incident_ledger_api_v1_incidents__incident_id__ledger_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents/{incident_id}/cross-camera-threads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Incident Cross Camera Threads */
-        get: operations["list_incident_cross_camera_threads_api_v1_incidents__incident_id__cross_camera_threads_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents/{incident_id}/artifacts/{artifact_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Incident Artifact Content */
-        get: operations["get_incident_artifact_content_api_v1_incidents__incident_id__artifacts__artifact_id__content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/incidents/{incident_id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Incident Review */
-        patch: operations["update_incident_review_api_v1_incidents__incident_id__review_patch"];
-        trace?: never;
-    };
-    "/api/v1/cameras/{camera_id}/incident-rules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Incident Rules */
-        get: operations["list_incident_rules_api_v1_cameras__camera_id__incident_rules_get"];
-        put?: never;
-        /** Create Incident Rule */
-        post: operations["create_incident_rule_api_v1_cameras__camera_id__incident_rules_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/cameras/{camera_id}/incident-rules/validate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Validate Incident Rule */
-        post: operations["validate_incident_rule_api_v1_cameras__camera_id__incident_rules_validate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/cameras/{camera_id}/incident-rules/{rule_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Incident Rule */
-        get: operations["get_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Incident Rule */
-        delete: operations["delete_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Incident Rule */
-        patch: operations["update_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/streams/{camera_id}/offer": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Stream Offer */
-        post: operations["create_stream_offer_api_v1_streams__camera_id__offer_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
+        /** Update Site */
+        patch: operations["update_site_api_v1_sites__site_id__patch"];
         trace?: never;
     };
     "/api/v1/streams/{camera_id}/hls.m3u8": {
@@ -1362,6 +2249,245 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/streams/{camera_id}/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Stream Offer */
+        post: operations["create_stream_offer_api_v1_streams__camera_id__offer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/break-glass": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open Break Glass */
+        post: operations["open_break_glass_api_v1_support_break_glass_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/break-glass/{record_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close Break Glass */
+        post: operations["close_break_glass_api_v1_support_break_glass__record_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/bundles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Support Bundles */
+        get: operations["get_support_bundles_api_v1_support_bundles_get"];
+        put?: never;
+        /** Post Support Bundle */
+        post: operations["post_support_bundle_api_v1_support_bundles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/bundles/{bundle_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Support Bundle */
+        get: operations["get_support_bundle_api_v1_support_bundles__bundle_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/onboarding-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Onboarding Checks */
+        get: operations["get_onboarding_checks_api_v1_support_onboarding_checks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/onboarding-checks/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Onboarding Checks */
+        post: operations["run_onboarding_checks_api_v1_support_onboarding_checks_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Support Session */
+        post: operations["post_support_session_api_v1_support_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Support Session */
+        patch: operations["patch_support_session_api_v1_support_sessions__session_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/support/tunnels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Support Tunnel */
+        post: operations["post_support_tunnel_api_v1_support_tunnels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/tunnels/{tunnel_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Support Tunnel */
+        post: operations["revoke_support_tunnel_api_v1_support_tunnels__tunnel_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Healthcheck */
+        get: operations["healthcheck_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metrics */
+        get: operations["metrics_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness */
+        get: operations["readiness_readyz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/video_feed/{camera_id}": {
         parameters: {
             query?: never;
@@ -1379,78 +2505,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/query": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resolve Query */
-        post: operations["resolve_query_api_v1_query_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** AppliedOperatorConfigRef */
         AppliedOperatorConfigRef: {
+            /** Operator Message */
+            operator_message?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
             /** Profile Id */
             profile_id?: string | null;
             /** Profile Name */
             profile_name?: string | null;
-            /** Profile Hash */
-            profile_hash?: string | null;
             /**
              * Support
              * @default active
              * @enum {string}
              */
             support: "active" | "advisory" | "requires_service" | "unsupported";
-            /** Operator Message */
-            operator_message?: string | null;
         };
         /** AppliedOperatorConfigurationSummary */
         AppliedOperatorConfigurationSummary: {
             evidence_storage?: components["schemas"]["AppliedOperatorConfigRef"];
-            stream_delivery?: components["schemas"]["AppliedOperatorConfigRef"];
-            runtime_selection?: components["schemas"]["AppliedRuntimeSelectionConfigRef"];
-            privacy_policy?: components["schemas"]["AppliedOperatorConfigRef"];
             llm_provider?: components["schemas"]["AppliedOperatorConfigRef"];
             operations_mode?: components["schemas"]["AppliedOperatorConfigRef"];
+            privacy_policy?: components["schemas"]["AppliedOperatorConfigRef"];
+            runtime_selection?: components["schemas"]["AppliedRuntimeSelectionConfigRef"];
+            stream_delivery?: components["schemas"]["AppliedOperatorConfigRef"];
         };
         /** AppliedRuntimeSelectionConfigRef */
         AppliedRuntimeSelectionConfigRef: {
+            /** Fallback Reason */
+            fallback_reason?: string | null;
+            /** Operator Message */
+            operator_message?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
             /** Profile Id */
             profile_id?: string | null;
             /** Profile Name */
             profile_name?: string | null;
-            /** Profile Hash */
-            profile_hash?: string | null;
+            /** Selected Artifact Id */
+            selected_artifact_id?: string | null;
+            /** Selected Backend */
+            selected_backend?: string | null;
             /**
              * Support
              * @default active
              * @enum {string}
              */
             support: "active" | "advisory" | "requires_service" | "unsupported";
-            /** Operator Message */
-            operator_message?: string | null;
-            /** Selected Backend */
-            selected_backend?: string | null;
-            /** Selected Artifact Id */
-            selected_artifact_id?: string | null;
-            /** Fallback Reason */
-            fallback_reason?: string | null;
+        };
+        /** BillingAccountCreate */
+        BillingAccountCreate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Node Ids */
+            node_ids?: string[];
+            /** Pack Id */
+            pack_id?: string | null;
+        };
+        /** BillingNodeCreate */
+        BillingNodeCreate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Pack Id */
+            pack_id?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+        };
+        /** BreakGlassClose */
+        BreakGlassClose: {
+            /** Closure Notes */
+            closure_notes: string;
+        };
+        /** BreakGlassOpen */
+        BreakGlassOpen: {
+            /** Actor Id */
+            actor_id: string;
+            /** Approver Id */
+            approver_id: string;
+            /** Audit Payload */
+            audit_payload?: {
+                [key: string]: unknown;
+            };
+            /** Reason */
+            reason: string;
+            /** Scope */
+            scope?: {
+                [key: string]: unknown;
+            };
         };
         /** BrowserDeliveryProfile */
         BrowserDeliveryProfile: {
+            /** Description */
+            description?: string | null;
+            /** Fps */
+            fps?: number | null;
+            /** H */
+            h?: number | null;
             /**
              * Id
              * @enum {string}
@@ -1461,167 +2626,161 @@ export interface components {
              * @enum {string}
              */
             kind: "passthrough" | "transcode";
-            /** W */
-            w?: number | null;
-            /** H */
-            h?: number | null;
-            /** Fps */
-            fps?: number | null;
             /** Label */
             label?: string | null;
-            /** Description */
-            description?: string | null;
             /** Reason */
             reason?: string | null;
+            /** W */
+            w?: number | null;
         } & {
             [key: string]: unknown;
         };
         /** BrowserDeliverySettings */
         BrowserDeliverySettings: {
             /**
+             * Allow Native On Demand
+             * @default true
+             */
+            allow_native_on_demand: boolean;
+            /**
              * Default Profile
              * @default 720p10
              * @enum {string}
              */
             default_profile: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
-            /**
-             * Allow Native On Demand
-             * @default true
-             */
-            allow_native_on_demand: boolean;
+            /** Delivery Mode */
+            delivery_mode?: ("native" | "webrtc" | "hls" | "mjpeg" | "transcode") | null;
+            /** Delivery Profile Hash */
+            delivery_profile_hash?: string | null;
             /** Delivery Profile Id */
             delivery_profile_id?: string | null;
             /** Delivery Profile Name */
             delivery_profile_name?: string | null;
-            /** Delivery Profile Hash */
-            delivery_profile_hash?: string | null;
-            /** Delivery Mode */
-            delivery_mode?: ("native" | "webrtc" | "hls" | "mjpeg" | "transcode") | null;
-            /** Public Base Url */
-            public_base_url?: string | null;
             /** Edge Override Url */
             edge_override_url?: string | null;
+            native_status?: components["schemas"]["NativeAvailability"];
             /** Operator Message */
             operator_message?: string | null;
             /** Profiles */
             profiles?: {
                 [key: string]: unknown;
             }[];
+            /** Public Base Url */
+            public_base_url?: string | null;
             /** Unsupported Profiles */
             unsupported_profiles?: {
                 [key: string]: unknown;
             }[];
-            native_status?: components["schemas"]["NativeAvailability"];
         };
         /** CameraCreate */
         CameraCreate: {
-            /**
-             * Site Id
-             * Format: uuid
-             */
-            site_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            /** Name */
-            name: string;
-            /** Rtsp Url */
-            rtsp_url?: string | null;
-            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
-            processing_mode: components["schemas"]["ProcessingMode"];
-            /**
-             * Primary Model Id
-             * Format: uuid
-             */
-            primary_model_id: string;
-            /** Secondary Model Id */
-            secondary_model_id?: string | null;
-            tracker_type: components["schemas"]["TrackerType"];
             /** Active Classes */
             active_classes?: string[];
-            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /** Attribute Rules */
             attribute_rules?: {
                 [key: string]: unknown;
             }[];
-            /** Zones */
-            zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[];
-            vision_profile?: components["schemas"]["SceneVisionProfile"];
+            browser_delivery?: components["schemas"]["BrowserDeliverySettings"];
+            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
             /** Detection Regions */
             detection_regions?: components["schemas"]["DetectionRegion"][];
-            homography?: components["schemas"]["HomographyPayload"] | null;
-            privacy?: components["schemas"]["PrivacySettings"];
-            browser_delivery?: components["schemas"]["BrowserDeliverySettings"];
-            /**
-             * Frame Skip
-             * @default 1
-             */
-            frame_skip: number;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
             /**
              * Fps Cap
              * @default 25
              */
             fps_cap: number;
-            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
-        };
-        /** CameraResponse */
-        CameraResponse: {
             /**
-             * Id
-             * Format: uuid
+             * Frame Skip
+             * @default 1
              */
-            id: string;
-            /**
-             * Site Id
-             * Format: uuid
-             */
-            site_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
+            frame_skip: number;
+            homography?: components["schemas"]["HomographyPayload"] | null;
             /** Name */
             name: string;
-            /** Rtsp Url Masked */
-            rtsp_url_masked: string;
-            camera_source?: components["schemas"]["CameraSourceSettings"];
-            processing_mode: components["schemas"]["ProcessingMode"];
             /**
              * Primary Model Id
              * Format: uuid
              */
             primary_model_id: string;
+            privacy?: components["schemas"]["PrivacySettings"];
+            processing_mode: components["schemas"]["ProcessingMode"];
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
+            /** Rtsp Url */
+            rtsp_url?: string | null;
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /** Secondary Model Id */
             secondary_model_id?: string | null;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
             tracker_type: components["schemas"]["TrackerType"];
+            vision_profile?: components["schemas"]["SceneVisionProfile"];
+            /** Zones */
+            zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[];
+        };
+        /** CameraResponse */
+        CameraResponse: {
             /** Active Classes */
             active_classes: string[];
-            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /** Attribute Rules */
             attribute_rules: {
                 [key: string]: unknown;
             }[];
-            /** Zones */
-            zones: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"] | components["schemas"]["LegacyZone"])[];
-            vision_profile?: components["schemas"]["SceneVisionProfile"];
-            /** Detection Regions */
-            detection_regions?: components["schemas"]["DetectionRegion"][];
-            homography?: components["schemas"]["HomographyPayload"] | null;
-            privacy: components["schemas"]["PrivacySettings"];
             browser_delivery: components["schemas"]["BrowserDeliverySettings"];
-            source_capability?: components["schemas"]["SourceCapability"] | null;
-            /** Frame Skip */
-            frame_skip: number;
-            /** Fps Cap */
-            fps_cap: number;
-            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
+            camera_source?: components["schemas"]["CameraSourceSettings"];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Detection Regions */
+            detection_regions?: components["schemas"]["DetectionRegion"][];
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Fps Cap */
+            fps_cap: number;
+            /** Frame Skip */
+            frame_skip: number;
+            homography?: components["schemas"]["HomographyPayload"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Primary Model Id
+             * Format: uuid
+             */
+            primary_model_id: string;
+            privacy: components["schemas"]["PrivacySettings"];
+            processing_mode: components["schemas"]["ProcessingMode"];
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
+            /** Rtsp Url Masked */
+            rtsp_url_masked: string;
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
+            /** Secondary Model Id */
+            secondary_model_id?: string | null;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            source_capability?: components["schemas"]["SourceCapability"] | null;
+            tracker_type: components["schemas"]["TrackerType"];
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
+            vision_profile?: components["schemas"]["SceneVisionProfile"];
+            /** Zones */
+            zones: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"] | components["schemas"]["LegacyZone"])[];
         };
         /** CameraSetupPreviewResponse */
         CameraSetupPreviewResponse: {
@@ -1630,14 +2789,14 @@ export interface components {
              * Format: uuid
              */
             camera_id: string;
-            /** Preview Url */
-            preview_url: string;
-            frame_size: components["schemas"]["FrameSize"];
             /**
              * Captured At
              * Format: date-time
              */
             captured_at: string;
+            frame_size: components["schemas"]["FrameSize"];
+            /** Preview Url */
+            preview_url: string;
         };
         /**
          * CameraSourceKind
@@ -1646,69 +2805,81 @@ export interface components {
         CameraSourceKind: "rtsp" | "usb" | "jetson_csi";
         /** CameraSourceProbeRequest */
         CameraSourceProbeRequest: {
+            browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
             /** Camera Id */
             camera_id?: string | null;
-            /** Rtsp Url */
-            rtsp_url?: string | null;
             camera_source?: components["schemas"]["CameraSourceSettings"] | null;
-            /** @default central */
-            processing_mode: components["schemas"]["ProcessingMode"];
             /** Edge Node Id */
             edge_node_id?: string | null;
-            browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
             privacy?: components["schemas"]["PrivacySettings"] | null;
+            /** @default central */
+            processing_mode: components["schemas"]["ProcessingMode"];
+            /** Rtsp Url */
+            rtsp_url?: string | null;
         };
         /** CameraSourceProbeResponse */
         CameraSourceProbeResponse: {
-            source_capability?: components["schemas"]["SourceCapability"] | null;
             browser_delivery: components["schemas"]["BrowserDeliverySettings"];
+            source_capability?: components["schemas"]["SourceCapability"] | null;
         };
         /** CameraSourceSettings */
         CameraSourceSettings: {
             /** @default rtsp */
             kind: components["schemas"]["CameraSourceKind"];
-            /** Uri */
-            uri: string;
             /** Label */
             label?: string | null;
+            /** Uri */
+            uri: string;
         };
         /** CameraUpdate */
         CameraUpdate: {
-            /** Site Id */
-            site_id?: string | null;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            /** Name */
-            name?: string | null;
-            /** Rtsp Url */
-            rtsp_url?: string | null;
-            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
-            processing_mode?: components["schemas"]["ProcessingMode"] | null;
-            /** Primary Model Id */
-            primary_model_id?: string | null;
-            /** Secondary Model Id */
-            secondary_model_id?: string | null;
-            tracker_type?: components["schemas"]["TrackerType"] | null;
             /** Active Classes */
             active_classes?: string[] | null;
-            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"] | null;
             /** Attribute Rules */
             attribute_rules?: {
                 [key: string]: unknown;
             }[] | null;
-            /** Zones */
-            zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[] | null;
-            vision_profile?: components["schemas"]["SceneVisionProfile"] | null;
+            browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
+            camera_source?: components["schemas"]["CameraSourceSettings"] | null;
             /** Detection Regions */
             detection_regions?: components["schemas"]["DetectionRegion"][] | null;
-            homography?: components["schemas"]["HomographyPayload"] | null;
-            privacy?: components["schemas"]["PrivacySettings"] | null;
-            browser_delivery?: components["schemas"]["BrowserDeliverySettings"] | null;
-            /** Frame Skip */
-            frame_skip?: number | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
             /** Fps Cap */
             fps_cap?: number | null;
+            /** Frame Skip */
+            frame_skip?: number | null;
+            homography?: components["schemas"]["HomographyPayload"] | null;
+            /** Name */
+            name?: string | null;
+            /** Primary Model Id */
+            primary_model_id?: string | null;
+            privacy?: components["schemas"]["PrivacySettings"] | null;
+            processing_mode?: components["schemas"]["ProcessingMode"] | null;
             recording_policy?: components["schemas"]["EvidenceRecordingPolicy"] | null;
+            /** Rtsp Url */
+            rtsp_url?: string | null;
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"] | null;
+            /** Secondary Model Id */
+            secondary_model_id?: string | null;
+            /** Site Id */
+            site_id?: string | null;
+            tracker_type?: components["schemas"]["TrackerType"] | null;
+            vision_profile?: components["schemas"]["SceneVisionProfile"] | null;
+            /** Zones */
+            zones?: (components["schemas"]["LineZone"] | components["schemas"]["PolygonZone"])[] | null;
+        };
+        /** CarrierTerminalIngestRequest */
+        CarrierTerminalIngestRequest: {
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Vessel Id
+             * Format: uuid
+             */
+            vessel_id: string;
         };
         /** CountEventBoundarySummary */
         CountEventBoundarySummary: {
@@ -1724,38 +2895,38 @@ export interface components {
         CountEventType: "line_cross" | "zone_enter" | "zone_exit";
         /** CrossCameraThreadResponse */
         CrossCameraThreadResponse: {
+            /** Camera Ids */
+            camera_ids: string[];
+            /** Confidence */
+            confidence: number;
+            /** Created At */
+            created_at?: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Site Id */
-            site_id?: string | null;
-            /** Camera Ids */
-            camera_ids: string[];
-            /** Source Incident Ids */
-            source_incident_ids: string[];
+            /** Privacy Labels */
+            privacy_labels?: string[];
             /** Privacy Manifest Hashes */
             privacy_manifest_hashes?: string[];
-            /** Confidence */
-            confidence: number;
             /** Rationale */
             rationale?: string[];
             /** Signals */
             signals?: {
                 [key: string]: unknown;
             };
-            /** Privacy Labels */
-            privacy_labels?: string[];
+            /** Site Id */
+            site_id?: string | null;
+            /** Source Incident Ids */
+            source_incident_ids: string[];
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
             /** Thread Hash */
             thread_hash: string;
-            /** Created At */
-            created_at?: string | null;
         };
         /**
          * DeploymentCredentialStatus
@@ -1775,49 +2946,49 @@ export interface components {
         /** DeploymentNodeResponse */
         DeploymentNodeResponse: {
             /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Host Profile */
+            host_profile?: string | null;
+            /** Hostname */
+            hostname: string;
+            /**
              * Id
              * Format: uuid
              */
             id: string;
+            install_status: components["schemas"]["DeploymentInstallStatus"];
+            /** Last Service Reported At */
+            last_service_reported_at?: string | null;
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Os Name */
+            os_name?: string | null;
+            service_manager?: components["schemas"]["DeploymentServiceManager"] | null;
+            /** Service Status */
+            service_status?: string | null;
+            /** Supervisor Id */
+            supervisor_id: string;
             /**
              * Tenant Id
              * Format: uuid
              */
             tenant_id: string;
-            node_kind: components["schemas"]["DeploymentNodeKind"];
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            /** Supervisor Id */
-            supervisor_id: string;
-            /** Hostname */
-            hostname: string;
-            install_status: components["schemas"]["DeploymentInstallStatus"];
-            credential_status: components["schemas"]["DeploymentCredentialStatus"];
-            service_manager?: components["schemas"]["DeploymentServiceManager"] | null;
-            /** Service Status */
-            service_status?: string | null;
-            /** Version */
-            version?: string | null;
-            /** Os Name */
-            os_name?: string | null;
-            /** Host Profile */
-            host_profile?: string | null;
-            /** Last Service Reported At */
-            last_service_reported_at?: string | null;
-            /** Diagnostics */
-            diagnostics?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
+            /** Version */
+            version?: string | null;
         };
         /**
          * DeploymentServiceManager
@@ -1826,41 +2997,10 @@ export interface components {
         DeploymentServiceManager: "systemd" | "launchd" | "compose" | "direct_child" | "unknown";
         /** DeploymentSupportBundleResponse */
         DeploymentSupportBundleResponse: {
-            node: components["schemas"]["DeploymentNodeResponse"];
-            /** Service Reports */
-            service_reports?: components["schemas"]["SupervisorServiceReportResponse"][];
-            /** Recent Lifecycle Requests */
-            recent_lifecycle_requests?: components["schemas"]["OperationsLifecycleRequestResponse"][];
-            /** Recent Runtime Reports */
-            recent_runtime_reports?: components["schemas"]["SupervisorRuntimeReportResponse"][];
-            /** Hardware Reports */
-            hardware_reports?: components["schemas"]["EdgeNodeHardwareReportResponse"][];
-            /** Model Admission Reports */
-            model_admission_reports?: components["schemas"]["WorkerModelAdmissionResponse"][];
-            /** Lifecycle Summary */
-            lifecycle_summary?: {
-                [key: string]: unknown;
-            };
-            /** Runtime Summary */
-            runtime_summary?: {
-                [key: string]: unknown;
-            };
-            /** Hardware Summary */
-            hardware_summary?: {
-                [key: string]: unknown;
-            };
-            /** Model Admission Summary */
-            model_admission_summary?: {
-                [key: string]: unknown;
-            };
             /** Config References */
             config_references?: {
                 [key: string]: unknown;
             };
-            /** Selected Log Excerpts */
-            selected_log_excerpts?: {
-                [key: string]: unknown;
-            }[];
             /** Diagnostics */
             diagnostics?: {
                 [key: string]: unknown;
@@ -1870,9 +3010,43 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
+            /** Hardware Reports */
+            hardware_reports?: components["schemas"]["EdgeNodeHardwareReportResponse"][];
+            /** Hardware Summary */
+            hardware_summary?: {
+                [key: string]: unknown;
+            };
+            /** Lifecycle Summary */
+            lifecycle_summary?: {
+                [key: string]: unknown;
+            };
+            /** Model Admission Reports */
+            model_admission_reports?: components["schemas"]["WorkerModelAdmissionResponse"][];
+            /** Model Admission Summary */
+            model_admission_summary?: {
+                [key: string]: unknown;
+            };
+            node: components["schemas"]["DeploymentNodeResponse"];
+            /** Recent Lifecycle Requests */
+            recent_lifecycle_requests?: components["schemas"]["OperationsLifecycleRequestResponse"][];
+            /** Recent Runtime Reports */
+            recent_runtime_reports?: components["schemas"]["SupervisorRuntimeReportResponse"][];
+            /** Runtime Summary */
+            runtime_summary?: {
+                [key: string]: unknown;
+            };
+            /** Selected Log Excerpts */
+            selected_log_excerpts?: {
+                [key: string]: unknown;
+            }[];
+            /** Service Reports */
+            service_reports?: components["schemas"]["SupervisorServiceReportResponse"][];
         };
         /** DetectionRegion */
         DetectionRegion: {
+            /** Class Names */
+            class_names?: string[];
+            frame_size?: components["schemas"]["FrameSize"] | null;
             /** Id */
             id: string;
             /**
@@ -1880,13 +3054,10 @@ export interface components {
              * @enum {string}
              */
             mode: "include" | "exclude";
-            /** Polygon */
-            polygon: number[][];
-            /** Class Names */
-            class_names?: string[];
-            frame_size?: components["schemas"]["FrameSize"] | null;
             /** Points Normalized */
             points_normalized?: number[][] | null;
+            /** Polygon */
+            polygon: number[][];
         };
         /**
          * DetectorCapability
@@ -1895,6 +3066,8 @@ export interface components {
         DetectorCapability: "fixed_vocab" | "open_vocab";
         /** EdgeHeartbeatRequest */
         EdgeHeartbeatRequest: {
+            /** Cameras */
+            cameras: number;
             /**
              * Node Id
              * Format: uuid
@@ -1902,137 +3075,160 @@ export interface components {
             node_id: string;
             /** Version */
             version: string;
-            /** Cameras */
-            cameras: number;
         };
         /** EdgeHeartbeatResponse */
         EdgeHeartbeatResponse: {
-            /** Status */
-            status: string;
             /**
              * Received At
              * Format: date-time
              */
             received_at: string;
+            /** Status */
+            status: string;
         };
         /** EdgeNodeHardwareReportCreate */
         EdgeNodeHardwareReportCreate: {
+            /** Accelerators */
+            accelerators?: string[];
+            /** Cpu Cores */
+            cpu_cores?: number | null;
+            /** Cpu Model */
+            cpu_model?: string | null;
             /** Edge Node Id */
             edge_node_id?: string | null;
+            /** Host Profile */
+            host_profile: string;
+            /** Machine Arch */
+            machine_arch: string;
+            /** Memory Total Mb */
+            memory_total_mb?: number | null;
+            /** Observed Performance */
+            observed_performance?: components["schemas"]["HardwarePerformanceSample"][];
+            /** Os Name */
+            os_name: string;
+            /** Provider Capabilities */
+            provider_capabilities?: {
+                [key: string]: boolean;
+            };
             /**
              * Reported At
              * Format: date-time
              */
             reported_at: string;
-            /** Host Profile */
-            host_profile: string;
-            /** Os Name */
-            os_name: string;
-            /** Machine Arch */
-            machine_arch: string;
-            /** Cpu Model */
-            cpu_model?: string | null;
-            /** Cpu Cores */
-            cpu_cores?: number | null;
-            /** Memory Total Mb */
-            memory_total_mb?: number | null;
-            /** Accelerators */
-            accelerators?: string[];
-            /** Provider Capabilities */
-            provider_capabilities?: {
-                [key: string]: boolean;
-            };
-            /** Observed Performance */
-            observed_performance?: components["schemas"]["HardwarePerformanceSample"][];
             /** Thermal State */
             thermal_state?: string | null;
         };
         /** EdgeNodeHardwareReportResponse */
         EdgeNodeHardwareReportResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            /** Supervisor Id */
-            supervisor_id: string;
-            /**
-             * Reported At
-             * Format: date-time
-             */
-            reported_at: string;
-            /** Host Profile */
-            host_profile: string;
-            /** Os Name */
-            os_name: string;
-            /** Machine Arch */
-            machine_arch: string;
-            /** Cpu Model */
-            cpu_model?: string | null;
-            /** Cpu Cores */
-            cpu_cores?: number | null;
-            /** Memory Total Mb */
-            memory_total_mb?: number | null;
             /** Accelerators */
             accelerators?: string[];
-            /** Provider Capabilities */
-            provider_capabilities?: {
-                [key: string]: boolean;
-            };
-            /** Observed Performance */
-            observed_performance?: components["schemas"]["HardwarePerformanceSample"][];
-            /** Thermal State */
-            thermal_state?: string | null;
-            /** Report Hash */
-            report_hash: string;
+            /** Cpu Cores */
+            cpu_cores?: number | null;
+            /** Cpu Model */
+            cpu_model?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Host Profile */
+            host_profile: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Machine Arch */
+            machine_arch: string;
+            /** Memory Total Mb */
+            memory_total_mb?: number | null;
+            /** Observed Performance */
+            observed_performance?: components["schemas"]["HardwarePerformanceSample"][];
+            /** Os Name */
+            os_name: string;
+            /** Provider Capabilities */
+            provider_capabilities?: {
+                [key: string]: boolean;
+            };
+            /** Report Hash */
+            report_hash: string;
+            /**
+             * Reported At
+             * Format: date-time
+             */
+            reported_at: string;
+            /** Supervisor Id */
+            supervisor_id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Thermal State */
+            thermal_state?: string | null;
         };
         /** EdgeRegisterRequest */
         EdgeRegisterRequest: {
+            /** Hostname */
+            hostname: string;
             /**
              * Site Id
              * Format: uuid
              */
             site_id: string;
-            /** Hostname */
-            hostname: string;
             /** Version */
             version: string;
         };
         /** EdgeRegisterResponse */
         EdgeRegisterResponse: {
+            /** Api Key */
+            api_key: string;
             /**
              * Edge Node Id
              * Format: uuid
              */
             edge_node_id: string;
-            /** Api Key */
-            api_key: string;
-            /** Nats Nkey Seed */
-            nats_nkey_seed: string;
-            /** Subjects */
-            subjects: string[];
+            /** Mediamtx Password */
+            mediamtx_password?: string | null;
             /** Mediamtx Url */
             mediamtx_url: string;
             /** Mediamtx Username */
             mediamtx_username?: string | null;
-            /** Mediamtx Password */
-            mediamtx_password?: string | null;
+            /** Nats Nkey Seed */
+            nats_nkey_seed: string;
             /** Overlay Network Hints */
             overlay_network_hints?: {
                 [key: string]: unknown;
             };
+            /** Subjects */
+            subjects: string[];
+        };
+        /** EntitlementCreate */
+        EntitlementCreate: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective To */
+            effective_to?: string | null;
+            /** Feature Key */
+            feature_key: string;
+            /** Pack Id */
+            pack_id?: string | null;
+            /** Usage Limit */
+            usage_limit?: number | string | null;
         };
         /**
          * EvidenceArtifactKind
@@ -2041,6 +3237,23 @@ export interface components {
         EvidenceArtifactKind: "event_clip" | "snapshot" | "manifest_export" | "case_export";
         /** EvidenceArtifactResponse */
         EvidenceArtifactResponse: {
+            /** Bucket */
+            bucket?: string | null;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Clip Ended At */
+            clip_ended_at?: string | null;
+            /** Clip Started At */
+            clip_started_at?: string | null;
+            /** Content Type */
+            content_type: string;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Fps */
+            fps?: number | null;
             /**
              * Id
              * Format: uuid
@@ -2051,51 +3264,52 @@ export interface components {
              * Format: uuid
              */
             incident_id: string;
-            /**
-             * Camera Id
-             * Format: uuid
-             */
-            camera_id: string;
             kind: components["schemas"]["EvidenceArtifactKind"];
-            status: components["schemas"]["EvidenceArtifactStatus"];
-            storage_provider: components["schemas"]["EvidenceStorageProvider"];
-            storage_scope: components["schemas"]["EvidenceStorageScope"];
-            /** Bucket */
-            bucket?: string | null;
             /** Object Key */
             object_key: string;
-            /** Content Type */
-            content_type: string;
-            /** Sha256 */
-            sha256: string;
-            /** Size Bytes */
-            size_bytes: number;
-            /** Clip Started At */
-            clip_started_at?: string | null;
-            /** Triggered At */
-            triggered_at?: string | null;
-            /** Clip Ended At */
-            clip_ended_at?: string | null;
-            /** Duration Seconds */
-            duration_seconds?: number | null;
-            /** Fps */
-            fps?: number | null;
-            /** Scene Contract Hash */
-            scene_contract_hash?: string | null;
             /** Privacy Manifest Hash */
             privacy_manifest_hash?: string | null;
             /** Review Url */
             review_url?: string | null;
-            /** Sync Status */
-            sync_status?: string | null;
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            status: components["schemas"]["EvidenceArtifactStatus"];
+            storage_provider: components["schemas"]["EvidenceStorageProvider"];
+            storage_scope: components["schemas"]["EvidenceStorageScope"];
             /** Sync Error */
             sync_error?: string | null;
+            /** Sync Status */
+            sync_status?: string | null;
+            /** Triggered At */
+            triggered_at?: string | null;
         };
         /**
          * EvidenceArtifactStatus
          * @enum {string}
          */
         EvidenceArtifactStatus: "available" | "local_only" | "remote_available" | "upload_pending" | "quota_exceeded" | "capture_failed" | "expired";
+        /** EvidenceExportCreate */
+        EvidenceExportCreate: {
+            /**
+             * Incident Id
+             * Format: uuid
+             */
+            incident_id: string;
+            /**
+             * Include Link Passport
+             * @default true
+             */
+            include_link_passport: boolean;
+            /**
+             * Include Maritime Context
+             * @default true
+             */
+            include_maritime_context: boolean;
+        };
         /**
          * EvidenceLedgerAction
          * @enum {string}
@@ -2103,6 +3317,18 @@ export interface components {
         EvidenceLedgerAction: "incident.triggered" | "scene_contract.attached" | "privacy_manifest.attached" | "evidence.clip.capture_started" | "evidence.clip.available" | "evidence.clip.quota_exceeded" | "evidence.clip.capture_failed" | "evidence.snapshot.available" | "evidence.snapshot.quota_exceeded" | "evidence.snapshot.capture_failed" | "incident_rule.attached" | "evidence.upload.started" | "evidence.upload.available" | "evidence.upload.failed" | "evidence.expired" | "incident.reviewed" | "incident.reopened";
         /** EvidenceLedgerEntryResponse */
         EvidenceLedgerEntryResponse: {
+            action: components["schemas"]["EvidenceLedgerAction"];
+            /** Actor Subject */
+            actor_subject?: string | null;
+            /** Actor Type */
+            actor_type: string;
+            /**
+             * Camera Id
+             * Format: uuid
+             */
+            camera_id: string;
+            /** Entry Hash */
+            entry_hash: string;
             /**
              * Id
              * Format: uuid
@@ -2113,18 +3339,6 @@ export interface components {
              * Format: uuid
              */
             incident_id: string;
-            /**
-             * Camera Id
-             * Format: uuid
-             */
-            camera_id: string;
-            /** Sequence */
-            sequence: number;
-            action: components["schemas"]["EvidenceLedgerAction"];
-            /** Actor Type */
-            actor_type: string;
-            /** Actor Subject */
-            actor_subject?: string | null;
             /**
              * Occurred At
              * Format: date-time
@@ -2136,8 +3350,8 @@ export interface components {
             };
             /** Previous Entry Hash */
             previous_entry_hash?: string | null;
-            /** Entry Hash */
-            entry_hash: string;
+            /** Sequence */
+            sequence: number;
         };
         /** EvidenceLedgerSummary */
         EvidenceLedgerSummary: {
@@ -2158,22 +3372,6 @@ export interface components {
              */
             enabled: boolean;
             /**
-             * Mode
-             * @default event_clip
-             * @constant
-             */
-            mode: "event_clip";
-            /**
-             * Pre Seconds
-             * @default 4
-             */
-            pre_seconds: number;
-            /**
-             * Post Seconds
-             * @default 8
-             */
-            post_seconds: number;
-            /**
              * Fps
              * @default 10
              */
@@ -2184,13 +3382,21 @@ export interface components {
              */
             max_duration_seconds: number;
             /**
-             * Storage Profile
-             * @default central
-             * @enum {string}
+             * Mode
+             * @default event_clip
+             * @constant
              */
-            storage_profile: "edge_local" | "central" | "cloud" | "local_first";
-            /** Storage Profile Id */
-            storage_profile_id?: string | null;
+            mode: "event_clip";
+            /**
+             * Post Seconds
+             * @default 8
+             */
+            post_seconds: number;
+            /**
+             * Pre Seconds
+             * @default 4
+             */
+            pre_seconds: number;
             /**
              * Snapshot Enabled
              * @default false
@@ -2206,6 +3412,14 @@ export interface components {
              * @default 85
              */
             snapshot_quality: number;
+            /**
+             * Storage Profile
+             * @default central
+             * @enum {string}
+             */
+            storage_profile: "edge_local" | "central" | "cloud" | "local_first";
+            /** Storage Profile Id */
+            storage_profile_id?: string | null;
         };
         /**
          * EvidenceStorageProvider
@@ -2219,41 +3433,41 @@ export interface components {
         EvidenceStorageScope: "edge" | "central" | "cloud";
         /** FleetBootstrapRequest */
         FleetBootstrapRequest: {
+            /** Hostname */
+            hostname: string;
             /**
              * Site Id
              * Format: uuid
              */
             site_id: string;
-            /** Hostname */
-            hostname: string;
             /** Version */
             version: string;
         };
         /** FleetBootstrapResponse */
         FleetBootstrapResponse: {
+            /** Api Key */
+            api_key: string;
+            /** Dev Compose Command */
+            dev_compose_command: string;
             /**
              * Edge Node Id
              * Format: uuid
              */
             edge_node_id: string;
-            /** Api Key */
-            api_key: string;
-            /** Nats Nkey Seed */
-            nats_nkey_seed: string;
-            /** Subjects */
-            subjects: string[];
+            /** Mediamtx Password */
+            mediamtx_password?: string | null;
             /** Mediamtx Url */
             mediamtx_url: string;
             /** Mediamtx Username */
             mediamtx_username?: string | null;
-            /** Mediamtx Password */
-            mediamtx_password?: string | null;
+            /** Nats Nkey Seed */
+            nats_nkey_seed: string;
             /** Overlay Network Hints */
             overlay_network_hints?: {
                 [key: string]: unknown;
             };
-            /** Dev Compose Command */
-            dev_compose_command: string;
+            /** Subjects */
+            subjects: string[];
             /** Supervisor Environment */
             supervisor_environment?: {
                 [key: string]: string;
@@ -2261,6 +3475,9 @@ export interface components {
         };
         /** FleetCameraWorkerSummary */
         FleetCameraWorkerSummary: {
+            /** Allowed Lifecycle Actions */
+            allowed_lifecycle_actions?: components["schemas"]["OperationsLifecycleAction"][];
+            assignment?: components["schemas"]["WorkerAssignmentResponse"] | null;
             /**
              * Camera Id
              * Format: uuid
@@ -2268,50 +3485,51 @@ export interface components {
             camera_id: string;
             /** Camera Name */
             camera_name: string;
-            /**
-             * Site Id
-             * Format: uuid
-             */
-            site_id: string;
-            /** Node Id */
-            node_id?: string | null;
-            /** Node Hostname */
-            node_hostname?: string | null;
-            processing_mode: components["schemas"]["ProcessingMode"];
+            configuration?: components["schemas"]["AppliedOperatorConfigurationSummary"];
             desired_state: components["schemas"]["WorkerDesiredState"];
-            runtime_status: components["schemas"]["WorkerRuntimeStatus"];
+            /** Detail */
+            detail?: string | null;
+            /** Dev Run Command */
+            dev_run_command?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            latest_hardware_report?: components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
+            latest_lifecycle_request?: components["schemas"]["OperationsLifecycleRequestResponse"] | null;
+            latest_model_admission?: components["schemas"]["WorkerModelAdmissionResponse"] | null;
             /**
              * Lifecycle Owner
              * @enum {string}
              */
             lifecycle_owner: "manual_dev" | "central_supervisor" | "edge_supervisor" | "none";
-            /** Dev Run Command */
-            dev_run_command?: string | null;
-            /** Detail */
-            detail?: string | null;
-            configuration?: components["schemas"]["AppliedOperatorConfigurationSummary"];
-            runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
-            rule_runtime?: components["schemas"]["FleetRuleRuntimeSummary"];
-            assignment?: components["schemas"]["WorkerAssignmentResponse"] | null;
-            runtime_report?: components["schemas"]["SupervisorRuntimeReportResponse"] | null;
-            latest_lifecycle_request?: components["schemas"]["OperationsLifecycleRequestResponse"] | null;
-            latest_hardware_report?: components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
-            latest_model_admission?: components["schemas"]["WorkerModelAdmissionResponse"] | null;
-            /** @default disabled */
-            supervisor_mode: components["schemas"]["SupervisorMode"];
+            /** Node Hostname */
+            node_hostname?: string | null;
+            /** Node Id */
+            node_id?: string | null;
+            processing_mode: components["schemas"]["ProcessingMode"];
             /**
              * Restart Policy
              * @default never
              * @enum {string}
              */
             restart_policy: "never" | "on_failure" | "always";
-            /** Allowed Lifecycle Actions */
-            allowed_lifecycle_actions?: components["schemas"]["OperationsLifecycleAction"][];
-            /** Last Error */
-            last_error?: string | null;
+            rule_runtime?: components["schemas"]["FleetRuleRuntimeSummary"];
+            runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
+            runtime_report?: components["schemas"]["SupervisorRuntimeReportResponse"] | null;
+            runtime_status: components["schemas"]["WorkerRuntimeStatus"];
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** @default disabled */
+            supervisor_mode: components["schemas"]["SupervisorMode"];
         };
         /** FleetDeliveryDiagnostic */
         FleetDeliveryDiagnostic: {
+            /** Assigned Node Id */
+            assigned_node_id?: string | null;
+            /** Available Profiles */
+            available_profiles?: components["schemas"]["BrowserDeliveryProfile"][];
             /**
              * Camera Id
              * Format: uuid
@@ -2319,23 +3537,19 @@ export interface components {
             camera_id: string;
             /** Camera Name */
             camera_name: string;
-            processing_mode: components["schemas"]["ProcessingMode"];
-            /** Assigned Node Id */
-            assigned_node_id?: string | null;
-            source_capability?: components["schemas"]["SourceCapability"] | null;
             /**
              * Default Profile
              * @enum {string}
              */
             default_profile: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
-            /** Available Profiles */
-            available_profiles?: components["schemas"]["BrowserDeliveryProfile"][];
             native_status?: components["schemas"]["NativeAvailability"];
+            processing_mode: components["schemas"]["ProcessingMode"];
             /**
              * Selected Stream Mode
              * @enum {string}
              */
             selected_stream_mode: "passthrough" | "transcode";
+            source_capability?: components["schemas"]["SourceCapability"] | null;
         };
         /**
          * FleetLifecycleMode
@@ -2349,6 +3563,10 @@ export interface components {
         FleetNodeStatus: "healthy" | "stale" | "offline" | "unknown";
         /** FleetNodeSummary */
         FleetNodeSummary: {
+            /** Assigned Camera Ids */
+            assigned_camera_ids?: string[];
+            /** Hostname */
+            hostname: string;
             /** Id */
             id?: string | null;
             /**
@@ -2356,35 +3574,31 @@ export interface components {
              * @enum {string}
              */
             kind: "central" | "edge";
-            /** Hostname */
-            hostname: string;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /** Reported Camera Count */
+            reported_camera_count?: number | null;
             /** Site Id */
             site_id?: string | null;
             status: components["schemas"]["FleetNodeStatus"];
             /** Version */
             version?: string | null;
-            /** Last Seen At */
-            last_seen_at?: string | null;
-            /** Assigned Camera Ids */
-            assigned_camera_ids?: string[];
-            /** Reported Camera Count */
-            reported_camera_count?: number | null;
         };
         /** FleetOverviewResponse */
         FleetOverviewResponse: {
-            mode: components["schemas"]["FleetLifecycleMode"];
+            /** Camera Workers */
+            camera_workers: components["schemas"]["FleetCameraWorkerSummary"][];
+            /** Delivery Diagnostics */
+            delivery_diagnostics: components["schemas"]["FleetDeliveryDiagnostic"][];
             /**
              * Generated At
              * Format: date-time
              */
             generated_at: string;
-            summary: components["schemas"]["FleetSummary"];
+            mode: components["schemas"]["FleetLifecycleMode"];
             /** Nodes */
             nodes: components["schemas"]["FleetNodeSummary"][];
-            /** Camera Workers */
-            camera_workers: components["schemas"]["FleetCameraWorkerSummary"][];
-            /** Delivery Diagnostics */
-            delivery_diagnostics: components["schemas"]["FleetDeliveryDiagnostic"][];
+            summary: components["schemas"]["FleetSummary"];
         };
         /** FleetRuleRuntimeSummary */
         FleetRuleRuntimeSummary: {
@@ -2408,21 +3622,21 @@ export interface components {
         FleetSummary: {
             /** Desired Workers */
             desired_workers: number;
+            /** Native Unavailable Cameras */
+            native_unavailable_cameras: number;
+            /** Offline Nodes */
+            offline_nodes: number;
             /** Running Workers */
             running_workers: number;
             /** Stale Nodes */
             stale_nodes: number;
-            /** Offline Nodes */
-            offline_nodes: number;
-            /** Native Unavailable Cameras */
-            native_unavailable_cameras: number;
         };
         /** FrameSize */
         FrameSize: {
-            /** Width */
-            width: number;
             /** Height */
             height: number;
+            /** Width */
+            width: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2431,20 +3645,20 @@ export interface components {
         };
         /** HardwarePerformanceSample */
         HardwarePerformanceSample: {
+            /** Captured At */
+            captured_at?: string | null;
+            /** Input Height */
+            input_height: number;
+            /** Input Width */
+            input_width: number;
             /** Model Id */
             model_id?: string | null;
             /** Model Name */
             model_name?: string | null;
-            /** Runtime Backend */
-            runtime_backend: string;
-            /** Input Width */
-            input_width: number;
-            /** Input Height */
-            input_height: number;
-            /** Target Fps */
-            target_fps: number;
             /** Observed Fps */
             observed_fps?: number | null;
+            /** Runtime Backend */
+            runtime_backend: string;
             /** Stage P95 Ms */
             stage_p95_ms?: {
                 [key: string]: number;
@@ -2453,8 +3667,32 @@ export interface components {
             stage_p99_ms?: {
                 [key: string]: number;
             };
-            /** Captured At */
-            captured_at?: string | null;
+            /** Target Fps */
+            target_fps: number;
+        };
+        /** HierarchyNodeUpdate */
+        HierarchyNodeUpdate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label?: string | null;
+            /** Pack Id */
+            pack_id?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Site Id */
+            site_id?: string | null;
+        };
+        /** HierarchyReplace */
+        HierarchyReplace: {
+            /** Nodes */
+            nodes?: components["schemas"]["HierarchyNodeUpdate"][];
         };
         /** HistoryBucketCoverage */
         HistoryBucketCoverage: {
@@ -2463,9 +3701,9 @@ export interface components {
              * Format: date-time
              */
             bucket: string;
-            status: components["schemas"]["HistoryCoverageStatus"];
             /** Reason */
             reason?: string | null;
+            status: components["schemas"]["HistoryCoverageStatus"];
         };
         /** HistoryClassEntry */
         HistoryClassEntry: {
@@ -2478,21 +3716,21 @@ export interface components {
         };
         /** HistoryClassesResponse */
         HistoryClassesResponse: {
+            /** Boundaries */
+            boundaries?: components["schemas"]["CountEventBoundarySummary"][];
+            /** Classes */
+            classes: components["schemas"]["HistoryClassEntry"][];
             /**
              * From
              * Format: date-time
              */
             from: string;
+            metric?: components["schemas"]["HistoryMetric"] | null;
             /**
              * To
              * Format: date-time
              */
             to: string;
-            metric?: components["schemas"]["HistoryMetric"] | null;
-            /** Boundaries */
-            boundaries?: components["schemas"]["CountEventBoundarySummary"][];
-            /** Classes */
-            classes: components["schemas"]["HistoryClassEntry"][];
         };
         /**
          * HistoryCoverageStatus
@@ -2523,29 +3761,6 @@ export interface components {
         };
         /** HistorySeriesResponse */
         HistorySeriesResponse: {
-            /** Granularity */
-            granularity: string;
-            metric?: components["schemas"]["HistoryMetric"] | null;
-            /** Class Names */
-            class_names: string[];
-            /** Rows */
-            rows: components["schemas"]["HistorySeriesRow"][];
-            /**
-             * Granularity Adjusted
-             * @default false
-             */
-            granularity_adjusted: boolean;
-            /**
-             * Speed Classes Capped
-             * @default false
-             */
-            speed_classes_capped: boolean;
-            /** Speed Classes Used */
-            speed_classes_used?: string[] | null;
-            /** Effective From */
-            effective_from?: string | null;
-            /** Effective To */
-            effective_to?: string | null;
             /**
              * Bucket Count
              * @default 0
@@ -2553,10 +3768,33 @@ export interface components {
             bucket_count: number;
             /** Bucket Span */
             bucket_span?: string | null;
-            /** @default populated */
-            coverage_status: components["schemas"]["HistoryCoverageStatus"];
+            /** Class Names */
+            class_names: string[];
             /** Coverage By Bucket */
             coverage_by_bucket?: components["schemas"]["HistoryBucketCoverage"][];
+            /** @default populated */
+            coverage_status: components["schemas"]["HistoryCoverageStatus"];
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective To */
+            effective_to?: string | null;
+            /** Granularity */
+            granularity: string;
+            /**
+             * Granularity Adjusted
+             * @default false
+             */
+            granularity_adjusted: boolean;
+            metric?: components["schemas"]["HistoryMetric"] | null;
+            /** Rows */
+            rows: components["schemas"]["HistorySeriesRow"][];
+            /**
+             * Speed Classes Capped
+             * @default false
+             */
+            speed_classes_capped: boolean;
+            /** Speed Classes Used */
+            speed_classes_used?: string[] | null;
         };
         /** HistorySeriesRow */
         HistorySeriesRow: {
@@ -2565,12 +3803,10 @@ export interface components {
              * Format: date-time
              */
             bucket: string;
-            /** Values */
-            values: {
+            /** Over Threshold Count */
+            over_threshold_count?: {
                 [key: string]: number;
-            };
-            /** Total Count */
-            total_count: number;
+            } | null;
             /** Speed P50 */
             speed_p50?: {
                 [key: string]: number;
@@ -2583,27 +3819,24 @@ export interface components {
             speed_sample_count?: {
                 [key: string]: number;
             } | null;
-            /** Over Threshold Count */
-            over_threshold_count?: {
+            /** Total Count */
+            total_count: number;
+            /** Values */
+            values: {
                 [key: string]: number;
-            } | null;
+            };
         };
         /** HomographyPayload */
         HomographyPayload: {
-            /** Src */
-            src: number[][];
             /** Dst */
             dst: number[][];
             /** Ref Distance M */
             ref_distance_m: number;
+            /** Src */
+            src: number[][];
         };
         /** IncidentResponse */
         IncidentResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
             /**
              * Camera Id
              * Format: uuid
@@ -2611,6 +3844,48 @@ export interface components {
             camera_id: string;
             /** Camera Name */
             camera_name?: string | null;
+            /** Clip Url */
+            clip_url?: string | null;
+            /** Evidence Artifacts */
+            evidence_artifacts?: components["schemas"]["EvidenceArtifactResponse"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            ledger_summary?: components["schemas"]["EvidenceLedgerSummary"] | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Privacy Manifest Hash */
+            privacy_manifest_hash?: string | null;
+            /** Privacy Manifest Id */
+            privacy_manifest_id?: string | null;
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"] | null;
+            /** @default pending */
+            review_status: components["schemas"]["IncidentReviewStatus"];
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By Subject */
+            reviewed_by_subject?: string | null;
+            runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
+            /** Runtime Passport Hash */
+            runtime_passport_hash?: string | null;
+            /** Runtime Passport Id */
+            runtime_passport_id?: string | null;
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+            /** Scene Contract Id */
+            scene_contract_id?: string | null;
+            /** Snapshot Url */
+            snapshot_url?: string | null;
+            /**
+             * Storage Bytes
+             * @default 0
+             */
+            storage_bytes: number;
+            trigger_rule?: components["schemas"]["TriggerRuleSummary"] | null;
             /**
              * Ts
              * Format: date-time
@@ -2618,43 +3893,6 @@ export interface components {
             ts: string;
             /** Type */
             type: string;
-            /** Payload */
-            payload: {
-                [key: string]: unknown;
-            };
-            /** Snapshot Url */
-            snapshot_url?: string | null;
-            /** Clip Url */
-            clip_url?: string | null;
-            /**
-             * Storage Bytes
-             * @default 0
-             */
-            storage_bytes: number;
-            /** @default pending */
-            review_status: components["schemas"]["IncidentReviewStatus"];
-            /** Reviewed At */
-            reviewed_at?: string | null;
-            /** Reviewed By Subject */
-            reviewed_by_subject?: string | null;
-            /** Scene Contract Hash */
-            scene_contract_hash?: string | null;
-            /** Scene Contract Id */
-            scene_contract_id?: string | null;
-            /** Privacy Manifest Hash */
-            privacy_manifest_hash?: string | null;
-            /** Privacy Manifest Id */
-            privacy_manifest_id?: string | null;
-            /** Runtime Passport Hash */
-            runtime_passport_hash?: string | null;
-            /** Runtime Passport Id */
-            runtime_passport_id?: string | null;
-            runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
-            trigger_rule?: components["schemas"]["TriggerRuleSummary"] | null;
-            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"] | null;
-            /** Evidence Artifacts */
-            evidence_artifacts?: components["schemas"]["EvidenceArtifactResponse"][];
-            ledger_summary?: components["schemas"]["EvidenceLedgerSummary"] | null;
         };
         /**
          * IncidentReviewStatus
@@ -2667,20 +3905,6 @@ export interface components {
         };
         /** IncidentRuleCreate */
         IncidentRuleCreate: {
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /** Name */
-            name: string;
-            /** Incident Type */
-            incident_type?: string | null;
-            /** @default warning */
-            severity: components["schemas"]["IncidentRuleSeverity"];
-            /** Description */
-            description?: string | null;
-            predicate?: components["schemas"]["IncidentRulePredicate"];
             /** @default record_clip */
             action: components["schemas"]["RuleAction"];
             /**
@@ -2688,67 +3912,81 @@ export interface components {
              * @default 0
              */
             cooldown_seconds: number;
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Incident Type */
+            incident_type?: string | null;
+            /** Name */
+            name: string;
+            predicate?: components["schemas"]["IncidentRulePredicate"];
+            /** @default warning */
+            severity: components["schemas"]["IncidentRuleSeverity"];
             /** Webhook Url */
             webhook_url?: string | null;
         };
         /** IncidentRulePredicate */
         IncidentRulePredicate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
             /** Class Names */
             class_names?: string[];
-            /** Zone Ids */
-            zone_ids?: string[];
             /**
              * Min Confidence
              * @default 0.5
              */
             min_confidence: number;
-            /** Attributes */
-            attributes?: {
-                [key: string]: unknown;
-            };
+            /** Zone Ids */
+            zone_ids?: string[];
         };
         /** IncidentRuleResponse */
         IncidentRuleResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
+            action: components["schemas"]["RuleAction"];
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            /** Enabled */
-            enabled: boolean;
-            /** Name */
-            name: string;
-            /** Incident Type */
-            incident_type: string;
-            severity: components["schemas"]["IncidentRuleSeverity"];
-            /** Description */
-            description?: string | null;
-            predicate: components["schemas"]["IncidentRulePredicate"];
-            action: components["schemas"]["RuleAction"];
             /** Cooldown Seconds */
             cooldown_seconds: number;
-            /**
-             * Webhook Url Present
-             * @default false
-             */
-            webhook_url_present: boolean;
-            /** Rule Hash */
-            rule_hash: string;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incident Type */
+            incident_type: string;
+            /** Name */
+            name: string;
+            predicate: components["schemas"]["IncidentRulePredicate"];
+            /** Rule Hash */
+            rule_hash: string;
+            severity: components["schemas"]["IncidentRuleSeverity"];
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Webhook Url Present
+             * @default false
+             */
+            webhook_url_present: boolean;
         };
         /**
          * IncidentRuleSeverity
@@ -2757,19 +3995,19 @@ export interface components {
         IncidentRuleSeverity: "info" | "warning" | "critical";
         /** IncidentRuleUpdate */
         IncidentRuleUpdate: {
-            /** Enabled */
-            enabled?: boolean | null;
-            /** Name */
-            name?: string | null;
-            /** Incident Type */
-            incident_type?: string | null;
-            severity?: components["schemas"]["IncidentRuleSeverity"] | null;
-            /** Description */
-            description?: string | null;
-            predicate?: components["schemas"]["IncidentRulePredicate"] | null;
             action?: components["schemas"]["RuleAction"] | null;
             /** Cooldown Seconds */
             cooldown_seconds?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Incident Type */
+            incident_type?: string | null;
+            /** Name */
+            name?: string | null;
+            predicate?: components["schemas"]["IncidentRulePredicate"] | null;
+            severity?: components["schemas"]["IncidentRuleSeverity"] | null;
             /** Webhook Url */
             webhook_url?: string | null;
         };
@@ -2783,24 +4021,132 @@ export interface components {
         };
         /** IncidentRuleValidationResponse */
         IncidentRuleValidationResponse: {
-            /** Valid */
-            valid: boolean;
-            /** Matches */
-            matches: boolean;
             /** Errors */
             errors?: string[];
+            /** Matches */
+            matches: boolean;
             /** Normalized Incident Type */
             normalized_incident_type?: string | null;
             /** Rule Hash */
             rule_hash?: string | null;
+            /** Valid */
+            valid: boolean;
+        };
+        /** InvoiceLineItemResponse */
+        InvoiceLineItemResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoice Run Id
+             * Format: uuid
+             */
+            invoice_run_id: string;
+            /** Meter Key */
+            meter_key: string;
+            /** Pack Id */
+            pack_id?: string | null;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /** Quantity */
+            quantity: string;
+            /** Source Record Ids */
+            source_record_ids: string[];
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Total */
+            total: string;
+            /** Unit Label */
+            unit_label: string;
+            /** Unit Price */
+            unit_price: string;
+        };
+        /** InvoiceRunCreate */
+        InvoiceRunCreate: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
+        /** InvoiceRunListResponse */
+        InvoiceRunListResponse: {
+            /** Items */
+            items?: components["schemas"]["InvoiceRunResponse"][];
+        };
+        /** InvoiceRunResponse */
+        InvoiceRunResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Created At */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Line Items */
+            line_items?: components["schemas"]["InvoiceLineItemResponse"][];
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /** Status */
+            status: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
         };
         /** LegacyZone */
         LegacyZone: {
-            /** Id */
-            id?: string | null;
             /** Class Names */
             class_names?: string[] | null;
             frame_size?: components["schemas"]["FrameSize"] | null;
+            /** Id */
+            id?: string | null;
             /** Points Normalized */
             points_normalized?: number[][] | null;
             /** Type */
@@ -2810,28 +4156,30 @@ export interface components {
         };
         /** LifecycleRequestClaim */
         LifecycleRequestClaim: {
-            /** Supervisor Id */
-            supervisor_id: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
+            /** Supervisor Id */
+            supervisor_id: string;
         };
         /** LifecycleRequestCompletion */
         LifecycleRequestCompletion: {
-            /** Supervisor Id */
-            supervisor_id: string;
-            status: components["schemas"]["OperationsLifecycleStatus"];
             /** Admission Report Id */
             admission_report_id?: string | null;
             /** Error */
             error?: string | null;
+            status: components["schemas"]["OperationsLifecycleStatus"];
+            /** Supervisor Id */
+            supervisor_id: string;
         };
         /** LineZone */
         LineZone: {
-            /** Id */
-            id?: string | null;
             /** Class Names */
             class_names?: string[] | null;
             frame_size?: components["schemas"]["FrameSize"] | null;
+            /** Id */
+            id?: string | null;
+            /** Points */
+            points: number[][];
             /** Points Normalized */
             points_normalized?: number[][] | null;
             /**
@@ -2839,30 +4187,112 @@ export interface components {
              * @constant
              */
             type: "line";
-            /** Points */
-            points: number[][];
         } & {
             [key: string]: unknown;
         };
+        /** LinkBudgetUpdate */
+        LinkBudgetUpdate: {
+            /** Bulk Daily Bytes */
+            bulk_daily_bytes: number;
+            /** Monthly Bytes */
+            monthly_bytes: number;
+        };
+        /** LinkPolicyUpdate */
+        LinkPolicyUpdate: {
+            /** Policy */
+            policy?: {
+                [key: string]: unknown;
+            };
+        };
+        /** LinkProbeCreate */
+        LinkProbeCreate: {
+            /** Latency Ms */
+            latency_ms: number;
+            /** Packet Loss Percent */
+            packet_loss_percent: number;
+            /** Reachable */
+            reachable: boolean;
+            /** Source */
+            source: string;
+            /** Throughput Mbps */
+            throughput_mbps: number;
+        };
+        /** MaritimeVesselLinkStatusResponse */
+        MaritimeVesselLinkStatusResponse: {
+            /** Budget */
+            budget?: {
+                [key: string]: unknown;
+            } | null;
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Evidence Artifact Id */
+            evidence_artifact_id?: string | null;
+            /** Incident Id */
+            incident_id?: string | null;
+            /** Last Sync At */
+            last_sync_at?: string | null;
+            /** Latest Probe */
+            latest_probe?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Link State
+             * @enum {string}
+             */
+            link_state: "unknown" | "healthy" | "degraded" | "dark" | "recovering" | "port_wifi";
+            /** Pack Id */
+            pack_id?: string | null;
+            /** Passport Hash */
+            passport_hash: string;
+            /** Queue Depth */
+            queue_depth?: {
+                [key: string]: number;
+            };
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Vessel Id
+             * Format: uuid
+             */
+            vessel_id: string;
+        };
         /** MasterBootstrapComplete */
         MasterBootstrapComplete: {
-            /** Bootstrap Token */
-            bootstrap_token: string;
-            /** Tenant Name */
-            tenant_name: string;
-            /** Tenant Slug */
-            tenant_slug?: string | null;
             /** Admin Email */
             admin_email: string;
             /** Admin Password */
             admin_password: string;
+            /** Bootstrap Token */
+            bootstrap_token: string;
             /** Central Node Name */
             central_node_name: string;
             /** Central Supervisor Id */
             central_supervisor_id?: string | null;
+            /** Tenant Name */
+            tenant_name: string;
+            /** Tenant Slug */
+            tenant_slug?: string | null;
         };
         /** MasterBootstrapCompleteResponse */
         MasterBootstrapCompleteResponse: {
+            /** Admin Subject */
+            admin_subject: string;
+            central_node: components["schemas"]["DeploymentNodeResponse"];
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
             /** First Run Required */
             first_run_required: boolean;
             /**
@@ -2872,14 +4302,6 @@ export interface components {
             tenant_id: string;
             /** Tenant Slug */
             tenant_slug: string;
-            /** Admin Subject */
-            admin_subject: string;
-            /**
-             * Completed At
-             * Format: date-time
-             */
-            completed_at: string;
-            central_node: components["schemas"]["DeploymentNodeResponse"];
         };
         /** MasterBootstrapRotateResponse */
         MasterBootstrapRotateResponse: {
@@ -2893,14 +4315,14 @@ export interface components {
         };
         /** MasterBootstrapStatusResponse */
         MasterBootstrapStatusResponse: {
-            /** First Run Required */
-            first_run_required: boolean;
-            /** Has Active Local Token */
-            has_active_local_token: boolean;
             /** Active Token Expires At */
             active_token_expires_at?: string | null;
             /** Completed At */
             completed_at?: string | null;
+            /** First Run Required */
+            first_run_required: boolean;
+            /** Has Active Local Token */
+            has_active_local_token: boolean;
             /** Tenant Slug */
             tenant_slug?: string | null;
         };
@@ -2911,21 +4333,14 @@ export interface components {
         ModelAdmissionStatus: "recommended" | "supported" | "degraded" | "unsupported" | "unknown";
         /** ModelCapabilityConfig */
         ModelCapabilityConfig: {
-            /**
-             * Supports Runtime Vocabulary Updates
-             * @default false
-             */
-            supports_runtime_vocabulary_updates: boolean;
-            /** Max Runtime Terms */
-            max_runtime_terms?: number | null;
-            /** Prompt Format */
-            prompt_format?: ("labels" | "phrases") | null;
             /** Execution Profiles */
             execution_profiles?: string[];
+            /** Max Runtime Terms */
+            max_runtime_terms?: number | null;
             /** Model Family */
             model_family?: ("yolo11" | "yolo12" | "yolo26" | "yolo_world" | "yoloe") | null;
-            /** Runtime Backend */
-            runtime_backend?: ("onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine") | null;
+            /** Prompt Format */
+            prompt_format?: ("labels" | "phrases") | null;
             /** Readiness */
             readiness?: ("ready" | "experimental" | "planned") | null;
             /** Recommended Profiles */
@@ -2935,50 +4350,57 @@ export interface components {
              * @default false
              */
             requires_gpu: boolean;
+            /** Runtime Backend */
+            runtime_backend?: ("onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine") | null;
+            /** Source Url */
+            source_url?: string | null;
             /**
              * Supports Masks
              * @default false
              */
             supports_masks: boolean;
-            /** Source Url */
-            source_url?: string | null;
+            /**
+             * Supports Runtime Vocabulary Updates
+             * @default false
+             */
+            supports_runtime_vocabulary_updates: boolean;
         };
         /** ModelCatalogEntryResponse */
         ModelCatalogEntryResponse: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Version */
-            version: string;
-            task: components["schemas"]["ModelTask"];
-            /** Path Hint */
-            path_hint: string;
-            format: components["schemas"]["ModelFormat"];
-            capability: components["schemas"]["DetectorCapability"];
-            capability_config: components["schemas"]["ModelCapabilityConfig"];
-            /** Classes */
-            classes?: string[];
-            /** Input Shape */
-            input_shape: {
-                [key: string]: number;
-            };
-            /** Sha256 */
-            sha256?: string | null;
-            /** Size Bytes */
-            size_bytes?: number | null;
-            /** License */
-            license?: string | null;
-            registration_state: components["schemas"]["ModelCatalogRegistrationState"];
-            /** Registered Model Id */
-            registered_model_id?: string | null;
             /**
              * Artifact Exists
              * @default false
              */
             artifact_exists: boolean;
+            capability: components["schemas"]["DetectorCapability"];
+            capability_config: components["schemas"]["ModelCapabilityConfig"];
+            /** Classes */
+            classes?: string[];
+            format: components["schemas"]["ModelFormat"];
+            /** Id */
+            id: string;
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            /** License */
+            license?: string | null;
+            /** Name */
+            name: string;
             /** Note */
             note: string;
+            /** Path Hint */
+            path_hint: string;
+            /** Registered Model Id */
+            registered_model_id?: string | null;
+            registration_state: components["schemas"]["ModelCatalogRegistrationState"];
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            task: components["schemas"]["ModelTask"];
+            /** Version */
+            version: string;
         };
         /**
          * ModelCatalogRegistrationState
@@ -2987,29 +4409,29 @@ export interface components {
         ModelCatalogRegistrationState: "unregistered" | "registered" | "missing_artifact" | "planned";
         /** ModelCreate */
         ModelCreate: {
-            /** Name */
-            name: string;
-            /** Version */
-            version: string;
-            task: components["schemas"]["ModelTask"];
-            /** Path */
-            path: string;
-            format: components["schemas"]["ModelFormat"];
             /** @default fixed_vocab */
             capability: components["schemas"]["DetectorCapability"];
             capability_config?: components["schemas"]["ModelCapabilityConfig"];
             /** Classes */
             classes?: string[] | null;
+            format: components["schemas"]["ModelFormat"];
             /** Input Shape */
             input_shape: {
                 [key: string]: number;
             };
+            /** License */
+            license?: string | null;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
             /** Sha256 */
             sha256: string;
             /** Size Bytes */
             size_bytes: number;
-            /** License */
-            license?: string | null;
+            task: components["schemas"]["ModelTask"];
+            /** Version */
+            version: string;
         };
         /**
          * ModelFormat
@@ -3018,34 +4440,34 @@ export interface components {
         ModelFormat: "onnx" | "engine" | "pt";
         /** ModelResponse */
         ModelResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /** Version */
-            version: string;
-            task: components["schemas"]["ModelTask"];
-            /** Path */
-            path: string;
-            format: components["schemas"]["ModelFormat"];
             /** @default fixed_vocab */
             capability: components["schemas"]["DetectorCapability"];
             capability_config?: components["schemas"]["ModelCapabilityConfig"];
             /** Classes */
             classes: string[];
+            format: components["schemas"]["ModelFormat"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /** Input Shape */
             input_shape: {
                 [key: string]: number;
             };
+            /** License */
+            license?: string | null;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
             /** Sha256 */
             sha256: string;
             /** Size Bytes */
             size_bytes: number;
-            /** License */
-            license?: string | null;
+            task: components["schemas"]["ModelTask"];
+            /** Version */
+            version: string;
         };
         /**
          * ModelTask
@@ -3054,28 +4476,28 @@ export interface components {
         ModelTask: "detect" | "classify" | "attribute";
         /** ModelUpdate */
         ModelUpdate: {
-            /** Name */
-            name?: string | null;
-            /** Version */
-            version?: string | null;
-            task?: components["schemas"]["ModelTask"] | null;
-            /** Path */
-            path?: string | null;
-            format?: components["schemas"]["ModelFormat"] | null;
             capability?: components["schemas"]["DetectorCapability"] | null;
             capability_config?: components["schemas"]["ModelCapabilityConfig"] | null;
             /** Classes */
             classes?: string[] | null;
+            format?: components["schemas"]["ModelFormat"] | null;
             /** Input Shape */
             input_shape?: {
                 [key: string]: number;
             } | null;
+            /** License */
+            license?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Path */
+            path?: string | null;
             /** Sha256 */
             sha256?: string | null;
             /** Size Bytes */
             size_bytes?: number | null;
-            /** License */
-            license?: string | null;
+            task?: components["schemas"]["ModelTask"] | null;
+            /** Version */
+            version?: string | null;
         };
         /** MotionMetricsSettings */
         MotionMetricsSettings: {
@@ -3084,6 +4506,21 @@ export interface components {
              * @default false
              */
             speed_enabled: boolean;
+        };
+        /** NMEAIngestRequest */
+        NMEAIngestRequest: {
+            /** Lines */
+            lines: string[];
+            /**
+             * Source
+             * @default nmea_0183
+             */
+            source: string;
+            /**
+             * Vessel Id
+             * Format: uuid
+             */
+            vessel_id: string;
         };
         /** NativeAvailability */
         NativeAvailability: {
@@ -3097,6 +4534,7 @@ export interface components {
         };
         /** NodeCredentialRevokeResponse */
         NodeCredentialRevokeResponse: {
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
             /**
              * Node Id
              * Format: uuid
@@ -3104,15 +4542,11 @@ export interface components {
             node_id: string;
             /** Revoked Credentials */
             revoked_credentials: number;
-            credential_status: components["schemas"]["DeploymentCredentialStatus"];
         };
         /** NodeCredentialRotateResponse */
         NodeCredentialRotateResponse: {
-            /**
-             * Node Id
-             * Format: uuid
-             */
-            node_id: string;
+            /** Credential Hash */
+            credential_hash: string;
             /**
              * Credential Id
              * Format: uuid
@@ -3120,31 +4554,31 @@ export interface components {
             credential_id: string;
             /** Credential Material */
             credential_material: string;
-            /** Credential Hash */
-            credential_hash: string;
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
             /** Credential Version */
             credential_version: number;
+            node: components["schemas"]["DeploymentNodeResponse"];
+            /**
+             * Node Id
+             * Format: uuid
+             */
+            node_id: string;
             /** Revoked Credentials */
             revoked_credentials: number;
-            credential_status: components["schemas"]["DeploymentCredentialStatus"];
-            node: components["schemas"]["DeploymentNodeResponse"];
         };
         /** NodePairingClaim */
         NodePairingClaim: {
+            /** Hostname */
+            hostname: string;
             /** Pairing Code */
             pairing_code: string;
             /** Supervisor Id */
             supervisor_id: string;
-            /** Hostname */
-            hostname: string;
         };
         /** NodePairingClaimResponse */
         NodePairingClaimResponse: {
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
+            /** Credential Hash */
+            credential_hash: string;
             /**
              * Credential Id
              * Format: uuid
@@ -3152,22 +4586,25 @@ export interface components {
             credential_id: string;
             /** Credential Material */
             credential_material: string;
-            /** Credential Hash */
-            credential_hash: string;
             /**
              * Credential Version
              * @default 1
              */
             credential_version: number;
             node: components["schemas"]["DeploymentNodeResponse"];
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
         };
         /** NodePairingSessionCreate */
         NodePairingSessionCreate: {
-            node_kind: components["schemas"]["DeploymentNodeKind"];
             /** Edge Node Id */
             edge_node_id?: string | null;
             /** Hostname */
             hostname: string;
+            node_kind: components["schemas"]["DeploymentNodeKind"];
             /**
              * Requested Ttl Seconds
              * @default 300
@@ -3176,84 +4613,72 @@ export interface components {
         };
         /** NodePairingSessionResponse */
         NodePairingSessionResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Deployment Node Id */
-            deployment_node_id?: string | null;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            node_kind: components["schemas"]["DeploymentNodeKind"];
-            /** Hostname */
-            hostname?: string | null;
-            /** Status */
-            status: string;
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /** Consumed At */
-            consumed_at?: string | null;
             /** Claimed By Supervisor */
             claimed_by_supervisor?: string | null;
-            /** Created By Subject */
-            created_by_subject?: string | null;
-            /** Pairing Code */
-            pairing_code?: string | null;
+            /** Consumed At */
+            consumed_at?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Created By Subject */
+            created_by_subject?: string | null;
+            /** Deployment Node Id */
+            deployment_node_id?: string | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Hostname */
+            hostname?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Pairing Code */
+            pairing_code?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
         };
+        /** OnboardingCheckRunCreate */
+        OnboardingCheckRunCreate: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Pack Id */
+            pack_id?: string | null;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+        };
         /** OperationalMemoryPatternResponse */
         OperationalMemoryPatternResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Site Id */
-            site_id?: string | null;
             /** Camera Id */
             camera_id?: string | null;
-            /** Pattern Type */
-            pattern_type: string;
-            severity: components["schemas"]["IncidentRuleSeverity"];
-            /** Summary */
-            summary: string;
             /**
-             * Window Started At
+             * Created At
              * Format: date-time
              */
-            window_started_at: string;
-            /**
-             * Window Ended At
-             * Format: date-time
-             */
-            window_ended_at: string;
-            /** Source Incident Ids */
-            source_incident_ids?: string[];
-            /** Source Contract Hashes */
-            source_contract_hashes?: string[];
+            created_at: string;
             /** Dimensions */
             dimensions?: {
                 [key: string]: unknown;
@@ -3262,13 +4687,39 @@ export interface components {
             evidence?: {
                 [key: string]: unknown;
             };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /** Pattern Hash */
             pattern_hash: string;
+            /** Pattern Type */
+            pattern_type: string;
+            severity: components["schemas"]["IncidentRuleSeverity"];
+            /** Site Id */
+            site_id?: string | null;
+            /** Source Contract Hashes */
+            source_contract_hashes?: string[];
+            /** Source Incident Ids */
+            source_incident_ids?: string[];
+            /** Summary */
+            summary: string;
             /**
-             * Created At
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Window Ended At
              * Format: date-time
              */
-            created_at: string;
+            window_ended_at: string;
+            /**
+             * Window Started At
+             * Format: date-time
+             */
+            window_started_at: string;
         };
         /**
          * OperationsLifecycleAction
@@ -3277,6 +4728,9 @@ export interface components {
         OperationsLifecycleAction: "start" | "stop" | "restart" | "drain";
         /** OperationsLifecycleRequestCreate */
         OperationsLifecycleRequestCreate: {
+            action: components["schemas"]["OperationsLifecycleAction"];
+            /** Assignment Id */
+            assignment_id?: string | null;
             /**
              * Camera Id
              * Format: uuid
@@ -3284,9 +4738,6 @@ export interface components {
             camera_id: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
-            /** Assignment Id */
-            assignment_id?: string | null;
-            action: components["schemas"]["OperationsLifecycleAction"];
             /** Request Payload */
             request_payload?: {
                 [key: string]: unknown;
@@ -3294,55 +4745,55 @@ export interface components {
         };
         /** OperationsLifecycleRequestResponse */
         OperationsLifecycleRequestResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
+            action: components["schemas"]["OperationsLifecycleAction"];
+            /** Admission Report Id */
+            admission_report_id?: string | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            /** Assignment Id */
-            assignment_id?: string | null;
-            action: components["schemas"]["OperationsLifecycleAction"];
-            status: components["schemas"]["OperationsLifecycleStatus"];
-            /** Requested By Subject */
-            requested_by_subject?: string | null;
-            /**
-             * Requested At
-             * Format: date-time
-             */
-            requested_at: string;
-            /** Acknowledged At */
-            acknowledged_at?: string | null;
-            /** Claimed By Supervisor */
-            claimed_by_supervisor?: string | null;
             /** Claimed At */
             claimed_at?: string | null;
+            /** Claimed By Supervisor */
+            claimed_by_supervisor?: string | null;
             /** Completed At */
             completed_at?: string | null;
-            /** Admission Report Id */
-            admission_report_id?: string | null;
-            /** Error */
-            error?: string | null;
-            /** Request Payload */
-            request_payload?: {
-                [key: string]: unknown;
-            };
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Error */
+            error?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Request Payload */
+            request_payload?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Requested By Subject */
+            requested_by_subject?: string | null;
+            status: components["schemas"]["OperationsLifecycleStatus"];
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
             /**
              * Updated At
              * Format: date-time
@@ -3362,41 +4813,41 @@ export interface components {
         /** OperatorConfigBindingRequest */
         OperatorConfigBindingRequest: {
             kind: components["schemas"]["OperatorConfigProfileKind"];
-            scope: components["schemas"]["OperatorConfigScope"];
-            /** Scope Key */
-            scope_key: string;
             /**
              * Profile Id
              * Format: uuid
              */
             profile_id: string;
+            scope: components["schemas"]["OperatorConfigScope"];
+            /** Scope Key */
+            scope_key: string;
         };
         /** OperatorConfigBindingResponse */
         OperatorConfigBindingResponse: {
-            kind: components["schemas"]["OperatorConfigProfileKind"];
-            scope: components["schemas"]["OperatorConfigScope"];
-            /** Scope Key */
-            scope_key: string;
-            /**
-             * Profile Id
-             * Format: uuid
-             */
-            profile_id: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /**
+             * Profile Id
+             * Format: uuid
+             */
+            profile_id: string;
+            scope: components["schemas"]["OperatorConfigScope"];
+            /** Scope Key */
+            scope_key: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
             /**
              * Updated At
              * Format: date-time
@@ -3405,19 +4856,14 @@ export interface components {
         };
         /** OperatorConfigProfileCreate */
         OperatorConfigProfileCreate: {
-            kind: components["schemas"]["OperatorConfigProfileKind"];
-            /** @default tenant */
-            scope: components["schemas"]["OperatorConfigScope"];
-            /** Site Id */
-            site_id?: string | null;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
             /** Camera Id */
             camera_id?: string | null;
-            /** Name */
-            name: string;
-            /** Slug */
-            slug: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Edge Node Id */
+            edge_node_id?: string | null;
             /**
              * Enabled
              * @default true
@@ -3428,14 +4874,19 @@ export interface components {
              * @default false
              */
             is_default: boolean;
-            /** Config */
-            config?: {
-                [key: string]: unknown;
-            };
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /** Name */
+            name: string;
+            /** @default tenant */
+            scope: components["schemas"]["OperatorConfigScope"];
             /** Secrets */
             secrets?: {
                 [key: string]: string;
             };
+            /** Site Id */
+            site_id?: string | null;
+            /** Slug */
+            slug: string;
         };
         /** OperatorConfigProfileDeleteRequest */
         OperatorConfigProfileDeleteRequest: {
@@ -3445,20 +4896,20 @@ export interface components {
         /** OperatorConfigProfileImpactResponse */
         OperatorConfigProfileImpactResponse: {
             /**
-             * Profile Id
-             * Format: uuid
-             */
-            profile_id: string;
-            kind: components["schemas"]["OperatorConfigProfileKind"];
-            /** Is Default */
-            is_default: boolean;
-            /** Direct Bindings */
-            direct_bindings?: components["schemas"]["OperatorConfigBindingResponse"][];
-            /**
              * Affected Targets Count
              * @default 0
              */
             affected_targets_count: number;
+            /** Direct Bindings */
+            direct_bindings?: components["schemas"]["OperatorConfigBindingResponse"][];
+            /** Is Default */
+            is_default: boolean;
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /**
+             * Profile Id
+             * Format: uuid
+             */
+            profile_id: string;
             /**
              * Requires Replacement Default
              * @default false
@@ -3476,53 +4927,12 @@ export interface components {
         OperatorConfigProfileKind: "evidence_storage" | "stream_delivery" | "runtime_selection" | "privacy_policy" | "llm_provider" | "operations_mode";
         /** OperatorConfigProfileResponse */
         OperatorConfigProfileResponse: {
-            kind: components["schemas"]["OperatorConfigProfileKind"];
-            /** @default tenant */
-            scope: components["schemas"]["OperatorConfigScope"];
-            /** Site Id */
-            site_id?: string | null;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
             /** Camera Id */
             camera_id?: string | null;
-            /** Name */
-            name: string;
-            /** Slug */
-            slug: string;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /**
-             * Is Default
-             * @default false
-             */
-            is_default: boolean;
             /** Config */
             config?: {
                 [key: string]: unknown;
             };
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Secret State */
-            secret_state?: {
-                [key: string]: "missing" | "present";
-            };
-            /** @default unvalidated */
-            validation_status: components["schemas"]["OperatorConfigValidationStatus"];
-            /** Validation Message */
-            validation_message?: string | null;
-            /** Validated At */
-            validated_at?: string | null;
             /** Config Hash */
             config_hash: string;
             /**
@@ -3530,36 +4940,77 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            kind: components["schemas"]["OperatorConfigProfileKind"];
+            /** Name */
+            name: string;
+            /** @default tenant */
+            scope: components["schemas"]["OperatorConfigScope"];
+            /** Secret State */
+            secret_state?: {
+                [key: string]: "missing" | "present";
+            };
+            /** Site Id */
+            site_id?: string | null;
+            /** Slug */
+            slug: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
+            /** Validated At */
+            validated_at?: string | null;
+            /** Validation Message */
+            validation_message?: string | null;
+            /** @default unvalidated */
+            validation_status: components["schemas"]["OperatorConfigValidationStatus"];
         };
         /** OperatorConfigProfileUpdate */
         OperatorConfigProfileUpdate: {
-            /** Site Id */
-            site_id?: string | null;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
             /** Camera Id */
             camera_id?: string | null;
-            /** Name */
-            name?: string | null;
-            /** Slug */
-            slug?: string | null;
-            /** Enabled */
-            enabled?: boolean | null;
-            /** Is Default */
-            is_default?: boolean | null;
             /** Config */
             config?: {
                 [key: string]: unknown;
             } | null;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Name */
+            name?: string | null;
             /** Secrets */
             secrets?: {
                 [key: string]: string;
             } | null;
+            /** Site Id */
+            site_id?: string | null;
+            /** Slug */
+            slug?: string | null;
         };
         /**
          * OperatorConfigScope
@@ -3568,14 +5019,14 @@ export interface components {
         OperatorConfigScope: "tenant" | "site" | "edge_node" | "camera";
         /** OperatorConfigTestResponse */
         OperatorConfigTestResponse: {
+            /** Message */
+            message?: string | null;
             /**
              * Profile Id
              * Format: uuid
              */
             profile_id: string;
             status: components["schemas"]["OperatorConfigValidationStatus"];
-            /** Message */
-            message?: string | null;
             /**
              * Tested At
              * Format: date-time
@@ -3587,6 +5038,150 @@ export interface components {
          * @enum {string}
          */
         OperatorConfigValidationStatus: "unvalidated" | "valid" | "invalid";
+        /** PackBillingResponse */
+        PackBillingResponse: {
+            /** Hierarchy Labels */
+            hierarchy_labels?: string[];
+            /** Meters */
+            meters?: string[];
+            /** Status */
+            status?: string | null;
+        };
+        /** PackEngineRequirementsResponse */
+        PackEngineRequirementsResponse: {
+            /** Min Version */
+            min_version: string;
+            /** Required Capabilities */
+            required_capabilities?: string[];
+        };
+        /** PackEntityResponse */
+        PackEntityResponse: {
+            /** Extends */
+            extends: string;
+            /** Name */
+            name: string;
+            /** Purpose */
+            purpose: string;
+            /** Storage */
+            storage: string;
+        };
+        /** PackEvidenceContextResponse */
+        PackEvidenceContextResponse: {
+            /** Fields */
+            fields?: string[];
+        };
+        /** PackIntegrationResponse */
+        PackIntegrationResponse: {
+            /** Id */
+            id: string;
+            /** Protocol */
+            protocol: string;
+            /** Status */
+            status: string;
+        };
+        /** PackListResponse */
+        PackListResponse: {
+            /** Packs */
+            packs: components["schemas"]["PackManifestResponse"][];
+        };
+        /** PackManifestResponse */
+        PackManifestResponse: {
+            /** Activation Conditions */
+            activation_conditions?: string[];
+            /** Allowed Core Dependencies */
+            allowed_core_dependencies?: string[];
+            /** Api Version */
+            api_version: string;
+            billing: components["schemas"]["PackBillingResponse"];
+            engine: components["schemas"]["PackEngineRequirementsResponse"];
+            /** Entities */
+            entities?: components["schemas"]["PackEntityResponse"][];
+            evidence_context: components["schemas"]["PackEvidenceContextResponse"];
+            /** Forbidden Dependencies */
+            forbidden_dependencies?: string[];
+            /** Integrations */
+            integrations?: components["schemas"]["PackIntegrationResponse"][];
+            /** Is Runtime Enabled */
+            is_runtime_enabled: boolean;
+            /** Kind */
+            kind: string;
+            metadata: components["schemas"]["PackMetadataResponse"];
+            model_presets: components["schemas"]["PackModelPresetsResponse"];
+            /** Privacy Defaults */
+            privacy_defaults?: {
+                [key: string]: unknown;
+            };
+            /** Scene Templates */
+            scene_templates?: components["schemas"]["PackSceneTemplateResponse"][];
+            ui_extensions: components["schemas"]["PackUiExtensionsResponse"];
+        };
+        /** PackMetadataResponse */
+        PackMetadataResponse: {
+            /** Id */
+            id: string;
+            /** Implementation Commitment */
+            implementation_commitment: boolean;
+            /** Name */
+            name: string;
+            /** Owner */
+            owner: string;
+            /** Product Name */
+            product_name: string;
+            /** Sales Motion */
+            sales_motion: string;
+            status: components["schemas"]["PackStatus"];
+            /** Wedge */
+            wedge: string;
+        };
+        /** PackModelPresetResponse */
+        PackModelPresetResponse: {
+            /** Classes */
+            classes?: string[];
+            /** Id */
+            id: string;
+            /** Max Terms */
+            max_terms?: number | null;
+            /** Scenes */
+            scenes?: string[];
+            /** Status */
+            status?: string | null;
+            /** Terms */
+            terms?: string[];
+        };
+        /** PackModelPresetsResponse */
+        PackModelPresetsResponse: {
+            /** Fixed Vocab */
+            fixed_vocab?: components["schemas"]["PackModelPresetResponse"][];
+            /** Open Vocab */
+            open_vocab?: components["schemas"]["PackModelPresetResponse"][];
+        };
+        /** PackSceneTemplateResponse */
+        PackSceneTemplateResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Outcome */
+            outcome: string;
+            /** Primitives */
+            primitives?: string[];
+        };
+        /**
+         * PackStatus
+         * @enum {string}
+         */
+        PackStatus: "planned_mvp" | "designed_not_implemented" | "active" | "retired";
+        /** PackUiExtensionsResponse */
+        PackUiExtensionsResponse: {
+            /** Navigation Labels */
+            navigation_labels?: {
+                [key: string]: string;
+            };
+            /** Panels */
+            panels?: string[];
+            /** Status */
+            status?: string | null;
+        };
         /** PolicyDraftCreate */
         PolicyDraftCreate: {
             /**
@@ -3604,53 +5199,53 @@ export interface components {
         };
         /** PolicyDraftResponse */
         PolicyDraftResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Camera Id */
-            camera_id?: string | null;
-            /** Site Id */
-            site_id?: string | null;
-            status: components["schemas"]["PolicyDraftStatus"];
-            /** Prompt */
-            prompt: string;
-            /** Structured Diff */
-            structured_diff?: {
-                [key: string]: unknown;
-            };
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /** Created By Subject */
-            created_by_subject?: string | null;
-            /** Approved By Subject */
-            approved_by_subject?: string | null;
-            /** Rejected By Subject */
-            rejected_by_subject?: string | null;
+            /** Applied At */
+            applied_at?: string | null;
             /** Applied By Subject */
             applied_by_subject?: string | null;
+            /** Approved By Subject */
+            approved_by_subject?: string | null;
+            /** Camera Id */
+            camera_id?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Created By Subject */
+            created_by_subject?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Prompt */
+            prompt: string;
+            /** Rejected By Subject */
+            rejected_by_subject?: string | null;
+            /** Site Id */
+            site_id?: string | null;
+            status: components["schemas"]["PolicyDraftStatus"];
+            /** Structured Diff */
+            structured_diff?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
-            /** Decided At */
-            decided_at?: string | null;
-            /** Applied At */
-            applied_at?: string | null;
         };
         /**
          * PolicyDraftStatus
@@ -3659,42 +5254,100 @@ export interface components {
         PolicyDraftStatus: "draft" | "approved" | "rejected" | "applied";
         /** PolygonZone */
         PolygonZone: {
-            /** Id */
-            id?: string | null;
             /** Class Names */
             class_names?: string[] | null;
             frame_size?: components["schemas"]["FrameSize"] | null;
+            /** Id */
+            id?: string | null;
             /** Points Normalized */
             points_normalized?: number[][] | null;
-            /** Type */
-            type?: "polygon" | null;
             /** Polygon */
             polygon: number[][];
+            /** Type */
+            type?: "polygon" | null;
         } & {
             [key: string]: unknown;
         };
+        /** PortCallCreate */
+        PortCallCreate: {
+            /** Berth */
+            berth?: string | null;
+            /** Eta */
+            eta?: string | null;
+            /** Etd */
+            etd?: string | null;
+            /** Link Profile */
+            link_profile?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Port Name */
+            port_name: string;
+            /** Terminal Name */
+            terminal_name?: string | null;
+            /** Un Locode */
+            un_locode?: string | null;
+        };
+        /** PortCallUpdate */
+        PortCallUpdate: {
+            /** Berth */
+            berth?: string | null;
+            /** Eta */
+            eta?: string | null;
+            /** Etd */
+            etd?: string | null;
+            /** Link Profile */
+            link_profile?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Port Name */
+            port_name?: string | null;
+            /** Terminal Name */
+            terminal_name?: string | null;
+            /** Un Locode */
+            un_locode?: string | null;
+        };
+        /** PriceBookCreate */
+        PriceBookCreate: {
+            /** Currency */
+            currency: string;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective To */
+            effective_to?: string | null;
+            /** Meter Prices */
+            meter_prices?: {
+                [key: string]: number | string;
+            };
+        };
         /** PrivacyManifestSnapshotResponse */
         PrivacyManifestSnapshotResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            /** Schema Version */
-            schema_version: number;
-            /** Manifest Hash */
-            manifest_hash: string;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /** Manifest */
             manifest: {
                 [key: string]: unknown;
             };
-            /** Created At */
-            created_at?: string | null;
+            /** Manifest Hash */
+            manifest_hash: string;
+            /** Schema Version */
+            schema_version: number;
         };
         /** PrivacySettings */
         PrivacySettings: {
@@ -3732,10 +5385,10 @@ export interface components {
         PublishProfile: "jetson-nano" | "central-gpu";
         /** QueryRequest */
         QueryRequest: {
-            /** Prompt */
-            prompt: string;
             /** Camera Ids */
             camera_ids: string[];
+            /** Prompt */
+            prompt: string;
         };
         /**
          * QueryResolutionMode
@@ -3744,57 +5397,57 @@ export interface components {
         QueryResolutionMode: "fixed_filter" | "open_vocab";
         /** QueryResponse */
         QueryResponse: {
+            /** Camera Ids */
+            camera_ids: string[];
+            /** Latency Ms */
+            latency_ms: number;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
             /** @default fixed_filter */
             resolution_mode: components["schemas"]["QueryResolutionMode"];
             /** Resolved Classes */
             resolved_classes: string[];
             /** Resolved Vocabulary */
             resolved_vocabulary?: string[];
-            /** Provider */
-            provider: string;
-            /** Model */
-            model: string;
-            /** Latency Ms */
-            latency_ms: number;
-            /** Camera Ids */
-            camera_ids: string[];
         };
         /** ResolvedOperatorConfigEntryResponse */
         ResolvedOperatorConfigEntryResponse: {
+            /**
+             * Applies To Runtime
+             * @default false
+             */
+            applies_to_runtime: boolean;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
             kind: components["schemas"]["OperatorConfigProfileKind"];
+            /** Operator Message */
+            operator_message?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
             /** Profile Id */
             profile_id?: string | null;
             /** Profile Name */
             profile_name?: string | null;
             /** Profile Slug */
             profile_slug?: string | null;
-            /** Profile Hash */
-            profile_hash?: string | null;
-            winner_scope?: components["schemas"]["OperatorConfigScope"] | null;
-            /** Winner Scope Key */
-            winner_scope_key?: string | null;
-            validation_status?: components["schemas"]["OperatorConfigValidationStatus"] | null;
             /**
              * Resolution Status
              * @default unresolved
              * @enum {string}
              */
             resolution_status: "resolved" | "unresolved";
-            /**
-             * Applies To Runtime
-             * @default false
-             */
-            applies_to_runtime: boolean;
             /** Secret State */
             secret_state?: {
                 [key: string]: "missing" | "present";
             };
-            /** Operator Message */
-            operator_message?: string | null;
-            /** Config */
-            config?: {
-                [key: string]: unknown;
-            };
+            validation_status?: components["schemas"]["OperatorConfigValidationStatus"] | null;
+            winner_scope?: components["schemas"]["OperatorConfigScope"] | null;
+            /** Winner Scope Key */
+            winner_scope_key?: string | null;
         };
         /** ResolvedOperatorConfigResponse */
         ResolvedOperatorConfigResponse: {
@@ -3807,6 +5460,21 @@ export interface components {
                 [key: string]: components["schemas"]["OperatorConfigProfileResponse"];
             };
         };
+        /** RotationGroupCreate */
+        RotationGroupCreate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Label */
+            label: string;
+            /** Member User Ids */
+            member_user_ids?: string[];
+            /** Pack Labels */
+            pack_labels?: {
+                [key: string]: string;
+            };
+        };
         /**
          * RuleAction
          * @enum {string}
@@ -3814,55 +5482,55 @@ export interface components {
         RuleAction: "count" | "alert" | "record_clip" | "webhook";
         /** RuntimeArtifactCreate */
         RuntimeArtifactCreate: {
+            /** Build Duration Seconds */
+            build_duration_seconds?: number | null;
+            /** Builder */
+            builder?: {
+                [key: string]: unknown;
+            };
             /** Camera Id */
             camera_id?: string | null;
-            scope: components["schemas"]["RuntimeArtifactScope"];
-            kind: components["schemas"]["RuntimeArtifactKind"];
             capability: components["schemas"]["DetectorCapability"];
+            /** Classes */
+            classes?: string[];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            kind: components["schemas"]["RuntimeArtifactKind"];
+            /** Path */
+            path: string;
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
             /**
              * Runtime Backend
              * @enum {string}
              */
             runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
-            /** Path */
-            path: string;
-            /** Target Profile */
-            target_profile: string;
-            precision: components["schemas"]["RuntimeArtifactPrecision"];
-            /** Input Shape */
-            input_shape: {
-                [key: string]: number;
-            };
-            /** Classes */
-            classes?: string[];
-            /** Vocabulary Hash */
-            vocabulary_hash?: string | null;
-            /** Vocabulary Version */
-            vocabulary_version?: number | null;
-            /** Source Model Sha256 */
-            source_model_sha256: string;
-            /** Sha256 */
-            sha256: string;
-            /** Size Bytes */
-            size_bytes: number;
-            /** Builder */
-            builder?: {
-                [key: string]: unknown;
-            };
             /** Runtime Versions */
             runtime_versions?: {
                 [key: string]: unknown;
             };
-            /** @default unvalidated */
-            validation_status: components["schemas"]["RuntimeArtifactValidationStatus"];
-            /** Validation Error */
-            validation_error?: string | null;
-            /** Build Duration Seconds */
-            build_duration_seconds?: number | null;
-            /** Validation Duration Seconds */
-            validation_duration_seconds?: number | null;
+            scope: components["schemas"]["RuntimeArtifactScope"];
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Source Model Sha256 */
+            source_model_sha256: string;
+            /** Target Profile */
+            target_profile: string;
             /** Validated At */
             validated_at?: string | null;
+            /** Validation Duration Seconds */
+            validation_duration_seconds?: number | null;
+            /** Validation Error */
+            validation_error?: string | null;
+            /** @default unvalidated */
+            validation_status: components["schemas"]["RuntimeArtifactValidationStatus"];
+            /** Vocabulary Hash */
+            vocabulary_hash?: string | null;
+            /** Vocabulary Version */
+            vocabulary_version?: number | null;
         };
         /**
          * RuntimeArtifactKind
@@ -3876,69 +5544,69 @@ export interface components {
         RuntimeArtifactPrecision: "fp32" | "fp16" | "int8";
         /** RuntimeArtifactResponse */
         RuntimeArtifactResponse: {
-            /** Camera Id */
-            camera_id?: string | null;
-            scope: components["schemas"]["RuntimeArtifactScope"];
-            kind: components["schemas"]["RuntimeArtifactKind"];
-            capability: components["schemas"]["DetectorCapability"];
-            /**
-             * Runtime Backend
-             * @enum {string}
-             */
-            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
-            /** Path */
-            path: string;
-            /** Target Profile */
-            target_profile: string;
-            precision: components["schemas"]["RuntimeArtifactPrecision"];
-            /** Input Shape */
-            input_shape: {
-                [key: string]: number;
-            };
-            /** Classes */
-            classes?: string[];
-            /** Vocabulary Hash */
-            vocabulary_hash?: string | null;
-            /** Vocabulary Version */
-            vocabulary_version?: number | null;
-            /** Source Model Sha256 */
-            source_model_sha256: string;
-            /** Sha256 */
-            sha256: string;
-            /** Size Bytes */
-            size_bytes: number;
+            /** Build Duration Seconds */
+            build_duration_seconds?: number | null;
             /** Builder */
             builder?: {
                 [key: string]: unknown;
             };
-            /** Runtime Versions */
-            runtime_versions?: {
-                [key: string]: unknown;
-            };
-            /** @default unvalidated */
-            validation_status: components["schemas"]["RuntimeArtifactValidationStatus"];
-            /** Validation Error */
-            validation_error?: string | null;
-            /** Build Duration Seconds */
-            build_duration_seconds?: number | null;
-            /** Validation Duration Seconds */
-            validation_duration_seconds?: number | null;
-            /** Validated At */
-            validated_at?: string | null;
+            /** Camera Id */
+            camera_id?: string | null;
+            capability: components["schemas"]["DetectorCapability"];
+            /** Classes */
+            classes?: string[];
+            /** Created At */
+            created_at?: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            kind: components["schemas"]["RuntimeArtifactKind"];
             /**
              * Model Id
              * Format: uuid
              */
             model_id: string;
-            /** Created At */
-            created_at?: string | null;
+            /** Path */
+            path: string;
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
+            /**
+             * Runtime Backend
+             * @enum {string}
+             */
+            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
+            /** Runtime Versions */
+            runtime_versions?: {
+                [key: string]: unknown;
+            };
+            scope: components["schemas"]["RuntimeArtifactScope"];
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Source Model Sha256 */
+            source_model_sha256: string;
+            /** Target Profile */
+            target_profile: string;
             /** Updated At */
             updated_at?: string | null;
+            /** Validated At */
+            validated_at?: string | null;
+            /** Validation Duration Seconds */
+            validation_duration_seconds?: number | null;
+            /** Validation Error */
+            validation_error?: string | null;
+            /** @default unvalidated */
+            validation_status: components["schemas"]["RuntimeArtifactValidationStatus"];
+            /** Vocabulary Hash */
+            vocabulary_hash?: string | null;
+            /** Vocabulary Version */
+            vocabulary_version?: number | null;
         };
         /**
          * RuntimeArtifactScope
@@ -3949,104 +5617,104 @@ export interface components {
         RuntimeArtifactSoakRunCreate: {
             /** Edge Node Id */
             edge_node_id?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Fallback Reason */
+            fallback_reason?: string | null;
+            /** Hardware Report Id */
+            hardware_report_id?: string | null;
+            /** Metrics */
+            metrics?: {
+                [key: string]: unknown;
+            };
+            /** Model Admission Report Id */
+            model_admission_report_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Operations Assignment Id */
+            operations_assignment_id?: string | null;
             /**
              * Runtime Artifact Id
              * Format: uuid
              */
             runtime_artifact_id: string;
-            /** Operations Assignment Id */
-            operations_assignment_id?: string | null;
             /** Runtime Selection Profile Id */
             runtime_selection_profile_id?: string | null;
-            /** Hardware Report Id */
-            hardware_report_id?: string | null;
-            /** Model Admission Report Id */
-            model_admission_report_id?: string | null;
-            status: components["schemas"]["RuntimeArtifactSoakStatus"];
             /**
              * Started At
              * Format: date-time
              */
             started_at: string;
-            /** Ended At */
-            ended_at?: string | null;
-            /** Metrics */
-            metrics?: {
-                [key: string]: unknown;
-            };
-            /** Fallback Reason */
-            fallback_reason?: string | null;
-            /** Notes */
-            notes?: string | null;
+            status: components["schemas"]["RuntimeArtifactSoakStatus"];
         };
         /** RuntimeArtifactSoakRunResponse */
         RuntimeArtifactSoakRunResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
             /** Camera Id */
             camera_id?: string | null;
-            /**
-             * Runtime Artifact Id
-             * Format: uuid
-             */
-            runtime_artifact_id: string;
-            runtime_kind: components["schemas"]["RuntimeArtifactKind"];
-            /**
-             * Runtime Backend
-             * @enum {string}
-             */
-            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
-            /** Model Id */
-            model_id?: string | null;
-            /** Model Name */
-            model_name?: string | null;
-            model_capability?: components["schemas"]["DetectorCapability"] | null;
-            /** Target Profile */
-            target_profile: string;
-            status: components["schemas"]["RuntimeArtifactSoakStatus"];
-            /**
-             * Started At
-             * Format: date-time
-             */
-            started_at: string;
-            /** Ended At */
-            ended_at?: string | null;
-            /** Metrics */
-            metrics?: {
-                [key: string]: unknown;
-            };
-            /** Fallback Reason */
-            fallback_reason?: string | null;
-            /** Notes */
-            notes?: string | null;
-            /** Operations Assignment Id */
-            operations_assignment_id?: string | null;
-            /** Runtime Selection Profile Id */
-            runtime_selection_profile_id?: string | null;
-            /** Runtime Selection Profile Hash */
-            runtime_selection_profile_hash?: string | null;
-            /** Hardware Report Id */
-            hardware_report_id?: string | null;
-            /** Model Admission Report Id */
-            model_admission_report_id?: string | null;
-            hardware_admission_status?: components["schemas"]["ModelAdmissionStatus"] | null;
-            /** Model Recommendation Rationale */
-            model_recommendation_rationale?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Fallback Reason */
+            fallback_reason?: string | null;
+            hardware_admission_status?: components["schemas"]["ModelAdmissionStatus"] | null;
+            /** Hardware Report Id */
+            hardware_report_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metrics */
+            metrics?: {
+                [key: string]: unknown;
+            };
+            /** Model Admission Report Id */
+            model_admission_report_id?: string | null;
+            model_capability?: components["schemas"]["DetectorCapability"] | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** Model Name */
+            model_name?: string | null;
+            /** Model Recommendation Rationale */
+            model_recommendation_rationale?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Operations Assignment Id */
+            operations_assignment_id?: string | null;
+            /**
+             * Runtime Artifact Id
+             * Format: uuid
+             */
+            runtime_artifact_id: string;
+            /**
+             * Runtime Backend
+             * @enum {string}
+             */
+            runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
+            runtime_kind: components["schemas"]["RuntimeArtifactKind"];
+            /** Runtime Selection Profile Hash */
+            runtime_selection_profile_hash?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            status: components["schemas"]["RuntimeArtifactSoakStatus"];
+            /** Target Profile */
+            target_profile: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
         };
         /**
          * RuntimeArtifactSoakStatus
@@ -4055,13 +5723,8 @@ export interface components {
         RuntimeArtifactSoakStatus: "passed" | "failed";
         /** RuntimeArtifactUpdate */
         RuntimeArtifactUpdate: {
-            validation_status?: components["schemas"]["RuntimeArtifactValidationStatus"] | null;
-            /** Validation Error */
-            validation_error?: string | null;
-            /** Sha256 */
-            sha256?: string | null;
-            /** Size Bytes */
-            size_bytes?: number | null;
+            /** Build Duration Seconds */
+            build_duration_seconds?: number | null;
             /** Builder */
             builder?: {
                 [key: string]: unknown;
@@ -4070,12 +5733,17 @@ export interface components {
             runtime_versions?: {
                 [key: string]: unknown;
             } | null;
-            /** Build Duration Seconds */
-            build_duration_seconds?: number | null;
-            /** Validation Duration Seconds */
-            validation_duration_seconds?: number | null;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
             /** Validated At */
             validated_at?: string | null;
+            /** Validation Duration Seconds */
+            validation_duration_seconds?: number | null;
+            /** Validation Error */
+            validation_error?: string | null;
+            validation_status?: components["schemas"]["RuntimeArtifactValidationStatus"] | null;
         };
         /**
          * RuntimeArtifactValidationStatus
@@ -4085,65 +5753,65 @@ export interface components {
         /** RuntimePassportSnapshotResponse */
         RuntimePassportSnapshotResponse: {
             /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            /** Incident Id */
-            incident_id?: string | null;
-            /** Schema Version */
-            schema_version: number;
-            /** Passport Hash */
-            passport_hash: string;
-            /** Passport */
-            passport: {
-                [key: string]: unknown;
-            };
-            summary: components["schemas"]["RuntimePassportSummary"];
             /** Created At */
             created_at?: string | null;
-        };
-        /** RuntimePassportSummary */
-        RuntimePassportSummary: {
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Incident Id */
+            incident_id?: string | null;
+            /** Passport */
+            passport: {
+                [key: string]: unknown;
+            };
             /** Passport Hash */
             passport_hash: string;
+            /** Schema Version */
+            schema_version: number;
+            summary: components["schemas"]["RuntimePassportSummary"];
+        };
+        /** RuntimePassportSummary */
+        RuntimePassportSummary: {
             configuration?: components["schemas"]["AppliedOperatorConfigurationSummary"];
-            /** Selected Backend */
-            selected_backend?: string | null;
-            /** Model Hash */
-            model_hash?: string | null;
-            /** Runtime Artifact Id */
-            runtime_artifact_id?: string | null;
-            /** Runtime Artifact Hash */
-            runtime_artifact_hash?: string | null;
-            /** Target Profile */
-            target_profile?: string | null;
-            /** Precision */
-            precision?: string | null;
-            /** Validated At */
-            validated_at?: string | null;
             /** Fallback Reason */
             fallback_reason?: string | null;
-            /** Runtime Selection Profile Id */
-            runtime_selection_profile_id?: string | null;
-            /** Runtime Selection Profile Name */
-            runtime_selection_profile_name?: string | null;
-            /** Runtime Selection Profile Hash */
-            runtime_selection_profile_hash?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model Hash */
+            model_hash?: string | null;
+            /** Passport Hash */
+            passport_hash: string;
+            /** Precision */
+            precision?: string | null;
             /** Provider Versions */
             provider_versions?: {
                 [key: string]: unknown;
             };
+            /** Runtime Artifact Hash */
+            runtime_artifact_hash?: string | null;
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            /** Runtime Selection Profile Hash */
+            runtime_selection_profile_hash?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /** Runtime Selection Profile Name */
+            runtime_selection_profile_name?: string | null;
+            /** Selected Backend */
+            selected_backend?: string | null;
+            /** Target Profile */
+            target_profile?: string | null;
+            /** Validated At */
+            validated_at?: string | null;
         };
         /**
          * RuntimeVocabularySource
@@ -4152,72 +5820,72 @@ export interface components {
         RuntimeVocabularySource: "default" | "query" | "manual";
         /** RuntimeVocabularyState */
         RuntimeVocabularyState: {
-            /** Terms */
-            terms?: string[];
             /** @default default */
             source: components["schemas"]["RuntimeVocabularySource"];
+            /** Terms */
+            terms?: string[];
+            /** Updated At */
+            updated_at?: string | null;
             /**
              * Version
              * @default 0
              */
             version: number;
-            /** Updated At */
-            updated_at?: string | null;
         };
         /** SceneContractSnapshotResponse */
         SceneContractSnapshotResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            /** Schema Version */
-            schema_version: number;
-            /** Contract Hash */
-            contract_hash: string;
             /** Contract */
             contract: {
                 [key: string]: unknown;
             };
+            /** Contract Hash */
+            contract_hash: string;
             /** Created At */
             created_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Schema Version */
+            schema_version: number;
         };
         /** SceneVisionProfile */
         SceneVisionProfile: {
-            /**
-             * Compute Tier
-             * @default edge_standard
-             * @enum {string}
-             */
-            compute_tier: "cpu_low" | "edge_standard" | "edge_advanced_jetson" | "central_gpu";
             /**
              * Accuracy Mode
              * @default balanced
              * @enum {string}
              */
             accuracy_mode: "fast" | "balanced" | "maximum_accuracy" | "open_vocabulary";
+            /** Candidate Quality */
+            candidate_quality?: {
+                [key: string]: unknown;
+            };
             /**
-             * Scene Difficulty
-             * @default cluttered
+             * Compute Tier
+             * @default edge_standard
              * @enum {string}
              */
-            scene_difficulty: "open" | "cluttered" | "occluded" | "crowded" | "traffic" | "custom";
+            compute_tier: "cpu_low" | "edge_standard" | "edge_advanced_jetson" | "central_gpu";
+            motion_metrics?: components["schemas"]["MotionMetricsSettings"];
             /**
              * Object Domain
              * @default mixed
              * @enum {string}
              */
             object_domain: "people" | "vehicles" | "mixed" | "open_vocab";
-            motion_metrics?: components["schemas"]["MotionMetricsSettings"];
-            /** Candidate Quality */
-            candidate_quality?: {
-                [key: string]: unknown;
-            };
+            /**
+             * Scene Difficulty
+             * @default cluttered
+             * @enum {string}
+             */
+            scene_difficulty: "open" | "cluttered" | "occluded" | "crowded" | "traffic" | "custom";
             /** Tracker Profile */
             tracker_profile?: {
                 [key: string]: unknown;
@@ -4227,75 +5895,108 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SiteAssignmentCreate */
+        SiteAssignmentCreate: {
+            /** Assignee Id */
+            assignee_id: string;
+            /** Assignee Type */
+            assignee_type: string;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Pack Id */
+            pack_id?: string | null;
+            /** Rotation Group Id */
+            rotation_group_id?: string | null;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+        };
         /** SiteCreate */
         SiteCreate: {
-            /** Name */
-            name: string;
             /** Description */
             description?: string | null;
+            /** Geo Point */
+            geo_point?: {
+                [key: string]: number;
+            } | null;
+            /** Name */
+            name: string;
             /**
              * Tz
              * @default UTC
              */
             tz: string;
-            /** Geo Point */
-            geo_point?: {
-                [key: string]: number;
-            } | null;
+        };
+        /** SiteGroupCreate */
+        SiteGroupCreate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Pack Id */
+            pack_id?: string | null;
         };
         /** SiteResponse */
         SiteResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description?: string | null;
-            /** Tz */
-            tz: string;
-            /** Geo Point */
-            geo_point?: {
-                [key: string]: number;
-            } | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-        };
-        /** SiteUpdate */
-        SiteUpdate: {
-            /** Name */
-            name?: string | null;
             /** Description */
             description?: string | null;
-            /** Tz */
-            tz?: string | null;
             /** Geo Point */
             geo_point?: {
                 [key: string]: number;
             } | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Tz */
+            tz: string;
+        };
+        /** SiteUpdate */
+        SiteUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Geo Point */
+            geo_point?: {
+                [key: string]: number;
+            } | null;
+            /** Name */
+            name?: string | null;
+            /** Tz */
+            tz?: string | null;
         };
         /** SourceCapability */
         SourceCapability: {
-            /** Width */
-            width: number;
-            /** Height */
-            height: number;
-            /** Fps */
-            fps?: number | null;
-            /** Codec */
-            codec?: string | null;
             /** Aspect Ratio */
             aspect_ratio?: string | null;
+            /** Codec */
+            codec?: string | null;
+            /** Fps */
+            fps?: number | null;
+            /** Height */
+            height: number;
+            /** Width */
+            width: number;
         };
         /**
          * StreamMode
@@ -4304,10 +6005,10 @@ export interface components {
         StreamMode: "passthrough" | "filtered-preview" | "annotated-whip";
         /** StreamOfferRequest */
         StreamOfferRequest: {
-            /** Sdp Offer */
-            sdp_offer: string;
             /** Profile Id */
             profile_id?: ("native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5") | null;
+            /** Sdp Offer */
+            sdp_offer: string;
         };
         /** StreamOfferResponse */
         StreamOfferResponse: {
@@ -4336,15 +6037,17 @@ export interface components {
         };
         /** SupervisorPollResponse */
         SupervisorPollResponse: {
-            /** Supervisor Id */
-            supervisor_id: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
             /** Requests */
             requests?: components["schemas"]["OperationsLifecycleRequestResponse"][];
+            /** Supervisor Id */
+            supervisor_id: string;
         };
         /** SupervisorRuntimeReportCreate */
         SupervisorRuntimeReportCreate: {
+            /** Assignment Id */
+            assignment_id?: string | null;
             /**
              * Camera Id
              * Format: uuid
@@ -4352,151 +6055,282 @@ export interface components {
             camera_id: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
-            /** Assignment Id */
-            assignment_id?: string | null;
             /**
              * Heartbeat At
              * Format: date-time
              */
             heartbeat_at: string;
-            /** @default unknown */
-            runtime_state: components["schemas"]["WorkerRuntimeState"];
+            /** Last Error */
+            last_error?: string | null;
             /**
              * Restart Count
              * @default 0
              */
             restart_count: number;
-            /** Last Error */
-            last_error?: string | null;
             /** Runtime Artifact Id */
             runtime_artifact_id?: string | null;
+            /** @default unknown */
+            runtime_state: components["schemas"]["WorkerRuntimeState"];
             /** Scene Contract Hash */
             scene_contract_hash?: string | null;
         };
         /** SupervisorRuntimeReportResponse */
         SupervisorRuntimeReportResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
+            /** Assignment Id */
+            assignment_id?: string | null;
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            /** Assignment Id */
-            assignment_id?: string | null;
-            /**
-             * Heartbeat At
-             * Format: date-time
-             */
-            heartbeat_at: string;
-            runtime_state: components["schemas"]["WorkerRuntimeState"];
-            /** Restart Count */
-            restart_count: number;
-            /** Last Error */
-            last_error?: string | null;
-            /** Runtime Artifact Id */
-            runtime_artifact_id?: string | null;
-            /** Scene Contract Hash */
-            scene_contract_hash?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-        };
-        /** SupervisorServiceReportCreate */
-        SupervisorServiceReportCreate: {
-            node_kind: components["schemas"]["DeploymentNodeKind"];
             /** Edge Node Id */
             edge_node_id?: string | null;
-            /** Hostname */
-            hostname: string;
-            service_manager: components["schemas"]["DeploymentServiceManager"];
-            /** Service Status */
-            service_status: string;
-            install_status: components["schemas"]["DeploymentInstallStatus"];
-            credential_status: components["schemas"]["DeploymentCredentialStatus"];
-            /** Version */
-            version?: string | null;
-            /** Os Name */
-            os_name: string;
-            /** Host Profile */
-            host_profile: string;
             /**
              * Heartbeat At
              * Format: date-time
              */
             heartbeat_at: string;
-            /** Diagnostics */
-            diagnostics?: {
-                [key: string]: unknown;
-            };
-        };
-        /** SupervisorServiceReportResponse */
-        SupervisorServiceReportResponse: {
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Last Error */
+            last_error?: string | null;
+            /** Restart Count */
+            restart_count: number;
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            runtime_state: components["schemas"]["WorkerRuntimeState"];
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
             /**
              * Tenant Id
              * Format: uuid
              */
             tenant_id: string;
-            /**
-             * Deployment Node Id
-             * Format: uuid
-             */
-            deployment_node_id: string;
+        };
+        /** SupervisorServiceReportCreate */
+        SupervisorServiceReportCreate: {
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
             /** Edge Node Id */
             edge_node_id?: string | null;
-            /** Supervisor Id */
-            supervisor_id: string;
-            node_kind: components["schemas"]["DeploymentNodeKind"];
-            /** Hostname */
-            hostname: string;
-            service_manager: components["schemas"]["DeploymentServiceManager"];
-            /** Service Status */
-            service_status: string;
-            install_status: components["schemas"]["DeploymentInstallStatus"];
-            credential_status: components["schemas"]["DeploymentCredentialStatus"];
-            /** Version */
-            version?: string | null;
-            /** Os Name */
-            os_name: string;
-            /** Host Profile */
-            host_profile: string;
             /**
              * Heartbeat At
              * Format: date-time
              */
             heartbeat_at: string;
-            /** Diagnostics */
-            diagnostics?: {
-                [key: string]: unknown;
-            };
+            /** Host Profile */
+            host_profile: string;
+            /** Hostname */
+            hostname: string;
+            install_status: components["schemas"]["DeploymentInstallStatus"];
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Os Name */
+            os_name: string;
+            service_manager: components["schemas"]["DeploymentServiceManager"];
+            /** Service Status */
+            service_status: string;
+            /** Version */
+            version?: string | null;
+        };
+        /** SupervisorServiceReportResponse */
+        SupervisorServiceReportResponse: {
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            credential_status: components["schemas"]["DeploymentCredentialStatus"];
+            /**
+             * Deployment Node Id
+             * Format: uuid
+             */
+            deployment_node_id: string;
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /**
+             * Heartbeat At
+             * Format: date-time
+             */
+            heartbeat_at: string;
+            /** Host Profile */
+            host_profile: string;
+            /** Hostname */
+            hostname: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            install_status: components["schemas"]["DeploymentInstallStatus"];
             node: components["schemas"]["DeploymentNodeResponse"];
+            node_kind: components["schemas"]["DeploymentNodeKind"];
+            /** Os Name */
+            os_name: string;
+            service_manager: components["schemas"]["DeploymentServiceManager"];
+            /** Service Status */
+            service_status: string;
+            /** Supervisor Id */
+            supervisor_id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Version */
+            version?: string | null;
+        };
+        /** SupportBundleCreate */
+        SupportBundleCreate: {
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Include Logs
+             * @default false
+             */
+            include_logs: boolean;
+            /** Node Id */
+            node_id?: string | null;
+            /** Pack Id */
+            pack_id?: string | null;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+        };
+        /** SupportBundleListResponse */
+        SupportBundleListResponse: {
+            /** Items */
+            items?: components["schemas"]["SupportBundleResponse"][];
+        };
+        /** SupportBundleResponse */
+        SupportBundleResponse: {
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Include Logs */
+            include_logs: boolean;
+            /** Node Id */
+            node_id?: string | null;
+            /** Pack Id */
+            pack_id?: string | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+        };
+        /** SupportSessionClose */
+        SupportSessionClose: {
+            /** Ended At */
+            ended_at?: string | null;
+        };
+        /** SupportSessionCreate */
+        SupportSessionCreate: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Node Id */
+            node_id?: string | null;
+            /** Operator Id */
+            operator_id?: string | null;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+        };
+        /** SupportTunnelCreate */
+        SupportTunnelCreate: {
+            /** Allowed Ports */
+            allowed_ports: number[];
+            /** Credential Ref */
+            credential_ref: string;
+            /**
+             * Dispatch Method
+             * @default supervisor_poll
+             */
+            dispatch_method: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Node Id
+             * Format: uuid
+             */
+            node_id: string;
+            /** Relay Host */
+            relay_host: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Transport
+             * @default ssh_reverse
+             * @constant
+             */
+            transport: "ssh_reverse";
+        };
+        /** SupportTunnelRevoke */
+        SupportTunnelRevoke: {
+            /** Reason */
+            reason?: string | null;
         };
         /** TelemetryEnvelope */
         TelemetryEnvelope: {
             /** Events */
             events?: components["schemas"]["TelemetryFrame"][];
+        };
+        /** TelemetryFileImportRequest */
+        TelemetryFileImportRequest: {
+            /** Content */
+            content: string;
+            /**
+             * Source
+             * @default file_import
+             */
+            source: string;
+            /**
+             * Vessel Id
+             * Format: uuid
+             */
+            vessel_id: string;
         };
         /** TelemetryFrame */
         TelemetryFrame: {
@@ -4505,11 +6339,10 @@ export interface components {
              * Format: uuid
              */
             camera_id: string;
-            /**
-             * Ts
-             * Format: date-time
-             */
-            ts: string;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
             profile: components["schemas"]["PublishProfile"];
             stream_mode: components["schemas"]["StreamMode"];
             /**
@@ -4517,43 +6350,66 @@ export interface components {
              * @default native
              */
             stream_profile_id: string;
-            /** Counts */
-            counts: {
-                [key: string]: number;
-            };
             /** Tracks */
             tracks: components["schemas"]["TelemetryTrack"][];
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /** TelemetryObjectIngestRequest */
+        TelemetryObjectIngestRequest: {
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source
+             * @default ais_json
+             */
+            source: string;
+            /**
+             * Vessel Id
+             * Format: uuid
+             */
+            vessel_id: string;
         };
         /** TelemetryTrack */
         TelemetryTrack: {
-            /** Class Name */
-            class_name: string;
-            /** Confidence */
-            confidence: number;
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
             /** Bbox */
             bbox: {
                 [key: string]: number;
             };
-            /** Track Id */
-            track_id: number;
-            /** Stable Track Id */
-            stable_track_id?: number | null;
-            /** Track State */
-            track_state?: ("active" | "coasting") | null;
+            /** Class Name */
+            class_name: string;
+            /** Confidence */
+            confidence: number;
+            /** Direction Deg */
+            direction_deg?: number | null;
             /** Last Seen Age Ms */
             last_seen_age_ms?: number | null;
             /** Source Track Id */
             source_track_id?: number | null;
             /** Speed Kph */
             speed_kph?: number | null;
-            /** Direction Deg */
-            direction_deg?: number | null;
+            /** Stable Track Id */
+            stable_track_id?: number | null;
+            /** Track Id */
+            track_id: number;
+            /** Track State */
+            track_state?: ("active" | "coasting") | null;
             /** Zone Id */
             zone_id?: string | null;
-            /** Attributes */
-            attributes?: {
-                [key: string]: unknown;
-            };
+        };
+        /** TemplateApplyRequest */
+        TemplateApplyRequest: {
+            /** Template Id */
+            template_id: string;
         };
         /**
          * TrackerType
@@ -4562,39 +6418,146 @@ export interface components {
         TrackerType: "botsort" | "bytetrack" | "ocsort";
         /** TriggerRuleSummary */
         TriggerRuleSummary: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /** Incident Type */
-            incident_type: string;
-            /** @default warning */
-            severity: components["schemas"]["IncidentRuleSeverity"];
             action: components["schemas"]["RuleAction"];
             /**
              * Cooldown Seconds
              * @default 0
              */
             cooldown_seconds: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incident Type */
+            incident_type: string;
+            /** Name */
+            name: string;
             predicate?: components["schemas"]["WorkerIncidentRulePredicate"];
             /** Rule Hash */
             rule_hash?: string | null;
+            /** @default warning */
+            severity: components["schemas"]["IncidentRuleSeverity"];
+        };
+        /** UsageCreate */
+        UsageCreate: {
+            /** Account Id */
+            account_id?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Meter Key */
+            meter_key: string;
+            /** Node Id */
+            node_id?: string | null;
+            /** Occurred On */
+            occurred_on?: string | null;
+            /** Pack Id */
+            pack_id?: string | null;
+            /** Quantity */
+            quantity: number | string;
+            /** Source Ended On */
+            source_ended_on?: string | null;
+            /**
+             * Source Object Id
+             * Format: uuid
+             */
+            source_object_id: string;
+            /** Source Object Type */
+            source_object_type: string;
+            /** Source Started On */
+            source_started_on?: string | null;
         };
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
             msg: string;
             /** Error Type */
             type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
+        };
+        /** VesselCreate */
+        VesselCreate: {
+            /** Call Sign */
+            call_sign?: string | null;
+            /** Charterer Label */
+            charterer_label?: string | null;
+            create_site?: components["schemas"]["SiteCreate"] | null;
+            /** Flag State */
+            flag_state?: string | null;
+            /** Imo Number */
+            imo_number?: string | null;
+            /** Manager Label */
+            manager_label?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Mmsi */
+            mmsi?: string | null;
+            /** Name */
+            name: string;
+            /** Owner Label */
+            owner_label?: string | null;
+            /** Site Id */
+            site_id?: string | null;
+            /** Vessel Type */
+            vessel_type?: string | null;
+        };
+        /** VesselUpdate */
+        VesselUpdate: {
+            /** Active */
+            active?: boolean | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name?: string | null;
+        };
+        /** VoyageCreate */
+        VoyageCreate: {
+            /** Destination */
+            destination?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Origin */
+            origin?: string | null;
+            /** Scheduled Arrival At */
+            scheduled_arrival_at?: string | null;
+            /** Scheduled Departure At */
+            scheduled_departure_at?: string | null;
+            /** Voyage Number */
+            voyage_number?: string | null;
+        };
+        /** VoyageUpdate */
+        VoyageUpdate: {
+            /** Destination */
+            destination?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name?: string | null;
+            /** Origin */
+            origin?: string | null;
+            /** Scheduled Arrival At */
+            scheduled_arrival_at?: string | null;
+            /** Scheduled Departure At */
+            scheduled_departure_at?: string | null;
+            /** Voyage Number */
+            voyage_number?: string | null;
         };
         /** WorkerAssignmentCreate */
         WorkerAssignmentCreate: {
@@ -4603,42 +6566,42 @@ export interface components {
              * Format: uuid
              */
             camera_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
             /** @default supervised */
             desired_state: components["schemas"]["WorkerDesiredState"];
+            /** Edge Node Id */
+            edge_node_id?: string | null;
         };
         /** WorkerAssignmentResponse */
         WorkerAssignmentResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
+            /** Active */
+            active: boolean;
+            /** Assigned By Subject */
+            assigned_by_subject?: string | null;
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            /** Edge Node Id */
-            edge_node_id?: string | null;
-            desired_state: components["schemas"]["WorkerDesiredState"];
-            /** Active */
-            active: boolean;
-            /** Supersedes Assignment Id */
-            supersedes_assignment_id?: string | null;
-            /** Assigned By Subject */
-            assigned_by_subject?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            desired_state: components["schemas"]["WorkerDesiredState"];
+            /** Edge Node Id */
+            edge_node_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Supersedes Assignment Id */
+            supersedes_assignment_id?: string | null;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
             /**
              * Updated At
              * Format: date-time
@@ -4647,72 +6610,72 @@ export interface components {
         };
         /** WorkerCameraSettings */
         WorkerCameraSettings: {
-            /** Rtsp Url */
-            rtsp_url?: string | null;
-            /** Source Uri */
-            source_uri?: string | null;
             camera_source?: components["schemas"]["CameraSourceSettings"] | null;
-            /**
-             * Frame Skip
-             * @default 1
-             */
-            frame_skip: number;
             /**
              * Fps Cap
              * @default 25
              */
             fps_cap: number;
+            /**
+             * Frame Skip
+             * @default 1
+             */
+            frame_skip: number;
+            /** Rtsp Url */
+            rtsp_url?: string | null;
+            /** Source Uri */
+            source_uri?: string | null;
         };
         /** WorkerConfigResponse */
         WorkerConfigResponse: {
+            /** Active Classes */
+            active_classes?: string[];
+            /** Attribute Rules */
+            attribute_rules?: {
+                [key: string]: unknown;
+            }[];
+            camera: components["schemas"]["WorkerCameraSettings"];
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
-            mode: components["schemas"]["ProcessingMode"];
-            /** Scene Contract Hash */
-            scene_contract_hash?: string | null;
-            /** Privacy Manifest Hash */
-            privacy_manifest_hash?: string | null;
-            /** Runtime Passport Snapshot Id */
-            runtime_passport_snapshot_id?: string | null;
-            /** Runtime Passport Hash */
-            runtime_passport_hash?: string | null;
             configuration?: components["schemas"]["AppliedOperatorConfigurationSummary"];
-            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
-            evidence_storage?: components["schemas"]["WorkerEvidenceStorageSettings"] | null;
-            camera: components["schemas"]["WorkerCameraSettings"];
-            publish?: components["schemas"]["WorkerPublishSettings"];
-            stream?: components["schemas"]["WorkerStreamSettings"];
-            stream_delivery?: components["schemas"]["WorkerStreamDeliverySettings"] | null;
-            model: components["schemas"]["WorkerModelSettings"];
-            secondary_model?: components["schemas"]["WorkerModelSettings"] | null;
-            tracker: components["schemas"]["WorkerTrackerSettings"];
-            privacy?: components["schemas"]["WorkerPrivacySettings"];
-            privacy_policy?: components["schemas"]["WorkerPrivacyPolicySettings"] | null;
-            /** Active Classes */
-            active_classes?: string[];
-            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
-            runtime_selection?: components["schemas"]["WorkerRuntimeSelectionSettings"];
-            runtime_capability?: components["schemas"]["WorkerRuntimeCapability"];
-            /** Runtime Artifacts */
-            runtime_artifacts?: components["schemas"]["WorkerRuntimeArtifact"][];
-            /** Attribute Rules */
-            attribute_rules?: {
-                [key: string]: unknown;
-            }[];
-            /** Incident Rules */
-            incident_rules?: components["schemas"]["WorkerIncidentRule"][];
-            /** Zones */
-            zones?: (components["schemas"]["WorkerLineZone"] | components["schemas"]["WorkerPolygonZone"] | components["schemas"]["LegacyZone"])[];
-            vision_profile?: components["schemas"]["SceneVisionProfile"];
             /** Detection Regions */
             detection_regions?: components["schemas"]["DetectionRegion"][];
+            evidence_storage?: components["schemas"]["WorkerEvidenceStorageSettings"] | null;
             /** Homography */
             homography?: {
                 [key: string]: unknown;
             } | null;
+            /** Incident Rules */
+            incident_rules?: components["schemas"]["WorkerIncidentRule"][];
+            mode: components["schemas"]["ProcessingMode"];
+            model: components["schemas"]["WorkerModelSettings"];
+            privacy?: components["schemas"]["WorkerPrivacySettings"];
+            /** Privacy Manifest Hash */
+            privacy_manifest_hash?: string | null;
+            privacy_policy?: components["schemas"]["WorkerPrivacyPolicySettings"] | null;
+            publish?: components["schemas"]["WorkerPublishSettings"];
+            recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
+            /** Runtime Artifacts */
+            runtime_artifacts?: components["schemas"]["WorkerRuntimeArtifact"][];
+            runtime_capability?: components["schemas"]["WorkerRuntimeCapability"];
+            /** Runtime Passport Hash */
+            runtime_passport_hash?: string | null;
+            /** Runtime Passport Snapshot Id */
+            runtime_passport_snapshot_id?: string | null;
+            runtime_selection?: components["schemas"]["WorkerRuntimeSelectionSettings"];
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
+            /** Scene Contract Hash */
+            scene_contract_hash?: string | null;
+            secondary_model?: components["schemas"]["WorkerModelSettings"] | null;
+            stream?: components["schemas"]["WorkerStreamSettings"];
+            stream_delivery?: components["schemas"]["WorkerStreamDeliverySettings"] | null;
+            tracker: components["schemas"]["WorkerTrackerSettings"];
+            vision_profile?: components["schemas"]["SceneVisionProfile"];
+            /** Zones */
+            zones?: (components["schemas"]["WorkerLineZone"] | components["schemas"]["WorkerPolygonZone"] | components["schemas"]["LegacyZone"])[];
         };
         /**
          * WorkerDesiredState
@@ -4721,94 +6684,96 @@ export interface components {
         WorkerDesiredState: "desired" | "not_desired" | "manual" | "supervised";
         /** WorkerEvidenceStorageSettings */
         WorkerEvidenceStorageSettings: {
-            /** Profile Id */
-            profile_id?: string | null;
-            /** Profile Name */
-            profile_name?: string | null;
-            /** Profile Hash */
-            profile_hash?: string | null;
-            /** Provider */
-            provider: components["schemas"]["EvidenceStorageProvider"] | "local_first";
-            storage_scope: components["schemas"]["EvidenceStorageScope"];
             /** Config */
             config?: {
                 [key: string]: unknown;
             };
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Provider */
+            provider: components["schemas"]["EvidenceStorageProvider"] | "local_first";
             /** Secrets */
             secrets?: {
                 [key: string]: string;
             };
+            storage_scope: components["schemas"]["EvidenceStorageScope"];
         };
         /** WorkerIncidentRule */
         WorkerIncidentRule: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
+            /** @default record_clip */
+            action: components["schemas"]["RuleAction"];
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
             /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /** Name */
-            name: string;
-            /** Incident Type */
-            incident_type: string;
-            /** @default warning */
-            severity: components["schemas"]["IncidentRuleSeverity"];
-            predicate?: components["schemas"]["WorkerIncidentRulePredicate"];
-            /** @default record_clip */
-            action: components["schemas"]["RuleAction"];
-            /**
              * Cooldown Seconds
              * @default 0
              */
             cooldown_seconds: number;
-            /** Webhook Url */
-            webhook_url?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incident Type */
+            incident_type: string;
+            /** Name */
+            name: string;
+            predicate?: components["schemas"]["WorkerIncidentRulePredicate"];
             /** Rule Hash */
             rule_hash: string;
+            /** @default warning */
+            severity: components["schemas"]["IncidentRuleSeverity"];
+            /** Webhook Url */
+            webhook_url?: string | null;
         };
         /** WorkerIncidentRulePredicate */
         WorkerIncidentRulePredicate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
             /** Class Names */
             class_names?: string[];
-            /** Zone Ids */
-            zone_ids?: string[];
             /**
              * Min Confidence
              * @default 0.5
              */
             min_confidence: number;
-            /** Attributes */
-            attributes?: {
-                [key: string]: unknown;
-            };
+            /** Zone Ids */
+            zone_ids?: string[];
         };
         /** WorkerLineZone */
         WorkerLineZone: {
-            /** Id */
-            id?: string | null;
             /** Class Names */
             class_names?: string[] | null;
+            /** Id */
+            id?: string | null;
+            /** Points */
+            points: number[][];
             /**
              * Type
              * @constant
              */
             type: "line";
-            /** Points */
-            points: number[][];
         } & {
             [key: string]: unknown;
         };
         /** WorkerModelAdmissionRequest */
         WorkerModelAdmissionRequest: {
+            /** Assignment Id */
+            assignment_id?: string | null;
             /**
              * Camera Id
              * Format: uuid
@@ -4816,14 +6781,19 @@ export interface components {
             camera_id: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
-            /** Assignment Id */
-            assignment_id?: string | null;
+            /**
+             * Fallback Allowed
+             * @default true
+             */
+            fallback_allowed: boolean;
+            /** @default fixed_vocab */
+            model_capability: components["schemas"]["DetectorCapability"];
             /** Model Id */
             model_id?: string | null;
             /** Model Name */
             model_name?: string | null;
-            /** @default fixed_vocab */
-            model_capability: components["schemas"]["DetectorCapability"];
+            /** Preferred Backend */
+            preferred_backend?: string | null;
             /** Runtime Artifact Id */
             runtime_artifact_id?: string | null;
             /** Runtime Artifact Target Profile */
@@ -4832,130 +6802,135 @@ export interface components {
             runtime_selection_profile_id?: string | null;
             /** Selected Backend */
             selected_backend?: string | null;
-            /** Preferred Backend */
-            preferred_backend?: string | null;
             /** Stream Profile */
             stream_profile?: {
                 [key: string]: unknown;
             };
-            /**
-             * Fallback Allowed
-             * @default true
-             */
-            fallback_allowed: boolean;
         };
         /** WorkerModelAdmissionResponse */
         WorkerModelAdmissionResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
+            /** Assignment Id */
+            assignment_id?: string | null;
             /**
              * Camera Id
              * Format: uuid
              */
             camera_id: string;
+            /** Constraints */
+            constraints?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
-            /** Assignment Id */
-            assignment_id?: string | null;
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
             /** Hardware Report Id */
             hardware_report_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            model_capability?: components["schemas"]["DetectorCapability"] | null;
             /** Model Id */
             model_id?: string | null;
             /** Model Name */
             model_name?: string | null;
-            model_capability?: components["schemas"]["DetectorCapability"] | null;
-            /** Runtime Artifact Id */
-            runtime_artifact_id?: string | null;
-            /** Runtime Selection Profile Id */
-            runtime_selection_profile_id?: string | null;
-            /** Stream Profile */
-            stream_profile?: {
-                [key: string]: unknown;
-            };
-            status: components["schemas"]["ModelAdmissionStatus"];
-            /** Selected Backend */
-            selected_backend?: string | null;
+            /** Rationale */
+            rationale: string;
+            /** Recommended Backend */
+            recommended_backend?: string | null;
             /** Recommended Model Id */
             recommended_model_id?: string | null;
             /** Recommended Model Name */
             recommended_model_name?: string | null;
             /** Recommended Runtime Profile Id */
             recommended_runtime_profile_id?: string | null;
-            /** Recommended Backend */
-            recommended_backend?: string | null;
-            /** Rationale */
-            rationale: string;
-            /** Constraints */
-            constraints?: {
+            /** Runtime Artifact Id */
+            runtime_artifact_id?: string | null;
+            /** Runtime Selection Profile Id */
+            runtime_selection_profile_id?: string | null;
+            /** Selected Backend */
+            selected_backend?: string | null;
+            status: components["schemas"]["ModelAdmissionStatus"];
+            /** Stream Profile */
+            stream_profile?: {
                 [key: string]: unknown;
             };
             /**
-             * Evaluated At
-             * Format: date-time
+             * Tenant Id
+             * Format: uuid
              */
-            evaluated_at: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
+            tenant_id: string;
         };
         /** WorkerModelSettings */
         WorkerModelSettings: {
-            /** Name */
-            name: string;
-            /** Path */
-            path: string;
             /** @default fixed_vocab */
             capability: components["schemas"]["DetectorCapability"];
             capability_config?: components["schemas"]["ModelCapabilityConfig"];
             /** Classes */
             classes: string[];
-            /** Input Shape */
-            input_shape: {
-                [key: string]: number;
-            };
-            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /**
              * Confidence Threshold
              * @default 0.25
              */
             confidence_threshold: number;
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
             /**
              * Iou Threshold
              * @default 0.45
              */
             iou_threshold: number;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
         };
         /** WorkerPolygonZone */
         WorkerPolygonZone: {
-            /** Id */
-            id?: string | null;
             /** Class Names */
             class_names?: string[] | null;
-            /** Type */
-            type?: "polygon" | null;
+            /** Id */
+            id?: string | null;
             /** Polygon */
             polygon: number[][];
+            /** Type */
+            type?: "polygon" | null;
         } & {
             [key: string]: unknown;
         };
         /** WorkerPrivacyPolicySettings */
         WorkerPrivacyPolicySettings: {
+            /**
+             * Plaintext Plate Storage
+             * @default blocked
+             * @enum {string}
+             */
+            plaintext_plate_storage: "blocked" | "allowed";
+            /** Profile Hash */
+            profile_hash?: string | null;
             /** Profile Id */
             profile_id?: string | null;
             /** Profile Name */
             profile_name?: string | null;
-            /** Profile Hash */
-            profile_hash?: string | null;
+            /**
+             * Residency
+             * @default central
+             * @enum {string}
+             */
+            residency: "edge" | "central" | "cloud" | "local_first";
             /**
              * Retention Days
              * @default 30
@@ -4966,18 +6941,6 @@ export interface components {
              * @default 10737418240
              */
             storage_quota_bytes: number;
-            /**
-             * Plaintext Plate Storage
-             * @default blocked
-             * @enum {string}
-             */
-            plaintext_plate_storage: "blocked" | "allowed";
-            /**
-             * Residency
-             * @default central
-             * @enum {string}
-             */
-            residency: "edge" | "central" | "cloud" | "local_first";
         };
         /** WorkerPrivacySettings */
         WorkerPrivacySettings: {
@@ -5005,57 +6968,57 @@ export interface components {
         };
         /** WorkerPublishSettings */
         WorkerPublishSettings: {
+            /** Http Fallback Url */
+            http_fallback_url?: string | null;
             /**
              * Subject Prefix
              * @default evt.tracking
              */
             subject_prefix: string;
-            /** Http Fallback Url */
-            http_fallback_url?: string | null;
         };
         /** WorkerRuntimeArtifact */
         WorkerRuntimeArtifact: {
+            capability: components["schemas"]["DetectorCapability"];
+            /** Classes */
+            classes?: string[];
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            scope: components["schemas"]["RuntimeArtifactScope"];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
             kind: components["schemas"]["RuntimeArtifactKind"];
-            capability: components["schemas"]["DetectorCapability"];
+            /** Path */
+            path: string;
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
             /**
              * Runtime Backend
              * @enum {string}
              */
             runtime_backend: "onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine";
-            /** Path */
-            path: string;
-            /** Target Profile */
-            target_profile: string;
-            precision: components["schemas"]["RuntimeArtifactPrecision"];
-            /** Input Shape */
-            input_shape: {
-                [key: string]: number;
-            };
-            /** Classes */
-            classes?: string[];
-            /** Vocabulary Hash */
-            vocabulary_hash?: string | null;
-            /** Vocabulary Version */
-            vocabulary_version?: number | null;
-            /** Source Model Sha256 */
-            source_model_sha256: string;
+            scope: components["schemas"]["RuntimeArtifactScope"];
             /** Sha256 */
             sha256: string;
             /** Size Bytes */
             size_bytes: number;
+            /** Source Model Sha256 */
+            source_model_sha256: string;
+            /** Target Profile */
+            target_profile: string;
+            /** Vocabulary Hash */
+            vocabulary_hash?: string | null;
+            /** Vocabulary Version */
+            vocabulary_version?: number | null;
         };
         /** WorkerRuntimeCapability */
         WorkerRuntimeCapability: {
-            /** Execution Profiles */
-            execution_profiles?: string[];
             /** Detector Capabilities */
             detector_capabilities?: components["schemas"]["DetectorCapability"][];
+            /** Execution Profiles */
+            execution_profiles?: string[];
             /**
              * Hot Runtime Vocabulary Updates
              * @default false
@@ -5066,14 +7029,6 @@ export interface components {
         };
         /** WorkerRuntimeSelectionSettings */
         WorkerRuntimeSelectionSettings: {
-            /** Profile Id */
-            profile_id?: string | null;
-            /** Profile Name */
-            profile_name?: string | null;
-            /** Profile Hash */
-            profile_hash?: string | null;
-            /** Preferred Backend */
-            preferred_backend?: ("onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine") | null;
             /**
              * Artifact Preference
              * @default tensorrt_first
@@ -5085,6 +7040,14 @@ export interface components {
              * @default true
              */
             fallback_allowed: boolean;
+            /** Preferred Backend */
+            preferred_backend?: ("onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine") | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
         };
         /**
          * WorkerRuntimeState
@@ -5098,57 +7061,57 @@ export interface components {
         WorkerRuntimeStatus: "running" | "stale" | "offline" | "unknown" | "not_reported";
         /** WorkerStreamDeliverySettings */
         WorkerStreamDeliverySettings: {
-            /** Profile Id */
-            profile_id?: string | null;
-            /** Profile Name */
-            profile_name?: string | null;
-            /** Profile Hash */
-            profile_hash?: string | null;
             /**
              * Delivery Mode
              * @default native
              * @enum {string}
              */
             delivery_mode: "native" | "webrtc" | "hls" | "mjpeg" | "transcode";
-            /** Public Base Url */
-            public_base_url?: string | null;
             /** Edge Override Url */
             edge_override_url?: string | null;
             /** Operator Message */
             operator_message?: string | null;
+            /** Profile Hash */
+            profile_hash?: string | null;
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Profile Name */
+            profile_name?: string | null;
+            /** Public Base Url */
+            public_base_url?: string | null;
         };
         /** WorkerStreamSettings */
         WorkerStreamSettings: {
             /**
-             * Profile Id
-             * @default native
-             * @enum {string}
+             * Fps
+             * @default 25
              */
-            profile_id: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
+            fps: number;
+            /** Height */
+            height?: number | null;
             /**
              * Kind
              * @default passthrough
              * @enum {string}
              */
             kind: "passthrough" | "transcode";
+            /**
+             * Profile Id
+             * @default native
+             * @enum {string}
+             */
+            profile_id: "native" | "annotated" | "1080p25" | "1080p20" | "1080p15" | "1080p10" | "1080p5" | "900p25" | "900p20" | "900p15" | "900p10" | "900p5" | "720p25" | "720p20" | "720p15" | "720p10" | "720p5" | "540p25" | "540p20" | "540p15" | "540p10" | "540p5" | "360p25" | "360p20" | "360p15" | "360p10" | "360p5" | "240p25" | "240p20" | "240p15" | "240p10" | "240p5";
             /** Width */
             width?: number | null;
-            /** Height */
-            height?: number | null;
-            /**
-             * Fps
-             * @default 25
-             */
-            fps: number;
         };
         /** WorkerTrackerSettings */
         WorkerTrackerSettings: {
-            tracker_type: components["schemas"]["TrackerType"];
             /**
              * Frame Rate
              * @default 25
              */
             frame_rate: number;
+            tracker_type: components["schemas"]["TrackerType"];
         };
     };
     responses: never;
@@ -5159,10 +7122,14 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    healthcheck_healthz_get: {
+    get_billing_accounts_api_v1_billing_accounts_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                tenant_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5175,16 +7142,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: string;
+                        [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
     };
-    readiness_readyz_get: {
+    post_billing_account_api_v1_billing_accounts_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingAccountCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_entitlements_api_v1_billing_entitlements_get: {
+        parameters: {
+            query?: {
+                account_id?: string | null;
+                tenant_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5197,16 +7215,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: boolean;
+                        [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
     };
-    metrics_metrics_get: {
+    post_entitlement_api_v1_billing_entitlements_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntitlementCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_billing_export_api_v1_billing_exports__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_runs_api_v1_billing_invoice_runs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5218,14 +7319,97 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["InvoiceRunListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
     };
-    debug_protected_api_v1_debug_protected_get: {
+    post_invoice_run_api_v1_billing_invoice_runs_post: {
         parameters: {
             query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceRunCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_run_api_v1_billing_invoice_runs__invoice_run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                invoice_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_meters_api_v1_billing_meters_get: {
+        parameters: {
+            query?: {
+                pack_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5243,12 +7427,25 @@ export interface operations {
                     };
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
-    edge_ping_api_v1_edge_ping_post: {
+    get_billing_nodes_api_v1_billing_nodes_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                tenant_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5261,30 +7458,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: string;
+                        [key: string]: unknown;
                     };
-                };
-            };
-        };
-    };
-    list_sites_api_v1_sites_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SiteResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -5298,7 +7473,7 @@ export interface operations {
             };
         };
     };
-    create_site_api_v1_sites_post: {
+    post_billing_node_api_v1_billing_nodes_post: {
         parameters: {
             query?: never;
             header?: {
@@ -5309,7 +7484,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SiteCreate"];
+                "application/json": components["schemas"]["BillingNodeCreate"];
             };
         };
         responses: {
@@ -5319,7 +7494,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SiteResponse"];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -5333,15 +7510,13 @@ export interface operations {
             };
         };
     };
-    get_site_api_v1_sites__site_id__get: {
+    get_price_books_api_v1_billing_price_books_get: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
-            path: {
-                site_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -5352,7 +7527,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SiteResponse"];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -5366,53 +7543,57 @@ export interface operations {
             };
         };
     };
-    delete_site_api_v1_sites__site_id__delete: {
+    post_price_book_api_v1_billing_price_books_post: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
-            path: {
-                site_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_site_api_v1_sites__site_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                site_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SiteUpdate"];
+                "application/json": components["schemas"]["PriceBookCreate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_api_v1_billing_usage_get: {
+        parameters: {
+            query?: {
+                meter_key?: string | null;
+                pack_id?: string | null;
+                tenant_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -5420,7 +7601,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SiteResponse"];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_usage_api_v1_billing_usage_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -5638,11 +7858,9 @@ export interface operations {
             };
         };
     };
-    get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get: {
+    list_incident_rules_api_v1_cameras__camera_id__incident_rules_get: {
         parameters: {
-            query?: {
-                supervisor_id?: string | null;
-            };
+            query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
@@ -5659,7 +7877,185 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkerConfigResponse"];
+                    "application/json": components["schemas"]["IncidentRuleResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_incident_rule_api_v1_cameras__camera_id__incident_rules_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_incident_rule_api_v1_cameras__camera_id__incident_rules_validate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentRuleValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleValidationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentRuleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5729,6 +8125,140 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_camera_worker_config_api_v1_cameras__camera_id__worker_config_get: {
+        parameters: {
+            query?: {
+                supervisor_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_bindings_api_v1_configuration_bindings_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["OperatorConfigProfileKind"] | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigBindingListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_configuration_binding_api_v1_configuration_bindings_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorConfigBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigBindingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_binding_api_v1_configuration_bindings__binding_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5969,105 +8499,6 @@ export interface operations {
             };
         };
     };
-    list_configuration_bindings_api_v1_configuration_bindings_get: {
-        parameters: {
-            query?: {
-                kind?: components["schemas"]["OperatorConfigProfileKind"] | null;
-            };
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperatorConfigBindingListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    upsert_configuration_binding_api_v1_configuration_bindings_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OperatorConfigBindingRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperatorConfigBindingResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_configuration_binding_api_v1_configuration_bindings__binding_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                binding_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     resolve_configuration_api_v1_configuration_resolved_get: {
         parameters: {
             query?: {
@@ -6103,7 +8534,7 @@ export interface operations {
             };
         };
     };
-    get_master_bootstrap_status_api_v1_deployment_bootstrap_status_get: {
+    debug_protected_api_v1_debug_protected_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6118,27 +8549,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MasterBootstrapStatusResponse"];
-                };
-            };
-        };
-    };
-    rotate_local_bootstrap_token_api_v1_deployment_bootstrap_rotate_local_token_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MasterBootstrapRotateResponse"];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -6176,6 +8589,46 @@ export interface operations {
             };
         };
     };
+    rotate_local_bootstrap_token_api_v1_deployment_bootstrap_rotate_local_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterBootstrapRotateResponse"];
+                };
+            };
+        };
+    };
+    get_master_bootstrap_status_api_v1_deployment_bootstrap_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterBootstrapStatusResponse"];
+                };
+            };
+        };
+    };
     list_deployment_nodes_api_v1_deployment_nodes_get: {
         parameters: {
             query?: never;
@@ -6194,6 +8647,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeploymentNodeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_node_credentials_api_v1_deployment_nodes__node_id__credentials_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeCredentialRevokeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_node_credentials_api_v1_deployment_nodes__node_id__credentials_rotate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeCredentialRotateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSupportBundleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6310,105 +8862,6 @@ export interface operations {
             };
         };
     };
-    revoke_node_credentials_api_v1_deployment_nodes__node_id__credentials_revoke_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                node_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NodeCredentialRevokeResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rotate_node_credentials_api_v1_deployment_nodes__node_id__credentials_rotate_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                node_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NodeCredentialRotateResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                node_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentSupportBundleResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     record_supervisor_service_report_api_v1_deployment_supervisors__supervisor_id__service_reports_post: {
         parameters: {
             query?: never;
@@ -6442,6 +8895,2531 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edge_heartbeat_api_v1_edge_heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeHeartbeatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeHeartbeatResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edge_ping_api_v1_edge_ping_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    register_edge_node_api_v1_edge_register_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeRegisterResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_edge_telemetry_api_v1_edge_telemetry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelemetryEnvelope"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_history_api_v1_export_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                camera_id?: string | null;
+                camera_ids?: string[] | null;
+                class_names?: string[] | null;
+                granularity?: string;
+                format?: string;
+                metric?: components["schemas"]["HistoryMetric"];
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_exceptions_api_v1_fleet_exceptions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_hierarchy_api_v1_fleet_hierarchy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_hierarchy_api_v1_fleet_hierarchy_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HierarchyReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rotation_groups_api_v1_fleet_rotation_groups_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_rotation_group_api_v1_fleet_rotation_groups_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotationGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_site_assignments_api_v1_fleet_site_assignments_get: {
+        parameters: {
+            query?: {
+                site_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_site_assignment_api_v1_fleet_site_assignments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteAssignmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_site_groups_api_v1_fleet_site_groups_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_site_group_api_v1_fleet_site_groups_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_site_state_api_v1_fleet_sites__site_id__state_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_api_v1_history_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                camera_id?: string | null;
+                camera_ids?: string[] | null;
+                class_names?: string[] | null;
+                granularity?: string;
+                metric?: components["schemas"]["HistoryMetric"];
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryPoint"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_classes_api_v1_history_classes_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                camera_id?: string | null;
+                camera_ids?: string[] | null;
+                metric?: components["schemas"]["HistoryMetric"];
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryClassesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_series_api_v1_history_series_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                camera_id?: string | null;
+                camera_ids?: string[] | null;
+                class_names?: string[] | null;
+                granularity?: string;
+                metric?: components["schemas"]["HistoryMetric"];
+                include_speed?: boolean;
+                speed_threshold?: number | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistorySeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_incidents_api_v1_incidents_get: {
+        parameters: {
+            query?: {
+                camera_id?: string | null;
+                type?: string | null;
+                review_status?: components["schemas"]["IncidentReviewStatus"] | null;
+                limit?: number;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_artifact_content_api_v1_incidents__incident_id__artifacts__artifact_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_incident_cross_camera_threads_api_v1_incidents__incident_id__cross_camera_threads_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrossCameraThreadResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_incident_ledger_api_v1_incidents__incident_id__ledger_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceLedgerEntryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_privacy_manifest_api_v1_incidents__incident_id__privacy_manifest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivacyManifestSnapshotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_incident_review_api_v1_incidents__incident_id__review_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentReviewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_runtime_passport_api_v1_incidents__incident_id__runtime_passport_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimePassportSnapshotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_scene_contract_api_v1_incidents__incident_id__scene_contract_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneContractSnapshotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_link_passport_api_v1_link_evidence__incident_id__passport_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_link_queue_item_api_v1_link_queue__queue_item_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                queue_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_link_queue_item_api_v1_link_queue__queue_item_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                queue_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_link_queue_item_api_v1_link_queue__queue_item_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                queue_item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_budget_api_v1_link_sites__site_id__budget_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    } | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_link_budget_api_v1_link_sites__site_id__budget_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkBudgetUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_policies_api_v1_link_sites__site_id__policies_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_link_policies_api_v1_link_sites__site_id__policies_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkPolicyUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_probes_api_v1_link_sites__site_id__probes_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_link_probe_api_v1_link_sites__site_id__probes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkProbeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_queue_api_v1_link_sites__site_id__queue_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_status_api_v1_link_sites__site_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_billing_rollups_api_v1_maritime_billing_rollups_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_billing_usage_api_v1_maritime_billing_usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_maritime_scene_template_api_v1_maritime_cameras__camera_id__apply_template_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_evidence_context_api_v1_maritime_evidence_context_get: {
+        parameters: {
+            query?: {
+                incident_id?: string | null;
+                camera_id?: string | null;
+                incident_time?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_maritime_evidence_exports_api_v1_maritime_evidence_exports_get: {
+        parameters: {
+            query?: {
+                incident_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_maritime_evidence_export_api_v1_maritime_evidence_exports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceExportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_maritime_ais_file_api_v1_maritime_import_ais_file_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelemetryFileImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_maritime_nmea_file_api_v1_maritime_import_nmea_file_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelemetryFileImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_maritime_ais_position_api_v1_maritime_ingest_ais_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelemetryObjectIngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_maritime_carrier_terminal_api_v1_maritime_ingest_carrier_terminal_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CarrierTerminalIngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_maritime_nmea_readings_api_v1_maritime_ingest_nmea_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NMEAIngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_maritime_port_call_api_v1_maritime_port_calls__port_call_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                port_call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortCallUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    arrive_maritime_port_call_api_v1_maritime_port_calls__port_call_id__arrive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                port_call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    depart_maritime_port_call_api_v1_maritime_port_calls__port_call_id__depart_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                port_call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_runtime_api_v1_maritime_runtime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_maritime_scene_templates_api_v1_maritime_scene_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    get_maritime_support_checklist_api_v1_maritime_support_checklist_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_maritime_support_diagnostics_api_v1_maritime_support_diagnostics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_maritime_vessels_api_v1_maritime_vessels_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_maritime_vessel_api_v1_maritime_vessels_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VesselCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_vessel_api_v1_maritime_vessels__vessel_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deactivate_maritime_vessel_api_v1_maritime_vessels__vessel_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_maritime_vessel_api_v1_maritime_vessels__vessel_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VesselUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_carrier_selection_api_v1_maritime_vessels__vessel_id__carrier_selection_get: {
+        parameters: {
+            query?: {
+                priority_lane?: string;
+                remaining_budget_bytes?: number;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_vessel_link_status_api_v1_maritime_vessels__vessel_id__link_status_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaritimeVesselLinkStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_vessel_telemetry_api_v1_maritime_vessels__vessel_id__telemetry_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_maritime_voyages_api_v1_maritime_vessels__vessel_id__voyages_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_maritime_voyage_api_v1_maritime_vessels__vessel_id__voyages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                vessel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoyageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maritime_voyage_api_v1_maritime_voyages__voyage_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                voyage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_maritime_voyage_api_v1_maritime_voyages__voyage_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                voyage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoyageUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_maritime_voyage_api_v1_maritime_voyages__voyage_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                voyage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_maritime_voyage_api_v1_maritime_voyages__voyage_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                voyage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_maritime_port_calls_api_v1_maritime_voyages__voyage_id__port_calls_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                voyage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_maritime_port_call_api_v1_maritime_voyages__voyage_id__port_calls_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                voyage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortCallCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_model_catalog_api_v1_model_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelCatalogEntryResponse"][];
                 };
             };
         };
@@ -6668,17 +11646,50 @@ export interface operations {
             };
         };
     };
-    list_runtime_artifact_soak_runs_api_v1_runtime_artifacts_soak_runs_get: {
+    create_bootstrap_material_api_v1_operations_bootstrap_post: {
         parameters: {
-            query?: {
-                runtime_artifact_id?: string | null;
-                edge_node_id?: string | null;
-                limit?: number;
-            };
+            query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
             path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FleetBootstrapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FleetBootstrapResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_edge_node_credentials_api_v1_operations_edge_nodes__edge_node_id__credentials_rotate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                edge_node_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -6689,7 +11700,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RuntimeArtifactSoakRunResponse"][];
+                    "application/json": components["schemas"]["NodeCredentialRotateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6703,46 +11714,15 @@ export interface operations {
             };
         };
     };
-    create_runtime_artifact_soak_run_api_v1_runtime_artifacts_soak_runs_post: {
+    get_latest_edge_hardware_report_api_v1_operations_edge_nodes__edge_node_id__hardware_reports_latest_get: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RuntimeArtifactSoakRunCreate"];
+            path: {
+                edge_node_id: string;
             };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RuntimeArtifactSoakRunResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_model_catalog_api_v1_model_catalog_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -6753,101 +11733,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ModelCatalogEntryResponse"][];
-                };
-            };
-        };
-    };
-    register_edge_node_api_v1_edge_register_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EdgeRegisterRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EdgeRegisterResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ingest_edge_telemetry_api_v1_edge_telemetry_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TelemetryEnvelope"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    edge_heartbeat_api_v1_edge_heartbeat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EdgeHeartbeatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EdgeHeartbeatResponse"];
+                    "application/json": components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
                 };
             };
             /** @description Validation Error */
@@ -6894,149 +11780,6 @@ export interface operations {
             };
         };
     };
-    list_operational_memory_patterns_api_v1_operations_memory_patterns_get: {
-        parameters: {
-            query?: {
-                incident_id?: string | null;
-                camera_id?: string | null;
-                site_id?: string | null;
-                limit?: number;
-            };
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationalMemoryPatternResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_bootstrap_material_api_v1_operations_bootstrap_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FleetBootstrapRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FleetBootstrapResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_worker_assignment_api_v1_operations_worker_assignments_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkerAssignmentCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkerAssignmentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    record_worker_runtime_report_api_v1_operations_runtime_reports_post: {
-        parameters: {
-            query?: {
-                supervisor_id?: string | null;
-            };
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SupervisorRuntimeReportCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SupervisorRuntimeReportResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     create_lifecycle_request_api_v1_operations_lifecycle_requests_post: {
         parameters: {
             query?: never;
@@ -7059,43 +11802,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationsLifecycleRequestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    poll_supervisor_lifecycle_requests_api_v1_operations_supervisors__supervisor_id__poll_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                supervisor_id: string | null;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SupervisorPollRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SupervisorPollResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7187,6 +11893,79 @@ export interface operations {
             };
         };
     };
+    list_operational_memory_patterns_api_v1_operations_memory_patterns_get: {
+        parameters: {
+            query?: {
+                incident_id?: string | null;
+                camera_id?: string | null;
+                site_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationalMemoryPatternResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_worker_runtime_report_api_v1_operations_runtime_reports_post: {
+        parameters: {
+            query?: {
+                supervisor_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorRuntimeReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupervisorRuntimeReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     record_hardware_report_api_v1_operations_supervisors__supervisor_id__hardware_reports_post: {
         parameters: {
             query?: never;
@@ -7257,18 +12036,22 @@ export interface operations {
             };
         };
     };
-    get_latest_edge_hardware_report_api_v1_operations_edge_nodes__edge_node_id__hardware_reports_latest_get: {
+    poll_supervisor_lifecycle_requests_api_v1_operations_supervisors__supervisor_id__poll_post: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
             path: {
-                edge_node_id: string;
+                supervisor_id: string | null;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorPollRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -7276,7 +12059,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EdgeNodeHardwareReportResponse"] | null;
+                    "application/json": components["schemas"]["SupervisorPollResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7290,26 +12073,28 @@ export interface operations {
             };
         };
     };
-    rotate_edge_node_credentials_api_v1_operations_edge_nodes__edge_node_id__credentials_rotate_post: {
+    create_worker_assignment_api_v1_operations_worker_assignments_post: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
-            path: {
-                edge_node_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkerAssignmentCreate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NodeCredentialRotateResponse"];
+                    "application/json": components["schemas"]["WorkerAssignmentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7362,6 +12147,79 @@ export interface operations {
             };
         };
     };
+    list_packs_api_v1_packs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackListResponse"];
+                };
+            };
+        };
+    };
+    get_maritime_pack_runtime_api_v1_packs_maritime_fleet_runtime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_pack_api_v1_packs__pack_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pack_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackManifestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_policy_draft_api_v1_policy_drafts_post: {
         parameters: {
             query?: never;
@@ -7398,6 +12256,39 @@ export interface operations {
         };
     };
     get_policy_draft_api_v1_policy_drafts__draft_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_policy_draft_api_v1_policy_drafts__draft_id__apply_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7496,57 +12387,20 @@ export interface operations {
             };
         };
     };
-    apply_policy_draft_api_v1_policy_drafts__draft_id__apply_post: {
+    resolve_query_api_v1_query_post: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
-            path: {
-                draft_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PolicyDraftResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_history_api_v1_history_get: {
-        parameters: {
-            query: {
-                from: string;
-                to: string;
-                camera_id?: string | null;
-                camera_ids?: string[] | null;
-                class_names?: string[] | null;
-                granularity?: string;
-                metric?: components["schemas"]["HistoryMetric"];
-            };
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -7554,7 +12408,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HistoryPoint"][];
+                    "application/json": components["schemas"]["QueryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7568,130 +12422,11 @@ export interface operations {
             };
         };
     };
-    get_history_series_api_v1_history_series_get: {
-        parameters: {
-            query: {
-                from: string;
-                to: string;
-                camera_id?: string | null;
-                camera_ids?: string[] | null;
-                class_names?: string[] | null;
-                granularity?: string;
-                metric?: components["schemas"]["HistoryMetric"];
-                include_speed?: boolean;
-                speed_threshold?: number | null;
-            };
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistorySeriesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_history_classes_api_v1_history_classes_get: {
-        parameters: {
-            query: {
-                from: string;
-                to: string;
-                camera_id?: string | null;
-                camera_ids?: string[] | null;
-                metric?: components["schemas"]["HistoryMetric"];
-            };
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryClassesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_history_api_v1_export_get: {
-        parameters: {
-            query: {
-                from: string;
-                to: string;
-                camera_id?: string | null;
-                camera_ids?: string[] | null;
-                class_names?: string[] | null;
-                granularity?: string;
-                format?: string;
-                metric?: components["schemas"]["HistoryMetric"];
-            };
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_incidents_api_v1_incidents_get: {
+    list_runtime_artifact_soak_runs_api_v1_runtime_artifacts_soak_runs_get: {
         parameters: {
             query?: {
-                camera_id?: string | null;
-                type?: string | null;
-                review_status?: components["schemas"]["IncidentReviewStatus"] | null;
+                runtime_artifact_id?: string | null;
+                edge_node_id?: string | null;
                 limit?: number;
             };
             header?: {
@@ -7708,7 +12443,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IncidentResponse"][];
+                    "application/json": components["schemas"]["RuntimeArtifactSoakRunResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -7722,289 +12457,18 @@ export interface operations {
             };
         };
     };
-    get_incident_scene_contract_api_v1_incidents__incident_id__scene_contract_get: {
+    create_runtime_artifact_soak_run_api_v1_runtime_artifacts_soak_runs_post: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
-            path: {
-                incident_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SceneContractSnapshotResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_incident_privacy_manifest_api_v1_incidents__incident_id__privacy_manifest_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                incident_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PrivacyManifestSnapshotResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_incident_runtime_passport_api_v1_incidents__incident_id__runtime_passport_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                incident_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RuntimePassportSnapshotResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_incident_ledger_api_v1_incidents__incident_id__ledger_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                incident_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvidenceLedgerEntryResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_incident_cross_camera_threads_api_v1_incidents__incident_id__cross_camera_threads_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                incident_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CrossCameraThreadResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_incident_artifact_content_api_v1_incidents__incident_id__artifacts__artifact_id__content_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                incident_id: string;
-                artifact_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_incident_review_api_v1_incidents__incident_id__review_patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                incident_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IncidentReviewUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IncidentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_incident_rules_api_v1_cameras__camera_id__incident_rules_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                camera_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IncidentRuleResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_incident_rule_api_v1_cameras__camera_id__incident_rules_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                camera_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IncidentRuleCreate"];
+                "application/json": components["schemas"]["RuntimeArtifactSoakRunCreate"];
             };
         };
         responses: {
@@ -8014,7 +12478,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IncidentRuleResponse"];
+                    "application/json": components["schemas"]["RuntimeArtifactSoakRunResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8028,22 +12492,16 @@ export interface operations {
             };
         };
     };
-    validate_incident_rule_api_v1_cameras__camera_id__incident_rules_validate_post: {
+    list_sites_api_v1_sites_get: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
-            path: {
-                camera_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IncidentRuleValidationRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -8051,7 +12509,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IncidentRuleValidationResponse"];
+                    "application/json": components["schemas"]["SiteResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -8065,15 +12523,49 @@ export interface operations {
             };
         };
     };
-    get_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__get: {
+    create_site_api_v1_sites_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_site_api_v1_sites__site_id__get: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
             path: {
-                camera_id: string;
-                rule_id: string;
+                site_id: string;
             };
             cookie?: never;
         };
@@ -8085,7 +12577,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IncidentRuleResponse"];
+                    "application/json": components["schemas"]["SiteResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8099,15 +12591,14 @@ export interface operations {
             };
         };
     };
-    delete_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__delete: {
+    delete_site_api_v1_sites__site_id__delete: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
             path: {
-                camera_id: string;
-                rule_id: string;
+                site_id: string;
             };
             cookie?: never;
         };
@@ -8131,21 +12622,20 @@ export interface operations {
             };
         };
     };
-    update_incident_rule_api_v1_cameras__camera_id__incident_rules__rule_id__patch: {
+    update_site_api_v1_sites__site_id__patch: {
         parameters: {
             query?: never;
             header?: {
                 "X-Tenant-ID"?: string | null;
             };
             path: {
-                camera_id: string;
-                rule_id: string;
+                site_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IncidentRuleUpdate"];
+                "application/json": components["schemas"]["SiteUpdate"];
             };
         };
         responses: {
@@ -8155,44 +12645,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IncidentRuleResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_stream_offer_api_v1_streams__camera_id__offer_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path: {
-                camera_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StreamOfferRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StreamOfferResponse"];
+                    "application/json": components["schemas"]["SiteResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8279,6 +12732,510 @@ export interface operations {
             };
         };
     };
+    create_stream_offer_api_v1_streams__camera_id__offer_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StreamOfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamOfferResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_break_glass_api_v1_support_break_glass_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BreakGlassOpen"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_break_glass_api_v1_support_break_glass__record_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BreakGlassClose"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_support_bundles_api_v1_support_bundles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportBundleListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_support_bundle_api_v1_support_bundles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportBundleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_support_bundle_api_v1_support_bundles__bundle_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                bundle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_onboarding_checks_api_v1_support_onboarding_checks_get: {
+        parameters: {
+            query: {
+                site_id: string;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_onboarding_checks_api_v1_support_onboarding_checks_run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingCheckRunCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_support_session_api_v1_support_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportSessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_support_session_api_v1_support_sessions__session_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportSessionClose"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_support_tunnel_api_v1_support_tunnels_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportTunnelCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_support_tunnel_api_v1_support_tunnels__tunnel_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                tunnel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportTunnelRevoke"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    healthcheck_healthz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    metrics_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    readiness_readyz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
     get_video_feed_video_feed__camera_id__get: {
         parameters: {
             query?: {
@@ -8302,41 +13259,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    resolve_query_api_v1_query_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Tenant-ID"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QueryRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QueryResponse"];
                 };
             };
             /** @description Validation Error */

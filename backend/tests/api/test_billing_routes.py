@@ -127,6 +127,28 @@ async def test_billing_invoice_route_aggregates_usage(client: AsyncClient) -> No
 
 
 @pytest.mark.asyncio
+async def test_billing_invoice_runs_route_lists_invoice_runs(client: AsyncClient) -> None:
+    account_response = await client.post(
+        "/api/v1/billing/accounts",
+        json={"name": "Invoice list account", "node_ids": []},
+    )
+    invoice_response = await client.post(
+        "/api/v1/billing/invoice-runs",
+        json={
+            "account_id": account_response.json()["id"],
+            "period_start": "2026-06-01",
+            "period_end": "2026-07-01",
+        },
+    )
+
+    response = await client.get("/api/v1/billing/invoice-runs")
+
+    assert invoice_response.status_code == 201
+    assert response.status_code == 200
+    assert response.json()["items"][0]["id"] == invoice_response.json()["id"]
+
+
+@pytest.mark.asyncio
 async def test_billing_meters_route_exposes_core_meters(client: AsyncClient) -> None:
     response = await client.get("/api/v1/billing/meters")
 

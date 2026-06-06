@@ -738,6 +738,47 @@ class BillingService:
             [_line_item_record(row) for row in result.scalars().all()],
         )
 
+    def list_invoice_runs(self, *, tenant_id: UUID) -> list[InvoiceRunRecord]:
+        return sorted(
+            (
+                invoice
+                for invoice in self._invoice_runs.values()
+                if invoice.tenant_id == tenant_id
+            ),
+            key=lambda invoice: invoice.created_at,
+            reverse=True,
+        )
+
+    async def alist_invoice_runs(self, *, tenant_id: UUID) -> list[InvoiceRunRecord]:
+        if self.session_factory is None:
+            return self.list_invoice_runs(tenant_id=tenant_id)
+        async with self.session_factory() as session:
+            invoice_result = await session.execute(
+                select(InvoiceRun)
+                .where(InvoiceRun.tenant_id == tenant_id)
+                .order_by(InvoiceRun.created_at.desc())
+            )
+            invoices = list(invoice_result.scalars().all())
+            if not invoices:
+                return []
+            invoice_ids = [invoice.id for invoice in invoices]
+            line_result = await session.execute(
+                select(InvoiceLineItem)
+                .where(InvoiceLineItem.invoice_run_id.in_(invoice_ids))
+                .order_by(InvoiceLineItem.meter_key)
+            )
+        lines_by_invoice_id: dict[UUID, list[InvoiceLineItemRecord]] = {
+            invoice_id: [] for invoice_id in invoice_ids
+        }
+        for row in line_result.scalars().all():
+            lines_by_invoice_id.setdefault(row.invoice_run_id, []).append(
+                _line_item_record(row)
+            )
+        return [
+            _invoice_run_record(invoice, lines_by_invoice_id.get(invoice.id, []))
+            for invoice in invoices
+        ]
+
     def export_billing(
         self,
         *,

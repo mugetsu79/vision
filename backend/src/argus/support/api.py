@@ -86,6 +86,33 @@ class OnboardingCheckRunCreate(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
 
+class SupportBundleResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    site_id: UUID
+    node_id: UUID | None = None
+    pack_id: str | None = None
+    include_logs: bool
+    payload: JsonObject
+    created_at: str
+
+
+class SupportBundleListResponse(BaseModel):
+    items: list[SupportBundleResponse] = Field(default_factory=list)
+
+
+@router.get("/bundles", response_model=SupportBundleListResponse)
+async def get_support_bundles(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> SupportBundleListResponse:
+    bundles = await services.support.alist_bundles(tenant_id=tenant_context.tenant_id)
+    return SupportBundleListResponse(
+        items=[SupportBundleResponse.model_validate(_bundle_payload(bundle)) for bundle in bundles]
+    )
+
+
 @router.post("/bundles", status_code=status.HTTP_201_CREATED)
 async def post_support_bundle(
     payload: SupportBundleCreate,

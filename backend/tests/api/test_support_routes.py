@@ -43,6 +43,21 @@ async def test_support_bundle_route_creates_packless_bundle(client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_support_bundle_route_lists_packless_bundles(client: AsyncClient) -> None:
+    bundle_response = await client.post(
+        "/api/v1/support/bundles",
+        json={"site_id": str(SITE_ID), "include_logs": True},
+    )
+
+    response = await client.get("/api/v1/support/bundles")
+
+    assert bundle_response.status_code == 201
+    assert response.status_code == 200
+    assert response.json()["items"][0]["id"] == bundle_response.json()["id"]
+    assert response.json()["items"][0]["pack_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_support_routes_are_tenant_scoped(
     client: AsyncClient,
     foreign_bundle_id: UUID,

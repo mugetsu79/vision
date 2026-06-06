@@ -87,6 +87,39 @@ class InvoiceRunCreate(BaseModel):
     period_end: date
 
 
+class InvoiceLineItemResponse(BaseModel):
+    id: UUID
+    invoice_run_id: UUID
+    tenant_id: UUID
+    account_id: UUID
+    meter_key: str
+    quantity: str
+    unit_label: str
+    unit_price: str
+    total: str
+    currency: str
+    period_start: date
+    period_end: date
+    source_record_ids: list[UUID]
+    pack_id: str | None = None
+
+
+class InvoiceRunResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    account_id: UUID
+    period_start: date
+    period_end: date
+    currency: str
+    status: str
+    created_at: str
+    line_items: list[InvoiceLineItemResponse] = Field(default_factory=list)
+
+
+class InvoiceRunListResponse(BaseModel):
+    items: list[InvoiceRunResponse] = Field(default_factory=list)
+
+
 @router.get("/nodes")
 async def get_billing_nodes(
     current_user: ViewerUser,
@@ -292,6 +325,20 @@ async def post_invoice_run(
     except BillingNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _invoice_payload(invoice)
+
+
+@router.get("/invoice-runs", response_model=InvoiceRunListResponse)
+async def get_invoice_runs(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> InvoiceRunListResponse:
+    invoices = await services.billing.alist_invoice_runs(
+        tenant_id=tenant_context.tenant_id,
+    )
+    return InvoiceRunListResponse(
+        items=[InvoiceRunResponse.model_validate(_invoice_payload(invoice)) for invoice in invoices]
+    )
 
 
 @router.get("/invoice-runs/{invoice_run_id}")

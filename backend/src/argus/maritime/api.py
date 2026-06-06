@@ -16,6 +16,7 @@ from argus.api.contracts import (
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
+from argus.link.contracts import LinkState
 from argus.maritime.billing import (
     maritime_billing_rollups_payload,
     maritime_billing_usage_payload,
@@ -96,6 +97,23 @@ class VesselUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     active: bool | None = None
     metadata: JsonObject | None = None
+
+
+class MaritimeVesselLinkStatusResponse(BaseModel):
+    schema_version: int
+    tenant_id: UUID
+    site_id: UUID
+    vessel_id: UUID
+    camera_id: UUID | None = None
+    incident_id: UUID | None = None
+    evidence_artifact_id: UUID | None = None
+    pack_id: str | None = None
+    link_state: LinkState
+    passport_hash: str
+    budget: JsonObject | None = None
+    queue_depth: dict[str, int] = Field(default_factory=dict)
+    latest_probe: JsonObject | None = None
+    last_sync_at: str | None = None
 
 
 class VoyageCreate(BaseModel):
@@ -588,6 +606,33 @@ async def get_maritime_vessel_telemetry(
             vessel_id=vessel_id,
         )
         return _telemetry_payload(snapshot)
+    except MaritimeError as exc:
+        _raise_maritime_http_error(exc)
+
+
+@router.get(
+    "/api/v1/maritime/vessels/{vessel_id}/link-status",
+    response_model=MaritimeVesselLinkStatusResponse,
+)
+async def get_maritime_vessel_link_status(
+    vessel_id: UUID,
+    current_user: ViewerUser,
+    services: ServicesDependency,
+    tenant_context: TenantDependency,
+) -> MaritimeVesselLinkStatusResponse:
+    try:
+        vessel = await services.maritime.aget_vessel(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=vessel_id,
+        )
+        passport = await services.link.abuild_passport(
+            tenant_id=tenant_context.tenant_id,
+            site_id=vessel.site_id,
+        )
+        payload = passport.payload.copy()
+        payload["passport_hash"] = passport.passport_hash
+        payload["vessel_id"] = str(vessel.id)
+        return MaritimeVesselLinkStatusResponse.model_validate(payload)
     except MaritimeError as exc:
         _raise_maritime_http_error(exc)
 
