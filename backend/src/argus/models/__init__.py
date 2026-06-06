@@ -45,6 +45,7 @@ from argus.models.tables import (
 if "argus.link.tables" not in sys.modules:
     from argus.link.tables import (
         LinkBudget,
+        LinkConnection,
         LinkHealthProbe,
         LinkPassportSnapshot,
         LinkQueueItem,
@@ -67,6 +68,7 @@ if "argus.maritime.tables" not in sys.modules:
 
 _LINK_TABLE_EXPORTS = {
     "LinkBudget",
+    "LinkConnection",
     "LinkHealthProbe",
     "LinkPassportSnapshot",
     "LinkQueueItem",
@@ -151,6 +153,7 @@ __all__ = [
     "InvoiceLineItem",
     "InvoiceRun",
     "LinkBudget",
+    "LinkConnection",
     "LinkHealthProbe",
     "LinkPassportSnapshot",
     "LinkQueueItem",

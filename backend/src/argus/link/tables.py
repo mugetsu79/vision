@@ -20,6 +20,56 @@ from sqlalchemy.orm import Mapped, mapped_column
 from argus.models.base import Base, TimestampMixin, UpdatedAtMixin, UUIDPrimaryKeyMixin
 
 
+class LinkConnection(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "link_connections"
+    __table_args__ = (
+        Index("ix_link_connections_tenant_site_rank", "tenant_id", "site_id", "priority_rank"),
+        CheckConstraint(
+            "transport_kind IN ('satellite', 'lte', '5g', 'wifi', 'fiber', 'ethernet', 'other')",
+            name="transport_kind",
+        ),
+        CheckConstraint(
+            "status IN ('unknown', 'online', 'degraded', 'offline', 'blocked', 'recovering')",
+            name="status",
+        ),
+        CheckConstraint(
+            "availability_scope IN ('always', 'remote', 'nearby', 'local', 'maintenance')",
+            name="availability_scope",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id"),
+        nullable=False,
+    )
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    transport_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    priority_rank: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    availability_scope: Mapped[str] = mapped_column(String(32), nullable=False, default="always")
+    metered: Mapped[bool] = mapped_column(nullable=False, default=False)
+    monthly_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    bulk_daily_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    expected_downlink_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_uplink_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    packet_loss_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connection_metadata: Mapped[dict[str, object]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+
+
 class LinkBudget(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "link_budgets"
     __table_args__ = (
@@ -119,6 +169,7 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "link_health_probes"
     __table_args__ = (
         Index("ix_link_health_probes_tenant_site_recorded", "tenant_id", "site_id", "recorded_at"),
+        Index("ix_link_health_probes_connection", "connection_id"),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -130,6 +181,11 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("sites.id"),
         nullable=False,
+    )
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("link_connections.id", ondelete="SET NULL"),
+        nullable=True,
     )
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     throughput_mbps: Mapped[float] = mapped_column(Float, nullable=False)

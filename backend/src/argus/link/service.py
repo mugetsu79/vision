@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import cast
 from uuid import UUID, uuid4
@@ -16,16 +17,21 @@ from argus.link.contracts import (
     LINK_PRIORITY_ORDER,
     BackpressureDecision,
     JsonObject,
+    LinkAvailabilityScope,
     LinkBudgetSnapshot,
+    LinkConnectionRecord,
+    LinkConnectionStatus,
     LinkHealthProbeRecord,
     LinkPassportSnapshotRecord,
     LinkPriorityLane,
     LinkQueueItemRecord,
     LinkState,
     LinkTransferAttemptRecord,
+    LinkTransportKind,
 )
 from argus.link.tables import (
     LinkBudget,
+    LinkConnection,
     LinkHealthProbe,
     LinkPassportSnapshot,
     LinkQueueItem,
@@ -33,6 +39,18 @@ from argus.link.tables import (
 )
 
 LINK_STATES = {"unknown", "healthy", "degraded", "dark", "recovering", "port_wifi"}
+LINK_TRANSPORT_KINDS = {"satellite", "lte", "5g", "wifi", "fiber", "ethernet", "other"}
+LINK_CONNECTION_STATUSES = {"unknown", "online", "degraded", "offline", "blocked", "recovering"}
+LINK_AVAILABILITY_SCOPES = {"always", "remote", "nearby", "local", "maintenance"}
+LINK_USABLE_CONNECTION_STATUSES = {"online", "recovering", "degraded"}
+LINK_CONNECTION_STATUS_ORDER = {
+    "online": 0,
+    "recovering": 1,
+    "degraded": 2,
+    "offline": 3,
+    "blocked": 4,
+    "unknown": 5,
+}
 QUEUE_STATUSES = {"queued", "paused", "interrupted", "succeeded", "failed"}
 TRANSFER_ATTEMPT_STATUSES = {"interrupted", "succeeded", "failed"}
 
@@ -41,6 +59,7 @@ class LinkService:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:
         self.session_factory = session_factory
         self._budgets: dict[tuple[UUID, UUID], LinkBudgetSnapshot] = {}
+        self._connections: dict[UUID, LinkConnectionRecord] = {}
         self._queue_items: dict[UUID, LinkQueueItemRecord] = {}
         self._attempts: dict[UUID, LinkTransferAttemptRecord] = {}
         self._probes: list[LinkHealthProbeRecord] = []
@@ -145,6 +164,314 @@ class LinkService:
                 site_id=site_id,
             )
             return _budget_record(budget) if budget is not None else None
+
+    def upsert_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        label: str,
+        transport_kind: LinkTransportKind,
+        status: LinkConnectionStatus = "unknown",
+        priority_rank: int = 100,
+        availability_scope: LinkAvailabilityScope = "always",
+        metered: bool = False,
+        provider: str | None = None,
+        monthly_bytes: int | None = None,
+        bulk_daily_bytes: int | None = None,
+        expected_downlink_mbps: float | None = None,
+        expected_uplink_mbps: float | None = None,
+        expected_latency_ms: int | None = None,
+        packet_loss_percent: float | None = None,
+        last_seen_at: datetime | None = None,
+        metadata: JsonObject | None = None,
+        connection_id: UUID | None = None,
+    ) -> LinkConnectionRecord:
+        self._ensure_memory_mode()
+        _validate_connection_values(
+            label=label,
+            transport_kind=transport_kind,
+            status=status,
+            priority_rank=priority_rank,
+            availability_scope=availability_scope,
+        )
+        existing = self._connections.get(connection_id) if connection_id is not None else None
+        if existing is not None and (
+            existing.tenant_id != tenant_id or existing.site_id != site_id
+        ):
+            raise ValueError("Connection not found.")
+        now = _now()
+        record = LinkConnectionRecord(
+            id=existing.id if existing is not None else connection_id or uuid4(),
+            tenant_id=tenant_id,
+            site_id=site_id,
+            label=label.strip(),
+            transport_kind=transport_kind,
+            provider=provider.strip() if provider is not None else None,
+            status=status,
+            priority_rank=priority_rank,
+            availability_scope=availability_scope,
+            metered=metered,
+            monthly_bytes=monthly_bytes,
+            bulk_daily_bytes=bulk_daily_bytes,
+            expected_downlink_mbps=expected_downlink_mbps,
+            expected_uplink_mbps=expected_uplink_mbps,
+            expected_latency_ms=expected_latency_ms,
+            packet_loss_percent=packet_loss_percent,
+            last_seen_at=last_seen_at,
+            metadata=dict(metadata or {}),
+            created_at=existing.created_at if existing is not None else now,
+            updated_at=now,
+        )
+        self._connections[record.id] = record
+        return record
+
+    async def aupsert_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        label: str,
+        transport_kind: LinkTransportKind,
+        status: LinkConnectionStatus = "unknown",
+        priority_rank: int = 100,
+        availability_scope: LinkAvailabilityScope = "always",
+        metered: bool = False,
+        provider: str | None = None,
+        monthly_bytes: int | None = None,
+        bulk_daily_bytes: int | None = None,
+        expected_downlink_mbps: float | None = None,
+        expected_uplink_mbps: float | None = None,
+        expected_latency_ms: int | None = None,
+        packet_loss_percent: float | None = None,
+        last_seen_at: datetime | None = None,
+        metadata: JsonObject | None = None,
+        connection_id: UUID | None = None,
+    ) -> LinkConnectionRecord:
+        _validate_connection_values(
+            label=label,
+            transport_kind=transport_kind,
+            status=status,
+            priority_rank=priority_rank,
+            availability_scope=availability_scope,
+        )
+        if self.session_factory is None:
+            return self.upsert_connection(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                label=label,
+                transport_kind=transport_kind,
+                status=status,
+                priority_rank=priority_rank,
+                availability_scope=availability_scope,
+                metered=metered,
+                provider=provider,
+                monthly_bytes=monthly_bytes,
+                bulk_daily_bytes=bulk_daily_bytes,
+                expected_downlink_mbps=expected_downlink_mbps,
+                expected_uplink_mbps=expected_uplink_mbps,
+                expected_latency_ms=expected_latency_ms,
+                packet_loss_percent=packet_loss_percent,
+                last_seen_at=last_seen_at,
+                metadata=metadata,
+                connection_id=connection_id,
+            )
+        async with self.session_factory() as session:
+            row = (
+                await session.get(LinkConnection, connection_id)
+                if connection_id is not None
+                else None
+            )
+            if row is not None and (row.tenant_id != tenant_id or row.site_id != site_id):
+                raise ValueError("Connection not found.")
+            now = _now()
+            if row is None:
+                row = LinkConnection(
+                    id=connection_id or uuid4(),
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    label=label.strip(),
+                    transport_kind=transport_kind,
+                    provider=provider.strip() if provider is not None else None,
+                    status=status,
+                    priority_rank=priority_rank,
+                    availability_scope=availability_scope,
+                    metered=metered,
+                    monthly_bytes=monthly_bytes,
+                    bulk_daily_bytes=bulk_daily_bytes,
+                    expected_downlink_mbps=expected_downlink_mbps,
+                    expected_uplink_mbps=expected_uplink_mbps,
+                    expected_latency_ms=expected_latency_ms,
+                    packet_loss_percent=packet_loss_percent,
+                    last_seen_at=last_seen_at,
+                    connection_metadata=dict(metadata or {}),
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+            else:
+                row.label = label.strip()
+                row.transport_kind = transport_kind
+                row.provider = provider.strip() if provider is not None else None
+                row.status = status
+                row.priority_rank = priority_rank
+                row.availability_scope = availability_scope
+                row.metered = metered
+                row.monthly_bytes = monthly_bytes
+                row.bulk_daily_bytes = bulk_daily_bytes
+                row.expected_downlink_mbps = expected_downlink_mbps
+                row.expected_uplink_mbps = expected_uplink_mbps
+                row.expected_latency_ms = expected_latency_ms
+                row.packet_loss_percent = packet_loss_percent
+                row.last_seen_at = last_seen_at
+                row.connection_metadata = dict(metadata or {})
+                row.updated_at = now
+            await session.commit()
+            await session.refresh(row)
+            return _connection_record(row)
+
+    def list_connections(self, *, tenant_id: UUID, site_id: UUID) -> list[LinkConnectionRecord]:
+        self._ensure_memory_mode()
+        return _sort_connections(
+            [
+                connection
+                for connection in self._connections.values()
+                if connection.tenant_id == tenant_id and connection.site_id == site_id
+            ]
+        )
+
+    async def alist_connections(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+    ) -> list[LinkConnectionRecord]:
+        if self.session_factory is None:
+            return self.list_connections(tenant_id=tenant_id, site_id=site_id)
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(LinkConnection).where(
+                    LinkConnection.tenant_id == tenant_id,
+                    LinkConnection.site_id == site_id,
+                )
+            )
+            rows = cast(list[LinkConnection], result.scalars().all())
+        return _sort_connections([_connection_record(row) for row in rows])
+
+    def get_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        connection_id: UUID,
+    ) -> LinkConnectionRecord | None:
+        self._ensure_memory_mode()
+        connection = self._connections.get(connection_id)
+        if connection is None or connection.tenant_id != tenant_id or connection.site_id != site_id:
+            return None
+        return connection
+
+    async def aget_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        connection_id: UUID,
+    ) -> LinkConnectionRecord | None:
+        if self.session_factory is None:
+            return self.get_connection(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                connection_id=connection_id,
+            )
+        async with self.session_factory() as session:
+            row = await session.get(LinkConnection, connection_id)
+        if row is None or row.tenant_id != tenant_id or row.site_id != site_id:
+            return None
+        return _connection_record(row)
+
+    def delete_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        connection_id: UUID,
+    ) -> bool:
+        self._ensure_memory_mode()
+        connection = self.get_connection(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            connection_id=connection_id,
+        )
+        if connection is None:
+            return False
+        del self._connections[connection_id]
+        self._probes = [
+            replace(probe, connection_id=None)
+            if probe.connection_id == connection_id
+            else probe
+            for probe in self._probes
+        ]
+        return True
+
+    async def adelete_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        connection_id: UUID,
+    ) -> bool:
+        if self.session_factory is None:
+            return self.delete_connection(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                connection_id=connection_id,
+            )
+        async with self.session_factory() as session:
+            row = await session.get(LinkConnection, connection_id)
+            if row is None or row.tenant_id != tenant_id or row.site_id != site_id:
+                return False
+            result = await session.execute(
+                select(LinkHealthProbe).where(LinkHealthProbe.connection_id == connection_id)
+            )
+            probes = cast(list[LinkHealthProbe], result.scalars().all())
+            for probe in probes:
+                if probe.connection_id == connection_id:
+                    probe.connection_id = None
+            await session.delete(row)
+            await session.commit()
+            return True
+
+    def select_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        priority_lane: LinkPriorityLane,
+        remaining_budget_bytes: int,
+    ) -> LinkConnectionRecord | None:
+        self._ensure_memory_mode()
+        connections = self.list_connections(tenant_id=tenant_id, site_id=site_id)
+        return _select_connection(
+            connections,
+            priority_lane=priority_lane,
+            remaining_budget_bytes=remaining_budget_bytes,
+        )
+
+    async def aselect_connection(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        priority_lane: LinkPriorityLane,
+        remaining_budget_bytes: int,
+    ) -> LinkConnectionRecord | None:
+        connections = await self.alist_connections(tenant_id=tenant_id, site_id=site_id)
+        return _select_connection(
+            connections,
+            priority_lane=priority_lane,
+            remaining_budget_bytes=remaining_budget_bytes,
+        )
 
     def enqueue_transfer(
         self,
@@ -280,6 +607,7 @@ class LinkService:
         *,
         tenant_id: UUID,
         site_id: UUID,
+        connection_id: UUID | None = None,
         latency_ms: int,
         throughput_mbps: float,
         packet_loss_percent: float,
@@ -287,10 +615,19 @@ class LinkService:
         source: str,
     ) -> LinkHealthProbeRecord:
         self._ensure_memory_mode()
+        if connection_id is not None:
+            connection = self.get_connection(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                connection_id=connection_id,
+            )
+            if connection is None:
+                raise ValueError("Connection not found.")
         probe = LinkHealthProbeRecord(
             id=uuid4(),
             tenant_id=tenant_id,
             site_id=site_id,
+            connection_id=connection_id,
             latency_ms=latency_ms,
             throughput_mbps=throughput_mbps,
             packet_loss_percent=packet_loss_percent,
@@ -306,16 +643,26 @@ class LinkService:
         *,
         tenant_id: UUID,
         site_id: UUID,
+        connection_id: UUID | None = None,
         latency_ms: int,
         throughput_mbps: float,
         packet_loss_percent: float,
         reachable: bool,
         source: str,
     ) -> LinkHealthProbeRecord:
+        if connection_id is not None:
+            connection = await self.aget_connection(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                connection_id=connection_id,
+            )
+            if connection is None:
+                raise ValueError("Connection not found.")
         if self.session_factory is None:
             return self.record_probe(
                 tenant_id=tenant_id,
                 site_id=site_id,
+                connection_id=connection_id,
                 latency_ms=latency_ms,
                 throughput_mbps=throughput_mbps,
                 packet_loss_percent=packet_loss_percent,
@@ -326,6 +673,7 @@ class LinkService:
             id=uuid4(),
             tenant_id=tenant_id,
             site_id=site_id,
+            connection_id=connection_id,
             latency_ms=latency_ms,
             throughput_mbps=throughput_mbps,
             packet_loss_percent=packet_loss_percent,
@@ -698,6 +1046,12 @@ class LinkService:
     ) -> LinkPassportSnapshotRecord:
         self._ensure_memory_mode()
         budget = self.get_budget(tenant_id=tenant_id, site_id=site_id)
+        connections = self.list_connections(tenant_id=tenant_id, site_id=site_id)
+        selected_connection = _select_connection(
+            connections,
+            priority_lane="bulk",
+            remaining_budget_bytes=budget.bulk_daily_bytes if budget is not None else 0,
+        )
         latest_probe = self.latest_probe(tenant_id=tenant_id, site_id=site_id)
         queue = self.list_queue(tenant_id=tenant_id, site_id=site_id, incident_id=incident_id)
         queue_depth = self.queue_depth_by_lane(queue)
@@ -718,6 +1072,12 @@ class LinkService:
             ),
             "pack_id": None,
             "link_state": link_state,
+            "active_connection": (
+                _connection_payload(selected_connection)
+                if selected_connection is not None
+                else None
+            ),
+            "connections": [_connection_payload(connection) for connection in connections],
             "budget": _budget_payload(budget),
             "queue_depth": queue_depth,
             "latest_probe": _probe_payload(latest_probe),
@@ -758,6 +1118,12 @@ class LinkService:
                 evidence_artifact_id=evidence_artifact_id,
             )
         budget = await self.aget_budget(tenant_id=tenant_id, site_id=site_id)
+        connections = await self.alist_connections(tenant_id=tenant_id, site_id=site_id)
+        selected_connection = _select_connection(
+            connections,
+            priority_lane="bulk",
+            remaining_budget_bytes=budget.bulk_daily_bytes if budget is not None else 0,
+        )
         latest_probe = await self.alatest_probe(tenant_id=tenant_id, site_id=site_id)
         queue = await self.alist_queue(
             tenant_id=tenant_id,
@@ -782,6 +1148,12 @@ class LinkService:
             ),
             "pack_id": None,
             "link_state": link_state,
+            "active_connection": (
+                _connection_payload(selected_connection)
+                if selected_connection is not None
+                else None
+            ),
+            "connections": [_connection_payload(connection) for connection in connections],
             "budget": _budget_payload(budget),
             "queue_depth": queue_depth,
             "latest_probe": _probe_payload(latest_probe),
@@ -1047,6 +1419,26 @@ def _validate_link_state(link_state: str) -> None:
         raise ValueError(f"Invalid link state: {link_state}")
 
 
+def _validate_connection_values(
+    *,
+    label: str,
+    transport_kind: str,
+    status: str,
+    priority_rank: int,
+    availability_scope: str,
+) -> None:
+    if not label.strip():
+        raise ValueError("Connection label is required.")
+    if transport_kind not in LINK_TRANSPORT_KINDS:
+        raise ValueError(f"Invalid link transport kind: {transport_kind}")
+    if status not in LINK_CONNECTION_STATUSES:
+        raise ValueError(f"Invalid link connection status: {status}")
+    if availability_scope not in LINK_AVAILABILITY_SCOPES:
+        raise ValueError(f"Invalid link availability scope: {availability_scope}")
+    if priority_rank < 0:
+        raise ValueError("Connection priority rank must be non-negative.")
+
+
 def _validate_queue_status(status: str) -> None:
     if status not in QUEUE_STATUSES:
         raise ValueError(f"Invalid queue status: {status}")
@@ -1076,6 +1468,31 @@ def _budget_record(budget: LinkBudget) -> LinkBudgetSnapshot:
         bulk_daily_bytes=budget.bulk_daily_bytes,
         created_at=budget.created_at,
         updated_at=budget.updated_at,
+    )
+
+
+def _connection_record(connection: LinkConnection) -> LinkConnectionRecord:
+    return LinkConnectionRecord(
+        id=connection.id,
+        tenant_id=connection.tenant_id,
+        site_id=connection.site_id,
+        label=connection.label,
+        transport_kind=cast(LinkTransportKind, connection.transport_kind),
+        provider=connection.provider,
+        status=cast(LinkConnectionStatus, connection.status),
+        priority_rank=connection.priority_rank,
+        availability_scope=cast(LinkAvailabilityScope, connection.availability_scope),
+        metered=connection.metered,
+        monthly_bytes=connection.monthly_bytes,
+        bulk_daily_bytes=connection.bulk_daily_bytes,
+        expected_downlink_mbps=connection.expected_downlink_mbps,
+        expected_uplink_mbps=connection.expected_uplink_mbps,
+        expected_latency_ms=connection.expected_latency_ms,
+        packet_loss_percent=connection.packet_loss_percent,
+        last_seen_at=connection.last_seen_at,
+        metadata=dict(connection.connection_metadata or {}),
+        created_at=connection.created_at,
+        updated_at=connection.updated_at,
     )
 
 
@@ -1117,6 +1534,7 @@ def _probe_record(probe: LinkHealthProbe) -> LinkHealthProbeRecord:
         id=probe.id,
         tenant_id=probe.tenant_id,
         site_id=probe.site_id,
+        connection_id=probe.connection_id,
         latency_ms=probe.latency_ms,
         throughput_mbps=probe.throughput_mbps,
         packet_loss_percent=probe.packet_loss_percent,
@@ -1153,10 +1571,37 @@ def _budget_payload(budget: LinkBudgetSnapshot | None) -> JsonObject | None:
     }
 
 
+def _connection_payload(connection: LinkConnectionRecord) -> JsonObject:
+    return {
+        "id": str(connection.id),
+        "tenant_id": str(connection.tenant_id),
+        "site_id": str(connection.site_id),
+        "label": connection.label,
+        "transport_kind": connection.transport_kind,
+        "provider": connection.provider,
+        "status": connection.status,
+        "priority_rank": connection.priority_rank,
+        "availability_scope": connection.availability_scope,
+        "metered": connection.metered,
+        "monthly_bytes": connection.monthly_bytes,
+        "bulk_daily_bytes": connection.bulk_daily_bytes,
+        "expected_downlink_mbps": connection.expected_downlink_mbps,
+        "expected_uplink_mbps": connection.expected_uplink_mbps,
+        "expected_latency_ms": connection.expected_latency_ms,
+        "packet_loss_percent": connection.packet_loss_percent,
+        "last_seen_at": connection.last_seen_at.isoformat()
+        if connection.last_seen_at is not None
+        else None,
+        "metadata": connection.metadata,
+        "created_at": connection.created_at.isoformat(),
+        "updated_at": connection.updated_at.isoformat(),
+    }
+
+
 def _probe_payload(probe: LinkHealthProbeRecord | None) -> JsonObject | None:
     if probe is None:
         return None
-    return {
+    payload: JsonObject = {
         "latency_ms": probe.latency_ms,
         "throughput_mbps": probe.throughput_mbps,
         "packet_loss_percent": probe.packet_loss_percent,
@@ -1164,3 +1609,46 @@ def _probe_payload(probe: LinkHealthProbeRecord | None) -> JsonObject | None:
         "source": probe.source,
         "recorded_at": probe.recorded_at.isoformat(),
     }
+    if probe.connection_id is not None:
+        payload["connection_id"] = str(probe.connection_id)
+    return payload
+
+
+def _sort_connections(
+    connections: Sequence[LinkConnectionRecord],
+) -> list[LinkConnectionRecord]:
+    return sorted(
+        connections,
+        key=lambda connection: (
+            connection.priority_rank,
+            LINK_CONNECTION_STATUS_ORDER[connection.status],
+            connection.created_at,
+            str(connection.id),
+        ),
+    )
+
+
+def _select_connection(
+    connections: Sequence[LinkConnectionRecord],
+    *,
+    priority_lane: LinkPriorityLane,
+    remaining_budget_bytes: int,
+) -> LinkConnectionRecord | None:
+    _validate_priority_lane(priority_lane)
+    usable = [
+        connection
+        for connection in connections
+        if connection.status in LINK_USABLE_CONNECTION_STATUSES
+    ]
+    if not usable:
+        return None
+    return min(
+        usable,
+        key=lambda connection: (
+            LINK_CONNECTION_STATUS_ORDER[connection.status],
+            priority_lane == "bulk" and connection.metered and remaining_budget_bytes <= 0,
+            connection.priority_rank,
+            connection.created_at,
+            str(connection.id),
+        ),
+    )

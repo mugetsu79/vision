@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from argus.link.service import LinkService
 from argus.link.tables import (
     LinkBudget,
+    LinkConnection,
     LinkHealthProbe,
     LinkPassportSnapshot,
     LinkQueueItem,
@@ -79,6 +80,158 @@ def test_link_passport_carries_core_optional_identifiers(link_service: LinkServi
     assert passport.payload["camera_id"] == str(camera_id)
     assert passport.payload["incident_id"] == str(incident_id)
     assert passport.payload["evidence_artifact_id"] == str(evidence_artifact_id)
+
+
+def test_packless_link_connections_select_best_available_path(
+    link_service: LinkService,
+) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    satellite = link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label="VSAT primary",
+        transport_kind="satellite",
+        status="degraded",
+        priority_rank=20,
+        metered=True,
+        availability_scope="remote",
+    )
+    fiber = link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label="Port fiber",
+        transport_kind="fiber",
+        status="online",
+        priority_rank=5,
+        metered=False,
+        availability_scope="local",
+    )
+
+    selected = link_service.select_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        priority_lane="bulk",
+        remaining_budget_bytes=0,
+    )
+
+    assert selected is not None
+    assert selected.id == fiber.id
+    assert satellite.transport_kind == "satellite"
+
+
+def test_link_passport_includes_connection_candidates(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label="Port fiber",
+        transport_kind="fiber",
+        status="online",
+        priority_rank=5,
+        metered=False,
+        availability_scope="local",
+    )
+
+    passport = link_service.build_passport(tenant_id=tenant_id, site_id=site_id)
+
+    assert passport.payload["active_connection"] is not None
+    assert passport.payload["active_connection"]["label"] == "Port fiber"
+    assert passport.payload["connections"][0]["transport_kind"] == "fiber"
+    assert passport.payload["connections"][0]["site_id"] == str(site_id)
+
+
+def test_bulk_selection_prefers_online_before_unmetered(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    online_metered = link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label="Metered online path",
+        transport_kind="lte",
+        status="online",
+        priority_rank=20,
+        metered=True,
+        availability_scope="remote",
+    )
+    link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label="Unmetered degraded path",
+        transport_kind="fiber",
+        status="degraded",
+        priority_rank=1,
+        metered=False,
+        availability_scope="local",
+    )
+
+    selected = link_service.select_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        priority_lane="bulk",
+        remaining_budget_bytes=0,
+    )
+
+    assert selected is not None
+    assert selected.id == online_metered.id
+
+
+def test_probe_connection_must_belong_to_same_site(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    connection = link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=UUID("00000000-0000-4000-8000-000000000002"),
+        label="Local fiber",
+        transport_kind="fiber",
+        status="online",
+        availability_scope="local",
+    )
+
+    with pytest.raises(ValueError, match="Connection not found"):
+        link_service.record_probe(
+            tenant_id=tenant_id,
+            site_id=UUID("00000000-0000-4000-8000-000000000099"),
+            connection_id=connection.id,
+            latency_ms=20,
+            throughput_mbps=100,
+            packet_loss_percent=0,
+            reachable=True,
+            source="packless-lab",
+        )
+
+
+def test_delete_connection_clears_probe_references(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+    connection = link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label="Local fiber",
+        transport_kind="fiber",
+        status="online",
+        availability_scope="local",
+    )
+    link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        connection_id=connection.id,
+        latency_ms=20,
+        throughput_mbps=100,
+        packet_loss_percent=0,
+        reachable=True,
+        source="packless-lab",
+    )
+
+    assert link_service.delete_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        connection_id=connection.id,
+    )
+    assert link_service.list_probes(tenant_id=tenant_id, site_id=site_id)[0].connection_id is None
 
 
 @pytest.mark.asyncio
@@ -279,6 +432,7 @@ def test_link_tables_and_migration_constrain_domain_neutral_literals() -> None:
     queue_constraints = _check_constraint_names(LinkQueueItem)
     attempt_constraints = _check_constraint_names(LinkTransferAttempt)
     passport_constraints = _check_constraint_names(LinkPassportSnapshot)
+    probe_indexes = {index.name for index in LinkHealthProbe.__table__.indexes}
     migration_path = (
         Path(__file__).resolve().parents[2]
         / "src/argus/migrations/versions/0030_core_link.py"
@@ -291,6 +445,22 @@ def test_link_tables_and_migration_constrain_domain_neutral_literals() -> None:
     text = migration_path.read_text(encoding="utf-8")
     assert "ck_link_queue_items_priority_lane" in text
     assert "ck_link_passport_snapshots_link_state" in text
+
+    connection_constraints = _check_constraint_names(LinkConnection)
+    connection_migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "src/argus/migrations/versions/0037_core_link_connections.py"
+    )
+    connection_text = connection_migration_path.read_text(encoding="utf-8")
+    assert "ck_link_connections_availability_scope" in connection_constraints
+    assert "ix_link_health_probes_connection" in probe_indexes
+    assert "ix_link_health_probes_connection" in connection_text
+    assert "'remote'" in connection_text
+    assert "'nearby'" in connection_text
+    assert "'local'" in connection_text
+    assert "at_sea" not in connection_text
+    assert "near_shore" not in connection_text
+    assert "in_port" not in connection_text
 
 
 def test_priority_order_is_safety_evidence_telemetry_bulk(link_service: LinkService) -> None:
@@ -400,6 +570,7 @@ class _PersistentLinkSession:
         entity = statement.column_descriptions[0]["entity"]
         if entity in {
             LinkBudget,
+            LinkConnection,
             LinkHealthProbe,
             LinkPassportSnapshot,
             LinkQueueItem,
@@ -414,6 +585,7 @@ class _PersistentLinkSessionFactory:
     def __init__(self) -> None:
         self.rows: dict[type[object], list[object]] = {
             LinkBudget: [],
+            LinkConnection: [],
             LinkHealthProbe: [],
             LinkQueueItem: [],
             LinkTransferAttempt: [],

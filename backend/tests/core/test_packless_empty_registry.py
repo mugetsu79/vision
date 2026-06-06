@@ -114,6 +114,32 @@ async def test_link_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI
 
 
 @pytest.mark.asyncio
+async def test_link_connection_routes_work_with_empty_pack_registry(
+    empty_pack_app: FastAPI,
+) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=empty_pack_app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections",
+            json={
+                "label": "Packless fiber",
+                "transport_kind": "fiber",
+                "status": "online",
+                "priority_rank": 5,
+                "availability_scope": "always",
+                "metered": False,
+            },
+        )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["transport_kind"] == "fiber"
+    assert "vessel" not in json.dumps(payload).lower()
+
+
+@pytest.mark.asyncio
 async def test_fleet_routes_work_with_empty_pack_registry(empty_pack_app: FastAPI) -> None:
     empty_pack_app.state.services.fleet.upsert_site_state(
         tenant_id=TENANT_ID,

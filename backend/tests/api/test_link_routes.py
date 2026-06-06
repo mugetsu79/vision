@@ -132,6 +132,90 @@ async def test_link_budget_update_requires_admin(viewer_client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
+async def test_link_connection_routes_are_packless(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections",
+        json={
+            "label": "Port fiber",
+            "transport_kind": "fiber",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "local",
+            "metered": False,
+        },
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["transport_kind"] == "fiber"
+    assert payload["label"] == "Port fiber"
+
+    listed = await client.get(
+        "/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections"
+    )
+    assert listed.status_code == 200
+    assert listed.json()[0]["label"] == "Port fiber"
+
+    selection = await client.get(
+        "/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections/selection"
+    )
+    assert selection.status_code == 200
+    assert selection.json()["id"] == payload["id"]
+
+    patched = await client.patch(
+        f"/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections/{payload['id']}",
+        json={"status": "blocked"},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["status"] == "blocked"
+
+    deleted = await client.delete(
+        f"/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections/{payload['id']}"
+    )
+    assert deleted.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_link_probe_rejects_unknown_connection_id(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/link/sites/00000000-0000-4000-8000-000000000002/probes",
+        json={
+            "connection_id": "00000000-0000-4000-8000-000000000099",
+            "latency_ms": 12,
+            "throughput_mbps": 50,
+            "packet_loss_percent": 0,
+            "reachable": True,
+            "source": "packless-lab",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_link_connection_patch_rejects_null_required_fields(
+    client: AsyncClient,
+) -> None:
+    created = await client.post(
+        "/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections",
+        json={
+            "label": "Local fiber",
+            "transport_kind": "fiber",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "local",
+            "metered": False,
+        },
+    )
+
+    response = await client.patch(
+        f"/api/v1/link/sites/00000000-0000-4000-8000-000000000002/connections/{created.json()['id']}",
+        json={"label": None},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_queue_pause_resume_retry_routes_are_tenant_scoped(client: AsyncClient) -> None:
     foreign_item_id = "00000000-0000-4000-8000-000000000099"
     for action in ("pause", "resume", "retry"):
