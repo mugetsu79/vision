@@ -192,7 +192,7 @@ export function useConfigurationProfileImpact(profileId?: string | null) {
       if (error || !data) {
         throw toApiError(error, "Failed to load configuration profile impact.");
       }
-      return data as OperatorConfigProfileImpact;
+      return data;
     },
   });
 }

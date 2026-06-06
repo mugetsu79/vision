@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
@@ -266,6 +266,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SETUP_PREVIEW_CACHE_TTL = timedelta(minutes=2)
+T = TypeVar("T")
 
 
 def capture_still_image(rtsp_url: str) -> tuple[bytes, int, int]:
@@ -5904,7 +5905,7 @@ def _ordered_unique(values: Sequence[str | None]) -> list[str]:
     return ordered
 
 
-def _first_or_none[T](values: Sequence[T]) -> T | None:
+def _first_or_none(values: Sequence[T]) -> T | None:  # noqa: UP047
     return values[0] if values else None
 
 
@@ -6273,7 +6274,7 @@ def _enforce_stream_delivery_route(
     requested_route: Literal["webrtc", "hls", "mjpeg"] | None,
 ) -> None:
     delivery_mode = browser_delivery.delivery_mode
-    if delivery_mode in {None, "native", "transcode"}:
+    if delivery_mode is None or delivery_mode in {"native", "transcode"}:
         return
     if requested_route is None or requested_route == delivery_mode:
         return

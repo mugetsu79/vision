@@ -5,7 +5,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypeVar, cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
@@ -47,6 +47,7 @@ DEFAULT_ONBOARDING_CHECKS: tuple[OnboardingCheck, ...] = (
     OnboardingCheck(key="billing_entitlement", label="Billing entitlement", status="ready"),
     OnboardingCheck(key="support_readiness", label="Support readiness", status="ready"),
 )
+TableRow = TypeVar("TableRow")
 
 
 class SupportError(ValueError):
@@ -707,7 +708,7 @@ class SupportService:
             )
 
 
-async def _db_get[TableRow](
+async def _db_get(  # noqa: UP047
     session: AsyncSession,
     model: type[TableRow],
     *,

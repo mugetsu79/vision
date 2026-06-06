@@ -147,7 +147,7 @@ export function ConfigurationWorkspace({
   const catalogLabels = new Map(
     (catalog.data?.kinds ?? []).map((item) => [item.kind, item.label]),
   );
-  const bindings = bindingsQuery.data ?? [];
+  const bindings = useMemo(() => bindingsQuery.data ?? [], [bindingsQuery.data]);
   const bindingCountByProfileId = useMemo(() => {
     const counts = new Map<string, number>();
     for (const binding of bindings) {

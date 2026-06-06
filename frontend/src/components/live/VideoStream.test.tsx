@@ -337,8 +337,20 @@ describe("VideoStream", () => {
       />,
     );
 
-    await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(2));
-    const secondUrl = String(loadSourceMock.mock.calls[1]?.[0]);
+    await waitFor(() =>
+      expect(
+        loadSourceMock.mock.calls.some(
+          ([source]) =>
+            new URL(String(source)).searchParams.get("profile_id") === "540p5",
+        ),
+      ).toBe(true),
+    );
+    const secondUrl = loadSourceMock.mock.calls
+      .map(([source]) => String(source))
+      .find((url) => new URL(url).searchParams.get("profile_id") === "540p5");
+    if (!secondUrl) {
+      throw new Error("Expected HLS restart to request the 540p5 profile.");
+    }
 
     expect(secondUrl).not.toBe(firstUrl);
     expect(new URL(firstUrl).searchParams.get("profile_id")).toBe("720p10");
@@ -362,7 +374,11 @@ describe("VideoStream", () => {
     );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const requestBody = fetchMock.mock.calls[0]?.[1]?.body;
+    if (typeof requestBody !== "string") {
+      throw new Error("Expected WebRTC offer body to be a JSON string.");
+    }
+    const body = JSON.parse(requestBody) as { profile_id?: string };
 
     expect(body.profile_id).toBe("540p5");
   });
@@ -403,7 +419,11 @@ describe("VideoStream", () => {
     );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const requestBody = fetchMock.mock.calls[0]?.[1]?.body;
+    if (typeof requestBody !== "string") {
+      throw new Error("Expected WebRTC offer body to be a JSON string.");
+    }
+    const body = JSON.parse(requestBody) as { profile_id?: string };
 
     expect(body.profile_id).toBe("720p25");
   });
@@ -450,7 +470,11 @@ describe("VideoStream", () => {
     });
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const requestBody = fetchMock.mock.calls[0]?.[1]?.body;
+    if (typeof requestBody !== "string") {
+      throw new Error("Expected WebRTC offer body to be a JSON string.");
+    }
+    const body = JSON.parse(requestBody) as { profile_id?: string };
 
     expect(body.profile_id).toBe("annotated");
   });

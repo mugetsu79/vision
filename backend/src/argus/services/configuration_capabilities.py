@@ -3,6 +3,7 @@ from __future__ import annotations
 from argus.api.contracts import (
     OperatorConfigFieldCapability,
     OperatorConfigKindCapability,
+    OperatorConfigSupportState,
     OperatorConfigValueCapability,
 )
 from argus.models.enums import OperatorConfigProfileKind
@@ -12,7 +13,9 @@ def configuration_capabilities(
     *,
     nats_enabled: bool,
 ) -> list[OperatorConfigKindCapability]:
-    push_support = "active" if nats_enabled else "requires_service"
+    push_support: OperatorConfigSupportState = (
+        "active" if nats_enabled else "requires_service"
+    )
     push_message = (
         "Push lifecycle requests require NATS supervisor acknowledgement."
         if nats_enabled

@@ -168,7 +168,7 @@ export function VideoStream({
         session_token: String(sessionToken),
         tenant_id: tenantId,
       }),
-    [accessToken, cameraId, sessionToken, tenantId],
+    [accessToken, cameraId, defaultProfile, sessionToken, tenantId],
   );
   const mjpegUrl = useMemo(
     () =>
@@ -178,7 +178,7 @@ export function VideoStream({
         session_token: String(sessionToken),
         tenant_id: tenantId,
       }),
-    [accessToken, cameraId, sessionToken, tenantId],
+    [accessToken, cameraId, defaultProfile, sessionToken, tenantId],
   );
 
   const streamProfileReady =

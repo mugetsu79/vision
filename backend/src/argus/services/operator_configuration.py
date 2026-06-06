@@ -25,6 +25,7 @@ from argus.api.contracts import (
     OperatorConfigProfileResponse,
     OperatorConfigProfileUpdate,
     OperatorConfigTestResponse,
+    OperatorSecretState,
     PrivacyPolicyProfileConfig,
     ResolvedOperatorConfigResponse,
     RuntimeSelectionProfileConfig,
@@ -331,7 +332,9 @@ class OperatorConfigurationService:
                 for binding in await self._load_bindings(session, tenant_context.tenant_id)
                 if binding.profile_id == profile.id
             ]
-        secret_state: dict[str, str] = {secret.key: "present" for secret in secrets}
+        secret_state: dict[str, OperatorSecretState] = {
+            secret.key: "present" for secret in secrets
+        }
         return OperatorConfigProfileImpactResponse(
             profile_id=profile.id,
             kind=profile.kind,
@@ -592,6 +595,8 @@ class OperatorConfigurationService:
                 getattr(camera, "evidence_recording_policy", None) or {}
             )
             try:
+                evidence_storage: WorkerEvidenceStorageSettings | None
+                privacy_policy: WorkerPrivacyPolicySettings | None
                 if payload.kind is OperatorConfigProfileKind.EVIDENCE_STORAGE:
                     evidence_storage = await self.resolve_worker_evidence_storage(
                         tenant_context,

@@ -46,6 +46,12 @@ from argus.models.tables import (
 from argus.services.model_admission import ModelAdmissionDecision
 
 REPORT_STALE_AFTER = timedelta(minutes=15)
+LifecycleDispatchStatus = Literal[
+    "queued_for_polling",
+    "acknowledged",
+    "ack_timeout",
+    "failed",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,12 +66,7 @@ class WorkerOperationsControls:
 @dataclass(frozen=True, slots=True)
 class LifecycleDispatchResult:
     dispatch_mode: Literal["polling", "push"]
-    dispatch_status: Literal[
-        "queued_for_polling",
-        "acknowledged",
-        "ack_timeout",
-        "failed",
-    ]
+    dispatch_status: LifecycleDispatchStatus
     error: str | None = None
 
 
@@ -901,13 +902,13 @@ def _coerce_lifecycle_dispatch_result(
     else:
         raw_status = getattr(result, "dispatch_status", None)
         error = getattr(result, "error", None)
-    dispatch_status = (
-        raw_status
-        if raw_status in {"queued_for_polling", "acknowledged", "ack_timeout", "failed"}
-        else "queued_for_polling"
-        if dispatch_mode == "polling"
-        else "failed"
-    )
+    dispatch_status: LifecycleDispatchStatus
+    if raw_status in {"queued_for_polling", "acknowledged", "ack_timeout", "failed"}:
+        dispatch_status = raw_status
+    elif dispatch_mode == "polling":
+        dispatch_status = "queued_for_polling"
+    else:
+        dispatch_status = "failed"
     return LifecycleDispatchResult(
         dispatch_mode=dispatch_mode,
         dispatch_status=dispatch_status,

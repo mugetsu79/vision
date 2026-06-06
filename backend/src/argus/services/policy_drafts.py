@@ -1041,6 +1041,8 @@ def _clean_text(value: object) -> str:
 
 
 def _bounded_float(value: object, *, default: float) -> float:
+    if not isinstance(value, str | int | float):
+        return default
     try:
         parsed = float(value)
     except (TypeError, ValueError):
@@ -1057,6 +1059,8 @@ def _bounded_int(
     minimum: int,
     maximum: int,
 ) -> int:
+    if not isinstance(value, str | int | float):
+        return default
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -1065,7 +1069,7 @@ def _bounded_int(
 
 
 def _json_clone(value: object) -> dict[str, Any]:
-    return json.loads(json.dumps(value, sort_keys=True, default=str))
+    return cast(dict[str, Any], json.loads(json.dumps(value, sort_keys=True, default=str)))
 
 
 def _camera_update_from_diff(diff: dict[str, Any]) -> CameraUpdate:
