@@ -6,6 +6,14 @@ REPO_ROOT = Path(__file__).parents[2]
 MASTER_PLIST = REPO_ROOT / "infra" / "install" / "launchd" / "com.vezor.master.plist"
 INSTALL_SCRIPT = REPO_ROOT / "installer" / "macos" / "install-master.sh"
 UNINSTALL_SCRIPT = REPO_ROOT / "installer" / "macos" / "uninstall.sh"
+BACKEND_DOCKERFILE = REPO_ROOT / "backend" / "Dockerfile"
+DOCKERIGNORE = REPO_ROOT / ".dockerignore"
+MARITIME_PACK = REPO_ROOT / "packs" / "maritime-fleet" / "pack.yaml"
+TRAFFIC_PACK = REPO_ROOT / "packs" / "traffic-public-space" / "pack.yaml"
+FRONTEND_ROUTER = REPO_ROOT / "frontend" / "src" / "app" / "router.tsx"
+WORKSPACE_NAV = REPO_ROOT / "frontend" / "src" / "components" / "layout" / "workspace-nav.ts"
+OPENAPI_JSON = REPO_ROOT / "frontend" / "src" / "lib" / "openapi.json"
+API_TYPES = REPO_ROOT / "frontend" / "src" / "lib" / "api.generated.ts"
 
 FORBIDDEN_PRODUCT_STRINGS = (
     "ARGUS_API_BEARER_TOKEN",
@@ -201,6 +209,57 @@ def test_macos_dev_installer_builds_local_master_images_before_launchd_start() -
     assert 'docker build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE"' in script
     assert 'docker tag "$BACKEND_IMAGE" "$SUPERVISOR_IMAGE"' in script
     assert "build_local_master_images" in script.split("run launchctl bootstrap system")[0]
+
+
+def test_macos_master_packaging_keeps_fleetops_pack_routes_and_api_assets() -> None:
+    script = _read(INSTALL_SCRIPT)
+    backend_dockerfile = _read(BACKEND_DOCKERFILE)
+    dockerignore = _read(DOCKERIGNORE)
+    maritime_pack = _read(MARITIME_PACK)
+    traffic_pack = _read(TRAFFIC_PACK)
+    router = _read(FRONTEND_ROUTER)
+    workspace_nav = _read(WORKSPACE_NAV)
+    openapi = _read(OPENAPI_JSON)
+    api_types = _read(API_TYPES)
+
+    assert (
+        'docker build -f /opt/vezor/current/backend/Dockerfile '
+        '-t "$BACKEND_IMAGE" /opt/vezor/current'
+    ) in script
+    assert (
+        'docker build -f /opt/vezor/current/backend/Dockerfile '
+        '-t "$BACKEND_IMAGE" /opt/vezor/current/backend'
+    ) not in script
+    assert "COPY packs ./packs" in backend_dockerfile
+    assert "!packs/" in dockerignore
+    assert "!packs/**" in dockerignore
+    assert "id: maritime-fleet" in maritime_pack
+    assert "product_name: Vezor FleetOps" in maritime_pack
+    assert "id: traffic-public-space" in traffic_pack
+    assert "status: designed_not_implemented" in traffic_pack
+    assert "implementation_commitment: false" in traffic_pack
+    assert "traffic_runtime_code_before_activation" in traffic_pack
+    for route in (
+        'path: "fleetops"',
+        'path: "fleetops/vessels"',
+        'path: "fleetops/vessels/:vesselId"',
+        'path: "fleetops/evidence"',
+        'path: "fleetops/billing"',
+        'path: "fleetops/support"',
+        'path: "fleetops/onboarding"',
+    ):
+        assert route in router
+    assert 'label: "FleetOps"' in workspace_nav
+    for path in (
+        "/api/v1/maritime",
+        "/api/v1/fleet",
+        "/api/v1/link",
+        "/api/v1/billing",
+        "/api/v1/support",
+        "/api/v1/packs/maritime-fleet/runtime",
+    ):
+        assert path in openapi
+        assert path in api_types
 
 
 def test_macos_installer_starts_master_synchronously_before_launchd_registration() -> None:

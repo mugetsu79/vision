@@ -97,6 +97,27 @@ Operator browser
   -> site cameras
 ```
 
+### FleetOps Runtime Pack Boundary
+
+FleetOps is the maritime runtime pack on the installed product path. Validate it
+through the same MacBook or Linux master plus Jetson edge appliance flow used
+for cameras and supervisors: the backend image must include `packs/`, the UI
+must expose `/fleetops` routes, and the generated API assets must include
+maritime, fleet, link, billing, support, and
+`/api/v1/packs/maritime-fleet/runtime`.
+
+Operational FleetOps smoke should create a vessel-linked site, attach fleet
+hierarchy and exceptions, apply the gangway template, resolve maritime evidence
+context from AIS and managed-link terminal state, export an evidence pack, roll
+usage into FleetOps billing, and verify support bundle, supervisor-polled
+`ssh_reverse` tunnel, break-glass, and onboarding check flows. FleetOps support
+tunnels are transport records dispatched through the supervisor path; the
+browser and backend remain a control plane, not a remote shell.
+
+Keep pack boundaries explicit. Home/lab validation is still packless and
+non-product. `traffic-public-space` remains manifest-only here; do not add a
+traffic runtime, public-space demo, or traffic UI when validating FleetOps.
+
 ## 1. Smallest Lab Setup
 
 This is the recommended first deployment for evaluation, local validation, UI review, and basic architecture proof.

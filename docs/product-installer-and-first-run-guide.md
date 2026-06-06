@@ -45,6 +45,32 @@ Normal installed operation must not depend on:
 - WebGL
 - DeepStream or Task 24 work before Track A/B Jetson soak evidence exists
 
+### FleetOps Pack Packaging And Smoke
+
+Vezor FleetOps is the first product runtime pack in this installer path. The
+pack manifest lives at `packs/maritime-fleet/pack.yaml`; installed backend
+images must build from `/opt/vezor/current` so `backend/Dockerfile` can copy the
+top-level `packs/` directory into the image. The FleetOps frontend routes
+`/fleetops`, `/fleetops/vessels`, `/fleetops/evidence`, `/fleetops/billing`,
+`/fleetops/support`, and `/fleetops/onboarding` must ship with the generated
+OpenAPI client entries for maritime, fleet, link, billing, support, and
+`/api/v1/packs/maritime-fleet/runtime`.
+
+The installed product smoke for FleetOps covers the MacBook or Linux master plus
+the normal Jetson edge path: create a vessel-linked site, apply the gangway
+template, ingest AIS and managed-link terminal state, exercise link budgets and
+queues, export a maritime evidence pack, record billable usage, run an invoice,
+generate a support bundle, request a supervisor-polled `ssh_reverse` support
+tunnel, close break-glass access, and run onboarding checks. FleetOps billing
+uses the core billing baseline with the `maritime-fleet` entitlement, FleetOps
+meters, and invoice/export records; it does not introduce a payment processor or
+accounting integration.
+
+Home/lab validation remains a packless, non-product path unless a later product
+decision changes that status. `packs/traffic-public-space/pack.yaml` is packaged
+as a manifest-only reference and must not be treated as an installed runtime
+pack in this guide.
+
 ## Current Source Reality
 
 The current source tree contains installer scripts, service templates, Compose
