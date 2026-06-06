@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { RequireRole } from "@/components/auth/RequireRole";
 import {
@@ -11,6 +11,8 @@ import {
   WorkspaceBand,
 } from "@/components/layout/workspace-surfaces";
 import { PolicyDraftReview } from "@/components/policy/PolicyDraftReview";
+import { SceneFocusPicker } from "@/components/scenes/SceneFocusPicker";
+import { filterSceneFocusItems } from "@/components/scenes/scene-focus";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
@@ -59,6 +61,10 @@ function CamerasContent() {
     string | null
   >(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [sceneSearch, setSceneSearch] = useState("");
+  const [selectedSceneIds, setSelectedSceneIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const { data: cameras = [], isLoading: camerasLoading } = useCameras();
   const { data: sites = [] } = useSites();
   const {
@@ -80,6 +86,46 @@ function CamerasContent() {
     () => new Map(sites.map((site) => [site.id, site.name])),
     [sites],
   );
+  const cameraIdSet = useMemo(
+    () => new Set(cameras.map((camera) => camera.id)),
+    [cameras],
+  );
+  const sceneFocusItems = useMemo(
+    () =>
+      cameras.map((camera) => ({
+        id: camera.id,
+        name: camera.name,
+        siteName: siteNameById.get(camera.site_id) ?? "Unknown site",
+      })),
+    [cameras, siteNameById],
+  );
+  const searchedSceneFocusItems = useMemo(
+    () => filterSceneFocusItems(sceneFocusItems, sceneSearch),
+    [sceneFocusItems, sceneSearch],
+  );
+  const focusedSceneIds = useMemo(() => {
+    if (selectedSceneIds.size > 0) {
+      return new Set(
+        Array.from(selectedSceneIds).filter((sceneId) =>
+          cameraIdSet.has(sceneId),
+        ),
+      );
+    }
+
+    if (sceneSearch.trim().length > 0) {
+      return new Set(searchedSceneFocusItems.map((item) => item.id));
+    }
+
+    return new Set(sceneFocusItems.slice(0, 1).map((item) => item.id));
+  }, [cameraIdSet, sceneFocusItems, sceneSearch, searchedSceneFocusItems, selectedSceneIds]);
+  const focusedInventoryCameras = useMemo(
+    () => cameras.filter((camera) => focusedSceneIds.has(camera.id)),
+    [cameras, focusedSceneIds],
+  );
+  const sceneInventorySummary =
+    cameras.length === 0
+      ? "0 of 0 scenes shown"
+      : `${focusedInventoryCameras.length} of ${cameras.length} scenes shown`;
   const sceneHealthRows = useMemo(
     () => deriveSceneReadinessRows({ cameras, fleet: fleet.data }),
     [cameras, fleet.data],
@@ -127,6 +173,27 @@ function CamerasContent() {
       selectedCamera?.secondary_model_id,
     ],
   );
+
+  useEffect(() => {
+    setSelectedSceneIds((current) => {
+      const next = new Set(
+        Array.from(current).filter((sceneId) => cameraIdSet.has(sceneId)),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [cameraIdSet]);
+
+  function toggleFocusedScene(sceneId: string) {
+    setSelectedSceneIds((current) => {
+      const next = new Set(current);
+      if (next.has(sceneId)) {
+        next.delete(sceneId);
+      } else {
+        next.add(sceneId);
+      }
+      return next;
+    });
+  }
 
   function openCreateWizard() {
     void refetchModels();
@@ -249,6 +316,18 @@ function CamerasContent() {
             Scene inventory
           </h2>
         </div>
+        <SceneFocusPicker
+          defaultSummary={sceneInventorySummary}
+          items={sceneFocusItems}
+          onClearSelection={() => setSelectedSceneIds(new Set())}
+          onSearchChange={setSceneSearch}
+          onToggleScene={toggleFocusedScene}
+          searchLabel="Search scene inventory"
+          searchPlaceholder="Search by scene or site"
+          searchValue={sceneSearch}
+          selectedSceneIds={selectedSceneIds}
+          title="Choose scene inventory"
+        />
         <div
           data-testid="scene-inventory-table"
           className="overflow-x-auto rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
@@ -279,8 +358,14 @@ function CamerasContent() {
                   {omniEmptyStates.noScenes}
                 </TD>
               </TR>
+            ) : focusedInventoryCameras.length === 0 ? (
+              <TR>
+                <TD colSpan={8} className="text-[#9eb2cf]">
+                  No scenes match this selection.
+                </TD>
+              </TR>
             ) : (
-              cameras.map((camera) => {
+              focusedInventoryCameras.map((camera) => {
                 const sceneHealth = sceneHealthByCamera.get(camera.id);
                 const visionSummary = getCameraVisionSummary(camera);
 

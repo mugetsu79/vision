@@ -220,9 +220,9 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    const row = (await screen.findByText("Dock Camera")).closest("tr");
-    expect(row).not.toBeNull();
-    await user.click(within(row as HTMLElement).getByRole("button", { name: /delete/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /delete dock camera/i }),
+    );
 
     expect(confirm).toHaveBeenCalledWith("Delete Dock Camera? This cannot be undone.");
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -327,6 +327,151 @@ describe("CamerasPage", () => {
       await screen.findByRole("heading", { name: /update dock camera/i }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/camera name/i)).toHaveValue("Dock Camera");
+  });
+
+  test("uses search and selection instead of showing every scene inventory row", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras" && request.method === "GET") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "camera-1",
+              site_id: "site-1",
+              edge_node_id: null,
+              name: "Dock Camera",
+              rtsp_url_masked: "rtsp://***",
+              processing_mode: "central",
+              primary_model_id: null,
+              secondary_model_id: null,
+              tracker_type: "botsort",
+              active_classes: ["person"],
+              attribute_rules: [],
+              zones: [],
+              homography: null,
+              privacy: {
+                blur_faces: false,
+                blur_plates: false,
+                method: "gaussian",
+                strength: 7,
+              },
+              browser_delivery: {
+                default_profile: "720p10",
+                allow_native_on_demand: true,
+                profiles: [],
+                unsupported_profiles: [],
+                native_status: { available: true, reason: null },
+              },
+              frame_skip: 1,
+              fps_cap: 25,
+              created_at: "2026-04-20T10:00:00Z",
+              updated_at: "2026-04-20T10:00:00Z",
+            },
+            {
+              id: "camera-2",
+              site_id: "site-2",
+              edge_node_id: null,
+              name: "Gate Camera",
+              rtsp_url_masked: "rtsp://***",
+              processing_mode: "edge",
+              primary_model_id: null,
+              secondary_model_id: null,
+              tracker_type: "bytetrack",
+              active_classes: ["car"],
+              attribute_rules: [],
+              zones: [],
+              homography: null,
+              privacy: {
+                blur_faces: true,
+                blur_plates: true,
+                method: "gaussian",
+                strength: 7,
+              },
+              browser_delivery: {
+                default_profile: "540p5",
+                allow_native_on_demand: true,
+                profiles: [],
+                unsupported_profiles: [],
+                native_status: { available: true, reason: null },
+              },
+              frame_skip: 1,
+              fps_cap: 15,
+              created_at: "2026-04-20T10:00:00Z",
+              updated_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "Dockside",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+            {
+              id: "site-2",
+              tenant_id: "tenant-1",
+              name: "Gatehouse",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    await screen.findByText("1 of 2 scenes shown");
+    const inventory = await screen.findByTestId("scene-inventory-table");
+    expect(within(inventory).getByText("Dock Camera")).toBeInTheDocument();
+    expect(within(inventory).queryByText("Gate Camera")).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 2 scenes shown")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/search scene inventory/i), "gate house");
+
+    expect(within(inventory).getByText("Gate Camera")).toBeInTheDocument();
+    expect(within(inventory).queryByText("Dock Camera")).not.toBeInTheDocument();
+    expect(screen.getByText("1 matching")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Gate Camera" }));
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(within(inventory).getByText("Gate Camera")).toBeInTheDocument();
   });
 
   test("refetches models when the create wizard opens so newly registered models appear", async () => {
@@ -1075,7 +1220,9 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Dock Camera")).toBeInTheDocument();
+    await screen.findByText("1 of 1 scenes shown");
+    const inventory = screen.getByTestId("scene-inventory-table");
+    expect(within(inventory).getByText("Dock Camera")).toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: /readiness/i }),
     ).toBeInTheDocument();
@@ -1085,6 +1232,8 @@ describe("CamerasPage", () => {
   });
 
   test("shows selected vision accuracy and speed state in the scene list", async () => {
+    const user = userEvent.setup();
+
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       await Promise.resolve();
       const request = input as Request;
@@ -1228,14 +1377,14 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    const dockRow = (await screen.findByText("Dock Camera")).closest("tr");
-    const gateRow = (await screen.findByText("Gate Camera")).closest("tr");
+    await screen.findByText("1 of 2 scenes shown");
+    const inventory = screen.getByTestId("scene-inventory-table");
+    const dockRow = within(inventory).getByText("Dock Camera").closest("tr");
 
     expect(
       screen.getByRole("columnheader", { name: /vision/i }),
     ).toBeInTheDocument();
     expect(dockRow).not.toBeNull();
-    expect(gateRow).not.toBeNull();
     expect(
       within(dockRow as HTMLElement).getByText("Balanced"),
     ).toBeInTheDocument();
@@ -1245,6 +1394,10 @@ describe("CamerasPage", () => {
     expect(
       within(dockRow as HTMLElement).getByText("Speed off"),
     ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/search scene inventory/i), "gate");
+    const gateRow = within(inventory).getByText("Gate Camera").closest("tr");
+    expect(gateRow).not.toBeNull();
     expect(
       within(gateRow as HTMLElement).getByText("Max accuracy"),
     ).toBeInTheDocument();
@@ -1412,10 +1565,8 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    const dockRow = (await screen.findByText("Dock Camera")).closest("tr");
-    expect(dockRow).not.toBeNull();
     await user.click(
-      within(dockRow as HTMLElement).getByRole("button", { name: /rules/i }),
+      await screen.findByRole("button", { name: /open rules for dock camera/i }),
     );
 
     expect(

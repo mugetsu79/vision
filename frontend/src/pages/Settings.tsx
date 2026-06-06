@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -22,6 +22,11 @@ import { AttentionStack } from "@/components/operations/AttentionStack";
 import { HardwareAdmissionPanel } from "@/components/operations/HardwareAdmissionPanel";
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
 import { SupervisorLifecycleControls } from "@/components/operations/SupervisorLifecycleControls";
+import { SceneFocusPicker } from "@/components/scenes/SceneFocusPicker";
+import {
+  filterSceneFocusItems,
+  type SceneFocusItem,
+} from "@/components/scenes/scene-focus";
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
 import { Button } from "@/components/ui/button";
 import { omniLabels } from "@/copy/omnisight";
@@ -67,6 +72,88 @@ export function SettingsPage() {
   );
   const [configurationOpen, setConfigurationOpen] = useState(false);
   const [configurationHasOpened, setConfigurationHasOpened] = useState(false);
+  const [operationsSceneSearch, setOperationsSceneSearch] = useState("");
+  const [selectedOperationsSceneIds, setSelectedOperationsSceneIds] = useState<
+    Set<string>
+  >(() => new Set());
+
+  const siteNameById = useMemo(
+    () => new Map(sites.map((site) => [site.id, site.name])),
+    [sites],
+  );
+  const operationSceneItems = useMemo(() => {
+    const itemsById = new Map<string, SceneFocusItem>();
+
+    function addSceneItem(cameraId: string, name: string, siteId?: string | null) {
+      if (itemsById.has(cameraId)) {
+        return;
+      }
+      const resolvedSiteId = siteId ?? camerasById.get(cameraId)?.site_id ?? null;
+      itemsById.set(cameraId, {
+        id: cameraId,
+        name,
+        siteId: resolvedSiteId,
+        siteName: resolvedSiteId
+          ? siteNameById.get(resolvedSiteId) ?? "Unknown site"
+          : "Unknown site",
+      });
+    }
+
+    cameras.forEach((camera) => {
+      addSceneItem(camera.id, camera.name, camera.site_id);
+    });
+    fleet.data?.camera_workers.forEach((worker) => {
+      addSceneItem(worker.camera_id, worker.camera_name, worker.site_id);
+    });
+    fleet.data?.delivery_diagnostics.forEach((diagnostic) => {
+      addSceneItem(diagnostic.camera_id, diagnostic.camera_name);
+    });
+
+    return Array.from(itemsById.values());
+  }, [cameras, camerasById, fleet.data, siteNameById]);
+  const operationSceneIdSet = useMemo(
+    () => new Set(operationSceneItems.map((item) => item.id)),
+    [operationSceneItems],
+  );
+  const searchedOperationSceneItems = useMemo(
+    () => filterSceneFocusItems(operationSceneItems, operationsSceneSearch),
+    [operationSceneItems, operationsSceneSearch],
+  );
+  const focusedOperationSceneItems = useMemo(() => {
+    if (selectedOperationsSceneIds.size > 0) {
+      return operationSceneItems.filter((item) =>
+        selectedOperationsSceneIds.has(item.id),
+      );
+    }
+
+    if (operationsSceneSearch.trim().length > 0) {
+      return searchedOperationSceneItems;
+    }
+
+    return operationSceneItems.slice(0, 1);
+  }, [
+    operationSceneItems,
+    operationsSceneSearch,
+    searchedOperationSceneItems,
+    selectedOperationsSceneIds,
+  ]);
+  const focusedOperationSceneIds = useMemo(
+    () => new Set(focusedOperationSceneItems.map((item) => item.id)),
+    [focusedOperationSceneItems],
+  );
+  const focusedOperationSiteIds = useMemo(
+    () =>
+      new Set(
+        focusedOperationSceneItems
+          .map((item) => item.siteId)
+          .filter((siteId): siteId is string => Boolean(siteId)),
+      ),
+    [focusedOperationSceneItems],
+  );
+  const operationsSceneFocusSummary =
+    operationSceneItems.length === 0
+      ? "0 of 0 scenes focused"
+      : `${focusedOperationSceneItems.length} of ${operationSceneItems.length} scenes focused`;
 
   const modeCopy = useMemo(() => {
     if (fleet.data?.mode === "supervised") {
@@ -87,6 +174,17 @@ export function SettingsPage() {
       }),
     [cameras, fleet.data],
   );
+
+  useEffect(() => {
+    setSelectedOperationsSceneIds((current) => {
+      const next = new Set(
+        Array.from(current).filter((sceneId) =>
+          operationSceneIdSet.has(sceneId),
+        ),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [operationSceneIdSet]);
 
   if (fleet.isLoading) {
     return (
@@ -110,6 +208,26 @@ export function SettingsPage() {
     fleet: fleet.data,
     framesByCamera,
   });
+  const focusedSceneHealthRows = sceneHealthRows.filter((row) =>
+    focusedOperationSceneIds.has(row.cameraId),
+  );
+  const focusedCameraWorkers = fleet.data.camera_workers.filter((worker) =>
+    focusedOperationSceneIds.has(worker.camera_id),
+  );
+  const focusedDeliveryDiagnostics = fleet.data.delivery_diagnostics.filter(
+    (diagnostic) => focusedOperationSceneIds.has(diagnostic.camera_id),
+  );
+  const focusedOperationalMemoryPatterns = (operationalMemory.data ?? []).filter(
+    (pattern) => {
+      if (pattern.camera_id) {
+        return focusedOperationSceneIds.has(pattern.camera_id);
+      }
+      if (pattern.site_id) {
+        return focusedOperationSiteIds.has(pattern.site_id);
+      }
+      return true;
+    },
+  );
   const edgeNodes = fleet.data.nodes
     .filter((node) => node.id !== null)
     .map((node) => ({
@@ -124,6 +242,18 @@ export function SettingsPage() {
       setConfigurationHasOpened(true);
     }
     setConfigurationOpen((current) => !current);
+  }
+
+  function toggleFocusedOperationsScene(sceneId: string) {
+    setSelectedOperationsSceneIds((current) => {
+      const next = new Set(current);
+      if (next.has(sceneId)) {
+        next.delete(sceneId);
+      } else {
+        next.add(sceneId);
+      }
+      return next;
+    });
   }
 
   return (
@@ -144,7 +274,21 @@ export function SettingsPage() {
 
       <AttentionStack items={attentionItems} fleetHealth={fleetHealth} />
 
-      <SceneIntelligenceMatrix rows={sceneHealthRows} />
+      <SceneFocusPicker
+        defaultSummary={operationsSceneFocusSummary}
+        items={operationSceneItems}
+        onClearSelection={() => setSelectedOperationsSceneIds(new Set())}
+        onSearchChange={setOperationsSceneSearch}
+        onToggleScene={toggleFocusedOperationsScene}
+        searchLabel="Search operations scenes"
+        searchPlaceholder="Search by scene or site"
+        searchValue={operationsSceneSearch}
+        selectedSceneIds={selectedOperationsSceneIds}
+        testId="operations-scene-focus"
+        title="Focus scene view"
+      />
+
+      <SceneIntelligenceMatrix rows={focusedSceneHealthRows} />
 
       <OperationsSectionNav />
 
@@ -164,8 +308,12 @@ export function SettingsPage() {
               <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
                 No scene workers yet.
               </p>
+            ) : focusedCameraWorkers.length === 0 ? (
+              <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+                No workers match the focused scenes.
+              </p>
             ) : (
-              fleet.data.camera_workers.map((worker) => {
+              focusedCameraWorkers.map((worker) => {
                 const camera = camerasById.get(worker.camera_id);
 
                 return (
@@ -245,7 +393,7 @@ export function SettingsPage() {
       </OperationalSection>
 
       <OperationalMemoryPanel
-        patterns={operationalMemory.data ?? []}
+        patterns={focusedOperationalMemoryPatterns}
         loading={operationalMemory.isLoading}
       />
 
@@ -265,8 +413,12 @@ export function SettingsPage() {
               <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
                 No stream diagnostics yet.
               </p>
+            ) : focusedDeliveryDiagnostics.length === 0 ? (
+              <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
+                No stream diagnostics match the focused scenes.
+              </p>
             ) : (
-              fleet.data.delivery_diagnostics.map((diagnostic) => (
+              focusedDeliveryDiagnostics.map((diagnostic) => (
                 <div
                   key={diagnostic.camera_id}
                   className="rounded-[1rem] border border-white/10 p-3"

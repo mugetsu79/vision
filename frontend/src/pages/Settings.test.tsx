@@ -732,6 +732,186 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
   });
 
+  test("filters readiness workers patterns and delivery by searchable scene focus", async () => {
+    const user = userEvent.setup();
+    settingsMocks.cameras = [
+      {
+        id: "00000000-0000-0000-0000-000000000101",
+        site_id: "00000000-0000-0000-0000-000000000301",
+        edge_node_id: null,
+        name: "Lobby",
+        rtsp_url_masked: "rtsp://redacted@camera.local/live",
+        camera_source: {
+          kind: "rtsp",
+          uri: "rtsp://redacted@camera.local/live",
+        },
+        processing_mode: "central",
+        primary_model_id: "00000000-0000-0000-0000-000000000001",
+        secondary_model_id: null,
+        tracker_type: "bytetrack",
+        active_classes: ["person"],
+        attribute_rules: [],
+        zones: [],
+        homography: null,
+        privacy: {
+          blur_faces: true,
+          blur_plates: true,
+          method: "gaussian",
+          strength: 7,
+        },
+        browser_delivery: {
+          default_profile: "720p10",
+          allow_native_on_demand: true,
+          profiles: [],
+          unsupported_profiles: [],
+          native_status: {
+            available: false,
+            reason: "privacy_filtering_required",
+          },
+        },
+        frame_skip: 1,
+        fps_cap: 25,
+        created_at: "2026-05-09T07:00:00Z",
+        updated_at: "2026-05-09T07:00:00Z",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000102",
+        site_id: "00000000-0000-0000-0000-000000000301",
+        edge_node_id: "00000000-0000-0000-0000-000000000201",
+        name: "Driveway",
+        rtsp_url_masked: "rtsp://redacted@driveway.local/live",
+        camera_source: {
+          kind: "rtsp",
+          uri: "rtsp://redacted@driveway.local/live",
+        },
+        processing_mode: "edge",
+        primary_model_id: "00000000-0000-0000-0000-000000000001",
+        secondary_model_id: null,
+        tracker_type: "botsort",
+        active_classes: ["car"],
+        attribute_rules: [],
+        zones: [],
+        homography: null,
+        privacy: {
+          blur_faces: true,
+          blur_plates: true,
+          method: "gaussian",
+          strength: 7,
+        },
+        browser_delivery: {
+          default_profile: "540p5",
+          allow_native_on_demand: true,
+          profiles: [],
+          unsupported_profiles: [],
+          native_status: { available: true, reason: null },
+        },
+        recording_policy: {
+          enabled: true,
+          mode: "event_clip",
+          pre_seconds: 6,
+          post_seconds: 10,
+          fps: 12,
+          max_duration_seconds: 16,
+          storage_profile: "cloud",
+          snapshot_enabled: false,
+          snapshot_offset_seconds: 0,
+          snapshot_quality: 85,
+        },
+        frame_skip: 1,
+        fps_cap: 25,
+        created_at: "2026-05-09T07:00:00Z",
+        updated_at: "2026-05-09T07:00:00Z",
+      },
+    ];
+    settingsMocks.fleetOverview = {
+      ...fleetOverview,
+      delivery_diagnostics: [
+        ...fleetOverview.delivery_diagnostics,
+        {
+          camera_id: "00000000-0000-0000-0000-000000000102",
+          camera_name: "Driveway",
+          processing_mode: "edge",
+          assigned_node_id: "00000000-0000-0000-0000-000000000201",
+          source_capability: { width: 1920, height: 1080, fps: 15 },
+          default_profile: "540p5",
+          available_profiles: [{ id: "540p5", kind: "transcode" }],
+          native_status: { available: true, reason: null },
+          selected_stream_mode: "transcode",
+        },
+      ],
+    };
+    settingsMocks.memoryPatterns = [
+      {
+        id: "00000000-0000-0000-0000-000000000901",
+        tenant_id: "tenant-1",
+        site_id: "00000000-0000-0000-0000-000000000301",
+        camera_id: "00000000-0000-0000-0000-000000000101",
+        pattern_type: "event_burst",
+        severity: "warning",
+        summary: "Lobby pattern: 3 incidents in one zone.",
+        window_started_at: "2026-05-12T08:00:00Z",
+        window_ended_at: "2026-05-12T08:15:00Z",
+        source_incident_ids: ["00000000-0000-0000-0000-000000000701"],
+        source_contract_hashes: ["a".repeat(64)],
+        dimensions: { zone_id: "lobby" },
+        evidence: { incident_count: 3 },
+        pattern_hash: "b".repeat(64),
+        created_at: "2026-05-12T08:20:00Z",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000902",
+        tenant_id: "tenant-1",
+        site_id: "00000000-0000-0000-0000-000000000301",
+        camera_id: "00000000-0000-0000-0000-000000000102",
+        pattern_type: "zone_hotspot",
+        severity: "critical",
+        summary: "Driveway pattern: 5 incidents at the gate.",
+        window_started_at: "2026-05-12T09:00:00Z",
+        window_ended_at: "2026-05-12T09:15:00Z",
+        source_incident_ids: ["00000000-0000-0000-0000-000000000702"],
+        source_contract_hashes: ["c".repeat(64)],
+        dimensions: { zone_id: "gate" },
+        evidence: { incident_count: 5 },
+        pattern_hash: "d".repeat(64),
+        created_at: "2026-05-12T09:20:00Z",
+      },
+    ];
+
+    renderPage();
+
+    const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
+    const workerRail = screen.getByTestId("worker-rail");
+    const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
+    const memoryPanel = screen.getByTestId("operational-memory-panel");
+
+    expect(screen.getByText("1 of 2 scenes focused")).toBeInTheDocument();
+    expect(within(sceneMatrix).getByText("Lobby")).toBeInTheDocument();
+    expect(within(sceneMatrix).queryByText("Driveway")).not.toBeInTheDocument();
+    expect(within(workerRail).getByText("Lobby")).toBeInTheDocument();
+    expect(within(workerRail).queryByText("Driveway")).not.toBeInTheDocument();
+    expect(within(diagnosticsRail).getByText(/Lobby scene delivery/i)).toBeInTheDocument();
+    expect(within(diagnosticsRail).queryByText(/Driveway scene delivery/i)).not.toBeInTheDocument();
+    expect(within(memoryPanel).getByText(/Lobby pattern/i)).toBeInTheDocument();
+    expect(within(memoryPanel).queryByText(/Driveway pattern/i)).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/search operations scenes/i), "drive");
+
+    expect(screen.getByText("1 matching")).toBeInTheDocument();
+    expect(within(sceneMatrix).getByText("Driveway")).toBeInTheDocument();
+    expect(within(sceneMatrix).queryByText("Lobby")).not.toBeInTheDocument();
+    expect(within(workerRail).getByText("Driveway")).toBeInTheDocument();
+    expect(within(workerRail).queryByText("Lobby")).not.toBeInTheDocument();
+    expect(within(diagnosticsRail).getByText(/Driveway scene delivery/i)).toBeInTheDocument();
+    expect(within(diagnosticsRail).queryByText(/Lobby scene delivery/i)).not.toBeInTheDocument();
+    expect(within(memoryPanel).getByText(/Driveway pattern/i)).toBeInTheDocument();
+    expect(within(memoryPanel).queryByText(/Lobby pattern/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Driveway" }));
+
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(within(sceneMatrix).getByText("Driveway")).toBeInTheDocument();
+  });
+
   test("guides a fresh tenant to configure sites, scenes, and deployment", () => {
     settingsMocks.fleetOverview = {
       ...fleetOverview,
@@ -782,7 +962,9 @@ describe("SettingsPage operations workbench", () => {
     ).toBeInTheDocument();
   });
 
-  test("shows worker lifecycle and delivery diagnostics", () => {
+  test("shows worker lifecycle and delivery diagnostics", async () => {
+    const user = userEvent.setup();
+
     renderPage();
 
     expect(
@@ -829,6 +1011,22 @@ describe("SettingsPage operations workbench", () => {
     expect(
       within(screen.getByTestId("worker-rail")).getByText(/loaded/i),
     ).toBeInTheDocument();
+    const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
+    expect(
+      within(diagnosticsRail).getByText(/direct stream unavailable:/i),
+    ).toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).getByText(/privacy filtering required/i),
+    ).toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).getByText(/1280 x 720/i),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/search operations scenes/i), "drive");
+    expect(screen.getByText("1 matching")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("worker-rail")).getByText("Driveway"),
+    ).toBeInTheDocument();
     const supervisorControls = screen.getAllByTestId(
       "supervisor-lifecycle-controls",
     );
@@ -869,19 +1067,9 @@ describe("SettingsPage operations workbench", () => {
         /desired worker location/i,
       ).length,
     ).toBeGreaterThan(0);
-    const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
-    expect(
-      within(diagnosticsRail).getByText(/direct stream unavailable:/i),
-    ).toBeInTheDocument();
-    expect(
-      within(diagnosticsRail).getByText(/privacy filtering required/i),
-    ).toBeInTheDocument();
-    expect(
-      within(diagnosticsRail).getByText(/1280 x 720/i),
-    ).toBeInTheDocument();
   });
 
-  test("surfaces removed worker assignments with a re-enable path", () => {
+  test("surfaces removed worker assignments with a re-enable path", async () => {
     settingsMocks.fleetOverview = {
       ...fleetOverview,
       summary: {
@@ -920,7 +1108,11 @@ describe("SettingsPage operations workbench", () => {
       ),
     };
 
+    const user = userEvent.setup();
+
     renderPage();
+
+    await user.type(screen.getByLabelText(/search operations scenes/i), "drive");
 
     const workerRail = screen.getByTestId("worker-rail");
     expect(within(workerRail).getByText("Driveway")).toBeInTheDocument();
