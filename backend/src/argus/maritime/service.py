@@ -1312,6 +1312,37 @@ class MaritimeRuntimeService:
                 await session.refresh(row)
         return _carrier_terminal_record(row)
 
+    def get_carrier_terminal_by_terminal_id(
+        self,
+        *,
+        tenant_id: UUID,
+        terminal_id: str,
+    ) -> MaritimeCarrierTerminalRecord | None:
+        self._ensure_memory_mode()
+        terminal = self._carrier_terminals.get((tenant_id, terminal_id))
+        if terminal is None or terminal.tenant_id != tenant_id:
+            return None
+        return terminal
+
+    async def aget_carrier_terminal_by_terminal_id(
+        self,
+        *,
+        tenant_id: UUID,
+        terminal_id: str,
+    ) -> MaritimeCarrierTerminalRecord | None:
+        if self.session_factory is None:
+            return self.get_carrier_terminal_by_terminal_id(
+                tenant_id=tenant_id,
+                terminal_id=terminal_id,
+            )
+        async with self.session_factory() as session:
+            row = await self._afind_carrier_terminal(
+                session,
+                tenant_id=tenant_id,
+                terminal_id=terminal_id,
+            )
+        return _carrier_terminal_record(row) if row is not None else None
+
     def get_vessel_telemetry(
         self,
         *,

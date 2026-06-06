@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, NoReturn
+from typing import Annotated, NoReturn, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
 
 from argus.api.contracts import (
@@ -16,7 +16,13 @@ from argus.api.contracts import (
 )
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
-from argus.link.contracts import LinkState
+from argus.link.contracts import (
+    LinkAvailabilityScope,
+    LinkConnectionStatus,
+    LinkPriorityLane,
+    LinkState,
+    LinkTransportKind,
+)
 from argus.maritime.billing import (
     maritime_billing_rollups_payload,
     maritime_billing_usage_payload,
@@ -49,13 +55,16 @@ from argus.maritime.support import (
     maritime_support_diagnostics_payload,
 )
 from argus.maritime.telemetry import (
+    BULK_DEGRADED_BUDGET_FLOOR_BYTES,
     AisCsvFileAdapter,
     AISJsonAdapter,
+    CarrierTerminalReading,
     CarrierWebhookAdapter,
     Nmea0183Adapter,
     Nmea0183FileAdapter,
     ParseFailure,
     TransferLaneDecision,
+    _transport_kind_for_link_state,
 )
 from argus.maritime.templates import MaritimeTemplateError, MaritimeTemplateService
 from argus.models.enums import RoleEnum
@@ -68,6 +77,9 @@ OperatorUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.OPERATOR))]
 AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
+PriorityLaneQuery = Annotated[LinkPriorityLane, Query()]
+RemainingBudgetBytesQuery = Annotated[int, Query(ge=0)]
+LINK_CONNECTION_LABEL_MAX_LENGTH = 160
 
 
 class VesselCreate(BaseModel):
@@ -379,9 +391,25 @@ async def ingest_maritime_carrier_terminal(
 ) -> JsonObject:
     try:
         reading = CarrierWebhookAdapter().parse(payload.payload)
+        vessel = await services.maritime.aget_vessel(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=payload.vessel_id,
+        )
+        previous_terminal = await services.maritime.aget_carrier_terminal_by_terminal_id(
+            tenant_id=tenant_context.tenant_id,
+            terminal_id=reading.terminal_id,
+        )
         terminal = await services.maritime.aupsert_carrier_terminal(
             tenant_id=tenant_context.tenant_id,
             vessel_id=payload.vessel_id,
+            reading=reading,
+        )
+        await _upsert_carrier_link_connection(
+            services=services,
+            tenant_id=tenant_context.tenant_id,
+            vessel=vessel,
+            terminal=terminal,
+            previous_terminal=previous_terminal,
             reading=reading,
         )
         return {"carrier_terminal": _carrier_terminal_payload(terminal)}
@@ -643,10 +671,48 @@ async def get_maritime_carrier_selection(
     current_user: ViewerUser,
     services: ServicesDependency,
     tenant_context: TenantDependency,
-    priority_lane: str = "bulk",
-    remaining_budget_bytes: int = 0,
+    priority_lane: PriorityLaneQuery = "bulk",
+    remaining_budget_bytes: RemainingBudgetBytesQuery = 0,
 ) -> JsonObject:
     try:
+        vessel = await services.maritime.aget_vessel(
+            tenant_id=tenant_context.tenant_id,
+            vessel_id=vessel_id,
+        )
+        connections = await services.link.alist_connections(
+            tenant_id=tenant_context.tenant_id,
+            site_id=vessel.site_id,
+        )
+        if connections:
+            connection = await services.link.aselect_connection(
+                tenant_id=tenant_context.tenant_id,
+                site_id=vessel.site_id,
+                priority_lane=priority_lane,
+                remaining_budget_bytes=remaining_budget_bytes,
+            )
+            if connection is None:
+                return _transfer_lane_payload(
+                    TransferLaneDecision(
+                        transport="deferred",
+                        defer=True,
+                        reason="core_connection_unavailable",
+                    )
+                )
+            core_decision = _transfer_lane_decision_for_core_connection(
+                transport=connection.transport_kind,
+                connection_status=connection.status,
+                priority_lane=priority_lane,
+                remaining_budget_bytes=remaining_budget_bytes,
+            )
+            if core_decision is not None:
+                return _transfer_lane_payload(core_decision)
+            return _transfer_lane_payload(
+                TransferLaneDecision(
+                    transport=connection.transport_kind,
+                    defer=False,
+                    reason="core_connection_selected",
+                )
+            )
         decision = await services.maritime.aget_carrier_selection(
             tenant_id=tenant_context.tenant_id,
             vessel_id=vessel_id,
@@ -654,8 +720,8 @@ async def get_maritime_carrier_selection(
             remaining_budget_bytes=remaining_budget_bytes,
         )
         return _transfer_lane_payload(decision)
-    except MaritimeError as exc:
-        _raise_maritime_http_error(exc)
+    except (MaritimeError, ValueError) as exc:
+        _raise_maritime_http_error(_to_maritime_error(exc))
 
 
 @router.patch("/api/v1/maritime/vessels/{vessel_id}")
@@ -1009,6 +1075,154 @@ async def _lookup_site(
         if exc.status_code == status.HTTP_404_NOT_FOUND:
             return None
         raise
+
+
+async def _upsert_carrier_link_connection(
+    *,
+    services: AppServices,
+    tenant_id: UUID,
+    vessel: MaritimeVesselRecord,
+    terminal: MaritimeCarrierTerminalRecord,
+    previous_terminal: MaritimeCarrierTerminalRecord | None,
+    reading: CarrierTerminalReading,
+) -> None:
+    await _delete_previous_carrier_link_connection(
+        services=services,
+        tenant_id=tenant_id,
+        current_vessel=vessel,
+        previous_terminal=previous_terminal,
+    )
+    transport_kind = reading.transport_kind or _transport_kind_for_link_state(
+        reading.link_state
+    )
+    await services.link.aupsert_connection(
+        tenant_id=tenant_id,
+        site_id=vessel.site_id,
+        connection_id=terminal.id,
+        label=_carrier_link_label(reading),
+        provider=reading.provider,
+        transport_kind=transport_kind,
+        status=_link_status_for_carrier_reading(reading),
+        priority_rank=_priority_rank_for_transport_kind(transport_kind),
+        availability_scope=_availability_scope_for_transport_kind(transport_kind),
+        metered=_is_metered_transport(transport_kind),
+        expected_downlink_mbps=reading.downlink_mbps,
+        expected_uplink_mbps=reading.uplink_mbps,
+        expected_latency_ms=_latency_ms(reading.latency_ms),
+        packet_loss_percent=reading.packet_loss_percent,
+        last_seen_at=reading.last_seen_at,
+        metadata={
+            "maritime_terminal_id": reading.terminal_id,
+            "provider": reading.provider,
+        },
+    )
+
+
+async def _delete_previous_carrier_link_connection(
+    *,
+    services: AppServices,
+    tenant_id: UUID,
+    current_vessel: MaritimeVesselRecord,
+    previous_terminal: MaritimeCarrierTerminalRecord | None,
+) -> None:
+    if (
+        previous_terminal is None
+        or previous_terminal.vessel_id == current_vessel.id
+    ):
+        return
+    try:
+        previous_vessel = await services.maritime.aget_vessel(
+            tenant_id=tenant_id,
+            vessel_id=previous_terminal.vessel_id,
+        )
+    except MaritimeError:
+        return
+    if previous_vessel.site_id == current_vessel.site_id:
+        return
+    await services.link.adelete_connection(
+        tenant_id=tenant_id,
+        site_id=previous_vessel.site_id,
+        connection_id=previous_terminal.id,
+    )
+
+
+def _link_status_for_carrier_reading(
+    reading: CarrierTerminalReading,
+) -> LinkConnectionStatus:
+    if reading.link_state in {"satellite_degraded", "recovering"}:
+        return "degraded"
+    if reading.link_state == "dark":
+        return "offline"
+    if reading.status != "unknown":
+        return cast(LinkConnectionStatus, reading.status)
+    if reading.link_state == "satellite_good":
+        return "online"
+    return "unknown"
+
+
+def _carrier_link_label(reading: CarrierTerminalReading) -> str:
+    label = f"{reading.provider} {reading.terminal_id}".strip()
+    return label[:LINK_CONNECTION_LABEL_MAX_LENGTH]
+
+
+def _transfer_lane_decision_for_core_connection(
+    *,
+    transport: LinkTransportKind,
+    connection_status: LinkConnectionStatus,
+    priority_lane: LinkPriorityLane,
+    remaining_budget_bytes: int,
+) -> TransferLaneDecision | None:
+    if (
+        transport == "satellite"
+        and connection_status in {"degraded", "recovering"}
+    ):
+        if (
+            priority_lane == "bulk"
+            and remaining_budget_bytes <= BULK_DEGRADED_BUDGET_FLOOR_BYTES
+        ):
+            return TransferLaneDecision(
+                transport="deferred",
+                defer=True,
+                reason="degraded_satellite_bulk_backpressure",
+            )
+        return TransferLaneDecision(
+            transport="satellite_degraded",
+            defer=False,
+            reason="degraded_satellite_priority_allowed",
+        )
+    return None
+
+
+def _priority_rank_for_transport_kind(transport_kind: LinkTransportKind) -> int:
+    if transport_kind == "satellite":
+        return 20
+    if transport_kind in {"lte", "5g", "wifi"}:
+        return 10
+    if transport_kind in {"fiber", "ethernet"}:
+        return 5
+    return 100
+
+
+def _availability_scope_for_transport_kind(
+    transport_kind: LinkTransportKind,
+) -> LinkAvailabilityScope:
+    if transport_kind == "satellite":
+        return "remote"
+    if transport_kind in {"lte", "5g"}:
+        return "nearby"
+    if transport_kind in {"wifi", "fiber", "ethernet"}:
+        return "local"
+    return "always"
+
+
+def _is_metered_transport(transport_kind: LinkTransportKind) -> bool:
+    return transport_kind in {"satellite", "lte", "5g"}
+
+
+def _latency_ms(value: float | None) -> int | None:
+    if value is None:
+        return None
+    return int(round(value))
 
 
 def _vessel_payload(

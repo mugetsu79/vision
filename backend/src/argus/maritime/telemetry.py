@@ -13,6 +13,7 @@ from typing import cast
 import httpx
 
 from argus.compat import UTC
+from argus.link.contracts import LinkTransportKind
 from argus.maritime.contracts import CarrierLinkState, CarrierStatus, JsonObject
 
 AIS_CSV_SOURCE = "ais_csv"
@@ -26,6 +27,7 @@ CARRIER_LINK_STATES = {
     "dark",
     "recovering",
 }
+CARRIER_TRANSPORT_KINDS = {"satellite", "lte", "5g", "wifi", "fiber", "ethernet", "other"}
 BULK_DEGRADED_BUDGET_FLOOR_BYTES = 1_000_000
 
 SecretResolver = Callable[[str], Mapping[str, str] | Awaitable[Mapping[str, str]]]
@@ -94,6 +96,7 @@ class CarrierTerminalReading:
     provider: str
     status: CarrierStatus
     link_state: CarrierLinkState
+    transport_kind: LinkTransportKind | None
     last_seen_at: datetime
     raw_payload: JsonObject
     downlink_mbps: float | None = None
@@ -283,11 +286,13 @@ class CarrierWebhookAdapter:
         link_state = _carrier_link_state(
             _optional_text(payload, "link_state") or _link_state_for_status(status)
         )
+        transport_kind = _carrier_transport_kind(payload.get("transport_kind"))
         return CarrierTerminalReading(
             terminal_id=terminal_id,
             provider=_optional_text(payload, "provider") or "generic",
             status=status,
             link_state=link_state,
+            transport_kind=transport_kind,
             downlink_mbps=_optional_float(payload, "downlink_mbps"),
             uplink_mbps=_optional_float(payload, "uplink_mbps"),
             latency_ms=_optional_float(payload, "latency_ms"),
@@ -396,6 +401,14 @@ def select_transfer_lane(
         defer=True,
         reason="carrier_state_unknown",
     )
+
+
+def _transport_kind_for_link_state(link_state: CarrierLinkState) -> LinkTransportKind:
+    if link_state in {"satellite_good", "satellite_degraded", "recovering"}:
+        return "satellite"
+    if link_state == "port_wifi":
+        return "wifi"
+    return "other"
 
 
 def _required_text(payload: Mapping[str, object], key: str) -> str:
@@ -510,6 +523,15 @@ def _carrier_link_state(value: str) -> CarrierLinkState:
     if value not in CARRIER_LINK_STATES:
         raise ValueError(f"Invalid carrier link_state: {value}")
     return cast(CarrierLinkState, value)
+
+
+def _carrier_transport_kind(value: object) -> LinkTransportKind | None:
+    if value is None or str(value).strip() == "":
+        return None
+    normalized = str(value).strip().lower()
+    if normalized not in CARRIER_TRANSPORT_KINDS:
+        return "other"
+    return cast(LinkTransportKind, normalized)
 
 
 def _link_state_for_status(status: CarrierStatus) -> CarrierLinkState:

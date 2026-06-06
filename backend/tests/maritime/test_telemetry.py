@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from argus.api.contracts import TenantContext
 from argus.api.v1 import router
 from argus.core.security import AuthenticatedUser
+from argus.link.service import LinkService
 from argus.maritime.service import MaritimeRuntimeService
 from argus.maritime.tables import (
     MaritimeAISPosition,
@@ -116,7 +117,62 @@ def test_carrier_webhook_adapter_preserves_raw_payload() -> None:
 
     assert result.terminal_id == "starlink-a"
     assert result.provider == "generic"
+    assert result.transport_kind is None
     assert result.raw_payload["vendor_extra"]["beam"] == "eu-west"
+
+
+@pytest.mark.parametrize(
+    ("payload_transport", "expected_transport"),
+    [
+        ("satellite", "satellite"),
+        ("lte", "lte"),
+        ("5g", "5g"),
+        ("wifi", "wifi"),
+        ("fiber", "fiber"),
+        ("ethernet", "ethernet"),
+        ("other", "other"),
+    ],
+)
+def test_carrier_webhook_adapter_accepts_transport_kind(
+    payload_transport: str,
+    expected_transport: str,
+) -> None:
+    reading = CarrierWebhookAdapter().parse(
+        {
+            "terminal_id": f"{payload_transport}-terminal",
+            "provider": "generic",
+            "transport_kind": payload_transport,
+            "status": "online",
+            "last_seen_at": "2026-06-06T10:00:00Z",
+        }
+    )
+
+    assert reading.transport_kind == expected_transport
+
+
+def test_carrier_webhook_adapter_maps_unknown_transport_kind_to_other() -> None:
+    reading = CarrierWebhookAdapter().parse(
+        {
+            "terminal_id": "terminal-with-unknown-transport",
+            "transport_kind": "mesh-radio",
+            "status": "online",
+        }
+    )
+
+    assert reading.transport_kind == "other"
+
+
+def test_carrier_webhook_adapter_treats_null_transport_kind_as_missing() -> None:
+    reading = CarrierWebhookAdapter().parse(
+        {
+            "terminal_id": "terminal-with-null-transport",
+            "transport_kind": None,
+            "link_state": "recovering",
+            "status": "online",
+        }
+    )
+
+    assert reading.transport_kind is None
 
 
 def test_carrier_webhook_adapter_rejects_non_finite_metrics() -> None:
@@ -317,7 +373,7 @@ async def test_maritime_telemetry_ingest_and_selection_routes(client: AsyncClien
     telemetry = telemetry_response.json()
     assert telemetry["latest_ais_position"]["mmsi"] == "235012345"
     assert telemetry["carrier_terminal"]["terminal_id"] == "starlink-a"
-    assert selection_response.json()["transport"] == "port_wifi"
+    assert selection_response.json()["transport"] == "wifi"
 
 
 @pytest.mark.asyncio
@@ -505,6 +561,7 @@ def _create_app(user: AuthenticatedUser) -> FastAPI:
         packs=PackRegistry(PACKS_ROOT),
         sites=_FakeSiteService(),
         maritime=MaritimeRuntimeService(pack_registry=PackRegistry(PACKS_ROOT)),
+        link=LinkService(),
     )
     app.state.security = _FakeSecurity(user)
     return app

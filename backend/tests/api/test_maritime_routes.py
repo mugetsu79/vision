@@ -291,6 +291,376 @@ async def test_vessel_link_status_composes_core_link_status(
 
 
 @pytest.mark.asyncio
+async def test_carrier_terminal_ingest_upserts_core_link_connection(
+    seeded_client: AsyncClient,
+    site_id: UUID,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "lte-a",
+                "provider": "generic-lte",
+                "transport_kind": "lte",
+                "status": "online",
+                "downlink_mbps": 45,
+                "uplink_mbps": 12,
+                "latency_ms": 90,
+                "packet_loss_percent": 0.2,
+            },
+        },
+    )
+    connections_response = await seeded_client.get(
+        f"/api/v1/link/sites/{site_id}/connections"
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 100_000_000},
+    )
+
+    assert response.status_code == 201
+    assert connections_response.status_code == 200
+    connections = connections_response.json()
+    assert any(item["transport_kind"] == "lte" for item in connections)
+    connection = next(item for item in connections if item["transport_kind"] == "lte")
+    assert connection["status"] == "online"
+    assert connection["availability_scope"] == "nearby"
+    assert connection["metered"] is True
+    assert connection["expected_downlink_mbps"] == 45
+    assert connection["expected_uplink_mbps"] == 12
+    assert connection["expected_latency_ms"] == 90
+    assert connection["packet_loss_percent"] == 0.2
+    assert connection["metadata"] == {
+        "maritime_terminal_id": "lte-a",
+        "provider": "generic-lte",
+    }
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "lte"
+    assert selection_response.json()["defer"] is False
+
+
+@pytest.mark.asyncio
+async def test_carrier_terminal_reassignment_moves_core_link_connection(
+    seeded_client: AsyncClient,
+    site_id: UUID,
+    vessel_id: UUID,
+) -> None:
+    second_vessel_response = await seeded_client.post(
+        "/api/v1/maritime/vessels",
+        json={
+            "name": "MV Second",
+            "create_site": {"name": "MV Second Site"},
+        },
+    )
+    assert second_vessel_response.status_code == 201
+    second_vessel_id = second_vessel_response.json()["id"]
+    second_site_id = second_vessel_response.json()["site_id"]
+
+    first_ingest = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "shared-terminal",
+                "provider": "generic",
+                "transport_kind": "wifi",
+                "status": "online",
+            },
+        },
+    )
+    second_ingest = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": second_vessel_id,
+            "payload": {
+                "terminal_id": "shared-terminal",
+                "provider": "generic",
+                "transport_kind": "wifi",
+                "status": "online",
+            },
+        },
+    )
+    first_site_connections = await seeded_client.get(
+        f"/api/v1/link/sites/{site_id}/connections"
+    )
+    second_site_connections = await seeded_client.get(
+        f"/api/v1/link/sites/{second_site_id}/connections"
+    )
+
+    assert first_ingest.status_code == 201
+    assert second_ingest.status_code == 201
+    assert not any(
+        item["metadata"].get("maritime_terminal_id") == "shared-terminal"
+        for item in first_site_connections.json()
+    )
+    assert any(
+        item["metadata"].get("maritime_terminal_id") == "shared-terminal"
+        for item in second_site_connections.json()
+    )
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_uses_legacy_link_state_when_status_missing(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "satellite-link-state-only",
+                "provider": "generic-sat",
+                "link_state": "satellite_good",
+            },
+        },
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 100_000_000},
+    )
+
+    assert response.status_code == 201
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "satellite"
+    assert selection_response.json()["defer"] is False
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_defers_degraded_core_satellite_bulk_lane(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "degraded-sat",
+                "provider": "generic-sat",
+                "link_state": "satellite_degraded",
+                "status": "degraded",
+            },
+        },
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 10_000},
+    )
+
+    assert response.status_code == 201
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "deferred"
+    assert selection_response.json()["defer"] is True
+    assert selection_response.json()["reason"] == "degraded_satellite_bulk_backpressure"
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_uses_available_core_connection_over_latest_degraded_terminal(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    wifi_response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "port-wifi-a",
+                "provider": "generic-wifi",
+                "transport_kind": "wifi",
+                "status": "online",
+            },
+        },
+    )
+    satellite_response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "degraded-sat-latest",
+                "provider": "generic-sat",
+                "link_state": "satellite_degraded",
+                "status": "degraded",
+            },
+        },
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 10_000},
+    )
+
+    assert wifi_response.status_code == 201
+    assert satellite_response.status_code == 201
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "wifi"
+    assert selection_response.json()["defer"] is False
+    assert selection_response.json()["reason"] == "core_connection_selected"
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_treats_recovering_core_connection_as_satellite_degraded(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "recovering-sat",
+                "provider": "generic-sat",
+                "link_state": "recovering",
+            },
+        },
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 10_000},
+    )
+
+    assert response.status_code == 201
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "deferred"
+    assert selection_response.json()["defer"] is True
+    assert selection_response.json()["reason"] == "degraded_satellite_bulk_backpressure"
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_preserves_recovering_link_state_over_online_status(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "recovering-status-online",
+                "provider": "generic-sat",
+                "link_state": "recovering",
+                "status": "online",
+            },
+        },
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 10_000},
+    )
+
+    assert response.status_code == 201
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "deferred"
+    assert selection_response.json()["defer"] is True
+    assert selection_response.json()["reason"] == "degraded_satellite_bulk_backpressure"
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_infers_null_transport_kind_from_recovering_link_state(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "recovering-null-transport",
+                "provider": "generic-sat",
+                "transport_kind": None,
+                "link_state": "recovering",
+                "status": "online",
+            },
+        },
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 10_000},
+    )
+
+    assert response.status_code == 201
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "deferred"
+    assert selection_response.json()["defer"] is True
+    assert selection_response.json()["reason"] == "degraded_satellite_bulk_backpressure"
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_preserves_dark_link_state_over_online_status(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "dark-status-online",
+                "provider": "generic-sat",
+                "link_state": "dark",
+                "status": "online",
+            },
+        },
+    )
+    selection_response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "bulk", "remaining_budget_bytes": 100_000_000},
+    )
+
+    assert response.status_code == 201
+    assert selection_response.status_code == 200
+    assert selection_response.json()["transport"] == "deferred"
+    assert selection_response.json()["defer"] is True
+    assert selection_response.json()["reason"] == "core_connection_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_carrier_selection_rejects_invalid_priority_lane_without_core_connections(
+    seeded_client: AsyncClient,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.get(
+        f"/api/v1/maritime/vessels/{vessel_id}/carrier-selection",
+        params={"priority_lane": "invalid"},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_carrier_terminal_ingest_truncates_core_link_label(
+    seeded_client: AsyncClient,
+    site_id: UUID,
+    vessel_id: UUID,
+) -> None:
+    response = await seeded_client.post(
+        "/api/v1/maritime/ingest/carrier-terminal",
+        json={
+            "vessel_id": str(vessel_id),
+            "payload": {
+                "terminal_id": "terminal-" + ("t" * 111),
+                "provider": "p" * 80,
+                "transport_kind": "ethernet",
+                "status": "online",
+            },
+        },
+    )
+    connections_response = await seeded_client.get(
+        f"/api/v1/link/sites/{site_id}/connections"
+    )
+
+    assert response.status_code == 201
+    connections = connections_response.json()
+    connection = next(
+        item
+        for item in connections
+        if item["metadata"].get("maritime_terminal_id") == "terminal-" + ("t" * 111)
+    )
+    assert len(connection["label"]) <= 160
+
+
+@pytest.mark.asyncio
 async def test_only_one_active_voyage_per_vessel(
     seeded_client: AsyncClient,
     vessel_id: UUID,
