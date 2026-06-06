@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -13,7 +14,7 @@ const vesselDetailMocks = vi.hoisted(() => ({
         name: "MV Resolute",
         metadata: {
           templates: ["Gangway access", "Cargo hatch watch"],
-        },
+        } as Record<string, unknown>,
       },
       isLoading: false,
       isError: false,
@@ -58,19 +59,52 @@ const vesselDetailMocks = vi.hoisted(() => ({
       isError: false,
     },
   },
+  updateVessel: vi.fn(),
+  deactivateVessel: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-maritime", () => ({
   useFleetOpsVesselDetail: () => vesselDetailMocks.detail,
+  useUpdateMaritimeVessel: () => ({
+    mutateAsync: vesselDetailMocks.updateVessel,
+    isPending: false,
+  }),
+  useDeactivateMaritimeVessel: () => ({
+    mutateAsync: vesselDetailMocks.deactivateVessel,
+    isPending: false,
+  }),
 }));
 
 function renderWithProviders(ui: ReactElement) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(
+    <MemoryRouter
+      future={{
+        v7_relativeSplatPath: true,
+        v7_startTransition: true,
+      }}
+    >
+      {ui}
+    </MemoryRouter>,
+  );
 }
 
 describe("FleetOpsVesselDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vesselDetailMocks.detail.vessel.data = {
+      id: "00000000-0000-4000-8000-000000000010",
+      name: "MV Resolute",
+      metadata: {
+        templates: ["Gangway access", "Cargo hatch watch"],
+      },
+    };
+    vesselDetailMocks.updateVessel.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000010",
+      name: "MV Endurance",
+    });
+    vesselDetailMocks.deactivateVessel.mockResolvedValue(
+      "00000000-0000-4000-8000-000000000010",
+    );
   });
 
   test("Vessel detail renders voyage timeline, templates, telemetry, and evidence context", async () => {
@@ -80,5 +114,69 @@ describe("FleetOpsVesselDetail", () => {
     expect(screen.getByText(/Gangway access/i)).toBeInTheDocument();
     expect(screen.getByText(/Latest AIS/i)).toBeInTheDocument();
     expect(screen.getByText(/Evidence context/i)).toBeInTheDocument();
+  });
+
+  test("edit vessel action submits an update payload", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<FleetOpsVesselDetail />);
+
+    await user.click(screen.getByRole("button", { name: /edit vessel/i }));
+    await user.clear(screen.getByLabelText(/vessel name/i));
+    await user.type(screen.getByLabelText(/vessel name/i), "MV Endurance");
+    await user.type(screen.getByLabelText(/home port/i), "Rotterdam");
+    await user.click(screen.getByRole("button", { name: /save vessel/i }));
+
+    expect(vesselDetailMocks.updateVessel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "MV Endurance",
+        metadata: expect.objectContaining({ home_port: "Rotterdam" }),
+      }),
+    );
+  });
+
+  test("deactivate vessel action calls the deactivate mutation", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<FleetOpsVesselDetail />);
+
+    await user.click(screen.getByRole("button", { name: /deactivate vessel/i }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("Deactivate MV Resolute?");
+    expect(vesselDetailMocks.deactivateVessel).toHaveBeenCalledWith(
+      "00000000-0000-4000-8000-000000000010",
+    );
+  });
+
+  test("edit vessel action can clear the final metadata field", async () => {
+    vesselDetailMocks.detail.vessel.data.metadata = {
+      home_port: "Rotterdam",
+    };
+    const user = userEvent.setup();
+    renderWithProviders(<FleetOpsVesselDetail />);
+
+    await user.click(screen.getByRole("button", { name: /edit vessel/i }));
+    await user.clear(screen.getByLabelText(/home port/i));
+    await user.click(screen.getByRole("button", { name: /save vessel/i }));
+
+    expect(vesselDetailMocks.updateVessel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {},
+      }),
+    );
+  });
+
+  test("deactivate vessel action reports mutation failures", async () => {
+    vesselDetailMocks.deactivateVessel.mockRejectedValueOnce(
+      new Error("Cannot deactivate active vessel."),
+    );
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<FleetOpsVesselDetail />);
+
+    await user.click(screen.getByRole("button", { name: /deactivate vessel/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Cannot deactivate active vessel.",
+    );
   });
 });

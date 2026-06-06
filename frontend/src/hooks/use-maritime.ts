@@ -1,7 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { components } from "@/lib/api.generated";
 import { apiClient, toApiError } from "@/lib/api";
 import { useMaritimeSupportDiagnostics } from "@/hooks/use-support";
+
+export type MaritimeVesselCreateInput = components["schemas"]["VesselCreate"];
+export type MaritimeVesselUpdateInput = components["schemas"]["VesselUpdate"];
+
+type MaritimeQueryClient = ReturnType<typeof useQueryClient>;
 
 export function useMaritimeRuntime() {
   return useQuery({
@@ -47,6 +53,79 @@ export function useMaritimeVessel(vesselId?: string | null) {
       return data ?? null;
     },
   });
+}
+
+export function useCreateMaritimeVessel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: MaritimeVesselCreateInput) => {
+      const { data, error } = await apiClient.POST("/api/v1/maritime/vessels", {
+        body: payload,
+      });
+      if (error) {
+        throw toApiError(error, "Failed to create vessel.");
+      }
+      return data ?? null;
+    },
+    onSuccess: async (created) => {
+      const vesselId = typeof created?.id === "string" ? created.id : null;
+      await invalidateMaritimeVesselCaches(queryClient, vesselId);
+    },
+  });
+}
+
+export function useUpdateMaritimeVessel(vesselId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: MaritimeVesselUpdateInput) => {
+      const { data, error } = await apiClient.PATCH(
+        "/api/v1/maritime/vessels/{vessel_id}",
+        { params: { path: { vessel_id: vesselId } }, body: payload },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to update vessel.");
+      }
+      return data ?? null;
+    },
+    onSuccess: async () =>
+      invalidateMaritimeVesselCaches(queryClient, vesselId),
+  });
+}
+
+export function useDeactivateMaritimeVessel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (vesselId: string) => {
+      const { error } = await apiClient.DELETE(
+        "/api/v1/maritime/vessels/{vessel_id}",
+        { params: { path: { vessel_id: vesselId } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to deactivate vessel.");
+      }
+      return vesselId;
+    },
+    onSuccess: async (vesselId) =>
+      invalidateMaritimeVesselCaches(queryClient, vesselId),
+  });
+}
+
+async function invalidateMaritimeVesselCaches(
+  queryClient: MaritimeQueryClient,
+  vesselId?: string | null,
+) {
+  await queryClient.invalidateQueries({ queryKey: ["maritime", "vessels"] });
+  await queryClient.invalidateQueries({ queryKey: ["sites"] });
+  await queryClient.invalidateQueries({ queryKey: ["fleet"] });
+  await queryClient.invalidateQueries({ queryKey: ["operations", "fleet"] });
+  if (vesselId) {
+    await queryClient.invalidateQueries({
+      queryKey: ["maritime", "vessels", vesselId],
+    });
+  }
 }
 
 export function useMaritimeVesselTelemetry(vesselId?: string | null) {

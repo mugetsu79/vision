@@ -4,17 +4,33 @@ import {
   StatusToneBadge,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
+import { Button } from "@/components/ui/button";
 import { asRecord, humanizeKey, textValue, type FleetOpsVessel } from "./types";
 
 type VesselSummaryTableProps = {
   vessels: FleetOpsVessel[];
+  onAddVessel?: () => void;
 };
 
-export function VesselSummaryTable({ vessels }: VesselSummaryTableProps) {
+export function VesselSummaryTable({
+  vessels,
+  onAddVessel,
+}: VesselSummaryTableProps) {
   if (vessels.length === 0) {
     return (
-      <WorkspaceSurface className="p-4 text-sm text-[var(--vz-text-secondary)]">
-        No vessels are connected to FleetOps yet.
+      <WorkspaceSurface className="p-6 text-center">
+        <p className="font-[family-name:var(--vz-font-display)] text-xl font-semibold text-[var(--vz-text-primary)]">
+          No vessels are connected to FleetOps yet.
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--vz-text-secondary)]">
+          Add the first vessel to create its FleetOps site binding and start
+          configuring connectivity, evidence, support, and onboarding.
+        </p>
+        {onAddVessel ? (
+          <Button className="mt-5" variant="primary" onClick={onAddVessel}>
+            Add vessel
+          </Button>
+        ) : null}
       </WorkspaceSurface>
     );
   }
