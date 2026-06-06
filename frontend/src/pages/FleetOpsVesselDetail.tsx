@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, Power } from "lucide-react";
 
 import { EvidenceExportBuilder } from "@/components/fleetops/EvidenceExportBuilder";
+import { LinkConnectionPanel } from "@/components/fleetops/LinkConnectionPanel";
 import { LinkOperationsPanel } from "@/components/fleetops/LinkOperationsPanel";
 import { VesselFormDialog } from "@/components/fleetops/VesselFormDialog";
 import { VoyageTimeline } from "@/components/fleetops/VoyageTimeline";
@@ -17,12 +18,13 @@ import {
   useUpdateMaritimeVessel,
   type MaritimeVesselUpdateInput,
 } from "@/hooks/use-maritime";
+import { useLinkConnections, useLinkSiteStatus } from "@/hooks/use-link";
 import type {
   FleetOpsVessel,
   JsonRecord,
   MaritimeVesselLinkStatus,
 } from "@/components/fleetops/types";
-import { textValue } from "@/components/fleetops/types";
+import { asRecord, textValue } from "@/components/fleetops/types";
 
 export function FleetOpsVesselDetail() {
   const { vesselId } = useParams();
@@ -32,8 +34,18 @@ export function FleetOpsVesselDetail() {
   const detail = useFleetOpsVesselDetail(vesselId);
   const vessel = detail.vessel.data as FleetOpsVessel | null | undefined;
   const effectiveVesselId = typeof vessel?.id === "string" ? vessel.id : "";
+  const effectiveSiteId = typeof vessel?.site_id === "string" ? vessel.site_id : null;
+  const coreLinkStatus = useLinkSiteStatus(effectiveSiteId);
+  const linkConnections = useLinkConnections(effectiveSiteId);
   const updateVessel = useUpdateMaritimeVessel(effectiveVesselId);
   const deactivateVessel = useDeactivateMaritimeVessel();
+  const maritimeLinkStatus =
+    detail.linkStatus.data as MaritimeVesselLinkStatus | JsonRecord | null | undefined;
+  const linkConnectionStatus = linkPanelStatus(
+    maritimeLinkStatus,
+    coreLinkStatus.data as JsonRecord | null | undefined,
+    (linkConnections.data ?? []) as JsonRecord[],
+  );
 
   async function handleUpdateVessel(payload: MaritimeVesselUpdateInput) {
     if (!effectiveVesselId) {
@@ -111,10 +123,9 @@ export function FleetOpsVesselDetail() {
         vessel={vessel}
       />
       <LinkOperationsPanel
-        linkStatus={
-          detail.linkStatus.data as MaritimeVesselLinkStatus | JsonRecord | null | undefined
-        }
+        linkStatus={maritimeLinkStatus}
       />
+      <LinkConnectionPanel linkStatus={linkConnectionStatus} />
       <EvidenceExportBuilder
         evidenceContext={detail.evidenceContext.data as JsonRecord | null | undefined}
       />
@@ -133,3 +144,28 @@ export function FleetOpsVesselDetail() {
 }
 
 export const FleetOpsVesselDetailPage = FleetOpsVesselDetail;
+
+function linkPanelStatus(
+  maritimeLinkStatus?: MaritimeVesselLinkStatus | JsonRecord | null,
+  coreLinkStatus?: JsonRecord | null,
+  linkConnections: JsonRecord[] = [],
+): JsonRecord {
+  const maritimeStatus = asRecord(maritimeLinkStatus);
+  const coreStatus = asRecord(coreLinkStatus);
+  const coreStatusConnections = Array.isArray(coreStatus.connections)
+    ? coreStatus.connections
+    : [];
+  const coreConnections = linkConnections.length
+    ? linkConnections
+    : coreStatusConnections.map(asRecord);
+
+  return {
+    ...coreStatus,
+    ...maritimeStatus,
+    active_connection: coreStatus.active_connection ?? null,
+    connections: coreConnections,
+    budget: maritimeStatus.budget ?? coreStatus.budget ?? null,
+    latest_probe: maritimeStatus.latest_probe ?? coreStatus.latest_probe ?? null,
+    queue_depth: maritimeStatus.queue_depth ?? coreStatus.queue_depth ?? {},
+  };
+}

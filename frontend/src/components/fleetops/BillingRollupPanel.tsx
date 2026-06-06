@@ -1,9 +1,9 @@
 import { WorkspaceSurface } from "@/components/layout/workspace-surfaces";
-import { Button } from "@/components/ui/button";
 import {
   humanizeKey,
   textValue,
   type BillingUsagePayload,
+  type InvoiceRun,
   type JsonRecord,
 } from "./types";
 
@@ -23,11 +23,13 @@ const valueMeters = [
 ];
 
 type BillingRollupPanelProps = {
+  invoiceRuns?: InvoiceRun[] | JsonRecord[];
   meters?: JsonRecord[];
   usage?: BillingUsagePayload;
 };
 
 export function BillingRollupPanel({
+  invoiceRuns = [],
   meters = [],
   usage,
 }: BillingRollupPanelProps) {
@@ -66,11 +68,34 @@ export function BillingRollupPanel({
               {usageItems.length || 0} active usage records
             </h2>
           </div>
-          <Button variant="ghost">Export usage</Button>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {[...new Set([...valueMeters, ...meterLabels])].map((meter) => (
             <MeterChip key={meter}>{humanizeKey(meter)}</MeterChip>
+          ))}
+        </div>
+      </WorkspaceSurface>
+      <WorkspaceSurface className="p-4 lg:col-span-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--vz-text-muted)]">
+          Invoice runs
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {(invoiceRuns.length
+            ? invoiceRuns
+            : [{ id: "none", status: "none", period_start: "", period_end: "" }]
+          ).map((run) => (
+            <div
+              className="rounded-[var(--vz-r-md)] border border-[color:var(--vz-hair)] bg-white/[0.025] px-3 py-3"
+              key={textValue(run.id, textValue(run.status))}
+            >
+              <p className="text-sm font-semibold text-[var(--vz-text-primary)]">
+                {humanizeKey(textValue(run.status, "No invoice run"))}
+              </p>
+              <p className="mt-2 text-xs text-[var(--vz-text-muted)]">
+                {textValue(run.period_start, "No period")} -{" "}
+                {textValue(run.period_end, "No period")}
+              </p>
+            </div>
           ))}
         </div>
       </WorkspaceSurface>

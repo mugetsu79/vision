@@ -5111,6 +5111,379 @@
         "title": "LinkBudgetUpdate",
         "type": "object"
       },
+      "LinkConnectionCreate": {
+        "properties": {
+          "availability_scope": {
+            "default": "always",
+            "enum": [
+              "always",
+              "remote",
+              "nearby",
+              "local",
+              "maintenance"
+            ],
+            "title": "Availability Scope",
+            "type": "string"
+          },
+          "bulk_daily_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bulk Daily Bytes"
+          },
+          "expected_downlink_mbps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Downlink Mbps"
+          },
+          "expected_latency_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Latency Ms"
+          },
+          "expected_uplink_mbps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Uplink Mbps"
+          },
+          "label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "metered": {
+            "default": false,
+            "title": "Metered",
+            "type": "boolean"
+          },
+          "monthly_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Bytes"
+          },
+          "packet_loss_percent": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packet Loss Percent"
+          },
+          "priority_rank": {
+            "default": 100,
+            "minimum": 0.0,
+            "title": "Priority Rank",
+            "type": "integer"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "status": {
+            "default": "unknown",
+            "enum": [
+              "unknown",
+              "online",
+              "degraded",
+              "offline",
+              "blocked",
+              "recovering"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transport_kind": {
+            "enum": [
+              "satellite",
+              "lte",
+              "5g",
+              "wifi",
+              "fiber",
+              "ethernet",
+              "other"
+            ],
+            "title": "Transport Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "transport_kind"
+        ],
+        "title": "LinkConnectionCreate",
+        "type": "object"
+      },
+      "LinkConnectionPatch": {
+        "properties": {
+          "availability_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "always",
+                  "remote",
+                  "nearby",
+                  "local",
+                  "maintenance"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability Scope"
+          },
+          "bulk_daily_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bulk Daily Bytes"
+          },
+          "expected_downlink_mbps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Downlink Mbps"
+          },
+          "expected_latency_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Latency Ms"
+          },
+          "expected_uplink_mbps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Uplink Mbps"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "metered": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metered"
+          },
+          "monthly_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Bytes"
+          },
+          "packet_loss_percent": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packet Loss Percent"
+          },
+          "priority_rank": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority Rank"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "online",
+                  "degraded",
+                  "offline",
+                  "blocked",
+                  "recovering"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "transport_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "satellite",
+                  "lte",
+                  "5g",
+                  "wifi",
+                  "fiber",
+                  "ethernet",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Kind"
+          }
+        },
+        "title": "LinkConnectionPatch",
+        "type": "object"
+      },
       "LinkPolicyUpdate": {
         "properties": {
           "policy": {
@@ -5124,6 +5497,18 @@
       },
       "LinkProbeCreate": {
         "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
           "latency_ms": {
             "minimum": 0.0,
             "title": "Latency Ms",
@@ -19058,6 +19443,375 @@
         ]
       }
     },
+    "/api/v1/link/sites/{site_id}/connections": {
+      "get": {
+        "operationId": "get_link_connections_api_v1_link_sites__site_id__connections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Get Link Connections Api V1 Link Sites  Site Id  Connections Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Link Connections",
+        "tags": [
+          "link"
+        ]
+      },
+      "post": {
+        "operationId": "post_link_connection_api_v1_link_sites__site_id__connections_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkConnectionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Link Connection Api V1 Link Sites  Site Id  Connections Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Link Connection",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/sites/{site_id}/connections/selection": {
+      "get": {
+        "operationId": "get_link_connection_selection_api_v1_link_sites__site_id__connections_selection_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "priority_lane",
+            "required": false,
+            "schema": {
+              "default": "bulk",
+              "enum": [
+                "safety",
+                "evidence",
+                "telemetry",
+                "bulk"
+              ],
+              "title": "Priority Lane",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "remaining_budget_bytes",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Remaining Budget Bytes",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Link Connection Selection Api V1 Link Sites  Site Id  Connections Selection Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Link Connection Selection",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/sites/{site_id}/connections/{connection_id}": {
+      "delete": {
+        "operationId": "delete_link_connection_api_v1_link_sites__site_id__connections__connection_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Link Connection",
+        "tags": [
+          "link"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_link_connection_api_v1_link_sites__site_id__connections__connection_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkConnectionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Patch Link Connection Api V1 Link Sites  Site Id  Connections  Connection Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Link Connection",
+        "tags": [
+          "link"
+        ]
+      }
+    },
     "/api/v1/link/sites/{site_id}/policies": {
       "get": {
         "operationId": "get_link_policies_api_v1_link_sites__site_id__policies_get",
@@ -20757,6 +21511,12 @@
             "required": false,
             "schema": {
               "default": "bulk",
+              "enum": [
+                "safety",
+                "evidence",
+                "telemetry",
+                "bulk"
+              ],
               "title": "Priority Lane",
               "type": "string"
             }
@@ -20767,6 +21527,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "minimum": 0,
               "title": "Remaining Budget Bytes",
               "type": "integer"
             }

@@ -35,10 +35,44 @@ const vesselDetailMocks = vi.hoisted(() => ({
       data: {
         link_state: "recovering",
         queue_depth: { evidence: 2 },
+        budget: {
+          monthly_bytes: 1000000000,
+          bulk_daily_bytes: 250000000,
+        },
+        latest_probe: {
+          latency_ms: 42,
+          throughput_mbps: 120,
+          packet_loss_percent: 0.1,
+          source: "fiber",
+        },
       },
       isLoading: false,
       isError: false,
     },
+    coreLinkStatus: {
+      data: {
+        active_connection: {
+          id: "connection-1",
+          label: "Fiber berth",
+          transport_kind: "fiber",
+          status: "online",
+          availability_scope: "local",
+          metered: false,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    },
+    linkConnections: [
+      {
+        id: "connection-1",
+        label: "Fiber berth",
+        transport_kind: "fiber",
+        status: "online",
+        availability_scope: "local",
+        metered: false,
+      },
+    ],
     evidenceContext: {
       data: {
         vessel_name: "MV Resolute",
@@ -72,6 +106,15 @@ vi.mock("@/hooks/use-maritime", () => ({
   useDeactivateMaritimeVessel: () => ({
     mutateAsync: vesselDetailMocks.deactivateVessel,
     isPending: false,
+  }),
+}));
+
+vi.mock("@/hooks/use-link", () => ({
+  useLinkSiteStatus: () => vesselDetailMocks.detail.coreLinkStatus,
+  useLinkConnections: () => ({
+    data: vesselDetailMocks.detail.linkConnections,
+    isLoading: false,
+    isError: false,
   }),
 }));
 
@@ -116,6 +159,21 @@ describe("FleetOpsVesselDetail", () => {
     expect(screen.getByText(/Evidence context/i)).toBeInTheDocument();
   });
 
+  test("Vessel detail renders link connections, budget, probes, and queue depth", async () => {
+    renderWithProviders(<FleetOpsVesselDetail />);
+
+    expect(await screen.findByText(/Active connection/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Fiber berth/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Satellite/i)).toBeInTheDocument();
+    expect(screen.getByText(/LTE/i)).toBeInTheDocument();
+    expect(screen.getByText(/5G/i)).toBeInTheDocument();
+    expect(screen.getByText(/Wi-Fi/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ethernet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Budget/i)).toBeInTheDocument();
+    expect(screen.getByText(/Latest probe/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Evidence queue/i).length).toBeGreaterThan(0);
+  });
+
   test("edit vessel action submits an update payload", async () => {
     const user = userEvent.setup();
     renderWithProviders(<FleetOpsVesselDetail />);
@@ -126,12 +184,13 @@ describe("FleetOpsVesselDetail", () => {
     await user.type(screen.getByLabelText(/home port/i), "Rotterdam");
     await user.click(screen.getByRole("button", { name: /save vessel/i }));
 
-    expect(vesselDetailMocks.updateVessel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "MV Endurance",
-        metadata: expect.objectContaining({ home_port: "Rotterdam" }),
-      }),
-    );
+    expect(vesselDetailMocks.updateVessel).toHaveBeenCalledWith({
+      name: "MV Endurance",
+      metadata: {
+        templates: ["Gangway access", "Cargo hatch watch"],
+        home_port: "Rotterdam",
+      },
+    });
   });
 
   test("deactivate vessel action calls the deactivate mutation", async () => {

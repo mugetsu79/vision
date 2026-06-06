@@ -1129,6 +1129,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/link/sites/{site_id}/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Connections */
+        get: operations["get_link_connections_api_v1_link_sites__site_id__connections_get"];
+        put?: never;
+        /** Post Link Connection */
+        post: operations["post_link_connection_api_v1_link_sites__site_id__connections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/connections/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Connection Selection */
+        get: operations["get_link_connection_selection_api_v1_link_sites__site_id__connections_selection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/connections/{connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Link Connection */
+        delete: operations["delete_link_connection_api_v1_link_sites__site_id__connections__connection_id__delete"];
+        options?: never;
+        head?: never;
+        /** Patch Link Connection */
+        patch: operations["patch_link_connection_api_v1_link_sites__site_id__connections__connection_id__patch"];
+        trace?: never;
+    };
     "/api/v1/link/sites/{site_id}/policies": {
         parameters: {
             query?: never;
@@ -4197,6 +4250,93 @@ export interface components {
             /** Monthly Bytes */
             monthly_bytes: number;
         };
+        /** LinkConnectionCreate */
+        LinkConnectionCreate: {
+            /**
+             * Availability Scope
+             * @default always
+             * @enum {string}
+             */
+            availability_scope: "always" | "remote" | "nearby" | "local" | "maintenance";
+            /** Bulk Daily Bytes */
+            bulk_daily_bytes?: number | null;
+            /** Expected Downlink Mbps */
+            expected_downlink_mbps?: number | null;
+            /** Expected Latency Ms */
+            expected_latency_ms?: number | null;
+            /** Expected Uplink Mbps */
+            expected_uplink_mbps?: number | null;
+            /** Label */
+            label: string;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Metered
+             * @default false
+             */
+            metered: boolean;
+            /** Monthly Bytes */
+            monthly_bytes?: number | null;
+            /** Packet Loss Percent */
+            packet_loss_percent?: number | null;
+            /**
+             * Priority Rank
+             * @default 100
+             */
+            priority_rank: number;
+            /** Provider */
+            provider?: string | null;
+            /**
+             * Status
+             * @default unknown
+             * @enum {string}
+             */
+            status: "unknown" | "online" | "degraded" | "offline" | "blocked" | "recovering";
+            /**
+             * Transport Kind
+             * @enum {string}
+             */
+            transport_kind: "satellite" | "lte" | "5g" | "wifi" | "fiber" | "ethernet" | "other";
+        };
+        /** LinkConnectionPatch */
+        LinkConnectionPatch: {
+            /** Availability Scope */
+            availability_scope?: ("always" | "remote" | "nearby" | "local" | "maintenance") | null;
+            /** Bulk Daily Bytes */
+            bulk_daily_bytes?: number | null;
+            /** Expected Downlink Mbps */
+            expected_downlink_mbps?: number | null;
+            /** Expected Latency Ms */
+            expected_latency_ms?: number | null;
+            /** Expected Uplink Mbps */
+            expected_uplink_mbps?: number | null;
+            /** Label */
+            label?: string | null;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Metered */
+            metered?: boolean | null;
+            /** Monthly Bytes */
+            monthly_bytes?: number | null;
+            /** Packet Loss Percent */
+            packet_loss_percent?: number | null;
+            /** Priority Rank */
+            priority_rank?: number | null;
+            /** Provider */
+            provider?: string | null;
+            /** Status */
+            status?: ("unknown" | "online" | "degraded" | "offline" | "blocked" | "recovering") | null;
+            /** Transport Kind */
+            transport_kind?: ("satellite" | "lte" | "5g" | "wifi" | "fiber" | "ethernet" | "other") | null;
+        };
         /** LinkPolicyUpdate */
         LinkPolicyUpdate: {
             /** Policy */
@@ -4206,6 +4346,8 @@ export interface components {
         };
         /** LinkProbeCreate */
         LinkProbeCreate: {
+            /** Connection Id */
+            connection_id?: string | null;
             /** Latency Ms */
             latency_ms: number;
             /** Packet Loss Percent */
@@ -10017,6 +10159,190 @@ export interface operations {
             };
         };
     };
+    get_link_connections_api_v1_link_sites__site_id__connections_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_link_connection_api_v1_link_sites__site_id__connections_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkConnectionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_connection_selection_api_v1_link_sites__site_id__connections_selection_get: {
+        parameters: {
+            query?: {
+                priority_lane?: "safety" | "evidence" | "telemetry" | "bulk";
+                remaining_budget_bytes?: number;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    } | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_link_connection_api_v1_link_sites__site_id__connections__connection_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_link_connection_api_v1_link_sites__site_id__connections__connection_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkConnectionPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_link_policies_api_v1_link_sites__site_id__policies_get: {
         parameters: {
             query?: never;
@@ -11009,7 +11335,7 @@ export interface operations {
     get_maritime_carrier_selection_api_v1_maritime_vessels__vessel_id__carrier_selection_get: {
         parameters: {
             query?: {
-                priority_lane?: string;
+                priority_lane?: "safety" | "evidence" | "telemetry" | "bulk";
                 remaining_budget_bytes?: number;
             };
             header?: {
