@@ -116,10 +116,16 @@ describe("maritime hooks", () => {
     });
 
     expect(apiClient.POST).toHaveBeenCalledWith("/api/v1/maritime/vessels", {
-      body: expect.objectContaining({
+      body: {
         name: "MV Resolute",
-        create_site: expect.objectContaining({ tz: "UTC" }),
-      }),
+        create_site: {
+          name: "MV Resolute",
+          description: "FleetOps vessel site for MV Resolute",
+          tz: "UTC",
+        },
+        imo_number: "9876543",
+        metadata: { home_port: "Rotterdam" },
+      },
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["maritime", "vessels"],

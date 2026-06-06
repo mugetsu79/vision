@@ -269,7 +269,7 @@ async function seedFleetOps(request: APIRequestContext, accessToken: string) {
   return vessel;
 }
 
-test("real FleetOps workspace covers overview, vessel detail, evidence, billing, and support", async ({
+test("real FleetOps workspace covers overview, vessel detail, evidence, billing, support, and onboarding", async ({
   page,
   request,
 }) => {
@@ -296,22 +296,40 @@ test("real FleetOps workspace covers overview, vessel detail, evidence, billing,
   await expect(page.getByText("Link operations")).toBeVisible();
   await expect(page.getByText("Export builder")).toBeVisible();
 
-  await page.goto("/fleetops/evidence");
-  await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
-  await expect(page.getByText("Export builder")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Prepare export" })).toBeVisible();
+  const packsNav = page.getByRole("navigation", { name: "Packs" });
 
-  await page.goto("/fleetops/billing");
+  await packsNav.getByRole("link", { name: "Evidence" }).click();
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await expect(page.getByText("Evidence queue", { exact: true })).toBeVisible();
+  await expect(page.getByText("Export builder")).toBeVisible();
+  await expect(page.getByText(/\d+ pending/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Prepare export" })).toHaveCount(0);
+  await expect(page.getByText("Export history")).toBeVisible();
+  await expect(
+    page.getByText("Latest context is ready for evidence export review."),
+  ).toBeVisible();
+
+  await packsNav.getByRole("link", { name: "Billing" }).click();
   await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
   await expect(page.getByText("Base commercial unit")).toBeVisible();
   await expect(page.getByText("vessel month")).toBeVisible();
   await expect(page.getByText("Value meters")).toBeVisible();
   await expect(page.getByText("Current billable usage")).toBeVisible();
 
-  await page.goto("/fleetops/support");
-  await expect(page.getByRole("heading", { name: "Support" })).toBeVisible();
+  await packsNav.getByRole("link", { name: "Support" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Support", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Support bundles")).toBeVisible();
   await expect(page.getByText("Tunnel lifecycle")).toBeVisible();
-  await expect(page.getByText("Break-glass")).toBeVisible();
-  await expect(page.getByText("Onboarding checks")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open break-glass" }),
+  ).toBeVisible();
+
+  await packsNav.getByRole("link", { name: "Onboarding" }).click();
+  await expect(page.getByRole("heading", { name: "Onboarding" })).toBeVisible();
+  await expect(page.getByText("Setup checks", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run checks" })).toBeVisible();
+  await expect(page.getByText("Identity", { exact: true })).toBeVisible();
+  await expect(page.getByText("Support readiness", { exact: true })).toBeVisible();
 });
