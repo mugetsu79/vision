@@ -462,15 +462,16 @@ export function HistoryPage() {
                 multiple
                 className="min-h-36 py-3"
                 value={state.cameraIds}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const cameraIds = Array.from(
+                    e.currentTarget.selectedOptions,
+                    (o) => o.value,
+                  );
                   applyState((p) => ({
                     ...p,
-                    cameraIds: Array.from(
-                      e.currentTarget.selectedOptions,
-                      (o) => o.value,
-                    ),
-                  }))
-                }
+                    cameraIds,
+                  }));
+                }}
               >
                 {cameras.map((camera) => (
                   <option key={camera.id} value={camera.id}>
@@ -489,15 +490,16 @@ export function HistoryPage() {
                 multiple
                 className="min-h-36 py-3"
                 value={state.classNames}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const classNames = Array.from(
+                    e.currentTarget.selectedOptions,
+                    (o) => o.value,
+                  );
                   applyState((p) => ({
                     ...p,
-                    classNames: Array.from(
-                      e.currentTarget.selectedOptions,
-                      (o) => o.value,
-                    ),
-                  }))
-                }
+                    classNames,
+                  }));
+                }}
               >
                 {observedClasses.map((entry) => (
                   <option key={entry.class_name} value={entry.class_name}>

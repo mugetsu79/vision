@@ -21,6 +21,7 @@ import { VideoStream } from "@/components/live/VideoStream";
 import { SceneStatusStrip } from "@/components/operations/SceneStatusStrip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras, useDeleteCamera, useUpdateCamera } from "@/hooks/use-cameras";
@@ -33,6 +34,7 @@ import {
   type TelemetryConnectionState,
 } from "@/hooks/use-live-telemetry";
 import { useFleetOverview } from "@/hooks/use-operations";
+import { useSites } from "@/hooks/use-sites";
 import { useStableSignalFrame } from "@/hooks/use-stable-signal-frame";
 import type { components } from "@/lib/api.generated";
 import { formatHeartbeat, getHeartbeatStatus } from "@/lib/live";
@@ -67,6 +69,7 @@ export function LivePage() {
 
 function WorkspacePage() {
   const { data: cameras = [], isLoading } = useCameras();
+  const { data: sites = [] } = useSites();
   const deleteCamera = useDeleteCamera();
   const fleet = useFleetOverview();
   const { connectionState, framesByCamera } = useLiveTelemetry(
@@ -82,6 +85,10 @@ function WorkspacePage() {
     response: QueryResponse;
     scope: LiveQueryScope;
   } | null>(null);
+  const [sceneSearch, setSceneSearch] = useState("");
+  const [selectedSceneIds, setSelectedSceneIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [signalRowsByCamera, setSignalRowsByCamera] = useState(
     () => new Map<string, SignalCountRow[]>(),
   );
@@ -97,6 +104,25 @@ function WorkspacePage() {
     [],
   );
 
+  const siteNameById = useMemo(
+    () => new Map(sites.map((site) => [site.id, site.name])),
+    [sites],
+  );
+  const visibleCameras = useMemo(
+    () =>
+      filterLiveCameras({
+        cameras,
+        search: sceneSearch,
+        selectedSceneIds,
+        siteNameById,
+      }),
+    [cameras, sceneSearch, selectedSceneIds, siteNameById],
+  );
+  const visibleCameraIds = useMemo(
+    () => new Set(visibleCameras.map((camera) => camera.id)),
+    [visibleCameras],
+  );
+
   const classFiltersByCamera = useMemo(() => {
     const filters = new Map<string, string[] | null>();
 
@@ -105,7 +131,7 @@ function WorkspacePage() {
     }
 
     if (activeQuery.scope.scope === "all") {
-      for (const camera of cameras) {
+      for (const camera of visibleCameras) {
         filters.set(camera.id, activeQuery.response.resolved_classes);
       }
       return filters;
@@ -116,12 +142,15 @@ function WorkspacePage() {
       activeQuery.response.resolved_classes,
     );
     return filters;
-  }, [activeQuery, cameras]);
+  }, [activeQuery, visibleCameras]);
 
   const signalRows = useMemo<SignalCountRow[]>(() => {
     const rowsByClass = new Map<string, SignalCountRow>();
 
-    for (const rows of signalRowsByCamera.values()) {
+    for (const [cameraId, rows] of signalRowsByCamera.entries()) {
+      if (!visibleCameraIds.has(cameraId)) {
+        continue;
+      }
       for (const row of rows) {
         if (row.totalCount <= 0) {
           continue;
@@ -152,7 +181,7 @@ function WorkspacePage() {
         right.totalCount - left.totalCount ||
         left.className.localeCompare(right.className),
     );
-  }, [signalRowsByCamera]);
+  }, [signalRowsByCamera, visibleCameraIds]);
 
   const sceneHealthRows = useMemo(
     () =>
@@ -205,7 +234,27 @@ function WorkspacePage() {
 
       return changed ? next : current;
     });
+    setSelectedSceneIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+
+      for (const cameraId of current) {
+        if (liveCameraIds.has(cameraId)) {
+          next.add(cameraId);
+        } else {
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
   }, [focusedCameraId, liveCameraIds]);
+
+  useEffect(() => {
+    if (focusedCameraId && !visibleCameraIds.has(focusedCameraId)) {
+      setFocusedCameraId(null);
+    }
+  }, [focusedCameraId, visibleCameraIds]);
 
   useEffect(() => {
     if (!focusedCameraId) return;
@@ -331,12 +380,33 @@ function WorkspacePage() {
         />
 
         <AgentInput
-          cameras={cameras.map((camera) => ({
+          cameras={visibleCameras.map((camera) => ({
             id: camera.id,
             name: camera.name,
+            siteName: siteNameById.get(camera.site_id) ?? "Unknown site",
           }))}
           onResolved={(response, scope) => {
             setActiveQuery({ response, scope });
+          }}
+        />
+
+        <LiveSceneBrowser
+          cameras={cameras}
+          search={sceneSearch}
+          selectedSceneIds={selectedSceneIds}
+          siteNameById={siteNameById}
+          onClearSelection={() => setSelectedSceneIds(new Set())}
+          onSearchChange={setSceneSearch}
+          onToggleScene={(cameraId) => {
+            setSelectedSceneIds((current) => {
+              const next = new Set(current);
+              if (next.has(cameraId)) {
+                next.delete(cameraId);
+              } else {
+                next.add(cameraId);
+              }
+              return next;
+            });
           }}
         />
 
@@ -368,18 +438,27 @@ function WorkspacePage() {
               <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
                 {activeQuery ? "Resolved view" : "Unfiltered view"}
               </Badge>
+              <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
+                {visibleCameras.length} of {cameras.length} scenes in view
+              </Badge>
             </div>
 
-            <div
-              data-testid="scene-portal-grid"
-              className="grid gap-4 md:grid-cols-2 xl:grid-cols-6"
-            >
-              {cameras.map((camera) =>
-                camera.id === focusedCameraId
-                  ? null
-                  : renderScenePortalCard(camera, false),
-              )}
-            </div>
+            {visibleCameras.length === 0 ? (
+              <div className="rounded-[1rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
+                No scenes match the current view.
+              </div>
+            ) : (
+              <div
+                data-testid="scene-portal-grid"
+                className="grid gap-4 md:grid-cols-2 xl:grid-cols-6"
+              >
+                {visibleCameras.map((camera) =>
+                  camera.id === focusedCameraId
+                    ? null
+                    : renderScenePortalCard(camera, false),
+                )}
+              </div>
+            )}
           </section>
         )}
       </section>
@@ -419,6 +498,164 @@ function WorkspacePage() {
         </InspectorPanel>
       </aside>
     </div>
+  );
+}
+
+function LiveSceneBrowser({
+  cameras,
+  search,
+  selectedSceneIds,
+  siteNameById,
+  onClearSelection,
+  onSearchChange,
+  onToggleScene,
+}: {
+  cameras: CameraResponse[];
+  search: string;
+  selectedSceneIds: Set<string>;
+  siteNameById: Map<string, string>;
+  onClearSelection: () => void;
+  onSearchChange: (value: string) => void;
+  onToggleScene: (cameraId: string) => void;
+}) {
+  const groupedCameras = useMemo(
+    () => groupLiveCamerasBySite(cameras, siteNameById, search),
+    [cameras, search, siteNameById],
+  );
+  const matchingCount = groupedCameras.reduce(
+    (count, group) => count + group.cameras.length,
+    0,
+  );
+
+  return (
+    <section
+      data-testid="live-scene-browser"
+      className="rounded-[0.9rem] border border-[color:var(--vezor-border-neutral)] bg-[color:var(--vezor-surface-rail)] px-4 py-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#9fb7da]">
+            Scene browser
+          </p>
+          <p className="mt-1 text-sm text-[#d9e5f7]">
+            {selectedSceneIds.size > 0
+              ? `${selectedSceneIds.size} selected`
+              : `${matchingCount} matching`}
+          </p>
+        </div>
+        {selectedSceneIds.size > 0 ? (
+          <Button
+            className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+            onClick={onClearSelection}
+            type="button"
+          >
+            Clear selection
+          </Button>
+        ) : null}
+      </div>
+      <div className="pt-4">
+        <Input
+          aria-label="Search scenes"
+          placeholder="Search scenes or sites"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+        />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {groupedCameras.length > 0 ? (
+          groupedCameras.map((group) => (
+            <div
+              className="rounded-[0.75rem] border border-white/8 bg-black/20 px-3 py-3"
+              key={group.siteName}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8ea8cf]">
+                {group.siteName}
+              </p>
+              <div className="mt-3 grid gap-2">
+                {group.cameras.map((camera) => (
+                  <label
+                    className="flex items-center gap-2 text-sm text-[#dce6f7]"
+                    key={camera.id}
+                  >
+                    <input
+                      checked={selectedSceneIds.has(camera.id)}
+                      className="size-4 accent-[#76e0ff]"
+                      onChange={() => onToggleScene(camera.id)}
+                      type="checkbox"
+                    />
+                    <span>{camera.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-[#8ca2c5]">No scenes match this search.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function filterLiveCameras({
+  cameras,
+  search,
+  selectedSceneIds,
+  siteNameById,
+}: {
+  cameras: CameraResponse[];
+  search: string;
+  selectedSceneIds: Set<string>;
+  siteNameById: Map<string, string>;
+}) {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  return cameras.filter((camera) => {
+    if (selectedSceneIds.size > 0 && !selectedSceneIds.has(camera.id)) {
+      return false;
+    }
+    return cameraMatchesLiveSearch(camera, siteNameById, normalizedSearch);
+  });
+}
+
+function groupLiveCamerasBySite(
+  cameras: CameraResponse[],
+  siteNameById: Map<string, string>,
+  search: string,
+) {
+  const normalizedSearch = search.trim().toLowerCase();
+  const groups = new Map<string, CameraResponse[]>();
+
+  for (const camera of cameras) {
+    if (!cameraMatchesLiveSearch(camera, siteNameById, normalizedSearch)) {
+      continue;
+    }
+    const siteName = siteNameById.get(camera.site_id) ?? "Unknown site";
+    groups.set(siteName, [...(groups.get(siteName) ?? []), camera]);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([siteName, groupCameras]) => ({
+      siteName,
+      cameras: groupCameras.sort((left, right) =>
+        left.name.localeCompare(right.name),
+      ),
+    }));
+}
+
+function cameraMatchesLiveSearch(
+  camera: CameraResponse,
+  siteNameById: Map<string, string>,
+  normalizedSearch: string,
+) {
+  if (!normalizedSearch) {
+    return true;
+  }
+  const siteName = siteNameById.get(camera.site_id) ?? "Unknown site";
+  return (
+    camera.name.toLowerCase().includes(normalizedSearch) ||
+    siteName.toLowerCase().includes(normalizedSearch)
   );
 }
 

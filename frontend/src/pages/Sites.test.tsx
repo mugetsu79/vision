@@ -308,7 +308,9 @@ describe("SitesPage", () => {
       sites: [hqSite],
       cameras: [dockScene],
       deleteStatus: 409,
-      deleteBody: { detail: "Delete cameras and edge nodes before deleting this site." },
+      deleteBody: {
+        detail: "Delete scenes and dependent records before deleting this site.",
+      },
     });
 
     renderSitesPage();
@@ -324,7 +326,9 @@ describe("SitesPage", () => {
     );
 
     expect(
-      await screen.findByText(/delete cameras and edge nodes before deleting this site/i),
+      await screen.findByText(
+        /delete scenes and dependent records before deleting this site/i,
+      ),
     ).toBeInTheDocument();
     expect(within(grid).getByRole("rowheader", { name: "HQ" })).toBeInTheDocument();
   });

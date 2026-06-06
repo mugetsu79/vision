@@ -93,6 +93,16 @@ vi.mock("@/hooks/use-operations", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-sites", () => ({
+  useSites: () => ({
+    data: [
+      { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", name: "Harbor HQ" },
+      { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", name: "Depot" },
+    ],
+    isLoading: false,
+  }),
+}));
+
 import { createQueryClient } from "@/app/query-client";
 import { LivePage } from "@/pages/Live";
 import { useAuthStore } from "@/stores/auth-store";
@@ -544,6 +554,110 @@ describe("LivePage", () => {
       expect(screen.getAllByText(/query-rules-v1/i).length).toBeGreaterThanOrEqual(1),
     );
     await waitFor(() => expect(screen.queryByText("bus")).not.toBeInTheDocument());
+  });
+
+  test("filters the live wall with a site-grouped scene browser", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["person"],
+            attribute_rules: [],
+            zones: [],
+            homography: null,
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+          {
+            id: "22222222-2222-2222-2222-222222222222",
+            site_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            edge_node_id: null,
+            name: "Depot Yard",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "bytetrack",
+            active_classes: ["car"],
+            attribute_rules: [],
+            zones: [],
+            homography: null,
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "540p5",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 15,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "North Gate" });
+    expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
+    expect(screen.getByText("Harbor HQ")).toBeInTheDocument();
+    expect(screen.getByText("Depot")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/search scenes/i), "depot");
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "North Gate" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 scenes in view")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/search scenes/i));
+    await user.click(screen.getByRole("checkbox", { name: "North Gate" }));
+
+    expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Depot Yard" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
   });
 
   test("keeps visible copy stable when a frame arrives without tracks", async () => {

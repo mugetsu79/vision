@@ -230,6 +230,105 @@ describe("CamerasPage", () => {
     );
   });
 
+  test("opens edit setup from a scene-specific row action without clipping controls", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      await Promise.resolve();
+      const request = input as Request;
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/v1/cameras" && request.method === "GET") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "camera-1",
+              site_id: "site-1",
+              edge_node_id: null,
+              name: "Dock Camera",
+              rtsp_url_masked: "rtsp://***",
+              processing_mode: "central",
+              primary_model_id: null,
+              secondary_model_id: null,
+              tracker_type: "botsort",
+              active_classes: ["person"],
+              attribute_rules: [],
+              zones: [],
+              homography: null,
+              privacy: {
+                blur_faces: false,
+                blur_plates: false,
+                method: "gaussian",
+                strength: 7,
+              },
+              browser_delivery: {
+                default_profile: "720p10",
+                allow_native_on_demand: true,
+                profiles: [],
+                unsupported_profiles: [],
+                native_status: { available: true, reason: null },
+              },
+              frame_skip: 1,
+              fps_cap: 25,
+              created_at: "2026-04-20T10:00:00Z",
+              updated_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/sites") {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "site-1",
+              tenant_id: "tenant-1",
+              name: "HQ",
+              description: null,
+              tz: "Europe/Zurich",
+              geo_point: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ]),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.pathname === "/api/v1/model-catalog") {
+        return emptyModelCatalogResponse();
+      }
+
+      throw new Error(`Unexpected request to ${url.pathname}`);
+    });
+
+    renderPage();
+
+    const inventory = await screen.findByTestId("scene-inventory-table");
+    expect(inventory).toHaveClass("overflow-x-auto");
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Dock Camera" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: /update dock camera/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/camera name/i)).toHaveValue("Dock Camera");
+  });
+
   test("refetches models when the create wizard opens so newly registered models appear", async () => {
     const user = userEvent.setup();
     let modelRequests = 0;

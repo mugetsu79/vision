@@ -226,6 +226,56 @@ describe("HistoryPage", () => {
     ).toBeDefined();
   });
 
+  test("scene and class multi-select filters update without stale event targets", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const request =
+        input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+      recordedRequests.push(url);
+      if (url.pathname === "/api/v1/cameras") {
+        return Promise.resolve(
+          jsonResponse([
+            cameraResponse({ id: "cam-1", name: "Gate camera" }),
+            cameraResponse({ id: "cam-2", name: "Dock camera" }),
+          ]),
+        );
+      }
+      if (url.pathname === "/api/v1/history/classes")
+        return Promise.resolve(jsonResponse(classesResponse()));
+      if (url.pathname === "/api/v1/history/series")
+        return Promise.resolve(jsonResponse(historySeriesResponse()));
+      return Promise.resolve(new Response("Not found", { status: 404 }));
+    });
+
+    renderPage();
+    await screen.findByTestId("history-trend-chart");
+
+    recordedRequests = [];
+    await user.selectOptions(screen.getByLabelText(/scene filters/i), ["cam-1"]);
+
+    await waitFor(() => {
+      const request = recordedRequests.find(
+        (url) =>
+          url.pathname === "/api/v1/history/series" &&
+          url.searchParams.getAll("camera_ids").includes("cam-1"),
+      );
+      expect(request).toBeDefined();
+    });
+
+    recordedRequests = [];
+    await user.selectOptions(screen.getByLabelText(/class filters/i), ["car"]);
+
+    await waitFor(() => {
+      const request = recordedRequests.find(
+        (url) =>
+          url.pathname === "/api/v1/history/series" &&
+          url.searchParams.getAll("class_names").includes("car"),
+      );
+      expect(request).toBeDefined();
+    });
+  });
+
   test("defaults to count_events when selected cameras have count boundaries", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request =

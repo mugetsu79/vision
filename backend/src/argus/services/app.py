@@ -562,7 +562,14 @@ class SiteService:
         async with self.session_factory() as session:
             site = await _load_site(session, tenant_context.tenant_id, site_id)
             await session.delete(site)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Delete scenes and dependent records before deleting this site.",
+                ) from exc
         await self.audit_logger.record(
             tenant_context=tenant_context,
             action="site.delete",

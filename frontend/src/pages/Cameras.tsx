@@ -251,9 +251,9 @@ function CamerasContent() {
         </div>
         <div
           data-testid="scene-inventory-table"
-          className="overflow-hidden rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
+          className="overflow-x-auto rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
         >
-        <Table>
+        <Table className="min-w-[76rem]">
           <THead>
             <TR>
               <TH>Scene</TH>
@@ -340,6 +340,7 @@ function CamerasContent() {
                     <TD>
                       <div className="flex gap-2">
                         <button
+                          aria-label={`Open rules for ${camera.name}`}
                           className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
                           type="button"
                           onClick={() => openRulesPanel(camera)}
@@ -347,6 +348,7 @@ function CamerasContent() {
                           Rules
                         </button>
                         <button
+                          aria-label={`Open policy for ${camera.name}`}
                           className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
                           type="button"
                           onClick={() => openPolicyDraftPanel(camera)}
@@ -354,6 +356,7 @@ function CamerasContent() {
                           Policy
                         </button>
                         <button
+                          aria-label={`Edit ${camera.name}`}
                           className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
                           type="button"
                           onClick={() => openEditWizard(camera)}
@@ -361,6 +364,7 @@ function CamerasContent() {
                           Edit
                         </button>
                         <button
+                          aria-label={`Delete ${camera.name}`}
                           className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722]"
                           type="button"
                           onClick={() => void handleDeleteCamera(camera)}

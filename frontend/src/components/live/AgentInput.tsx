@@ -1,4 +1,10 @@
-import { startTransition, type FormEvent, useMemo, useState } from "react";
+import {
+  startTransition,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { productBrand } from "@/brand/product";
 import { omniLabels, omniPlaceExamples } from "@/copy/omnisight";
@@ -20,7 +26,7 @@ export function AgentInput({
   cameras,
   onResolved,
 }: {
-  cameras: Array<{ id: string; name: string }>;
+  cameras: Array<{ id: string; name: string; siteName?: string | null }>;
   onResolved: (response: QueryResponse, scope: LiveQueryScope) => void;
 }) {
   const brandName = productBrand.name;
@@ -30,6 +36,12 @@ export function AgentInput({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resolution, setResolution] = useState<QueryResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (scopeValue !== "all" && !cameras.some((camera) => camera.id === scopeValue)) {
+      setScopeValue("all");
+    }
+  }, [cameras, scopeValue]);
 
   const selectedScope = useMemo<LiveQueryScope>(() => {
     if (scopeValue === "all") {
@@ -44,6 +56,23 @@ export function AgentInput({
     }
     return [selectedScope.cameraId];
   }, [cameras, selectedScope]);
+  const scopeGroups = useMemo(() => {
+    const groups = new Map<string, Array<{ id: string; name: string }>>();
+
+    for (const camera of cameras) {
+      const siteName = camera.siteName ?? "Scenes";
+      groups.set(siteName, [...(groups.get(siteName) ?? []), camera]);
+    }
+
+    return Array.from(groups.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([siteName, groupCameras]) => ({
+        siteName,
+        cameras: groupCameras.sort((left, right) =>
+          left.name.localeCompare(right.name),
+        ),
+      }));
+  }, [cameras]);
 
   const queryDisabled =
     user?.role === "viewer" ||
@@ -115,10 +144,14 @@ export function AgentInput({
               onChange={(event) => setScopeValue(event.target.value)}
             >
               <option value="all">All live scenes</option>
-              {cameras.map((camera) => (
-                <option key={camera.id} value={camera.id}>
-                  {camera.name}
-                </option>
+              {scopeGroups.map((group) => (
+                <optgroup key={group.siteName} label={group.siteName}>
+                  {group.cameras.map((camera) => (
+                    <option key={camera.id} value={camera.id}>
+                      {camera.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </Select>
           </label>
