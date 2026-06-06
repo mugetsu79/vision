@@ -108,8 +108,8 @@ async function seedFleetOps(request: APIRequestContext, accessToken: string) {
       name: `FleetOps Model ${suffix}`,
       version: `1.0.${suffix}`,
       task: "detect",
-      path: `/models/fleetops-${suffix}.onnx`,
-      format: "onnx",
+      path: `/models/fleetops-${suffix}.engine`,
+      format: "engine",
       classes: ["person", "boat", "truck"],
       input_shape: { h: 640, w: 640, c: 3 },
       sha256: "b".repeat(64),
@@ -289,7 +289,7 @@ test("real FleetOps workspace covers overview, vessel detail, evidence, billing,
   await expect(page.getByText("Current billable usage")).toBeVisible();
 
   await page.getByRole("link", { name: vessel.name }).click();
-  await expect(page.getByRole("heading", { name: vessel.name })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: vessel.name })).toBeVisible();
   await expect(page.getByText("Voyage timeline")).toBeVisible();
   await expect(page.getByText("Latest AIS")).toBeVisible();
   await expect(page.getByText("Evidence context")).toBeVisible();
