@@ -2,9 +2,9 @@ import { Link } from "react-router-dom";
 
 import { FleetOverviewPanel } from "@/components/fleetops/FleetOverviewPanel";
 import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
+import { useBillingUsage } from "@/hooks/use-billing";
 import { useFleetExceptions } from "@/hooks/use-fleet";
 import {
-  useMaritimeBillingUsage,
   useMaritimeRuntime,
   useMaritimeVessels,
 } from "@/hooks/use-maritime";
@@ -16,17 +16,17 @@ import type {
 } from "@/components/fleetops/types";
 
 const fleetOpsLinks = [
-  { label: "Vessels", to: "/fleetops/vessels" },
-  { label: "Evidence", to: "/fleetops/evidence" },
-  { label: "Billing", to: "/fleetops/billing" },
-  { label: "Support", to: "/fleetops/support" },
-  { label: "Onboarding", to: "/fleetops/onboarding" },
+  { label: "Add Vessel", to: "/fleetops/vessels" },
+  { label: "Review Evidence", to: "/fleetops/evidence" },
+  { label: "Open Billing", to: "/fleetops/billing" },
+  { label: "Open Support", to: "/fleetops/support" },
+  { label: "Open Onboarding", to: "/fleetops/onboarding" },
 ];
 
 export function FleetOps() {
   const runtime = useMaritimeRuntime();
   const vessels = useMaritimeVessels();
-  const billingUsage = useMaritimeBillingUsage();
+  const billingUsage = useBillingUsage();
   const supportDiagnostics = useMaritimeSupportDiagnostics();
   const fleetExceptions = useFleetExceptions();
 

@@ -4,6 +4,7 @@ import { WorkspaceSurface } from "@/components/layout/workspace-surfaces";
 import { VesselSummaryTable } from "./VesselSummaryTable";
 import {
   asRecord,
+  type DiagnosticsGroup,
   humanizeKey,
   textValue,
   type BillingUsagePayload,
@@ -23,11 +24,22 @@ export function FleetOverviewPanel({
   supportDiagnostics,
 }: FleetOverviewPanelProps) {
   const firstUsage = billingUsage?.items?.[0];
-  const supportGroups = asRecord(supportDiagnostics?.groups);
-  const supportLabel = textValue(
-    asRecord(supportGroups.support_roles).label,
-    "Open support sessions",
+  const usageLabel = textValue(
+    firstUsage?.label,
+    humanizeKey(textValue(firstUsage?.meter_key, "vessel_month")),
   );
+  const supportGroups = readinessGroups(supportDiagnostics?.groups);
+  const supportLabel = textValue(supportDiagnostics?.label, "Support readiness");
+  const readinessCountLabel = `${supportGroups.length} readiness ${
+    supportGroups.length === 1 ? "group" : "groups"
+  }`;
+  const readinessSummary =
+    supportGroups
+      .map((group) =>
+        textValue(group.label, humanizeKey(textValue(group.id, "readiness"))),
+      )
+      .slice(0, 3)
+      .join(" / ") || "connection readiness / evidence path";
   const evidenceQueue =
     vessels
       .map((vessel) => textValue(asRecord(vessel.metadata).evidence_queue, ""))
@@ -46,13 +58,14 @@ export function FleetOverviewPanel({
           </p>
           <p className="mt-2 text-sm leading-6 text-[var(--vz-text-secondary)]">
             Prioritized export work stays visible beside link health so operators can
-            decide what waits for shore connectivity and what moves over satellite.
+            decide what waits for a better connection window and what moves over the
+            selected connection.
           </p>
           <Link
             className="mt-4 inline-flex rounded-full border border-[color:var(--vz-hair-strong)] bg-[linear-gradient(180deg,#161c26,#0d121a)] px-4 py-2.5 text-sm font-medium text-[var(--vz-text-primary)] shadow-[var(--vz-elev-1)] transition hover:border-[color:var(--vz-hair-focus)]"
             to="/fleetops/evidence"
           >
-            Review queue
+            Review evidence
           </Link>
         </WorkspaceSurface>
         <WorkspaceSurface className="p-4">
@@ -60,7 +73,7 @@ export function FleetOverviewPanel({
             Current billable usage
           </p>
           <p className="mt-3 text-xl font-semibold text-[var(--vz-text-primary)]">
-            {textValue(firstUsage?.label, "vessel month")}
+            {usageLabel}
           </p>
           <p className="mt-2 text-sm text-[var(--vz-text-secondary)]">
             Quantity {textValue(firstUsage?.quantity, "0")} against FleetOps value
@@ -78,16 +91,45 @@ export function FleetOverviewPanel({
             {supportLabel}
           </p>
           <p className="mt-3 text-xl font-semibold text-[var(--vz-text-primary)]">
-            {Object.keys(supportGroups).length || 0} diagnostic groups
+            {readinessCountLabel}
           </p>
           <p className="mt-2 text-sm text-[var(--vz-text-secondary)]">
-            {Object.keys(supportGroups)
-              .map(humanizeKey)
-              .slice(0, 3)
-              .join(" / ") || "support roles / evidence path"}
+            {readinessSummary}
           </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              className="inline-flex rounded-full border border-[color:var(--vz-hair)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--vz-text-secondary)] transition hover:border-[color:var(--vz-hair-strong)] hover:text-[var(--vz-text-primary)]"
+              to="/fleetops/support"
+            >
+              Open support
+            </Link>
+            <Link
+              className="inline-flex rounded-full border border-[color:var(--vz-hair)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--vz-text-secondary)] transition hover:border-[color:var(--vz-hair-strong)] hover:text-[var(--vz-text-primary)]"
+              to="/fleetops/onboarding"
+            >
+              Open onboarding
+            </Link>
+          </div>
         </WorkspaceSurface>
       </div>
     </div>
   );
+}
+
+function readinessGroups(
+  groups: SupportDiagnosticsPayload["groups"],
+): DiagnosticsGroup[] {
+  if (Array.isArray(groups)) {
+    return groups
+      .map((group) => asRecord(group) as DiagnosticsGroup)
+      .filter((group) => Object.keys(group).length > 0);
+  }
+
+  return Object.entries(asRecord(groups)).map(([id, group]) => {
+    const item = asRecord(group);
+    return {
+      ...item,
+      id: textValue(item.id, id),
+    } as DiagnosticsGroup;
+  });
 }

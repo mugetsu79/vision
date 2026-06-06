@@ -526,6 +526,7 @@ async def test_maritime_fleetops_product_smoke(app: FastAPI, client: AsyncClient
                 "payload": {
                     "terminal_id": "st-mv-resolute",
                     "provider": "managed_satellite",
+                    "transport_kind": "satellite",
                     "status": "degraded",
                     "link_state": "satellite_degraded",
                     "downlink_mbps": 1.8,
@@ -537,6 +538,53 @@ async def test_maritime_fleetops_product_smoke(app: FastAPI, client: AsyncClient
             },
         )
     )
+    await _created(
+        await client.post(
+            "/api/v1/maritime/ingest/carrier-terminal",
+            json={
+                "vessel_id": vessel["id"],
+                "payload": {
+                    "terminal_id": "lte-mv-resolute",
+                    "provider": "managed_lte",
+                    "transport_kind": "lte",
+                    "status": "online",
+                    "link_state": "recovering",
+                    "downlink_mbps": 18.0,
+                    "uplink_mbps": 6.0,
+                    "latency_ms": 80,
+                    "packet_loss_percent": 0.8,
+                    "last_seen_at": INCIDENT_TIME.isoformat(),
+                },
+            },
+        )
+    )
+    fiber_connection = await _created(
+        await client.post(
+            f"/api/v1/link/sites/{site.id}/connections",
+            json={
+                "label": "Port fiber",
+                "transport_kind": "fiber",
+                "status": "online",
+                "priority_rank": 5,
+                "availability_scope": "local",
+                "metered": False,
+                "expected_downlink_mbps": 250.0,
+                "expected_uplink_mbps": 250.0,
+            },
+        )
+    )
+    assert fiber_connection["transport_kind"] == "fiber"
+    carrier_selection = await _ok(
+        await client.get(
+            f"/api/v1/maritime/vessels/{vessel['id']}/carrier-selection",
+            params={"priority_lane": "bulk"},
+        )
+    )
+    assert carrier_selection == {
+        "transport": "fiber",
+        "defer": False,
+        "reason": "core_connection_selected",
+    }
 
     services.maritime_evidence.register_camera_site(camera_id=CAMERA_ID, site_id=site.id)
     services.maritime_evidence.register_incident(

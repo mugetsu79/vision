@@ -14,7 +14,7 @@ const fleetOpsMocks = vi.hoisted(() => ({
       site_id: "00000000-0000-4000-8000-000000000020",
       active: true,
       metadata: {
-        link_state: "satellite degraded",
+        link_state: "active connection degraded",
         evidence_queue: "4 pending exports",
       },
     },
@@ -22,20 +22,24 @@ const fleetOpsMocks = vi.hoisted(() => ({
   billingUsage: {
     items: [
       {
-        meter_key: "vessel_month",
-        label: "vessel month",
+        meter_key: "evidence_pack_export",
         quantity: "1",
       },
     ],
   },
   supportDiagnostics: {
-    groups: {
-      support_roles: {
-        label: "Open support sessions",
-        checks: ["support_readiness"],
+    label: "Support readiness",
+    groups: [
+      {
+        id: "connectivity",
+        label: "Connection readiness",
+        status: "ready",
+        checks: [{ key: "support_readiness", label: "Support path", status: "ready" }],
       },
-    },
+    ],
   },
+  useBillingUsage: vi.fn(),
+  useMaritimeBillingUsage: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-maritime", () => ({
@@ -49,11 +53,11 @@ vi.mock("@/hooks/use-maritime", () => ({
     isLoading: false,
     isError: false,
   }),
-  useMaritimeBillingUsage: () => ({
-    data: fleetOpsMocks.billingUsage,
-    isLoading: false,
-    isError: false,
-  }),
+  useMaritimeBillingUsage: fleetOpsMocks.useMaritimeBillingUsage,
+}));
+
+vi.mock("@/hooks/use-billing", () => ({
+  useBillingUsage: fleetOpsMocks.useBillingUsage,
 }));
 
 vi.mock("@/hooks/use-fleet", () => ({
@@ -79,6 +83,16 @@ function renderWithProviders(ui: ReactElement) {
 describe("FleetOps", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fleetOpsMocks.useBillingUsage.mockReturnValue({
+      data: fleetOpsMocks.billingUsage,
+      isLoading: false,
+      isError: false,
+    });
+    fleetOpsMocks.useMaritimeBillingUsage.mockReturnValue({
+      data: fleetOpsMocks.billingUsage,
+      isLoading: false,
+      isError: false,
+    });
   });
 
   test("FleetOps overview renders vessels, link state, evidence queue, billing, and support status", async () => {
@@ -89,15 +103,32 @@ describe("FleetOps", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/MV Resolute/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/port wifi|satellite degraded|dark|recovering/i),
+      screen.getByText(/active connection degraded|dark|recovering/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Evidence queue/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/moves over the selected connection/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/moves over satellite/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Current billable usage/i)).toBeInTheDocument();
-    expect(screen.getByText(/Open support sessions/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Onboarding/i })).toHaveAttribute(
-      "href",
-      "/fleetops/onboarding",
-    );
+    expect(fleetOpsMocks.useBillingUsage).toHaveBeenCalled();
+    expect(fleetOpsMocks.useMaritimeBillingUsage).not.toHaveBeenCalled();
+    expect(screen.getByText(/evidence pack export/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^vessel month$/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Support readiness")).toBeInTheDocument();
+    expect(screen.getByText(/1 readiness group/i)).toBeInTheDocument();
+  });
+
+  test("FleetOps overview exposes operator workflow links", async () => {
+    renderWithProviders(<FleetOps />);
+
+    await screen.findByRole("heading", { name: /FleetOps/i });
+
+    expectLink(/Add Vessel/i, "/fleetops/vessels");
+    expectLink(/Review Evidence/i, "/fleetops/evidence");
+    expectLink(/Open Billing/i, "/fleetops/billing");
+    expectLink(/Open Support/i, "/fleetops/support");
+    expectLink(/Open Onboarding/i, "/fleetops/onboarding");
   });
 
   test("traffic public space route is not present in workspace navigation", () => {
@@ -106,3 +137,11 @@ describe("FleetOps", () => {
     expect(labels.join(" ")).not.toContain("public space");
   });
 });
+
+function expectLink(name: RegExp, href: string) {
+  expect(
+    screen
+      .getAllByRole("link", { name })
+      .some((link) => link.getAttribute("href") === href),
+  ).toBe(true);
+}
