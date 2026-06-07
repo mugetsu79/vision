@@ -170,6 +170,20 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
     __table_args__ = (
         Index("ix_link_health_probes_tenant_site_recorded", "tenant_id", "site_id", "recorded_at"),
         Index("ix_link_health_probes_connection", "connection_id"),
+        Index("ix_link_health_probes_target", "target_id"),
+        Index("ix_link_health_probes_deleted", "deleted_at"),
+        CheckConstraint(
+            "probe_type IS NULL OR probe_type IN ('icmp', 'tcp', 'http', 'https', 'manual')",
+            name="probe_type",
+        ),
+        CheckConstraint(
+            "source_type IN ('manual', 'backend_synthetic', 'edge_agent', 'provider_api', 'import')",
+            name="source_type",
+        ),
+        CheckConstraint(
+            "sample_kind IN ('manual', 'automated', 'imported')",
+            name="sample_kind",
+        ),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -193,6 +207,14 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
     reachable: Mapped[bool] = mapped_column(nullable=False)
     source: Mapped[str] = mapped_column(String(128), nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    target_id: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    target_label: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    target_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    probe_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    source_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    sample_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class LinkPassportSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):

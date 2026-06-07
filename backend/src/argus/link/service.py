@@ -23,6 +23,9 @@ from argus.link.contracts import (
     LinkConnectionStatus,
     LinkHealthProbeRecord,
     LinkPassportSnapshotRecord,
+    LinkProbeSampleKind,
+    LinkProbeSourceType,
+    LinkProbeType,
     LinkPriorityLane,
     LinkQueueItemRecord,
     LinkSiteSummaryRecord,
@@ -723,6 +726,13 @@ class LinkService:
         packet_loss_percent: float,
         reachable: bool,
         source: str,
+        target_id: str | None = None,
+        target_label: str | None = None,
+        target_address: str | None = None,
+        probe_type: LinkProbeType | None = None,
+        source_type: LinkProbeSourceType = "manual",
+        source_label: str | None = None,
+        sample_kind: LinkProbeSampleKind = "manual",
     ) -> LinkHealthProbeRecord:
         self._ensure_memory_mode()
         if connection_id is not None:
@@ -744,6 +754,13 @@ class LinkService:
             reachable=reachable,
             source=source,
             recorded_at=_now(),
+            target_id=target_id,
+            target_label=target_label,
+            target_address=target_address,
+            probe_type=probe_type,
+            source_type=source_type,
+            source_label=source_label,
+            sample_kind=sample_kind,
         )
         self._probes.append(probe)
         return probe
@@ -759,6 +776,13 @@ class LinkService:
         packet_loss_percent: float,
         reachable: bool,
         source: str,
+        target_id: str | None = None,
+        target_label: str | None = None,
+        target_address: str | None = None,
+        probe_type: LinkProbeType | None = None,
+        source_type: LinkProbeSourceType = "manual",
+        source_label: str | None = None,
+        sample_kind: LinkProbeSampleKind = "manual",
     ) -> LinkHealthProbeRecord:
         if connection_id is not None:
             connection = await self.aget_connection(
@@ -778,6 +802,13 @@ class LinkService:
                 packet_loss_percent=packet_loss_percent,
                 reachable=reachable,
                 source=source,
+                target_id=target_id,
+                target_label=target_label,
+                target_address=target_address,
+                probe_type=probe_type,
+                source_type=source_type,
+                source_label=source_label,
+                sample_kind=sample_kind,
             )
         probe = LinkHealthProbe(
             id=uuid4(),
@@ -790,6 +821,13 @@ class LinkService:
             reachable=reachable,
             source=source,
             recorded_at=_now(),
+            target_id=target_id,
+            target_label=target_label,
+            target_address=target_address,
+            probe_type=probe_type,
+            source_type=source_type,
+            source_label=source_label,
+            sample_kind=sample_kind,
         )
         async with self.session_factory() as session:
             session.add(probe)
@@ -802,8 +840,48 @@ class LinkService:
         return [
             probe
             for probe in self._probes
-            if probe.tenant_id == tenant_id and probe.site_id == site_id
+            if probe.tenant_id == tenant_id
+            and probe.site_id == site_id
+            and probe.deleted_at is None
         ]
+
+    def delete_probe(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        probe_id: UUID,
+    ) -> LinkHealthProbeRecord | None:
+        self._ensure_memory_mode()
+        deleted_at = _now()
+        for index, probe in enumerate(self._probes):
+            if probe.id == probe_id and probe.tenant_id == tenant_id and probe.site_id == site_id:
+                deleted = replace(probe, deleted_at=deleted_at)
+                self._probes[index] = deleted
+                return deleted
+        return None
+
+    async def adelete_probe(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        probe_id: UUID,
+    ) -> LinkHealthProbeRecord | None:
+        if self.session_factory is None:
+            return self.delete_probe(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                probe_id=probe_id,
+            )
+        async with self.session_factory() as session:
+            row = await session.get(LinkHealthProbe, probe_id)
+            if row is None or row.tenant_id != tenant_id or row.site_id != site_id:
+                return None
+            row.deleted_at = _now()
+            await session.commit()
+            await session.refresh(row)
+        return _probe_record(row)
 
     async def alist_probes(
         self,
@@ -1442,7 +1520,11 @@ class LinkService:
     ) -> list[LinkHealthProbe]:
         result = await session.execute(
             select(LinkHealthProbe)
-            .where(LinkHealthProbe.tenant_id == tenant_id, LinkHealthProbe.site_id == site_id)
+            .where(
+                LinkHealthProbe.tenant_id == tenant_id,
+                LinkHealthProbe.site_id == site_id,
+                LinkHealthProbe.deleted_at.is_(None),
+            )
             .order_by(LinkHealthProbe.recorded_at.desc())
         )
         return cast(list[LinkHealthProbe], result.scalars().all())
@@ -1674,6 +1756,14 @@ def _probe_record(probe: LinkHealthProbe) -> LinkHealthProbeRecord:
         reachable=probe.reachable,
         source=probe.source,
         recorded_at=probe.recorded_at,
+        target_id=probe.target_id,
+        target_label=probe.target_label,
+        target_address=probe.target_address,
+        probe_type=cast(LinkProbeType | None, probe.probe_type),
+        source_type=cast(LinkProbeSourceType, probe.source_type),
+        source_label=probe.source_label,
+        sample_kind=cast(LinkProbeSampleKind, probe.sample_kind),
+        deleted_at=probe.deleted_at,
     )
 
 
@@ -1741,6 +1831,14 @@ def _probe_payload(probe: LinkHealthProbeRecord | None) -> JsonObject | None:
         "reachable": probe.reachable,
         "source": probe.source,
         "recorded_at": probe.recorded_at.isoformat(),
+        "target_id": probe.target_id,
+        "target_label": probe.target_label,
+        "target_address": probe.target_address,
+        "probe_type": probe.probe_type,
+        "source_type": probe.source_type,
+        "source_label": probe.source_label,
+        "sample_kind": probe.sample_kind,
+        "deleted_at": probe.deleted_at.isoformat() if probe.deleted_at is not None else None,
     }
     if probe.connection_id is not None:
         payload["connection_id"] = str(probe.connection_id)

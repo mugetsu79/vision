@@ -12,6 +12,9 @@ LinkPriorityLane = Literal["safety", "evidence", "telemetry", "bulk"]
 LinkTransportKind = Literal["satellite", "lte", "5g", "wifi", "fiber", "ethernet", "other"]
 LinkConnectionStatus = Literal["unknown", "online", "degraded", "offline", "blocked", "recovering"]
 LinkAvailabilityScope = Literal["always", "remote", "nearby", "local", "maintenance"]
+LinkProbeType = Literal["icmp", "tcp", "http", "https", "manual"]
+LinkProbeSourceType = Literal["manual", "backend_synthetic", "edge_agent", "provider_api", "import"]
+LinkProbeSampleKind = Literal["manual", "automated", "imported"]
 
 LINK_PRIORITY_ORDER: dict[LinkPriorityLane, int] = {
     "safety": 0,
@@ -99,6 +102,14 @@ class LinkHealthProbeRecord:
     reachable: bool
     source: str
     recorded_at: datetime
+    target_id: str | None = None
+    target_label: str | None = None
+    target_address: str | None = None
+    probe_type: LinkProbeType | None = None
+    source_type: LinkProbeSourceType = "manual"
+    source_label: str | None = None
+    sample_kind: LinkProbeSampleKind = "manual"
+    deleted_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

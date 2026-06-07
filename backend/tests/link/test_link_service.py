@@ -299,6 +299,65 @@ def test_delete_connection_clears_probe_references(link_service: LinkService) ->
     assert link_service.list_probes(tenant_id=tenant_id, site_id=site_id)[0].connection_id is None
 
 
+def test_record_probe_stores_structured_source_and_target(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    probe = link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        latency_ms=42,
+        throughput_mbps=180.0,
+        packet_loss_percent=0.1,
+        reachable=True,
+        source="manual:operator-console",
+        target_id="target-vezor-ingest",
+        target_label="Vezor ingest",
+        target_address="ingest.example.vezor",
+        probe_type="https",
+        source_type="manual",
+        source_label="operator-console",
+        sample_kind="manual",
+    )
+
+    assert probe.target_id == "target-vezor-ingest"
+    assert probe.target_label == "Vezor ingest"
+    assert probe.target_address == "ingest.example.vezor"
+    assert probe.probe_type == "https"
+    assert probe.source_type == "manual"
+    assert probe.source_label == "operator-console"
+    assert probe.sample_kind == "manual"
+    assert probe.deleted_at is None
+
+
+def test_delete_probe_hides_sample_from_history_and_latest(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+    probe = link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        latency_ms=42,
+        throughput_mbps=180.0,
+        packet_loss_percent=0.1,
+        reachable=True,
+        source="manual:operator-console",
+        source_type="manual",
+        source_label="operator-console",
+        sample_kind="manual",
+    )
+
+    deleted = link_service.delete_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        probe_id=probe.id,
+    )
+
+    assert deleted is not None
+    assert deleted.deleted_at is not None
+    assert link_service.list_probes(tenant_id=tenant_id, site_id=site_id) == []
+    assert link_service.latest_probe(tenant_id=tenant_id, site_id=site_id) is None
+
+
 @pytest.mark.asyncio
 async def test_session_backed_link_service_persists_core_state() -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000001")
