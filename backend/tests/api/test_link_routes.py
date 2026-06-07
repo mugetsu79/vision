@@ -20,6 +20,7 @@ from argus.services.pack_registry import PackRegistry
 
 TENANT_ID = UUID("00000000-0000-4000-8000-000000000001")
 KNOWN_SITE_ID = UUID("00000000-0000-4000-8000-000000000002")
+MASTER_SITE_ID = UUID("00000000-0000-4000-8000-000000000003")
 
 
 def _user(role: RoleEnum) -> AuthenticatedUser:
@@ -63,26 +64,42 @@ class _FakeSecurity:
 
 
 class _FakeSiteService:
+    def __init__(self, *, edge_site_ids: set[UUID] | None = None) -> None:
+        self.edge_site_ids = edge_site_ids or {KNOWN_SITE_ID}
+
     async def list_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
         return [
-            SiteResponse(
-                id=KNOWN_SITE_ID,
-                tenant_id=tenant_context.tenant_id,
-                name="Packless Site",
-                description=None,
-                tz="UTC",
-                geo_point=None,
-                created_at=datetime.now(tz=UTC),
-            )
+            self._site_response(tenant_context, KNOWN_SITE_ID, "Packless Site"),
+            self._site_response(tenant_context, MASTER_SITE_ID, "Vezor Master"),
         ]
 
+    async def list_edge_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        sites = await self.list_sites(tenant_context)
+        return [site for site in sites if site.id in self.edge_site_ids]
+
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
-        if site_id != KNOWN_SITE_ID:
+        if site_id == KNOWN_SITE_ID:
+            return self._site_response(tenant_context, site_id, "Packless Site")
+        if site_id == MASTER_SITE_ID:
+            return self._site_response(tenant_context, site_id, "Vezor Master")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found.")
+
+    async def is_edge_site(self, tenant_context: TenantContext, site_id: UUID) -> bool:
+        await self.get_site(tenant_context, site_id)
+        return site_id in self.edge_site_ids
+
+    def _site_response(
+        self,
+        tenant_context: TenantContext,
+        site_id: UUID,
+        name: str,
+    ) -> SiteResponse:
+        if site_id not in {KNOWN_SITE_ID, MASTER_SITE_ID}:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found.")
         return SiteResponse(
             id=site_id,
             tenant_id=tenant_context.tenant_id,
-            name="Packless Site",
+            name=name,
             description=None,
             tz="UTC",
             geo_point=None,
@@ -90,7 +107,12 @@ class _FakeSiteService:
         )
 
 
-def _create_app(user: AuthenticatedUser, *, include_sites: bool = True) -> FastAPI:
+def _create_app(
+    user: AuthenticatedUser,
+    *,
+    include_sites: bool = True,
+    edge_site_ids: set[UUID] | None = None,
+) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     services = SimpleNamespace(
@@ -99,7 +121,7 @@ def _create_app(user: AuthenticatedUser, *, include_sites: bool = True) -> FastA
         link=LinkService(),
     )
     if include_sites:
-        services.sites = _FakeSiteService()
+        services.sites = _FakeSiteService(edge_site_ids=edge_site_ids)
     app.state.services = services
     app.state.security = _FakeSecurity(user)
     return app
@@ -158,6 +180,16 @@ async def test_link_site_summary_route_is_packless_and_domain_neutral(
     } <= set(payload[0])
     assert "vessel" not in payload[0]
     assert "voyage" not in payload[0]
+
+
+@pytest.mark.asyncio
+async def test_link_site_summary_route_only_lists_edge_sites(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/link/sites/summary")
+
+    assert response.status_code == 200
+    site_ids = {item["site_id"] for item in response.json()}
+    assert str(KNOWN_SITE_ID) in site_ids
+    assert str(MASTER_SITE_ID) not in site_ids
 
 
 @pytest.mark.asyncio
@@ -390,6 +422,41 @@ async def test_edge_agent_sample_computes_loss_from_packet_counts(client: AsyncC
     assert payload["measurement_metadata"]["packet_count"] == 20
     assert payload["measurement_metadata"]["packets_received"] == 19
     assert payload["measurement_metadata"]["packets_lost"] == 1
+
+
+@pytest.mark.asyncio
+async def test_link_configuration_rejects_master_or_non_edge_site(client: AsyncClient) -> None:
+    response = await client.post(
+        f"/api/v1/link/sites/{MASTER_SITE_ID}/connections",
+        json={
+            "label": "Master loopback",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Core Link can only be configured for edge sites."
+
+
+@pytest.mark.asyncio
+async def test_link_probe_sample_rejects_master_or_non_edge_site(client: AsyncClient) -> None:
+    response = await client.post(
+        f"/api/v1/link/sites/{MASTER_SITE_ID}/probes",
+        json={
+            "latency_ms": 12,
+            "throughput_mbps": 50,
+            "packet_loss_percent": 0,
+            "reachable": True,
+            "source": "manual:operator-console",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Core Link probes can only be recorded for edge sites."
 
 
 @pytest.mark.asyncio

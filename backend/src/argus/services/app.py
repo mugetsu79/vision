@@ -510,6 +510,18 @@ class SiteService:
             sites = (await session.execute(statement)).scalars().all()
         return [_site_to_response(site) for site in sites]
 
+    async def list_edge_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        async with self.session_factory() as session:
+            statement = (
+                select(Site)
+                .join(EdgeNode, EdgeNode.site_id == Site.id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .distinct()
+                .order_by(Site.name)
+            )
+            sites = (await session.execute(statement)).scalars().all()
+        return [_site_to_response(site) for site in sites]
+
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         site = await _get_site(
             session_factory=self.session_factory,
@@ -517,6 +529,17 @@ class SiteService:
             site_id=site_id,
         )
         return _site_to_response(site)
+
+    async def is_edge_site(self, tenant_context: TenantContext, site_id: UUID) -> bool:
+        async with self.session_factory() as session:
+            statement = (
+                select(EdgeNode.id)
+                .join(Site, Site.id == EdgeNode.site_id)
+                .where(Site.tenant_id == tenant_context.tenant_id, Site.id == site_id)
+                .limit(1)
+            )
+            edge_node_id = (await session.execute(statement)).scalar_one_or_none()
+        return edge_node_id is not None
 
     async def create_site(self, tenant_context: TenantContext, payload: SiteCreate) -> SiteResponse:
         async with self.session_factory() as session:

@@ -157,7 +157,7 @@ async def get_link_site_summaries(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[LinkSiteSummaryResponse]:
-    sites = await services.sites.list_sites(tenant_context)
+    sites = await services.sites.list_edge_sites(tenant_context)
     summary_records = await services.link.alist_site_summaries(
         tenant_id=tenant_context.tenant_id,
         sites=[{"id": site.id, "name": site.name, "tz": site.tz} for site in sites],
@@ -172,7 +172,7 @@ async def get_link_status(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     passport = await services.link.abuild_passport(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -187,7 +187,7 @@ async def get_link_budget(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject | None:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     budget = await services.link.aget_budget(tenant_id=tenant_context.tenant_id, site_id=site_id)
     if budget is None:
         return None
@@ -202,7 +202,7 @@ async def put_link_budget(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     budget = await services.link.aupsert_budget(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -219,7 +219,7 @@ async def get_link_connections(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[JsonObject]:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     return [
         _connection_payload(connection)
         for connection in await services.link.alist_connections(
@@ -237,7 +237,7 @@ async def post_link_connection(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     try:
         connection = await services.link.aupsert_connection(
             tenant_id=tenant_context.tenant_id,
@@ -272,7 +272,7 @@ async def get_link_connection_selection(
     priority_lane: PriorityLaneQuery = "bulk",
     remaining_budget_bytes: RemainingBudgetBytesQuery = 0,
 ) -> JsonObject | None:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     connection = await services.link.aselect_connection(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -291,7 +291,7 @@ async def patch_link_connection(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     existing = await services.link.aget_connection(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -344,7 +344,7 @@ async def delete_link_connection(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> None:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     deleted = await services.link.adelete_connection(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -361,7 +361,7 @@ async def get_link_queue(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[JsonObject]:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     return [
         _queue_item_payload(item)
         for item in await services.link.alist_queue(
@@ -378,7 +378,12 @@ async def get_link_probes(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[JsonObject]:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(
+        services,
+        tenant_context,
+        site_id,
+        detail="Core Link probes can only be recorded for edge sites.",
+    )
     return [
         _probe_payload(probe)
         for probe in await services.link.alist_probes(
@@ -396,7 +401,12 @@ async def post_link_probe(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(
+        services,
+        tenant_context,
+        site_id,
+        detail="Core Link probes can only be recorded for edge sites.",
+    )
     try:
         probe = await services.link.arecord_probe(
             tenant_id=tenant_context.tenant_id,
@@ -433,7 +443,12 @@ async def post_link_edge_probe_sample(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(
+        services,
+        tenant_context,
+        site_id,
+        detail="Core Link probes can only be recorded for edge sites.",
+    )
     target = await services.link.atarget_for_connection_metadata(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -473,7 +488,12 @@ async def delete_link_probe(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> Response:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(
+        services,
+        tenant_context,
+        site_id,
+        detail="Core Link probes can only be recorded for edge sites.",
+    )
     deleted = await services.link.adelete_probe(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -498,7 +518,12 @@ async def run_link_probe_target(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(
+        services,
+        tenant_context,
+        site_id,
+        detail="Core Link probes can only be recorded for edge sites.",
+    )
     target = await services.link.atarget_for_connection_metadata(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -537,7 +562,12 @@ async def measure_link_probe_target_throughput(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(
+        services,
+        tenant_context,
+        site_id,
+        detail="Core Link probes can only be recorded for edge sites.",
+    )
     target = await services.link.atarget_for_connection_metadata(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -572,7 +602,7 @@ async def get_link_policies(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     return await services.link.aget_policy(tenant_id=tenant_context.tenant_id, site_id=site_id)
 
 
@@ -584,7 +614,7 @@ async def put_link_policies(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_tenant_site(services, tenant_context, site_id)
+    await _ensure_link_edge_site(services, tenant_context, site_id)
     try:
         return await services.link.aput_policy(
             tenant_id=tenant_context.tenant_id,
@@ -694,15 +724,19 @@ def _site_summary_payload(summary: LinkSiteSummaryRecord) -> LinkSiteSummaryResp
     )
 
 
-async def _ensure_tenant_site(
+async def _ensure_link_edge_site(
     services: AppServices,
     tenant_context: TenantContext,
     site_id: UUID,
+    *,
+    detail: str = "Core Link can only be configured for edge sites.",
 ) -> None:
     try:
         await services.sites.get_site(tenant_context, site_id)
     except HTTPException:
         raise
+    if not await services.sites.is_edge_site(tenant_context, site_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
 def _reject_null_required_connection_fields(updates: dict[str, object]) -> None:

@@ -4,7 +4,7 @@
 
 **Goal:** Make state-of-the-art edge-to-reflector packet-loss measurement operational with an authenticated UDP sequence sender/reflector flow.
 
-**Architecture:** Keep Vezor master as the control plane and result store. Extend the edge agent to run UDP sequence sessions from the edge site, add a small authenticated UDP reflector service, compute loss/RTT/jitter from observed sequence replies, and post summarized samples through the existing Core Link edge sample ingestion path.
+**Architecture:** Keep Vezor master as the control plane and result store. Link Performance configuration remains edge-site only: a site must have a registered edge node before it can receive link paths, monitoring targets, probe samples, policies, budgets, or throughput checks. Extend the edge agent to run UDP sequence sessions from the edge site, add a small authenticated UDP reflector service, compute loss/RTT/jitter from observed sequence replies, and post summarized samples through the existing Core Link edge sample ingestion path. If the master hosts a reflector, configure it as deployment infrastructure, not as a master-site Link path.
 
 **Tech Stack:** Python `asyncio` datagrams, HMAC-SHA256, FastAPI/Pydantic, React/TypeScript, pytest, Vitest, Ruff, mypy.
 
@@ -14,13 +14,63 @@
 
 - Create `backend/src/argus/link/udp_sequence.py`: packet codec, HMAC auth, statistics helpers.
 - Create `backend/src/argus/link/reflector.py`: UDP reflector server and CLI.
+- Modify `backend/src/argus/services/app.py`: expose edge-site eligibility helpers backed by registered edge nodes.
 - Modify `backend/src/argus/link/edge_agent.py`: add `udp_sequence` sender mode.
-- Modify `backend/src/argus/link/api.py`: validate richer UDP sequence sample metadata.
+- Modify `backend/src/argus/link/api.py`: enforce edge-site eligibility and validate richer UDP sequence sample metadata.
 - Modify `frontend/src/components/link/types.ts`: add reflector target fields and sample metadata helpers.
 - Modify `frontend/src/components/link/LinkActionDialogs.tsx`: expose reflector fields in the link-path form.
 - Modify `frontend/src/components/link/LinkProbePanel.tsx`: show edge-to-reflector path and sequence statistics.
 - Update generated OpenAPI files if API schemas change.
-- Test `backend/tests/link/test_udp_sequence.py`, `backend/tests/link/test_reflector.py`, `backend/tests/link/test_edge_agent.py`, `backend/tests/api/test_link_routes.py`, and `frontend/src/pages/Links.test.tsx`.
+- Test `backend/tests/link/test_udp_sequence.py`, `backend/tests/link/test_reflector.py`, `backend/tests/link/test_edge_agent.py`, `backend/tests/api/test_link_routes.py`, `backend/tests/services/test_site_service.py` if service-level coverage is needed, and `frontend/src/pages/Links.test.tsx`.
+
+## Task 0: Edge-Site Eligibility And Master Reflector Boundary
+
+**Files:**
+- Modify: `backend/src/argus/services/app.py`
+- Modify: `backend/src/argus/link/api.py`
+- Test: `backend/tests/api/test_link_routes.py`
+
+- [x] **Step 1: Write failing eligibility tests**
+
+Add route tests proving:
+
+- `/api/v1/link/sites/summary` lists only sites with registered edge nodes.
+- Existing non-edge/master sites reject link connection setup with `409`.
+- Existing non-edge/master sites reject probe sample recording with `409`.
+
+- [x] **Step 2: Run RED**
+
+Run:
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_link_routes.py::test_link_site_summary_route_only_lists_edge_sites tests/api/test_link_routes.py::test_link_configuration_rejects_master_or_non_edge_site tests/api/test_link_routes.py::test_link_probe_sample_rejects_master_or_non_edge_site -q
+```
+
+Expected: FAIL before the guard is implemented.
+
+- [x] **Step 3: Implement edge-site guard**
+
+Implement:
+
+- `SiteService.list_edge_sites(...)` using `Site` joined to `EdgeNode`.
+- `SiteService.is_edge_site(...)`.
+- Link summary uses `list_edge_sites`.
+- Every site-scoped Link route calls an edge-site guard before reading or mutating Link state.
+- Probe routes use probe-specific error text.
+
+- [x] **Step 4: Run GREEN**
+
+Run:
+
+```bash
+cd /Users/yann.moren/vision/backend
+python3 -m uv run pytest tests/api/test_link_routes.py -q
+```
+
+Expected: PASS.
+
+Master reflector configuration remains a separate deployment service profile. Do not add Link paths or monitoring targets to a master/control-plane site.
 
 ## Task 1: UDP Sequence Packet Codec
 

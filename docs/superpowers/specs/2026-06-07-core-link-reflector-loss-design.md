@@ -12,11 +12,11 @@ Yes: edge sites run the measurements. The Vezor master/control plane does not me
 
 Roles:
 
-- **Vezor master/control plane**: stores target configuration, displays monitoring posture, accepts summarized probe samples, and can optionally provide recommended commands.
+- **Vezor master/control plane**: stores edge-site target configuration, displays monitoring posture, accepts summarized probe samples, can optionally provide recommended commands, and may host deployment-level reflector profiles.
 - **Edge agent**: runs at or near the site/link path. It is the measurement source and sends active probe packets.
 - **Reflector**: runs at the far end of the measured path. It receives probe packets and sends replies. It may be a Vezor-managed regional service, a customer-controlled host, another Vezor edge agent in reflector mode, or a provider/STAMP/TWAMP endpoint.
 
-The master can run a reflector in a lab or single-node deployment, but that is an optional deployment role. In production, reflector placement should be explicit because the measured path is "edge site to reflector," not "edge site to Vezor in general."
+The master can run a reflector process in a lab or single-node deployment, but that is a deployment-level reflector endpoint, not a Link Performance site. Link paths, monitoring targets, and probe samples are only configured for edge sites. In production, reflector placement should be explicit because the measured path is "edge site to reflector," not "edge site to Vezor in general."
 
 ```mermaid
 flowchart LR
@@ -35,6 +35,41 @@ Build the reflector path in three phases:
 3. **Provider/device integration**: add TWAMP/STAMP import or active sessions for routers, SD-WAN platforms, or provider endpoints that already expose measurement responders.
 
 The first phase is the best product path because it can be tested end to end inside Vezor without waiting on network equipment support.
+
+## Site Eligibility
+
+Core Link is an edge-site feature. The UI and API should use this rule:
+
+- A site is eligible for Link Performance only when it has a registered edge node.
+- A master/control-plane deployment node is not a Link Performance site.
+- Link paths, budgets, policies, monitoring targets, manual probe samples, edge-agent samples, backend synthetic probe runs, and throughput measurements are rejected for non-edge/master sites.
+- The Link Performance site selector lists only eligible edge sites.
+- A master-hosted reflector can still be offered as a reflector endpoint for an edge site's target. That configuration belongs to Deployment/Reflectors or equivalent platform settings, not to the master site.
+
+This avoids the confusing model where operators add a "connection" to the master. The master stores and optionally reflects measurements; the edge site owns the measured link.
+
+## Master Reflector Configuration
+
+When the master hosts a reflector, configure it as a deployment service profile:
+
+```json
+{
+  "id": "master-reflector-default",
+  "scope": "deployment",
+  "host_role": "master",
+  "bind_address": "0.0.0.0",
+  "udp_port": 8622,
+  "mode": "vezor_udp_sequence",
+  "key_id": "master-reflector-2026-06",
+  "secret_ref": "secret://vezor/link-reflectors/master-reflector-2026-06",
+  "allowed_edge_site_ids": ["site-edge-home"],
+  "allowed_source_cidrs": ["198.51.100.0/24"],
+  "rate_limit_pps_per_source": 100,
+  "enabled": true
+}
+```
+
+Edge-site monitoring targets may reference this profile or specify an explicit reflector address. They still remain edge-site targets because the measurement source is the edge agent.
 
 ## Why Not Master-Only Probes
 
@@ -251,6 +286,9 @@ python -m argus.link.edge_agent \
 ## Acceptance Criteria
 
 - Operators can configure a reflector-backed monitoring target without JSON.
+- The Link Performance selector and API expose configuration only for edge sites.
+- Master/control-plane sites cannot receive link paths, monitoring targets, probe samples, or throughput measurements.
+- A master-hosted reflector is configured as deployment infrastructure, not as a master-site link path.
 - Edge agent can run a UDP sequence measurement against a reflector.
 - Reflector replies only to authenticated measurement packets.
 - Agent computes loss, RTT statistics, variation, duplicate, late, and out-of-order counters.
