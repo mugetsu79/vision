@@ -133,6 +133,7 @@ describe("FleetOpsVessels", () => {
         tenant_id: "00000000-0000-4000-8000-000000000001",
         description: null,
         tz: "UTC",
+        site_kind: "edge",
         geo_point: null,
         created_at: "2026-06-06T00:00:00Z",
       },

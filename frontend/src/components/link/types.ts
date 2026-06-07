@@ -49,7 +49,14 @@ export type MonitoringTarget = {
   monitoring: MonitoringConfig;
   loss_method?: LinkProbeLossMethod | null;
   loss_packet_count?: number | null;
+  loss_packet_spacing_ms?: number | null;
+  loss_timeout_ms?: number | null;
   loss_dscp?: number | null;
+  reflector_profile_id?: string | null;
+  reflector_address?: string | null;
+  reflector_port?: number | null;
+  reflector_mode?: string | null;
+  reflector_key_id?: string | null;
   throughput_test_url?: string | null;
   throughput_test_max_bytes?: number | null;
 };
@@ -226,13 +233,40 @@ export function probeMeasurementSummary(probe: unknown) {
   const metadata = asRecord(asRecord(probe).measurement_metadata);
   const packetCount = optionalNumericValue(metadata.packet_count);
   const packetsReceived = optionalNumericValue(metadata.packets_received);
-  const jitterMs = optionalNumericValue(metadata.jitter_ms);
-  const parts = [probeLossMethodLabel(metadata.method)];
+  const packetsLost = optionalNumericValue(metadata.packets_lost);
+  const packetsLate = optionalNumericValue(metadata.packets_late);
+  const packetsDuplicate = optionalNumericValue(metadata.packets_duplicate);
+  const packetsOutOfOrder = optionalNumericValue(metadata.packets_out_of_order);
+  const rttAvgMs = optionalNumericValue(metadata.rtt_avg_ms);
+  const rttVariationMs =
+    optionalNumericValue(metadata.rtt_variation_ms) ??
+    optionalNumericValue(metadata.jitter_ms);
+  const method = enumValue(metadata.method, linkProbeLossMethods, "icmp_sequence");
+  const parts = [probeLossMethodLabel(method)];
   if (packetCount !== null && packetsReceived !== null) {
     parts.push(`${packetsReceived}/${packetCount} received`);
   }
-  if (jitterMs !== null) {
-    parts.push(`${jitterMs} ms variation`);
+  if (packetsLost !== null) {
+    parts.push(`${packetsLost} lost`);
+  }
+  if (packetsLate !== null) {
+    parts.push(`${packetsLate} late`);
+  }
+  if (packetsDuplicate !== null) {
+    parts.push(`${packetsDuplicate} duplicate`);
+  }
+  if (packetsOutOfOrder !== null) {
+    parts.push(`${packetsOutOfOrder} out of order`);
+  }
+  if (rttAvgMs !== null) {
+    parts.push(`${rttAvgMs} ms RTT avg`);
+  }
+  if (rttVariationMs !== null) {
+    parts.push(
+      method === "udp_sequence"
+        ? `${rttVariationMs} ms RTT variation`
+        : `${rttVariationMs} ms variation`,
+    );
   }
   return parts.join(", ");
 }
@@ -341,10 +375,17 @@ function monitoringTargets(value: unknown): MonitoringTarget[] {
       loss_dscp: optionalNumericValue(item.loss_dscp),
       loss_method: enumValue(item.loss_method, linkProbeLossMethods, "icmp_sequence"),
       loss_packet_count: optionalNumericValue(item.loss_packet_count),
+      loss_packet_spacing_ms: optionalNumericValue(item.loss_packet_spacing_ms),
+      loss_timeout_ms: optionalNumericValue(item.loss_timeout_ms),
       monitoring: monitoringConfig(item.monitoring),
       port: optionalNumericValue(item.port),
       probe_type: enumValue(item.probe_type, monitoringProbeTypes, "icmp"),
       purpose: enumValue(item.purpose, monitoringPurposes, "custom"),
+      reflector_address: nullableTextValue(item.reflector_address),
+      reflector_key_id: nullableTextValue(item.reflector_key_id),
+      reflector_mode: nullableTextValue(item.reflector_mode),
+      reflector_port: optionalNumericValue(item.reflector_port),
+      reflector_profile_id: nullableTextValue(item.reflector_profile_id),
       target_site_id: nullableTextValue(item.target_site_id),
       throughput_test_max_bytes: optionalNumericValue(
         item.throughput_test_max_bytes,

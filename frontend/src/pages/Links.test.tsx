@@ -14,6 +14,7 @@ const linkPageMocks = vi.hoisted(() => ({
   probes: [] as unknown[],
   queue: [] as unknown[],
   policies: {} as unknown,
+  reflectorProfile: null as unknown,
   createConnection: vi.fn(),
   updateConnection: vi.fn(),
   deleteConnection: vi.fn(),
@@ -23,6 +24,9 @@ const linkPageMocks = vi.hoisted(() => ({
   deleteProbe: vi.fn(),
   runProbeTarget: vi.fn(),
   measureProbeTargetThroughput: vi.fn(),
+  enableMasterReflector: vi.fn(),
+  disableMasterReflector: vi.fn(),
+  rotateMasterReflectorKey: vi.fn(),
   retryQueueItem: vi.fn(),
   pauseQueueItem: vi.fn(),
   resumeQueueItem: vi.fn(),
@@ -64,6 +68,11 @@ vi.mock("@/hooks/use-link", () => ({
     isLoading: false,
     error: null,
   }),
+  useMasterLinkReflectorProfile: () => ({
+    data: linkPageMocks.reflectorProfile,
+    isLoading: false,
+    error: null,
+  }),
   useCreateLinkConnection: () => ({
     mutateAsync: linkPageMocks.createConnection,
     isPending: false,
@@ -98,6 +107,18 @@ vi.mock("@/hooks/use-link", () => ({
   }),
   useMeasureLinkProbeTargetThroughput: () => ({
     mutateAsync: linkPageMocks.measureProbeTargetThroughput,
+    isPending: false,
+  }),
+  useEnableMasterLinkReflector: () => ({
+    mutateAsync: linkPageMocks.enableMasterReflector,
+    isPending: false,
+  }),
+  useDisableMasterLinkReflector: () => ({
+    mutateAsync: linkPageMocks.disableMasterReflector,
+    isPending: false,
+  }),
+  useRotateMasterLinkReflectorKey: () => ({
+    mutateAsync: linkPageMocks.rotateMasterReflectorKey,
     isPending: false,
   }),
   useRetryLinkQueueItem: () => ({
@@ -147,6 +168,7 @@ function mockLinkHooks({
   probes = [],
   queue = [],
   policies = {},
+  reflectorProfile = null,
   createConnection = vi.fn().mockResolvedValue({}),
   updateConnection = vi.fn().mockResolvedValue({}),
   deleteConnection = vi.fn().mockResolvedValue({}),
@@ -156,6 +178,9 @@ function mockLinkHooks({
   deleteProbe = vi.fn().mockResolvedValue({}),
   runProbeTarget = vi.fn().mockResolvedValue({}),
   measureProbeTargetThroughput = vi.fn().mockResolvedValue({}),
+  enableMasterReflector = vi.fn().mockResolvedValue({}),
+  disableMasterReflector = vi.fn().mockResolvedValue({}),
+  rotateMasterReflectorKey = vi.fn().mockResolvedValue({}),
   retryQueueItem = vi.fn().mockResolvedValue({}),
   pauseQueueItem = vi.fn().mockResolvedValue({}),
   resumeQueueItem = vi.fn().mockResolvedValue({}),
@@ -167,6 +192,7 @@ function mockLinkHooks({
   probes?: unknown[];
   queue?: unknown[];
   policies?: unknown;
+  reflectorProfile?: unknown;
   createConnection?: ReturnType<typeof vi.fn>;
   updateConnection?: ReturnType<typeof vi.fn>;
   deleteConnection?: ReturnType<typeof vi.fn>;
@@ -176,6 +202,9 @@ function mockLinkHooks({
   deleteProbe?: ReturnType<typeof vi.fn>;
   runProbeTarget?: ReturnType<typeof vi.fn>;
   measureProbeTargetThroughput?: ReturnType<typeof vi.fn>;
+  enableMasterReflector?: ReturnType<typeof vi.fn>;
+  disableMasterReflector?: ReturnType<typeof vi.fn>;
+  rotateMasterReflectorKey?: ReturnType<typeof vi.fn>;
   retryQueueItem?: ReturnType<typeof vi.fn>;
   pauseQueueItem?: ReturnType<typeof vi.fn>;
   resumeQueueItem?: ReturnType<typeof vi.fn>;
@@ -187,6 +216,7 @@ function mockLinkHooks({
   linkPageMocks.probes = probes;
   linkPageMocks.queue = queue;
   linkPageMocks.policies = policies;
+  linkPageMocks.reflectorProfile = reflectorProfile;
   linkPageMocks.createConnection = createConnection;
   linkPageMocks.updateConnection = updateConnection;
   linkPageMocks.deleteConnection = deleteConnection;
@@ -196,6 +226,9 @@ function mockLinkHooks({
   linkPageMocks.deleteProbe = deleteProbe;
   linkPageMocks.runProbeTarget = runProbeTarget;
   linkPageMocks.measureProbeTargetThroughput = measureProbeTargetThroughput;
+  linkPageMocks.enableMasterReflector = enableMasterReflector;
+  linkPageMocks.disableMasterReflector = disableMasterReflector;
+  linkPageMocks.rotateMasterReflectorKey = rotateMasterReflectorKey;
   linkPageMocks.retryQueueItem = retryQueueItem;
   linkPageMocks.pauseQueueItem = pauseQueueItem;
   linkPageMocks.resumeQueueItem = resumeQueueItem;
@@ -228,6 +261,7 @@ describe("Links", () => {
     linkPageMocks.probes = [];
     linkPageMocks.queue = [];
     linkPageMocks.policies = {};
+    linkPageMocks.reflectorProfile = null;
     linkPageMocks.createConnection = vi.fn().mockResolvedValue({});
     linkPageMocks.updateConnection = vi.fn().mockResolvedValue({});
     linkPageMocks.deleteConnection = vi.fn().mockResolvedValue({});
@@ -237,6 +271,9 @@ describe("Links", () => {
     linkPageMocks.deleteProbe = vi.fn().mockResolvedValue({});
     linkPageMocks.runProbeTarget = vi.fn().mockResolvedValue({});
     linkPageMocks.measureProbeTargetThroughput = vi.fn().mockResolvedValue({});
+    linkPageMocks.enableMasterReflector = vi.fn().mockResolvedValue({});
+    linkPageMocks.disableMasterReflector = vi.fn().mockResolvedValue({});
+    linkPageMocks.rotateMasterReflectorKey = vi.fn().mockResolvedValue({});
     linkPageMocks.retryQueueItem = vi.fn().mockResolvedValue({});
     linkPageMocks.pauseQueueItem = vi.fn().mockResolvedValue({});
     linkPageMocks.resumeQueueItem = vi.fn().mockResolvedValue({});
@@ -497,6 +534,96 @@ describe("Links", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("control plane site exposes master reflector status and actions", async () => {
+    const user = userEvent.setup();
+    const enableMasterReflector = vi.fn().mockResolvedValue({});
+    const rotateMasterReflectorKey = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [
+        createSummary({
+          site_id: "master-site",
+          site_name: "Vezor Master",
+          site_role: "control_plane",
+          capabilities: {
+            can_configure_links: false,
+            can_receive_edge_probes: true,
+            can_record_manual_samples: false,
+          },
+        }),
+      ],
+      reflectorProfile: {
+        enabled: false,
+        last_status: "disabled",
+        public_address: "master.vezor.local",
+        udp_port: 8622,
+        key_id: "master-reflector-default",
+        secret_state: "present",
+        rate_limit_pps_per_source: 75,
+      },
+      enableMasterReflector,
+      rotateMasterReflectorKey,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=master-site" });
+
+    expect(
+      await screen.findByRole("heading", { name: /Master reflector/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/master\.vezor\.local:8622/i)).toBeInTheDocument();
+    expect(screen.getByText(/master-reflector-default/i)).toBeInTheDocument();
+    expect(screen.getByText(/75 pps per source/i)).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /enable master reflector/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /rotate reflector key/i }));
+
+    expect(enableMasterReflector).toHaveBeenCalledWith({
+      public_address: "master.vezor.local",
+      udp_port: 8622,
+    });
+    expect(rotateMasterReflectorKey).toHaveBeenCalledTimes(1);
+  });
+
+  test("enabled control plane reflector can be disabled from the master panel", async () => {
+    const user = userEvent.setup();
+    const disableMasterReflector = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [
+        createSummary({
+          site_id: "master-site",
+          site_name: "Vezor Master",
+          site_role: "control_plane",
+          capabilities: {
+            can_configure_links: false,
+            can_receive_edge_probes: true,
+            can_record_manual_samples: false,
+          },
+        }),
+      ],
+      reflectorProfile: {
+        enabled: true,
+        last_status: "listening",
+        public_address: "master.vezor.local",
+        udp_port: 8622,
+        key_id: "master-reflector-default",
+        secret_state: "present",
+        rate_limit_pps_per_source: 75,
+      },
+      disableMasterReflector,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=master-site" });
+
+    expect(await screen.findByText(/Listening/i)).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /disable master reflector/i }),
+    );
+
+    expect(disableMasterReflector).toHaveBeenCalledTimes(1);
+  });
+
   test("link path form saves a provider-managed path with a monitoring target", async () => {
     const user = userEvent.setup();
     const createConnection = vi.fn().mockResolvedValue({});
@@ -600,10 +727,29 @@ describe("Links", () => {
       screen.getByLabelText(/target preset/i),
       "master-site",
     );
+    expect(screen.getByLabelText(/reflector address/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/reflector UDP port/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/packet spacing ms/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/reply timeout ms/i)).toBeInTheDocument();
     await user.type(
       screen.getByLabelText(/target address/i),
       "master.vezor.local",
     );
+    await user.type(
+      screen.getByLabelText(/reflector address/i),
+      "master.vezor.local",
+    );
+    await user.clear(screen.getByLabelText(/reflector UDP port/i));
+    await user.type(screen.getByLabelText(/reflector UDP port/i), "8622");
+    await user.clear(screen.getByLabelText(/reflector key ID/i));
+    await user.type(
+      screen.getByLabelText(/reflector key ID/i),
+      "master-reflector-default",
+    );
+    await user.clear(screen.getByLabelText(/packet spacing ms/i));
+    await user.type(screen.getByLabelText(/packet spacing ms/i), "25");
+    await user.clear(screen.getByLabelText(/reply timeout ms/i));
+    await user.type(screen.getByLabelText(/reply timeout ms/i), "1200");
     await user.click(screen.getByRole("button", { name: /save link path/i }));
 
     const createCall = createConnection.mock.calls[0]?.[0] as
@@ -611,10 +757,17 @@ describe("Links", () => {
           metadata?: {
             monitoring_targets?: Array<{
               label?: string;
+              loss_packet_spacing_ms?: number | null;
+              loss_timeout_ms?: number | null;
               loss_method?: string;
               monitoring?: { enabled?: boolean; source_type?: string };
               probe_type?: string;
               purpose?: string;
+              reflector_address?: string | null;
+              reflector_key_id?: string | null;
+              reflector_mode?: string | null;
+              reflector_port?: number | null;
+              reflector_profile_id?: string | null;
               target_site_id?: string | null;
             }>;
           };
@@ -622,10 +775,17 @@ describe("Links", () => {
       | undefined;
     expect(createCall?.metadata?.monitoring_targets?.[0]).toMatchObject({
       label: "Vezor Master",
+      loss_packet_spacing_ms: 25,
+      loss_timeout_ms: 1200,
       loss_method: "udp_sequence",
       monitoring: { enabled: true, source_type: "edge_agent" },
       probe_type: "udp",
       purpose: "vezor_control",
+      reflector_address: "master.vezor.local",
+      reflector_key_id: "master-reflector-default",
+      reflector_mode: "reply",
+      reflector_port: 8622,
+      reflector_profile_id: "master-reflector-default",
       target_site_id: "master-site",
     });
   });
@@ -1035,6 +1195,93 @@ describe("Links", () => {
     expect(screen.getByText(/19\/20 received/i)).toBeInTheDocument();
     expect(screen.getByText(/5% loss/i)).toBeInTheDocument();
     expect(screen.getByText(/1.8 ms variation/i)).toBeInTheDocument();
+  });
+
+  test("monitoring panel renders UDP reflector measurement details", async () => {
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      connections: [
+        {
+          id: "connection-1",
+          label: "Home",
+          transport_kind: "ethernet",
+          status: "online",
+          metadata: {
+            monitoring_targets: [
+              {
+                id: "vezor-master-udp-reflector",
+                label: "Vezor Master reflector",
+                address: "master.vezor.local",
+                probe_type: "udp",
+                purpose: "vezor_control",
+                loss_method: "udp_sequence",
+                loss_packet_count: 50,
+                loss_packet_spacing_ms: 25,
+                loss_timeout_ms: 1200,
+                reflector_profile_id: "master-reflector-default",
+                reflector_address: "master.vezor.local",
+                reflector_port: 8622,
+                reflector_mode: "reply",
+                reflector_key_id: "master-reflector-default",
+                monitoring: {
+                  enabled: true,
+                  source_type: "edge_agent",
+                  interval_seconds: 300,
+                },
+              },
+            ],
+          },
+        },
+      ],
+      probes: [
+        {
+          id: "probe-udp-1",
+          latency_ms: 24,
+          jitter_ms: 2.1,
+          throughput_mbps: 0,
+          packet_loss_percent: 2,
+          reachable: true,
+          source: "edge_agent:macbook-home",
+          source_type: "edge_agent",
+          source_label: "MacBook at home",
+          sample_kind: "automated",
+          target_label: "Vezor Master reflector",
+          target_address: "master.vezor.local",
+          probe_type: "udp",
+          measurement_metadata: {
+            method: "udp_sequence",
+            packet_count: 50,
+            packets_received: 49,
+            packets_lost: 1,
+            packets_late: 0,
+            packets_duplicate: 0,
+            packets_out_of_order: 0,
+            rtt_avg_ms: 24.2,
+            rtt_variation_ms: 2.1,
+            reflector_profile_id: "master-reflector-default",
+            reflector_address: "master.vezor.local",
+            reflector_port: 8622,
+          },
+          recorded_at: "2026-06-07T10:00:00Z",
+        },
+      ],
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    expect(
+      await screen.findByText(/UDP sequence via master\.vezor\.local:8622/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/50 packets/i)).toBeInTheDocument();
+    expect(screen.getByText(/spacing 25 ms/i)).toBeInTheDocument();
+    expect(screen.getByText(/timeout 1200 ms/i)).toBeInTheDocument();
+    expect(screen.getByText(/49\/50 received/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 lost/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 late/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 duplicate/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 out of order/i)).toBeInTheDocument();
+    expect(screen.getByText(/24.2 ms RTT avg/i)).toBeInTheDocument();
+    expect(screen.getByText(/2.1 ms RTT variation/i)).toBeInTheDocument();
   });
 
   test("link path form saves edge agent loss settings", async () => {

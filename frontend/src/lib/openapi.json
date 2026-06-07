@@ -5558,6 +5558,11 @@
             ],
             "title": "Measured At"
           },
+          "measurement_metadata": {
+            "additionalProperties": true,
+            "title": "Measurement Metadata",
+            "type": "object"
+          },
           "method": {
             "default": "icmp_sequence",
             "enum": [
@@ -5590,6 +5595,92 @@
         "title": "LinkEdgeProbeSampleCreate",
         "type": "object"
       },
+      "LinkMasterControlTargetCreate": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "connection_label": {
+            "default": "Vezor control",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Connection Label",
+            "type": "string"
+          },
+          "dscp": {
+            "anyOf": [
+              {
+                "maximum": 63.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dscp"
+          },
+          "interval_seconds": {
+            "default": 300,
+            "minimum": 30.0,
+            "title": "Interval Seconds",
+            "type": "integer"
+          },
+          "loss_timeout_ms": {
+            "default": 1000,
+            "minimum": 1.0,
+            "title": "Loss Timeout Ms",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "https_only",
+              "udp_reflector",
+              "https_and_udp_reflector"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "packet_count": {
+            "default": 50,
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000.0,
+            "title": "Packet Count",
+            "type": "integer"
+          },
+          "packet_spacing_ms": {
+            "default": 100,
+            "minimum": 1.0,
+            "title": "Packet Spacing Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "LinkMasterControlTargetCreate",
+        "type": "object"
+      },
       "LinkPolicyUpdate": {
         "properties": {
           "policy": {
@@ -5614,18 +5705,6 @@
               }
             ],
             "title": "Connection Id"
-          },
-          "target_site_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Site Id"
           },
           "latency_ms": {
             "minimum": 0.0,
@@ -5740,6 +5819,18 @@
             ],
             "title": "Target Label"
           },
+          "target_site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Site Id"
+          },
           "throughput_mbps": {
             "minimum": 0.0,
             "title": "Throughput Mbps",
@@ -5756,6 +5847,218 @@
         "title": "LinkProbeCreate",
         "type": "object"
       },
+      "LinkReflectorProfileResponse": {
+        "properties": {
+          "allowed_edge_site_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Allowed Edge Site Ids",
+            "type": "array"
+          },
+          "allowed_source_cidrs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Source Cidrs",
+            "type": "array"
+          },
+          "bind_address": {
+            "title": "Bind Address",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_status": {
+            "title": "Last Status",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "profile_kind": {
+            "title": "Profile Kind",
+            "type": "string"
+          },
+          "public_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Address"
+          },
+          "rate_limit_pps_per_source": {
+            "title": "Rate Limit Pps Per Source",
+            "type": "integer"
+          },
+          "secret_state": {
+            "enum": [
+              "missing",
+              "present"
+            ],
+            "title": "Secret State",
+            "type": "string"
+          },
+          "site_id": {
+            "format": "uuid",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "udp_port": {
+            "title": "Udp Port",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "site_id",
+          "profile_kind",
+          "enabled",
+          "mode",
+          "public_address",
+          "bind_address",
+          "udp_port",
+          "key_id",
+          "allowed_edge_site_ids",
+          "allowed_source_cidrs",
+          "rate_limit_pps_per_source",
+          "last_status",
+          "last_error",
+          "secret_state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LinkReflectorProfileResponse",
+        "type": "object"
+      },
+      "LinkReflectorProfileUpdate": {
+        "properties": {
+          "allowed_edge_site_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Edge Site Ids"
+          },
+          "allowed_source_cidrs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Source Cidrs"
+          },
+          "bind_address": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bind Address"
+          },
+          "public_address": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Address"
+          },
+          "rate_limit_pps_per_source": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Pps Per Source"
+          },
+          "udp_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Udp Port"
+          }
+        },
+        "title": "LinkReflectorProfileUpdate",
+        "type": "object"
+      },
       "LinkSiteSummaryResponse": {
         "properties": {
           "active_connection": {
@@ -5770,13 +6073,6 @@
             ],
             "title": "Active Connection"
           },
-          "capabilities": {
-            "additionalProperties": {
-              "type": "boolean"
-            },
-            "title": "Capabilities",
-            "type": "object"
-          },
           "budget": {
             "anyOf": [
               {
@@ -5788,6 +6084,13 @@
               }
             ],
             "title": "Budget"
+          },
+          "capabilities": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Capabilities",
+            "type": "object"
           },
           "connection_count": {
             "title": "Connection Count",
@@ -5849,10 +6152,6 @@
             "title": "Site Name",
             "type": "string"
           },
-          "site_tz": {
-            "title": "Site Tz",
-            "type": "string"
-          },
           "site_role": {
             "default": "edge",
             "enum": [
@@ -5860,6 +6159,10 @@
               "control_plane"
             ],
             "title": "Site Role",
+            "type": "string"
+          },
+          "site_tz": {
+            "title": "Site Tz",
             "type": "string"
           }
         },
@@ -10912,6 +11215,15 @@
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "site_kind": {
+            "default": "edge",
+            "enum": [
+              "edge",
+              "control_plane"
+            ],
+            "title": "Site Kind",
             "type": "string"
           },
           "tenant_id": {
@@ -19637,6 +19949,269 @@
         ]
       }
     },
+    "/api/v1/link/reflectors/master": {
+      "get": {
+        "operationId": "get_master_reflector_profile_api_v1_link_reflectors_master_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkReflectorProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Master Reflector Profile",
+        "tags": [
+          "link"
+        ]
+      },
+      "put": {
+        "operationId": "put_master_reflector_profile_api_v1_link_reflectors_master_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkReflectorProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkReflectorProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Master Reflector Profile",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/reflectors/master/disable": {
+      "post": {
+        "operationId": "disable_master_reflector_profile_api_v1_link_reflectors_master_disable_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkReflectorProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disable Master Reflector Profile",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/reflectors/master/enable": {
+      "post": {
+        "operationId": "enable_master_reflector_profile_api_v1_link_reflectors_master_enable_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkReflectorProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkReflectorProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Master Reflector Profile",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/reflectors/master/rotate-key": {
+      "post": {
+        "operationId": "rotate_master_reflector_key_api_v1_link_reflectors_master_rotate_key_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkReflectorProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Master Reflector Key",
+        "tags": [
+          "link"
+        ]
+      }
+    },
     "/api/v1/link/sites/summary": {
       "get": {
         "operationId": "get_link_site_summaries_api_v1_link_sites_summary_get",
@@ -20191,6 +20766,77 @@
           }
         },
         "summary": "Patch Link Connection",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/sites/{site_id}/control-targets/master": {
+      "post": {
+        "operationId": "post_master_control_target_api_v1_link_sites__site_id__control_targets_master_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkMasterControlTargetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Master Control Target Api V1 Link Sites  Site Id  Control Targets Master Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Master Control Target",
         "tags": [
           "link"
         ]

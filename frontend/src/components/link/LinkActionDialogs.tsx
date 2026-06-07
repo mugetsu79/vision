@@ -52,7 +52,14 @@ type MonitoringTargetFormState = {
   monitoringIntervalSeconds: string;
   lossMethod: LinkProbeLossMethod;
   lossPacketCount: string;
+  lossPacketSpacingMs: string;
+  lossTimeoutMs: string;
   lossDscp: string;
+  reflectorProfileId: string;
+  reflectorAddress: string;
+  reflectorPort: string;
+  reflectorMode: string;
+  reflectorKeyId: string;
   throughputTestUrl: string;
   throughputTestMaxBytes: string;
 };
@@ -132,12 +139,19 @@ function defaultTargetForm(): MonitoringTargetFormState {
     lossDscp: "",
     lossMethod: "icmp_sequence",
     lossPacketCount: "20",
+    lossPacketSpacingMs: "100",
+    lossTimeoutMs: "1000",
     monitoringEnabled: false,
     monitoringIntervalSeconds: "300",
     monitoringSourceType: "manual",
     port: "443",
     probeType: "https",
     purpose: "vezor_control",
+    reflectorAddress: "",
+    reflectorKeyId: "",
+    reflectorMode: "reply",
+    reflectorPort: "8622",
+    reflectorProfileId: "master-reflector-default",
     targetSiteId: "",
     throughputTestMaxBytes: "1048576",
     throughputTestUrl: "",
@@ -195,11 +209,24 @@ export function LinkConnectionDialog({
         lossDscp: optionalNumberText(target.loss_dscp),
         lossMethod: lossMethodValue(target.loss_method),
         lossPacketCount: optionalNumberText(target.loss_packet_count, "20"),
+        lossPacketSpacingMs: optionalNumberText(
+          target.loss_packet_spacing_ms,
+          "100",
+        ),
+        lossTimeoutMs: optionalNumberText(target.loss_timeout_ms, "1000"),
         monitoringEnabled: target.monitoring.enabled,
         monitoringSourceType: target.monitoring.source_type,
         monitoringIntervalSeconds: optionalNumberText(
           target.monitoring.interval_seconds,
           "300",
+        ),
+        reflectorAddress: textValue(target.reflector_address, ""),
+        reflectorKeyId: textValue(target.reflector_key_id, ""),
+        reflectorMode: textValue(target.reflector_mode, "reply"),
+        reflectorPort: optionalNumberText(target.reflector_port, "8622"),
+        reflectorProfileId: textValue(
+          target.reflector_profile_id,
+          "master-reflector-default",
         ),
         throughputTestMaxBytes: optionalNumberText(
           target.throughput_test_max_bytes,
@@ -269,11 +296,19 @@ export function LinkConnectionDialog({
           ...target,
           label: targetSite.site_name,
           lossMethod: "udp_sequence",
+          lossPacketCount: "50",
+          lossPacketSpacingMs: "100",
+          lossTimeoutMs: "1000",
           monitoringEnabled: true,
           monitoringSourceType: "edge_agent",
           port: "",
           probeType: "udp",
           purpose: "vezor_control",
+          reflectorAddress: target.address,
+          reflectorKeyId: "master-reflector-default",
+          reflectorMode: "reply",
+          reflectorPort: "8622",
+          reflectorProfileId: "master-reflector-default",
           targetSiteId: targetSite.site_id,
         };
       }),
@@ -641,6 +676,75 @@ export function LinkConnectionDialog({
                       value={target.lossDscp}
                       onChange={(value) => updateTargetField(index, "lossDscp", value)}
                     />
+                    {target.lossMethod === "udp_sequence" ? (
+                      <>
+                        <LabeledInput
+                          label="Packet spacing ms"
+                          type="number"
+                          min="1"
+                          value={target.lossPacketSpacingMs}
+                          onChange={(value) =>
+                            updateTargetField(
+                              index,
+                              "lossPacketSpacingMs",
+                              value,
+                            )
+                          }
+                        />
+                        <LabeledInput
+                          label="Reply timeout ms"
+                          type="number"
+                          min="1"
+                          value={target.lossTimeoutMs}
+                          onChange={(value) =>
+                            updateTargetField(index, "lossTimeoutMs", value)
+                          }
+                        />
+                        <LabeledInput
+                          label="Reflector address"
+                          value={target.reflectorAddress}
+                          onChange={(value) =>
+                            updateTargetField(index, "reflectorAddress", value)
+                          }
+                          placeholder="master.vezor.example"
+                        />
+                        <LabeledInput
+                          label="Reflector UDP port"
+                          type="number"
+                          min="1"
+                          max="65535"
+                          value={target.reflectorPort}
+                          onChange={(value) =>
+                            updateTargetField(index, "reflectorPort", value)
+                          }
+                        />
+                        <LabeledSelect
+                          label="Reflector mode"
+                          value={target.reflectorMode}
+                          onChange={(value) =>
+                            updateTargetField(index, "reflectorMode", value)
+                          }
+                        >
+                          <option value="reply">Reply to edge agent</option>
+                        </LabeledSelect>
+                        <LabeledInput
+                          label="Reflector key ID"
+                          value={target.reflectorKeyId}
+                          onChange={(value) =>
+                            updateTargetField(index, "reflectorKeyId", value)
+                          }
+                          placeholder="master-reflector-default"
+                        />
+                        <LabeledInput
+                          label="Reflector profile ID"
+                          value={target.reflectorProfileId}
+                          onChange={(value) =>
+                            updateTargetField(index, "reflectorProfileId", value)
+                          }
+                          placeholder="master-reflector-default"
+                        />
+                      </>
+                    ) : null}
                   </>
                 ) : null}
                 <div className="sm:col-span-2">
@@ -938,6 +1042,8 @@ function buildConnectionMetadata(form: ConnectionFormState): LinkPathMetadata {
       loss_dscp: optionalNumber(target.lossDscp),
       loss_method: target.lossMethod,
       loss_packet_count: optionalNumber(target.lossPacketCount),
+      loss_packet_spacing_ms: optionalNumber(target.lossPacketSpacingMs),
+      loss_timeout_ms: optionalNumber(target.lossTimeoutMs),
       monitoring: {
         enabled: target.monitoringEnabled,
         interval_seconds: optionalNumber(target.monitoringIntervalSeconds),
@@ -946,6 +1052,13 @@ function buildConnectionMetadata(form: ConnectionFormState): LinkPathMetadata {
       port: optionalNumber(target.port),
       probe_type: target.probeType,
       purpose: target.purpose,
+      reflector_address:
+        nullableText(target.reflectorAddress) ??
+        (target.lossMethod === "udp_sequence" ? nullableText(target.address) : null),
+      reflector_key_id: nullableText(target.reflectorKeyId),
+      reflector_mode: nullableText(target.reflectorMode),
+      reflector_port: optionalNumber(target.reflectorPort),
+      reflector_profile_id: nullableText(target.reflectorProfileId),
       target_site_id: nullableText(target.targetSiteId),
       throughput_test_max_bytes: optionalNumber(target.throughputTestMaxBytes),
       throughput_test_url: nullableText(target.throughputTestUrl),

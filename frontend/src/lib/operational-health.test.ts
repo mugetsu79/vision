@@ -180,6 +180,7 @@ const sites: Site[] = [
     name: "Zurich Lab",
     description: null,
     tz: "Europe/Zurich",
+    site_kind: "edge",
     geo_point: null,
     created_at: "2026-05-09T07:00:00Z",
   },

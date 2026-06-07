@@ -1111,6 +1111,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/link/reflectors/master": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Master Reflector Profile */
+        get: operations["get_master_reflector_profile_api_v1_link_reflectors_master_get"];
+        /** Put Master Reflector Profile */
+        put: operations["put_master_reflector_profile_api_v1_link_reflectors_master_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/reflectors/master/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable Master Reflector Profile */
+        post: operations["disable_master_reflector_profile_api_v1_link_reflectors_master_disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/reflectors/master/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable Master Reflector Profile */
+        post: operations["enable_master_reflector_profile_api_v1_link_reflectors_master_enable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/reflectors/master/rotate-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Master Reflector Key */
+        post: operations["rotate_master_reflector_key_api_v1_link_reflectors_master_rotate_key_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/link/sites/summary": {
         parameters: {
             query?: never;
@@ -1197,6 +1266,23 @@ export interface paths {
         head?: never;
         /** Patch Link Connection */
         patch: operations["patch_link_connection_api_v1_link_sites__site_id__connections__connection_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/control-targets/master": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Master Control Target */
+        post: operations["post_master_control_target_api_v1_link_sites__site_id__control_targets_master_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/link/sites/{site_id}/policies": {
@@ -4438,6 +4524,10 @@ export interface components {
             latency_ms: number;
             /** Measured At */
             measured_at?: string | null;
+            /** Measurement Metadata */
+            measurement_metadata?: {
+                [key: string]: unknown;
+            };
             /**
              * Method
              * @default icmp_sequence
@@ -4448,6 +4538,45 @@ export interface components {
             packet_count: number;
             /** Packets Received */
             packets_received: number;
+        };
+        /** LinkMasterControlTargetCreate */
+        LinkMasterControlTargetCreate: {
+            /** Address */
+            address?: string | null;
+            /** Connection Id */
+            connection_id?: string | null;
+            /**
+             * Connection Label
+             * @default Vezor control
+             */
+            connection_label: string;
+            /** Dscp */
+            dscp?: number | null;
+            /**
+             * Interval Seconds
+             * @default 300
+             */
+            interval_seconds: number;
+            /**
+             * Loss Timeout Ms
+             * @default 1000
+             */
+            loss_timeout_ms: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "https_only" | "udp_reflector" | "https_and_udp_reflector";
+            /**
+             * Packet Count
+             * @default 50
+             */
+            packet_count: number;
+            /**
+             * Packet Spacing Ms
+             * @default 100
+             */
+            packet_spacing_ms: number;
         };
         /** LinkPolicyUpdate */
         LinkPolicyUpdate: {
@@ -4460,11 +4589,6 @@ export interface components {
         LinkProbeCreate: {
             /** Connection Id */
             connection_id?: string | null;
-            /**
-             * Target Site Id
-             * Format: uuid
-             */
-            target_site_id?: string | null;
             /** Latency Ms */
             latency_ms: number;
             /** Measurement Metadata */
@@ -4499,8 +4623,82 @@ export interface components {
             target_id?: string | null;
             /** Target Label */
             target_label?: string | null;
+            /** Target Site Id */
+            target_site_id?: string | null;
             /** Throughput Mbps */
             throughput_mbps: number;
+        };
+        /** LinkReflectorProfileResponse */
+        LinkReflectorProfileResponse: {
+            /** Allowed Edge Site Ids */
+            allowed_edge_site_ids: string[];
+            /** Allowed Source Cidrs */
+            allowed_source_cidrs: string[];
+            /** Bind Address */
+            bind_address: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key Id */
+            key_id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Status */
+            last_status: string;
+            /** Mode */
+            mode: string;
+            /** Profile Kind */
+            profile_kind: string;
+            /** Public Address */
+            public_address: string | null;
+            /** Rate Limit Pps Per Source */
+            rate_limit_pps_per_source: number;
+            /**
+             * Secret State
+             * @enum {string}
+             */
+            secret_state: "missing" | "present";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Udp Port */
+            udp_port: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** LinkReflectorProfileUpdate */
+        LinkReflectorProfileUpdate: {
+            /** Allowed Edge Site Ids */
+            allowed_edge_site_ids?: string[] | null;
+            /** Allowed Source Cidrs */
+            allowed_source_cidrs?: string[] | null;
+            /** Bind Address */
+            bind_address?: string | null;
+            /** Public Address */
+            public_address?: string | null;
+            /** Rate Limit Pps Per Source */
+            rate_limit_pps_per_source?: number | null;
+            /** Udp Port */
+            udp_port?: number | null;
         };
         /** LinkSiteSummaryResponse */
         LinkSiteSummaryResponse: {
@@ -4508,14 +4706,14 @@ export interface components {
             active_connection?: {
                 [key: string]: unknown;
             } | null;
-            /** Capabilities */
-            capabilities?: {
-                [key: string]: boolean;
-            };
             /** Budget */
             budget?: {
                 [key: string]: unknown;
             } | null;
+            /** Capabilities */
+            capabilities?: {
+                [key: string]: boolean;
+            };
             /** Connection Count */
             connection_count: number;
             /** Last Sync At */
@@ -4543,14 +4741,14 @@ export interface components {
             site_id: string;
             /** Site Name */
             site_name: string;
-            /** Site Tz */
-            site_tz: string;
             /**
              * Site Role
              * @default edge
              * @enum {string}
              */
-            site_role?: "edge" | "control_plane";
+            site_role: "edge" | "control_plane";
+            /** Site Tz */
+            site_tz: string;
         };
         /** MaritimeVesselLinkStatusResponse */
         MaritimeVesselLinkStatusResponse: {
@@ -6299,6 +6497,12 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Site Kind
+             * @default edge
+             * @enum {string}
+             */
+            site_kind: "edge" | "control_plane";
             /**
              * Tenant Id
              * Format: uuid
@@ -10278,6 +10482,169 @@ export interface operations {
             };
         };
     };
+    get_master_reflector_profile_api_v1_link_reflectors_master_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkReflectorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_master_reflector_profile_api_v1_link_reflectors_master_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkReflectorProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkReflectorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_master_reflector_profile_api_v1_link_reflectors_master_disable_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkReflectorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_master_reflector_profile_api_v1_link_reflectors_master_enable_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkReflectorProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkReflectorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_master_reflector_key_api_v1_link_reflectors_master_rotate_key_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkReflectorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_link_site_summaries_api_v1_link_sites_summary_get: {
         parameters: {
             query?: never;
@@ -10547,6 +10914,45 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_master_control_target_api_v1_link_sites__site_id__control_targets_master_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkMasterControlTargetCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

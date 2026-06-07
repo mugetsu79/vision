@@ -11,6 +11,34 @@ export type LinkBudgetUpdateInput = components["schemas"]["LinkBudgetUpdate"];
 export type LinkPolicyUpdateInput = components["schemas"]["LinkPolicyUpdate"];
 export type LinkProbeCreateInput = components["schemas"]["LinkProbeCreate"];
 export type LinkSiteSummary = components["schemas"]["LinkSiteSummaryResponse"];
+export type LinkReflectorProfile = {
+  id?: string;
+  tenant_id?: string;
+  site_id?: string;
+  profile_kind?: string;
+  enabled: boolean;
+  mode?: string;
+  public_address?: string | null;
+  bind_address?: string | null;
+  udp_port: number;
+  key_id?: string;
+  allowed_edge_site_ids?: string[];
+  allowed_source_cidrs?: string[];
+  rate_limit_pps_per_source?: number;
+  last_status?: string;
+  last_error?: string | null;
+  secret_state?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+export type LinkReflectorProfileUpdateInput = {
+  public_address?: string | null;
+  bind_address?: string | null;
+  udp_port?: number | null;
+  allowed_edge_site_ids?: string[] | null;
+  allowed_source_cidrs?: string[] | null;
+  rate_limit_pps_per_source?: number | null;
+};
 
 type LinkMutationContext = {
   siteId?: string | null;
@@ -27,6 +55,73 @@ export function useLinkSiteSummaries() {
       }
       return data ?? [];
     },
+  });
+}
+
+export function useMasterLinkReflectorProfile() {
+  return useQuery<LinkReflectorProfile | null>({
+    queryKey: ["link", "reflectors", "master"],
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        "/api/v1/link/reflectors/master",
+      );
+      if (error) {
+        throw toApiError(error, "Failed to load master reflector profile.");
+      }
+      return (data as LinkReflectorProfile | null) ?? null;
+    },
+  });
+}
+
+export function useEnableMasterLinkReflector() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: LinkReflectorProfileUpdateInput) => {
+      const { data, error } = await apiClient.POST(
+        "/api/v1/link/reflectors/master/enable",
+        { body: payload },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to enable master reflector.");
+      }
+      return (data as LinkReflectorProfile | null) ?? null;
+    },
+    onSuccess: async () => invalidateMasterReflectorQueries(queryClient),
+  });
+}
+
+export function useDisableMasterLinkReflector() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.POST(
+        "/api/v1/link/reflectors/master/disable",
+      );
+      if (error) {
+        throw toApiError(error, "Failed to disable master reflector.");
+      }
+      return (data as LinkReflectorProfile | null) ?? null;
+    },
+    onSuccess: async () => invalidateMasterReflectorQueries(queryClient),
+  });
+}
+
+export function useRotateMasterLinkReflectorKey() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.POST(
+        "/api/v1/link/reflectors/master/rotate-key",
+      );
+      if (error) {
+        throw toApiError(error, "Failed to rotate master reflector key.");
+      }
+      return (data as LinkReflectorProfile | null) ?? null;
+    },
+    onSuccess: async () => invalidateMasterReflectorQueries(queryClient),
   });
 }
 
@@ -459,4 +554,15 @@ async function invalidateLinkSiteQueries(
       queryKey: ["maritime", "vessels", vesselId, "link-status"],
     });
   }
+}
+
+async function invalidateMasterReflectorQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  await queryClient.invalidateQueries({
+    queryKey: ["link", "reflectors", "master"],
+  });
+  await queryClient.invalidateQueries({
+    queryKey: ["link", "sites", "summary"],
+  });
 }

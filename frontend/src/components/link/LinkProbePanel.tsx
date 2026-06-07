@@ -141,10 +141,7 @@ export function LinkProbePanel({
               </p>
               {target.monitoring.source_type === "edge_agent" ? (
                 <p className="mt-1 text-sm text-[var(--vz-text-secondary)]">
-                  {probeLossMethodLabel(target.loss_method)}
-                  {target.loss_packet_count
-                    ? ` / ${target.loss_packet_count} packets`
-                    : ""}
+                  {edgeAgentTargetSummary(target)}
                 </p>
               ) : null}
             </div>
@@ -228,6 +225,31 @@ function monitoringTargetOptions(connections: unknown[]): ProbeTargetOption[] {
     });
   });
   return targets;
+}
+
+function edgeAgentTargetSummary(target: ProbeTargetOption) {
+  const parts = [probeLossMethodLabel(target.loss_method)];
+  if (target.loss_method === "udp_sequence") {
+    const reflectorAddress = target.reflector_address ?? target.address;
+    const reflectorPort = target.reflector_port ?? target.port;
+    if (reflectorAddress) {
+      parts[0] = `UDP sequence via ${reflectorAddress}${
+        reflectorPort ? `:${reflectorPort}` : ""
+      }`;
+    }
+  }
+  if (target.loss_packet_count) {
+    parts.push(`${target.loss_packet_count} packets`);
+  }
+  if (target.loss_method === "udp_sequence") {
+    if (target.loss_packet_spacing_ms) {
+      parts.push(`spacing ${target.loss_packet_spacing_ms} ms`);
+    }
+    if (target.loss_timeout_ms) {
+      parts.push(`timeout ${target.loss_timeout_ms} ms`);
+    }
+  }
+  return parts.join(" / ");
 }
 
 function canRunBackendSynthetic(target: ProbeTargetOption) {

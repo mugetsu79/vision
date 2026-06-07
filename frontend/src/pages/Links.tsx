@@ -25,6 +25,10 @@ import {
   useLinkSiteQueue,
   useLinkSiteStatus,
   useLinkSiteSummaries,
+  useMasterLinkReflectorProfile,
+  useDisableMasterLinkReflector,
+  useEnableMasterLinkReflector,
+  useRotateMasterLinkReflectorKey,
 } from "@/hooks/use-link";
 
 export function Links() {
@@ -52,6 +56,10 @@ export function Links() {
   const policies = useLinkPolicies(selectedEdgeSiteId);
   const probes = useLinkProbes(selectedSiteId);
   const queue = useLinkSiteQueue(selectedEdgeSiteId);
+  const reflectorProfile = useMasterLinkReflectorProfile();
+  const enableReflector = useEnableMasterLinkReflector();
+  const disableReflector = useDisableMasterLinkReflector();
+  const rotateReflectorKey = useRotateMasterLinkReflectorKey();
   const connectionItems = connections.data ?? [];
   const statusBudget = asRecord(status.data).budget ?? null;
 
@@ -85,9 +93,22 @@ export function Links() {
           summary={selectedSummary}
           status={status.data}
           probes={probes.data ?? []}
+          reflectorProfile={reflectorProfile.data}
+          reflectorIsLoading={reflectorProfile.isLoading}
+          reflectorError={reflectorProfile.error}
+          reflectorActionPending={
+            enableReflector.isPending ||
+            disableReflector.isPending ||
+            rotateReflectorKey.isPending
+          }
           isLoading={status.isLoading}
           error={status.error}
           onClearSelection={clearSite}
+          onEnableReflector={(payload) =>
+            enableReflector.mutateAsync(payload)
+          }
+          onDisableReflector={() => disableReflector.mutateAsync()}
+          onRotateReflectorKey={() => rotateReflectorKey.mutateAsync()}
         />
       ) : selectedSummary ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
