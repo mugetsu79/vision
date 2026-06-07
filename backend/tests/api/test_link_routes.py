@@ -284,6 +284,52 @@ async def test_delete_link_probe_hides_sample(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_link_probe_target_records_backend_synthetic_sample(client: AsyncClient) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "ISP",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+            "metadata": {
+                "monitoring_targets": [
+                    {
+                        "id": "target-gateway",
+                        "label": "Gateway",
+                        "address": "203.0.113.10",
+                        "probe_type": "icmp",
+                        "purpose": "gateway",
+                        "monitoring": {
+                            "enabled": True,
+                            "source_type": "backend_synthetic",
+                            "interval_seconds": 300,
+                        },
+                    }
+                ]
+            },
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-gateway/run",
+    )
+
+    assert created.status_code == 201
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["target_id"] == "target-gateway"
+    assert payload["target_label"] == "Gateway"
+    assert payload["target_address"] == "203.0.113.10"
+    assert payload["probe_type"] == "icmp"
+    assert payload["source_type"] == "backend_synthetic"
+    assert payload["sample_kind"] == "automated"
+    assert payload["reachable"] is False
+
+
+@pytest.mark.asyncio
 async def test_link_connection_patch_rejects_null_required_fields(
     client: AsyncClient,
 ) -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -26,6 +26,7 @@ from argus.link.contracts import (
     LinkSiteSummaryRecord,
     LinkTransportKind,
 )
+from argus.link.probe_runner import ProbeTarget, run_backend_probe
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
 
@@ -415,6 +416,45 @@ async def delete_link_probe(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post(
+    "/sites/{site_id}/probe-targets/{target_id}/run",
+    status_code=status.HTTP_201_CREATED,
+)
+async def run_link_probe_target(
+    site_id: UUID,
+    target_id: str,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> JsonObject:
+    await _ensure_tenant_site(services, tenant_context, site_id)
+    target = await services.link.atarget_for_connection_metadata(
+        tenant_id=tenant_context.tenant_id,
+        site_id=site_id,
+        target_id=target_id,
+    )
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
+    result = await run_backend_probe(_probe_target_from_metadata(target))
+    probe = await services.link.arecord_probe(
+        tenant_id=tenant_context.tenant_id,
+        site_id=site_id,
+        latency_ms=result.latency_ms,
+        throughput_mbps=result.throughput_mbps,
+        packet_loss_percent=result.packet_loss_percent,
+        reachable=result.reachable,
+        source=result.source,
+        target_id=result.target_id,
+        target_label=result.target_label,
+        target_address=result.target_address,
+        probe_type=result.probe_type,
+        source_type=result.source_type,
+        source_label=result.source_label,
+        sample_kind=result.sample_kind,
+    )
+    return _probe_payload(probe)
+
+
 @router.get("/sites/{site_id}/policies")
 async def get_link_policies(
     site_id: UUID,
@@ -651,3 +691,28 @@ def _probe_payload(probe: LinkHealthProbeRecord) -> JsonObject:
         "sample_kind": probe.sample_kind,
         "deleted_at": probe.deleted_at.isoformat() if probe.deleted_at is not None else None,
     }
+
+
+def _probe_target_from_metadata(target: JsonObject) -> ProbeTarget:
+    probe_type = target.get("probe_type")
+    if probe_type not in {"icmp", "tcp", "http", "https"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported probe target type.",
+        )
+    target_id = target.get("id")
+    label = target.get("label")
+    address = target.get("address")
+    if not isinstance(target_id, str) or not isinstance(label, str) or not isinstance(address, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Probe target is missing required fields.",
+        )
+    port_value = target.get("port")
+    return ProbeTarget(
+        target_id=target_id,
+        label=label,
+        address=address,
+        probe_type=cast(LinkProbeType, probe_type),
+        port=port_value if isinstance(port_value, int) else None,
+    )

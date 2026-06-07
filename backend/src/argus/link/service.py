@@ -362,6 +362,39 @@ class LinkService:
             rows = cast(list[LinkConnection], result.scalars().all())
         return _sort_connections([_connection_record(row) for row in rows])
 
+    def target_for_connection_metadata(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        target_id: str,
+    ) -> JsonObject | None:
+        self._ensure_memory_mode()
+        for connection in self.list_connections(tenant_id=tenant_id, site_id=site_id):
+            for target in _metadata_targets(connection.metadata):
+                if target.get("id") == target_id:
+                    return target
+        return None
+
+    async def atarget_for_connection_metadata(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        target_id: str,
+    ) -> JsonObject | None:
+        if self.session_factory is None:
+            return self.target_for_connection_metadata(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                target_id=target_id,
+            )
+        for connection in await self.alist_connections(tenant_id=tenant_id, site_id=site_id):
+            for target in _metadata_targets(connection.metadata):
+                if target.get("id") == target_id:
+                    return target
+        return None
+
     def get_connection(
         self,
         *,
@@ -1709,6 +1742,13 @@ def _connection_record(connection: LinkConnection) -> LinkConnectionRecord:
         created_at=connection.created_at,
         updated_at=connection.updated_at,
     )
+
+
+def _metadata_targets(metadata: Mapping[str, object]) -> list[JsonObject]:
+    targets = metadata.get("monitoring_targets")
+    if not isinstance(targets, list):
+        return []
+    return [dict(target) for target in targets if isinstance(target, Mapping)]
 
 
 def _queue_item_record(item: LinkQueueItem) -> LinkQueueItemRecord:
