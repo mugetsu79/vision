@@ -1,5 +1,13 @@
 # Claude Code Handoff
 
+> Current active handoff for this repo is now
+> `docs/superpowers/status/2026-06-07-next-chat-core-link-reflector-completion-handoff.md`
+> on branch `codex/sceneops-pack-registry`.
+>
+> The older streaming notes below are retained as historical context only.
+> Follow the current handoff and `docs/core-link-performance-guide.md` for
+> Core Link/FleetOps work.
+
 Last updated: 2026-04-23, Europe/Zurich.
 
 ## Repo State

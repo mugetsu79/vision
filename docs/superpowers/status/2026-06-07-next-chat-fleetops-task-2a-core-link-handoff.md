@@ -1,5 +1,11 @@
 # FleetOps Task 2A And Core Link Workspace Next-Chat Handoff
 
+> Superseded by
+> `docs/superpowers/status/2026-06-07-next-chat-core-link-reflector-completion-handoff.md`.
+> This file is retained as the historical handoff from before FleetOps Task 2A,
+> the Core Link workspace, edge-agent probes, and master reflector work were
+> implemented.
+
 Date: 2026-06-07
 Current branch: `codex/sceneops-pack-registry`
 Implementation base before this handoff doc: `87872f70`
@@ -56,10 +62,13 @@ Latest pushed commits before this handoff:
 0dc36660 feat: focus scene-heavy operator views
 ```
 
-Task 2A has been specified and planned but not implemented.
+At the time of this historical handoff, Task 2A was still pending. It is now
+implemented on `codex/sceneops-pack-registry` through commits including
+`8aa3ea50` and `0cbc39ab`.
 
-The Core Link Performance Workspace has been specified and planned but not
-implemented.
+At the time of this historical handoff, the Core Link Performance Workspace had
+not landed yet. It is now implemented through commit `fca544f1` and extended by
+the edge-agent/master-reflector work.
 
 The working tree currently has unrelated untracked files and directories,
 including `.claude/`, `.codex/`, `.playwright-mcp/`, `.superpowers/`, `.vite/`,

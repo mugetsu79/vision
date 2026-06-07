@@ -12,7 +12,7 @@ Vezor separates **native ingest for analytics** from **browser delivery for oper
 
 The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, and support bundles. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
 
-The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, and the Evidence Desk incident review queue. The installer-managed path now includes local macOS master, Linux master, and Jetson edge package artifacts plus first-run bootstrap. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, and deferred Task 24 DeepStream work are still outside the portable demo path.
+The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, Link Performance, FleetOps, and the Evidence Desk incident review queue. The installer-managed path now includes local macOS master, Linux master, and Jetson edge package artifacts plus first-run bootstrap. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, edge-agent packaging/pairing, and deferred Task 24 DeepStream work are still outside the portable demo path.
 
 ## What’s In This Repo
 
@@ -150,6 +150,7 @@ Start here if you are new to the repo:
 - [docs/runbook.md](/Users/yann.moren/vision/docs/runbook.md): operations starting point
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance
+- [docs/core-link-performance-guide.md](/Users/yann.moren/vision/docs/core-link-performance-guide.md): current Link Performance, link path, monitoring target, edge-agent, and master reflector guide
 - [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md): canonical installer-managed setup guide for MacBook Pro/Linux master, Jetson edge, models, first-run, pairing, validation, and operations
 - [docs/live-video-troubleshooting.md](/Users/yann.moren/vision/docs/live-video-troubleshooting.md): short recovery guide for blank Live video, stuck renditions, worker restart checks, and Jetson edge stream validation
 - [docs/macbook-jetson-cross-network-reinstall-guide.md](/Users/yann.moren/vision/docs/macbook-jetson-cross-network-reinstall-guide.md): short reinstall guide for a MacBook master and Jetson edge when they are reachable through different networks, VPNs, or forwarded addresses
@@ -254,9 +255,11 @@ The repo already includes:
 - shared telemetry WebSocket state that survives route changes and keeps the live wall warm across short navigation hops
 - metric-aware history and incidents, including URL-backed history filters, class discovery, optional speed telemetry, CSV/Parquet export, and a clear split between `occupancy`, `count_events`, and raw `observations`
 - Evidence Desk incident review at `/incidents`, including pending/reviewed state, review/reopen actions, signed clip access, clip-only evidence handling, and review audit entries
+- Core Link Performance at `/links`, including searchable generic site posture, edge-only link path configuration, structured policy fields, monitoring targets, manual samples, backend synthetic checks, edge-agent samples, queue actions, master target-only posture, and optional authenticated UDP sequence master reflector profile controls
 - incident clip storage; snapshot fields exist but current capture primarily stores clips
 - Fleet and Operations workbench at `/settings`, including node summaries, camera worker lifecycle state, delivery diagnostics, edge bootstrap material, and copy/paste-safe local worker commands
 - edge worker support and a production-oriented supervisor lifecycle model
+- source-side Core Link edge-agent probes for ICMP packet trains and authenticated UDP sequence reflector measurements; STAMP/TWAMP/provider responder modes remain future work
 - model catalog presets, fixed-vocab and open-vocab detector capability contracts, runtime vocabulary persistence, vocabulary snapshot attribution, capability-aware query commands, an experimental Ultralytics-backed open-vocab `.pt` runtime path, validated runtime artifact records, TensorRT `.engine` artifact selection, and compiled per-scene open-vocab artifact registration/selection
 - scene vision profiles with explicit speed enablement, optional homography for speed-off scenes, include/exclusion detection regions, and candidate quality gating before tracking
 - hybrid ingest: processed workers read camera RTSP directly, while MediaMTX remains the distribution/publication layer for passthrough, annotated, and preview renditions

@@ -5,6 +5,7 @@ See also:
 - [deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md)
 - [operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md)
 - [product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md)
+- [core-link-performance-guide.md](/Users/yann.moren/vision/docs/core-link-performance-guide.md)
 - [macbook-jetson-cross-network-reinstall-guide.md](/Users/yann.moren/vision/docs/macbook-jetson-cross-network-reinstall-guide.md)
 - [2026-05-14-product-installer-and-no-console-first-run-design.md](/Users/yann.moren/vision/docs/superpowers/specs/2026-05-14-product-installer-and-no-console-first-run-design.md)
 
@@ -57,6 +58,58 @@ operation is UI intent plus node-local supervisor reconciliation.
 For step-by-step installation, first-run, pairing, reboot validation, support
 bundle, upgrade, and uninstall instructions, use
 `docs/product-installer-and-first-run-guide.md`.
+
+## Core Link Performance Operations
+
+The Link Performance workspace lives at `/links`. Use it for generic site link
+posture, not only FleetOps vessels.
+
+Operational rules:
+
+- Configure link paths only on edge sites. The Vezor master/control-plane site
+  is target-only and aggregates edge-originated samples.
+- Treat a link path as logical inventory: ISP circuit, SD-WAN overlay,
+  satellite path, LTE backup, Wi-Fi, ethernet handoff, or provider-managed
+  transport.
+- Add monitoring targets for real IPs, FQDNs, services, gateways, provider
+  edges, partner endpoints, or the Vezor master reflector.
+- Backend synthetic HTTP/TCP checks measure from the backend network, not from
+  the edge site.
+- Edge-agent checks measure from the real edge vantage point and post summarized
+  samples back to Vezor.
+- Throughput checks are manual operator actions only; do not schedule them at
+  normal monitoring intervals.
+
+Current edge-agent modes:
+
+- `icmp_sequence`: OS ping packet train to an IP or FQDN such as `8.8.8.8`.
+- `udp_sequence`: authenticated Vezor packet sequence to a cooperating UDP
+  reflector. This computes received/lost/late/duplicate/out-of-order counters
+  and RTT statistics. It is not STAMP/TWAMP compliance yet.
+
+Master reflector operations:
+
+1. Set deployment config before backend startup when the master should bind the
+   UDP listener:
+
+   ```env
+   ARGUS_LINK_REFLECTOR_ENABLED=true
+   ARGUS_LINK_REFLECTOR_SECRET=<shared-hmac-secret>
+   ARGUS_LINK_REFLECTOR_PUBLIC_ADDRESS=<edge-reachable-host-or-ip>
+   ARGUS_LINK_REFLECTOR_PORT=8622
+   ```
+
+2. In `/links`, select the Vezor master target site and confirm the reflector
+   profile status, endpoint, key id, secret state, and rate limit.
+3. On an edge site, add a link path and a monitoring target. Use the Vezor
+   Master preset for edge-to-master checks, or custom UDP sequence fields for a
+   third-party/customer reflector.
+4. Run `python -m argus.link.edge_agent` from the edge site with the configured
+   target id and reflector secret.
+
+Open gaps: dynamic runtime/profile reconciliation, edge-agent service
+packaging, paired edge-agent credentials, polished reflector secret
+distribution, and STAMP/TWAMP/provider responder modes.
 
 Before publishing or field-testing an installer build, run:
 

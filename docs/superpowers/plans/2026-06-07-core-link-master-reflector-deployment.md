@@ -1,6 +1,12 @@
 # Core Link Master Reflector Deployment Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
+
+Status: implemented on `codex/sceneops-pack-registry` through commit
+`3b66ebfa`. Use this plan as historical implementation trace and verification
+evidence, not as pending work. The currently open product gaps are dynamic
+runtime/profile reconciliation, edge-agent service packaging/pairing,
+reflector secret distribution UX, and STAMP/TWAMP/provider responder modes.
 
 **Goal:** Make the Vezor master an optional authenticated UDP sequence reflector for edge-to-master Link Performance monitoring, with operator-controlled enablement during control-link setup.
 
@@ -40,7 +46,7 @@
 - Create: `backend/src/argus/link/udp_sequence.py`
 - Test: `backend/tests/link/test_udp_sequence.py`
 
-- [ ] **Step 1: Write failing codec/statistics tests**
+- [x] **Step 1: Write failing codec/statistics tests**
 
 Add tests that prove:
 
@@ -58,7 +64,7 @@ python3 -m uv run pytest tests/link/test_udp_sequence.py -q
 
 Expected: FAIL because `argus.link.udp_sequence` does not exist.
 
-- [ ] **Step 2: Implement codec and statistics**
+- [x] **Step 2: Implement codec and statistics**
 
 Implement:
 
@@ -72,7 +78,7 @@ Implement:
 
 Use packet magic `VZLP`, protocol version `1`, 16-byte session id, unsigned 64-bit sequence number, sender monotonic timestamp, nonce, and 16-byte truncated HMAC-SHA256.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -85,7 +91,7 @@ python3 -m uv run mypy src/argus/link/udp_sequence.py
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -99,7 +105,7 @@ git commit -m "feat: add link udp sequence codec"
 - Create: `backend/src/argus/link/reflector.py`
 - Test: `backend/tests/link/test_reflector.py`
 
-- [ ] **Step 1: Write failing reflector tests**
+- [x] **Step 1: Write failing reflector tests**
 
 Add async tests that:
 
@@ -118,7 +124,7 @@ python3 -m uv run pytest tests/link/test_reflector.py -q
 
 Expected: FAIL because `argus.link.reflector` does not exist.
 
-- [ ] **Step 2: Implement reflector lifecycle**
+- [x] **Step 2: Implement reflector lifecycle**
 
 Implement:
 
@@ -130,7 +136,7 @@ Implement:
 
 The reflector must drop bad auth, keep reply size no larger than request size, and maintain per-source counters for packet/rate-limit telemetry.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -143,7 +149,7 @@ python3 -m uv run mypy src/argus/link/reflector.py
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -161,7 +167,7 @@ git commit -m "feat: add link udp reflector"
 - Modify: `backend/src/argus/link/service.py`
 - Test: `backend/tests/link/test_link_service.py`
 
-- [ ] **Step 1: Write failing persistence tests**
+- [x] **Step 1: Write failing persistence tests**
 
 Add tests for:
 
@@ -180,7 +186,7 @@ python3 -m uv run pytest tests/link/test_link_service.py::test_master_reflector_
 
 Expected: FAIL because profile persistence does not exist.
 
-- [ ] **Step 2: Implement model and service methods**
+- [x] **Step 2: Implement model and service methods**
 
 Add `LinkReflectorProfile` with:
 
@@ -213,7 +219,7 @@ Add service methods:
 
 Encrypt secrets with the existing config encryption key path used by configuration-sensitive data. If no helper exists, create a focused helper in `reflector_profiles.py` and test round trip.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -226,7 +232,7 @@ python3 -m uv run mypy src/argus/link
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -240,7 +246,7 @@ git commit -m "feat: persist master link reflector profile"
 - Modify: `backend/src/argus/link/api.py`
 - Test: `backend/tests/api/test_link_routes.py`
 
-- [ ] **Step 1: Write failing API tests**
+- [x] **Step 1: Write failing API tests**
 
 Add tests that:
 
@@ -261,7 +267,7 @@ python3 -m uv run pytest tests/api/test_link_routes.py::test_master_reflector_pr
 
 Expected: FAIL before the endpoints exist.
 
-- [ ] **Step 2: Implement API models and routes**
+- [x] **Step 2: Implement API models and routes**
 
 Add request/response models for:
 
@@ -274,7 +280,7 @@ Add routes under existing Link router. All mutation routes require admin/operato
 
 The control-target helper writes structured monitoring target metadata and never writes raw JSON strings.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -286,7 +292,7 @@ python3 -m uv run ruff check src/argus/link/api.py tests/api/test_link_routes.py
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -306,7 +312,7 @@ git commit -m "feat: expose master link reflector controls"
 - Test: `backend/tests/test_app_lifecycle.py` or closest existing app lifecycle test file
 - Test: `backend/tests/link/test_reflector.py`
 
-- [ ] **Step 1: Write failing runtime/deployment tests**
+- [x] **Step 1: Write failing runtime/deployment tests**
 
 Add tests that:
 
@@ -325,7 +331,7 @@ python3 -m uv run pytest tests/link/test_reflector.py tests/test_app_lifecycle.p
 
 Expected: FAIL until settings/lifecycle are wired.
 
-- [ ] **Step 2: Implement runtime wiring**
+- [x] **Step 2: Implement runtime wiring**
 
 Add settings:
 
@@ -345,7 +351,7 @@ Update Compose and Helm:
 - expose `${VEZOR_LINK_REFLECTOR_PORT:-8622}:8622/udp` only for the reflector service/profile path;
 - add env passthrough for the settings above.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -358,7 +364,7 @@ python3 -m uv run mypy src/argus/link src/argus/main.py
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -372,7 +378,7 @@ git commit -m "feat: wire master link reflector runtime"
 - Modify: `backend/src/argus/link/edge_agent.py`
 - Test: `backend/tests/link/test_edge_agent.py`
 
-- [ ] **Step 1: Write failing edge-agent tests**
+- [x] **Step 1: Write failing edge-agent tests**
 
 Add tests for:
 
@@ -389,7 +395,7 @@ python3 -m uv run pytest tests/link/test_edge_agent.py -q
 
 Expected: FAIL because only ICMP mode is supported.
 
-- [ ] **Step 2: Implement sender mode**
+- [x] **Step 2: Implement sender mode**
 
 Add:
 
@@ -402,7 +408,7 @@ Add:
 
 Do not run throughput tests automatically from interval monitoring. This task is packet-loss/RTT/jitter only.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -415,7 +421,7 @@ python3 -m uv run mypy src/argus/link
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -432,7 +438,7 @@ git commit -m "feat: add edge agent udp sequence probes"
 - Modify: `frontend/src/components/link/LinkProbePanel.tsx`
 - Modify: `frontend/src/pages/Links.test.tsx`
 
-- [ ] **Step 1: Write failing UI tests**
+- [x] **Step 1: Write failing UI tests**
 
 Add tests that:
 
@@ -452,7 +458,7 @@ corepack pnpm test --run src/pages/Links.test.tsx
 
 Expected: FAIL before UI support exists.
 
-- [ ] **Step 2: Implement UI**
+- [x] **Step 2: Implement UI**
 
 Add:
 
@@ -465,7 +471,7 @@ Add:
 
 Keep policy and target configuration as fields, not raw JSON.
 
-- [ ] **Step 3: Run GREEN**
+- [x] **Step 3: Run GREEN**
 
 Run:
 
@@ -477,7 +483,7 @@ corepack pnpm lint
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -492,7 +498,7 @@ git commit -m "feat: add master reflector control link UI"
 - Modify if changed: `frontend/src/lib/api.generated.ts`
 - Modify: docs only if implementation details changed from this plan
 
-- [ ] **Step 1: Regenerate OpenAPI**
+- [x] **Step 1: Regenerate OpenAPI**
 
 Run:
 
@@ -501,7 +507,7 @@ cd /Users/yann.moren/vision/backend
 python3 -m uv run python -m argus.scripts.export_openapi_schema ../frontend/src/lib/openapi.json
 ```
 
-- [ ] **Step 2: Regenerate frontend API types**
+- [x] **Step 2: Regenerate frontend API types**
 
 Run:
 
@@ -510,7 +516,7 @@ cd /Users/yann.moren/vision/frontend
 corepack pnpm generate:api
 ```
 
-- [ ] **Step 3: Full scoped verification**
+- [x] **Step 3: Full scoped verification**
 
 Run:
 
@@ -531,7 +537,7 @@ git diff --check
 
 Expected: all pass.
 
-- [ ] **Step 4: Commit generated/schema changes**
+- [x] **Step 4: Commit generated/schema changes**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -542,7 +548,7 @@ git commit -m "docs: plan master link reflector deployment"
 
 If generated files did not change, commit only the docs if they are still uncommitted.
 
-- [ ] **Step 5: Push**
+- [x] **Step 5: Push**
 
 ```bash
 cd /Users/yann.moren/vision

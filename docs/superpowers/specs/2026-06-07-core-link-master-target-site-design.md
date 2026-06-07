@@ -1,5 +1,7 @@
 # Core Link Master Target Site Design
 
+Status: implemented on branch `codex/sceneops-pack-registry`; retained as product trace. The master/control-plane site is target-only, and edge sites own link path and probe configuration.
+
 ## Purpose
 
 Operators need a clear answer to: "Can every edge prove it can reach the Vezor master?" The current edge-only Core Link guard prevents confusing master-side link inventory, but it also hides the master from Link Performance. That makes edge-to-master health feel indirect.

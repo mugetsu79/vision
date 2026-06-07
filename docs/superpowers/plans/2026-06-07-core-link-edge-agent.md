@@ -1,10 +1,12 @@
 # Core Link Edge Agent Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
+
+Status: implemented on branch `codex/sceneops-pack-registry`. The initial ICMP edge-agent path was completed and later extended with the operational Vezor `udp_sequence` sender. STAMP/TWAMP/provider responder modes remain future integrations.
 
 **Goal:** Add a source-side Core Link edge agent path that records packet-loss samples from real site vantage points.
 
-**Architecture:** Extend the existing `LinkHealthProbe` sample model with measurement metadata and a `udp` probe type, add an edge-agent sample ingestion endpoint that computes packet loss from counts, and add a small Python CLI that parses OS ping packet trains and posts samples. The frontend remains an operator control-plane surface: it configures edge-agent targets and renders edge-agent sample details.
+**Architecture:** Extend the existing `LinkHealthProbe` sample model with measurement metadata and a `udp` probe type, add an edge-agent sample ingestion endpoint that computes packet loss from counts, and add a small Python CLI that parses OS ping packet trains or runs authenticated Vezor UDP sequence measurements and posts samples. The frontend remains an operator control-plane surface: it configures edge-agent targets and renders edge-agent sample details.
 
 **Tech Stack:** FastAPI, Pydantic v2, SQLAlchemy/Alembic, Python `argparse`/`subprocess`, `httpx`, React, TypeScript, Vitest, pytest, Ruff, mypy.
 
@@ -33,7 +35,7 @@
 - Create: `backend/src/argus/migrations/versions/0039_core_link_edge_agent.py`
 - Test: `backend/tests/link/test_link_service.py`
 
-- [ ] **Step 1: Write the failing service test**
+- [x] **Step 1: Write the failing service test**
 
 Add:
 
@@ -68,7 +70,7 @@ def test_record_probe_stores_measurement_metadata(link_service: LinkService) -> 
     assert probe.measurement_metadata["packets_lost"] == 1
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -79,7 +81,7 @@ python3 -m uv run pytest tests/link/test_link_service.py::test_record_probe_stor
 
 Expected: FAIL because `record_probe` does not accept `measurement_metadata` and `udp` is not in the contract.
 
-- [ ] **Step 3: Implement service metadata**
+- [x] **Step 3: Implement service metadata**
 
 Make these changes:
 
@@ -129,7 +131,7 @@ def downgrade() -> None:
     op.drop_column("link_health_probes", "measurement_metadata")
 ```
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -146,7 +148,7 @@ Expected: PASS.
 - Modify: `backend/src/argus/link/api.py`
 - Test: `backend/tests/api/test_link_routes.py`
 
-- [ ] **Step 1: Write failing API tests**
+- [x] **Step 1: Write failing API tests**
 
 Add:
 
@@ -227,7 +229,7 @@ async def test_edge_agent_sample_rejects_received_count_above_sent(client: Async
     assert response.status_code == 422
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -238,17 +240,17 @@ python3 -m uv run pytest tests/api/test_link_routes.py::test_edge_agent_sample_c
 
 Expected: FAIL because the route and validation model do not exist.
 
-- [ ] **Step 3: Implement API route**
+- [x] **Step 3: Implement API route**
 
 Add:
 
-- `LinkEdgeProbeMethod = Literal["icmp_sequence", "stamp", "twamp", "udp_sequence"]`
+- `LinkEdgeProbeMethod` currently accepts operational `icmp_sequence` and `udp_sequence` samples. `stamp` and `twamp` are reserved for future integrations, not current operational methods.
 - `LinkEdgeProbeSampleCreate` with a `model_validator` that rejects `packets_received > packet_count`.
 - `POST /sites/{site_id}/probe-targets/{target_id}/edge-samples`.
 - Metadata helper that stores agent id/label, method, packet counts, lost packets, jitter, duration, DSCP, and measured time.
 - Computed loss percent rounded to four decimals.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -265,7 +267,7 @@ Expected: PASS.
 - Create: `backend/src/argus/link/edge_agent.py`
 - Test: `backend/tests/link/test_edge_agent.py`
 
-- [ ] **Step 1: Write failing agent tests**
+- [x] **Step 1: Write failing agent tests**
 
 Add tests for:
 
@@ -274,7 +276,7 @@ Add tests for:
 - payload building.
 - API posting path and authorization header.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -285,7 +287,7 @@ python3 -m uv run pytest tests/link/test_edge_agent.py -q
 
 Expected: FAIL because `argus.link.edge_agent` does not exist.
 
-- [ ] **Step 3: Implement agent**
+- [x] **Step 3: Implement agent**
 
 Implement:
 
@@ -298,7 +300,7 @@ Implement:
 
 The CLI supports `--once`; without `--once`, it loops on `--interval-seconds`.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -317,14 +319,14 @@ Expected: PASS.
 - Modify: `frontend/src/components/link/LinkProbePanel.tsx`
 - Test: `frontend/src/pages/Links.test.tsx`
 
-- [ ] **Step 1: Write failing frontend tests**
+- [x] **Step 1: Write failing frontend tests**
 
 Add tests that:
 
 - Save an edge-agent monitoring target with method, packet count, and DSCP.
 - Render an edge-agent target card and sample metadata.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -335,7 +337,7 @@ corepack pnpm test --run src/pages/Links.test.tsx
 
 Expected: FAIL because `udp` and metadata rendering are not wired.
 
-- [ ] **Step 3: Implement frontend**
+- [x] **Step 3: Implement frontend**
 
 Update:
 
@@ -344,7 +346,7 @@ Update:
 - `LinkConnectionDialog` preserves those fields.
 - `LinkProbePanel` displays method/count metadata for edge-agent targets and samples.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -361,7 +363,7 @@ Expected: PASS.
 - Modify: `frontend/src/lib/openapi.json`
 - Modify: `frontend/src/lib/api.generated.ts`
 
-- [ ] **Step 1: Export OpenAPI**
+- [x] **Step 1: Export OpenAPI**
 
 Run:
 
@@ -370,7 +372,7 @@ cd /Users/yann.moren/vision/backend
 python3 -m uv run python -m argus.scripts.export_openapi_schema ../frontend/src/lib/openapi.json
 ```
 
-- [ ] **Step 2: Generate frontend API types**
+- [x] **Step 2: Generate frontend API types**
 
 Run:
 
@@ -379,7 +381,7 @@ cd /Users/yann.moren/vision/frontend
 corepack pnpm generate:api
 ```
 
-- [ ] **Step 3: Full scoped verification**
+- [x] **Step 3: Full scoped verification**
 
 Run:
 
@@ -400,7 +402,7 @@ git diff --check
 
 Expected: all pass.
 
-- [ ] **Step 4: Commit and push scoped changes**
+- [x] **Step 4: Commit and push scoped changes**
 
 Run:
 

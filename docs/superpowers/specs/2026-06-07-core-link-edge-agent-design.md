@@ -8,14 +8,14 @@ This design adds an edge-agent measurement path to Core Link. It lets operators 
 
 ## Recommendation
 
-Implement a small, honest first edge agent:
+Implemented first edge agent:
 
 - Control plane: Core Link stores and displays edge-agent targets and samples.
 - Ingestion: the backend accepts edge-agent samples for configured monitoring targets and computes packet loss from sent/received packet counts.
-- Source process: a Python CLI module can run source-side ICMP packet-train checks and post samples to the backend.
+- Source process: a Python CLI module can run source-side ICMP packet-train checks or Vezor UDP sequence reflector checks and post samples to the backend.
 - Metadata: every sample stores method, packet counts, lost packets, jitter/variation when available, duration, and agent identity.
 
-This gives operators something useful today for targets such as `8.8.8.8` and FQDNs that respond to ICMP. It also keeps the data model ready for STAMP, TWAMP, or UDP sequence reflectors when a cooperating endpoint is available.
+This gives operators something useful today for targets such as `8.8.8.8` and FQDNs that respond to ICMP. It also supports authenticated Vezor UDP sequence when a cooperating reflector endpoint is available. STAMP/TWAMP/provider responder modes remain future protocol modes behind the same metadata model.
 
 ## Non-Goals
 
@@ -23,7 +23,7 @@ This gives operators something useful today for targets such as `8.8.8.8` and FQ
 - Do not run throughput tests on an interval.
 - Do not ship a full installer, service manager, or pairing flow for the edge agent in this step.
 - Do not add unauthenticated agent access. The first CLI uses the same bearer-token style as existing local supervisor tooling. Dedicated edge-agent credentials can follow as a separate security task.
-- Do not build a UDP reflector daemon yet. The schema and method labels reserve that path.
+- Do not claim STAMP/TWAMP compliance yet. The operational UDP responder in this branch is Vezor UDP sequence only.
 
 ## Operator Workflow
 
@@ -32,7 +32,7 @@ This gives operators something useful today for targets such as `8.8.8.8` and FQ
 3. Choose `Edge agent` as the monitoring source.
 4. Choose the probe type:
    - `ICMP` for normal source-side packet loss checks to IP/FQDN targets.
-   - `UDP` for future STAMP/TWAMP/UDP sequence reflector targets.
+   - `UDP` for authenticated Vezor UDP sequence reflector targets.
 5. Run the edge agent near the site with the Vezor site id, target id, and target address.
 6. Vezor records each sample, derives link posture, and shows method/source details in Monitoring.
 
@@ -61,18 +61,17 @@ loss_percent = ((packet_count - packets_received) / packet_count) * 100
 
 The agent reports counts and supporting timing metadata. It does not get to send a trusted arbitrary loss percent.
 
-The first implementation supports:
+The current implementation supports:
 
 - `icmp_sequence`: OS `ping` packet train. Works without a reflector, subject to ICMP filtering and OS ping behavior.
+- `udp_sequence`: authenticated Vezor packet sequence to a cooperating reflector. It reports sent/received/lost/late/duplicate/out-of-order counts and RTT statistics.
 
-The backend/API metadata supports:
+The backend/API metadata also reserves:
 
-- `icmp_sequence`
 - `stamp`
 - `twamp`
-- `udp_sequence`
 
-For STAMP/TWAMP/UDP sequence, the expected future design is a cooperating reflector/responder at the far end. The source sends sequenced packets, the responder reflects or timestamps them, and Vezor records sent/received counts, RTT/latency, jitter, and loss. This follows the measurement model described by IPPM one-way packet loss and modern STAMP/TWAMP active measurement standards.
+For STAMP/TWAMP, the expected future design is a cooperating responder at the far end. The source sends sequenced packets, the responder reflects or timestamps them, and Vezor records sent/received counts, RTT/latency, jitter, and loss. This follows the measurement model described by IPPM one-way packet loss and modern STAMP/TWAMP active measurement standards.
 
 ## Data Model
 

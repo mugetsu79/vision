@@ -31,7 +31,8 @@ The installer path is for normal product operation:
 2. complete first-run from the UI
 3. pair central and edge nodes from Control -> Deployment
 4. operate cameras and workers from Control -> Scenes and Control -> Operations
-5. validate Live, History, Evidence, Sites, Configuration, and Deployment
+5. validate Live, History, Evidence, Sites, Configuration, Link Performance,
+   FleetOps, and Deployment
 
 The browser and backend are a control plane. They must not become a remote
 shell. Host installation and diagnostics happen locally on the host through the
@@ -44,6 +45,29 @@ Normal installed operation must not depend on:
 - hand-run development Docker Compose commands
 - WebGL
 - DeepStream or Task 24 work before Track A/B Jetson soak evidence exists
+
+### Core Link Performance Packaging And Smoke
+
+The installed product includes the Core Link Performance workspace at `/links`.
+Use it to validate generic site link posture outside FleetOps:
+
+- edge sites can own link paths, budgets, policies, monitoring targets, manual
+  samples, queues, backend synthetic checks, and edge-agent samples
+- the Vezor master/control-plane site is target-only and must not expose local
+  link path or probe configuration
+- edge-agent ICMP sequence probes can post source-side packet-count samples
+- edge-agent UDP sequence probes can measure against an authenticated
+  cooperating reflector
+- throughput checks are explicit manual operator actions, not interval jobs
+
+The master appliance includes disabled-by-default reflector settings and UDP
+port mapping support. A real reflector listener requires
+`ARGUS_LINK_REFLECTOR_ENABLED=true`, `ARGUS_LINK_REFLECTOR_SECRET`, and an
+edge-reachable public address in the master backend environment before startup.
+The current UI exposes profile enable/disable/rotate controls and target
+metadata; a later product hardening pass should add paired edge-agent
+credentials, reflector secret distribution, and dynamic runtime/profile
+reconciliation.
 
 ### FleetOps Pack Packaging And Smoke
 

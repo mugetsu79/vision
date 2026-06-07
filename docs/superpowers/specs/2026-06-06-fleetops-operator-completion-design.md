@@ -1,7 +1,7 @@
 # FleetOps Operator Completion Design
 
 Date: 2026-06-06
-Status: draft plan-ready design
+Status: implemented on branch `codex/sceneops-pack-registry`; retained as product trace.
 Related runtime spec: `docs/superpowers/specs/2026-06-05-maritime-fleetops-runtime-pack-design.md`
 Related pack boundary spec: `docs/superpowers/specs/2026-06-05-one-pack-sceneops-engine-pack-boundary-design.md`
 Related implementation plan: `docs/superpowers/plans/2026-06-06-fleetops-operator-completion.md`

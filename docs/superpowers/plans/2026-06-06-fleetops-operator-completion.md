@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+Status: FleetOps operator surfaces and Task 2A list controls are implemented on
+branch `codex/sceneops-pack-registry` through commits including `f72053cd`,
+`453783f8`, `0cbc39ab`, and `8aa3ea50`. This plan is retained as historical
+trace; remaining unchecked boxes are original broader-plan steps, not the
+current next-chat start point.
+
 **Goal:** Make FleetOps a fully navigable, fully plumbed operations workspace with vessel creation, core multi-transport link connections, distinct Support and Onboarding workflows, and real backend-backed controls on every current FleetOps page.
 
 **Architecture:** FleetOps UI remains in the existing React workspace shell and uses generated OpenAPI types through TanStack Query hooks. Vessel, voyage, port-call, AIS, NMEA, and carrier terminal concepts remain in `argus.maritime`; link transport and connection state are added to domain-neutral `argus.link` and referenced by maritime through site IDs. Existing core billing, support, fleet, evidence, and site APIs are reused rather than duplicated by the pack.
@@ -545,7 +551,7 @@ git push origin codex/sceneops-pack-registry
 - Modify: `frontend/src/components/fleetops/VesselSummaryTable.tsx`
 - Test: `frontend/src/pages/FleetOpsVessels.test.tsx`
 
-- [ ] **Step 1: Write failing list-control tests**
+- [x] **Step 1: Write failing list-control tests**
 
 Extend `frontend/src/pages/FleetOpsVessels.test.tsx` with this helper near the
 mock setup:
@@ -674,7 +680,7 @@ corepack pnpm test --run src/pages/FleetOpsVessels.test.tsx
 Expected: FAIL because the Vessels page has no search box, link-state filter,
 status filter, page-size selector, or pagination controls.
 
-- [ ] **Step 2: Add URL-backed list state to `FleetOpsVessels.tsx`**
+- [x] **Step 2: Add URL-backed list state to `FleetOpsVessels.tsx`**
 
 Change the imports at the top of `frontend/src/pages/FleetOpsVessels.tsx`:
 
@@ -746,7 +752,7 @@ Also add `asRecord` to the existing type import:
 import { asRecord, type FleetOpsVessel } from "@/components/fleetops/types";
 ```
 
-- [ ] **Step 3: Derive filtered and paged vessels in `FleetOpsVessels.tsx`**
+- [x] **Step 3: Derive filtered and paged vessels in `FleetOpsVessels.tsx`**
 
 Inside `FleetOpsVessels`, after `const vesselRows = ...`, add:
 
@@ -847,7 +853,7 @@ Update the `VesselSummaryTable` call:
       />
 ```
 
-- [ ] **Step 4: Render the Vessels list control surface**
+- [x] **Step 4: Render the Vessels list control surface**
 
 Change `frontend/src/components/fleetops/VesselSummaryTable.tsx` imports:
 
@@ -1014,7 +1020,7 @@ After the table, render pagination controls:
       </div>
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 

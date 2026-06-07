@@ -13,6 +13,9 @@ The current product includes the operator workflows needed for a serious pilot:
 - Live wall with source-aware browser delivery
 - metric-aware History with exports
 - Fleet and Operations workbench at `/settings`
+- Core Link Performance workspace at `/links` for generic site link posture,
+  edge-only link paths, monitoring targets, budgets, queues, policies, and
+  link passports
 - first-run Deployment workbench at `/deployment` for install health, node
   pairing, credential status, and redacted support bundles
 - Evidence Desk incident review queue at `/incidents`
@@ -32,6 +35,10 @@ The current product includes the operator workflows needed for a serious pilot:
   and credential audit events in Control -> Deployment
 - RTSP and edge USB/UVC camera source configuration
 - Jetson edge compose stack and preflight tooling
+- source-side Core Link edge-agent measurements using ICMP sequence or Vezor
+  authenticated UDP sequence against a cooperating reflector
+- optional master-hosted UDP sequence reflector capability, disabled by default
+  and exposed as a master target profile rather than a master-site link path
 
 The supervisor lifecycle MVP is now present as API contracts, database records,
 UI admission status, a reconciler library, a runnable child-process supervisor,
@@ -117,6 +124,31 @@ browser and backend remain a control plane, not a remote shell.
 Keep pack boundaries explicit. Home/lab validation is still packless and
 non-product. `traffic-public-space` remains manifest-only here; do not add a
 traffic runtime, public-space demo, or traffic UI when validating FleetOps.
+
+### Core Link Performance And Reflectors
+
+Core Link is part of the product core, not a FleetOps-only feature. Use
+`/links` when the operator needs to inspect or configure generic site
+connectivity. Only edge sites can own link paths, monitoring targets, budgets,
+policies, manual samples, queues, or throughput checks. The Vezor master appears
+as a target-only control-plane site so edge-originated samples can be inspected
+without inventing a local master link.
+
+Backend synthetic checks measure from the backend network. Edge-agent checks
+measure from the edge site. Use edge-agent ICMP sequence for no-reflector
+targets such as `8.8.8.8`; use Vezor UDP sequence only when the far end has a
+cooperating authenticated reflector. Throughput measurement is manual only and
+must not run at the monitoring interval.
+
+The master deployment can host a UDP sequence reflector on port `8622`, but it
+is disabled by default. Binding the listener requires deployment settings,
+including `ARGUS_LINK_REFLECTOR_ENABLED=true` and
+`ARGUS_LINK_REFLECTOR_SECRET`. The UI/profile controls expose reflector intent,
+endpoint metadata, and key rotation; a later hardening pass should add dynamic
+runtime reconciliation and paired edge-agent secret distribution.
+
+For operator steps and examples, use
+[core-link-performance-guide.md](/Users/yann.moren/vision/docs/core-link-performance-guide.md).
 
 ## 1. Smallest Lab Setup
 

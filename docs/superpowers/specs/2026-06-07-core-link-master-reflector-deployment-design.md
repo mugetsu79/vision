@@ -18,14 +18,25 @@ Core Link already supports:
 - Edge-site link paths and monitoring targets.
 - A control-plane `Vezor Master` target site.
 - Edge-originated samples with `target_site_id`.
-- Reserved `udp_sequence`/STAMP/TWAMP labels and metadata fields.
+- Operational `udp_sequence` edge-agent measurements with sequence metadata.
 
-What is missing:
+Implemented in this branch:
 
-- A running authenticated UDP reflector.
-- A deployment profile that exposes reflector availability/status.
-- Edge-agent UDP sequence sending against that reflector.
-- UI controls that make reflector monitoring an explicit choice during Vezor Master control-link setup.
+- Authenticated Vezor UDP sequence packet codec and reflector.
+- Deployment settings and disabled-by-default Compose/Helm exposure for the
+  master reflector.
+- Persisted master reflector profile with enable, disable, update, and key
+  rotation APIs.
+- Edge-agent UDP sequence sender and edge-sample ingestion.
+- Link Performance UI status/actions for the master reflector profile and
+  structured UDP reflector fields on edge monitoring targets.
+
+Still missing for product hardening:
+
+- Dynamic reconciliation from persisted profile changes to an already-running
+  backend listener.
+- Paired edge-agent credentials and reflector secret distribution UX.
+- STAMP/TWAMP/provider responder modes.
 
 ## Recommended Approach
 
@@ -37,7 +48,7 @@ This gives three important properties:
 2. The UDP listener is not exposed silently.
 3. Operators can enable reflector-based control-link monitoring exactly when they decide an edge should actively measure edge-to-master loss.
 
-The first implementation should use Vezor's authenticated UDP sequence protocol from `docs/superpowers/specs/2026-06-07-core-link-reflector-loss-design.md`. It should not claim STAMP/TWAMP compliance yet. STAMP/TWAMP remain future packet modes behind the same profile model.
+The current implementation uses Vezor's authenticated UDP sequence protocol from `docs/superpowers/specs/2026-06-07-core-link-reflector-loss-design.md`. It does not claim STAMP/TWAMP compliance yet. STAMP/TWAMP remain future packet modes behind the same profile model.
 
 ## Operator Flow
 
@@ -110,7 +121,11 @@ ARGUS_LINK_REFLECTOR_KEY_ID=master-reflector-default
 ARGUS_LINK_REFLECTOR_RATE_LIMIT_PPS=100
 ```
 
-When enabled through deployment config or admin UI, the backend starts the reflector listener and advertises the profile to Link Performance.
+When enabled through deployment config with `ARGUS_LINK_REFLECTOR_ENABLED=true`
+and `ARGUS_LINK_REFLECTOR_SECRET`, the backend starts the reflector listener at
+process startup. The admin UI persists reflector profile intent and key
+metadata. Dynamic hot-start/hot-stop reconciliation from that profile into the
+running listener remains a follow-up task.
 
 For Docker Compose and Helm, exposing the UDP port while disabled is acceptable only if no listener is bound. The UI must still report `Disabled` until the listener is active.
 

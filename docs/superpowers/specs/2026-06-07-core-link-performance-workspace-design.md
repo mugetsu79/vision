@@ -1,7 +1,7 @@
 # Core Link Performance Workspace Design
 
 Date: 2026-06-07
-Status: plan-ready design
+Status: implemented on branch `codex/sceneops-pack-registry`; retained as product trace. Reflector and edge-agent additions are covered by the linked follow-up specs and `docs/core-link-performance-guide.md`.
 Related FleetOps runtime spec: `docs/superpowers/specs/2026-06-05-maritime-fleetops-runtime-pack-design.md`
 Related FleetOps operator plan: `docs/superpowers/plans/2026-06-06-fleetops-operator-completion.md`
 Related operator focus spec: `docs/superpowers/specs/2026-06-07-operator-focus-consistency-design.md`

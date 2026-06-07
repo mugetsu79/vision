@@ -8,7 +8,7 @@ For step-by-step rollout instructions, use [operator-deployment-playbook.md](/Us
 
 ## Current Implementation Posture
 
-As of the current codebase, Vezor has working operator surfaces for Live, History, Operations, and the Evidence Desk incident review queue. Live telemetry is now stabilized by backend track lifecycle state and rendered with class-colored overlays plus Telemetry Terrain. The backend and worker contracts also include a recommended model catalog, fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, capability-aware query commands, scene vision profiles, detection include/exclusion regions, candidate quality gating, Jetson-aware runtime profile selection, an experimental Ultralytics-backed open-vocab `.pt` detector path, runtime artifact records, TensorRT `.engine` artifact selection, and compiled per-scene open-vocab artifact registration/selection.
+As of the current codebase, Vezor has working operator surfaces for Live, History, Operations, Link Performance, FleetOps, and the Evidence Desk incident review queue. Live telemetry is now stabilized by backend track lifecycle state and rendered with class-colored overlays plus Telemetry Terrain. The backend and worker contracts also include a recommended model catalog, fixed-vocabulary and open-vocabulary detector capability metadata, persisted runtime vocabulary state, capability-aware query commands, scene vision profiles, detection include/exclusion regions, candidate quality gating, Jetson-aware runtime profile selection, an experimental Ultralytics-backed open-vocab `.pt` detector path, runtime artifact records, TensorRT `.engine` artifact selection, and compiled per-scene open-vocab artifact registration/selection.
 
 The strongest production-ready paths are still:
 
@@ -25,6 +25,15 @@ master, Linux master, and Jetson edge. The remaining final-product layer is
 field hardening: signed packages, production backup/restore, TLS/OIDC
 production configuration, pinned production manifests, and long-run hardware
 soak evidence.
+
+Core Link Performance is now a core operator workspace at `/links`. It lists
+generic edge sites and the target-only Vezor master site, lets operators manage
+edge link paths, budgets, queue actions, field-based policies, monitoring
+targets, manual samples, backend synthetic checks, and edge-agent samples. The
+edge-agent path can measure ICMP packet trains and authenticated Vezor UDP
+sequence reflector sessions; the optional master reflector is present in
+deployment/API/UI but disabled by default and still needs packaging/pairing and
+secret-distribution hardening before field rollout.
 
 Raw TensorRT `.engine` files are now modeled as target-specific runtime artifacts, not normal camera model choices. Fixed-vocab production testing should still register portable ONNX model rows first, then attach validated `.engine` artifacts for compatible Jetson/NVIDIA targets. Stable open-vocab scenes can now register compiled scene artifacts keyed by camera, vocabulary hash, source model hash, and target profile. Runtime soak records are modeled in the API/UI, but real Track A/B Jetson evidence must be recorded before Task 24 / DeepStream is opened unless the risk is explicitly accepted.
 

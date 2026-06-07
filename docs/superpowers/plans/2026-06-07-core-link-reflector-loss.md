@@ -1,6 +1,11 @@
 # Core Link Reflector Packet Loss Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
+
+Status: implemented on branch `codex/sceneops-pack-registry` through the UDP
+sequence codec, reflector, and edge-agent sender commits. Use the later master
+reflector deployment plan for deployment profile/UI details and open hardening
+gaps.
 
 **Goal:** Make state-of-the-art edge-to-reflector packet-loss measurement operational with an authenticated UDP sequence sender/reflector flow.
 
@@ -78,7 +83,7 @@ Master reflector configuration remains a separate deployment service profile. Do
 - Create: `backend/src/argus/link/udp_sequence.py`
 - Test: `backend/tests/link/test_udp_sequence.py`
 
-- [ ] **Step 1: Write failing codec tests**
+- [x] **Step 1: Write failing codec tests**
 
 Add tests for:
 
@@ -110,7 +115,7 @@ def test_udp_sequence_packet_round_trips_authenticated_request() -> None:
     assert decoded.reply is False
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -121,7 +126,7 @@ python3 -m uv run pytest tests/link/test_udp_sequence.py -q
 
 Expected: FAIL because `argus.link.udp_sequence` does not exist.
 
-- [ ] **Step 3: Implement codec**
+- [x] **Step 3: Implement codec**
 
 Implement:
 
@@ -131,7 +136,7 @@ Implement:
 - `UdpSequencePacketError`.
 - Constants for magic `VZLP`, version `1`, request/reply flags, and 16-byte truncated HMAC-SHA256.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -148,7 +153,7 @@ Expected: PASS.
 - Modify: `backend/src/argus/link/udp_sequence.py`
 - Test: `backend/tests/link/test_udp_sequence.py`
 
-- [ ] **Step 1: Write failing statistics tests**
+- [x] **Step 1: Write failing statistics tests**
 
 Add:
 
@@ -174,7 +179,7 @@ def test_udp_sequence_statistics_counts_loss_late_duplicates_and_out_of_order() 
     assert stats.rtt_avg_ms == 20
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -185,7 +190,7 @@ python3 -m uv run pytest tests/link/test_udp_sequence.py::test_udp_sequence_stat
 
 Expected: FAIL because statistics helpers do not exist.
 
-- [ ] **Step 3: Implement statistics**
+- [x] **Step 3: Implement statistics**
 
 Implement:
 
@@ -194,7 +199,7 @@ Implement:
 - `summarize_sequence_results(...)`.
 - RTT min/avg/p95/max and variation from on-time unique replies.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -211,13 +216,13 @@ Expected: PASS.
 - Create: `backend/src/argus/link/reflector.py`
 - Test: `backend/tests/link/test_reflector.py`
 
-- [ ] **Step 1: Write failing reflector tests**
+- [x] **Step 1: Write failing reflector tests**
 
 Add tests that start a UDP reflector on `127.0.0.1:0`, send an authenticated request packet, and assert a valid authenticated reply is received.
 
 Also test that a packet with the wrong secret gets no reply.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -228,7 +233,7 @@ python3 -m uv run pytest tests/link/test_reflector.py -q
 
 Expected: FAIL because `argus.link.reflector` does not exist.
 
-- [ ] **Step 3: Implement reflector**
+- [x] **Step 3: Implement reflector**
 
 Implement:
 
@@ -244,7 +249,7 @@ Implement:
   - reply packet no larger than request packet
   - per-source counter map for future rate limiting
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -261,15 +266,17 @@ Expected: PASS.
 - Modify: `backend/src/argus/link/edge_agent.py`
 - Test: `backend/tests/link/test_edge_agent.py`
 
-- [ ] **Step 1: Write failing sender tests**
+- [x] **Step 1: Write failing sender tests**
 
 Add tests for:
 
-- `parse_args` accepts `--method udp_sequence`, `--reflector`, `--reflector-secret`, `--packet-spacing-ms`, and `--loss-timeout-ms`.
+- `parse_args` accepts `--method udp_sequence`, `--reflector`,
+  `--reflector-port`, `--reflector-key-id`, `--reflector-secret`,
+  `--packet-spacing-ms`, and `--loss-timeout-ms`.
 - `run_udp_sequence_probe` sends N packets and computes stats from replies.
 - Payload builder includes `method: "udp_sequence"` and richer metadata fields.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -280,7 +287,7 @@ python3 -m uv run pytest tests/link/test_edge_agent.py -q
 
 Expected: FAIL because only ICMP mode is implemented.
 
-- [ ] **Step 3: Implement sender mode**
+- [x] **Step 3: Implement sender mode**
 
 Update `edge_agent.py`:
 
@@ -292,7 +299,7 @@ Update `edge_agent.py`:
 - Wait until timeout for late replies and track late replies separately.
 - Build sample payload with existing top-level fields plus `measurement_metadata` values supported by API.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -309,13 +316,13 @@ Expected: PASS.
 - Modify: `backend/src/argus/link/api.py`
 - Test: `backend/tests/api/test_link_routes.py`
 
-- [ ] **Step 1: Write failing API tests**
+- [x] **Step 1: Write failing API tests**
 
 Add an API test that posts a UDP sequence sample with `measurement_metadata` containing reflector address, session id, late/duplicate/out-of-order counters, timeout, packet spacing, and RTT stats. Assert the payload is stored and returned.
 
 Add a validation test that rejects `method: "udp_sequence"` if the target is not configured as `probe_type: "udp"`.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -326,7 +333,7 @@ python3 -m uv run pytest tests/api/test_link_routes.py::test_edge_agent_udp_sequ
 
 Expected: FAIL because route validation does not understand richer UDP sequence metadata.
 
-- [ ] **Step 3: Implement validation**
+- [x] **Step 3: Implement validation**
 
 Update `LinkEdgeProbeSampleCreate` or add a UDP-specific nested metadata model:
 
@@ -352,7 +359,7 @@ Update `LinkEdgeProbeSampleCreate` or add a UDP-specific nested metadata model:
   - `rtt_variation_ms`
   - `clock_sync`
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -371,7 +378,7 @@ Expected: PASS.
 - Modify: `frontend/src/components/link/LinkProbePanel.tsx`
 - Test: `frontend/src/pages/Links.test.tsx`
 
-- [ ] **Step 1: Write failing frontend tests**
+- [x] **Step 1: Write failing frontend tests**
 
 Add tests for:
 
@@ -379,7 +386,7 @@ Add tests for:
 - Monitoring card displays `UDP sequence via host:port`.
 - Sample history displays received/sent, loss, RTT average, RTT variation, late, duplicate, and out-of-order counts.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -390,7 +397,7 @@ corepack pnpm test --run src/pages/Links.test.tsx
 
 Expected: FAIL because fields and display helpers do not exist.
 
-- [ ] **Step 3: Implement UI**
+- [x] **Step 3: Implement UI**
 
 Update:
 
@@ -400,7 +407,7 @@ Update:
 - Target card text.
 - Sample metadata summary helper.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -417,7 +424,7 @@ Expected: PASS.
 - Modify if needed: `frontend/src/lib/openapi.json`
 - Modify if needed: `frontend/src/lib/api.generated.ts`
 
-- [ ] **Step 1: Regenerate OpenAPI**
+- [x] **Step 1: Regenerate OpenAPI**
 
 Run if API schemas changed:
 
@@ -426,7 +433,7 @@ cd /Users/yann.moren/vision/backend
 python3 -m uv run python -m argus.scripts.export_openapi_schema ../frontend/src/lib/openapi.json
 ```
 
-- [ ] **Step 2: Regenerate frontend API types**
+- [x] **Step 2: Regenerate frontend API types**
 
 Run if OpenAPI changed:
 
@@ -435,7 +442,7 @@ cd /Users/yann.moren/vision/frontend
 corepack pnpm generate:api
 ```
 
-- [ ] **Step 3: Full scoped verification**
+- [x] **Step 3: Full scoped verification**
 
 Run:
 
@@ -456,7 +463,7 @@ git diff --check
 
 Expected: all pass.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 

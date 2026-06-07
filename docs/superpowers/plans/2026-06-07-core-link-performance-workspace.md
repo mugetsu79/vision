@@ -1,6 +1,10 @@
 # Core Link Performance Workspace Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
+
+Status: implemented on branch `codex/sceneops-pack-registry` through commit
+`fca544f1` and extended by the later edge-agent/master-reflector work. Use this
+plan as historical implementation trace, not as pending work.
 
 **Goal:** Add a domain-neutral Core Link Performance workspace that lets operators inspect and operate link health, connections, budgets, probes, policies, queues, and passports across generic sites without entering FleetOps.
 
@@ -133,7 +137,7 @@ Regenerate OpenAPI artifacts after backend route changes:
 - Test: `backend/tests/api/test_link_routes.py`
 - Test: `backend/tests/core/test_packless_empty_registry.py`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Add tests to `backend/tests/link/test_link_service.py`:
 
@@ -212,7 +216,7 @@ python3 -m uv run pytest tests/link/test_link_service.py::test_packless_link_sit
 
 Expected: FAIL because `list_site_summaries` and `LinkSiteSummaryRecord` do not exist.
 
-- [ ] **Step 2: Add summary contract**
+- [x] **Step 2: Add summary contract**
 
 Add to `backend/src/argus/link/contracts.py`:
 
@@ -236,7 +240,7 @@ class LinkSiteSummaryRecord:
 
 Update `backend/src/argus/link/__init__.py` to import `LinkSiteSummaryRecord` and include it in `__all__`.
 
-- [ ] **Step 3: Implement sync summary service**
+- [x] **Step 3: Implement sync summary service**
 
 In `backend/src/argus/link/service.py`, add:
 
@@ -287,7 +291,7 @@ def list_site_summaries(
 
 Add imports for `Mapping`, `Sequence`, `cast`, and `LinkSiteSummaryRecord`. Keep this method generic; do not import maritime.
 
-- [ ] **Step 4: Implement async summary service**
+- [x] **Step 4: Implement async summary service**
 
 Add an async equivalent in `backend/src/argus/link/service.py`:
 
@@ -339,7 +343,7 @@ async def alist_site_summaries(
 
 This intentionally uses existing per-site methods for the MVP. Batched SQL optimization belongs behind the same service contract in a later performance pass.
 
-- [ ] **Step 5: Write failing API route test**
+- [x] **Step 5: Write failing API route test**
 
 Add to `backend/tests/api/test_link_routes.py`:
 
@@ -378,7 +382,7 @@ python3 -m uv run pytest tests/api/test_link_routes.py::test_link_site_summary_r
 
 Expected: FAIL because `/api/v1/link/sites/summary` is not routed.
 
-- [ ] **Step 6: Add named summary API response and route**
+- [x] **Step 6: Add named summary API response and route**
 
 In `backend/src/argus/link/api.py`, add route before `/sites/{site_id}/status` so the literal path is not captured as a UUID:
 
@@ -451,7 +455,7 @@ def _site_summary_payload(summary: LinkSiteSummaryRecord) -> LinkSiteSummaryResp
 
 Import `LinkSiteSummaryRecord`.
 
-- [ ] **Step 7: Extend empty-registry test coverage**
+- [x] **Step 7: Extend empty-registry test coverage**
 
 In `backend/tests/core/test_packless_empty_registry.py`, add `list_sites` to `_FakeSiteService`:
 
@@ -490,7 +494,7 @@ async def test_link_summary_route_works_with_empty_pack_registry(
     assert "vessel" not in json.dumps(payload).lower()
 ```
 
-- [ ] **Step 8: Verify backend summary**
+- [x] **Step 8: Verify backend summary**
 
 Run:
 
@@ -503,7 +507,7 @@ python3 -m uv run mypy src/argus/link
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit backend summary**
+- [x] **Step 9: Commit backend summary**
 
 ```bash
 cd /Users/yann.moren/vision
@@ -530,7 +534,7 @@ git push origin codex/sceneops-pack-registry
 - Modify: `frontend/src/lib/openapi.json`
 - Modify: `frontend/src/lib/api.generated.ts`
 
-- [ ] **Step 1: Regenerate OpenAPI**
+- [x] **Step 1: Regenerate OpenAPI**
 
 Run:
 
@@ -543,7 +547,7 @@ corepack pnpm generate:api
 
 Expected: `frontend/src/lib/openapi.json` includes `/api/v1/link/sites/summary`, and `frontend/src/lib/api.generated.ts` includes the response schema.
 
-- [ ] **Step 2: Create failing hook test**
+- [x] **Step 2: Create failing hook test**
 
 Create `frontend/src/hooks/use-link.test.ts`:
 
@@ -618,7 +622,7 @@ corepack pnpm test --run src/hooks/use-link.test.ts
 
 Expected: FAIL because `useLinkSiteSummaries` does not exist.
 
-- [ ] **Step 3: Add summary hook**
+- [x] **Step 3: Add summary hook**
 
 Add to `frontend/src/hooks/use-link.ts`:
 
@@ -641,7 +645,7 @@ export function useLinkSiteSummaries() {
 
 Verify `components["schemas"]["LinkSiteSummaryResponse"]` exists before moving on. A missing generated schema means Task 1 is incomplete and the backend response model must be fixed before frontend work continues.
 
-- [ ] **Step 4: Write failing navigation test**
+- [x] **Step 4: Write failing navigation test**
 
 In `frontend/src/components/layout/AppShell.test.tsx`, add or update assertions:
 
@@ -674,7 +678,7 @@ corepack pnpm test --run src/components/layout/AppShell.test.tsx
 
 Expected: FAIL because the Control nav has no Links item.
 
-- [ ] **Step 5: Add nav and route**
+- [x] **Step 5: Add nav and route**
 
 In `frontend/src/components/layout/workspace-nav.ts`, map or add a Control item:
 
@@ -701,7 +705,7 @@ In `frontend/src/app/router.tsx`, add:
 },
 ```
 
-- [ ] **Step 6: Write failing page selector tests**
+- [x] **Step 6: Write failing page selector tests**
 
 Create `frontend/src/pages/Links.test.tsx`:
 
@@ -756,7 +760,7 @@ corepack pnpm test --run src/pages/Links.test.tsx
 
 Expected: FAIL because `Links` does not exist.
 
-- [ ] **Step 7: Implement link selector component**
+- [x] **Step 7: Implement link selector component**
 
 Create `frontend/src/components/link/types.ts` with helpers:
 
@@ -834,7 +838,7 @@ export function LinkSiteSelector({
 
 Use existing Vezor classes from Sites/FleetOps selectors when filling the button markup.
 
-- [ ] **Step 8: Implement Links page shell**
+- [x] **Step 8: Implement Links page shell**
 
 Create `frontend/src/pages/Links.tsx`:
 
@@ -887,7 +891,7 @@ export const LinksPage = Links;
 
 Polish classes to match current pages.
 
-- [ ] **Step 9: Verify and commit page shell**
+- [x] **Step 9: Verify and commit page shell**
 
 Run:
 
@@ -923,7 +927,7 @@ git push origin codex/sceneops-pack-registry
 - Create/Modify: `frontend/src/components/link/LinkActionDialogs.tsx`
 - Modify: `frontend/src/pages/Links.test.tsx`
 
-- [ ] **Step 1: Write failing detail panel test**
+- [x] **Step 1: Write failing detail panel test**
 
 Add to `frontend/src/pages/Links.test.tsx`:
 
@@ -966,7 +970,7 @@ corepack pnpm test --run src/pages/Links.test.tsx
 
 Expected: FAIL because detail panels do not exist.
 
-- [ ] **Step 2: Wire selected-site queries**
+- [x] **Step 2: Wire selected-site queries**
 
 In `frontend/src/pages/Links.tsx`, call existing hooks with `selectedSiteId`:
 
@@ -981,7 +985,7 @@ const queue = useLinkSiteQueue(selectedSiteId);
 
 Do not enable these hooks when no site is selected; existing hooks already use `enabled: Boolean(siteId)`.
 
-- [ ] **Step 3: Implement posture panel**
+- [x] **Step 3: Implement posture panel**
 
 Create `LinkPosturePanel.tsx` with:
 
@@ -995,7 +999,7 @@ Create `LinkPosturePanel.tsx` with:
 
 Pass `isLoading={status.isLoading}` and `error={status.error}` into the panel. Render a compact skeleton while loading and a panel-local recoverable error when `error` is present.
 
-- [ ] **Step 4: Implement connections panel and dialogs**
+- [x] **Step 4: Implement connections panel and dialogs**
 
 `LinkConnectionsPanel.tsx` should render connection rows and call:
 
@@ -1020,7 +1024,7 @@ Pass `isLoading={status.isLoading}` and `error={status.error}` into the panel. R
 
 Tests should assert create/edit/delete call the correct hook payloads.
 
-- [ ] **Step 5: Implement budget and policy panel**
+- [x] **Step 5: Implement budget and policy panel**
 
 `LinkBudgetPolicyPanel.tsx` should call:
 
@@ -1029,7 +1033,7 @@ Tests should assert create/edit/delete call the correct hook payloads.
 
 The budget form has numeric monthly bytes and bulk daily bytes. The policy editor may use a textarea containing formatted JSON. On submit, parse JSON and send `{ policy: parsed }`. Invalid JSON shows inline error and does not call the mutation.
 
-- [ ] **Step 6: Implement probe panel**
+- [x] **Step 6: Implement probe panel**
 
 `LinkProbePanel.tsx` should list probes newest first and expose a record-probe dialog:
 
@@ -1042,7 +1046,7 @@ The budget form has numeric monthly bytes and bulk daily bytes. The policy edito
 
 Call `useCreateLinkProbe`.
 
-- [ ] **Step 7: Implement queue panel**
+- [x] **Step 7: Implement queue panel**
 
 `LinkQueuePanel.tsx` should render queue items with:
 
@@ -1061,7 +1065,7 @@ Actions:
 
 Call `useRetryLinkQueueItem`, `usePauseLinkQueueItem`, and `useResumeLinkQueueItem`.
 
-- [ ] **Step 8: Add mutation tests**
+- [x] **Step 8: Add mutation tests**
 
 In `frontend/src/pages/Links.test.tsx`, add tests:
 
@@ -1086,7 +1090,7 @@ test("connection form creates a core link connection for the selected site", asy
 
 Add equivalent tests for budget save, invalid policy JSON, record probe, and queue retry/pause/resume.
 
-- [ ] **Step 9: Verify and commit controls**
+- [x] **Step 9: Verify and commit controls**
 
 Run:
 
@@ -1122,7 +1126,7 @@ git push origin codex/sceneops-pack-registry
 - Modify: `frontend/src/pages/FleetOpsSupport.test.tsx`
 - Modify: `frontend/src/pages/FleetOpsOnboarding.test.tsx`
 
-- [ ] **Step 1: Write failing FleetOps deep-link tests**
+- [x] **Step 1: Write failing FleetOps deep-link tests**
 
 In each selected-scope FleetOps page test, assert:
 
@@ -1143,7 +1147,7 @@ corepack pnpm test --run src/pages/FleetOpsVesselDetail.test.tsx src/pages/Fleet
 
 Expected: FAIL because the deep links do not exist.
 
-- [ ] **Step 2: Add deep links**
+- [x] **Step 2: Add deep links**
 
 Add a small helper near FleetOps pages or inline:
 
@@ -1155,7 +1159,7 @@ function linkPerformancePath(siteId?: string | null) {
 
 Render `Open Link Performance` only when the page has an explicit selected site or detail vessel site. Do not auto-select a FleetOps vessel just to show this link.
 
-- [ ] **Step 3: Verify FleetOps deep links**
+- [x] **Step 3: Verify FleetOps deep links**
 
 Run:
 
@@ -1166,7 +1170,7 @@ corepack pnpm test --run src/pages/FleetOpsVesselDetail.test.tsx src/pages/Fleet
 
 Expected: PASS.
 
-- [ ] **Step 4: Full verification**
+- [x] **Step 4: Full verification**
 
 Run:
 
@@ -1184,7 +1188,7 @@ corepack pnpm test --run
 
 Expected: PASS.
 
-- [ ] **Step 5: Browser smoke**
+- [x] **Step 5: Browser smoke**
 
 Start the frontend if no server is running:
 
@@ -1205,7 +1209,7 @@ Open `/links` in the in-app browser. Verify:
 
 If the browser session is not authenticated, report that browser verification is auth-blocked and rely on tests for protected states.
 
-- [ ] **Step 6: Commit and push final checkpoint**
+- [x] **Step 6: Commit and push final checkpoint**
 
 ```bash
 cd /Users/yann.moren/vision

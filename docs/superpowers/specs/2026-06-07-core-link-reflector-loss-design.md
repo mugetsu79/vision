@@ -6,6 +6,8 @@ The current edge-agent implementation gives Vezor an honest source-side packet-l
 
 The next step is an edge-agent plus reflector flow. The edge agent sends sequenced measurement packets from the site. A known reflector at the far end replies to those packets. The edge agent computes packet loss, latency, jitter, duplicates, and out-of-order delivery, then posts a summarized sample to Vezor.
 
+Current branch status: phase 1 is implemented for Vezor UDP sequence. The branch includes the authenticated UDP sequence packet codec, reflector, deployment settings, edge-agent sender, API sample ingestion, and UI controls. STAMP/TWAMP/provider responder modes remain future work, and master reflector profile changes do not hot-reconcile into an already-running backend listener yet.
+
 ## Plain Model
 
 Yes: edge sites run the measurements. The Vezor master/control plane does not measure the edge site's path by itself.
@@ -28,13 +30,13 @@ flowchart LR
 
 ## Recommended Approach
 
-Build the reflector path in three phases:
+The reflector path is staged in three phases:
 
-1. **Vezor UDP sequence protocol**: implement a small authenticated UDP sender/reflector pair. It is not advertised as STAMP-compliant, but it uses the same active-measurement principles: session id, sequence number, transmit timestamp, receive timeout, and reflected replies.
-2. **STAMP-compatible packet mode**: add packet formats and state handling compatible with STAMP Session-Sender and Session-Reflector semantics where feasible.
-3. **Provider/device integration**: add TWAMP/STAMP import or active sessions for routers, SD-WAN platforms, or provider endpoints that already expose measurement responders.
+1. **Vezor UDP sequence protocol**: implemented. It is a small authenticated UDP sender/reflector pair. It is not advertised as STAMP-compliant, but it uses the same active-measurement principles: session id, sequence number, transmit timestamp, receive timeout, and reflected replies.
+2. **STAMP-compatible packet mode**: future. Add packet formats and state handling compatible with STAMP Session-Sender and Session-Reflector semantics where feasible.
+3. **Provider/device integration**: future. Add TWAMP/STAMP import or active sessions for routers, SD-WAN platforms, or provider endpoints that already expose measurement responders.
 
-The first phase is the best product path because it can be tested end to end inside Vezor without waiting on network equipment support.
+The first phase is the current product path because it can be tested end to end inside Vezor without waiting on network equipment support.
 
 ## Site Eligibility
 
@@ -271,10 +273,12 @@ python -m argus.link.edge_agent \
   --bearer-token "$TOKEN" \
   --site-id "$SITE_ID" \
   --target-id target-openwisp-reflector \
+  --target openwisp.mugetsu.tech \
   --agent-id macbook-home \
   --agent-label "MacBook at home" \
   --method udp_sequence \
-  --reflector openwisp.mugetsu.tech:8622 \
+  --reflector openwisp.mugetsu.tech \
+  --reflector-port 8622 \
   --reflector-key-id home-reflector-2026-06 \
   --reflector-secret "$REFLECTOR_SECRET" \
   --packet-count 50 \

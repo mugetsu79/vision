@@ -1,5 +1,9 @@
 # Core Link Probe Monitoring Design
 
+Status: implemented as the first monitoring-model slice on branch
+`codex/sceneops-pack-registry`; later work added source-side edge-agent ICMP
+sequence and authenticated Vezor UDP sequence measurement.
+
 ## Purpose
 
 The current Link workspace lets an operator add a logical link path and a monitoring target, but the adjacent **Record probe** action reads like it starts monitoring. It does not. It only saves manually entered probe metrics. That creates the wrong mental model for real networking, especially when a site has an opaque third-party SD-WAN path and Vezor can only observe a handoff or endpoint.
@@ -98,7 +102,9 @@ Validation:
 - `id` is required for every target persisted by the UI.
 - Existing targets without IDs should be assigned stable IDs on edit/save.
 - `label`, `address`, `probe_type`, and `purpose` are required.
-- `probe_type` remains `icmp | tcp | http | https`.
+- `probe_type` supports `icmp | tcp | http | https | udp | manual` in current
+  Core Link samples. Monitoring target UI still exposes only methods that are
+  operational for the selected source.
 - `port` is required for `tcp`, `http`, and `https`, and omitted for `icmp`.
 - `port` must be 1-65535.
 - `monitoring.enabled` defaults to `false`.
@@ -148,7 +154,9 @@ Unsupported from central backend in this slice:
 
 - Raw ICMP ping. It often needs elevated permissions and does not prove site-side reachability. ICMP targets can still receive manual, edge agent, provider, or imported samples.
 
-Edge-agent and provider/API sources are contract-ready but not implemented as live collectors in this slice. Their samples can be recorded through the same probe APIs once those collectors exist.
+Edge-agent ICMP sequence and Vezor UDP sequence samples are now operational
+through the edge-agent sample API. Provider/API sources remain contract-ready
+but are not implemented as live collectors yet.
 
 ## Deleting Probe Samples
 
