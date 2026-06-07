@@ -20,6 +20,7 @@ from argus.link.contracts import (
     LinkPassportSnapshotRecord,
     LinkPriorityLane,
     LinkQueueItemRecord,
+    LinkSiteSummaryRecord,
     LinkTransportKind,
 )
 from argus.models.enums import RoleEnum
@@ -95,6 +96,36 @@ class LinkConnectionPatch(BaseModel):
     packet_loss_percent: float | None = Field(default=None, ge=0)
     last_seen_at: datetime | None = None
     metadata: dict[str, object] | None = None
+
+
+class LinkSiteSummaryResponse(BaseModel):
+    site_id: UUID
+    site_name: str
+    site_tz: str
+    link_state: str
+    active_connection: dict[str, object] | None = None
+    connection_count: int
+    metered_connection_count: int
+    latest_probe: dict[str, object] | None = None
+    queue_depth: dict[str, int] = Field(default_factory=dict)
+    queued_bytes: int
+    budget: dict[str, object] | None = None
+    last_sync_at: datetime | None = None
+    passport_hash: str
+
+
+@router.get("/sites/summary", response_model=list[LinkSiteSummaryResponse])
+async def get_link_site_summaries(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> list[LinkSiteSummaryResponse]:
+    sites = await services.sites.list_sites(tenant_context)
+    summary_records = await services.link.alist_site_summaries(
+        tenant_id=tenant_context.tenant_id,
+        sites=[{"id": site.id, "name": site.name, "tz": site.tz} for site in sites],
+    )
+    return [_site_summary_payload(summary) for summary in summary_records]
 
 
 @router.get("/sites/{site_id}/status")
@@ -446,6 +477,32 @@ def _status_payload(passport: LinkPassportSnapshotRecord) -> JsonObject:
     payload = passport.payload.copy()
     payload["passport_hash"] = passport.passport_hash
     return payload
+
+
+def _site_summary_payload(summary: LinkSiteSummaryRecord) -> LinkSiteSummaryResponse:
+    return LinkSiteSummaryResponse(
+        site_id=summary.site_id,
+        site_name=summary.site_name,
+        site_tz=summary.site_tz,
+        link_state=summary.link_state,
+        active_connection=(
+            _connection_payload(summary.active_connection)
+            if summary.active_connection is not None
+            else None
+        ),
+        connection_count=summary.connection_count,
+        metered_connection_count=summary.metered_connection_count,
+        latest_probe=(
+            _probe_payload(summary.latest_probe)
+            if summary.latest_probe is not None
+            else None
+        ),
+        queue_depth={str(lane): count for lane, count in summary.queue_depth.items()},
+        queued_bytes=summary.queued_bytes,
+        budget=_budget_payload(summary.budget) if summary.budget is not None else None,
+        last_sync_at=summary.last_sync_at,
+        passport_hash=summary.passport_hash,
+    )
 
 
 async def _ensure_tenant_site(

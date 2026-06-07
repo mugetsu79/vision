@@ -118,6 +118,23 @@ class LinkPassportSnapshotRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class LinkSiteSummaryRecord:
+    site_id: UUID
+    site_name: str
+    site_tz: str
+    link_state: LinkState
+    active_connection: LinkConnectionRecord | None
+    connection_count: int
+    metered_connection_count: int
+    latest_probe: LinkHealthProbeRecord | None
+    queue_depth: dict[LinkPriorityLane, int]
+    queued_bytes: int
+    budget: LinkBudgetSnapshot | None
+    last_sync_at: datetime | None
+    passport_hash: str
+
+
+@dataclass(frozen=True, slots=True)
 class BackpressureDecision:
     paused_lanes: set[LinkPriorityLane] = field(default_factory=set)
     allowed_lanes: set[LinkPriorityLane] = field(default_factory=set)

@@ -25,6 +25,7 @@ from argus.link.contracts import (
     LinkPassportSnapshotRecord,
     LinkPriorityLane,
     LinkQueueItemRecord,
+    LinkSiteSummaryRecord,
     LinkState,
     LinkTransferAttemptRecord,
     LinkTransportKind,
@@ -472,6 +473,115 @@ class LinkService:
             priority_lane=priority_lane,
             remaining_budget_bytes=remaining_budget_bytes,
         )
+
+    def list_site_summaries(
+        self,
+        *,
+        tenant_id: UUID,
+        sites: Sequence[Mapping[str, object]],
+    ) -> list[LinkSiteSummaryRecord]:
+        self._ensure_memory_mode()
+        summaries: list[LinkSiteSummaryRecord] = []
+        for site in sites:
+            site_id = cast(UUID, site["id"])
+            connections = self.list_connections(tenant_id=tenant_id, site_id=site_id)
+            budget = self.get_budget(tenant_id=tenant_id, site_id=site_id)
+            active_connection = _select_connection(
+                connections,
+                priority_lane="bulk",
+                remaining_budget_bytes=(
+                    budget.bulk_daily_bytes if budget is not None else 0
+                ),
+            )
+            latest_probe = self.latest_probe(tenant_id=tenant_id, site_id=site_id)
+            queue = self.list_queue(tenant_id=tenant_id, site_id=site_id)
+            last_sync_at = self.last_successful_transfer_at(
+                tenant_id=tenant_id,
+                site_id=site_id,
+            )
+            passport = self.build_passport(tenant_id=tenant_id, site_id=site_id)
+            summaries.append(
+                LinkSiteSummaryRecord(
+                    site_id=site_id,
+                    site_name=str(site["name"]),
+                    site_tz=str(site.get("tz", "UTC")),
+                    link_state=self.derive_link_state(latest_probe),
+                    active_connection=active_connection,
+                    connection_count=len(connections),
+                    metered_connection_count=sum(
+                        1 for connection in connections if connection.metered
+                    ),
+                    latest_probe=latest_probe,
+                    queue_depth=self.queue_depth_by_lane(queue),
+                    queued_bytes=sum(
+                        item.byte_size
+                        for item in queue
+                        if item.status not in {"paused", "succeeded"}
+                    ),
+                    budget=budget,
+                    last_sync_at=last_sync_at,
+                    passport_hash=passport.passport_hash,
+                )
+            )
+        return summaries
+
+    async def alist_site_summaries(
+        self,
+        *,
+        tenant_id: UUID,
+        sites: Sequence[Mapping[str, object]],
+    ) -> list[LinkSiteSummaryRecord]:
+        if self.session_factory is None:
+            return self.list_site_summaries(tenant_id=tenant_id, sites=sites)
+        summaries: list[LinkSiteSummaryRecord] = []
+        for site in sites:
+            site_id = cast(UUID, site["id"])
+            connections = await self.alist_connections(
+                tenant_id=tenant_id,
+                site_id=site_id,
+            )
+            budget = await self.aget_budget(tenant_id=tenant_id, site_id=site_id)
+            active_connection = _select_connection(
+                connections,
+                priority_lane="bulk",
+                remaining_budget_bytes=(
+                    budget.bulk_daily_bytes if budget is not None else 0
+                ),
+            )
+            latest_probe = await self.alatest_probe(
+                tenant_id=tenant_id,
+                site_id=site_id,
+            )
+            queue = await self.alist_queue(tenant_id=tenant_id, site_id=site_id)
+            last_sync_at = await self.alast_successful_transfer_at(
+                tenant_id=tenant_id,
+                site_id=site_id,
+            )
+            passport = await self.abuild_passport(tenant_id=tenant_id, site_id=site_id)
+            summaries.append(
+                LinkSiteSummaryRecord(
+                    site_id=site_id,
+                    site_name=str(site["name"]),
+                    site_tz=str(site.get("tz", "UTC")),
+                    link_state=self.derive_link_state(latest_probe),
+                    active_connection=active_connection,
+                    connection_count=len(connections),
+                    metered_connection_count=sum(
+                        1 for connection in connections if connection.metered
+                    ),
+                    latest_probe=latest_probe,
+                    queue_depth=self.queue_depth_by_lane(queue),
+                    queued_bytes=sum(
+                        item.byte_size
+                        for item in queue
+                        if item.status not in {"paused", "succeeded"}
+                    ),
+                    budget=budget,
+                    last_sync_at=last_sync_at,
+                    passport_hash=passport.passport_hash,
+                )
+            )
+        return summaries
 
     def enqueue_transfer(
         self,

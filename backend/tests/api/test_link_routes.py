@@ -63,6 +63,19 @@ class _FakeSecurity:
 
 
 class _FakeSiteService:
+    async def list_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        return [
+            SiteResponse(
+                id=KNOWN_SITE_ID,
+                tenant_id=tenant_context.tenant_id,
+                name="Packless Site",
+                description=None,
+                tz="UTC",
+                geo_point=None,
+                created_at=datetime.now(tz=UTC),
+            )
+        ]
+
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         if site_id != KNOWN_SITE_ID:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found.")
@@ -120,6 +133,31 @@ async def test_packless_link_status_route_returns_budget_queue_probe_and_state(
     assert payload["site_id"] == "00000000-0000-4000-8000-000000000002"
     assert payload["pack_id"] is None
     assert set(payload) >= {"budget", "queue_depth", "latest_probe", "link_state", "last_sync_at"}
+
+
+@pytest.mark.asyncio
+async def test_link_site_summary_route_is_packless_and_domain_neutral(
+    client: AsyncClient,
+) -> None:
+    response = await client.get("/api/v1/link/sites/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert payload
+    assert {
+        "site_id",
+        "site_name",
+        "site_tz",
+        "link_state",
+        "connection_count",
+        "metered_connection_count",
+        "queue_depth",
+        "queued_bytes",
+        "passport_hash",
+    } <= set(payload[0])
+    assert "vessel" not in payload[0]
+    assert "voyage" not in payload[0]
 
 
 @pytest.mark.asyncio

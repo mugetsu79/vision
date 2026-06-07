@@ -144,6 +144,71 @@ def test_link_passport_includes_connection_candidates(link_service: LinkService)
     assert passport.payload["connections"][0]["site_id"] == str(site_id)
 
 
+def test_packless_link_site_summaries_include_status_budget_queue_and_probe(
+    link_service: LinkService,
+) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    connection = link_service.upsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label="Primary fiber",
+        transport_kind="fiber",
+        status="online",
+        priority_rank=5,
+        availability_scope="always",
+        metered=False,
+        expected_downlink_mbps=250.0,
+        expected_uplink_mbps=100.0,
+    )
+    budget = link_service.upsert_budget(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        monthly_bytes=500_000_000_000,
+        bulk_daily_bytes=25_000_000_000,
+    )
+    link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        connection_id=connection.id,
+        latency_ms=42,
+        throughput_mbps=180.0,
+        packet_loss_percent=0.1,
+        reachable=True,
+        source="packless-lab",
+    )
+    link_service.enqueue_transfer(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        priority_lane="evidence",
+        byte_size=8_000_000,
+        source_object_type="evidence_artifact",
+        source_object_id=UUID("00000000-0000-4000-8000-000000000030"),
+    )
+
+    summaries = link_service.list_site_summaries(
+        tenant_id=tenant_id,
+        sites=[{"id": site_id, "name": "North Gate", "tz": "UTC"}],
+    )
+
+    assert summaries[0].site_id == site_id
+    assert summaries[0].site_name == "North Gate"
+    assert summaries[0].site_tz == "UTC"
+    assert summaries[0].link_state == "healthy"
+    assert summaries[0].active_connection is not None
+    assert summaries[0].active_connection.id == connection.id
+    assert summaries[0].connection_count == 1
+    assert summaries[0].metered_connection_count == 0
+    assert summaries[0].latest_probe is not None
+    assert summaries[0].latest_probe.latency_ms == 42
+    assert summaries[0].queue_depth["evidence"] == 1
+    assert summaries[0].queued_bytes == 8_000_000
+    assert summaries[0].budget is not None
+    assert summaries[0].budget.id == budget.id
+    assert summaries[0].passport_hash
+
+
 def test_bulk_selection_prefers_online_before_unmetered(link_service: LinkService) -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000001")
     site_id = UUID("00000000-0000-4000-8000-000000000002")

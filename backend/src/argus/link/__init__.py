@@ -8,6 +8,7 @@ from argus.link.contracts import (
     LinkPassportSnapshotRecord,
     LinkPriorityLane,
     LinkQueueItemRecord,
+    LinkSiteSummaryRecord,
     LinkState,
     LinkTransferAttemptRecord,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "LinkPassportSnapshotRecord",
     "LinkPriorityLane",
     "LinkQueueItemRecord",
+    "LinkSiteSummaryRecord",
     "LinkService",
     "LinkState",
     "LinkTransferAttemptRecord",

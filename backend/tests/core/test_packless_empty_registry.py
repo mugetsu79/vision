@@ -58,6 +58,19 @@ class _FakeTenancyService:
 
 
 class _FakeSiteService:
+    async def list_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        return [
+            SiteResponse(
+                id=SITE_ID,
+                tenant_id=tenant_context.tenant_id,
+                name="Packless Site",
+                description=None,
+                tz="UTC",
+                geo_point=None,
+                created_at=datetime.now(tz=UTC),
+            )
+        ]
+
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         return SiteResponse(
             id=SITE_ID if site_id == SITE_ID else site_id,
@@ -136,6 +149,23 @@ async def test_link_connection_routes_work_with_empty_pack_registry(
     assert response.status_code == 201
     payload = response.json()
     assert payload["transport_kind"] == "fiber"
+    assert "vessel" not in json.dumps(payload).lower()
+
+
+@pytest.mark.asyncio
+async def test_link_summary_route_works_with_empty_pack_registry(
+    empty_pack_app: FastAPI,
+) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=empty_pack_app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/link/sites/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["site_id"] == "00000000-0000-4000-8000-000000000002"
+    assert payload[0]["site_name"] == "Packless Site"
     assert "vessel" not in json.dumps(payload).lower()
 
 
