@@ -93,6 +93,7 @@ class LinkEdgeProbeSampleCreate(BaseModel):
     duration_ms: int | None = Field(default=None, ge=0)
     dscp: int | None = Field(default=None, ge=0, le=63)
     measured_at: datetime | None = None
+    measurement_metadata: JsonObject = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_packet_counts(self) -> LinkEdgeProbeSampleCreate:
@@ -693,6 +694,11 @@ async def post_link_edge_probe_sample(
     )
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
+    if payload.method == "udp_sequence" and target.get("probe_type") != "udp":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="UDP sequence samples require a UDP probe target.",
+        )
 
     target_site_id = await _target_site_id_from_metadata(services, tenant_context, target)
     packets_lost = payload.packet_count - payload.packets_received
@@ -1373,13 +1379,16 @@ def _edge_measurement_metadata(
     payload: LinkEdgeProbeSampleCreate,
     packets_lost: int,
 ) -> JsonObject:
-    metadata: JsonObject = {
+    metadata: JsonObject = dict(payload.measurement_metadata)
+    metadata.update(
+        {
         "agent_id": payload.agent_id,
         "method": payload.method,
         "packet_count": payload.packet_count,
         "packets_received": payload.packets_received,
         "packets_lost": packets_lost,
-    }
+        }
+    )
     if payload.agent_label is not None:
         metadata["agent_label"] = payload.agent_label
     if payload.jitter_ms is not None:

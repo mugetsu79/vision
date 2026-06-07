@@ -493,6 +493,124 @@ async def test_edge_agent_sample_can_target_control_plane_site(client: AsyncClie
 
 
 @pytest.mark.asyncio
+async def test_edge_agent_udp_sequence_sample_stores_reflector_metadata(
+    client: AsyncClient,
+) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+            "metadata": {
+                "monitoring_targets": [
+                    {
+                        "id": "target-vezor-master",
+                        "label": "Vezor Master reflector",
+                        "address": "master.vezor.local",
+                        "target_site_id": str(MASTER_SITE_ID),
+                        "probe_type": "udp",
+                        "purpose": "vezor_control",
+                        "monitoring": {
+                            "enabled": True,
+                            "source_type": "edge_agent",
+                            "interval_seconds": 300,
+                        },
+                    }
+                ]
+            },
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-vezor-master/edge-samples",
+        json={
+            "agent_id": "macbook-home",
+            "method": "udp_sequence",
+            "packet_count": 50,
+            "packets_received": 49,
+            "latency_ms": 24,
+            "jitter_ms": 2.1,
+            "duration_ms": 5900,
+            "measurement_metadata": {
+                "protocol": "vezor_udp_sequence",
+                "reflector_profile_id": "master-reflector-default",
+                "reflector_address": "master.vezor.local",
+                "reflector_port": 8622,
+                "packets_late": 0,
+                "packets_duplicate": 0,
+                "packets_out_of_order": 0,
+                "rtt_avg_ms": 24.2,
+                "rtt_variation_ms": 2.1,
+            },
+        },
+    )
+
+    assert created.status_code == 201
+    assert response.status_code == 201
+    metadata = response.json()["measurement_metadata"]
+    assert metadata["protocol"] == "vezor_udp_sequence"
+    assert metadata["reflector_profile_id"] == "master-reflector-default"
+    assert metadata["reflector_address"] == "master.vezor.local"
+    assert metadata["reflector_port"] == 8622
+    assert metadata["packets_lost"] == 1
+    assert metadata["packets_duplicate"] == 0
+    assert metadata["packets_out_of_order"] == 0
+    assert metadata["rtt_avg_ms"] == 24.2
+
+
+@pytest.mark.asyncio
+async def test_edge_agent_udp_sequence_sample_rejects_non_udp_target(
+    client: AsyncClient,
+) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+            "metadata": {
+                "monitoring_targets": [
+                    {
+                        "id": "target-https",
+                        "label": "Vezor Master API",
+                        "address": "https://master.vezor.local/healthz",
+                        "probe_type": "https",
+                        "purpose": "vezor_control",
+                        "monitoring": {
+                            "enabled": True,
+                            "source_type": "edge_agent",
+                            "interval_seconds": 300,
+                        },
+                    }
+                ]
+            },
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-https/edge-samples",
+        json={
+            "agent_id": "macbook-home",
+            "method": "udp_sequence",
+            "packet_count": 50,
+            "packets_received": 49,
+            "latency_ms": 24,
+        },
+    )
+
+    assert created.status_code == 201
+    assert response.status_code == 422
+    assert response.json()["detail"] == "UDP sequence samples require a UDP probe target."
+
+
+@pytest.mark.asyncio
 async def test_master_reflector_profile_api_defaults_disabled(client: AsyncClient) -> None:
     response = await client.get("/api/v1/link/reflectors/master")
 

@@ -6,9 +6,13 @@ import pytest
 from argus.link.edge_agent import (
     PingStatistics,
     build_edge_sample_payload,
+    build_udp_sequence_edge_sample_payload,
+    parse_args,
     parse_ping_output,
     post_edge_sample,
+    run_udp_sequence_probe,
 )
+from argus.link.reflector import start_reflector, stop_reflector
 
 
 def test_parse_macos_ping_output_reports_packets_and_timing() -> None:
@@ -72,6 +76,112 @@ def test_build_edge_sample_payload_uses_ping_statistics() -> None:
         "latency_ms": 22,
         "jitter_ms": 5.612,
         "duration_ms": 19024,
+    }
+
+
+def test_parse_args_accepts_udp_sequence_reflector_options() -> None:
+    args = parse_args(
+        [
+            "--api-base-url",
+            "http://api.local",
+            "--bearer-token",
+            "secret-token",
+            "--site-id",
+            "site-1",
+            "--target-id",
+            "vezor-master-udp-reflector",
+            "--target",
+            "vezor.example.local",
+            "--method",
+            "udp_sequence",
+            "--reflector",
+            "vezor.example.local",
+            "--reflector-port",
+            "8622",
+            "--reflector-key-id",
+            "master-reflector-test",
+            "--reflector-secret",
+            "reflector-secret",
+            "--packet-spacing-ms",
+            "10",
+            "--loss-timeout-ms",
+            "250",
+            "--once",
+        ]
+    )
+
+    assert args.method == "udp_sequence"
+    assert args.reflector == "vezor.example.local"
+    assert args.reflector_port == 8622
+    assert args.reflector_key_id == "master-reflector-test"
+    assert args.reflector_secret == "reflector-secret"
+    assert args.packet_spacing_ms == 10
+    assert args.loss_timeout_ms == 250
+
+
+@pytest.mark.asyncio
+async def test_run_udp_sequence_probe_measures_loopback_reflector() -> None:
+    runtime = await start_reflector(
+        bind_host="127.0.0.1",
+        port=0,
+        secret=b"reflector-secret",
+        key_id="master-reflector-test",
+    )
+    assert runtime is not None
+    try:
+        stats = await run_udp_sequence_probe(
+            reflector_host="127.0.0.1",
+            reflector_port=runtime.port,
+            reflector_secret="reflector-secret",
+            reflector_key_id="master-reflector-test",
+            packet_count=3,
+            packet_spacing_ms=1,
+            loss_timeout_ms=250,
+        )
+    finally:
+        stop_reflector(runtime)
+
+    assert stats.packet_count == 3
+    assert stats.packets_received == 3
+    assert stats.latency_ms >= 0
+    assert stats.jitter_ms is not None
+    assert stats.measurement_metadata["protocol"] == "vezor_udp_sequence"
+    assert stats.measurement_metadata["reflector_port"] == runtime.port
+    assert stats.measurement_metadata["packets_lost"] == 0
+
+
+def test_build_udp_sequence_edge_sample_payload_includes_sequence_metadata() -> None:
+    payload = build_udp_sequence_edge_sample_payload(
+        agent_id="macbook-home",
+        agent_label="MacBook at home",
+        stats=PingStatistics(
+            packet_count=5,
+            packets_received=4,
+            latency_ms=22,
+            jitter_ms=1.4,
+            duration_ms=450,
+            measurement_metadata={
+                "protocol": "vezor_udp_sequence",
+                "reflector_address": "vezor.example.local",
+                "reflector_port": 8622,
+                "packets_lost": 1,
+            },
+        ),
+        dscp=46,
+    )
+
+    assert payload["method"] == "udp_sequence"
+    assert payload["packet_count"] == 5
+    assert payload["packets_received"] == 4
+    assert payload["latency_ms"] == 22
+    assert payload["jitter_ms"] == 1.4
+    assert payload["duration_ms"] == 450
+    assert payload["dscp"] == 46
+    assert payload["measurement_metadata"] == {
+        "protocol": "vezor_udp_sequence",
+        "reflector_address": "vezor.example.local",
+        "reflector_port": 8622,
+        "packets_lost": 1,
     }
 
 
