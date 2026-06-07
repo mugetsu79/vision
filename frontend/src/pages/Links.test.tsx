@@ -266,7 +266,7 @@ describe("Links", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("selected site renders link posture connections budget probes queue and passport", async () => {
+  test("selected site renders link posture link paths budget probes queue and passport", async () => {
     mockLinkHooks({
       summaries: [createSummary({ site_id: "site-1", site_name: "North Gate" })],
       status: {
@@ -296,6 +296,20 @@ describe("Links", () => {
           transport_kind: "fiber",
           status: "online",
           metered: false,
+          provider: "Acme Fiber",
+          metadata: {
+            link_model: "direct",
+            visibility: "full",
+            external_reference: "Circuit CH-ZRH-01",
+            monitoring_targets: [
+              {
+                label: "Provider edge",
+                address: "203.0.113.10",
+                probe_type: "icmp",
+                purpose: "provider_edge",
+              },
+            ],
+          },
         },
       ],
       probes: [
@@ -328,8 +342,11 @@ describe("Links", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Primary fiber/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /Connections/i }),
+      screen.getByRole("heading", { name: /Link paths/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Direct/i)).toBeInTheDocument();
+    expect(screen.getByText(/Full visibility/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 monitoring target/i)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /Budget and policy/i }),
     ).toBeInTheDocument();
@@ -342,7 +359,7 @@ describe("Links", () => {
     expect(screen.getByText(/abcdef12/i)).toBeInTheDocument();
   });
 
-  test("connection form creates a core link connection for the selected site", async () => {
+  test("link path form saves a provider-managed path with a monitoring target", async () => {
     const user = userEvent.setup();
     const createConnection = vi.fn().mockResolvedValue({});
     mockLinkHooks({
@@ -353,21 +370,110 @@ describe("Links", () => {
     renderWithProviders(<Links />, { route: "/links?site=site-1" });
 
     await user.click(
-      await screen.findByRole("button", { name: /add connection/i }),
+      await screen.findByRole("button", { name: /add link path/i }),
     );
-    await user.type(screen.getByLabelText(/connection label/i), "Primary fiber");
-    await user.selectOptions(screen.getByLabelText(/transport kind/i), "fiber");
-    await user.click(screen.getByRole("button", { name: /save connection/i }));
+    await user.type(
+      screen.getByLabelText(/link path label/i),
+      "Managed SD-WAN overlay",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/link model/i),
+      "provider_managed",
+    );
+    await user.type(screen.getByLabelText(/provider/i), "Acme MSP");
+    await user.type(
+      screen.getByLabelText(/external reference/i),
+      "CH-ZRH-01 edge pair",
+    );
+    await user.selectOptions(screen.getByLabelText(/visibility/i), "handoff_only");
+    await user.click(screen.getByRole("button", { name: /add monitoring target/i }));
+    await user.type(screen.getByLabelText(/target label/i), "Vezor ingest");
+    await user.type(
+      screen.getByLabelText(/target address/i),
+      "ingest.example.vezor",
+    );
+    await user.selectOptions(screen.getByLabelText(/probe type/i), "https");
+    await user.clear(screen.getByLabelText(/target port/i));
+    await user.type(screen.getByLabelText(/target port/i), "443");
+    await user.click(screen.getByRole("button", { name: /save link path/i }));
 
-    expect(createConnection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "Primary fiber",
-        transport_kind: "fiber",
-      }),
+    const createCall = createConnection.mock.calls[0]?.[0] as
+      | {
+          label?: string;
+          transport_kind?: string;
+          provider?: string | null;
+          metadata?: {
+            external_reference?: string | null;
+            link_model?: string;
+            monitoring_targets?: Array<{
+              address?: string;
+              label?: string;
+              port?: number | null;
+              probe_type?: string;
+            }>;
+            visibility?: string;
+          };
+        }
+      | undefined;
+    expect(createCall?.label).toBe("Managed SD-WAN overlay");
+    expect(createCall?.transport_kind).toBe("other");
+    expect(createCall?.provider).toBe("Acme MSP");
+    expect(createCall?.metadata?.external_reference).toBe(
+      "CH-ZRH-01 edge pair",
     );
+    expect(createCall?.metadata?.link_model).toBe("provider_managed");
+    expect(createCall?.metadata?.visibility).toBe("handoff_only");
+    expect(createCall?.metadata?.monitoring_targets?.[0]).toMatchObject({
+      address: "ingest.example.vezor",
+      label: "Vezor ingest",
+      port: 443,
+      probe_type: "https",
+    });
   });
 
-  test("connection controls edit and delete the selected connection", async () => {
+  test("link path form can save inventory-only paths without targets", async () => {
+    const user = userEvent.setup();
+    const createConnection = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      createConnection,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    await user.click(
+      await screen.findByRole("button", { name: /add link path/i }),
+    );
+    await user.type(
+      screen.getByLabelText(/link path label/i),
+      "Inventory only SD-WAN",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/link model/i),
+      "inventory_only",
+    );
+    await user.selectOptions(screen.getByLabelText(/visibility/i), "none");
+    await user.click(screen.getByRole("button", { name: /save link path/i }));
+
+    const createCall = createConnection.mock.calls[0]?.[0] as
+      | {
+          label?: string;
+          transport_kind?: string;
+          metadata?: {
+            link_model?: string;
+            monitoring_targets?: unknown[];
+            visibility?: string;
+          };
+        }
+      | undefined;
+    expect(createCall?.label).toBe("Inventory only SD-WAN");
+    expect(createCall?.transport_kind).toBe("other");
+    expect(createCall?.metadata?.link_model).toBe("inventory_only");
+    expect(createCall?.metadata?.monitoring_targets).toEqual([]);
+    expect(createCall?.metadata?.visibility).toBe("none");
+  });
+
+  test("link path controls edit and delete the selected path", async () => {
     const user = userEvent.setup();
     const updateConnection = vi.fn().mockResolvedValue({});
     const deleteConnection = vi.fn().mockResolvedValue({});
@@ -391,9 +497,9 @@ describe("Links", () => {
     await user.click(
       await screen.findByRole("button", { name: /edit primary fiber/i }),
     );
-    await user.clear(screen.getByLabelText(/connection label/i));
-    await user.type(screen.getByLabelText(/connection label/i), "Backup fiber");
-    await user.click(screen.getByRole("button", { name: /save connection/i }));
+    await user.clear(screen.getByLabelText(/link path label/i));
+    await user.type(screen.getByLabelText(/link path label/i), "Backup fiber");
+    await user.click(screen.getByRole("button", { name: /save link path/i }));
     await user.click(
       screen.getByRole("button", { name: /delete primary fiber/i }),
     );
@@ -429,25 +535,54 @@ describe("Links", () => {
     });
   });
 
-  test("invalid policy JSON shows an inline error without saving", async () => {
+  test("policy controls save generated policy without exposing JSON", async () => {
     const user = userEvent.setup();
     const updatePolicies = vi.fn().mockResolvedValue({});
     mockLinkHooks({
       summaries: [createSummary({ site_id: "site-1" })],
-      policies: { policy: { bulk_requires_unmetered: true } },
+      policies: {
+        policy: {
+          priority_order: ["safety", "evidence", "telemetry", "bulk"],
+          backpressure: {
+            degraded_pauses: ["telemetry", "bulk"],
+            dark_allows: ["safety"],
+          },
+        },
+      },
       updatePolicies,
     });
 
     renderWithProviders(<Links />, { route: "/links?site=site-1" });
 
-    await user.clear(await screen.findByLabelText(/policy json/i));
-    await user.type(screen.getByLabelText(/policy json/i), "not json");
+    expect(screen.queryByLabelText(/policy json/i)).not.toBeInTheDocument();
+
+    await user.click(
+      await screen.findByRole("button", { name: /move evidence down/i }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: /pause evidence when degraded/i }),
+    );
     await user.click(screen.getByRole("button", { name: /save policy/i }));
 
-    expect(
-      screen.getByText(/policy must be valid json/i),
-    ).toBeInTheDocument();
-    expect(updatePolicies).not.toHaveBeenCalled();
+    const policyCall = updatePolicies.mock.calls[0]?.[0] as
+      | {
+          policy?: {
+            backpressure?: { degraded_pauses?: string[] };
+            priority_order?: string[];
+          };
+        }
+      | undefined;
+    expect(policyCall?.policy?.priority_order).toEqual([
+      "safety",
+      "telemetry",
+      "evidence",
+      "bulk",
+    ]);
+    expect(policyCall?.policy?.backpressure?.degraded_pauses).toEqual([
+      "telemetry",
+      "bulk",
+      "evidence",
+    ]);
   });
 
   test("record probe dialog sends probe metrics for the selected site", async () => {

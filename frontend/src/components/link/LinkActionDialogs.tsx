@@ -1,6 +1,23 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Plus, Trash2 } from "lucide-react";
 
-import { asRecord, numberValue, textValue } from "@/components/link/types";
+import {
+  asRecord,
+  linkModelLabel,
+  linkModels,
+  linkPathMetadata,
+  linkVisibilities,
+  linkVisibilityLabel,
+  monitoringProbeTypes,
+  monitoringPurposes,
+  numberValue,
+  textValue,
+  type LinkModel,
+  type LinkPathMetadata,
+  type LinkVisibility,
+  type MonitoringProbeType,
+  type MonitoringPurpose,
+} from "@/components/link/types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogCloseButton, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,8 +30,20 @@ import type {
 
 type ConnectionMode = "create" | "edit";
 
+type MonitoringTargetFormState = {
+  label: string;
+  address: string;
+  probeType: MonitoringProbeType;
+  port: string;
+  purpose: MonitoringPurpose;
+  expectedLatencyMs: string;
+};
+
 type ConnectionFormState = {
   label: string;
+  linkModel: LinkModel;
+  visibility: LinkVisibility;
+  externalReference: string;
   transportKind: LinkConnectionCreateInput["transport_kind"];
   provider: string;
   status: LinkConnectionCreateInput["status"];
@@ -27,6 +56,7 @@ type ConnectionFormState = {
   expectedUplinkMbps: string;
   expectedLatencyMs: string;
   packetLossPercent: string;
+  targets: MonitoringTargetFormState[];
 };
 
 type LinkConnectionDialogProps = {
@@ -50,6 +80,9 @@ type LinkProbeDialogProps = {
 
 const defaultConnectionForm: ConnectionFormState = {
   label: "",
+  linkModel: "direct",
+  visibility: "full",
+  externalReference: "",
   transportKind: "other",
   provider: "",
   status: "unknown",
@@ -62,6 +95,16 @@ const defaultConnectionForm: ConnectionFormState = {
   expectedUplinkMbps: "",
   expectedLatencyMs: "",
   packetLossPercent: "",
+  targets: [],
+};
+
+const defaultTargetForm: MonitoringTargetFormState = {
+  label: "",
+  address: "",
+  probeType: "https",
+  port: "443",
+  purpose: "vezor_control",
+  expectedLatencyMs: "",
 };
 
 export function LinkConnectionDialog({
@@ -84,8 +127,12 @@ export function LinkConnectionDialog({
     }
 
     const item = asRecord(connection);
+    const metadata = linkPathMetadata(item.metadata);
     setForm({
       label: textValue(item.label, ""),
+      linkModel: metadata.link_model,
+      visibility: metadata.visibility,
+      externalReference: textValue(metadata.external_reference, ""),
       transportKind: transportKindValue(item.transport_kind),
       provider: textValue(item.provider, ""),
       status: statusValue(item.status),
@@ -98,6 +145,14 @@ export function LinkConnectionDialog({
       expectedUplinkMbps: optionalNumberText(item.expected_uplink_mbps),
       expectedLatencyMs: optionalNumberText(item.expected_latency_ms),
       packetLossPercent: optionalNumberText(item.packet_loss_percent),
+      targets: metadata.monitoring_targets.map((target) => ({
+        label: target.label,
+        address: target.address,
+        probeType: target.probe_type,
+        port: optionalNumberText(target.port),
+        purpose: target.purpose,
+        expectedLatencyMs: optionalNumberText(target.expected_latency_ms),
+      })),
     });
     setSubmitError(null);
   }, [connection, open]);
@@ -107,6 +162,47 @@ export function LinkConnectionDialog({
     value: ConnectionFormState[K],
   ) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateTargetField<K extends keyof MonitoringTargetFormState>(
+    index: number,
+    field: K,
+    value: MonitoringTargetFormState[K],
+  ) {
+    setForm((current) => ({
+      ...current,
+      targets: current.targets.map((target, targetIndex) => {
+        if (targetIndex !== index) {
+          return target;
+        }
+        if (field === "probeType") {
+          const probeType = value as MonitoringProbeType;
+          return {
+            ...target,
+            [field]: value,
+            port:
+              target.port === "" || target.port === defaultPort(target.probeType)
+                ? defaultPort(probeType)
+                : target.port,
+          };
+        }
+        return { ...target, [field]: value };
+      }),
+    }));
+  }
+
+  function addTarget() {
+    setForm((current) => ({
+      ...current,
+      targets: [...current.targets, { ...defaultTargetForm }],
+    }));
+  }
+
+  function removeTarget(index: number) {
+    setForm((current) => ({
+      ...current,
+      targets: current.targets.filter((_, targetIndex) => targetIndex !== index),
+    }));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -120,7 +216,7 @@ export function LinkConnectionDialog({
       setSubmitError(
         error instanceof Error
           ? error.message
-          : "Unable to save link connection.",
+          : "Unable to save link path.",
       );
     }
   }
@@ -128,8 +224,8 @@ export function LinkConnectionDialog({
   return (
     <Dialog
       open={open}
-      title={isEdit ? "Edit connection" : "Add connection"}
-      description="Configure a site link path and expected performance envelope."
+      title={isEdit ? "Edit link path" : "Add link path"}
+      description="Configure the logical path, monitoring target, and expected performance envelope."
     >
       <form
         className="max-h-[calc(100vh-12rem)] space-y-5 overflow-y-auto pr-1"
@@ -137,14 +233,50 @@ export function LinkConnectionDialog({
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <LabeledInput
-            label="Connection label"
+            label="Link path label"
             value={form.label}
             required
             onChange={(value) => updateField("label", value)}
-            placeholder="Primary fiber"
+            placeholder="Managed SD-WAN overlay"
           />
           <LabeledSelect
-            label="Transport kind"
+            label="Link model"
+            value={form.linkModel}
+            onChange={(value) => updateField("linkModel", linkModelValue(value))}
+          >
+            {linkModels.map((model) => (
+              <option key={model} value={model}>
+                {linkModelLabel(model)}
+              </option>
+            ))}
+          </LabeledSelect>
+          <LabeledInput
+            label="Provider"
+            value={form.provider}
+            onChange={(value) => updateField("provider", value)}
+            placeholder="Provider or MSP"
+          />
+          <LabeledInput
+            label="External reference"
+            value={form.externalReference}
+            onChange={(value) => updateField("externalReference", value)}
+            placeholder="Circuit, tenant, tunnel, or ticket ID"
+          />
+          <LabeledSelect
+            label="Visibility"
+            value={form.visibility}
+            onChange={(value) =>
+              updateField("visibility", linkVisibilityValue(value))
+            }
+          >
+            {linkVisibilities.map((visibility) => (
+              <option key={visibility} value={visibility}>
+                {linkVisibilityLabel(visibility)}
+              </option>
+            ))}
+          </LabeledSelect>
+          <LabeledSelect
+            label="Transport visible to Vezor"
             value={form.transportKind}
             onChange={(value) =>
               updateField("transportKind", transportKindValue(value))
@@ -156,14 +288,8 @@ export function LinkConnectionDialog({
               </option>
             ))}
           </LabeledSelect>
-          <LabeledInput
-            label="Provider"
-            value={form.provider}
-            onChange={(value) => updateField("provider", value)}
-            placeholder="Provider"
-          />
           <LabeledSelect
-            label="Connection status"
+            label="Link status"
             value={form.status}
             onChange={(value) => updateField("status", statusValue(value))}
           >
@@ -200,7 +326,7 @@ export function LinkConnectionDialog({
             checked={form.metered}
             onChange={(event) => updateField("metered", event.target.checked)}
           />
-          <span>Metered connection</span>
+          <span>Metered path</span>
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <LabeledInput
@@ -249,6 +375,97 @@ export function LinkConnectionDialog({
             onChange={(value) => updateField("packetLossPercent", value)}
           />
         </div>
+        <div className="space-y-3 rounded-[var(--vz-r-md)] border border-[color:var(--vz-hair)] bg-white/[0.025] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="font-[family-name:var(--vz-font-display)] text-sm font-semibold text-[var(--vz-text-primary)]">
+              Monitoring targets
+            </h3>
+            <Button type="button" variant="ghost" onClick={addTarget}>
+              <Plus className="mr-2 size-4" aria-hidden="true" />
+              Add monitoring target
+            </Button>
+          </div>
+          {form.targets.length === 0 ? (
+            <p className="text-xs text-[var(--vz-text-muted)]">
+              No monitoring targets recorded.
+            </p>
+          ) : (
+            form.targets.map((target, index) => (
+              <div
+                key={index}
+                className="grid gap-4 rounded-[var(--vz-r-sm)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite-up)] p-3 sm:grid-cols-2"
+              >
+                <LabeledInput
+                  label="Target label"
+                  value={target.label}
+                  required
+                  onChange={(value) => updateTargetField(index, "label", value)}
+                  placeholder="Vezor ingest"
+                />
+                <LabeledInput
+                  label="Target address"
+                  value={target.address}
+                  required
+                  onChange={(value) => updateTargetField(index, "address", value)}
+                  placeholder="fqdn.example.com or 203.0.113.10"
+                />
+                <LabeledSelect
+                  label="Probe type"
+                  value={target.probeType}
+                  onChange={(value) =>
+                    updateTargetField(index, "probeType", probeTypeValue(value))
+                  }
+                >
+                  {monitoringProbeTypes.map((probeType) => (
+                    <option key={probeType} value={probeType}>
+                      {probeType.toUpperCase()}
+                    </option>
+                  ))}
+                </LabeledSelect>
+                <LabeledInput
+                  label="Target port"
+                  type="number"
+                  min="1"
+                  value={target.port}
+                  onChange={(value) => updateTargetField(index, "port", value)}
+                />
+                <LabeledSelect
+                  label="Target purpose"
+                  value={target.purpose}
+                  onChange={(value) =>
+                    updateTargetField(index, "purpose", purposeValue(value))
+                  }
+                >
+                  {monitoringPurposes.map((purpose) => (
+                    <option key={purpose} value={purpose}>
+                      {purposeLabel(purpose)}
+                    </option>
+                  ))}
+                </LabeledSelect>
+                <LabeledInput
+                  label="Target expected latency ms"
+                  type="number"
+                  min="0"
+                  value={target.expectedLatencyMs}
+                  onChange={(value) =>
+                    updateTargetField(index, "expectedLatencyMs", value)
+                  }
+                />
+                <div className="sm:col-span-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => removeTarget(index)}
+                    aria-label={`Remove ${target.label || "monitoring target"}`}
+                  >
+                    <Trash2 className="mr-2 size-4" aria-hidden="true" />
+                    Remove target
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
         {submitError ? (
           <p role="alert" className="text-sm font-medium text-[#ff9ca6]">
             {submitError}
@@ -257,7 +474,7 @@ export function LinkConnectionDialog({
         <DialogFooter>
           <DialogCloseButton onClick={onClose}>Cancel</DialogCloseButton>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : "Save connection"}
+            {isSubmitting ? "Saving..." : "Save link path"}
           </Button>
         </DialogFooter>
       </form>
@@ -475,9 +692,26 @@ function buildConnectionPayload(
     expected_uplink_mbps: optionalNumber(form.expectedUplinkMbps),
     expected_latency_ms: optionalNumber(form.expectedLatencyMs),
     packet_loss_percent: optionalNumber(form.packetLossPercent),
+    metadata: buildConnectionMetadata(form),
   };
 
   return isEdit ? payload : (payload satisfies LinkConnectionCreateInput);
+}
+
+function buildConnectionMetadata(form: ConnectionFormState): LinkPathMetadata {
+  return {
+    external_reference: nullableText(form.externalReference),
+    link_model: form.linkModel,
+    monitoring_targets: form.targets.map((target) => ({
+      address: target.address.trim(),
+      expected_latency_ms: optionalNumber(target.expectedLatencyMs),
+      label: target.label.trim(),
+      port: optionalNumber(target.port),
+      probe_type: target.probeType,
+      purpose: target.purpose,
+    })),
+    visibility: form.visibility,
+  };
 }
 
 function nullableText(value: string) {
@@ -500,6 +734,16 @@ function requiredNumber(value: string, fallback = 0) {
 
 function optionalNumberText(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+}
+
+function defaultPort(probeType: MonitoringProbeType) {
+  const ports: Record<MonitoringProbeType, string> = {
+    http: "80",
+    https: "443",
+    icmp: "",
+    tcp: "",
+  };
+  return ports[probeType];
 }
 
 const transportKinds = [
@@ -543,12 +787,42 @@ function availabilityScopeValue(
   return availabilityScopes.find((scope) => scope === value) ?? "always";
 }
 
+function linkModelValue(value: unknown): LinkModel {
+  return linkModels.find((model) => model === value) ?? "direct";
+}
+
+function linkVisibilityValue(value: unknown): LinkVisibility {
+  return linkVisibilities.find((visibility) => visibility === value) ?? "full";
+}
+
+function probeTypeValue(value: unknown): MonitoringProbeType {
+  return monitoringProbeTypes.find((probeType) => probeType === value) ?? "icmp";
+}
+
+function purposeValue(value: unknown): MonitoringPurpose {
+  return monitoringPurposes.find((purpose) => purpose === value) ?? "custom";
+}
+
 function transportLabel(kind: LinkConnectionCreateInput["transport_kind"]) {
   if (kind === "lte") {
     return "LTE";
+  }
+  if (kind === "5g") {
+    return "5G";
   }
   if (kind === "wifi") {
     return "Wi-Fi";
   }
   return kind;
+}
+
+function purposeLabel(value: MonitoringPurpose) {
+  const labels: Record<MonitoringPurpose, string> = {
+    custom: "Custom",
+    gateway: "Gateway",
+    partner_endpoint: "Partner endpoint",
+    provider_edge: "Provider edge",
+    vezor_control: "Vezor control",
+  };
+  return labels[value];
 }

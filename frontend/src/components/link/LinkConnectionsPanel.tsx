@@ -11,7 +11,13 @@ import {
   type LinkConnectionCreateInput,
   type LinkConnectionPatchInput,
 } from "@/hooks/use-link";
-import { asRecord, textValue } from "@/components/link/types";
+import {
+  asRecord,
+  linkModelLabel,
+  linkPathMetadata,
+  linkVisibilityLabel,
+  textValue,
+} from "@/components/link/types";
 
 type LinkConnectionsPanelProps = {
   siteId?: string | null;
@@ -58,25 +64,29 @@ export function LinkConnectionsPanel({
     <WorkspaceSurface className="p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-[family-name:var(--vz-font-display)] text-xl font-semibold text-[var(--vz-text-primary)]">
-          Connections
+          Link paths
         </h2>
         <Button
           onClick={() => setDialog({ mode: "create" })}
           disabled={!siteId}
         >
           <Plus className="mr-2 size-4" aria-hidden="true" />
-          Add connection
+          Add link path
         </Button>
       </div>
       <div className="mt-4 grid gap-2">
         {connections.length === 0 ? (
           <p className="text-sm text-[var(--vz-text-secondary)]">
-            No link connections recorded.
+            No link paths recorded.
           </p>
         ) : (
           connections.map((connection, index) => {
             const item = asRecord(connection);
             const id = textValue(item.id, `connection-${index}`);
+            const metadata = linkPathMetadata(item.metadata);
+            const externalReference = textValue(metadata.external_reference, "");
+            const provider = textValue(item.provider, "");
+            const targetCount = metadata.monitoring_targets.length;
             return (
               <div
                 key={id}
@@ -86,10 +96,20 @@ export function LinkConnectionsPanel({
                   {textValue(item.label)}
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
-                  {textValue(item.transport_kind, "unknown")} /{" "}
+                  {linkModelLabel(metadata.link_model)} /{" "}
+                  {linkVisibilityLabel(metadata.visibility)} /{" "}
                   {textValue(item.status, "unknown")} /{" "}
                   {item.metered === true ? "metered" : "unmetered"}
                 </p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--vz-text-secondary)]">
+                  <span>{textValue(item.transport_kind, "unknown")}</span>
+                  {provider ? <span>{provider}</span> : null}
+                  {externalReference ? <span>{externalReference}</span> : null}
+                  <span>
+                    {targetCount} monitoring{" "}
+                    {targetCount === 1 ? "target" : "targets"}
+                  </span>
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     variant="ghost"

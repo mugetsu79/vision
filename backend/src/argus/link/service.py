@@ -837,21 +837,13 @@ class LinkService:
 
     def get_policy(self, *, tenant_id: UUID, site_id: UUID) -> JsonObject:
         self._ensure_memory_mode()
-        return self._policies.get(
-            (tenant_id, site_id),
-            {
-                "priority_order": list(LINK_PRIORITY_ORDER),
-                "backpressure": {
-                    "degraded_pauses": ["telemetry", "bulk"],
-                    "dark_allows": ["safety"],
-                },
-            },
-        )
+        return self._policies.get((tenant_id, site_id), _default_policy())
 
     def put_policy(self, *, tenant_id: UUID, site_id: UUID, policy: JsonObject) -> JsonObject:
         self._ensure_memory_mode()
-        self._policies[(tenant_id, site_id)] = policy
-        return policy
+        validated_policy = _validate_policy(policy)
+        self._policies[(tenant_id, site_id)] = validated_policy
+        return validated_policy
 
     async def aget_policy(self, *, tenant_id: UUID, site_id: UUID) -> JsonObject:
         if self.session_factory is None:
@@ -883,10 +875,11 @@ class LinkService:
             )
             if budget is None:
                 raise ValueError("Link budget not found.")
-            budget.policy = policy
+            validated_policy = _validate_policy(policy)
+            budget.policy = validated_policy
             budget.updated_at = _now()
             await session.commit()
-        return policy
+        return validated_policy
 
     def list_queue(
         self,
@@ -1565,8 +1558,38 @@ def _default_policy() -> JsonObject:
         "backpressure": {
             "degraded_pauses": ["telemetry", "bulk"],
             "dark_allows": ["safety"],
+            "pause_bulk_when_daily_budget_exhausted": True,
+            "avoid_metered_for_bulk_when_budget_exhausted": True,
         },
     }
+
+
+def _validate_policy(policy: JsonObject) -> JsonObject:
+    validated = dict(policy)
+    priority_order = validated.get("priority_order")
+    if priority_order is not None:
+        _validate_policy_lanes(priority_order)
+
+    backpressure = validated.get("backpressure")
+    if isinstance(backpressure, Mapping):
+        backpressure_copy = dict(backpressure)
+        degraded_pauses = backpressure_copy.get("degraded_pauses")
+        if degraded_pauses is not None:
+            _validate_policy_lanes(degraded_pauses)
+        dark_allows = backpressure_copy.get("dark_allows")
+        if dark_allows is not None:
+            _validate_policy_lanes(dark_allows)
+        validated["backpressure"] = backpressure_copy
+
+    return validated
+
+
+def _validate_policy_lanes(value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError("Invalid link policy lanes.")
+    for lane in value:
+        if lane not in LINK_PRIORITY_ORDER:
+            raise ValueError(f"Invalid link policy lane: {lane}")
 
 
 def _budget_record(budget: LinkBudget) -> LinkBudgetSnapshot:

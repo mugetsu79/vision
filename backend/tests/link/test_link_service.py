@@ -554,6 +554,32 @@ def test_degraded_budget_backpressures_lower_priority_lanes(link_service: LinkSe
     assert decision.reason == "degraded_link_or_budget_exhausted"
 
 
+def test_default_policy_includes_budget_behavior_flags(link_service: LinkService) -> None:
+    policy = link_service.get_policy(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        site_id=UUID("00000000-0000-4000-8000-000000000002"),
+    )
+
+    assert policy == {
+        "priority_order": ["safety", "evidence", "telemetry", "bulk"],
+        "backpressure": {
+            "degraded_pauses": ["telemetry", "bulk"],
+            "dark_allows": ["safety"],
+            "pause_bulk_when_daily_budget_exhausted": True,
+            "avoid_metered_for_bulk_when_budget_exhausted": True,
+        },
+    }
+
+
+def test_policy_rejects_unknown_lanes(link_service: LinkService) -> None:
+    with pytest.raises(ValueError, match="Invalid link policy lane"):
+        link_service.put_policy(
+            tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+            site_id=UUID("00000000-0000-4000-8000-000000000002"),
+            policy={"priority_order": ["safety", "evidence", "bulk", "unknown"]},
+        )
+
+
 def test_resume_records_offsets_and_last_successful_transfer(link_service: LinkService) -> None:
     queue_item = link_service.make_queue_item_for_test(priority_lane="evidence", byte_size=4096)
     attempt = link_service.record_transfer_attempt(
