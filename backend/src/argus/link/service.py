@@ -1516,7 +1516,10 @@ class LinkService:
         if (
             probe.latency_ms >= 500
             or probe.packet_loss_percent >= 0.5
-            or probe.throughput_mbps < 10.0
+            or (
+                _probe_throughput_measured(probe)
+                and probe.throughput_mbps < 10.0
+            )
         ):
             return "degraded"
         return "healthy"
@@ -1883,6 +1886,12 @@ def _probe_payload(probe: LinkHealthProbeRecord | None) -> JsonObject | None:
     if probe.connection_id is not None:
         payload["connection_id"] = str(probe.connection_id)
     return payload
+
+
+def _probe_throughput_measured(probe: LinkHealthProbeRecord) -> bool:
+    if probe.throughput_mbps > 0:
+        return True
+    return probe.source_type != "backend_synthetic"
 
 
 def _sort_connections(

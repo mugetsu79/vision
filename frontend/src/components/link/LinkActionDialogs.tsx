@@ -45,6 +45,8 @@ type MonitoringTargetFormState = {
   monitoringEnabled: boolean;
   monitoringSourceType: MonitoringSourceType;
   monitoringIntervalSeconds: string;
+  throughputTestUrl: string;
+  throughputTestMaxBytes: string;
 };
 
 type ConnectionFormState = {
@@ -124,6 +126,8 @@ function defaultTargetForm(): MonitoringTargetFormState {
     port: "443",
     probeType: "https",
     purpose: "vezor_control",
+    throughputTestMaxBytes: "1048576",
+    throughputTestUrl: "",
   };
 }
 
@@ -179,6 +183,11 @@ export function LinkConnectionDialog({
           target.monitoring.interval_seconds,
           "300",
         ),
+        throughputTestMaxBytes: optionalNumberText(
+          target.throughput_test_max_bytes,
+          "1048576",
+        ),
+        throughputTestUrl: textValue(target.throughput_test_url, ""),
       })),
     });
     setSubmitError(null);
@@ -522,6 +531,23 @@ export function LinkConnectionDialog({
                     )
                   }
                 />
+                <LabeledInput
+                  label="Manual throughput URL"
+                  value={target.throughputTestUrl}
+                  onChange={(value) =>
+                    updateTargetField(index, "throughputTestUrl", value)
+                  }
+                  placeholder="https://example.com/speed.bin"
+                />
+                <LabeledInput
+                  label="Manual throughput byte cap"
+                  type="number"
+                  min="1"
+                  value={target.throughputTestMaxBytes}
+                  onChange={(value) =>
+                    updateTargetField(index, "throughputTestMaxBytes", value)
+                  }
+                />
                 <div className="sm:col-span-2">
                   <Button
                     type="button"
@@ -818,6 +844,8 @@ function buildConnectionMetadata(form: ConnectionFormState): LinkPathMetadata {
       port: optionalNumber(target.port),
       probe_type: target.probeType,
       purpose: target.purpose,
+      throughput_test_max_bytes: optionalNumber(target.throughputTestMaxBytes),
+      throughput_test_url: nullableText(target.throughputTestUrl),
     })),
     visibility: form.visibility,
   };

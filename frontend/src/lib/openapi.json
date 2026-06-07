@@ -20186,6 +20186,76 @@
         ]
       }
     },
+    "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-throughput": {
+      "post": {
+        "operationId": "measure_link_probe_target_throughput_api_v1_link_sites__site_id__probe_targets__target_id__measure_throughput_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Measure Link Probe Target Throughput Api V1 Link Sites  Site Id  Probe Targets  Target Id  Measure Throughput Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Measure Link Probe Target Throughput",
+        "tags": [
+          "link"
+        ]
+      }
+    },
     "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/run": {
       "post": {
         "operationId": "run_link_probe_target_api_v1_link_sites__site_id__probe_targets__target_id__run_post",

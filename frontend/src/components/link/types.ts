@@ -35,6 +35,8 @@ export type MonitoringTarget = {
   purpose: MonitoringPurpose;
   expected_latency_ms?: number | null;
   monitoring: MonitoringConfig;
+  throughput_test_url?: string | null;
+  throughput_test_max_bytes?: number | null;
 };
 export type LinkPathMetadata = {
   link_model: LinkModel;
@@ -234,6 +236,14 @@ export function probeSampleTargetLabel(probe: unknown) {
   return targetLabel || targetAddress || "No target";
 }
 
+export function probeThroughputLabel(probe: unknown) {
+  const item = asRecord(probe);
+  if (!probeThroughputMeasured(item)) {
+    return "throughput not measured";
+  }
+  return `${numberValue(item.throughput_mbps)} Mbps`;
+}
+
 function monitoringTargets(value: unknown): MonitoringTarget[] {
   if (!Array.isArray(value)) {
     return [];
@@ -256,9 +266,20 @@ function monitoringTargets(value: unknown): MonitoringTarget[] {
       port: optionalNumericValue(item.port),
       probe_type: enumValue(item.probe_type, monitoringProbeTypes, "icmp"),
       purpose: enumValue(item.purpose, monitoringPurposes, "custom"),
+      throughput_test_max_bytes: optionalNumericValue(
+        item.throughput_test_max_bytes,
+      ),
+      throughput_test_url: nullableTextValue(item.throughput_test_url),
     });
   }
   return targets;
+}
+
+function probeThroughputMeasured(item: Record<string, unknown>) {
+  if (numberValue(item.throughput_mbps) > 0) {
+    return true;
+  }
+  return enumValue(item.source_type, monitoringSourceTypes, "manual") !== "backend_synthetic";
 }
 
 function monitoringConfig(value: unknown): MonitoringConfig {

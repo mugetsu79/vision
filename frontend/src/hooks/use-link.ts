@@ -330,6 +330,31 @@ export function useRunLinkProbeTarget({
   });
 }
 
+export function useMeasureLinkProbeTargetThroughput({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (targetId: string) => {
+      if (!siteId) {
+        throw new Error("A site is required to measure link throughput.");
+      }
+      const { data, error } = await apiClient.POST(
+        "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-throughput",
+        { params: { path: { site_id: siteId, target_id: targetId } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to measure link throughput.");
+      }
+      return data ?? null;
+    },
+    onSuccess: async () =>
+      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+  });
+}
+
 export function useLinkSiteQueue(siteId?: string | null) {
   return useQuery({
     queryKey: ["link", "sites", siteId ?? "none", "queue"],

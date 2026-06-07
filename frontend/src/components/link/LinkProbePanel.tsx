@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   useCreateLinkProbe,
   useDeleteLinkProbe,
+  useMeasureLinkProbeTargetThroughput,
   useRunLinkProbeTarget,
   type LinkProbeCreateInput,
 } from "@/hooks/use-link";
@@ -20,6 +21,7 @@ import {
   numberValue,
   probeSampleSourceLabel,
   probeSampleTargetLabel,
+  probeThroughputLabel,
   textValue,
 } from "@/components/link/types";
 
@@ -38,6 +40,7 @@ export function LinkProbePanel({
   const createProbe = useCreateLinkProbe({ siteId });
   const deleteProbe = useDeleteLinkProbe({ siteId });
   const runProbeTarget = useRunLinkProbeTarget({ siteId });
+  const measureThroughput = useMeasureLinkProbeTargetThroughput({ siteId });
   const targets = monitoringTargetOptions(connections);
   const sortedProbes = [...probes].sort((left, right) =>
     textValue(asRecord(right).recorded_at, "").localeCompare(
@@ -58,6 +61,10 @@ export function LinkProbePanel({
 
   async function handleRunTarget(target: ProbeTargetOption) {
     await runProbeTarget.mutateAsync(target.id);
+  }
+
+  async function handleMeasureThroughput(target: ProbeTargetOption) {
+    await measureThroughput.mutateAsync(target.id);
   }
 
   return (
@@ -102,6 +109,17 @@ export function LinkProbePanel({
                     Run check now
                   </Button>
                 ) : null}
+                {canMeasureThroughput(target) ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => void handleMeasureThroughput(target)}
+                    disabled={!siteId || measureThroughput.isPending}
+                    aria-label={`Measure throughput ${target.label}`}
+                  >
+                    <Play className="mr-2 size-4" aria-hidden="true" />
+                    Measure throughput
+                  </Button>
+                ) : null}
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
                 <span>
@@ -143,7 +161,7 @@ export function LinkProbePanel({
                   <p className="text-[var(--vz-text-primary)]">{label}</p>
                   <p className="mt-1">
                     {numberValue(item.latency_ms)} ms /{" "}
-                    {numberValue(item.throughput_mbps)} Mbps /{" "}
+                    {probeThroughputLabel(probe)} /{" "}
                     {numberValue(item.packet_loss_percent)}% loss /{" "}
                     {item.reachable === false ? "unreachable" : "reachable"}
                   </p>
@@ -201,5 +219,14 @@ function canRunBackendSynthetic(target: ProbeTargetOption) {
     target.monitoring.enabled &&
     target.monitoring.source_type === "backend_synthetic" &&
     target.probe_type !== "icmp"
+  );
+}
+
+function canMeasureThroughput(target: ProbeTargetOption) {
+  return (
+    target.monitoring.enabled &&
+    target.monitoring.source_type === "backend_synthetic" &&
+    target.probe_type !== "icmp" &&
+    Boolean(target.throughput_test_url)
   );
 }

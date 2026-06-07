@@ -5,7 +5,12 @@ import asyncio
 import httpx
 import pytest
 
-from argus.link.probe_runner import ProbeTarget, run_backend_probe
+from argus.link.probe_runner import (
+    ProbeTarget,
+    ThroughputProbeTarget,
+    measure_backend_throughput,
+    run_backend_probe,
+)
 
 
 @pytest.mark.asyncio
@@ -76,3 +81,31 @@ async def test_backend_probe_rejects_icmp() -> None:
 
     assert result.reachable is False
     assert result.failure_reason == "backend_synthetic_icmp_unsupported"
+
+
+@pytest.mark.asyncio
+async def test_backend_throughput_measurement_records_capped_download() -> None:
+    payload = b"x" * 2048
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["range"] == "bytes=0-1023"
+        return httpx.Response(200, content=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await measure_backend_throughput(
+            ThroughputProbeTarget(
+                target_id="target-openwisp",
+                label="OpenWISP",
+                address="https://openwisp.mugetsu.tech",
+                probe_type="https",
+                throughput_test_url="https://openwisp.mugetsu.tech/speed.bin",
+                throughput_test_max_bytes=1024,
+            ),
+            http_client=client,
+        )
+
+    assert result.reachable is True
+    assert result.throughput_mbps > 0
+    assert result.latency_ms >= 0
+    assert result.packet_loss_percent == 0.0
+    assert result.source == "backend_synthetic:backend:primary/manual-throughput"

@@ -22,6 +22,7 @@ const linkPageMocks = vi.hoisted(() => ({
   createProbe: vi.fn(),
   deleteProbe: vi.fn(),
   runProbeTarget: vi.fn(),
+  measureProbeTargetThroughput: vi.fn(),
   retryQueueItem: vi.fn(),
   pauseQueueItem: vi.fn(),
   resumeQueueItem: vi.fn(),
@@ -95,6 +96,10 @@ vi.mock("@/hooks/use-link", () => ({
     mutateAsync: linkPageMocks.runProbeTarget,
     isPending: false,
   }),
+  useMeasureLinkProbeTargetThroughput: () => ({
+    mutateAsync: linkPageMocks.measureProbeTargetThroughput,
+    isPending: false,
+  }),
   useRetryLinkQueueItem: () => ({
     mutateAsync: linkPageMocks.retryQueueItem,
     isPending: false,
@@ -144,6 +149,7 @@ function mockLinkHooks({
   createProbe = vi.fn().mockResolvedValue({}),
   deleteProbe = vi.fn().mockResolvedValue({}),
   runProbeTarget = vi.fn().mockResolvedValue({}),
+  measureProbeTargetThroughput = vi.fn().mockResolvedValue({}),
   retryQueueItem = vi.fn().mockResolvedValue({}),
   pauseQueueItem = vi.fn().mockResolvedValue({}),
   resumeQueueItem = vi.fn().mockResolvedValue({}),
@@ -163,6 +169,7 @@ function mockLinkHooks({
   createProbe?: ReturnType<typeof vi.fn>;
   deleteProbe?: ReturnType<typeof vi.fn>;
   runProbeTarget?: ReturnType<typeof vi.fn>;
+  measureProbeTargetThroughput?: ReturnType<typeof vi.fn>;
   retryQueueItem?: ReturnType<typeof vi.fn>;
   pauseQueueItem?: ReturnType<typeof vi.fn>;
   resumeQueueItem?: ReturnType<typeof vi.fn>;
@@ -182,6 +189,7 @@ function mockLinkHooks({
   linkPageMocks.createProbe = createProbe;
   linkPageMocks.deleteProbe = deleteProbe;
   linkPageMocks.runProbeTarget = runProbeTarget;
+  linkPageMocks.measureProbeTargetThroughput = measureProbeTargetThroughput;
   linkPageMocks.retryQueueItem = retryQueueItem;
   linkPageMocks.pauseQueueItem = pauseQueueItem;
   linkPageMocks.resumeQueueItem = resumeQueueItem;
@@ -222,6 +230,7 @@ describe("Links", () => {
     linkPageMocks.createProbe = vi.fn().mockResolvedValue({});
     linkPageMocks.deleteProbe = vi.fn().mockResolvedValue({});
     linkPageMocks.runProbeTarget = vi.fn().mockResolvedValue({});
+    linkPageMocks.measureProbeTargetThroughput = vi.fn().mockResolvedValue({});
     linkPageMocks.retryQueueItem = vi.fn().mockResolvedValue({});
     linkPageMocks.pauseQueueItem = vi.fn().mockResolvedValue({});
     linkPageMocks.resumeQueueItem = vi.fn().mockResolvedValue({});
@@ -282,6 +291,33 @@ describe("Links", () => {
     expect(
       within(selector).queryByText("Remote Site 1"),
     ).not.toBeInTheDocument();
+  });
+
+  test("selected Link Performance scope hides the unfiltered site list", async () => {
+    const user = userEvent.setup();
+    mockLinkHooks({
+      summaries: Array.from({ length: 12 }, (_, index) =>
+        createSummary({
+          site_id: `site-${index + 1}`,
+          site_name: `Remote Site ${index + 1}`,
+        }),
+      ),
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    const selector = await screen.findByTestId("link-site-selector");
+    expect(within(selector).getByText("Remote Site 1")).toBeInTheDocument();
+    expect(
+      within(selector).queryByText("Remote Site 2"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(selector).queryByLabelText(/link sites per page/i),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/search link sites/i), "12");
+
+    expect(within(selector).getByText("Remote Site 12")).toBeInTheDocument();
   });
 
   test("selected site renders link posture link paths budget probes queue and passport", async () => {
@@ -368,6 +404,9 @@ describe("Links", () => {
     expect(
       screen.getByRole("heading", { name: /Budget and policy/i }),
     ).toBeInTheDocument();
+    expect(screen.getAllByText(/180 Mbps/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/evidence 1 \/ bulk 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Queued transfers/i)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /Monitoring/i }),
     ).toBeInTheDocument();
@@ -646,6 +685,51 @@ describe("Links", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("backend synthetic samples show throughput as unmeasured", async () => {
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      status: {
+        link_state: "healthy",
+        passport_hash: "abcdef123456",
+        queue_depth: {},
+        latest_probe: {
+          latency_ms: 73,
+          throughput_mbps: 0,
+          packet_loss_percent: 0,
+          reachable: true,
+          source: "backend_synthetic:backend:primary",
+          source_type: "backend_synthetic",
+          source_label: "backend:primary",
+          sample_kind: "automated",
+          recorded_at: "2026-06-07T10:00:00Z",
+        },
+      },
+      probes: [
+        {
+          id: "probe-1",
+          latency_ms: 73,
+          throughput_mbps: 0,
+          packet_loss_percent: 0,
+          reachable: true,
+          source: "backend_synthetic:backend:primary",
+          source_type: "backend_synthetic",
+          source_label: "backend:primary",
+          sample_kind: "automated",
+          target_label: "Wisp",
+          target_address: "https://openwisp.mugetsu.tech",
+          recorded_at: "2026-06-07T10:00:00Z",
+        },
+      ],
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    expect(
+      await screen.findAllByText(/throughput not measured/i),
+    ).toHaveLength(2);
+    expect(screen.queryByText(/0 Mbps/i)).not.toBeInTheDocument();
+  });
+
   test("monitoring panel runs a backend synthetic target now", async () => {
     const user = userEvent.setup();
     const runProbeTarget = vi.fn().mockResolvedValue({});
@@ -688,6 +772,57 @@ describe("Links", () => {
     );
 
     expect(runProbeTarget).toHaveBeenCalledWith("target-1");
+  });
+
+  test("monitoring panel measures throughput only from an operator action", async () => {
+    const user = userEvent.setup();
+    const measureProbeTargetThroughput = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      connections: [
+        {
+          id: "connection-1",
+          label: "Home",
+          transport_kind: "ethernet",
+          status: "online",
+          metadata: {
+            monitoring_targets: [
+              {
+                id: "target-openwisp",
+                label: "Wisp",
+                address: "https://openwisp.mugetsu.tech",
+                probe_type: "https",
+                port: 443,
+                purpose: "custom",
+                throughput_test_url:
+                  "https://openwisp.mugetsu.tech/speed.bin",
+                throughput_test_max_bytes: 1048576,
+                monitoring: {
+                  enabled: true,
+                  source_type: "backend_synthetic",
+                  interval_seconds: 300,
+                },
+              },
+            ],
+          },
+        },
+      ],
+      measureProbeTargetThroughput,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    expect(
+      await screen.findByRole("button", {
+        name: /measure throughput wisp/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /measure throughput wisp/i }),
+    );
+
+    expect(measureProbeTargetThroughput).toHaveBeenCalledWith("target-openwisp");
   });
 
   test("monitoring panel deletes a sample from history", async () => {

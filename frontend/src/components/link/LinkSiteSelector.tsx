@@ -36,6 +36,13 @@ export function LinkSiteSelector({
     [searchValue, summaries],
   );
   const paginated = paginateItems(filtered, pageSize, pageIndex);
+  const selectedSummary =
+    summaries.find((summary) => summary.site_id === selectedSiteId) ?? null;
+  const hasSearch = searchValue.trim().length > 0;
+  const showScopedSelection = Boolean(selectedSummary && !hasSearch);
+  const visibleItems = showScopedSelection && selectedSummary
+    ? [selectedSummary]
+    : paginated.items;
 
   useEffect(() => {
     setPageIndex(0);
@@ -62,7 +69,7 @@ export function LinkSiteSelector({
         </span>
       </label>
       <div className="mt-4 grid gap-2">
-        {paginated.items.map((summary) => (
+        {visibleItems.map((summary) => (
           <button
             key={summary.site_id}
             aria-pressed={summary.site_id === selectedSiteId}
@@ -91,16 +98,18 @@ export function LinkSiteSelector({
           No link sites match this search.
         </p>
       ) : null}
-      <PaginationControls
-        className="mt-3"
-        itemLabel="sites"
-        pageIndex={paginated.currentPageIndex}
-        pageSize={pageSize}
-        pageSizeLabel="Link sites per page"
-        totalCount={filtered.length}
-        onPageIndexChange={setPageIndex}
-        onPageSizeChange={setPageSize}
-      />
+      {!showScopedSelection ? (
+        <PaginationControls
+          className="mt-3"
+          itemLabel="sites"
+          pageIndex={paginated.currentPageIndex}
+          pageSize={pageSize}
+          pageSizeLabel="Link sites per page"
+          totalCount={filtered.length}
+          onPageIndexChange={setPageIndex}
+          onPageSizeChange={setPageSize}
+        />
+      ) : null}
     </WorkspaceSurface>
   );
 }

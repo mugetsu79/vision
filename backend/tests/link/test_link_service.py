@@ -209,6 +209,37 @@ def test_packless_link_site_summaries_include_status_budget_queue_and_probe(
     assert summaries[0].passport_hash
 
 
+def test_backend_synthetic_probe_does_not_degrade_for_unmeasured_throughput(
+    link_service: LinkService,
+) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        latency_ms=73,
+        throughput_mbps=0.0,
+        packet_loss_percent=0.0,
+        reachable=True,
+        source="backend_synthetic:backend:primary",
+        source_type="backend_synthetic",
+        source_label="backend:primary",
+        sample_kind="automated",
+        probe_type="https",
+        target_id="target-openwisp",
+        target_label="OpenWISP",
+        target_address="https://openwisp.mugetsu.tech",
+    )
+
+    summaries = link_service.list_site_summaries(
+        tenant_id=tenant_id,
+        sites=[{"id": site_id, "name": "MacBook", "tz": "CET"}],
+    )
+
+    assert summaries[0].link_state == "healthy"
+
+
 def test_bulk_selection_prefers_online_before_unmetered(link_service: LinkService) -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000001")
     site_id = UUID("00000000-0000-4000-8000-000000000002")

@@ -6,7 +6,13 @@ import {
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
-import { asRecord, numberValue, textValue } from "@/components/link/types";
+import {
+  asRecord,
+  linkPriorityLanes,
+  numberValue,
+  probeThroughputLabel,
+  textValue,
+} from "@/components/link/types";
 
 type LinkPosturePanelProps = {
   status: unknown;
@@ -84,17 +90,15 @@ export function LinkPosturePanel({
           </Metric>
           <Metric label="Latest probe">
             {numberValue(latestProbe.latency_ms)} ms /{" "}
-            {numberValue(latestProbe.throughput_mbps)} Mbps /{" "}
+            {probeThroughputLabel(latestProbe)} /{" "}
             {numberValue(latestProbe.packet_loss_percent)}% loss
           </Metric>
           <Metric label="Passport hash">{shortHash}</Metric>
           <Metric label="Reachable">
             {latestProbe.reachable === false ? "No" : "Yes"}
           </Metric>
-          <Metric label="Queue depth">
-            {Object.entries(queueDepth)
-              .map(([lane, count]) => `${lane} ${numberValue(count)}`)
-              .join(" / ") || "No queued work"}
+          <Metric label="Queued transfers">
+            {queuedTransferLabel(queueDepth)}
           </Metric>
         </div>
       )}
@@ -118,6 +122,16 @@ function Metric({
         {children}
       </div>
     </div>
+  );
+}
+
+function queuedTransferLabel(queueDepth: Record<string, unknown>) {
+  return (
+    linkPriorityLanes
+      .map((lane) => [lane, numberValue(queueDepth[lane])] as const)
+      .filter(([, count]) => count > 0)
+      .map(([lane, count]) => `${lane} ${count}`)
+      .join(" / ") || "No queued transfers"
   );
 }
 
