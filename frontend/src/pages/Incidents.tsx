@@ -23,6 +23,11 @@ import {
 } from "@/components/layout/workspace-surfaces";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras } from "@/hooks/use-cameras";
@@ -284,6 +289,14 @@ function IncidentQueue({
   cameraNamesById: Map<string, string>;
   onSelect: (incidentId: string) => void;
 }) {
+  const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
+  const [pageIndex, setPageIndex] = useState(0);
+  const paginatedIncidents = paginateItems(incidents, pageSize, pageIndex);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [incidents.length, pageSize]);
+
   return (
     <InstrumentRail
       aria-label="Review Queue"
@@ -296,8 +309,18 @@ function IncidentQueue({
         </h3>
       </div>
 
+      <PaginationControls
+        className="px-3 py-3"
+        itemLabel="records"
+        pageIndex={paginatedIncidents.currentPageIndex}
+        pageSize={pageSize}
+        pageSizeLabel="Evidence records per page"
+        totalCount={incidents.length}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={setPageSize}
+      />
       <div className="divide-y divide-white/8">
-        {incidents.map((incident) => {
+        {paginatedIncidents.items.map((incident) => {
           const selected = incident.id === selectedIncidentId;
           const cameraName = cameraNameFor(incident, cameraNamesById);
 

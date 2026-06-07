@@ -1,3 +1,10 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import type { components } from "@/lib/api.generated";
 
 type OperationalMemoryPattern =
@@ -12,7 +19,22 @@ export function OperationalMemoryPanel({
   loading?: boolean;
   compact?: boolean;
 }) {
-  const visiblePatterns = patterns ?? [];
+  const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
+  const [pageIndex, setPageIndex] = useState(0);
+  const visiblePatterns = useMemo(() => patterns ?? [], [patterns]);
+  const patternIdentity = useMemo(
+    () => visiblePatterns.map((pattern) => pattern.id).join("\u0000"),
+    [visiblePatterns],
+  );
+  const paginatedPatterns = paginateItems(
+    visiblePatterns,
+    pageSize,
+    pageIndex,
+  );
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [pageSize, patternIdentity]);
 
   return (
     <section
@@ -41,7 +63,16 @@ export function OperationalMemoryPanel({
 
       {visiblePatterns.length ? (
         <div className="mt-3 space-y-3">
-          {visiblePatterns.map((pattern) => (
+          <PaginationControls
+            itemLabel="patterns"
+            pageIndex={paginatedPatterns.currentPageIndex}
+            pageSize={pageSize}
+            pageSizeLabel="Observed patterns per page"
+            totalCount={visiblePatterns.length}
+            onPageIndexChange={setPageIndex}
+            onPageSizeChange={setPageSize}
+          />
+          {paginatedPatterns.items.map((pattern) => (
             <MemoryPatternCard key={pattern.id} pattern={pattern} />
           ))}
         </div>

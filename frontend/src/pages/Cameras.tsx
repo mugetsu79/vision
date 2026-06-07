@@ -14,6 +14,11 @@ import { PolicyDraftReview } from "@/components/policy/PolicyDraftReview";
 import { SceneFocusPicker } from "@/components/scenes/SceneFocusPicker";
 import { filterSceneFocusItems } from "@/components/scenes/scene-focus";
 import { Button } from "@/components/ui/button";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { productBrand } from "@/brand/product";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
@@ -65,6 +70,9 @@ function CamerasContent() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [inventoryPageSize, setInventoryPageSize] =
+    useState<PaginationPageSize>(10);
+  const [inventoryPageIndex, setInventoryPageIndex] = useState(0);
   const { data: cameras = [], isLoading: camerasLoading } = useCameras();
   const { data: sites = [] } = useSites();
   const {
@@ -121,6 +129,11 @@ function CamerasContent() {
   const focusedInventoryCameras = useMemo(
     () => cameras.filter((camera) => focusedSceneIds.has(camera.id)),
     [cameras, focusedSceneIds],
+  );
+  const paginatedInventoryCameras = paginateItems(
+    focusedInventoryCameras,
+    inventoryPageSize,
+    inventoryPageIndex,
   );
   const sceneInventorySummary =
     cameras.length === 0
@@ -181,6 +194,10 @@ function CamerasContent() {
       return next.size === current.size ? current : next;
     });
   }, [cameraIdSet]);
+
+  useEffect(() => {
+    setInventoryPageIndex(0);
+  }, [focusedInventoryCameras.length, inventoryPageSize, sceneSearch]);
 
   function toggleFocusedScene(sceneId: string) {
     setSelectedSceneIds((current) => {
@@ -331,6 +348,16 @@ function CamerasContent() {
           data-testid="scene-inventory-table"
           className="overflow-x-auto rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
         >
+          <PaginationControls
+            className="px-4 pt-4"
+            itemLabel="scenes"
+            pageIndex={paginatedInventoryCameras.currentPageIndex}
+            pageSize={inventoryPageSize}
+            pageSizeLabel="Scene inventory per page"
+            totalCount={focusedInventoryCameras.length}
+            onPageIndexChange={setInventoryPageIndex}
+            onPageSizeChange={setInventoryPageSize}
+          />
           <Table className="min-w-[76rem]">
             <THead>
               <TR>
@@ -367,7 +394,7 @@ function CamerasContent() {
                   </TD>
                 </TR>
               ) : (
-                focusedInventoryCameras.map((camera) => {
+                paginatedInventoryCameras.items.map((camera) => {
                   const sceneHealth = sceneHealthByCamera.get(camera.id);
                   const visionSummary = getCameraVisionSummary(camera);
 

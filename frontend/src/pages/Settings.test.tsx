@@ -963,6 +963,159 @@ describe("SettingsPage operations workbench", () => {
     expect(within(sceneMatrix).getByText("Driveway")).toBeInTheDocument();
   });
 
+  test("paginates large focused operations result panels", async () => {
+    const user = userEvent.setup();
+    const siteId = "00000000-0000-0000-0000-000000000301";
+    const cameras = Array.from({ length: 12 }, (_, index) => {
+      const number = index + 1;
+      return {
+        id: `00000000-0000-0000-0000-${String(100 + number).padStart(12, "0")}`,
+        site_id: siteId,
+        edge_node_id: null,
+        name: `Batch Scene ${String(number).padStart(2, "0")}`,
+        rtsp_url_masked: "rtsp://redacted@camera.local/live",
+        camera_source: {
+          kind: "rtsp",
+          uri: "rtsp://redacted@camera.local/live",
+        },
+        processing_mode: "central",
+        primary_model_id: "00000000-0000-0000-0000-000000000001",
+        secondary_model_id: null,
+        tracker_type: "bytetrack",
+        active_classes: ["person"],
+        attribute_rules: [],
+        zones: [],
+        homography: null,
+        privacy: {
+          blur_faces: true,
+          blur_plates: true,
+          method: "gaussian",
+          strength: 7,
+        },
+        browser_delivery: {
+          default_profile: "720p10",
+          allow_native_on_demand: true,
+          profiles: [],
+          unsupported_profiles: [],
+          native_status: {
+            available: false,
+            reason: "privacy_filtering_required",
+          },
+        },
+        source_capability: {
+          width: 1280,
+          height: 720,
+          fps: 10,
+          codec: "h264",
+        },
+        recording_policy: {
+          enabled: true,
+          mode: "event_clip",
+          pre_seconds: 6,
+          post_seconds: 10,
+          fps: 12,
+          max_duration_seconds: 16,
+          storage_profile: "cloud",
+          snapshot_enabled: false,
+          snapshot_offset_seconds: 0,
+          snapshot_quality: 85,
+        },
+        frame_skip: 1,
+        fps_cap: 25,
+        created_at: "2026-05-09T07:00:00Z",
+        updated_at: "2026-05-09T07:00:00Z",
+      };
+    });
+    settingsMocks.cameras = cameras;
+    settingsMocks.fleetOverview = {
+      ...fleetOverview,
+      summary: {
+        desired_workers: cameras.length,
+        running_workers: 0,
+        stale_nodes: 0,
+        offline_nodes: 0,
+        native_unavailable_cameras: cameras.length,
+      },
+      nodes: fleetOverview.nodes,
+      camera_workers: cameras.map((camera) => ({
+        camera_id: camera.id,
+        camera_name: camera.name,
+        site_id: siteId,
+        node_id: null,
+        node_hostname: null,
+        processing_mode: "central",
+        desired_state: "manual",
+        runtime_status: "not_reported",
+        lifecycle_owner: "manual_dev",
+        dev_run_command: null,
+        detail: null,
+      })),
+      delivery_diagnostics: cameras.map((camera) => ({
+        camera_id: camera.id,
+        camera_name: camera.name,
+        processing_mode: "central",
+        assigned_node_id: null,
+        source_capability: {
+          width: 1280,
+          height: 720,
+          fps: 10,
+          codec: "h264",
+        },
+        default_profile: "720p10",
+        available_profiles: [{ id: "720p10", kind: "transcode" }],
+        native_status: {
+          available: false,
+          reason: "privacy_filtering_required",
+        },
+        selected_stream_mode: "transcode",
+      })),
+    };
+    settingsMocks.memoryPatterns = [];
+
+    renderPage();
+    await user.type(
+      screen.getByLabelText(/search operations scenes/i),
+      "batch",
+    );
+
+    const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
+    expect(within(sceneMatrix).getByText("Batch Scene 10")).toBeInTheDocument();
+    expect(
+      within(sceneMatrix).queryByText("Batch Scene 11"),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(
+      screen.getByLabelText(/scene readiness per page/i),
+      "25",
+    );
+    expect(within(sceneMatrix).getByText("Batch Scene 11")).toBeInTheDocument();
+
+    const workerRail = screen.getByTestId("worker-rail");
+    expect(within(workerRail).getByText("Batch Scene 10")).toBeInTheDocument();
+    expect(
+      within(workerRail).queryByText("Batch Scene 11"),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(
+      within(workerRail).getByLabelText(/scene workers per page/i),
+      "25",
+    );
+    expect(within(workerRail).getByText("Batch Scene 11")).toBeInTheDocument();
+
+    const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
+    expect(
+      within(diagnosticsRail).getByText(/Batch Scene 10 scene delivery/i),
+    ).toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).queryByText(/Batch Scene 11 scene delivery/i),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(
+      within(diagnosticsRail).getByLabelText(/stream diagnostics per page/i),
+      "25",
+    );
+    expect(
+      within(diagnosticsRail).getByText(/Batch Scene 11 scene delivery/i),
+    ).toBeInTheDocument();
+  });
+
   test("guides a fresh tenant to configure sites, scenes, and deployment", () => {
     settingsMocks.fleetOverview = {
       ...fleetOverview,

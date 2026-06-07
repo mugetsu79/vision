@@ -1,3 +1,10 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import type { components } from "@/lib/api.generated";
 
 type CrossCameraThread = components["schemas"]["CrossCameraThreadResponse"];
@@ -13,7 +20,18 @@ export function CrossCameraThreadPanel({
   cameraNamesById?: Map<string, string>;
   onCameraSelect?: (cameraId: string) => void;
 }) {
-  const visibleThreads = threads ?? [];
+  const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
+  const [pageIndex, setPageIndex] = useState(0);
+  const visibleThreads = useMemo(() => threads ?? [], [threads]);
+  const threadIdentity = useMemo(
+    () => visibleThreads.map((thread) => thread.id).join("\u0000"),
+    [visibleThreads],
+  );
+  const paginatedThreads = paginateItems(visibleThreads, pageSize, pageIndex);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [pageSize, threadIdentity]);
 
   return (
     <section
@@ -38,7 +56,16 @@ export function CrossCameraThreadPanel({
 
       {visibleThreads.length ? (
         <div className="mt-3 space-y-3">
-          {visibleThreads.map((thread) => (
+          <PaginationControls
+            itemLabel="threads"
+            pageIndex={paginatedThreads.currentPageIndex}
+            pageSize={pageSize}
+            pageSizeLabel="Cross-camera threads per page"
+            totalCount={visibleThreads.length}
+            onPageIndexChange={setPageIndex}
+            onPageSizeChange={setPageSize}
+          />
+          {paginatedThreads.items.map((thread) => (
             <ThreadCard
               key={thread.id}
               thread={thread}

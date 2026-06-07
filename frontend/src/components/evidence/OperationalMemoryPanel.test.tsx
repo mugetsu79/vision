@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, test } from "vitest";
 
 import type { components } from "@/lib/api.generated";
@@ -94,5 +95,38 @@ describe("OperationalMemoryPanel", () => {
     expect(
       within(panel).getByTestId("pattern-glyph-storage-failure"),
     ).toHaveAccessibleName(/storage failure pattern/i);
+  });
+
+  test("paginates long observed-pattern sets with the shared page sizes", async () => {
+    const user = userEvent.setup();
+    render(
+      <OperationalMemoryPanel
+        patterns={Array.from({ length: 12 }, (_, index) =>
+          pattern({
+            id: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
+            summary: `Observed pattern ${String(index + 1).padStart(2, "0")}`,
+          }),
+        )}
+      />,
+    );
+
+    const panel = screen.getByTestId("operational-memory-panel");
+    expect(
+      within(panel).getByText("Observed pattern 10"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByText("Observed pattern 11"),
+    ).not.toBeInTheDocument();
+    expect(within(panel).getByText("1-10 of 12 patterns")).toBeInTheDocument();
+
+    await user.selectOptions(
+      within(panel).getByLabelText(/observed patterns per page/i),
+      "25",
+    );
+
+    expect(
+      within(panel).getByText("Observed pattern 11"),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText("1-12 of 12 patterns")).toBeInTheDocument();
   });
 });

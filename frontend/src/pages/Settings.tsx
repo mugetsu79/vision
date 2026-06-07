@@ -29,6 +29,11 @@ import {
 } from "@/components/scenes/scene-focus";
 import { ConfigurationWorkspace } from "@/components/configuration/ConfigurationWorkspace";
 import { Button } from "@/components/ui/button";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import { omniLabels } from "@/copy/omnisight";
 import { useCameras, type Camera } from "@/hooks/use-cameras";
 import { useLiveTelemetry } from "@/hooks/use-live-telemetry";
@@ -76,6 +81,14 @@ export function SettingsPage() {
   const [selectedOperationsSceneIds, setSelectedOperationsSceneIds] = useState<
     Set<string>
   >(() => new Set());
+  const [workerPageSize, setWorkerPageSize] =
+    useState<PaginationPageSize>(10);
+  const [workerPageIndex, setWorkerPageIndex] = useState(0);
+  const [deliveryPageSize, setDeliveryPageSize] =
+    useState<PaginationPageSize>(10);
+  const [deliveryPageIndex, setDeliveryPageIndex] = useState(0);
+  const [nodePageSize, setNodePageSize] = useState<PaginationPageSize>(10);
+  const [nodePageIndex, setNodePageIndex] = useState(0);
 
   const siteNameById = useMemo(
     () => new Map(sites.map((site) => [site.id, site.name])),
@@ -199,6 +212,26 @@ export function SettingsPage() {
     });
   }, [operationSceneIdSet]);
 
+  useEffect(() => {
+    setWorkerPageIndex(0);
+  }, [
+    fleet.data?.camera_workers.length,
+    focusedOperationSceneIds.size,
+    workerPageSize,
+  ]);
+
+  useEffect(() => {
+    setDeliveryPageIndex(0);
+  }, [
+    fleet.data?.delivery_diagnostics.length,
+    focusedOperationSceneIds.size,
+    deliveryPageSize,
+  ]);
+
+  useEffect(() => {
+    setNodePageIndex(0);
+  }, [fleet.data?.nodes.length, nodePageSize]);
+
   if (fleet.isLoading) {
     return (
       <WorkspaceSurface className="px-5 py-6 text-sm text-[#9bb0d0]">
@@ -227,8 +260,18 @@ export function SettingsPage() {
   const focusedCameraWorkers = fleet.data.camera_workers.filter((worker) =>
     focusedOperationSceneIds.has(worker.camera_id),
   );
+  const paginatedCameraWorkers = paginateItems(
+    focusedCameraWorkers,
+    workerPageSize,
+    workerPageIndex,
+  );
   const focusedDeliveryDiagnostics = fleet.data.delivery_diagnostics.filter(
     (diagnostic) => focusedOperationSceneIds.has(diagnostic.camera_id),
+  );
+  const paginatedDeliveryDiagnostics = paginateItems(
+    focusedDeliveryDiagnostics,
+    deliveryPageSize,
+    deliveryPageIndex,
   );
   const focusedOperationalMemoryPatterns = (
     operationalMemory.data ?? []
@@ -247,6 +290,11 @@ export function SettingsPage() {
       id: node.id as string,
       hostname: node.hostname,
     }));
+  const paginatedDeploymentNodes = paginateItems(
+    fleet.data.nodes,
+    nodePageSize,
+    nodePageIndex,
+  );
   const needsOperationsSetup =
     sites.length === 0 || cameras.length === 0 || fleet.data.nodes.length === 0;
 
@@ -335,80 +383,92 @@ export function SettingsPage() {
                   : "Select or search scenes to review workers."}
               </p>
             ) : (
-              focusedCameraWorkers.map((worker) => {
-                const camera = camerasById.get(worker.camera_id);
+              <>
+                <PaginationControls
+                  itemLabel="workers"
+                  pageIndex={paginatedCameraWorkers.currentPageIndex}
+                  pageSize={workerPageSize}
+                  pageSizeLabel="Scene workers per page"
+                  totalCount={focusedCameraWorkers.length}
+                  onPageIndexChange={setWorkerPageIndex}
+                  onPageSizeChange={setWorkerPageSize}
+                />
+                {paginatedCameraWorkers.items.map((worker) => {
+                  const camera = camerasById.get(worker.camera_id);
 
-                return (
-                  <div
-                    key={worker.camera_id}
-                    className="rounded-[1rem] border border-white/10 p-3"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-[#f4f8ff]">
-                          {worker.camera_name}
+                  return (
+                    <div
+                      key={worker.camera_id}
+                      className="rounded-[1rem] border border-white/10 p-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-[#f4f8ff]">
+                            {worker.camera_name}
+                          </p>
+                          <p className="mt-1 text-xs text-[#93a7c5]">
+                            {worker.processing_mode} -{" "}
+                            {worker.lifecycle_owner}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <StatusToneBadge
+                            tone={statusTone(worker.desired_state)}
+                          >
+                            {worker.desired_state}
+                          </StatusToneBadge>
+                          <StatusToneBadge
+                            tone={statusTone(worker.runtime_status)}
+                          >
+                            {worker.runtime_status}
+                          </StatusToneBadge>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#93a7c5]">
+                        <p>
+                          <span className="font-semibold text-[#d8e2f2]">
+                            Source
+                          </span>{" "}
+                          {formatCameraSource(camera)}
                         </p>
-                        <p className="mt-1 text-xs text-[#93a7c5]">
-                          {worker.processing_mode} - {worker.lifecycle_owner}
+                        <p>
+                          <span className="font-semibold text-[#d8e2f2]">
+                            Recording
+                          </span>{" "}
+                          {formatRecordingPolicy(camera)}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <StatusToneBadge
-                          tone={statusTone(worker.desired_state)}
-                        >
-                          {worker.desired_state}
-                        </StatusToneBadge>
-                        <StatusToneBadge
-                          tone={statusTone(worker.runtime_status)}
-                        >
-                          {worker.runtime_status}
-                        </StatusToneBadge>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#93a7c5]">
-                      <p>
-                        <span className="font-semibold text-[#d8e2f2]">
-                          Source
-                        </span>{" "}
-                        {formatCameraSource(camera)}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-[#d8e2f2]">
-                          Recording
-                        </span>{" "}
-                        {formatRecordingPolicy(camera)}
-                      </p>
-                    </div>
-                    <details className="mt-3 rounded-[0.85rem] border border-white/10 bg-black/15 p-3">
-                      <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.16em] text-[#9fb7d8]">
-                        Runtime diagnostics
-                      </summary>
-                      <RuntimePassportPanel
-                        summary={worker.runtime_passport}
-                        compact
+                      <details className="mt-3 rounded-[0.85rem] border border-white/10 bg-black/15 p-3">
+                        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.16em] text-[#9fb7d8]">
+                          Runtime diagnostics
+                        </summary>
+                        <RuntimePassportPanel
+                          summary={worker.runtime_passport}
+                          compact
+                        />
+                        <HardwareAdmissionPanel worker={worker} />
+                        <RuleRuntimePanel summary={worker.rule_runtime} />
+                        {worker.detail ? (
+                          <p className="mt-2 text-sm text-[#93a7c5]">
+                            {worker.detail}
+                          </p>
+                        ) : null}
+                      </details>
+                      <SupervisorLifecycleControls
+                        worker={worker}
+                        edgeNodes={edgeNodes}
                       />
-                      <HardwareAdmissionPanel worker={worker} />
-                      <RuleRuntimePanel summary={worker.rule_runtime} />
-                      {worker.detail ? (
-                        <p className="mt-2 text-sm text-[#93a7c5]">
-                          {worker.detail}
+                      {worker.dev_run_command ? (
+                        <p className="mt-3 rounded-[0.75rem] border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100">
+                          Installable supervisors own production worker launch.
+                          Manual terminal commands live in local lab and
+                          break-glass documentation.
                         </p>
                       ) : null}
-                    </details>
-                    <SupervisorLifecycleControls
-                      worker={worker}
-                      edgeNodes={edgeNodes}
-                    />
-                    {worker.dev_run_command ? (
-                      <p className="mt-3 rounded-[0.75rem] border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100">
-                        Installable supervisors own production worker launch.
-                        Manual terminal commands live in local lab and
-                        break-glass documentation.
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
         </Panel>
@@ -442,33 +502,44 @@ export function SettingsPage() {
                   : "Select or search scenes to review stream diagnostics."}
               </p>
             ) : (
-              focusedDeliveryDiagnostics.map((diagnostic) => (
-                <div
-                  key={diagnostic.camera_id}
-                  className="rounded-[1rem] border border-white/10 p-3"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-[#f4f8ff]">
-                        {diagnostic.camera_name} scene delivery
-                      </p>
-                      <p className="mt-1 text-xs text-[#93a7c5]">
-                        {formatSource(diagnostic.source_capability)} -{" "}
-                        {diagnostic.default_profile}
-                      </p>
+              <>
+                <PaginationControls
+                  itemLabel="diagnostics"
+                  pageIndex={paginatedDeliveryDiagnostics.currentPageIndex}
+                  pageSize={deliveryPageSize}
+                  pageSizeLabel="Stream diagnostics per page"
+                  totalCount={focusedDeliveryDiagnostics.length}
+                  onPageIndexChange={setDeliveryPageIndex}
+                  onPageSizeChange={setDeliveryPageSize}
+                />
+                {paginatedDeliveryDiagnostics.items.map((diagnostic) => (
+                  <div
+                    key={diagnostic.camera_id}
+                    className="rounded-[1rem] border border-white/10 p-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-[#f4f8ff]">
+                          {diagnostic.camera_name} scene delivery
+                        </p>
+                        <p className="mt-1 text-xs text-[#93a7c5]">
+                          {formatSource(diagnostic.source_capability)} -{" "}
+                          {diagnostic.default_profile}
+                        </p>
+                      </div>
+                      <StatusToneBadge tone="muted">
+                        {diagnostic.selected_stream_mode}
+                      </StatusToneBadge>
                     </div>
-                    <StatusToneBadge tone="muted">
-                      {diagnostic.selected_stream_mode}
-                    </StatusToneBadge>
+                    {diagnostic.native_status?.available === false ? (
+                      <p className="mt-2 text-sm text-amber-100">
+                        Direct stream unavailable:{" "}
+                        {formatReason(diagnostic.native_status?.reason)}
+                      </p>
+                    ) : null}
                   </div>
-                  {diagnostic.native_status?.available === false ? (
-                    <p className="mt-2 text-sm text-amber-100">
-                      Direct stream unavailable:{" "}
-                      {formatReason(diagnostic.native_status?.reason)}
-                    </p>
-                  ) : null}
-                </div>
-              ))
+                ))}
+              </>
             )}
           </div>
         </Panel>
@@ -514,27 +585,39 @@ export function SettingsPage() {
                   No deployment nodes yet.
                 </p>
               ) : (
-                fleet.data.nodes.map((node) => (
-                  <div
-                    key={node.id ?? "central"}
-                    className="rounded-[1rem] border border-white/10 p-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-[#f4f8ff]">
-                          {node.hostname}
-                        </p>
-                        <p className="mt-1 text-xs text-[#93a7c5]">
-                          {node.kind} - {node.assigned_camera_ids?.length ?? 0}{" "}
-                          assigned scenes
-                        </p>
+                <>
+                  <PaginationControls
+                    itemLabel="nodes"
+                    pageIndex={paginatedDeploymentNodes.currentPageIndex}
+                    pageSize={nodePageSize}
+                    pageSizeLabel="Deployment nodes per page"
+                    totalCount={fleet.data.nodes.length}
+                    onPageIndexChange={setNodePageIndex}
+                    onPageSizeChange={setNodePageSize}
+                  />
+                  {paginatedDeploymentNodes.items.map((node) => (
+                    <div
+                      key={node.id ?? "central"}
+                      className="rounded-[1rem] border border-white/10 p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-[#f4f8ff]">
+                            {node.hostname}
+                          </p>
+                          <p className="mt-1 text-xs text-[#93a7c5]">
+                            {node.kind} -{" "}
+                            {node.assigned_camera_ids?.length ?? 0} assigned
+                            scenes
+                          </p>
+                        </div>
+                        <StatusToneBadge tone={statusTone(node.status)}>
+                          {node.status}
+                        </StatusToneBadge>
                       </div>
-                      <StatusToneBadge tone={statusTone(node.status)}>
-                        {node.status}
-                      </StatusToneBadge>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </>
               )}
             </div>
           </Panel>

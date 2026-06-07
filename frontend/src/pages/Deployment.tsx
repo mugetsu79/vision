@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -22,6 +22,11 @@ import {
 } from "@/components/layout/workspace-surfaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import {
   useCreatePairingSession,
   useDeploymentNodes,
@@ -62,6 +67,8 @@ const installerTargets = [
   },
 ] as const;
 
+const emptyDeploymentNodes: DeploymentNode[] = [];
+
 export function DeploymentPage() {
   const nodes = useDeploymentNodes();
   const sites = useSites();
@@ -82,9 +89,21 @@ export function DeploymentPage() {
   const [revocation, setRevocation] =
     useState<NodeCredentialRevokeResponse | null>(null);
   const [bundleNodeId, setBundleNodeId] = useState<string | null>(null);
+  const [nodePageSize, setNodePageSize] = useState<PaginationPageSize>(10);
+  const [nodePageIndex, setNodePageIndex] = useState(0);
   const supportBundle = useDeploymentSupportBundle(bundleNodeId);
   const availableSites = sites.data ?? [];
+  const deploymentNodes = nodes.data ?? emptyDeploymentNodes;
   const selectedEdgeSiteId = edgeSiteId || availableSites[0]?.id || "";
+  const paginatedNodes = paginateItems(
+    deploymentNodes,
+    nodePageSize,
+    nodePageIndex,
+  );
+
+  useEffect(() => {
+    setNodePageIndex(0);
+  }, [deploymentNodes.length, nodePageSize]);
 
   async function handlePairNode(node?: DeploymentNode) {
     const result = await createPairing.mutateAsync({
@@ -208,10 +227,20 @@ export function DeploymentPage() {
             <PackageCheck className="size-4" />
             <h2>Deployment nodes</h2>
           </div>
-          {nodes.data.length === 0 ? (
+          {deploymentNodes.length === 0 ? (
             <DeploymentEmptyState onPairCentral={() => void handlePairNode()} />
           ) : (
             <div className="overflow-x-auto">
+              <PaginationControls
+                className="mb-3"
+                itemLabel="nodes"
+                pageIndex={paginatedNodes.currentPageIndex}
+                pageSize={nodePageSize}
+                pageSizeLabel="Deployment nodes per page"
+                totalCount={deploymentNodes.length}
+                onPageIndexChange={setNodePageIndex}
+                onPageSizeChange={setNodePageSize}
+              />
               <table className="min-w-full border-separate border-spacing-y-2 text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-[0.14em] text-[#7894bd]">
                   <tr>
@@ -224,7 +253,7 @@ export function DeploymentPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {nodes.data.map((node) => (
+                  {paginatedNodes.items.map((node) => (
                     <tr key={node.id} className="bg-white/[0.025]">
                       <td className="rounded-l-[0.75rem] border-y border-l border-white/10 px-3 py-3">
                         <p className="font-medium text-[#f4f8ff]">

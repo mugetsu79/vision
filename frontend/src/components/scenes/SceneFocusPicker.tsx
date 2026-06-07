@@ -1,5 +1,12 @@
+import { useEffect, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 import {
   filterSceneFocusItems,
@@ -35,7 +42,10 @@ export function SceneFocusPicker({
   testId,
   title,
 }: SceneFocusPickerProps) {
+  const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
+  const [pageIndex, setPageIndex] = useState(0);
   const visibleItems = filterSceneFocusItems(items, searchValue);
+  const paginatedItems = paginateItems(visibleItems, pageSize, pageIndex);
   const hasSearch = searchValue.trim().length > 0;
   const statusLabel =
     selectedSceneIds.size > 0
@@ -43,6 +53,10 @@ export function SceneFocusPicker({
       : hasSearch
         ? `${visibleItems.length} matching`
         : defaultSummary;
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [pageSize, searchValue, visibleItems.length]);
 
   return (
     <section
@@ -82,7 +96,7 @@ export function SceneFocusPicker({
             {emptyLabel}
           </div>
         ) : (
-          visibleItems.map((item) => {
+          paginatedItems.items.map((item) => {
             const checked = selectedSceneIds.has(item.id);
             return (
               <label
@@ -112,6 +126,16 @@ export function SceneFocusPicker({
           })
         )}
       </div>
+      <PaginationControls
+        className="mt-3"
+        itemLabel="scenes"
+        pageIndex={paginatedItems.currentPageIndex}
+        pageSize={pageSize}
+        pageSizeLabel="Scenes per page"
+        totalCount={visibleItems.length}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={setPageSize}
+      />
     </section>
   );
 }

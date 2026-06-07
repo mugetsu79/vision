@@ -1,7 +1,13 @@
+import { useEffect, useState } from "react";
 import { Ship } from "lucide-react";
 
 import { WorkspaceSurface } from "@/components/layout/workspace-surfaces";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 import {
   asRecord,
@@ -28,8 +34,15 @@ export function FleetOpsScopeSelector({
   title = "Choose vessel or site",
   vessels,
 }: FleetOpsScopeSelectorProps) {
+  const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
+  const [pageIndex, setPageIndex] = useState(0);
   const visibleVessels = filterFleetOpsVessels(vessels, searchValue);
+  const paginatedVessels = paginateItems(visibleVessels, pageSize, pageIndex);
   const hasSelection = Boolean(selectedVesselId);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [pageSize, searchValue, visibleVessels.length]);
 
   return (
     <WorkspaceSurface className="p-4">
@@ -68,7 +81,7 @@ export function FleetOpsScopeSelector({
             No vessels match this search.
           </div>
         ) : (
-          visibleVessels.map((vessel) => {
+          paginatedVessels.items.map((vessel) => {
             const vesselId = textValue(vessel.id, "");
             const siteId = textValue(vessel.site_id, "No site");
             const metadata = asRecord(vessel.metadata);
@@ -109,6 +122,16 @@ export function FleetOpsScopeSelector({
           })
         )}
       </div>
+      <PaginationControls
+        className="mt-3"
+        itemLabel="vessels"
+        pageIndex={paginatedVessels.currentPageIndex}
+        pageSize={pageSize}
+        pageSizeLabel="FleetOps vessels per page"
+        totalCount={visibleVessels.length}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={setPageSize}
+      />
     </WorkspaceSurface>
   );
 }

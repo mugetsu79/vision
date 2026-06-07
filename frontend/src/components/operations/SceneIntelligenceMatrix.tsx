@@ -1,9 +1,15 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
   StatusToneBadge,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import {
   healthToTone,
   type HealthSignal,
@@ -19,6 +25,18 @@ export function SceneIntelligenceMatrix({
   emptyLabel = "No scenes configured.",
   rows,
 }: SceneIntelligenceMatrixProps) {
+  const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
+  const [pageIndex, setPageIndex] = useState(0);
+  const rowIdentity = useMemo(
+    () => rows.map((row) => row.cameraId).join("\u0000"),
+    [rows],
+  );
+  const paginatedRows = paginateItems(rows, pageSize, pageIndex);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [pageSize, rowIdentity]);
+
   return (
     <WorkspaceSurface data-testid="scene-intelligence-matrix">
       <div className="border-b border-white/8 px-4 py-3">
@@ -35,52 +53,64 @@ export function SceneIntelligenceMatrix({
           {emptyLabel}
         </p>
       ) : (
-        <div className="grid gap-3 p-4">
-          {rows.map((row) => (
-            <article
-              key={row.cameraId}
-              className="grid min-w-0 gap-4 rounded-lg border border-white/8 bg-white/[0.025] p-4 xl:grid-cols-[minmax(14rem,0.8fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-start"
-            >
-              <div className="min-w-0">
-                <h3 className="break-words text-base font-semibold text-[var(--vz-text-primary)]">
-                  {row.cameraName}
-                </h3>
-                <p className="mt-1 break-words text-sm text-[var(--vz-text-secondary)]">
-                  {row.siteName}
-                </p>
-                <p className="mt-2 break-words text-sm text-[var(--vz-text-muted)]">
-                  {placementLabel(row)}
-                </p>
-              </div>
-
-              <SignalGroup
-                title="Runtime"
-                signals={[
-                  { label: "Worker", signal: row.worker },
-                  { label: "Telemetry", signal: row.telemetry },
-                  { label: "Rules", signal: row.rules },
-                ]}
-              />
-
-              <SignalGroup
-                title="Stream"
-                signals={[
-                  { label: "Transport", signal: row.transport },
-                  { label: "Live rendition", signal: row.liveRendition },
-                  { label: "Privacy", signal: row.privacy },
-                ]}
-              />
-
-              <Link
-                to={row.actionHref}
-                aria-label={`${row.actionLabel} for ${row.cameraName}`}
-                className="min-w-0 self-start break-words text-sm font-semibold text-[var(--vz-lens-cerulean)] transition hover:text-[var(--vz-text-primary)]"
+        <>
+          <PaginationControls
+            className="px-4 pt-3"
+            itemLabel="scenes"
+            pageIndex={paginatedRows.currentPageIndex}
+            pageSize={pageSize}
+            pageSizeLabel="Scene readiness per page"
+            totalCount={rows.length}
+            onPageIndexChange={setPageIndex}
+            onPageSizeChange={setPageSize}
+          />
+          <div className="grid gap-3 p-4">
+            {paginatedRows.items.map((row) => (
+              <article
+                key={row.cameraId}
+                className="grid min-w-0 gap-4 rounded-lg border border-white/8 bg-white/[0.025] p-4 xl:grid-cols-[minmax(14rem,0.8fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-start"
               >
-                {row.actionLabel}
-              </Link>
-            </article>
-          ))}
-        </div>
+                <div className="min-w-0">
+                  <h3 className="break-words text-base font-semibold text-[var(--vz-text-primary)]">
+                    {row.cameraName}
+                  </h3>
+                  <p className="mt-1 break-words text-sm text-[var(--vz-text-secondary)]">
+                    {row.siteName}
+                  </p>
+                  <p className="mt-2 break-words text-sm text-[var(--vz-text-muted)]">
+                    {placementLabel(row)}
+                  </p>
+                </div>
+
+                <SignalGroup
+                  title="Runtime"
+                  signals={[
+                    { label: "Worker", signal: row.worker },
+                    { label: "Telemetry", signal: row.telemetry },
+                    { label: "Rules", signal: row.rules },
+                  ]}
+                />
+
+                <SignalGroup
+                  title="Stream"
+                  signals={[
+                    { label: "Transport", signal: row.transport },
+                    { label: "Live rendition", signal: row.liveRendition },
+                    { label: "Privacy", signal: row.privacy },
+                  ]}
+                />
+
+                <Link
+                  to={row.actionHref}
+                  aria-label={`${row.actionLabel} for ${row.cameraName}`}
+                  className="min-w-0 self-start break-words text-sm font-semibold text-[var(--vz-lens-cerulean)] transition hover:text-[var(--vz-text-primary)]"
+                >
+                  {row.actionLabel}
+                </Link>
+              </article>
+            ))}
+          </div>
+        </>
       )}
     </WorkspaceSurface>
   );

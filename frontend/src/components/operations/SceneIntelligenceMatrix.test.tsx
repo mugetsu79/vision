@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test } from "vitest";
 
@@ -115,5 +116,33 @@ describe("SceneIntelligenceMatrix", () => {
     );
 
     expect(screen.getByText(/no scenes configured/i)).toBeInTheDocument();
+  });
+
+  test("paginates long readiness sets at operator-selected page sizes", async () => {
+    const user = userEvent.setup();
+    const manyRows = Array.from({ length: 12 }, (_, index) => ({
+      ...rows[0],
+      cameraId: `camera-${index + 1}`,
+      cameraName: `Batch Scene ${String(index + 1).padStart(2, "0")}`,
+    }));
+
+    render(
+      <MemoryRouter>
+        <SceneIntelligenceMatrix rows={manyRows} />
+      </MemoryRouter>,
+    );
+
+    const matrix = screen.getByTestId("scene-intelligence-matrix");
+    expect(within(matrix).getByText("Batch Scene 10")).toBeInTheDocument();
+    expect(within(matrix).queryByText("Batch Scene 11")).not.toBeInTheDocument();
+    expect(within(matrix).getByText("1-10 of 12 scenes")).toBeInTheDocument();
+
+    await user.selectOptions(
+      within(matrix).getByLabelText(/scene readiness per page/i),
+      "25",
+    );
+
+    expect(within(matrix).getByText("Batch Scene 11")).toBeInTheDocument();
+    expect(within(matrix).getByText("1-12 of 12 scenes")).toBeInTheDocument();
   });
 });

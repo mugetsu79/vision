@@ -22,6 +22,11 @@ import { SceneStatusStrip } from "@/components/operations/SceneStatusStrip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  paginateItems,
+  type PaginationPageSize,
+} from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { omniEmptyStates, omniLabels } from "@/copy/omnisight";
 import { useCameras, useDeleteCamera, useUpdateCamera } from "@/hooks/use-cameras";
@@ -89,6 +94,9 @@ function WorkspacePage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [liveScenePageSize, setLiveScenePageSize] =
+    useState<PaginationPageSize>(10);
+  const [liveScenePageIndex, setLiveScenePageIndex] = useState(0);
   const [signalRowsByCamera, setSignalRowsByCamera] = useState(
     () => new Map<string, SignalCountRow[]>(),
   );
@@ -109,7 +117,7 @@ function WorkspacePage() {
     [sites],
   );
   const activeQueryScope = activeQuery?.scope ?? null;
-  const visibleCameras = useMemo(
+  const matchedLiveCameras = useMemo(
     () =>
       filterLiveCameras({
         cameras,
@@ -120,6 +128,12 @@ function WorkspacePage() {
       }),
     [activeQueryScope, cameras, sceneSearch, selectedSceneIds, siteNameById],
   );
+  const paginatedLiveCameras = paginateItems(
+    matchedLiveCameras,
+    liveScenePageSize,
+    liveScenePageIndex,
+  );
+  const visibleCameras = paginatedLiveCameras.items;
   const hasLiveSceneFocus =
     selectedSceneIds.size > 0 ||
     sceneSearch.trim().length > 0 ||
@@ -261,6 +275,16 @@ function WorkspacePage() {
       setFocusedCameraId(null);
     }
   }, [focusedCameraId, visibleCameraIds]);
+
+  useEffect(() => {
+    setLiveScenePageIndex(0);
+  }, [
+    activeQueryScope,
+    liveScenePageSize,
+    matchedLiveCameras.length,
+    sceneSearch,
+    selectedSceneIds,
+  ]);
 
   useEffect(() => {
     if (!focusedCameraId) return;
@@ -445,9 +469,18 @@ function WorkspacePage() {
                 {activeQuery ? "Resolved view" : "Unfiltered view"}
               </Badge>
               <Badge className="border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]">
-                {visibleCameras.length} of {cameras.length} scenes in view
+                {`${visibleCameras.length} of ${cameras.length} scenes in view`}
               </Badge>
             </div>
+            <PaginationControls
+              itemLabel="scenes"
+              pageIndex={paginatedLiveCameras.currentPageIndex}
+              pageSize={liveScenePageSize}
+              pageSizeLabel="Live scenes per page"
+              totalCount={matchedLiveCameras.length}
+              onPageIndexChange={setLiveScenePageIndex}
+              onPageSizeChange={setLiveScenePageSize}
+            />
 
             {visibleCameras.length === 0 ? (
               <div className="rounded-[1rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
@@ -534,6 +567,21 @@ function LiveSceneBrowser({
     (count, group) => count + group.cameras.length,
     0,
   );
+  const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
+  const [pageIndex, setPageIndex] = useState(0);
+  const matchedCameras = useMemo(
+    () => filterLiveSceneBrowserCameras(cameras, siteNameById, search),
+    [cameras, search, siteNameById],
+  );
+  const paginatedCameras = paginateItems(matchedCameras, pageSize, pageIndex);
+  const paginatedGroups = useMemo(
+    () => groupCamerasBySite(paginatedCameras.items, siteNameById),
+    [paginatedCameras.items, siteNameById],
+  );
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [cameras.length, matchingCount, pageSize, search]);
 
   return (
     <section
@@ -570,8 +618,8 @@ function LiveSceneBrowser({
         />
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        {groupedCameras.length > 0 ? (
-          groupedCameras.map((group) => (
+        {paginatedGroups.length > 0 ? (
+          paginatedGroups.map((group) => (
             <div
               className="rounded-[0.75rem] border border-white/8 bg-black/20 px-3 py-3"
               key={group.siteName}
@@ -601,6 +649,16 @@ function LiveSceneBrowser({
           <p className="text-sm text-[#8ca2c5]">No scenes match this search.</p>
         )}
       </div>
+      <PaginationControls
+        className="mt-3"
+        itemLabel="scenes"
+        pageIndex={paginatedCameras.currentPageIndex}
+        pageSize={pageSize}
+        pageSizeLabel="Scene browser per page"
+        totalCount={matchingCount}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={setPageSize}
+      />
     </section>
   );
 }
@@ -646,12 +704,41 @@ function groupLiveCamerasBySite(
   search: string,
 ) {
   const normalizedSearch = search.trim().toLowerCase();
+  return groupCamerasBySite(
+    cameras.filter((camera) =>
+      cameraMatchesLiveSearch(camera, siteNameById, normalizedSearch),
+    ),
+    siteNameById,
+  );
+}
+
+function filterLiveSceneBrowserCameras(
+  cameras: CameraResponse[],
+  siteNameById: Map<string, string>,
+  search: string,
+) {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  return cameras
+    .filter((camera) =>
+      cameraMatchesLiveSearch(camera, siteNameById, normalizedSearch),
+    )
+    .sort((left, right) => {
+      const leftSite = siteNameById.get(left.site_id) ?? "Unknown site";
+      const rightSite = siteNameById.get(right.site_id) ?? "Unknown site";
+      return (
+        leftSite.localeCompare(rightSite) || left.name.localeCompare(right.name)
+      );
+    });
+}
+
+function groupCamerasBySite(
+  cameras: CameraResponse[],
+  siteNameById: Map<string, string>,
+) {
   const groups = new Map<string, CameraResponse[]>();
 
   for (const camera of cameras) {
-    if (!cameraMatchesLiveSearch(camera, siteNameById, normalizedSearch)) {
-      continue;
-    }
     const siteName = siteNameById.get(camera.site_id) ?? "Unknown site";
     groups.set(siteName, [...(groups.get(siteName) ?? []), camera]);
   }
