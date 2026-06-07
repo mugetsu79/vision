@@ -13,9 +13,8 @@ type SiteResponse = components["schemas"]["SiteResponse"];
 const vesselPageMocks = vi.hoisted(() => ({
   vessels: [] as unknown[],
   sites: [] as SiteResponse[],
-  createVessel: vi.fn<
-    (payload: MaritimeVesselCreateInput) => Promise<{ id: string }>
-  >(),
+  createVessel:
+    vi.fn<(payload: MaritimeVesselCreateInput) => Promise<{ id: string }>>(),
 }));
 
 vi.mock("@/hooks/use-maritime", () => ({
@@ -51,6 +50,33 @@ function renderWithProviders(ui: ReactElement) {
   );
 }
 
+function makeVessel(
+  index: number,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const suffix = String(index).padStart(2, "0");
+  return {
+    id: `vessel-${suffix}`,
+    name: `MV ${suffix}`,
+    site_id: `site-${suffix}`,
+    site: { name: `FleetOps Site ${suffix}` },
+    imo_number: `imo-${suffix}`,
+    mmsi: `mmsi-${suffix}`,
+    call_sign: `CALL${suffix}`,
+    active: true,
+    metadata: {
+      evidence_queue: "No pending exports",
+      link_state:
+        index % 3 === 0
+          ? "dark"
+          : index % 2 === 0
+            ? "satellite_degraded"
+            : "port_wifi",
+    },
+    ...overrides,
+  };
+}
+
 describe("FleetOpsVessels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,7 +93,9 @@ describe("FleetOpsVessels", () => {
 
     await user.click(screen.getAllByRole("button", { name: /add vessel/i })[0]);
 
-    expect(screen.getByRole("dialog", { name: /add vessel/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: /add vessel/i }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/vessel name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/imo number/i)).toBeInTheDocument();
     expect(
@@ -129,5 +157,101 @@ describe("FleetOpsVessels", () => {
     expect(payload?.create_site).toBeUndefined();
     expect(payload?.imo_number).toBeUndefined();
     expect(payload?.metadata).toBeUndefined();
+  });
+
+  test("vessel list filters by search, link state, and status", async () => {
+    vesselPageMocks.vessels = [
+      makeVessel(1, {
+        name: "MV Resolute",
+        active: true,
+        metadata: { link_state: "port_wifi", evidence_queue: "Ready" },
+      }),
+      makeVessel(2, {
+        name: "MV Horizon",
+        active: false,
+        metadata: { link_state: "dark", evidence_queue: "Queued" },
+      }),
+      makeVessel(3, {
+        name: "MV Endurance",
+        active: true,
+        metadata: {
+          link_state: "satellite_degraded",
+          evidence_queue: "Queued",
+        },
+      }),
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<FleetOpsVessels />);
+
+    await user.type(
+      screen.getByRole("searchbox", { name: /search vessels/i }),
+      "horizon",
+    );
+
+    expect(
+      screen.getByRole("link", { name: /mv horizon/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /mv resolute/i }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /link state/i }),
+      "dark",
+    );
+
+    expect(
+      screen.getByRole("link", { name: /mv horizon/i }),
+    ).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /^status$/i }),
+      "active",
+    );
+
+    expect(
+      screen.getByText(/no vessels match these filters/i),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /clear filters/i }));
+
+    expect(
+      screen.getByRole("link", { name: /mv resolute/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /mv horizon/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("vessel list paginates 10 rows by default and supports 25 or 50 rows", async () => {
+    vesselPageMocks.vessels = Array.from({ length: 12 }, (_, index) =>
+      makeVessel(index + 1),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<FleetOpsVessels />);
+
+    expect(screen.getByRole("link", { name: /mv 01/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /mv 10/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /mv 11/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/1-10 of 12 vessels/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /next page/i }));
+
+    expect(
+      screen.queryByRole("link", { name: /mv 01/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /mv 11/i })).toBeInTheDocument();
+    expect(screen.getByText(/11-12 of 12 vessels/i)).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /rows per page/i }),
+      "25",
+    );
+
+    expect(screen.getByRole("link", { name: /mv 01/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /mv 12/i })).toBeInTheDocument();
+    expect(screen.getByText(/1-12 of 12 vessels/i)).toBeInTheDocument();
   });
 });
