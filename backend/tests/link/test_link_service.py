@@ -657,6 +657,18 @@ def test_link_tables_and_migration_constrain_domain_neutral_literals() -> None:
     assert "in_port" not in connection_text
 
 
+def test_core_link_master_target_migration_adds_site_kind_and_target_site_id() -> None:
+    migration = Path(__file__).resolve().parents[2] / (
+        "src/argus/migrations/versions/0040_core_link_master_target_site.py"
+    )
+    text = migration.read_text(encoding="utf-8")
+
+    assert "site_kind" in text
+    assert "target_site_id" in text
+    assert "ix_link_health_probes_tenant_target_site_recorded" in text
+    assert "control_plane" in text
+
+
 def test_priority_order_is_safety_evidence_telemetry_bulk(link_service: LinkService) -> None:
     items = [
         link_service.make_queue_item_for_test(priority_lane="bulk", byte_size=100),

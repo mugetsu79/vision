@@ -122,6 +122,7 @@ class Site(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tz: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     geo_point: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    site_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="edge")
 
 
 class EdgeNode(UUIDPrimaryKeyMixin, Base):

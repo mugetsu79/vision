@@ -169,6 +169,12 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "link_health_probes"
     __table_args__ = (
         Index("ix_link_health_probes_tenant_site_recorded", "tenant_id", "site_id", "recorded_at"),
+        Index(
+            "ix_link_health_probes_tenant_target_site_recorded",
+            "tenant_id",
+            "target_site_id",
+            "recorded_at",
+        ),
         Index("ix_link_health_probes_connection", "connection_id"),
         Index("ix_link_health_probes_target", "target_id"),
         Index("ix_link_health_probes_deleted", "deleted_at"),
@@ -196,6 +202,11 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("sites.id"),
         nullable=False,
+    )
+    target_site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id", ondelete="SET NULL"),
+        nullable=True,
     )
     connection_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
