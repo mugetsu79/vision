@@ -759,6 +759,7 @@ class LinkService:
         packet_loss_percent: float,
         reachable: bool,
         source: str,
+        target_site_id: UUID | None = None,
         target_id: str | None = None,
         target_label: str | None = None,
         target_address: str | None = None,
@@ -781,6 +782,7 @@ class LinkService:
             id=uuid4(),
             tenant_id=tenant_id,
             site_id=site_id,
+            target_site_id=target_site_id,
             connection_id=connection_id,
             latency_ms=latency_ms,
             throughput_mbps=throughput_mbps,
@@ -811,6 +813,7 @@ class LinkService:
         packet_loss_percent: float,
         reachable: bool,
         source: str,
+        target_site_id: UUID | None = None,
         target_id: str | None = None,
         target_label: str | None = None,
         target_address: str | None = None,
@@ -838,6 +841,7 @@ class LinkService:
                 packet_loss_percent=packet_loss_percent,
                 reachable=reachable,
                 source=source,
+                target_site_id=target_site_id,
                 target_id=target_id,
                 target_label=target_label,
                 target_address=target_address,
@@ -851,6 +855,7 @@ class LinkService:
             id=uuid4(),
             tenant_id=tenant_id,
             site_id=site_id,
+            target_site_id=target_site_id,
             connection_id=connection_id,
             latency_ms=latency_ms,
             throughput_mbps=throughput_mbps,
@@ -880,6 +885,21 @@ class LinkService:
             for probe in self._probes
             if probe.tenant_id == tenant_id
             and probe.site_id == site_id
+            and probe.deleted_at is None
+        ]
+
+    def list_target_site_probes(
+        self,
+        *,
+        tenant_id: UUID,
+        target_site_id: UUID,
+    ) -> list[LinkHealthProbeRecord]:
+        self._ensure_memory_mode()
+        return [
+            probe
+            for probe in self._probes
+            if probe.tenant_id == tenant_id
+            and probe.target_site_id == target_site_id
             and probe.deleted_at is None
         ]
 
@@ -931,6 +951,25 @@ class LinkService:
             return self.list_probes(tenant_id=tenant_id, site_id=site_id)
         async with self.session_factory() as session:
             probes = await self._list_probe_rows(session, tenant_id=tenant_id, site_id=site_id)
+        return [_probe_record(probe) for probe in probes]
+
+    async def alist_target_site_probes(
+        self,
+        *,
+        tenant_id: UUID,
+        target_site_id: UUID,
+    ) -> list[LinkHealthProbeRecord]:
+        if self.session_factory is None:
+            return self.list_target_site_probes(
+                tenant_id=tenant_id,
+                target_site_id=target_site_id,
+            )
+        async with self.session_factory() as session:
+            probes = await self._list_target_site_probe_rows(
+                session,
+                tenant_id=tenant_id,
+                target_site_id=target_site_id,
+            )
         return [_probe_record(probe) for probe in probes]
 
     def latest_probe(self, *, tenant_id: UUID, site_id: UUID) -> LinkHealthProbeRecord | None:
@@ -1570,6 +1609,24 @@ class LinkService:
         )
         return cast(list[LinkHealthProbe], result.scalars().all())
 
+    async def _list_target_site_probe_rows(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        target_site_id: UUID,
+    ) -> list[LinkHealthProbe]:
+        result = await session.execute(
+            select(LinkHealthProbe)
+            .where(
+                LinkHealthProbe.tenant_id == tenant_id,
+                LinkHealthProbe.target_site_id == target_site_id,
+                LinkHealthProbe.deleted_at.is_(None),
+            )
+            .order_by(LinkHealthProbe.recorded_at.desc())
+        )
+        return cast(list[LinkHealthProbe], result.scalars().all())
+
     async def _list_queue_rows(
         self,
         session: AsyncSession,
@@ -1797,6 +1854,7 @@ def _probe_record(probe: LinkHealthProbe) -> LinkHealthProbeRecord:
         id=probe.id,
         tenant_id=probe.tenant_id,
         site_id=probe.site_id,
+        target_site_id=probe.target_site_id,
         connection_id=probe.connection_id,
         latency_ms=probe.latency_ms,
         throughput_mbps=probe.throughput_mbps,

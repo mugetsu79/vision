@@ -95,6 +95,7 @@ class LinkHealthProbeRecord:
     id: UUID
     tenant_id: UUID
     site_id: UUID
+    target_site_id: UUID | None
     connection_id: UUID | None
     latency_ms: int
     throughput_mbps: float

@@ -391,6 +391,65 @@ def test_record_probe_stores_measurement_metadata(link_service: LinkService) -> 
     assert probe.measurement_metadata["packets_lost"] == 1
 
 
+def test_record_probe_keeps_source_site_and_target_site(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    edge_site_id = UUID("00000000-0000-4000-8000-000000000002")
+    master_site_id = UUID("00000000-0000-4000-8000-000000000099")
+
+    probe = link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=edge_site_id,
+        target_site_id=master_site_id,
+        latency_ms=24,
+        throughput_mbps=0,
+        packet_loss_percent=0,
+        reachable=True,
+        source="edge_agent:macbook-home",
+        target_id="vezor-master",
+        target_label="Vezor Master",
+        target_address="master.vezor.local",
+        probe_type="udp",
+        source_type="edge_agent",
+        source_label="MacBook at home",
+        sample_kind="automated",
+    )
+
+    assert probe.site_id == edge_site_id
+    assert probe.target_site_id == master_site_id
+
+
+def test_list_target_site_probes_returns_inverse_master_view(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    edge_site_id = UUID("00000000-0000-4000-8000-000000000002")
+    other_edge_site_id = UUID("00000000-0000-4000-8000-000000000003")
+    master_site_id = UUID("00000000-0000-4000-8000-000000000099")
+
+    targeted_probe = link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=edge_site_id,
+        target_site_id=master_site_id,
+        latency_ms=24,
+        throughput_mbps=0,
+        packet_loss_percent=0,
+        reachable=True,
+        source="edge_agent:macbook-home",
+    )
+    link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=other_edge_site_id,
+        latency_ms=40,
+        throughput_mbps=0,
+        packet_loss_percent=0,
+        reachable=True,
+        source="edge_agent:other",
+    )
+
+    assert link_service.list_target_site_probes(
+        tenant_id=tenant_id,
+        target_site_id=master_site_id,
+    ) == [targeted_probe]
+
+
 def test_delete_probe_hides_sample_from_history_and_latest(link_service: LinkService) -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000001")
     site_id = UUID("00000000-0000-4000-8000-000000000002")
@@ -427,6 +486,7 @@ async def test_session_backed_link_service_persists_core_state() -> None:
     incident_id = UUID("00000000-0000-4000-8000-000000000004")
     evidence_artifact_id = UUID("00000000-0000-4000-8000-000000000005")
     source_object_id = UUID("00000000-0000-4000-8000-000000000006")
+    target_site_id = UUID("00000000-0000-4000-8000-000000000099")
     session_factory = _PersistentLinkSessionFactory()
     service = LinkService(session_factory)
 
@@ -439,6 +499,7 @@ async def test_session_backed_link_service_persists_core_state() -> None:
     await service.arecord_probe(
         tenant_id=tenant_id,
         site_id=site_id,
+        target_site_id=target_site_id,
         latency_ms=120,
         throughput_mbps=42.0,
         packet_loss_percent=0.1,
@@ -494,6 +555,7 @@ async def test_session_backed_link_service_persists_core_state() -> None:
     assert restored_queue[0].id == item.id
     assert restored_queue[0].last_successful_transfer_at is not None
     assert restored_probes[0].source == "packless-lab"
+    assert restored_probes[0].target_site_id == target_site_id
     assert restored_passport.payload["budget"] is not None
     assert restored_passport.payload["latest_probe"] is not None
     assert restored_passport.last_sync_at is not None
