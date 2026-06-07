@@ -38,15 +38,15 @@ The first phase is the best product path because it can be tested end to end ins
 
 ## Site Eligibility
 
-Core Link is an edge-site feature. The UI and API should use this rule:
+Core Link configuration is an edge-site feature. The UI and API should use this rule:
 
 - A site is eligible for Link Performance only when it has a registered edge node.
-- A master/control-plane deployment node is not a Link Performance site.
-- Link paths, budgets, policies, monitoring targets, manual probe samples, edge-agent samples, backend synthetic probe runs, and throughput measurements are rejected for non-edge/master sites.
-- The Link Performance site selector lists only eligible edge sites.
-- A master-hosted reflector can still be offered as a reflector endpoint for an edge site's target. That configuration belongs to Deployment/Reflectors or equivalent platform settings, not to the master site.
+- A master/control-plane deployment node can appear as a target-only Link Performance site when implemented by `docs/superpowers/specs/2026-06-07-core-link-master-target-site-design.md`.
+- Link paths, budgets, policies, monitoring targets, manual probe samples, backend synthetic probe runs, and throughput measurements are rejected when the selected source site is the master/control-plane site.
+- The Link Performance site selector lists configurable edge sites and may list the master as a read-only control-plane target site.
+- A master-hosted reflector can be offered as a reflector endpoint for an edge site's target. That configuration belongs to Deployment/Reflectors or the control-plane target profile, not to local master link inventory.
 
-This avoids the confusing model where operators add a "connection" to the master. The master stores and optionally reflects measurements; the edge site owns the measured link.
+This avoids the confusing model where operators add a local "connection" to the master. The master stores and optionally reflects measurements; the edge site owns the measured link and the master target view aggregates those edge-originated samples.
 
 ## Master Reflector Configuration
 
