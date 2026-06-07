@@ -15,7 +15,7 @@
 - Modify `backend/src/argus/models/tables.py`: add `Site.site_kind`.
 - Modify `backend/src/argus/api/contracts.py`: add `site_kind` to site responses and add Link role/capability fields.
 - Create `backend/src/argus/migrations/versions/0040_core_link_master_target_site.py`: add site kind and target site probe columns.
-- Modify `backend/src/argus/services/app.py`: create/repair the control-plane site during master bootstrap, return site kind, and expose Link site capability helpers.
+- Modify `backend/src/argus/services/app.py`: create/repair the control-plane site during master bootstrap and Link site listing, return site kind, and expose Link site capability helpers.
 - Modify `backend/src/argus/link/contracts.py`: add `target_site_id` and summary role/capabilities.
 - Modify `backend/src/argus/link/tables.py`: add `target_site_id` to `LinkHealthProbe`.
 - Modify `backend/src/argus/link/service.py`: persist/query target site samples and aggregate master target status.
@@ -271,7 +271,7 @@ async def _ensure_control_plane_site(
     return site
 ```
 
-Call `_ensure_control_plane_site(...)` from `DeploymentNodeService.complete_master_bootstrap` after the tenant is known.
+Call `_ensure_control_plane_site(...)` from `DeploymentNodeService.complete_master_bootstrap` after the tenant is known. Also call it from `list_link_performance_sites(...)` before querying so existing tenants are repaired idempotently after migration without relying on database-side UUID generation.
 
 Add a Link-specific site listing method:
 

@@ -40,7 +40,7 @@ Add a `site_kind` field to `sites`:
 - `edge`: default for existing and operator-created sites.
 - `control_plane`: reserved for the Vezor master site.
 
-At master bootstrap, create or repair one `control_plane` site named `Vezor Master`. If the tenant already has one, reuse it. Do not require an `EdgeNode` row for this site.
+At master bootstrap, create or repair one `control_plane` site named `Vezor Master`. During migration or service startup repair, backfill the same site for existing tenants. If the tenant already has one, reuse it. Do not require an `EdgeNode` row for this site.
 
 ## Capabilities
 
@@ -201,6 +201,7 @@ Add:
 - `sites.site_kind text not null default 'edge'` with allowed values `edge`, `control_plane`.
 - `link_health_probes.target_site_id uuid null references sites(id)`.
 - Index `ix_link_health_probes_tenant_target_site_recorded` on `(tenant_id, target_site_id, recorded_at desc)`.
+- Backfill one `control_plane` `Vezor Master` site per existing tenant during migration or idempotent service repair.
 
 Optional in the same implementation if UDP reflector config is included:
 
