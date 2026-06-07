@@ -1,6 +1,12 @@
 import type { LinkSiteSummary } from "@/hooks/use-link";
 
 export type LinkSiteSummaryItem = LinkSiteSummary;
+export type LinkSiteRole = "edge" | "control_plane";
+export type LinkTargetSiteOption = {
+  site_id: string;
+  site_name: string;
+  site_role: LinkSiteRole;
+};
 export type LinkModel =
   | "direct"
   | "provider_managed"
@@ -38,6 +44,7 @@ export type MonitoringTarget = {
   probe_type: MonitoringProbeType;
   port?: number | null;
   purpose: MonitoringPurpose;
+  target_site_id?: string | null;
   expected_latency_ms?: number | null;
   monitoring: MonitoringConfig;
   loss_method?: LinkProbeLossMethod | null;
@@ -247,6 +254,28 @@ export function monitoringSourceLabel(
   return labels[value];
 }
 
+export function linkSiteRole(summary: unknown): LinkSiteRole {
+  return asRecord(summary).site_role === "control_plane"
+    ? "control_plane"
+    : "edge";
+}
+
+export function linkSiteRoleLabel(role: LinkSiteRole) {
+  return role === "control_plane" ? "Control plane target" : "Edge site";
+}
+
+export function controlPlaneTargetSites(
+  summaries: LinkSiteSummaryItem[],
+): LinkTargetSiteOption[] {
+  return summaries
+    .filter((summary) => linkSiteRole(summary) === "control_plane")
+    .map((summary) => ({
+      site_id: summary.site_id,
+      site_name: summary.site_name,
+      site_role: "control_plane",
+    }));
+}
+
 export function probeSampleSourceLabel(probe: unknown) {
   const item = asRecord(probe);
   const sourceType = enumValue(
@@ -316,6 +345,7 @@ function monitoringTargets(value: unknown): MonitoringTarget[] {
       port: optionalNumericValue(item.port),
       probe_type: enumValue(item.probe_type, monitoringProbeTypes, "icmp"),
       purpose: enumValue(item.purpose, monitoringPurposes, "custom"),
+      target_site_id: nullableTextValue(item.target_site_id),
       throughput_test_max_bytes: optionalNumericValue(
         item.throughput_test_max_bytes,
       ),

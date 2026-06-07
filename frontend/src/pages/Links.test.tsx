@@ -129,6 +129,12 @@ function createSummary(overrides: Record<string, unknown> = {}) {
     budget: null,
     last_sync_at: null,
     passport_hash: "hash-1",
+    site_role: "edge",
+    capabilities: {
+      can_configure_links: true,
+      can_receive_edge_probes: false,
+      can_record_manual_samples: true,
+    },
     ...overrides,
   };
 }
@@ -416,6 +422,81 @@ describe("Links", () => {
     expect(screen.getByText(/abcdef12/i)).toBeInTheDocument();
   });
 
+  test("selected control plane site renders target-only edge probe ingress", async () => {
+    mockLinkHooks({
+      summaries: [
+        createSummary({
+          site_id: "master-site",
+          site_name: "Vezor Master",
+          site_role: "control_plane",
+          capabilities: {
+            can_configure_links: false,
+            can_receive_edge_probes: true,
+            can_record_manual_samples: false,
+          },
+          connection_count: 0,
+        }),
+      ],
+      status: {
+        link_state: "healthy",
+        passport_hash: "masterhash1234",
+        latest_probe: {
+          latency_ms: 31,
+          throughput_mbps: 0,
+          packet_loss_percent: 4,
+          reachable: true,
+          source: "edge_agent:macbook-home",
+          source_label: "MacBook at home",
+          source_type: "edge_agent",
+          target_site_id: "master-site",
+          recorded_at: "2026-06-07T10:00:00Z",
+        },
+      },
+      probes: [
+        {
+          id: "probe-master-1",
+          site_id: "edge-site",
+          target_site_id: "master-site",
+          latency_ms: 31,
+          throughput_mbps: 0,
+          packet_loss_percent: 4,
+          reachable: true,
+          source: "edge_agent:macbook-home",
+          source_label: "MacBook at home",
+          source_type: "edge_agent",
+          target_label: "Vezor Master",
+          target_address: "master.vezor.local",
+          probe_type: "udp",
+          measurement_metadata: {
+            method: "udp_sequence",
+            packet_count: 25,
+            packets_received: 24,
+          },
+          recorded_at: "2026-06-07T10:00:00Z",
+        },
+      ],
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=master-site" });
+
+    expect(
+      await screen.findByRole("heading", { name: /Edge probe ingress/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Vezor Master/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Control plane target/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/MacBook at home/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/31 ms/i).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("heading", { name: /Link paths/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /Budget and policy/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add manual sample/i }),
+    ).not.toBeInTheDocument();
+  });
+
   test("link path form saves a provider-managed path with a monitoring target", async () => {
     const user = userEvent.setup();
     const createConnection = vi.fn().mockResolvedValue({});
@@ -485,6 +566,67 @@ describe("Links", () => {
       label: "Vezor ingest",
       port: 443,
       probe_type: "https",
+    });
+  });
+
+  test("link path form can preset a Vezor Master monitoring target", async () => {
+    const user = userEvent.setup();
+    const createConnection = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [
+        createSummary({ site_id: "edge-site", site_name: "Edge Site" }),
+        createSummary({
+          site_id: "master-site",
+          site_name: "Vezor Master",
+          site_role: "control_plane",
+          capabilities: {
+            can_configure_links: false,
+            can_receive_edge_probes: true,
+            can_record_manual_samples: false,
+          },
+        }),
+      ],
+      createConnection,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=edge-site" });
+
+    await user.click(
+      await screen.findByRole("button", { name: /add link path/i }),
+    );
+    await user.type(screen.getByLabelText(/link path label/i), "Home uplink");
+    await user.click(screen.getByRole("button", { name: /add monitoring target/i }));
+    await user.selectOptions(
+      screen.getByLabelText(/target preset/i),
+      "master-site",
+    );
+    await user.type(
+      screen.getByLabelText(/target address/i),
+      "master.vezor.local",
+    );
+    await user.click(screen.getByRole("button", { name: /save link path/i }));
+
+    const createCall = createConnection.mock.calls[0]?.[0] as
+      | {
+          metadata?: {
+            monitoring_targets?: Array<{
+              label?: string;
+              loss_method?: string;
+              monitoring?: { enabled?: boolean; source_type?: string };
+              probe_type?: string;
+              purpose?: string;
+              target_site_id?: string | null;
+            }>;
+          };
+        }
+      | undefined;
+    expect(createCall?.metadata?.monitoring_targets?.[0]).toMatchObject({
+      label: "Vezor Master",
+      loss_method: "udp_sequence",
+      monitoring: { enabled: true, source_type: "edge_agent" },
+      probe_type: "udp",
+      purpose: "vezor_control",
+      target_site_id: "master-site",
     });
   });
 
@@ -1039,6 +1181,7 @@ describe("Links", () => {
       target_id: "target-1",
       target_label: "Vezor ingest",
       target_address: "ingest.example.vezor",
+      target_site_id: null,
       probe_type: "https",
     });
   });

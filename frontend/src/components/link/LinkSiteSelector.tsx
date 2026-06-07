@@ -10,6 +10,8 @@ import {
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   asRecord,
+  linkSiteRole,
+  linkSiteRoleLabel,
   textValue,
   type LinkSiteSummaryItem,
 } from "@/components/link/types";
@@ -69,29 +71,35 @@ export function LinkSiteSelector({
         </span>
       </label>
       <div className="mt-4 grid gap-2">
-        {visibleItems.map((summary) => (
-          <button
-            key={summary.site_id}
-            aria-pressed={summary.site_id === selectedSiteId}
-            aria-label={`Select ${summary.site_name}`}
-            className="grid gap-2 rounded-[var(--vz-r-md)] border border-[color:var(--vz-hair)] bg-white/[0.025] px-3 py-3 text-left transition hover:border-[color:var(--vz-hair-strong)] aria-pressed:border-[color:var(--vz-hair-focus)] aria-pressed:bg-[rgba(23,52,70,0.48)] sm:grid-cols-[minmax(0,1fr)_auto]"
-            type="button"
-            onClick={() => onSelectSite(summary.site_id)}
-          >
-            <span className="min-w-0">
-              <span className="block truncate font-[family-name:var(--vz-font-display)] text-base font-semibold text-[var(--vz-text-primary)]">
-                {summary.site_name}
+        {visibleItems.map((summary) => {
+          const role = linkSiteRole(summary);
+          return (
+            <button
+              key={summary.site_id}
+              aria-pressed={summary.site_id === selectedSiteId}
+              aria-label={`Select ${summary.site_name}`}
+              className="grid gap-2 rounded-[var(--vz-r-md)] border border-[color:var(--vz-hair)] bg-white/[0.025] px-3 py-3 text-left transition hover:border-[color:var(--vz-hair-strong)] aria-pressed:border-[color:var(--vz-hair-focus)] aria-pressed:bg-[rgba(23,52,70,0.48)] sm:grid-cols-[minmax(0,1fr)_auto]"
+              type="button"
+              onClick={() => onSelectSite(summary.site_id)}
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-[family-name:var(--vz-font-display)] text-base font-semibold text-[var(--vz-text-primary)]">
+                  {summary.site_name}
+                </span>
+                <span className="mt-1 block truncate text-xs text-[var(--vz-text-muted)]">
+                  {summary.site_tz}
+                </span>
               </span>
-              <span className="mt-1 block truncate text-xs text-[var(--vz-text-muted)]">
-                {summary.site_tz}
+              <span className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-secondary)]">
+                <span>{summary.link_state}</span>
+                <span>{linkSiteRoleLabel(role)}</span>
+                {role === "edge" ? (
+                  <span>{summary.connection_count} paths</span>
+                ) : null}
               </span>
-            </span>
-            <span className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-secondary)]">
-              <span>{summary.link_state}</span>
-              <span>{summary.connection_count} paths</span>
-            </span>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
       {filtered.length === 0 ? (
         <p className="mt-4 text-sm text-[var(--vz-text-secondary)]">
@@ -134,6 +142,7 @@ function summarySearchText(summary: LinkSiteSummaryItem): string {
     summary.site_id,
     summary.site_tz,
     summary.link_state,
+    linkSiteRoleLabel(linkSiteRole(summary)),
     textValue(activeConnection.label, ""),
     textValue(activeConnection.transport_kind, ""),
     textValue(activeConnection.provider, ""),

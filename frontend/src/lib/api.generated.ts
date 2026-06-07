@@ -4460,6 +4460,11 @@ export interface components {
         LinkProbeCreate: {
             /** Connection Id */
             connection_id?: string | null;
+            /**
+             * Target Site Id
+             * Format: uuid
+             */
+            target_site_id?: string | null;
             /** Latency Ms */
             latency_ms: number;
             /** Measurement Metadata */
@@ -4503,6 +4508,10 @@ export interface components {
             active_connection?: {
                 [key: string]: unknown;
             } | null;
+            /** Capabilities */
+            capabilities?: {
+                [key: string]: boolean;
+            };
             /** Budget */
             budget?: {
                 [key: string]: unknown;
@@ -4536,6 +4545,12 @@ export interface components {
             site_name: string;
             /** Site Tz */
             site_tz: string;
+            /**
+             * Site Role
+             * @default edge
+             * @enum {string}
+             */
+            site_role?: "edge" | "control_plane";
         };
         /** MaritimeVesselLinkStatusResponse */
         MaritimeVesselLinkStatusResponse: {

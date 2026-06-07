@@ -19,6 +19,7 @@ import {
   type LinkProbeLossMethod,
   type LinkModel,
   type LinkPathMetadata,
+  type LinkTargetSiteOption,
   type LinkVisibility,
   type MonitoringSourceType,
   type MonitoringProbeType,
@@ -44,6 +45,7 @@ type MonitoringTargetFormState = {
   probeType: MonitoringProbeType;
   port: string;
   purpose: MonitoringPurpose;
+  targetSiteId: string;
   expectedLatencyMs: string;
   monitoringEnabled: boolean;
   monitoringSourceType: MonitoringSourceType;
@@ -79,6 +81,7 @@ type LinkConnectionDialogProps = {
   open: boolean;
   mode: ConnectionMode;
   connection?: unknown;
+  targetSiteOptions?: LinkTargetSiteOption[];
   isSubmitting?: boolean;
   onClose: () => void;
   onSubmit: (
@@ -135,6 +138,7 @@ function defaultTargetForm(): MonitoringTargetFormState {
     port: "443",
     probeType: "https",
     purpose: "vezor_control",
+    targetSiteId: "",
     throughputTestMaxBytes: "1048576",
     throughputTestUrl: "",
   };
@@ -144,6 +148,7 @@ export function LinkConnectionDialog({
   open,
   mode,
   connection,
+  targetSiteOptions = [],
   isSubmitting = false,
   onClose,
   onSubmit,
@@ -185,6 +190,7 @@ export function LinkConnectionDialog({
         probeType: target.probe_type,
         port: optionalNumberText(target.port),
         purpose: target.purpose,
+        targetSiteId: textValue(target.target_site_id, ""),
         expectedLatencyMs: optionalNumberText(target.expected_latency_ms),
         lossDscp: optionalNumberText(target.loss_dscp),
         lossMethod: lossMethodValue(target.loss_method),
@@ -243,6 +249,34 @@ export function LinkConnectionDialog({
     setForm((current) => ({
       ...current,
       targets: [...current.targets, defaultTargetForm()],
+    }));
+  }
+
+  function applyTargetPreset(index: number, targetSiteId: string) {
+    const targetSite = targetSiteOptions.find(
+      (option) => option.site_id === targetSiteId,
+    );
+    setForm((current) => ({
+      ...current,
+      targets: current.targets.map((target, targetIndex) => {
+        if (targetIndex !== index) {
+          return target;
+        }
+        if (!targetSite) {
+          return { ...target, targetSiteId: "" };
+        }
+        return {
+          ...target,
+          label: targetSite.site_name,
+          lossMethod: "udp_sequence",
+          monitoringEnabled: true,
+          monitoringSourceType: "edge_agent",
+          port: "",
+          probeType: "udp",
+          purpose: "vezor_control",
+          targetSiteId: targetSite.site_id,
+        };
+      }),
     }));
   }
 
@@ -443,6 +477,20 @@ export function LinkConnectionDialog({
                 key={target.id || index}
                 className="grid gap-4 rounded-[var(--vz-r-sm)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite-up)] p-3 sm:grid-cols-2"
               >
+                {targetSiteOptions.length > 0 ? (
+                  <LabeledSelect
+                    label="Target preset"
+                    value={target.targetSiteId}
+                    onChange={(value) => applyTargetPreset(index, value)}
+                  >
+                    <option value="">Custom target</option>
+                    {targetSiteOptions.map((option) => (
+                      <option key={option.site_id} value={option.site_id}>
+                        {option.site_name}
+                      </option>
+                    ))}
+                  </LabeledSelect>
+                ) : null}
                 <LabeledInput
                   label="Target label"
                   value={target.label}
@@ -685,6 +733,7 @@ export function LinkProbeDialog({
         target_address: target?.address ?? null,
         target_id: target?.id ?? null,
         target_label: target?.label ?? null,
+        target_site_id: target?.target_site_id ?? null,
       });
       onClose();
     } catch (error) {
@@ -897,6 +946,7 @@ function buildConnectionMetadata(form: ConnectionFormState): LinkPathMetadata {
       port: optionalNumber(target.port),
       probe_type: target.probeType,
       purpose: target.purpose,
+      target_site_id: nullableText(target.targetSiteId),
       throughput_test_max_bytes: optionalNumber(target.throughputTestMaxBytes),
       throughput_test_url: nullableText(target.throughputTestUrl),
     })),

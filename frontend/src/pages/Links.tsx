@@ -3,11 +3,16 @@ import { useSearchParams } from "react-router-dom";
 
 import { LinkBudgetPolicyPanel } from "@/components/link/LinkBudgetPolicyPanel";
 import { LinkConnectionsPanel } from "@/components/link/LinkConnectionsPanel";
+import { LinkMasterTargetPanel } from "@/components/link/LinkMasterTargetPanel";
 import { LinkPosturePanel } from "@/components/link/LinkPosturePanel";
 import { LinkProbePanel } from "@/components/link/LinkProbePanel";
 import { LinkQueuePanel } from "@/components/link/LinkQueuePanel";
 import { LinkSiteSelector } from "@/components/link/LinkSiteSelector";
-import { asRecord } from "@/components/link/types";
+import {
+  asRecord,
+  controlPlaneTargetSites,
+  linkSiteRole,
+} from "@/components/link/types";
 import {
   WorkspaceBand,
   WorkspaceSurface,
@@ -34,12 +39,19 @@ export function Links() {
       null,
     [selectedSiteId, summaryItems],
   );
+  const selectedRole = selectedSummary ? linkSiteRole(selectedSummary) : "edge";
+  const selectedEdgeSiteId =
+    selectedSummary && selectedRole === "edge" ? selectedSiteId : null;
+  const targetSiteOptions = useMemo(
+    () => controlPlaneTargetSites(summaryItems),
+    [summaryItems],
+  );
   const status = useLinkSiteStatus(selectedSiteId);
-  const connections = useLinkConnections(selectedSiteId);
-  const budget = useLinkSiteBudget(selectedSiteId);
-  const policies = useLinkPolicies(selectedSiteId);
+  const connections = useLinkConnections(selectedEdgeSiteId);
+  const budget = useLinkSiteBudget(selectedEdgeSiteId);
+  const policies = useLinkPolicies(selectedEdgeSiteId);
   const probes = useLinkProbes(selectedSiteId);
-  const queue = useLinkSiteQueue(selectedSiteId);
+  const queue = useLinkSiteQueue(selectedEdgeSiteId);
   const connectionItems = connections.data ?? [];
   const statusBudget = asRecord(status.data).budget ?? null;
 
@@ -68,7 +80,16 @@ export function Links() {
         onSearchChange={setSearchValue}
         onSelectSite={selectSite}
       />
-      {selectedSummary ? (
+      {selectedSummary && selectedRole === "control_plane" ? (
+        <LinkMasterTargetPanel
+          summary={selectedSummary}
+          status={status.data}
+          probes={probes.data ?? []}
+          isLoading={status.isLoading}
+          error={status.error}
+          onClearSelection={clearSite}
+        />
+      ) : selectedSummary ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="grid gap-4">
             <LinkPosturePanel
@@ -78,22 +99,23 @@ export function Links() {
               onClearSelection={clearSite}
             />
             <LinkConnectionsPanel
-              siteId={selectedSiteId}
+              siteId={selectedEdgeSiteId}
               connections={connectionItems}
+              targetSiteOptions={targetSiteOptions}
             />
             <LinkBudgetPolicyPanel
-              siteId={selectedSiteId}
+              siteId={selectedEdgeSiteId}
               budget={budget.data ?? statusBudget}
               policies={policies.data ?? {}}
             />
           </div>
           <div className="grid gap-4">
             <LinkProbePanel
-              siteId={selectedSiteId}
+              siteId={selectedEdgeSiteId}
               connections={connectionItems}
               probes={probes.data ?? []}
             />
-            <LinkQueuePanel siteId={selectedSiteId} queue={queue.data ?? []} />
+            <LinkQueuePanel siteId={selectedEdgeSiteId} queue={queue.data ?? []} />
           </div>
         </div>
       ) : (

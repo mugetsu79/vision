@@ -5615,6 +5615,18 @@
             ],
             "title": "Connection Id"
           },
+          "target_site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Site Id"
+          },
           "latency_ms": {
             "minimum": 0.0,
             "title": "Latency Ms",
@@ -5758,6 +5770,13 @@
             ],
             "title": "Active Connection"
           },
+          "capabilities": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
           "budget": {
             "anyOf": [
               {
@@ -5832,6 +5851,15 @@
           },
           "site_tz": {
             "title": "Site Tz",
+            "type": "string"
+          },
+          "site_role": {
+            "default": "edge",
+            "enum": [
+              "edge",
+              "control_plane"
+            ],
+            "title": "Site Role",
             "type": "string"
           }
         },

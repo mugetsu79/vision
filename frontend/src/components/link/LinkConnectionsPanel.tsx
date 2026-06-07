@@ -17,11 +17,13 @@ import {
   linkPathMetadata,
   linkVisibilityLabel,
   textValue,
+  type LinkTargetSiteOption,
 } from "@/components/link/types";
 
 type LinkConnectionsPanelProps = {
   siteId?: string | null;
   connections: unknown[];
+  targetSiteOptions?: LinkTargetSiteOption[];
 };
 
 type ConnectionDialogState =
@@ -31,6 +33,7 @@ type ConnectionDialogState =
 export function LinkConnectionsPanel({
   siteId,
   connections,
+  targetSiteOptions = [],
 }: LinkConnectionsPanelProps) {
   const [dialog, setDialog] = useState<ConnectionDialogState | null>(null);
   const createConnection = useCreateLinkConnection({ siteId });
@@ -139,6 +142,7 @@ export function LinkConnectionsPanel({
         open={dialog !== null}
         mode={dialog?.mode ?? "create"}
         connection={dialog?.connection}
+        targetSiteOptions={targetSiteOptions}
         isSubmitting={createConnection.isPending || updateConnection.isPending}
         onClose={() => setDialog(null)}
         onSubmit={handleSubmit}
