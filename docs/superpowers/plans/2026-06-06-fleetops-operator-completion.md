@@ -537,6 +537,504 @@ git commit -m "feat: add fleetops vessel create flow"
 git push origin codex/sceneops-pack-registry
 ```
 
+### Task 2A: Vessel List Search Filters And Pagination
+
+**Files:**
+
+- Modify: `frontend/src/pages/FleetOpsVessels.tsx`
+- Modify: `frontend/src/components/fleetops/VesselSummaryTable.tsx`
+- Test: `frontend/src/pages/FleetOpsVessels.test.tsx`
+
+- [ ] **Step 1: Write failing list-control tests**
+
+Extend `frontend/src/pages/FleetOpsVessels.test.tsx` with this helper near the
+mock setup:
+
+```tsx
+function makeVessel(
+  index: number,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const suffix = String(index).padStart(2, "0");
+  return {
+    id: `vessel-${suffix}`,
+    name: `MV ${suffix}`,
+    site_id: `site-${suffix}`,
+    site: { name: `FleetOps Site ${suffix}` },
+    imo_number: `imo-${suffix}`,
+    mmsi: `mmsi-${suffix}`,
+    call_sign: `CALL${suffix}`,
+    active: true,
+    metadata: {
+      evidence_queue: "No pending exports",
+      link_state:
+        index % 3 === 0
+          ? "dark"
+          : index % 2 === 0
+            ? "satellite_degraded"
+            : "port_wifi",
+    },
+    ...overrides,
+  };
+}
+```
+
+Add the search and filter test:
+
+```tsx
+test("vessel list filters by search, link state, and status", async () => {
+  vesselPageMocks.vessels = [
+    makeVessel(1, {
+      name: "MV Resolute",
+      active: true,
+      metadata: { link_state: "port_wifi", evidence_queue: "Ready" },
+    }),
+    makeVessel(2, {
+      name: "MV Horizon",
+      active: false,
+      metadata: { link_state: "dark", evidence_queue: "Queued" },
+    }),
+    makeVessel(3, {
+      name: "MV Endurance",
+      active: true,
+      metadata: { link_state: "satellite_degraded", evidence_queue: "Queued" },
+    }),
+  ];
+  const user = userEvent.setup();
+  renderWithProviders(<FleetOpsVessels />);
+
+  await user.type(
+    screen.getByRole("searchbox", { name: /search vessels/i }),
+    "horizon",
+  );
+
+  expect(screen.getByRole("link", { name: /mv horizon/i })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /mv resolute/i })).not.toBeInTheDocument();
+
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: /link state/i }),
+    "dark",
+  );
+
+  expect(screen.getByRole("link", { name: /mv horizon/i })).toBeInTheDocument();
+
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: /^status$/i }),
+    "active",
+  );
+
+  expect(screen.getByText(/no vessels match these filters/i)).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /clear filters/i }));
+
+  expect(screen.getByRole("link", { name: /mv resolute/i })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /mv horizon/i })).toBeInTheDocument();
+});
+```
+
+Add the pagination test:
+
+```tsx
+test("vessel list paginates 10 rows by default and supports 25 or 50 rows", async () => {
+  vesselPageMocks.vessels = Array.from({ length: 12 }, (_, index) =>
+    makeVessel(index + 1),
+  );
+  const user = userEvent.setup();
+  renderWithProviders(<FleetOpsVessels />);
+
+  expect(screen.getByRole("link", { name: /mv 01/i })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /mv 10/i })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /mv 11/i })).not.toBeInTheDocument();
+  expect(screen.getByText(/1-10 of 12 vessels/i)).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /next page/i }));
+
+  expect(screen.queryByRole("link", { name: /mv 01/i })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /mv 11/i })).toBeInTheDocument();
+  expect(screen.getByText(/11-12 of 12 vessels/i)).toBeInTheDocument();
+
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: /rows per page/i }),
+    "25",
+  );
+
+  expect(screen.getByRole("link", { name: /mv 01/i })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /mv 12/i })).toBeInTheDocument();
+  expect(screen.getByText(/1-12 of 12 vessels/i)).toBeInTheDocument();
+});
+```
+
+Run:
+
+```bash
+cd /Users/yann.moren/vision/frontend
+corepack pnpm test --run src/pages/FleetOpsVessels.test.tsx
+```
+
+Expected: FAIL because the Vessels page has no search box, link-state filter,
+status filter, page-size selector, or pagination controls.
+
+- [ ] **Step 2: Add URL-backed list state to `FleetOpsVessels.tsx`**
+
+Change the imports at the top of `frontend/src/pages/FleetOpsVessels.tsx`:
+
+```tsx
+import { useDeferredValue, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+```
+
+Add these constants and helpers above `FleetOpsVessels`:
+
+```tsx
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+const DEFAULT_PAGE_SIZE = 10;
+type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
+type VesselStatusFilter = "all" | "active" | "inactive";
+
+function normalize(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function vesselLinkState(vessel: FleetOpsVessel): string {
+  const metadata = asRecord(vessel.metadata);
+  const value = metadata.link_state;
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : "unknown";
+}
+
+function vesselStatus(vessel: FleetOpsVessel): Exclude<VesselStatusFilter, "all"> {
+  return vessel.active === false ? "inactive" : "active";
+}
+
+function vesselSearchText(vessel: FleetOpsVessel): string {
+  const metadata = asRecord(vessel.metadata);
+  const site = asRecord(vessel.site);
+  return [
+    vessel.name,
+    vessel.id,
+    vessel.site_id,
+    site.name,
+    vessel.imo_number,
+    vessel.mmsi,
+    vessel.call_sign,
+    metadata.home_port,
+    metadata.link_state,
+    vesselStatus(vessel),
+  ]
+    .map((value) => (typeof value === "string" ? value : ""))
+    .join(" ")
+    .toLowerCase();
+}
+
+function parsePageSize(value: string | null): PageSizeOption {
+  const parsed = Number(value);
+  return PAGE_SIZE_OPTIONS.includes(parsed as PageSizeOption)
+    ? (parsed as PageSizeOption)
+    : DEFAULT_PAGE_SIZE;
+}
+
+function parsePage(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+```
+
+Also add `asRecord` to the existing type import:
+
+```tsx
+import { asRecord, type FleetOpsVessel } from "@/components/fleetops/types";
+```
+
+- [ ] **Step 3: Derive filtered and paged vessels in `FleetOpsVessels.tsx`**
+
+Inside `FleetOpsVessels`, after `const vesselRows = ...`, add:
+
+```tsx
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchTerm = searchParams.get("q") ?? "";
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const linkStateFilter = searchParams.get("link") ?? "all";
+  const rawStatusFilter = searchParams.get("status");
+  const statusFilter: VesselStatusFilter =
+    rawStatusFilter === "active" || rawStatusFilter === "inactive"
+      ? rawStatusFilter
+      : "all";
+  const pageSize = parsePageSize(searchParams.get("pageSize"));
+  const requestedPage = parsePage(searchParams.get("page"));
+
+  const linkStateOptions = useMemo(
+    () =>
+      Array.from(new Set(vesselRows.map(vesselLinkState))).sort((left, right) =>
+        left.localeCompare(right),
+      ),
+    [vesselRows],
+  );
+
+  const filteredVessels = useMemo(() => {
+    const normalizedSearch = normalize(deferredSearchTerm);
+    return vesselRows.filter((vessel) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        vesselSearchText(vessel).includes(normalizedSearch);
+      const matchesLinkState =
+        linkStateFilter === "all" || vesselLinkState(vessel) === linkStateFilter;
+      const matchesStatus =
+        statusFilter === "all" || vesselStatus(vessel) === statusFilter;
+      return matchesSearch && matchesLinkState && matchesStatus;
+    });
+  }, [deferredSearchTerm, linkStateFilter, statusFilter, vesselRows]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredVessels.length / pageSize));
+  const currentPage = Math.min(requestedPage, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pagedVessels = filteredVessels.slice(pageStart, pageStart + pageSize);
+  const hasActiveListFilters =
+    searchTerm.trim().length > 0 ||
+    linkStateFilter !== "all" ||
+    statusFilter !== "all";
+```
+
+Add this query updater below `handleCreateVessel`:
+
+```tsx
+  function updateListQuery(updates: Record<string, string | number | null>) {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === "" || value === "all") {
+        next.delete(key);
+      } else {
+        next.set(key, String(value));
+      }
+    }
+    setSearchParams(next, { replace: true });
+  }
+```
+
+Update the `VesselSummaryTable` call:
+
+```tsx
+      <VesselSummaryTable
+        vessels={pagedVessels}
+        totalVessels={vesselRows.length}
+        totalMatches={filteredVessels.length}
+        page={currentPage}
+        pageSize={pageSize}
+        pageStart={pageStart}
+        totalPages={totalPages}
+        searchTerm={searchTerm}
+        linkStateFilter={linkStateFilter}
+        statusFilter={statusFilter}
+        linkStateOptions={linkStateOptions}
+        hasActiveFilters={hasActiveListFilters}
+        onSearchTermChange={(value) =>
+          updateListQuery({ q: value, page: 1 })
+        }
+        onLinkStateFilterChange={(value) =>
+          updateListQuery({ link: value, page: 1 })
+        }
+        onStatusFilterChange={(value) =>
+          updateListQuery({ status: value, page: 1 })
+        }
+        onPageSizeChange={(value) =>
+          updateListQuery({ pageSize: value, page: 1 })
+        }
+        onPageChange={(value) => updateListQuery({ page: value })}
+        onClearFilters={() =>
+          updateListQuery({ q: null, link: null, status: null, page: 1 })
+        }
+        onAddVessel={() => setDialogOpen(true)}
+      />
+```
+
+- [ ] **Step 4: Render the Vessels list control surface**
+
+Change `frontend/src/components/fleetops/VesselSummaryTable.tsx` imports:
+
+```tsx
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { Link } from "react-router-dom";
+```
+
+Add UI imports:
+
+```tsx
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+```
+
+Replace `VesselSummaryTableProps` with:
+
+```tsx
+type VesselSummaryTableProps = {
+  vessels: FleetOpsVessel[];
+  totalVessels: number;
+  totalMatches: number;
+  page: number;
+  pageSize: number;
+  pageStart: number;
+  totalPages: number;
+  searchTerm: string;
+  linkStateFilter: string;
+  statusFilter: "all" | "active" | "inactive";
+  linkStateOptions: string[];
+  hasActiveFilters: boolean;
+  onSearchTermChange: (value: string) => void;
+  onLinkStateFilterChange: (value: string) => void;
+  onStatusFilterChange: (value: "all" | "active" | "inactive") => void;
+  onPageSizeChange: (value: number) => void;
+  onPageChange: (value: number) => void;
+  onClearFilters: () => void;
+  onAddVessel?: () => void;
+};
+```
+
+Change the component signature to destructure all props. Keep the existing true
+empty state when `totalVessels === 0`.
+
+Before the table markup, render this control surface:
+
+```tsx
+      <div className="border-b border-[color:var(--vz-hair)] px-4 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid flex-1 gap-3 md:grid-cols-[minmax(18rem,1fr)_12rem_10rem_10rem]">
+            <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
+              Search vessels
+              <span className="relative mt-2 block">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--vz-text-muted)]"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => onSearchTermChange(event.target.value)}
+                  className="pl-10"
+                  placeholder="Name, IMO, MMSI, call sign, site, or state"
+                />
+              </span>
+            </label>
+            <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
+              Link state
+              <Select
+                className="mt-2"
+                value={linkStateFilter}
+                onChange={(event) => onLinkStateFilterChange(event.target.value)}
+              >
+                <option value="all">All link states</option>
+                {linkStateOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLinkState(option)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
+              Status
+              <Select
+                className="mt-2"
+                value={statusFilter}
+                onChange={(event) =>
+                  onStatusFilterChange(event.target.value as "all" | "active" | "inactive")
+                }
+              >
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </Select>
+            </label>
+            <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
+              Rows per page
+              <Select
+                className="mt-2"
+                value={String(pageSize)}
+                onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </Select>
+            </label>
+          </div>
+          {hasActiveFilters ? (
+            <Button variant="ghost" onClick={onClearFilters}>
+              <X className="mr-2 size-4" aria-hidden="true" />
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+        <p className="mt-3 text-sm text-[var(--vz-text-secondary)]" aria-live="polite">
+          {totalMatches === 0
+            ? `0 of ${totalVessels} vessels shown`
+            : `${pageStart + 1}-${pageStart + vessels.length} of ${totalMatches} vessels shown`}
+        </p>
+      </div>
+```
+
+When `totalVessels > 0 && vessels.length === 0`, render this filtered empty
+state after the control surface:
+
+```tsx
+      <div className="px-4 py-12 text-center">
+        <p className="font-[family-name:var(--vz-font-display)] text-lg font-semibold text-[var(--vz-text-primary)]">
+          No vessels match these filters.
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--vz-text-secondary)]">
+          Clear filters or search for another vessel, site, IMO, MMSI, call sign,
+          link state, or status.
+        </p>
+      </div>
+```
+
+After the table, render pagination controls:
+
+```tsx
+      <div className="flex flex-col gap-3 border-t border-[color:var(--vz-hair)] px-4 py-3 text-sm text-[var(--vz-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          Page {page} of {totalPages}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => onPageChange(Math.max(1, page - 1))}
+            disabled={page <= 1}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+            disabled={page >= totalPages}
+            aria-label="Next page"
+          >
+            <ChevronRight className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+```
+
+- [ ] **Step 5: Verify and commit**
+
+Run:
+
+```bash
+cd /Users/yann.moren/vision/frontend
+corepack pnpm test --run src/pages/FleetOpsVessels.test.tsx
+corepack pnpm build
+```
+
+Expected: PASS.
+
+Commit:
+
+```bash
+cd /Users/yann.moren/vision
+git add frontend/src/pages/FleetOpsVessels.tsx frontend/src/components/fleetops/VesselSummaryTable.tsx frontend/src/pages/FleetOpsVessels.test.tsx
+git commit -m "feat: add fleetops vessel list controls"
+git push origin codex/sceneops-pack-registry
+```
+
 ## Gate 2: Core Multi-Transport Link Connections
 
 ### Task 3: Core Link Connections
@@ -1272,7 +1770,8 @@ git commit -m "feat: complete fleetops operator surfaces"
 
 **Files:**
 
-- Modify only if needed by failures:
+- Validation may modify these installer artifacts when a verification failure
+  identifies a defect in installer output:
   - `installer/macos/install-master.sh`
   - `installer/linux/install-master.sh`
   - `installer/edge/install-edge.sh`
@@ -1379,6 +1878,8 @@ Do not merge to `main`.
 - [ ] Real-stack Playwright FleetOps smoke passes.
 - [ ] Support and onboarding pages are distinct.
 - [ ] Vessel creation works from the UI.
+- [ ] Vessels page search, link-state filter, status filter, and 10/25/50
+  pagination work without auto-opening a vessel detail.
 - [ ] Link transport supports satellite, LTE, 5G, Wi-Fi, fiber, ethernet, and
   other through core link connections.
 - [ ] No traffic/public-space runtime, home-lab pack/status/UI, proprietary

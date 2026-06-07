@@ -133,6 +133,56 @@ FleetOps pages should feel like operational screens, not landing pages:
 
 The Vessels page owns the first operator action: add a vessel.
 
+### Vessel List Triage
+
+The Vessels page is also the fleet-level triage surface for operators who need
+to find a specific vessel without scrolling through every row. It must keep the
+same behavior conventions as the rest of the workspace:
+
+- no implicit detail selection on load
+- search and filters before the list
+- bounded result sets
+- clear empty states for no data versus no matching filters
+- query-string backed controls so views can be shared
+
+The list controls must include:
+
+- a search input labelled `Search vessels`
+- a link-state filter labelled `Link state`
+- a vessel-status filter labelled `Status`
+- a page-size selector labelled `Rows per page`
+- pagination controls that show 10, 25, or 50 rows per page
+
+Search must match:
+
+- vessel name
+- IMO number
+- MMSI
+- call sign
+- site ID
+- site name when the response includes the embedded site payload
+- link state
+- active or inactive status
+
+The link-state filter is derived from the loaded vessel rows. The status filter
+offers `All statuses`, `Active`, and `Inactive`. The page-size selector offers
+only `10`, `25`, and `50`, with `10` as the default. Changing search, link
+state, status, or page size resets the page to `1`.
+
+The URL query parameters are:
+
+- `q`
+- `link`
+- `status`
+- `page`
+- `pageSize`
+
+Invalid `page` and `pageSize` query values are normalized in the UI. The
+frontend continues to call `GET /api/v1/maritime/vessels`; this pass does not
+add server-side vessel search or pagination. If fleet sizes later make
+client-side filtering too expensive, a separate backend pagination plan is
+required.
+
 ### Add Vessel Form
 
 Required:
@@ -305,6 +355,11 @@ Backed by:
 - `GET /api/v1/sites`
 
 The empty state must show an Add Vessel action.
+
+The non-empty state must not render every vessel by default. It renders the
+current filtered page only, with a result count and pagination controls. A
+filtered zero-result state shows `No vessels match these filters` and a clear
+filters action; it does not reuse the add-vessel empty state.
 
 ### Vessel Detail
 
