@@ -11,6 +11,13 @@ central:
       repository: argus-backend
     service:
       port: 8000
+    reflector:
+      enabled: false
+      bindAddress: "0.0.0.0"
+      publicAddress: ""
+      port: 8622
+      keyId: master-reflector-default
+      rateLimitPps: 100
     env:
       ARGUS_DB_URL: postgresql+asyncpg://argus:argus@postgresql:5432/argus
       ARGUS_NATS_URL: nats://nats:4222

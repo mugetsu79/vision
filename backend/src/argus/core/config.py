@@ -101,6 +101,14 @@ class Settings(BaseSettings):
     websocket_telemetry_buffer_size: int = 32
     video_feed_max_concurrent_per_user: int = 10
 
+    link_reflector_enabled: bool = False
+    link_reflector_bind_address: str = "0.0.0.0"
+    link_reflector_public_address: str | None = None
+    link_reflector_port: int = Field(default=8622, ge=0, le=65_535)
+    link_reflector_key_id: str = "master-reflector-default"
+    link_reflector_secret: SecretStr | None = None
+    link_reflector_rate_limit_pps: int = Field(default=100, ge=0)
+
     enable_startup_services: bool = True
     enable_nats: bool = True
     enable_tracing: bool = True

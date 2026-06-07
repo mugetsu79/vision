@@ -13,4 +13,10 @@ spec:
     - name: http
       port: {{ .Values.central.backend.service.port }}
       targetPort: http
+    {{- if .Values.central.backend.reflector.enabled }}
+    - name: link-reflector
+      port: {{ .Values.central.backend.reflector.port }}
+      targetPort: link-reflector
+      protocol: UDP
+    {{- end }}
 {{- end }}

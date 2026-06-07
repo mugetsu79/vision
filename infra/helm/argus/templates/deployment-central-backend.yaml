@@ -24,6 +24,11 @@ spec:
           ports:
             - containerPort: {{ .Values.central.backend.service.port }}
               name: http
+            {{- if .Values.central.backend.reflector.enabled }}
+            - containerPort: {{ .Values.central.backend.reflector.port }}
+              name: link-reflector
+              protocol: UDP
+            {{- end }}
           env:
             - name: ARGUS_OTLP_ENDPOINT
               value: http://{{ include "argus.fullname" . }}-otel-collector:4318
@@ -33,6 +38,18 @@ spec:
               value: rtsp://{{ include "argus.fullname" . }}-mediamtx:8554
             - name: ARGUS_MEDIAMTX_WHIP_BASE_URL
               value: http://{{ include "argus.fullname" . }}-mediamtx:8889
+            - name: ARGUS_LINK_REFLECTOR_ENABLED
+              value: {{ .Values.central.backend.reflector.enabled | quote }}
+            - name: ARGUS_LINK_REFLECTOR_BIND_ADDRESS
+              value: {{ .Values.central.backend.reflector.bindAddress | quote }}
+            - name: ARGUS_LINK_REFLECTOR_PUBLIC_ADDRESS
+              value: {{ .Values.central.backend.reflector.publicAddress | quote }}
+            - name: ARGUS_LINK_REFLECTOR_PORT
+              value: {{ .Values.central.backend.reflector.port | quote }}
+            - name: ARGUS_LINK_REFLECTOR_KEY_ID
+              value: {{ .Values.central.backend.reflector.keyId | quote }}
+            - name: ARGUS_LINK_REFLECTOR_RATE_LIMIT_PPS
+              value: {{ .Values.central.backend.reflector.rateLimitPps | quote }}
             {{- range $name, $value := .Values.central.backend.env }}
             - name: {{ $name }}
               value: {{ $value | quote }}

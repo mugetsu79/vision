@@ -22,6 +22,7 @@ from argus.core.logging import (
 from argus.core.metrics import APP_INFO, HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 from argus.core.security import EdgeKeyMiddleware, SecurityService
 from argus.core.tracing import TracingManager
+from argus.link.reflector import ReflectorRuntime, start_reflector, stop_reflector
 from argus.llm.parser import ClassFilterParser
 from argus.services.app import DatabaseAuditLogger, build_app_services
 from argus.services.operator_configuration import OperatorConfigurationService
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings_object: Settings = app.state.settings
+    app.state.link_reflector_runtime = await start_link_reflector_for_startup(settings_object)
 
     if settings_object.enable_startup_services:
         configure_logging(settings_object)
@@ -48,6 +50,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        stop_reflector(app.state.link_reflector_runtime)
+        app.state.link_reflector_runtime = None
         if settings_object.enable_startup_services and settings_object.enable_nats:
             await app.state.events.close()
         close_services = getattr(app.state.services, "close", None)
@@ -64,10 +68,26 @@ async def reconcile_identity_provider_for_startup(app: FastAPI) -> None:
         logger.warning("Failed to reconcile identity provider frontend client.", exc_info=True)
 
 
+async def start_link_reflector_for_startup(settings: Settings) -> ReflectorRuntime | None:
+    if not settings.link_reflector_enabled:
+        return None
+    if settings.link_reflector_secret is None:
+        logger.warning("Link reflector enabled without ARGUS_LINK_REFLECTOR_SECRET.")
+        return None
+    return await start_reflector(
+        bind_host=settings.link_reflector_bind_address,
+        port=settings.link_reflector_port,
+        secret=settings.link_reflector_secret.get_secret_value().encode("utf-8"),
+        key_id=settings.link_reflector_key_id,
+        rate_limit_pps=settings.link_reflector_rate_limit_pps,
+    )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.state.settings = settings
+    app.state.link_reflector_runtime = None
     app.state.db = DatabaseManager(settings)
     app.state.events = NatsJetStreamClient(settings)
     app.state.security = SecurityService.from_settings(settings)
