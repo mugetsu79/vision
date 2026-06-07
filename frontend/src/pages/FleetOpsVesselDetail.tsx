@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, Power } from "lucide-react";
 
 import { EvidenceExportBuilder } from "@/components/fleetops/EvidenceExportBuilder";
+import { FleetOpsLinkPerformanceLink } from "@/components/fleetops/FleetOpsLinkPerformanceLink";
 import { LinkConnectionPanel } from "@/components/fleetops/LinkConnectionPanel";
 import { LinkOperationsPanel } from "@/components/fleetops/LinkOperationsPanel";
 import { VesselFormDialog } from "@/components/fleetops/VesselFormDialog";
@@ -86,6 +87,7 @@ export function FleetOpsVesselDetail() {
         title={vessel?.name ?? "Vessel detail"}
         actions={
           <div className="flex flex-wrap gap-2">
+            <FleetOpsLinkPerformanceLink siteId={effectiveSiteId} />
             <Button
               variant="secondary"
               disabled={!effectiveVesselId || updateVessel.isPending}

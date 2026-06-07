@@ -53,9 +53,7 @@ const baseWorkspaceNavGroups = omniNavGroups.map((group) => ({
                   ? MapPinned
                   : item.to === "/cameras"
                     ? Video
-                    : item.to === "/links"
-                      ? Network
-                      : Settings2,
+                    : Settings2,
   })),
 })) as readonly WorkspaceNavGroup[];
 

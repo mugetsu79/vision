@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { FleetOpsLinkPerformanceLink } from "@/components/fleetops/FleetOpsLinkPerformanceLink";
 import { FleetOpsScopeSelector } from "@/components/fleetops/FleetOpsScopeSelector";
 import { OnboardingChecklistPanel } from "@/components/fleetops/OnboardingChecklistPanel";
 import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
@@ -55,6 +56,7 @@ export function FleetOpsOnboarding() {
         selectedVesselId={selectedVesselId}
         vessels={fleetVessels}
       />
+      <FleetOpsLinkPerformanceLink siteId={siteId} />
       {selectedVessel ? (
         <OnboardingChecklistPanel
           checks={

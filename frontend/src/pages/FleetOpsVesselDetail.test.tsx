@@ -12,6 +12,7 @@ const vesselDetailMocks = vi.hoisted(() => ({
       data: {
         id: "00000000-0000-4000-8000-000000000010",
         name: "MV Resolute",
+        site_id: "00000000-0000-4000-8000-000000000020",
         metadata: {
           templates: ["Gangway access", "Cargo hatch watch"],
         } as Record<string, unknown>,
@@ -137,6 +138,7 @@ describe("FleetOpsVesselDetail", () => {
     vesselDetailMocks.detail.vessel.data = {
       id: "00000000-0000-4000-8000-000000000010",
       name: "MV Resolute",
+      site_id: "00000000-0000-4000-8000-000000000020",
       metadata: {
         templates: ["Gangway access", "Cargo hatch watch"],
       },
@@ -157,6 +159,17 @@ describe("FleetOpsVesselDetail", () => {
     expect(screen.getByText(/Gangway access/i)).toBeInTheDocument();
     expect(screen.getByText(/Latest AIS/i)).toBeInTheDocument();
     expect(screen.getByText(/Evidence context/i)).toBeInTheDocument();
+  });
+
+  test("Vessel detail links to core link performance for its site", async () => {
+    renderWithProviders(<FleetOpsVesselDetail />);
+
+    expect(
+      await screen.findByRole("link", { name: /open link performance/i }),
+    ).toHaveAttribute(
+      "href",
+      "/links?site=00000000-0000-4000-8000-000000000020",
+    );
   });
 
   test("Vessel detail renders link connections, budget, probes, and queue depth", async () => {

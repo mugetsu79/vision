@@ -137,6 +137,9 @@ describe("FleetOpsSupport", () => {
     expect(
       screen.queryByRole("button", { name: /generate bundle/i }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /open link performance/i }),
+    ).not.toBeInTheDocument();
 
     await user.type(
       screen.getByLabelText(/search fleetops vessel scope/i),
@@ -144,6 +147,12 @@ describe("FleetOpsSupport", () => {
     );
     await user.click(screen.getByRole("button", { name: /mv horizon/i }));
 
+    expect(
+      screen.getByRole("link", { name: /open link performance/i }),
+    ).toHaveAttribute(
+      "href",
+      "/links?site=00000000-0000-4000-8000-000000000021",
+    );
     expect(screen.getByText(/Support readiness/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /generate bundle/i }));
     expect(supportMocks.createBundle).toHaveBeenCalledWith(

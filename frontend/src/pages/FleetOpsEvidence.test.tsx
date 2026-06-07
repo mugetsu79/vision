@@ -110,6 +110,9 @@ describe("FleetOpsEvidence", () => {
       screen.getByText(/choose a vessel or site to review evidence/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/pending/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /open link performance/i }),
+    ).not.toBeInTheDocument();
     expect(evidenceMocks.queueSiteIds.at(-1)).toBeNull();
     expect(evidenceMocks.statusSiteIds.at(-1)).toBeNull();
     expect(evidenceMocks.retryContexts.at(-1)).toMatchObject({
@@ -119,6 +122,12 @@ describe("FleetOpsEvidence", () => {
 
     await user.click(screen.getByRole("button", { name: /mv resolute/i }));
 
+    expect(
+      screen.getByRole("link", { name: /open link performance/i }),
+    ).toHaveAttribute(
+      "href",
+      "/links?site=00000000-0000-4000-8000-000000000020",
+    );
     expect(screen.getByText(/pending/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /retry/i }));
     expect(evidenceMocks.retryQueueItem).toHaveBeenCalledWith("queue-1");

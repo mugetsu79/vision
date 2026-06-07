@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { FleetOpsLinkPerformanceLink } from "@/components/fleetops/FleetOpsLinkPerformanceLink";
 import { FleetOpsScopeSelector } from "@/components/fleetops/FleetOpsScopeSelector";
 import { SupportReadinessPanel } from "@/components/fleetops/SupportReadinessPanel";
 import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
@@ -85,6 +86,7 @@ export function FleetOpsSupport() {
         selectedVesselId={selectedVesselId}
         vessels={fleetVessels}
       />
+      <FleetOpsLinkPerformanceLink siteId={siteId} />
       {selectedVessel ? (
         <SupportReadinessPanel
           bundles={bundles.data ?? []}

@@ -107,6 +107,9 @@ describe("FleetOpsOnboarding", () => {
     expect(
       screen.queryByRole("button", { name: /run checks/i }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /open link performance/i }),
+    ).not.toBeInTheDocument();
     expect(onboardingMocks.onboardingCheckSiteIds.at(-1)).toBeNull();
 
     await user.type(
@@ -115,6 +118,12 @@ describe("FleetOpsOnboarding", () => {
     );
     await user.click(screen.getByRole("button", { name: /mv horizon/i }));
 
+    expect(
+      screen.getByRole("link", { name: /open link performance/i }),
+    ).toHaveAttribute(
+      "href",
+      "/links?site=00000000-0000-4000-8000-000000000021",
+    );
     expect(screen.getAllByText(/setup checks/i).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: /run checks/i }));
     expect(onboardingMocks.runChecks).toHaveBeenCalledWith(

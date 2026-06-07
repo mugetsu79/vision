@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { EvidenceExportBuilder } from "@/components/fleetops/EvidenceExportBuilder";
+import { FleetOpsLinkPerformanceLink } from "@/components/fleetops/FleetOpsLinkPerformanceLink";
 import { FleetOpsScopeSelector } from "@/components/fleetops/FleetOpsScopeSelector";
 import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
 import {
@@ -52,6 +53,7 @@ export function FleetOpsEvidence() {
         selectedVesselId={selectedVesselId}
         vessels={fleetVessels}
       />
+      <FleetOpsLinkPerformanceLink siteId={siteId} />
       {selectedVessel ? (
         <EvidenceExportBuilder
           evidenceContext={
