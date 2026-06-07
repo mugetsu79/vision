@@ -7,6 +7,8 @@ import pytest
 from sqlalchemy import CheckConstraint
 from sqlalchemy.exc import IntegrityError
 
+from argus.core.config import Settings
+from argus.link.reflector_profiles import decrypt_reflector_secret
 from argus.link.service import LinkService
 from argus.link.tables import (
     LinkBudget,
@@ -729,6 +731,86 @@ def test_core_link_master_target_migration_adds_site_kind_and_target_site_id() -
     assert "target_site_id" in text
     assert "ix_link_health_probes_tenant_target_site_recorded" in text
     assert "control_plane" in text
+
+
+def test_core_link_master_reflector_profile_migration_adds_profile_table() -> None:
+    migration = Path(__file__).resolve().parents[2] / (
+        "src/argus/migrations/versions/0041_core_link_master_reflector_profiles.py"
+    )
+    text = migration.read_text(encoding="utf-8")
+
+    assert "link_reflector_profiles" in text
+    assert "encrypted_secret" in text
+    assert "udp_port" in text
+    assert "enabled" in text
+
+
+def test_master_reflector_profile_defaults_disabled(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    master_site_id = UUID("00000000-0000-4000-8000-000000000003")
+
+    profile = link_service.ensure_master_reflector_profile(
+        tenant_id=tenant_id,
+        site_id=master_site_id,
+        public_address="vezor.example.local",
+    )
+
+    assert profile.tenant_id == tenant_id
+    assert profile.site_id == master_site_id
+    assert profile.profile_kind == "master"
+    assert profile.mode == "vezor_udp_sequence"
+    assert profile.enabled is False
+    assert profile.public_address == "vezor.example.local"
+    assert profile.bind_address == "0.0.0.0"
+    assert profile.udp_port == 8622
+    assert profile.rate_limit_pps_per_source == 100
+    assert profile.key_id == "master-reflector-default"
+    assert profile.encrypted_secret is None
+    assert profile.last_status == "disabled"
+
+
+def test_master_reflector_profile_enable_disable_and_rotate_key() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    master_site_id = UUID("00000000-0000-4000-8000-000000000003")
+    settings = Settings(config_encryption_key="argus-dev-config-key")
+    service = LinkService(settings=settings)
+
+    enabled = service.enable_master_reflector_profile(
+        tenant_id=tenant_id,
+        site_id=master_site_id,
+        public_address="vezor.example.local",
+        bind_address="0.0.0.0",
+        udp_port=8622,
+    )
+
+    assert enabled.enabled is True
+    assert enabled.last_status == "starting"
+    assert enabled.encrypted_secret is not None
+    assert enabled.encrypted_secret != "master-reflector-secret"
+    first_secret = decrypt_reflector_secret(enabled.encrypted_secret, settings=settings)
+    assert first_secret.startswith("vzref_")
+
+    disabled = service.disable_master_reflector_profile(
+        tenant_id=tenant_id,
+        site_id=master_site_id,
+    )
+
+    assert disabled.enabled is False
+    assert disabled.last_status == "disabled"
+    assert disabled.encrypted_secret == enabled.encrypted_secret
+
+    rotated = service.rotate_master_reflector_key(
+        tenant_id=tenant_id,
+        site_id=master_site_id,
+    )
+
+    assert rotated.enabled is False
+    assert rotated.encrypted_secret is not None
+    assert rotated.encrypted_secret != enabled.encrypted_secret
+    assert rotated.key_id != enabled.key_id
+    rotated_secret = decrypt_reflector_secret(rotated.encrypted_secret, settings=settings)
+    assert rotated_secret.startswith("vzref_")
+    assert rotated_secret != first_secret
 
 
 def test_priority_order_is_safety_evidence_telemetry_bulk(link_service: LinkService) -> None:

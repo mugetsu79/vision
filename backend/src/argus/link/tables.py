@@ -230,6 +230,54 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
     measurement_metadata: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
 
+class LinkReflectorProfile(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "link_reflector_profiles"
+    __table_args__ = (
+        Index(
+            "ix_link_reflector_profiles_tenant_site_kind",
+            "tenant_id",
+            "site_id",
+            "profile_kind",
+            unique=True,
+        ),
+        CheckConstraint("profile_kind IN ('master')", name="profile_kind"),
+        CheckConstraint("mode IN ('vezor_udp_sequence')", name="mode"),
+        CheckConstraint(
+            "last_status IN ('disabled', 'starting', 'listening', 'unhealthy')",
+            name="last_status",
+        ),
+        CheckConstraint("udp_port > 0 AND udp_port <= 65535", name="udp_port_range"),
+        CheckConstraint(
+            "rate_limit_pps_per_source >= 0",
+            name="rate_limit_pps_per_source_nonnegative",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sites.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    profile_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="vezor_udp_sequence")
+    public_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    bind_address: Mapped[str] = mapped_column(String(64), nullable=False, default="0.0.0.0")
+    udp_port: Mapped[int] = mapped_column(Integer, nullable=False, default=8622)
+    key_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    encrypted_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowed_edge_site_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    allowed_source_cidrs: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    rate_limit_pps_per_source: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    last_status: Mapped[str] = mapped_column(String(32), nullable=False, default="disabled")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class LinkPassportSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "link_passport_snapshots"
     __table_args__ = (

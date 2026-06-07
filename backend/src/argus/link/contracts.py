@@ -15,6 +15,9 @@ LinkAvailabilityScope = Literal["always", "remote", "nearby", "local", "maintena
 LinkProbeType = Literal["icmp", "tcp", "http", "https", "udp", "manual"]
 LinkProbeSourceType = Literal["manual", "backend_synthetic", "edge_agent", "provider_api", "import"]
 LinkProbeSampleKind = Literal["manual", "automated", "imported"]
+LinkReflectorProfileKind = Literal["master"]
+LinkReflectorMode = Literal["vezor_udp_sequence"]
+LinkReflectorStatus = Literal["disabled", "starting", "listening", "unhealthy"]
 
 LINK_PRIORITY_ORDER: dict[LinkPriorityLane, int] = {
     "safety": 0,
@@ -112,6 +115,28 @@ class LinkHealthProbeRecord:
     sample_kind: LinkProbeSampleKind = "manual"
     deleted_at: datetime | None = None
     measurement_metadata: JsonObject = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class LinkReflectorProfileRecord:
+    id: UUID
+    tenant_id: UUID
+    site_id: UUID
+    profile_kind: LinkReflectorProfileKind
+    enabled: bool
+    mode: LinkReflectorMode
+    public_address: str | None
+    bind_address: str
+    udp_port: int
+    key_id: str
+    encrypted_secret: str | None
+    allowed_edge_site_ids: list[UUID]
+    allowed_source_cidrs: list[str]
+    rate_limit_pps_per_source: int
+    last_status: LinkReflectorStatus
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)

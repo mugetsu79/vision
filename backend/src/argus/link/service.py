@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.compat import UTC
+from argus.core.config import Settings
 from argus.link.contracts import (
     LINK_PRIORITY_ORDER,
     BackpressureDecision,
@@ -28,10 +29,19 @@ from argus.link.contracts import (
     LinkProbeSourceType,
     LinkProbeType,
     LinkQueueItemRecord,
+    LinkReflectorMode,
+    LinkReflectorProfileKind,
+    LinkReflectorProfileRecord,
+    LinkReflectorStatus,
     LinkSiteSummaryRecord,
     LinkState,
     LinkTransferAttemptRecord,
     LinkTransportKind,
+)
+from argus.link.reflector_profiles import (
+    encrypt_reflector_secret,
+    generate_reflector_key_id,
+    generate_reflector_secret,
 )
 from argus.link.tables import (
     LinkBudget,
@@ -39,6 +49,7 @@ from argus.link.tables import (
     LinkHealthProbe,
     LinkPassportSnapshot,
     LinkQueueItem,
+    LinkReflectorProfile,
     LinkTransferAttempt,
 )
 
@@ -57,11 +68,18 @@ LINK_CONNECTION_STATUS_ORDER = {
 }
 QUEUE_STATUSES = {"queued", "paused", "interrupted", "succeeded", "failed"}
 TRANSFER_ATTEMPT_STATUSES = {"interrupted", "succeeded", "failed"}
+LINK_REFLECTOR_STATUSES = {"disabled", "starting", "listening", "unhealthy"}
 
 
 class LinkService:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
+        *,
+        settings: Settings | None = None,
+    ) -> None:
         self.session_factory = session_factory
+        self.settings = settings or Settings()
         self._budgets: dict[tuple[UUID, UUID], LinkBudgetSnapshot] = {}
         self._connections: dict[UUID, LinkConnectionRecord] = {}
         self._queue_items: dict[UUID, LinkQueueItemRecord] = {}
@@ -69,6 +87,369 @@ class LinkService:
         self._probes: list[LinkHealthProbeRecord] = []
         self._passports: list[LinkPassportSnapshotRecord] = []
         self._policies: dict[tuple[UUID, UUID], JsonObject] = {}
+        self._reflector_profiles: dict[tuple[UUID, UUID, str], LinkReflectorProfileRecord] = {}
+
+    def ensure_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        public_address: str | None = None,
+    ) -> LinkReflectorProfileRecord:
+        self._ensure_memory_mode()
+        key = (tenant_id, site_id, "master")
+        existing = self._reflector_profiles.get(key)
+        if existing is not None:
+            if public_address is None or public_address == existing.public_address:
+                return existing
+            updated = replace(
+                existing,
+                public_address=public_address.strip() or None,
+                updated_at=_now(),
+            )
+            self._reflector_profiles[key] = updated
+            return updated
+        now = _now()
+        profile = LinkReflectorProfileRecord(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            site_id=site_id,
+            profile_kind="master",
+            enabled=False,
+            mode="vezor_udp_sequence",
+            public_address=public_address.strip() if public_address else None,
+            bind_address="0.0.0.0",
+            udp_port=8622,
+            key_id="master-reflector-default",
+            encrypted_secret=None,
+            allowed_edge_site_ids=[],
+            allowed_source_cidrs=[],
+            rate_limit_pps_per_source=100,
+            last_status="disabled",
+            last_error=None,
+            created_at=now,
+            updated_at=now,
+        )
+        self._reflector_profiles[key] = profile
+        return profile
+
+    async def aensure_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        public_address: str | None = None,
+    ) -> LinkReflectorProfileRecord:
+        if self.session_factory is None:
+            return self.ensure_master_reflector_profile(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                public_address=public_address,
+            )
+        async with self.session_factory() as session:
+            row = await self._find_reflector_profile_row(
+                session,
+                tenant_id=tenant_id,
+                site_id=site_id,
+                profile_kind="master",
+            )
+            if row is None:
+                now = _now()
+                row = LinkReflectorProfile(
+                    id=uuid4(),
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    profile_kind="master",
+                    enabled=False,
+                    mode="vezor_udp_sequence",
+                    public_address=public_address.strip() if public_address else None,
+                    bind_address="0.0.0.0",
+                    udp_port=8622,
+                    key_id="master-reflector-default",
+                    encrypted_secret=None,
+                    allowed_edge_site_ids=[],
+                    allowed_source_cidrs=[],
+                    rate_limit_pps_per_source=100,
+                    last_status="disabled",
+                    last_error=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+                await session.commit()
+                await session.refresh(row)
+                return _reflector_profile_record(row)
+            if public_address is not None and public_address != row.public_address:
+                row.public_address = public_address.strip() or None
+                row.updated_at = _now()
+                await session.commit()
+                await session.refresh(row)
+            return _reflector_profile_record(row)
+
+    def get_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+    ) -> LinkReflectorProfileRecord | None:
+        self._ensure_memory_mode()
+        return self._reflector_profiles.get((tenant_id, site_id, "master"))
+
+    async def aget_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+    ) -> LinkReflectorProfileRecord | None:
+        if self.session_factory is None:
+            return self.get_master_reflector_profile(tenant_id=tenant_id, site_id=site_id)
+        async with self.session_factory() as session:
+            row = await self._find_reflector_profile_row(
+                session,
+                tenant_id=tenant_id,
+                site_id=site_id,
+                profile_kind="master",
+            )
+            return _reflector_profile_record(row) if row is not None else None
+
+    def update_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        public_address: str | None = None,
+        bind_address: str | None = None,
+        udp_port: int | None = None,
+        allowed_edge_site_ids: Sequence[UUID] | None = None,
+        allowed_source_cidrs: Sequence[str] | None = None,
+        rate_limit_pps_per_source: int | None = None,
+        last_status: LinkReflectorStatus | None = None,
+        last_error: str | None = None,
+    ) -> LinkReflectorProfileRecord:
+        profile = self.ensure_master_reflector_profile(tenant_id=tenant_id, site_id=site_id)
+        updated = _updated_reflector_profile_record(
+            profile,
+            public_address=public_address,
+            bind_address=bind_address,
+            udp_port=udp_port,
+            allowed_edge_site_ids=allowed_edge_site_ids,
+            allowed_source_cidrs=allowed_source_cidrs,
+            rate_limit_pps_per_source=rate_limit_pps_per_source,
+            last_status=last_status,
+            last_error=last_error,
+        )
+        self._reflector_profiles[(tenant_id, site_id, "master")] = updated
+        return updated
+
+    async def aupdate_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        public_address: str | None = None,
+        bind_address: str | None = None,
+        udp_port: int | None = None,
+        allowed_edge_site_ids: Sequence[UUID] | None = None,
+        allowed_source_cidrs: Sequence[str] | None = None,
+        rate_limit_pps_per_source: int | None = None,
+        last_status: LinkReflectorStatus | None = None,
+        last_error: str | None = None,
+    ) -> LinkReflectorProfileRecord:
+        if self.session_factory is None:
+            return self.update_master_reflector_profile(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                public_address=public_address,
+                bind_address=bind_address,
+                udp_port=udp_port,
+                allowed_edge_site_ids=allowed_edge_site_ids,
+                allowed_source_cidrs=allowed_source_cidrs,
+                rate_limit_pps_per_source=rate_limit_pps_per_source,
+                last_status=last_status,
+                last_error=last_error,
+            )
+        async with self.session_factory() as session:
+            row = await self._ensure_reflector_profile_row(
+                session,
+                tenant_id=tenant_id,
+                site_id=site_id,
+            )
+            _apply_reflector_profile_row_update(
+                row,
+                public_address=public_address,
+                bind_address=bind_address,
+                udp_port=udp_port,
+                allowed_edge_site_ids=allowed_edge_site_ids,
+                allowed_source_cidrs=allowed_source_cidrs,
+                rate_limit_pps_per_source=rate_limit_pps_per_source,
+                last_status=last_status,
+                last_error=last_error,
+            )
+            await session.commit()
+            await session.refresh(row)
+            return _reflector_profile_record(row)
+
+    def enable_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        public_address: str | None,
+        bind_address: str = "0.0.0.0",
+        udp_port: int = 8622,
+        rate_limit_pps_per_source: int = 100,
+    ) -> LinkReflectorProfileRecord:
+        profile = self.ensure_master_reflector_profile(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            public_address=public_address,
+        )
+        now = _now()
+        encrypted_secret = profile.encrypted_secret
+        key_id = profile.key_id
+        if encrypted_secret is None:
+            secret = generate_reflector_secret()
+            encrypted_secret = encrypt_reflector_secret(secret, settings=self.settings)
+            key_id = generate_reflector_key_id(now=now)
+        updated = replace(
+            profile,
+            enabled=True,
+            public_address=public_address.strip() if public_address else None,
+            bind_address=_validate_reflector_bind_address(bind_address),
+            udp_port=_validate_reflector_udp_port(udp_port),
+            rate_limit_pps_per_source=_validate_reflector_rate_limit(rate_limit_pps_per_source),
+            key_id=key_id,
+            encrypted_secret=encrypted_secret,
+            last_status="starting",
+            last_error=None,
+            updated_at=now,
+        )
+        self._reflector_profiles[(tenant_id, site_id, "master")] = updated
+        return updated
+
+    async def aenable_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        public_address: str | None,
+        bind_address: str = "0.0.0.0",
+        udp_port: int = 8622,
+        rate_limit_pps_per_source: int = 100,
+    ) -> LinkReflectorProfileRecord:
+        if self.session_factory is None:
+            return self.enable_master_reflector_profile(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                public_address=public_address,
+                bind_address=bind_address,
+                udp_port=udp_port,
+                rate_limit_pps_per_source=rate_limit_pps_per_source,
+            )
+        async with self.session_factory() as session:
+            row = await self._ensure_reflector_profile_row(
+                session,
+                tenant_id=tenant_id,
+                site_id=site_id,
+                public_address=public_address,
+            )
+            now = _now()
+            if row.encrypted_secret is None:
+                row.encrypted_secret = encrypt_reflector_secret(
+                    generate_reflector_secret(),
+                    settings=self.settings,
+                )
+                row.key_id = generate_reflector_key_id(now=now)
+            row.enabled = True
+            row.public_address = public_address.strip() if public_address else None
+            row.bind_address = _validate_reflector_bind_address(bind_address)
+            row.udp_port = _validate_reflector_udp_port(udp_port)
+            row.rate_limit_pps_per_source = _validate_reflector_rate_limit(
+                rate_limit_pps_per_source
+            )
+            row.last_status = "starting"
+            row.last_error = None
+            row.updated_at = now
+            await session.commit()
+            await session.refresh(row)
+            return _reflector_profile_record(row)
+
+    def disable_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+    ) -> LinkReflectorProfileRecord:
+        profile = self.ensure_master_reflector_profile(tenant_id=tenant_id, site_id=site_id)
+        updated = replace(profile, enabled=False, last_status="disabled", updated_at=_now())
+        self._reflector_profiles[(tenant_id, site_id, "master")] = updated
+        return updated
+
+    async def adisable_master_reflector_profile(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+    ) -> LinkReflectorProfileRecord:
+        if self.session_factory is None:
+            return self.disable_master_reflector_profile(tenant_id=tenant_id, site_id=site_id)
+        async with self.session_factory() as session:
+            row = await self._ensure_reflector_profile_row(
+                session,
+                tenant_id=tenant_id,
+                site_id=site_id,
+            )
+            row.enabled = False
+            row.last_status = "disabled"
+            row.updated_at = _now()
+            await session.commit()
+            await session.refresh(row)
+            return _reflector_profile_record(row)
+
+    def rotate_master_reflector_key(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+    ) -> LinkReflectorProfileRecord:
+        profile = self.ensure_master_reflector_profile(tenant_id=tenant_id, site_id=site_id)
+        now = _now()
+        updated = replace(
+            profile,
+            key_id=generate_reflector_key_id(now=now),
+            encrypted_secret=encrypt_reflector_secret(
+                generate_reflector_secret(),
+                settings=self.settings,
+            ),
+            updated_at=now,
+        )
+        self._reflector_profiles[(tenant_id, site_id, "master")] = updated
+        return updated
+
+    async def arotate_master_reflector_key(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+    ) -> LinkReflectorProfileRecord:
+        if self.session_factory is None:
+            return self.rotate_master_reflector_key(tenant_id=tenant_id, site_id=site_id)
+        async with self.session_factory() as session:
+            row = await self._ensure_reflector_profile_row(
+                session,
+                tenant_id=tenant_id,
+                site_id=site_id,
+            )
+            now = _now()
+            row.key_id = generate_reflector_key_id(now=now)
+            row.encrypted_secret = encrypt_reflector_secret(
+                generate_reflector_secret(),
+                settings=self.settings,
+            )
+            row.updated_at = now
+            await session.commit()
+            await session.refresh(row)
+            return _reflector_profile_record(row)
 
     def upsert_budget(
         self,
@@ -1591,6 +1972,67 @@ class LinkService:
         )
         return result.scalars().first()
 
+    async def _find_reflector_profile_row(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        profile_kind: LinkReflectorProfileKind,
+    ) -> LinkReflectorProfile | None:
+        result = await session.execute(
+            select(LinkReflectorProfile)
+            .where(
+                LinkReflectorProfile.tenant_id == tenant_id,
+                LinkReflectorProfile.site_id == site_id,
+                LinkReflectorProfile.profile_kind == profile_kind,
+            )
+            .limit(1)
+        )
+        return result.scalars().first()
+
+    async def _ensure_reflector_profile_row(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        public_address: str | None = None,
+    ) -> LinkReflectorProfile:
+        row = await self._find_reflector_profile_row(
+            session,
+            tenant_id=tenant_id,
+            site_id=site_id,
+            profile_kind="master",
+        )
+        if row is not None:
+            if public_address is not None:
+                row.public_address = public_address.strip() or None
+            return row
+        now = _now()
+        row = LinkReflectorProfile(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            site_id=site_id,
+            profile_kind="master",
+            enabled=False,
+            mode="vezor_udp_sequence",
+            public_address=public_address.strip() if public_address else None,
+            bind_address="0.0.0.0",
+            udp_port=8622,
+            key_id="master-reflector-default",
+            encrypted_secret=None,
+            allowed_edge_site_ids=[],
+            allowed_source_cidrs=[],
+            rate_limit_pps_per_source=100,
+            last_status="disabled",
+            last_error=None,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(row)
+        return row
+
     async def _list_probe_rows(
         self,
         session: AsyncSession,
@@ -1772,6 +2214,121 @@ def _validate_policy_lanes(value: object) -> None:
             raise ValueError(f"Invalid link policy lane: {lane}")
 
 
+def _updated_reflector_profile_record(
+    profile: LinkReflectorProfileRecord,
+    *,
+    public_address: str | None,
+    bind_address: str | None,
+    udp_port: int | None,
+    allowed_edge_site_ids: Sequence[UUID] | None,
+    allowed_source_cidrs: Sequence[str] | None,
+    rate_limit_pps_per_source: int | None,
+    last_status: LinkReflectorStatus | None,
+    last_error: str | None,
+) -> LinkReflectorProfileRecord:
+    next_public_address = profile.public_address
+    next_bind_address = profile.bind_address
+    next_udp_port = profile.udp_port
+    next_allowed_edge_site_ids = profile.allowed_edge_site_ids
+    next_allowed_source_cidrs = profile.allowed_source_cidrs
+    next_rate_limit_pps_per_source = profile.rate_limit_pps_per_source
+    next_last_status = profile.last_status
+    next_last_error = profile.last_error
+
+    if public_address is not None:
+        next_public_address = public_address.strip() or None
+    if bind_address is not None:
+        next_bind_address = _validate_reflector_bind_address(bind_address)
+    if udp_port is not None:
+        next_udp_port = _validate_reflector_udp_port(udp_port)
+    if allowed_edge_site_ids is not None:
+        next_allowed_edge_site_ids = list(allowed_edge_site_ids)
+    if allowed_source_cidrs is not None:
+        next_allowed_source_cidrs = [
+            cidr.strip() for cidr in allowed_source_cidrs if cidr.strip()
+        ]
+    if rate_limit_pps_per_source is not None:
+        next_rate_limit_pps_per_source = _validate_reflector_rate_limit(
+            rate_limit_pps_per_source
+        )
+    if last_status is not None:
+        next_last_status = _validate_reflector_status(last_status)
+    if last_error is not None:
+        next_last_error = last_error.strip() or None
+    return replace(
+        profile,
+        public_address=next_public_address,
+        bind_address=next_bind_address,
+        udp_port=next_udp_port,
+        allowed_edge_site_ids=next_allowed_edge_site_ids,
+        allowed_source_cidrs=next_allowed_source_cidrs,
+        rate_limit_pps_per_source=next_rate_limit_pps_per_source,
+        last_status=next_last_status,
+        last_error=next_last_error,
+        updated_at=_now(),
+    )
+
+
+def _apply_reflector_profile_row_update(
+    row: LinkReflectorProfile,
+    *,
+    public_address: str | None,
+    bind_address: str | None,
+    udp_port: int | None,
+    allowed_edge_site_ids: Sequence[UUID] | None,
+    allowed_source_cidrs: Sequence[str] | None,
+    rate_limit_pps_per_source: int | None,
+    last_status: LinkReflectorStatus | None,
+    last_error: str | None,
+) -> None:
+    if public_address is not None:
+        row.public_address = public_address.strip() or None
+    if bind_address is not None:
+        row.bind_address = _validate_reflector_bind_address(bind_address)
+    if udp_port is not None:
+        row.udp_port = _validate_reflector_udp_port(udp_port)
+    if allowed_edge_site_ids is not None:
+        row.allowed_edge_site_ids = [str(site_id) for site_id in allowed_edge_site_ids]
+    if allowed_source_cidrs is not None:
+        row.allowed_source_cidrs = [
+            cidr.strip() for cidr in allowed_source_cidrs if cidr.strip()
+        ]
+    if rate_limit_pps_per_source is not None:
+        row.rate_limit_pps_per_source = _validate_reflector_rate_limit(
+            rate_limit_pps_per_source
+        )
+    if last_status is not None:
+        row.last_status = _validate_reflector_status(last_status)
+    if last_error is not None:
+        row.last_error = last_error.strip() or None
+    row.updated_at = _now()
+
+
+def _validate_reflector_bind_address(bind_address: str) -> str:
+    value = bind_address.strip()
+    if not value:
+        raise ValueError("Reflector bind address is required.")
+    return value
+
+
+def _validate_reflector_udp_port(udp_port: int) -> int:
+    if udp_port <= 0 or udp_port > 65_535:
+        raise ValueError("Reflector UDP port must be between 1 and 65535.")
+    return udp_port
+
+
+def _validate_reflector_rate_limit(rate_limit_pps_per_source: int) -> int:
+    if rate_limit_pps_per_source < 0:
+        raise ValueError("Reflector rate limit must be non-negative.")
+    return rate_limit_pps_per_source
+
+
+def _validate_reflector_status(status: str) -> LinkReflectorStatus:
+    if status not in LINK_REFLECTOR_STATUSES:
+        raise ValueError(f"Invalid reflector status: {status}")
+    return cast(LinkReflectorStatus, status)
+
+
 def _budget_record(budget: LinkBudget) -> LinkBudgetSnapshot:
     return LinkBudgetSnapshot(
         id=budget.id,
@@ -1781,6 +2338,31 @@ def _budget_record(budget: LinkBudget) -> LinkBudgetSnapshot:
         bulk_daily_bytes=budget.bulk_daily_bytes,
         created_at=budget.created_at,
         updated_at=budget.updated_at,
+    )
+
+
+def _reflector_profile_record(profile: LinkReflectorProfile) -> LinkReflectorProfileRecord:
+    return LinkReflectorProfileRecord(
+        id=profile.id,
+        tenant_id=profile.tenant_id,
+        site_id=profile.site_id,
+        profile_kind=cast(LinkReflectorProfileKind, profile.profile_kind),
+        enabled=profile.enabled,
+        mode=cast(LinkReflectorMode, profile.mode),
+        public_address=profile.public_address,
+        bind_address=profile.bind_address,
+        udp_port=profile.udp_port,
+        key_id=profile.key_id,
+        encrypted_secret=profile.encrypted_secret,
+        allowed_edge_site_ids=[
+            UUID(str(site_id)) for site_id in (profile.allowed_edge_site_ids or [])
+        ],
+        allowed_source_cidrs=[str(cidr) for cidr in (profile.allowed_source_cidrs or [])],
+        rate_limit_pps_per_source=profile.rate_limit_pps_per_source,
+        last_status=cast(LinkReflectorStatus, profile.last_status),
+        last_error=profile.last_error,
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
     )
 
 
