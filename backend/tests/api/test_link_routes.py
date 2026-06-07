@@ -493,6 +493,205 @@ async def test_edge_agent_sample_can_target_control_plane_site(client: AsyncClie
 
 
 @pytest.mark.asyncio
+async def test_master_reflector_profile_api_defaults_disabled(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/link/reflectors/master")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["profile_kind"] == "master"
+    assert payload["site_id"] == str(MASTER_SITE_ID)
+    assert payload["enabled"] is False
+    assert payload["mode"] == "vezor_udp_sequence"
+    assert payload["udp_port"] == 8622
+    assert payload["last_status"] == "disabled"
+    assert payload["secret_state"] == "missing"
+    assert "encrypted_secret" not in payload
+
+
+@pytest.mark.asyncio
+async def test_master_reflector_profile_mutations_require_admin(
+    viewer_client: AsyncClient,
+) -> None:
+    response = await viewer_client.post(
+        "/api/v1/link/reflectors/master/enable",
+        json={"public_address": "vezor.example.local"},
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_master_reflector_profile_enable_update_disable_and_rotate(
+    client: AsyncClient,
+) -> None:
+    enabled = await client.post(
+        "/api/v1/link/reflectors/master/enable",
+        json={
+            "public_address": "vezor.example.local",
+            "bind_address": "0.0.0.0",
+            "udp_port": 8622,
+            "rate_limit_pps_per_source": 75,
+        },
+    )
+    updated = await client.put(
+        "/api/v1/link/reflectors/master",
+        json={
+            "public_address": "master.vezor.local",
+            "udp_port": 8623,
+            "allowed_source_cidrs": ["198.51.100.0/24"],
+        },
+    )
+    rotated = await client.post("/api/v1/link/reflectors/master/rotate-key")
+    disabled = await client.post("/api/v1/link/reflectors/master/disable")
+
+    assert enabled.status_code == 200
+    assert enabled.json()["enabled"] is True
+    assert enabled.json()["secret_state"] == "present"
+    assert enabled.json()["last_status"] == "starting"
+    assert updated.status_code == 200
+    assert updated.json()["public_address"] == "master.vezor.local"
+    assert updated.json()["udp_port"] == 8623
+    assert updated.json()["allowed_source_cidrs"] == ["198.51.100.0/24"]
+    assert rotated.status_code == 200
+    assert rotated.json()["key_id"] != enabled.json()["key_id"]
+    assert disabled.status_code == 200
+    assert disabled.json()["enabled"] is False
+    assert disabled.json()["last_status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_control_target_helper_creates_https_only_master_target(
+    client: AsyncClient,
+) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/control-targets/master",
+        json={
+            "mode": "https_only",
+            "connection_id": created.json()["id"],
+            "address": "https://vezor.example.local/healthz",
+            "interval_seconds": 300,
+        },
+    )
+
+    assert created.status_code == 201
+    assert response.status_code == 201
+    payload = response.json()
+    targets = payload["metadata"]["monitoring_targets"]
+    assert targets == [
+        {
+            "id": "vezor-master-https",
+            "label": "Vezor Master API",
+            "address": "https://vezor.example.local/healthz",
+            "target_site_id": str(MASTER_SITE_ID),
+            "probe_type": "https",
+            "purpose": "vezor_control",
+            "monitoring": {
+                "enabled": True,
+                "source_type": "edge_agent",
+                "interval_seconds": 300,
+            },
+            "loss_method": "icmp_sequence",
+            "loss_packet_count": 20,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_control_target_helper_rejects_udp_when_reflector_disabled(
+    client: AsyncClient,
+) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/control-targets/master",
+        json={"mode": "udp_reflector", "connection_id": created.json()["id"]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Master reflector is disabled."
+
+
+@pytest.mark.asyncio
+async def test_control_target_helper_creates_udp_reflector_target_when_enabled(
+    client: AsyncClient,
+) -> None:
+    await client.post(
+        "/api/v1/link/reflectors/master/enable",
+        json={"public_address": "vezor.example.local"},
+    )
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/control-targets/master",
+        json={
+            "mode": "udp_reflector",
+            "connection_id": created.json()["id"],
+            "packet_count": 50,
+            "packet_spacing_ms": 100,
+            "loss_timeout_ms": 1000,
+            "dscp": 46,
+        },
+    )
+
+    assert response.status_code == 201
+    targets = response.json()["metadata"]["monitoring_targets"]
+    assert targets[0]["id"] == "vezor-master-udp-reflector"
+    assert targets[0]["target_site_id"] == str(MASTER_SITE_ID)
+    assert targets[0]["probe_type"] == "udp"
+    assert targets[0]["loss_method"] == "udp_sequence"
+    assert targets[0]["reflector_profile_id"] == "master-reflector-default"
+    assert targets[0]["reflector_address"] == "vezor.example.local"
+    assert targets[0]["reflector_port"] == 8622
+    assert targets[0]["loss_packet_count"] == 50
+    assert targets[0]["loss_packet_spacing_ms"] == 100
+    assert targets[0]["loss_timeout_ms"] == 1000
+    assert targets[0]["loss_dscp"] == 46
+
+
+@pytest.mark.asyncio
+async def test_control_target_helper_rejects_master_as_source_site(client: AsyncClient) -> None:
+    response = await client.post(
+        f"/api/v1/link/sites/{MASTER_SITE_ID}/control-targets/master",
+        json={"mode": "https_only"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Core Link can only be configured for edge sites."
+
+
+@pytest.mark.asyncio
 async def test_link_configuration_rejects_master_or_non_edge_site(client: AsyncClient) -> None:
     response = await client.post(
         f"/api/v1/link/sites/{MASTER_SITE_ID}/connections",

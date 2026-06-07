@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Literal, cast
 from uuid import UUID
@@ -23,6 +24,7 @@ from argus.link.contracts import (
     LinkProbeSourceType,
     LinkProbeType,
     LinkQueueItemRecord,
+    LinkReflectorProfileRecord,
     LinkSiteSummaryRecord,
     LinkTransportKind,
 )
@@ -45,6 +47,8 @@ PriorityLaneQuery = Annotated[LinkPriorityLane, Query()]
 RemainingBudgetBytesQuery = Annotated[int, Query(ge=0)]
 LinkEdgeProbeMethod = Literal["icmp_sequence", "stamp", "twamp", "udp_sequence"]
 LinkSiteRole = Literal["edge", "control_plane"]
+LinkReflectorSecretState = Literal["missing", "present"]
+LinkControlTargetMode = Literal["https_only", "udp_reflector", "https_and_udp_reflector"]
 REQUIRED_CONNECTION_PATCH_FIELDS = {
     "label",
     "transport_kind",
@@ -101,6 +105,48 @@ class LinkPolicyUpdate(BaseModel):
     policy: dict[str, object] = Field(default_factory=dict)
 
 
+class LinkReflectorProfileUpdate(BaseModel):
+    public_address: str | None = Field(default=None, max_length=255)
+    bind_address: str | None = Field(default=None, max_length=64)
+    udp_port: int | None = Field(default=None, ge=1, le=65_535)
+    allowed_edge_site_ids: list[UUID] | None = None
+    allowed_source_cidrs: list[str] | None = None
+    rate_limit_pps_per_source: int | None = Field(default=None, ge=0)
+
+
+class LinkReflectorProfileResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    site_id: UUID
+    profile_kind: str
+    enabled: bool
+    mode: str
+    public_address: str | None
+    bind_address: str
+    udp_port: int
+    key_id: str
+    allowed_edge_site_ids: list[UUID]
+    allowed_source_cidrs: list[str]
+    rate_limit_pps_per_source: int
+    last_status: str
+    last_error: str | None
+    secret_state: LinkReflectorSecretState
+    created_at: datetime
+    updated_at: datetime
+
+
+class LinkMasterControlTargetCreate(BaseModel):
+    mode: LinkControlTargetMode
+    connection_id: UUID | None = None
+    connection_label: str = Field(default="Vezor control", min_length=1, max_length=160)
+    address: str | None = None
+    interval_seconds: int = Field(default=300, ge=30)
+    packet_count: int = Field(default=50, gt=0, le=10_000)
+    packet_spacing_ms: int = Field(default=100, ge=1)
+    loss_timeout_ms: int = Field(default=1000, ge=1)
+    dscp: int | None = Field(default=None, ge=0, le=63)
+
+
 class LinkConnectionCreate(BaseModel):
     label: str = Field(min_length=1, max_length=160)
     transport_kind: LinkTransportKind
@@ -153,6 +199,111 @@ class LinkSiteSummaryResponse(BaseModel):
     budget: dict[str, object] | None = None
     last_sync_at: datetime | None = None
     passport_hash: str
+
+
+@router.get("/reflectors/master", response_model=LinkReflectorProfileResponse)
+async def get_master_reflector_profile(
+    current_user: ViewerUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> LinkReflectorProfileResponse:
+    master_site = await _master_control_plane_site(services, tenant_context)
+    profile = await services.link.aensure_master_reflector_profile(
+        tenant_id=tenant_context.tenant_id,
+        site_id=master_site.id,
+    )
+    return _reflector_profile_payload(profile)
+
+
+@router.put("/reflectors/master", response_model=LinkReflectorProfileResponse)
+async def put_master_reflector_profile(
+    payload: LinkReflectorProfileUpdate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> LinkReflectorProfileResponse:
+    master_site = await _master_control_plane_site(services, tenant_context)
+    try:
+        profile = await services.link.aupdate_master_reflector_profile(
+            tenant_id=tenant_context.tenant_id,
+            site_id=master_site.id,
+            public_address=payload.public_address,
+            bind_address=payload.bind_address,
+            udp_port=payload.udp_port,
+            allowed_edge_site_ids=payload.allowed_edge_site_ids,
+            allowed_source_cidrs=payload.allowed_source_cidrs,
+            rate_limit_pps_per_source=payload.rate_limit_pps_per_source,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _reflector_profile_payload(profile)
+
+
+@router.post("/reflectors/master/enable", response_model=LinkReflectorProfileResponse)
+async def enable_master_reflector_profile(
+    payload: LinkReflectorProfileUpdate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> LinkReflectorProfileResponse:
+    master_site = await _master_control_plane_site(services, tenant_context)
+    existing = await services.link.aensure_master_reflector_profile(
+        tenant_id=tenant_context.tenant_id,
+        site_id=master_site.id,
+        public_address=payload.public_address,
+    )
+    public_address = payload.public_address or existing.public_address
+    try:
+        profile = await services.link.aenable_master_reflector_profile(
+            tenant_id=tenant_context.tenant_id,
+            site_id=master_site.id,
+            public_address=public_address,
+            bind_address=payload.bind_address or existing.bind_address,
+            udp_port=payload.udp_port or existing.udp_port,
+            rate_limit_pps_per_source=(
+                payload.rate_limit_pps_per_source
+                if payload.rate_limit_pps_per_source is not None
+                else existing.rate_limit_pps_per_source
+            ),
+        )
+        if payload.allowed_edge_site_ids is not None or payload.allowed_source_cidrs is not None:
+            profile = await services.link.aupdate_master_reflector_profile(
+                tenant_id=tenant_context.tenant_id,
+                site_id=master_site.id,
+                allowed_edge_site_ids=payload.allowed_edge_site_ids,
+                allowed_source_cidrs=payload.allowed_source_cidrs,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _reflector_profile_payload(profile)
+
+
+@router.post("/reflectors/master/disable", response_model=LinkReflectorProfileResponse)
+async def disable_master_reflector_profile(
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> LinkReflectorProfileResponse:
+    master_site = await _master_control_plane_site(services, tenant_context)
+    profile = await services.link.adisable_master_reflector_profile(
+        tenant_id=tenant_context.tenant_id,
+        site_id=master_site.id,
+    )
+    return _reflector_profile_payload(profile)
+
+
+@router.post("/reflectors/master/rotate-key", response_model=LinkReflectorProfileResponse)
+async def rotate_master_reflector_key(
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> LinkReflectorProfileResponse:
+    master_site = await _master_control_plane_site(services, tenant_context)
+    profile = await services.link.arotate_master_reflector_key(
+        tenant_id=tenant_context.tenant_id,
+        site_id=master_site.id,
+    )
+    return _reflector_profile_payload(profile)
 
 
 @router.get("/sites/summary", response_model=list[LinkSiteSummaryResponse])
@@ -296,6 +447,55 @@ async def post_link_connection(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _connection_payload(connection)
+
+
+@router.post("/sites/{site_id}/control-targets/master", status_code=status.HTTP_201_CREATED)
+async def post_master_control_target(
+    site_id: UUID,
+    payload: LinkMasterControlTargetCreate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> JsonObject:
+    await _ensure_link_edge_site(services, tenant_context, site_id)
+    master_site = await _master_control_plane_site(services, tenant_context)
+    profile = await services.link.aensure_master_reflector_profile(
+        tenant_id=tenant_context.tenant_id,
+        site_id=master_site.id,
+    )
+    connection = await _connection_for_control_target(
+        services,
+        tenant_id=tenant_context.tenant_id,
+        site_id=site_id,
+        connection_id=payload.connection_id,
+        connection_label=payload.connection_label,
+    )
+    targets = _master_control_targets(payload, master_site=master_site, profile=profile)
+    metadata = _metadata_with_master_control_targets(connection.metadata, targets)
+    try:
+        updated = await services.link.aupsert_connection(
+            tenant_id=tenant_context.tenant_id,
+            site_id=site_id,
+            connection_id=connection.id,
+            label=connection.label,
+            transport_kind=connection.transport_kind,
+            provider=connection.provider,
+            status=connection.status,
+            priority_rank=connection.priority_rank,
+            availability_scope=connection.availability_scope,
+            metered=connection.metered,
+            monthly_bytes=connection.monthly_bytes,
+            bulk_daily_bytes=connection.bulk_daily_bytes,
+            expected_downlink_mbps=connection.expected_downlink_mbps,
+            expected_uplink_mbps=connection.expected_uplink_mbps,
+            expected_latency_ms=connection.expected_latency_ms,
+            packet_loss_percent=connection.packet_loss_percent,
+            last_seen_at=connection.last_seen_at,
+            metadata=metadata,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _connection_payload(updated)
 
 
 @router.get("/sites/{site_id}/connections/selection")
@@ -811,6 +1011,189 @@ async def _ensure_link_edge_site(
     await _ensure_link_site(services, tenant_context, site_id)
     if not await services.sites.is_edge_site(tenant_context, site_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
+async def _master_control_plane_site(
+    services: AppServices,
+    tenant_context: TenantContext,
+) -> SiteResponse:
+    sites = await services.sites.list_link_performance_sites(tenant_context)
+    for site in sites:
+        if _site_role(site) == "control_plane":
+            return site
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Vezor Master control-plane target site not found.",
+    )
+
+
+def _reflector_profile_payload(
+    profile: LinkReflectorProfileRecord,
+) -> LinkReflectorProfileResponse:
+    return LinkReflectorProfileResponse(
+        id=profile.id,
+        tenant_id=profile.tenant_id,
+        site_id=profile.site_id,
+        profile_kind=profile.profile_kind,
+        enabled=profile.enabled,
+        mode=profile.mode,
+        public_address=profile.public_address,
+        bind_address=profile.bind_address,
+        udp_port=profile.udp_port,
+        key_id=profile.key_id,
+        allowed_edge_site_ids=profile.allowed_edge_site_ids,
+        allowed_source_cidrs=profile.allowed_source_cidrs,
+        rate_limit_pps_per_source=profile.rate_limit_pps_per_source,
+        last_status=profile.last_status,
+        last_error=profile.last_error,
+        secret_state="present" if profile.encrypted_secret is not None else "missing",
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
+    )
+
+
+async def _connection_for_control_target(
+    services: AppServices,
+    *,
+    tenant_id: UUID,
+    site_id: UUID,
+    connection_id: UUID | None,
+    connection_label: str,
+) -> LinkConnectionRecord:
+    if connection_id is not None:
+        connection = await services.link.aget_connection(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            connection_id=connection_id,
+        )
+        if connection is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Connection not found.",
+            )
+        return connection
+    return await services.link.aupsert_connection(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        label=connection_label,
+        transport_kind="other",
+        provider="Vezor",
+        status="unknown",
+        priority_rank=100,
+        availability_scope="always",
+        metered=False,
+        metadata={"monitoring_targets": []},
+    )
+
+
+def _master_control_targets(
+    payload: LinkMasterControlTargetCreate,
+    *,
+    master_site: SiteResponse,
+    profile: LinkReflectorProfileRecord,
+) -> list[JsonObject]:
+    targets: list[JsonObject] = []
+    if payload.mode in {"https_only", "https_and_udp_reflector"}:
+        targets.append(_master_https_target(payload, master_site=master_site, profile=profile))
+    if payload.mode in {"udp_reflector", "https_and_udp_reflector"}:
+        targets.append(
+            _master_udp_reflector_target(payload, master_site=master_site, profile=profile)
+        )
+    return targets
+
+
+def _master_https_target(
+    payload: LinkMasterControlTargetCreate,
+    *,
+    master_site: SiteResponse,
+    profile: LinkReflectorProfileRecord,
+) -> JsonObject:
+    return {
+        "id": "vezor-master-https",
+        "label": "Vezor Master API",
+        "address": payload.address or _default_master_https_address(profile),
+        "target_site_id": str(master_site.id),
+        "probe_type": "https",
+        "purpose": "vezor_control",
+        "monitoring": {
+            "enabled": True,
+            "source_type": "edge_agent",
+            "interval_seconds": payload.interval_seconds,
+        },
+        "loss_method": "icmp_sequence",
+        "loss_packet_count": 20,
+    }
+
+
+def _master_udp_reflector_target(
+    payload: LinkMasterControlTargetCreate,
+    *,
+    master_site: SiteResponse,
+    profile: LinkReflectorProfileRecord,
+) -> JsonObject:
+    if not profile.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Master reflector is disabled.",
+        )
+    reflector_address = payload.address or profile.public_address
+    if not reflector_address:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Master reflector public address is not configured.",
+        )
+    target: JsonObject = {
+        "id": "vezor-master-udp-reflector",
+        "label": "Vezor Master reflector",
+        "address": reflector_address,
+        "target_site_id": str(master_site.id),
+        "probe_type": "udp",
+        "purpose": "vezor_control",
+        "monitoring": {
+            "enabled": True,
+            "source_type": "edge_agent",
+            "interval_seconds": payload.interval_seconds,
+        },
+        "loss_method": "udp_sequence",
+        "loss_packet_count": payload.packet_count,
+        "loss_packet_spacing_ms": payload.packet_spacing_ms,
+        "loss_timeout_ms": payload.loss_timeout_ms,
+        "reflector_profile_id": "master-reflector-default",
+        "reflector_address": reflector_address,
+        "reflector_port": profile.udp_port,
+        "reflector_mode": profile.mode,
+        "reflector_key_id": profile.key_id,
+    }
+    if payload.dscp is not None:
+        target["loss_dscp"] = payload.dscp
+    return target
+
+
+def _metadata_with_master_control_targets(
+    metadata: Mapping[str, object],
+    targets: list[JsonObject],
+) -> JsonObject:
+    updated = dict(metadata)
+    existing_targets = [
+        target
+        for target in _metadata_targets(updated)
+        if target.get("id") not in {"vezor-master-https", "vezor-master-udp-reflector"}
+    ]
+    updated["monitoring_targets"] = [*existing_targets, *targets]
+    return updated
+
+
+def _metadata_targets(metadata: Mapping[str, object]) -> list[JsonObject]:
+    targets = metadata.get("monitoring_targets")
+    if not isinstance(targets, list):
+        return []
+    return [dict(target) for target in targets if isinstance(target, Mapping)]
+
+
+def _default_master_https_address(profile: LinkReflectorProfileRecord) -> str:
+    if profile.public_address:
+        return f"https://{profile.public_address.rstrip('/')}/healthz"
+    return "https://vezor-master/healthz"
 
 
 async def _target_site_status_payload(
