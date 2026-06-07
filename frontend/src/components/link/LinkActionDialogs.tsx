@@ -8,12 +8,15 @@ import {
   linkPathMetadata,
   linkVisibilities,
   linkVisibilityLabel,
+  linkProbeLossMethods,
   monitoringSourceTypeLabel,
   monitoringSourceTypes,
   monitoringProbeTypes,
   monitoringPurposes,
   numberValue,
+  probeLossMethodLabel,
   textValue,
+  type LinkProbeLossMethod,
   type LinkModel,
   type LinkPathMetadata,
   type LinkVisibility,
@@ -45,6 +48,9 @@ type MonitoringTargetFormState = {
   monitoringEnabled: boolean;
   monitoringSourceType: MonitoringSourceType;
   monitoringIntervalSeconds: string;
+  lossMethod: LinkProbeLossMethod;
+  lossPacketCount: string;
+  lossDscp: string;
   throughputTestUrl: string;
   throughputTestMaxBytes: string;
 };
@@ -120,6 +126,9 @@ function defaultTargetForm(): MonitoringTargetFormState {
     expectedLatencyMs: "",
     id: createTargetId(),
     label: "",
+    lossDscp: "",
+    lossMethod: "icmp_sequence",
+    lossPacketCount: "20",
     monitoringEnabled: false,
     monitoringIntervalSeconds: "300",
     monitoringSourceType: "manual",
@@ -177,6 +186,9 @@ export function LinkConnectionDialog({
         port: optionalNumberText(target.port),
         purpose: target.purpose,
         expectedLatencyMs: optionalNumberText(target.expected_latency_ms),
+        lossDscp: optionalNumberText(target.loss_dscp),
+        lossMethod: lossMethodValue(target.loss_method),
+        lossPacketCount: optionalNumberText(target.loss_packet_count, "20"),
         monitoringEnabled: target.monitoring.enabled,
         monitoringSourceType: target.monitoring.source_type,
         monitoringIntervalSeconds: optionalNumberText(
@@ -548,6 +560,41 @@ export function LinkConnectionDialog({
                     updateTargetField(index, "throughputTestMaxBytes", value)
                   }
                 />
+                {target.monitoringSourceType === "edge_agent" ? (
+                  <>
+                    <LabeledSelect
+                      label="Loss method"
+                      value={target.lossMethod}
+                      onChange={(value) =>
+                        updateTargetField(index, "lossMethod", lossMethodValue(value))
+                      }
+                    >
+                      {linkProbeLossMethods.map((method) => (
+                        <option key={method} value={method}>
+                          {probeLossMethodLabel(method)}
+                        </option>
+                      ))}
+                    </LabeledSelect>
+                    <LabeledInput
+                      label="Loss packet count"
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={target.lossPacketCount}
+                      onChange={(value) =>
+                        updateTargetField(index, "lossPacketCount", value)
+                      }
+                    />
+                    <LabeledInput
+                      label="Loss DSCP"
+                      type="number"
+                      min="0"
+                      max="63"
+                      value={target.lossDscp}
+                      onChange={(value) => updateTargetField(index, "lossDscp", value)}
+                    />
+                  </>
+                ) : null}
                 <div className="sm:col-span-2">
                   <Button
                     type="button"
@@ -745,6 +792,7 @@ type LabeledInputProps = {
   required?: boolean;
   type?: string;
   min?: string;
+  max?: string;
   step?: string;
   onChange: (value: string) => void;
 };
@@ -756,6 +804,7 @@ function LabeledInput({
   required = false,
   type = "text",
   min,
+  max,
   step,
   onChange,
 }: LabeledInputProps) {
@@ -766,6 +815,7 @@ function LabeledInput({
         aria-label={label}
         type={type}
         min={min}
+        max={max}
         step={step}
         value={value}
         required={required}
@@ -836,6 +886,9 @@ function buildConnectionMetadata(form: ConnectionFormState): LinkPathMetadata {
       expected_latency_ms: optionalNumber(target.expectedLatencyMs),
       id: target.id,
       label: target.label.trim(),
+      loss_dscp: optionalNumber(target.lossDscp),
+      loss_method: target.lossMethod,
+      loss_packet_count: optionalNumber(target.lossPacketCount),
       monitoring: {
         enabled: target.monitoringEnabled,
         interval_seconds: optionalNumber(target.monitoringIntervalSeconds),
@@ -881,6 +934,7 @@ function defaultPort(probeType: MonitoringProbeType) {
     https: "443",
     icmp: "",
     tcp: "",
+    udp: "",
   };
   return ports[probeType];
 }
@@ -936,6 +990,12 @@ function linkVisibilityValue(value: unknown): LinkVisibility {
 
 function probeTypeValue(value: unknown): MonitoringProbeType {
   return monitoringProbeTypes.find((probeType) => probeType === value) ?? "icmp";
+}
+
+function lossMethodValue(value: unknown): LinkProbeLossMethod {
+  return (
+    linkProbeLossMethods.find((method) => method === value) ?? "icmp_sequence"
+  );
 }
 
 function monitoringSourceTypeValue(value: unknown): MonitoringSourceType {

@@ -1217,6 +1217,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/edge-samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Link Edge Probe Sample */
+        post: operations["post_link_edge_probe_sample_api_v1_link_sites__site_id__probe_targets__target_id__edge_samples_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-throughput": {
         parameters: {
             query?: never;
@@ -4405,6 +4422,33 @@ export interface components {
             /** Transport Kind */
             transport_kind?: ("satellite" | "lte" | "5g" | "wifi" | "fiber" | "ethernet" | "other") | null;
         };
+        /** LinkEdgeProbeSampleCreate */
+        LinkEdgeProbeSampleCreate: {
+            /** Agent Id */
+            agent_id: string;
+            /** Agent Label */
+            agent_label?: string | null;
+            /** Dscp */
+            dscp?: number | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Jitter Ms */
+            jitter_ms?: number | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Measured At */
+            measured_at?: string | null;
+            /**
+             * Method
+             * @default icmp_sequence
+             * @enum {string}
+             */
+            method: "icmp_sequence" | "stamp" | "twamp" | "udp_sequence";
+            /** Packet Count */
+            packet_count: number;
+            /** Packets Received */
+            packets_received: number;
+        };
         /** LinkPolicyUpdate */
         LinkPolicyUpdate: {
             /** Policy */
@@ -4418,10 +4462,14 @@ export interface components {
             connection_id?: string | null;
             /** Latency Ms */
             latency_ms: number;
+            /** Measurement Metadata */
+            measurement_metadata?: {
+                [key: string]: unknown;
+            };
             /** Packet Loss Percent */
             packet_loss_percent: number;
             /** Probe Type */
-            probe_type?: ("icmp" | "tcp" | "http" | "https" | "manual") | null;
+            probe_type?: ("icmp" | "tcp" | "http" | "https" | "udp" | "manual") | null;
             /** Reachable */
             reachable: boolean;
             /**
@@ -10558,6 +10606,46 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_link_edge_probe_sample_api_v1_link_sites__site_id__probe_targets__target_id__edge_samples_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkEdgeProbeSampleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

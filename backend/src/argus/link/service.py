@@ -766,6 +766,7 @@ class LinkService:
         source_type: LinkProbeSourceType = "manual",
         source_label: str | None = None,
         sample_kind: LinkProbeSampleKind = "manual",
+        measurement_metadata: Mapping[str, object] | None = None,
     ) -> LinkHealthProbeRecord:
         self._ensure_memory_mode()
         if connection_id is not None:
@@ -794,6 +795,7 @@ class LinkService:
             source_type=source_type,
             source_label=source_label,
             sample_kind=sample_kind,
+            measurement_metadata=dict(measurement_metadata or {}),
         )
         self._probes.append(probe)
         return probe
@@ -816,6 +818,7 @@ class LinkService:
         source_type: LinkProbeSourceType = "manual",
         source_label: str | None = None,
         sample_kind: LinkProbeSampleKind = "manual",
+        measurement_metadata: Mapping[str, object] | None = None,
     ) -> LinkHealthProbeRecord:
         if connection_id is not None:
             connection = await self.aget_connection(
@@ -842,6 +845,7 @@ class LinkService:
                 source_type=source_type,
                 source_label=source_label,
                 sample_kind=sample_kind,
+                measurement_metadata=measurement_metadata,
             )
         probe = LinkHealthProbe(
             id=uuid4(),
@@ -861,6 +865,7 @@ class LinkService:
             source_type=source_type,
             source_label=source_label,
             sample_kind=sample_kind,
+            measurement_metadata=dict(measurement_metadata or {}),
         )
         async with self.session_factory() as session:
             session.add(probe)
@@ -1807,6 +1812,7 @@ def _probe_record(probe: LinkHealthProbe) -> LinkHealthProbeRecord:
         source_label=probe.source_label,
         sample_kind=cast(LinkProbeSampleKind, probe.sample_kind),
         deleted_at=probe.deleted_at,
+        measurement_metadata=dict(probe.measurement_metadata or {}),
     )
 
 
@@ -1882,6 +1888,7 @@ def _probe_payload(probe: LinkHealthProbeRecord | None) -> JsonObject | None:
         "source_label": probe.source_label,
         "sample_kind": probe.sample_kind,
         "deleted_at": probe.deleted_at.isoformat() if probe.deleted_at is not None else None,
+        "measurement_metadata": probe.measurement_metadata,
     }
     if probe.connection_id is not None:
         payload["connection_id"] = str(probe.connection_id)

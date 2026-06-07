@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from argus.api.contracts import TenantContext
 from argus.api.dependencies import get_app_services, get_tenant_context
@@ -43,6 +43,7 @@ ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 PriorityLaneQuery = Annotated[LinkPriorityLane, Query()]
 RemainingBudgetBytesQuery = Annotated[int, Query(ge=0)]
+LinkEdgeProbeMethod = Literal["icmp_sequence", "stamp", "twamp", "udp_sequence"]
 REQUIRED_CONNECTION_PATCH_FIELDS = {
     "label",
     "transport_kind",
@@ -72,6 +73,26 @@ class LinkProbeCreate(BaseModel):
     source_type: LinkProbeSourceType = "manual"
     source_label: str | None = Field(default=None, max_length=128)
     sample_kind: LinkProbeSampleKind = "manual"
+    measurement_metadata: JsonObject = Field(default_factory=dict)
+
+
+class LinkEdgeProbeSampleCreate(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=96)
+    agent_label: str | None = Field(default=None, max_length=128)
+    method: LinkEdgeProbeMethod = "icmp_sequence"
+    packet_count: int = Field(gt=0, le=10_000)
+    packets_received: int = Field(ge=0)
+    latency_ms: int = Field(ge=0)
+    jitter_ms: float | None = Field(default=None, ge=0)
+    duration_ms: int | None = Field(default=None, ge=0)
+    dscp: int | None = Field(default=None, ge=0, le=63)
+    measured_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_packet_counts(self) -> LinkEdgeProbeSampleCreate:
+        if self.packets_received > self.packet_count:
+            raise ValueError("packets_received cannot exceed packet_count.")
+        return self
 
 
 class LinkPolicyUpdate(BaseModel):
@@ -393,9 +414,54 @@ async def post_link_probe(
             source_type=payload.source_type,
             source_label=payload.source_label,
             sample_kind=payload.sample_kind,
+            measurement_metadata=payload.measurement_metadata,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _probe_payload(probe)
+
+
+@router.post(
+    "/sites/{site_id}/probe-targets/{target_id}/edge-samples",
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_link_edge_probe_sample(
+    site_id: UUID,
+    target_id: str,
+    payload: LinkEdgeProbeSampleCreate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> JsonObject:
+    await _ensure_tenant_site(services, tenant_context, site_id)
+    target = await services.link.atarget_for_connection_metadata(
+        tenant_id=tenant_context.tenant_id,
+        site_id=site_id,
+        target_id=target_id,
+    )
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
+
+    packets_lost = payload.packet_count - payload.packets_received
+    packet_loss_percent = round((packets_lost / payload.packet_count) * 100, 4)
+    source_label = payload.agent_label or payload.agent_id
+    probe = await services.link.arecord_probe(
+        tenant_id=tenant_context.tenant_id,
+        site_id=site_id,
+        latency_ms=payload.latency_ms,
+        throughput_mbps=0.0,
+        packet_loss_percent=packet_loss_percent,
+        reachable=payload.packets_received > 0,
+        source=f"edge_agent:{payload.agent_id}",
+        target_id=target_id,
+        target_label=_target_text(target, "label"),
+        target_address=_target_text(target, "address"),
+        probe_type=_edge_probe_type_from_metadata(target, payload.method),
+        source_type="edge_agent",
+        source_label=source_label,
+        sample_kind="automated",
+        measurement_metadata=_edge_measurement_metadata(payload, packets_lost),
+    )
     return _probe_payload(probe)
 
 
@@ -734,7 +800,47 @@ def _probe_payload(probe: LinkHealthProbeRecord) -> JsonObject:
         "source_label": probe.source_label,
         "sample_kind": probe.sample_kind,
         "deleted_at": probe.deleted_at.isoformat() if probe.deleted_at is not None else None,
+        "measurement_metadata": probe.measurement_metadata,
     }
+
+
+def _target_text(target: JsonObject, field: str) -> str | None:
+    value = target.get(field)
+    return value if isinstance(value, str) else None
+
+
+def _edge_probe_type_from_metadata(
+    target: JsonObject,
+    method: LinkEdgeProbeMethod,
+) -> LinkProbeType:
+    probe_type = target.get("probe_type")
+    if probe_type in {"icmp", "tcp", "http", "https", "udp"}:
+        return cast(LinkProbeType, probe_type)
+    return "icmp" if method == "icmp_sequence" else "udp"
+
+
+def _edge_measurement_metadata(
+    payload: LinkEdgeProbeSampleCreate,
+    packets_lost: int,
+) -> JsonObject:
+    metadata: JsonObject = {
+        "agent_id": payload.agent_id,
+        "method": payload.method,
+        "packet_count": payload.packet_count,
+        "packets_received": payload.packets_received,
+        "packets_lost": packets_lost,
+    }
+    if payload.agent_label is not None:
+        metadata["agent_label"] = payload.agent_label
+    if payload.jitter_ms is not None:
+        metadata["jitter_ms"] = payload.jitter_ms
+    if payload.duration_ms is not None:
+        metadata["duration_ms"] = payload.duration_ms
+    if payload.dscp is not None:
+        metadata["dscp"] = payload.dscp
+    if payload.measured_at is not None:
+        metadata["measured_at"] = payload.measured_at.isoformat()
+    return metadata
 
 
 def _probe_target_from_metadata(target: JsonObject) -> ProbeTarget:

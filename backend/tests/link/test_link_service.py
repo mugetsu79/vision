@@ -361,6 +361,36 @@ def test_record_probe_stores_structured_source_and_target(link_service: LinkServ
     assert probe.deleted_at is None
 
 
+def test_record_probe_stores_measurement_metadata(link_service: LinkService) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    probe = link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        latency_ms=24,
+        throughput_mbps=0,
+        packet_loss_percent=5.0,
+        reachable=True,
+        source="edge_agent:macbook-home",
+        probe_type="udp",
+        source_type="edge_agent",
+        source_label="MacBook at home",
+        sample_kind="automated",
+        measurement_metadata={
+            "agent_id": "macbook-home",
+            "method": "icmp_sequence",
+            "packet_count": 20,
+            "packets_received": 19,
+            "packets_lost": 1,
+        },
+    )
+
+    assert probe.probe_type == "udp"
+    assert probe.measurement_metadata["agent_id"] == "macbook-home"
+    assert probe.measurement_metadata["packets_lost"] == 1
+
+
 def test_delete_probe_hides_sample_from_history_and_latest(link_service: LinkService) -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000001")
     site_id = UUID("00000000-0000-4000-8000-000000000002")
@@ -588,6 +618,7 @@ def test_link_tables_and_migration_constrain_domain_neutral_literals() -> None:
     attempt_constraints = _check_constraint_names(LinkTransferAttempt)
     passport_constraints = _check_constraint_names(LinkPassportSnapshot)
     probe_indexes = {index.name for index in LinkHealthProbe.__table__.indexes}
+    probe_constraints = _check_constraint_names(LinkHealthProbe)
     migration_path = (
         Path(__file__).resolve().parents[2]
         / "src/argus/migrations/versions/0030_core_link.py"
@@ -606,10 +637,18 @@ def test_link_tables_and_migration_constrain_domain_neutral_literals() -> None:
         Path(__file__).resolve().parents[2]
         / "src/argus/migrations/versions/0037_core_link_connections.py"
     )
+    edge_agent_migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "src/argus/migrations/versions/0039_core_link_edge_agent.py"
+    )
     connection_text = connection_migration_path.read_text(encoding="utf-8")
+    edge_agent_text = edge_agent_migration_path.read_text(encoding="utf-8")
     assert "ck_link_connections_availability_scope" in connection_constraints
+    assert "ck_link_health_probes_probe_type" in probe_constraints
     assert "ix_link_health_probes_connection" in probe_indexes
     assert "ix_link_health_probes_connection" in connection_text
+    assert "measurement_metadata" in edge_agent_text
+    assert "'udp'" in edge_agent_text
     assert "'remote'" in connection_text
     assert "'nearby'" in connection_text
     assert "'local'" in connection_text

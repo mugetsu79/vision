@@ -12,7 +12,7 @@ LinkPriorityLane = Literal["safety", "evidence", "telemetry", "bulk"]
 LinkTransportKind = Literal["satellite", "lte", "5g", "wifi", "fiber", "ethernet", "other"]
 LinkConnectionStatus = Literal["unknown", "online", "degraded", "offline", "blocked", "recovering"]
 LinkAvailabilityScope = Literal["always", "remote", "nearby", "local", "maintenance"]
-LinkProbeType = Literal["icmp", "tcp", "http", "https", "manual"]
+LinkProbeType = Literal["icmp", "tcp", "http", "https", "udp", "manual"]
 LinkProbeSourceType = Literal["manual", "backend_synthetic", "edge_agent", "provider_api", "import"]
 LinkProbeSampleKind = Literal["manual", "automated", "imported"]
 
@@ -110,6 +110,7 @@ class LinkHealthProbeRecord:
     source_label: str | None = None
     sample_kind: LinkProbeSampleKind = "manual"
     deleted_at: datetime | None = None
+    measurement_metadata: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

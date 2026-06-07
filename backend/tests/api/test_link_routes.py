@@ -330,6 +330,85 @@ async def test_run_link_probe_target_records_backend_synthetic_sample(client: As
 
 
 @pytest.mark.asyncio
+async def test_edge_agent_sample_computes_loss_from_packet_counts(client: AsyncClient) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+            "metadata": {
+                "monitoring_targets": [
+                    {
+                        "id": "target-google-dns",
+                        "label": "Google DNS",
+                        "address": "8.8.8.8",
+                        "probe_type": "icmp",
+                        "purpose": "custom",
+                        "monitoring": {
+                            "enabled": True,
+                            "source_type": "edge_agent",
+                            "interval_seconds": 300,
+                        },
+                    }
+                ]
+            },
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-google-dns/edge-samples",
+        json={
+            "agent_id": "macbook-home",
+            "agent_label": "MacBook at home",
+            "method": "icmp_sequence",
+            "packet_count": 20,
+            "packets_received": 19,
+            "latency_ms": 24,
+            "jitter_ms": 1.8,
+            "duration_ms": 19024,
+        },
+    )
+
+    assert created.status_code == 201
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["source_type"] == "edge_agent"
+    assert payload["sample_kind"] == "automated"
+    assert payload["source"] == "edge_agent:macbook-home"
+    assert payload["source_label"] == "MacBook at home"
+    assert payload["target_id"] == "target-google-dns"
+    assert payload["target_label"] == "Google DNS"
+    assert payload["target_address"] == "8.8.8.8"
+    assert payload["probe_type"] == "icmp"
+    assert payload["packet_loss_percent"] == 5.0
+    assert payload["measurement_metadata"]["agent_id"] == "macbook-home"
+    assert payload["measurement_metadata"]["method"] == "icmp_sequence"
+    assert payload["measurement_metadata"]["packet_count"] == 20
+    assert payload["measurement_metadata"]["packets_received"] == 19
+    assert payload["measurement_metadata"]["packets_lost"] == 1
+
+
+@pytest.mark.asyncio
+async def test_edge_agent_sample_rejects_received_count_above_sent(client: AsyncClient) -> None:
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/missing/edge-samples",
+        json={
+            "agent_id": "macbook-home",
+            "method": "icmp_sequence",
+            "packet_count": 20,
+            "packets_received": 21,
+            "latency_ms": 24,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_link_connection_patch_rejects_null_required_fields(
     client: AsyncClient,
 ) -> None:

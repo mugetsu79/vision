@@ -19,6 +19,8 @@ import {
   linkPathMetadata,
   monitoringSourceLabel,
   numberValue,
+  probeLossMethodLabel,
+  probeMeasurementSummary,
   probePacketLossLabel,
   probeSampleSourceLabel,
   probeSampleTargetLabel,
@@ -137,6 +139,14 @@ export function LinkProbePanel({
                     )
                   : "Monitoring disabled"}
               </p>
+              {target.monitoring.source_type === "edge_agent" ? (
+                <p className="mt-1 text-sm text-[var(--vz-text-secondary)]">
+                  {probeLossMethodLabel(target.loss_method)}
+                  {target.loss_packet_count
+                    ? ` / ${target.loss_packet_count} packets`
+                    : ""}
+                </p>
+              ) : null}
             </div>
           ))
         )}
@@ -169,6 +179,11 @@ export function LinkProbePanel({
                   <p className="mt-1 text-xs text-[var(--vz-text-muted)]">
                     {probeSampleSourceLabel(probe)}
                   </p>
+                  {textValue(item.source_type, "") === "edge_agent" ? (
+                    <p className="mt-1 text-xs text-[var(--vz-text-muted)]">
+                      {probeMeasurementSummary(probe)}
+                    </p>
+                  ) : null}
                 </div>
                 <Button
                   variant="ghost"
@@ -219,7 +234,8 @@ function canRunBackendSynthetic(target: ProbeTargetOption) {
   return (
     target.monitoring.enabled &&
     target.monitoring.source_type === "backend_synthetic" &&
-    target.probe_type !== "icmp"
+    target.probe_type !== "icmp" &&
+    target.probe_type !== "udp"
   );
 }
 
@@ -228,6 +244,7 @@ function canMeasureThroughput(target: ProbeTargetOption) {
     target.monitoring.enabled &&
     target.monitoring.source_type === "backend_synthetic" &&
     target.probe_type !== "icmp" &&
+    target.probe_type !== "udp" &&
     Boolean(target.throughput_test_url)
   );
 }

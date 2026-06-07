@@ -173,7 +173,7 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
         Index("ix_link_health_probes_target", "target_id"),
         Index("ix_link_health_probes_deleted", "deleted_at"),
         CheckConstraint(
-            "probe_type IS NULL OR probe_type IN ('icmp', 'tcp', 'http', 'https', 'manual')",
+            "probe_type IS NULL OR probe_type IN ('icmp', 'tcp', 'http', 'https', 'udp', 'manual')",
             name="probe_type",
         ),
         CheckConstraint(
@@ -216,6 +216,7 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
     source_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     sample_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    measurement_metadata: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
 
 class LinkPassportSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):

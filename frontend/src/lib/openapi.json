@@ -5484,6 +5484,112 @@
         "title": "LinkConnectionPatch",
         "type": "object"
       },
+      "LinkEdgeProbeSampleCreate": {
+        "properties": {
+          "agent_id": {
+            "maxLength": 96,
+            "minLength": 1,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_label": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Label"
+          },
+          "dscp": {
+            "anyOf": [
+              {
+                "maximum": 63.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dscp"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "jitter_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jitter Ms"
+          },
+          "latency_ms": {
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "measured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured At"
+          },
+          "method": {
+            "default": "icmp_sequence",
+            "enum": [
+              "icmp_sequence",
+              "stamp",
+              "twamp",
+              "udp_sequence"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "packet_count": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000.0,
+            "title": "Packet Count",
+            "type": "integer"
+          },
+          "packets_received": {
+            "minimum": 0.0,
+            "title": "Packets Received",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent_id",
+          "packet_count",
+          "packets_received",
+          "latency_ms"
+        ],
+        "title": "LinkEdgeProbeSampleCreate",
+        "type": "object"
+      },
       "LinkPolicyUpdate": {
         "properties": {
           "policy": {
@@ -5514,6 +5620,11 @@
             "title": "Latency Ms",
             "type": "integer"
           },
+          "measurement_metadata": {
+            "additionalProperties": true,
+            "title": "Measurement Metadata",
+            "type": "object"
+          },
           "packet_loss_percent": {
             "minimum": 0.0,
             "title": "Packet Loss Percent",
@@ -5527,6 +5638,7 @@
                   "tcp",
                   "http",
                   "https",
+                  "udp",
                   "manual"
                 ],
                 "type": "string"
@@ -20181,6 +20293,86 @@
           }
         },
         "summary": "Put Link Policies",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/edge-samples": {
+      "post": {
+        "operationId": "post_link_edge_probe_sample_api_v1_link_sites__site_id__probe_targets__target_id__edge_samples_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkEdgeProbeSampleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Link Edge Probe Sample Api V1 Link Sites  Site Id  Probe Targets  Target Id  Edge Samples Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Link Edge Probe Sample",
         "tags": [
           "link"
         ]

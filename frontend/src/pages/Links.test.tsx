@@ -829,6 +829,126 @@ describe("Links", () => {
     expect(measureProbeTargetThroughput).toHaveBeenCalledWith("target-openwisp");
   });
 
+  test("monitoring panel renders edge agent packet loss metadata", async () => {
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      connections: [
+        {
+          id: "connection-1",
+          label: "Home",
+          transport_kind: "ethernet",
+          status: "online",
+          metadata: {
+            monitoring_targets: [
+              {
+                id: "target-google-dns",
+                label: "Google DNS",
+                address: "8.8.8.8",
+                probe_type: "icmp",
+                purpose: "custom",
+                loss_method: "icmp_sequence",
+                loss_packet_count: 20,
+                monitoring: {
+                  enabled: true,
+                  source_type: "edge_agent",
+                  interval_seconds: 300,
+                },
+              },
+            ],
+          },
+        },
+      ],
+      probes: [
+        {
+          id: "probe-1",
+          latency_ms: 22,
+          throughput_mbps: 0,
+          packet_loss_percent: 5,
+          reachable: true,
+          source: "edge_agent:macbook-home",
+          source_type: "edge_agent",
+          source_label: "MacBook at home",
+          sample_kind: "automated",
+          target_label: "Google DNS",
+          target_address: "8.8.8.8",
+          probe_type: "icmp",
+          measurement_metadata: {
+            method: "icmp_sequence",
+            packet_count: 20,
+            packets_received: 19,
+            packets_lost: 1,
+            jitter_ms: 1.8,
+          },
+          recorded_at: "2026-06-07T10:00:00Z",
+        },
+      ],
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    expect((await screen.findAllByText(/Google DNS/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Edge agent/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/ICMP sequence/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/20 packets/i)).toBeInTheDocument();
+    expect(screen.getByText(/19\/20 received/i)).toBeInTheDocument();
+    expect(screen.getByText(/5% loss/i)).toBeInTheDocument();
+    expect(screen.getByText(/1.8 ms variation/i)).toBeInTheDocument();
+  });
+
+  test("link path form saves edge agent loss settings", async () => {
+    const user = userEvent.setup();
+    const createConnection = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      createConnection,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    await user.click(
+      await screen.findByRole("button", { name: /add link path/i }),
+    );
+    await user.type(screen.getByLabelText(/link path label/i), "Home edge");
+    await user.click(screen.getByRole("button", { name: /add monitoring target/i }));
+    await user.type(screen.getByLabelText(/target label/i), "Google DNS");
+    await user.type(screen.getByLabelText(/target address/i), "8.8.8.8");
+    await user.selectOptions(screen.getByLabelText(/probe type/i), "udp");
+    await user.selectOptions(
+      screen.getByLabelText(/monitoring source/i),
+      "edge_agent",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/loss method/i),
+      "icmp_sequence",
+    );
+    await user.clear(screen.getByLabelText(/loss packet count/i));
+    await user.type(screen.getByLabelText(/loss packet count/i), "20");
+    await user.clear(screen.getByLabelText(/loss DSCP/i));
+    await user.type(screen.getByLabelText(/loss DSCP/i), "46");
+    await user.click(screen.getByRole("button", { name: /save link path/i }));
+
+    const createCall = createConnection.mock.calls[0]?.[0] as
+      | {
+          metadata?: {
+            monitoring_targets?: Array<{
+              loss_dscp?: number | null;
+              loss_method?: string | null;
+              loss_packet_count?: number | null;
+              monitoring?: { source_type?: string };
+              probe_type?: string;
+            }>;
+          };
+        }
+      | undefined;
+    expect(createCall?.metadata?.monitoring_targets?.[0]).toMatchObject({
+      loss_dscp: 46,
+      loss_method: "icmp_sequence",
+      loss_packet_count: 20,
+      monitoring: { source_type: "edge_agent" },
+      probe_type: "udp",
+    });
+  });
+
   test("monitoring panel deletes a sample from history", async () => {
     const user = userEvent.setup();
     const deleteProbe = vi.fn().mockResolvedValue({});

@@ -7,13 +7,18 @@ export type LinkModel =
   | "logical_overlay"
   | "inventory_only";
 export type LinkVisibility = "full" | "handoff_only" | "overlay_only" | "none";
-export type MonitoringProbeType = "icmp" | "tcp" | "http" | "https";
+export type MonitoringProbeType = "icmp" | "tcp" | "http" | "https" | "udp";
 export type MonitoringSourceType =
   | "manual"
   | "backend_synthetic"
   | "edge_agent"
   | "provider_api"
   | "import";
+export type LinkProbeLossMethod =
+  | "icmp_sequence"
+  | "stamp"
+  | "twamp"
+  | "udp_sequence";
 export type LinkProbeSampleKind = "manual" | "automated" | "imported";
 export type MonitoringPurpose =
   | "vezor_control"
@@ -35,6 +40,9 @@ export type MonitoringTarget = {
   purpose: MonitoringPurpose;
   expected_latency_ms?: number | null;
   monitoring: MonitoringConfig;
+  loss_method?: LinkProbeLossMethod | null;
+  loss_packet_count?: number | null;
+  loss_dscp?: number | null;
   throughput_test_url?: string | null;
   throughput_test_max_bytes?: number | null;
 };
@@ -65,13 +73,19 @@ export const linkVisibilities = [
   "overlay_only",
   "none",
 ] as const;
-export const monitoringProbeTypes = ["icmp", "tcp", "http", "https"] as const;
+export const monitoringProbeTypes = ["icmp", "tcp", "http", "https", "udp"] as const;
 export const monitoringSourceTypes = [
   "manual",
   "backend_synthetic",
   "edge_agent",
   "provider_api",
   "import",
+] as const;
+export const linkProbeLossMethods = [
+  "icmp_sequence",
+  "stamp",
+  "twamp",
+  "udp_sequence",
 ] as const;
 export const monitoringPurposes = [
   "vezor_control",
@@ -191,6 +205,31 @@ export function monitoringSourceTypeLabel(value: MonitoringSourceType) {
   return labels[value];
 }
 
+export function probeLossMethodLabel(value: unknown) {
+  const labels: Record<LinkProbeLossMethod, string> = {
+    icmp_sequence: "ICMP sequence",
+    stamp: "STAMP",
+    twamp: "TWAMP",
+    udp_sequence: "UDP sequence",
+  };
+  return labels[enumValue(value, linkProbeLossMethods, "icmp_sequence")];
+}
+
+export function probeMeasurementSummary(probe: unknown) {
+  const metadata = asRecord(asRecord(probe).measurement_metadata);
+  const packetCount = optionalNumericValue(metadata.packet_count);
+  const packetsReceived = optionalNumericValue(metadata.packets_received);
+  const jitterMs = optionalNumericValue(metadata.jitter_ms);
+  const parts = [probeLossMethodLabel(metadata.method)];
+  if (packetCount !== null && packetsReceived !== null) {
+    parts.push(`${packetsReceived}/${packetCount} received`);
+  }
+  if (jitterMs !== null) {
+    parts.push(`${jitterMs} ms variation`);
+  }
+  return parts.join(", ");
+}
+
 export function monitoringSourceLabel(
   value: MonitoringSourceType,
   intervalSeconds?: number | null,
@@ -270,6 +309,9 @@ function monitoringTargets(value: unknown): MonitoringTarget[] {
       expected_latency_ms: optionalNumericValue(item.expected_latency_ms),
       id: textValue(item.id, `target-${index + 1}`),
       label,
+      loss_dscp: optionalNumericValue(item.loss_dscp),
+      loss_method: enumValue(item.loss_method, linkProbeLossMethods, "icmp_sequence"),
+      loss_packet_count: optionalNumericValue(item.loss_packet_count),
       monitoring: monitoringConfig(item.monitoring),
       port: optionalNumericValue(item.port),
       probe_type: enumValue(item.probe_type, monitoringProbeTypes, "icmp"),
