@@ -1,13 +1,26 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { LinkBudgetPolicyPanel } from "@/components/link/LinkBudgetPolicyPanel";
+import { LinkConnectionsPanel } from "@/components/link/LinkConnectionsPanel";
+import { LinkPosturePanel } from "@/components/link/LinkPosturePanel";
+import { LinkProbePanel } from "@/components/link/LinkProbePanel";
+import { LinkQueuePanel } from "@/components/link/LinkQueuePanel";
 import { LinkSiteSelector } from "@/components/link/LinkSiteSelector";
+import { asRecord } from "@/components/link/types";
 import {
   WorkspaceBand,
   WorkspaceSurface,
 } from "@/components/layout/workspace-surfaces";
-import { Button } from "@/components/ui/button";
-import { useLinkSiteSummaries } from "@/hooks/use-link";
+import {
+  useLinkConnections,
+  useLinkPolicies,
+  useLinkProbes,
+  useLinkSiteBudget,
+  useLinkSiteQueue,
+  useLinkSiteStatus,
+  useLinkSiteSummaries,
+} from "@/hooks/use-link";
 
 export function Links() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -21,6 +34,14 @@ export function Links() {
       null,
     [selectedSiteId, summaryItems],
   );
+  const status = useLinkSiteStatus(selectedSiteId);
+  const connections = useLinkConnections(selectedSiteId);
+  const budget = useLinkSiteBudget(selectedSiteId);
+  const policies = useLinkPolicies(selectedSiteId);
+  const probes = useLinkProbes(selectedSiteId);
+  const queue = useLinkSiteQueue(selectedSiteId);
+  const connectionItems = connections.data ?? [];
+  const statusBudget = asRecord(status.data).budget ?? null;
 
   function selectSite(siteId: string) {
     setSearchParams({ site: siteId });
@@ -48,21 +69,33 @@ export function Links() {
         onSelectSite={selectSite}
       />
       {selectedSummary ? (
-        <WorkspaceSurface className="p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--vz-text-muted)]">
-                Selected site
-              </p>
-              <p className="mt-2 font-[family-name:var(--vz-font-display)] text-lg font-semibold text-[var(--vz-text-primary)]">
-                {selectedSummary.site_name}
-              </p>
-            </div>
-            <Button variant="ghost" onClick={clearSite}>
-              Clear selection
-            </Button>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <div className="grid gap-4">
+            <LinkPosturePanel
+              status={status.data}
+              isLoading={status.isLoading}
+              error={status.error}
+              onClearSelection={clearSite}
+            />
+            <LinkConnectionsPanel
+              siteId={selectedSiteId}
+              connections={connectionItems}
+            />
+            <LinkBudgetPolicyPanel
+              siteId={selectedSiteId}
+              budget={budget.data ?? statusBudget}
+              policies={policies.data ?? {}}
+            />
           </div>
-        </WorkspaceSurface>
+          <div className="grid gap-4">
+            <LinkProbePanel
+              siteId={selectedSiteId}
+              connections={connectionItems}
+              probes={probes.data ?? []}
+            />
+            <LinkQueuePanel siteId={selectedSiteId} queue={queue.data ?? []} />
+          </div>
+        </div>
       ) : (
         <WorkspaceSurface className="p-5 text-sm text-[var(--vz-text-secondary)]">
           Choose a site to inspect link performance.
