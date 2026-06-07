@@ -75,7 +75,10 @@ export function FleetOpsVessels() {
   const vessels = useMaritimeVessels();
   const sites = useSites();
   const createVessel = useCreateMaritimeVessel();
-  const vesselRows = (vessels.data ?? []) as FleetOpsVessel[];
+  const vesselRows = useMemo(
+    () => (vessels.data ?? []) as FleetOpsVessel[],
+    [vessels.data],
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   const searchTerm = searchParams.get("q") ?? "";
   const deferredSearchTerm = useDeferredValue(searchTerm);
