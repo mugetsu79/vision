@@ -727,7 +727,11 @@ describe("Links", () => {
     expect(
       await screen.findAllByText(/throughput not measured/i),
     ).toHaveLength(2);
+    expect(
+      screen.getAllByText(/packet loss not measured/i),
+    ).toHaveLength(2);
     expect(screen.queryByText(/0 Mbps/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0% loss/i)).not.toBeInTheDocument();
   });
 
   test("monitoring panel runs a backend synthetic target now", async () => {

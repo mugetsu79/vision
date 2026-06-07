@@ -244,6 +244,14 @@ export function probeThroughputLabel(probe: unknown) {
   return `${numberValue(item.throughput_mbps)} Mbps`;
 }
 
+export function probePacketLossLabel(probe: unknown) {
+  const item = asRecord(probe);
+  if (!probePacketLossMeasured(item)) {
+    return "packet loss not measured";
+  }
+  return `${numberValue(item.packet_loss_percent)}% loss`;
+}
+
 function monitoringTargets(value: unknown): MonitoringTarget[] {
   if (!Array.isArray(value)) {
     return [];
@@ -277,6 +285,13 @@ function monitoringTargets(value: unknown): MonitoringTarget[] {
 
 function probeThroughputMeasured(item: Record<string, unknown>) {
   if (numberValue(item.throughput_mbps) > 0) {
+    return true;
+  }
+  return enumValue(item.source_type, monitoringSourceTypes, "manual") !== "backend_synthetic";
+}
+
+function probePacketLossMeasured(item: Record<string, unknown>) {
+  if (numberValue(item.packet_loss_percent) > 0) {
     return true;
   }
   return enumValue(item.source_type, monitoringSourceTypes, "manual") !== "backend_synthetic";

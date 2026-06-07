@@ -19,6 +19,7 @@ import {
   linkPathMetadata,
   monitoringSourceLabel,
   numberValue,
+  probePacketLossLabel,
   probeSampleSourceLabel,
   probeSampleTargetLabel,
   probeThroughputLabel,
@@ -162,7 +163,7 @@ export function LinkProbePanel({
                   <p className="mt-1">
                     {numberValue(item.latency_ms)} ms /{" "}
                     {probeThroughputLabel(probe)} /{" "}
-                    {numberValue(item.packet_loss_percent)}% loss /{" "}
+                    {probePacketLossLabel(probe)} /{" "}
                     {item.reachable === false ? "unreachable" : "reachable"}
                   </p>
                   <p className="mt-1 text-xs text-[var(--vz-text-muted)]">

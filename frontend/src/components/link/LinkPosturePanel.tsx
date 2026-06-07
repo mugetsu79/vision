@@ -10,6 +10,7 @@ import {
   asRecord,
   linkPriorityLanes,
   numberValue,
+  probePacketLossLabel,
   probeThroughputLabel,
   textValue,
 } from "@/components/link/types";
@@ -91,7 +92,7 @@ export function LinkPosturePanel({
           <Metric label="Latest probe">
             {numberValue(latestProbe.latency_ms)} ms /{" "}
             {probeThroughputLabel(latestProbe)} /{" "}
-            {numberValue(latestProbe.packet_loss_percent)}% loss
+            {probePacketLossLabel(latestProbe)}
           </Metric>
           <Metric label="Passport hash">{shortHash}</Metric>
           <Metric label="Reachable">
