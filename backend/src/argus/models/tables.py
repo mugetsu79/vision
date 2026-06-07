@@ -112,6 +112,12 @@ class APIKey(UUIDPrimaryKeyMixin, Base):
 
 class Site(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "sites"
+    __table_args__ = (
+        CheckConstraint(
+            "site_kind IN ('edge', 'control_plane')",
+            name="site_kind",
+        ),
+    )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

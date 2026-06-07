@@ -60,6 +60,24 @@ def _tenant_context(tenant_id) -> TenantContext:  # noqa: ANN001
 
 
 @pytest.mark.asyncio
+async def test_site_response_exposes_site_kind() -> None:
+    site = Site(
+        id=uuid4(),
+        tenant_id=uuid4(),
+        name="Vezor Master",
+        description=None,
+        tz="UTC",
+        geo_point=None,
+        site_kind="control_plane",
+        created_at=datetime(2026, 6, 7, tzinfo=UTC),
+    )
+
+    response = app_services._site_to_response(site)
+
+    assert response.site_kind == "control_plane"
+
+
+@pytest.mark.asyncio
 async def test_delete_site_returns_conflict_when_site_is_still_referenced(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

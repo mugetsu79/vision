@@ -46,6 +46,7 @@ from argus.models.tables import (
     MasterBootstrapSession,
     NodePairingSession,
     OperationsLifecycleRequest,
+    Site,
     SupervisorNodeCredential,
     SupervisorServiceStatusReport,
     Tenant,
@@ -61,6 +62,8 @@ from argus.services.supervisor_operations import (
 )
 
 SERVICE_REPORT_STALE_AFTER = timedelta(minutes=5)
+CONTROL_PLANE_SITE_NAME = "Vezor Master"
+CONTROL_PLANE_SITE_KIND = "control_plane"
 ModelT = TypeVar("ModelT")
 _SECRET_KEY_PARTS = (
     "api_key",
@@ -300,6 +303,8 @@ class DeploymentNodeService:
                 _ensure_identity_and_timestamps(node, now=now)
                 session.add(node)
                 await _flush_if_available(session)
+
+            await _ensure_control_plane_site(session, tenant_id=tenant.id, now=now)
 
             session_row.tenant_id = tenant.id
             session_row.status = "consumed"
@@ -1394,6 +1399,35 @@ def _ensure_identity_and_timestamps(
         row_any.created_at = now
     if hasattr(row_any, "updated_at") and getattr(row_any, "updated_at", None) is None:
         row_any.updated_at = now
+
+
+async def _ensure_control_plane_site(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    now: datetime,
+) -> Site:
+    statement = (
+        select(Site)
+        .where(Site.tenant_id == tenant_id, Site.site_kind == CONTROL_PLANE_SITE_KIND)
+        .order_by(Site.created_at.asc())
+        .limit(1)
+    )
+    existing = (await session.execute(statement)).scalar_one_or_none()
+    if isinstance(existing, Site):
+        return existing
+    site = Site(
+        tenant_id=tenant_id,
+        name=CONTROL_PLANE_SITE_NAME,
+        description="Vezor control-plane probe target",
+        tz="UTC",
+        geo_point=None,
+        site_kind=CONTROL_PLANE_SITE_KIND,
+    )
+    _ensure_identity_and_timestamps(site, now=now)
+    session.add(site)
+    await _flush_if_available(session)
+    return site
 
 
 def _credential_event(

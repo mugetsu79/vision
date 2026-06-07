@@ -50,6 +50,8 @@ from argus.models.enums import (
     WorkerRuntimeState,
 )
 
+SiteKind = Literal["edge", "control_plane"]
+
 
 class SiteCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -72,6 +74,7 @@ class SiteResponse(BaseModel):
     description: str | None = None
     tz: str
     geo_point: dict[str, float] | None = None
+    site_kind: SiteKind = "edge"
     created_at: datetime
 
 

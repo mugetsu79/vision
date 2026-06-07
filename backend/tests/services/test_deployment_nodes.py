@@ -98,6 +98,7 @@ async def test_master_bootstrap_complete_creates_initial_tenant_admin_node() -> 
     tenants = [row for row in rows if isinstance(row, Tenant)]
     users = [row for row in rows if isinstance(row, User)]
     nodes = [row for row in rows if isinstance(row, DeploymentNode)]
+    sites = [row for row in rows if isinstance(row, Site)]
     sessions = [row for row in rows if isinstance(row, MasterBootstrapSession)]
     serialized_rows = str([row.__dict__ for row in rows])
 
@@ -110,6 +111,9 @@ async def test_master_bootstrap_complete_creates_initial_tenant_admin_node() -> 
     assert users[0].role is RoleEnum.ADMIN
     assert nodes[0].node_kind is DeploymentNodeKind.CENTRAL
     assert nodes[0].install_status is DeploymentInstallStatus.INSTALLED
+    assert sites[0].name == "Vezor Master"
+    assert sites[0].site_kind == "control_plane"
+    assert sites[0].tenant_id == tenants[0].id
     assert sessions[0].status == "consumed"
     assert sessions[0].tenant_id == tenants[0].id
     assert sessions[0].consumed_at == now

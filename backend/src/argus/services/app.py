@@ -258,6 +258,9 @@ TRANSCODE_ROUTE_NORMALIZED_MESSAGE = (
     "Transcode route mode was normalized. Use camera live rendition profiles "
     "for output size and FPS."
 )
+CONTROL_PLANE_SITE_NAME = "Vezor Master"
+CONTROL_PLANE_SITE_KIND = "control_plane"
+EDGE_SITE_KIND = "edge"
 
 if TYPE_CHECKING:
     from argus.services.query import QueryService
@@ -522,6 +525,33 @@ class SiteService:
             sites = (await session.execute(statement)).scalars().all()
         return [_site_to_response(site) for site in sites]
 
+    async def list_link_performance_sites(
+        self,
+        tenant_context: TenantContext,
+    ) -> list[SiteResponse]:
+        async with self.session_factory() as session:
+            await _ensure_control_plane_site(
+                session,
+                tenant_id=tenant_context.tenant_id,
+                now=datetime.now(tz=UTC),
+            )
+            statement = (
+                select(Site)
+                .outerjoin(EdgeNode, EdgeNode.site_id == Site.id)
+                .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(
+                    or_(
+                        Site.site_kind == CONTROL_PLANE_SITE_KIND,
+                        EdgeNode.id.is_not(None),
+                    )
+                )
+                .distinct()
+                .order_by(Site.site_kind.desc(), Site.name)
+            )
+            sites = (await session.execute(statement)).scalars().all()
+            await session.commit()
+        return [_site_to_response(site) for site in sites]
+
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         site = await _get_site(
             session_factory=self.session_factory,
@@ -549,6 +579,7 @@ class SiteService:
                 description=payload.description,
                 tz=payload.tz,
                 geo_point=payload.geo_point,
+                site_kind=EDGE_SITE_KIND,
             )
             session.add(site)
             await session.commit()
@@ -4860,8 +4891,40 @@ def _site_to_response(site: Site) -> SiteResponse:
         description=site.description,
         tz=site.tz,
         geo_point=geo_point,
+        site_kind=getattr(cast(Any, site), "site_kind", None) or EDGE_SITE_KIND,
         created_at=site.created_at,
     )
+
+
+async def _ensure_control_plane_site(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    now: datetime,
+) -> Site:
+    statement = (
+        select(Site)
+        .where(Site.tenant_id == tenant_id, Site.site_kind == CONTROL_PLANE_SITE_KIND)
+        .order_by(Site.created_at.asc())
+        .limit(1)
+    )
+    existing = (await session.execute(statement)).scalar_one_or_none()
+    if isinstance(existing, Site):
+        return existing
+    site = Site(
+        tenant_id=tenant_id,
+        name=CONTROL_PLANE_SITE_NAME,
+        description="Vezor control-plane probe target",
+        tz="UTC",
+        geo_point=None,
+        site_kind=CONTROL_PLANE_SITE_KIND,
+        created_at=now,
+    )
+    session.add(site)
+    flush = getattr(session, "flush", None)
+    if callable(flush):
+        await flush()
+    return site
 
 
 def _model_to_response(model: Model) -> ModelResponse:
