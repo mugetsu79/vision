@@ -5519,15 +5519,102 @@
             "title": "Packet Loss Percent",
             "type": "number"
           },
+          "probe_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "icmp",
+                  "tcp",
+                  "http",
+                  "https",
+                  "manual"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Type"
+          },
           "reachable": {
             "title": "Reachable",
             "type": "boolean"
+          },
+          "sample_kind": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "automated",
+              "imported"
+            ],
+            "title": "Sample Kind",
+            "type": "string"
           },
           "source": {
             "maxLength": 128,
             "minLength": 1,
             "title": "Source",
             "type": "string"
+          },
+          "source_label": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Label"
+          },
+          "source_type": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "backend_synthetic",
+              "edge_agent",
+              "provider_api",
+              "import"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "target_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Address"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "maxLength": 96,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Label"
           },
           "throughput_mbps": {
             "minimum": 0.0,
@@ -20099,6 +20186,76 @@
         ]
       }
     },
+    "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/run": {
+      "post": {
+        "operationId": "run_link_probe_target_api_v1_link_sites__site_id__probe_targets__target_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Link Probe Target Api V1 Link Sites  Site Id  Probe Targets  Target Id  Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Link Probe Target",
+        "tags": [
+          "link"
+        ]
+      }
+    },
     "/api/v1/link/sites/{site_id}/probes": {
       "get": {
         "operationId": "get_link_probes_api_v1_link_sites__site_id__probes_get",
@@ -20227,6 +20384,68 @@
           }
         },
         "summary": "Post Link Probe",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/sites/{site_id}/probes/{probe_id}": {
+      "delete": {
+        "operationId": "delete_link_probe_api_v1_link_sites__site_id__probes__probe_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "probe_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Probe Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Link Probe",
         "tags": [
           "link"
         ]

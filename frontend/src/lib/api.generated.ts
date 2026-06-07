@@ -1217,6 +1217,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Link Probe Target */
+        post: operations["run_link_probe_target_api_v1_link_sites__site_id__probe_targets__target_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/link/sites/{site_id}/probes": {
         parameters: {
             query?: never;
@@ -1230,6 +1247,23 @@ export interface paths {
         /** Post Link Probe */
         post: operations["post_link_probe_api_v1_link_sites__site_id__probes_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/sites/{site_id}/probes/{probe_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Link Probe */
+        delete: operations["delete_link_probe_api_v1_link_sites__site_id__probes__probe_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4369,10 +4403,32 @@ export interface components {
             latency_ms: number;
             /** Packet Loss Percent */
             packet_loss_percent: number;
+            /** Probe Type */
+            probe_type?: ("icmp" | "tcp" | "http" | "https" | "manual") | null;
             /** Reachable */
             reachable: boolean;
+            /**
+             * Sample Kind
+             * @default manual
+             * @enum {string}
+             */
+            sample_kind: "manual" | "automated" | "imported";
             /** Source */
             source: string;
+            /** Source Label */
+            source_label?: string | null;
+            /**
+             * Source Type
+             * @default manual
+             * @enum {string}
+             */
+            source_type: "manual" | "backend_synthetic" | "edge_agent" | "provider_api" | "import";
+            /** Target Address */
+            target_address?: string | null;
+            /** Target Id */
+            target_id?: string | null;
+            /** Target Label */
+            target_label?: string | null;
             /** Throughput Mbps */
             throughput_mbps: number;
         };
@@ -10505,6 +10561,42 @@ export interface operations {
             };
         };
     };
+    run_link_probe_target_api_v1_link_sites__site_id__probe_targets__target_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_link_probes_api_v1_link_sites__site_id__probes_get: {
         parameters: {
             query?: never;
@@ -10567,6 +10659,38 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_link_probe_api_v1_link_sites__site_id__probes__probe_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+                probe_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

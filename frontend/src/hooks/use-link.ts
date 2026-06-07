@@ -283,6 +283,53 @@ export function useCreateLinkProbe({ siteId, vesselId }: LinkMutationContext) {
   });
 }
 
+export function useDeleteLinkProbe({ siteId, vesselId }: LinkMutationContext) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (probeId: string) => {
+      if (!siteId) {
+        throw new Error("A site is required to delete a link probe sample.");
+      }
+      const { error } = await apiClient.DELETE(
+        "/api/v1/link/sites/{site_id}/probes/{probe_id}",
+        { params: { path: { site_id: siteId, probe_id: probeId } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to delete link probe sample.");
+      }
+      return probeId;
+    },
+    onSuccess: async () =>
+      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+  });
+}
+
+export function useRunLinkProbeTarget({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (targetId: string) => {
+      if (!siteId) {
+        throw new Error("A site is required to run a link probe target.");
+      }
+      const { data, error } = await apiClient.POST(
+        "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/run",
+        { params: { path: { site_id: siteId, target_id: targetId } } },
+      );
+      if (error) {
+        throw toApiError(error, "Failed to run link probe target.");
+      }
+      return data ?? null;
+    },
+    onSuccess: async () =>
+      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+  });
+}
+
 export function useLinkSiteQueue(siteId?: string | null) {
   return useQuery({
     queryKey: ["link", "sites", siteId ?? "none", "queue"],

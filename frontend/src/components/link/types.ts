@@ -8,19 +8,33 @@ export type LinkModel =
   | "inventory_only";
 export type LinkVisibility = "full" | "handoff_only" | "overlay_only" | "none";
 export type MonitoringProbeType = "icmp" | "tcp" | "http" | "https";
+export type MonitoringSourceType =
+  | "manual"
+  | "backend_synthetic"
+  | "edge_agent"
+  | "provider_api"
+  | "import";
+export type LinkProbeSampleKind = "manual" | "automated" | "imported";
 export type MonitoringPurpose =
   | "vezor_control"
   | "gateway"
   | "provider_edge"
   | "partner_endpoint"
   | "custom";
+export type MonitoringConfig = {
+  enabled: boolean;
+  source_type: MonitoringSourceType;
+  interval_seconds?: number | null;
+};
 export type MonitoringTarget = {
+  id: string;
   label: string;
   address: string;
   probe_type: MonitoringProbeType;
   port?: number | null;
   purpose: MonitoringPurpose;
   expected_latency_ms?: number | null;
+  monitoring: MonitoringConfig;
 };
 export type LinkPathMetadata = {
   link_model: LinkModel;
@@ -50,6 +64,13 @@ export const linkVisibilities = [
   "none",
 ] as const;
 export const monitoringProbeTypes = ["icmp", "tcp", "http", "https"] as const;
+export const monitoringSourceTypes = [
+  "manual",
+  "backend_synthetic",
+  "edge_agent",
+  "provider_api",
+  "import",
+] as const;
 export const monitoringPurposes = [
   "vezor_control",
   "gateway",
@@ -157,13 +178,69 @@ export function laneLabel(value: LinkPriorityLane) {
   return labels[value];
 }
 
+export function monitoringSourceTypeLabel(value: MonitoringSourceType) {
+  const labels: Record<MonitoringSourceType, string> = {
+    backend_synthetic: "Backend synthetic",
+    edge_agent: "Edge agent",
+    import: "Imported samples",
+    manual: "Manual samples",
+    provider_api: "Provider/API",
+  };
+  return labels[value];
+}
+
+export function monitoringSourceLabel(
+  value: MonitoringSourceType,
+  intervalSeconds?: number | null,
+) {
+  if (value === "backend_synthetic" && intervalSeconds) {
+    return `Backend synthetic every ${formatInterval(intervalSeconds)}`;
+  }
+  const labels: Record<MonitoringSourceType, string> = {
+    backend_synthetic: "Backend synthetic",
+    edge_agent: "Awaiting edge agent",
+    import: "External import",
+    manual: "Manual samples only",
+    provider_api: "Provider/API import",
+  };
+  return labels[value];
+}
+
+export function probeSampleSourceLabel(probe: unknown) {
+  const item = asRecord(probe);
+  const sourceType = enumValue(
+    item.source_type,
+    monitoringSourceTypes,
+    "manual",
+  );
+  const sourceLabel = textValue(item.source_label, "");
+  const source = textValue(item.source, "");
+  if (sourceLabel) {
+    return `${monitoringSourceTypeLabel(sourceType)} from ${sourceLabel}`;
+  }
+  if (source) {
+    return `${monitoringSourceTypeLabel(sourceType)} from ${source}`;
+  }
+  return monitoringSourceTypeLabel(sourceType);
+}
+
+export function probeSampleTargetLabel(probe: unknown) {
+  const item = asRecord(probe);
+  const targetLabel = textValue(item.target_label, "");
+  const targetAddress = textValue(item.target_address, "");
+  if (targetLabel && targetAddress) {
+    return `${targetLabel} (${targetAddress})`;
+  }
+  return targetLabel || targetAddress || "No target";
+}
+
 function monitoringTargets(value: unknown): MonitoringTarget[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   const targets: MonitoringTarget[] = [];
-  for (const target of value) {
+  for (const [index, target] of value.entries()) {
     const item = asRecord(target);
     const address = textValue(item.address, "");
     const label = textValue(item.label, "");
@@ -173,13 +250,39 @@ function monitoringTargets(value: unknown): MonitoringTarget[] {
     targets.push({
       address,
       expected_latency_ms: optionalNumericValue(item.expected_latency_ms),
+      id: textValue(item.id, `target-${index + 1}`),
       label,
+      monitoring: monitoringConfig(item.monitoring),
       port: optionalNumericValue(item.port),
       probe_type: enumValue(item.probe_type, monitoringProbeTypes, "icmp"),
       purpose: enumValue(item.purpose, monitoringPurposes, "custom"),
     });
   }
   return targets;
+}
+
+function monitoringConfig(value: unknown): MonitoringConfig {
+  const config = asRecord(value);
+  const sourceType = enumValue(
+    config.source_type,
+    monitoringSourceTypes,
+    "manual",
+  );
+  return {
+    enabled: booleanValue(config.enabled, sourceType !== "manual"),
+    interval_seconds: optionalNumericValue(config.interval_seconds),
+    source_type: sourceType,
+  };
+}
+
+function formatInterval(seconds: number) {
+  if (seconds >= 3600 && seconds % 3600 === 0) {
+    return `${seconds / 3600} hr`;
+  }
+  if (seconds >= 60 && seconds % 60 === 0) {
+    return `${seconds / 60} min`;
+  }
+  return `${seconds} sec`;
 }
 
 function priorityOrder(value: unknown): LinkPriorityLane[] {

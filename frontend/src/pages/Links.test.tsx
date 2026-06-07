@@ -20,6 +20,8 @@ const linkPageMocks = vi.hoisted(() => ({
   updateBudget: vi.fn(),
   updatePolicies: vi.fn(),
   createProbe: vi.fn(),
+  deleteProbe: vi.fn(),
+  runProbeTarget: vi.fn(),
   retryQueueItem: vi.fn(),
   pauseQueueItem: vi.fn(),
   resumeQueueItem: vi.fn(),
@@ -85,6 +87,14 @@ vi.mock("@/hooks/use-link", () => ({
     mutateAsync: linkPageMocks.createProbe,
     isPending: false,
   }),
+  useDeleteLinkProbe: () => ({
+    mutateAsync: linkPageMocks.deleteProbe,
+    isPending: false,
+  }),
+  useRunLinkProbeTarget: () => ({
+    mutateAsync: linkPageMocks.runProbeTarget,
+    isPending: false,
+  }),
   useRetryLinkQueueItem: () => ({
     mutateAsync: linkPageMocks.retryQueueItem,
     isPending: false,
@@ -132,6 +142,8 @@ function mockLinkHooks({
   updateBudget = vi.fn().mockResolvedValue({}),
   updatePolicies = vi.fn().mockResolvedValue({}),
   createProbe = vi.fn().mockResolvedValue({}),
+  deleteProbe = vi.fn().mockResolvedValue({}),
+  runProbeTarget = vi.fn().mockResolvedValue({}),
   retryQueueItem = vi.fn().mockResolvedValue({}),
   pauseQueueItem = vi.fn().mockResolvedValue({}),
   resumeQueueItem = vi.fn().mockResolvedValue({}),
@@ -149,6 +161,8 @@ function mockLinkHooks({
   updateBudget?: ReturnType<typeof vi.fn>;
   updatePolicies?: ReturnType<typeof vi.fn>;
   createProbe?: ReturnType<typeof vi.fn>;
+  deleteProbe?: ReturnType<typeof vi.fn>;
+  runProbeTarget?: ReturnType<typeof vi.fn>;
   retryQueueItem?: ReturnType<typeof vi.fn>;
   pauseQueueItem?: ReturnType<typeof vi.fn>;
   resumeQueueItem?: ReturnType<typeof vi.fn>;
@@ -166,6 +180,8 @@ function mockLinkHooks({
   linkPageMocks.updateBudget = updateBudget;
   linkPageMocks.updatePolicies = updatePolicies;
   linkPageMocks.createProbe = createProbe;
+  linkPageMocks.deleteProbe = deleteProbe;
+  linkPageMocks.runProbeTarget = runProbeTarget;
   linkPageMocks.retryQueueItem = retryQueueItem;
   linkPageMocks.pauseQueueItem = pauseQueueItem;
   linkPageMocks.resumeQueueItem = resumeQueueItem;
@@ -204,6 +220,8 @@ describe("Links", () => {
     linkPageMocks.updateBudget = vi.fn().mockResolvedValue({});
     linkPageMocks.updatePolicies = vi.fn().mockResolvedValue({});
     linkPageMocks.createProbe = vi.fn().mockResolvedValue({});
+    linkPageMocks.deleteProbe = vi.fn().mockResolvedValue({});
+    linkPageMocks.runProbeTarget = vi.fn().mockResolvedValue({});
     linkPageMocks.retryQueueItem = vi.fn().mockResolvedValue({});
     linkPageMocks.pauseQueueItem = vi.fn().mockResolvedValue({});
     linkPageMocks.resumeQueueItem = vi.fn().mockResolvedValue({});
@@ -340,7 +358,7 @@ describe("Links", () => {
     expect(
       await screen.findByRole("heading", { name: /Current posture/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Primary fiber/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Primary fiber/i).length).toBeGreaterThan(0);
     expect(
       screen.getByRole("heading", { name: /Link paths/i }),
     ).toBeInTheDocument();
@@ -351,7 +369,7 @@ describe("Links", () => {
       screen.getByRole("heading", { name: /Budget and policy/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /Probe history/i }),
+      screen.getByRole("heading", { name: /Monitoring/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /Transfer queue/i }),
@@ -585,7 +603,125 @@ describe("Links", () => {
     ]);
   });
 
-  test("record probe dialog sends probe metrics for the selected site", async () => {
+  test("monitoring panel renders target cards instead of a flat record probe action", async () => {
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      connections: [
+        {
+          id: "connection-1",
+          label: "ISP",
+          transport_kind: "ethernet",
+          status: "online",
+          metadata: {
+            monitoring_targets: [
+              {
+                id: "target-1",
+                label: "Vezor ingest",
+                address: "ingest.example.vezor",
+                probe_type: "https",
+                port: 443,
+                purpose: "vezor_control",
+                monitoring: {
+                  enabled: true,
+                  source_type: "backend_synthetic",
+                  interval_seconds: 300,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    expect(
+      await screen.findByRole("heading", { name: /Monitoring/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Vezor ingest/i)).toBeInTheDocument();
+    expect(screen.getByText(/ingest.example.vezor/i)).toBeInTheDocument();
+    expect(screen.getByText(/Backend synthetic every 5 min/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /record probe/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("monitoring panel runs a backend synthetic target now", async () => {
+    const user = userEvent.setup();
+    const runProbeTarget = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      connections: [
+        {
+          id: "connection-1",
+          label: "ISP",
+          transport_kind: "ethernet",
+          status: "online",
+          metadata: {
+            monitoring_targets: [
+              {
+                id: "target-1",
+                label: "Vezor ingest",
+                address: "ingest.example.vezor",
+                probe_type: "https",
+                port: 443,
+                purpose: "vezor_control",
+                monitoring: {
+                  enabled: true,
+                  source_type: "backend_synthetic",
+                  interval_seconds: 300,
+                },
+              },
+            ],
+          },
+        },
+      ],
+      runProbeTarget,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /run check now vezor ingest/i,
+      }),
+    );
+
+    expect(runProbeTarget).toHaveBeenCalledWith("target-1");
+  });
+
+  test("monitoring panel deletes a sample from history", async () => {
+    const user = userEvent.setup();
+    const deleteProbe = vi.fn().mockResolvedValue({});
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
+      probes: [
+        {
+          id: "probe-1",
+          latency_ms: 42,
+          throughput_mbps: 180,
+          packet_loss_percent: 0.1,
+          reachable: true,
+          source: "manual:operator-console",
+          source_type: "manual",
+          source_label: "operator-console",
+          sample_kind: "manual",
+          recorded_at: "2026-06-07T10:00:00Z",
+        },
+      ],
+      deleteProbe,
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    await user.click(
+      await screen.findByRole("button", { name: /delete sample/i }),
+    );
+
+    expect(deleteProbe).toHaveBeenCalledWith("probe-1");
+  });
+
+  test("manual sample dialog sends structured probe metrics for the selected target", async () => {
     const user = userEvent.setup();
     const createProbe = vi.fn().mockResolvedValue({});
     mockLinkHooks({
@@ -596,6 +732,18 @@ describe("Links", () => {
           label: "Primary fiber",
           transport_kind: "fiber",
           status: "online",
+          metadata: {
+            monitoring_targets: [
+              {
+                id: "target-1",
+                label: "Vezor ingest",
+                address: "ingest.example.vezor",
+                probe_type: "https",
+                port: 443,
+                purpose: "vezor_control",
+              },
+            ],
+          },
         },
       ],
       createProbe,
@@ -603,16 +751,21 @@ describe("Links", () => {
 
     renderWithProviders(<Links />, { route: "/links?site=site-1" });
 
-    await user.click(await screen.findByRole("button", { name: /record probe/i }));
-    await user.selectOptions(screen.getByLabelText(/probe connection/i), "connection-1");
+    await user.click(
+      await screen.findByRole("button", { name: /add manual sample/i }),
+    );
+    await user.selectOptions(screen.getByLabelText(/sample target/i), "target-1");
     await user.clear(screen.getByLabelText(/latency ms/i));
     await user.type(screen.getByLabelText(/latency ms/i), "42");
     await user.clear(screen.getByLabelText(/throughput mbps/i));
     await user.type(screen.getByLabelText(/throughput mbps/i), "180");
     await user.clear(screen.getByLabelText(/packet loss percent/i));
     await user.type(screen.getByLabelText(/packet loss percent/i), "0.1");
-    await user.type(screen.getByLabelText(/probe source/i), "packless-lab");
-    await user.click(screen.getByRole("button", { name: /save probe/i }));
+    await user.type(
+      screen.getByLabelText(/sample source label/i),
+      "operator-console",
+    );
+    await user.click(screen.getByRole("button", { name: /save sample/i }));
 
     expect(createProbe).toHaveBeenCalledWith({
       connection_id: "connection-1",
@@ -620,7 +773,14 @@ describe("Links", () => {
       throughput_mbps: 180,
       packet_loss_percent: 0.1,
       reachable: true,
-      source: "packless-lab",
+      source: "manual:operator-console",
+      source_type: "manual",
+      source_label: "operator-console",
+      sample_kind: "manual",
+      target_id: "target-1",
+      target_label: "Vezor ingest",
+      target_address: "ingest.example.vezor",
+      probe_type: "https",
     });
   });
 
