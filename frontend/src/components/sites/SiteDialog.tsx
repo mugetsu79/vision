@@ -2,12 +2,19 @@ import { useEffect, useState } from "react";
 
 import { productBrand } from "@/brand/product";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogCloseButton, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import type { Site } from "@/hooks/use-sites";
 
 interface SiteDialogProps {
+  mode?: "create" | "edit";
   open: boolean;
   onClose: () => void;
+  site?: Site | null;
   onSubmit: (payload: {
     name: string;
     description: string | null;
@@ -16,7 +23,13 @@ interface SiteDialogProps {
   }) => Promise<void>;
 }
 
-export function SiteDialog({ open, onClose, onSubmit }: SiteDialogProps) {
+export function SiteDialog({
+  mode = "create",
+  open,
+  onClose,
+  onSubmit,
+  site = null,
+}: SiteDialogProps) {
   const brandName = productBrand.name;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -31,8 +44,21 @@ export function SiteDialog({ open, onClose, onSubmit }: SiteDialogProps) {
       setTz("UTC");
       setIsSubmitting(false);
       setSubmitError(null);
+      return;
     }
-  }, [open]);
+
+    if (mode === "edit" && site) {
+      setName(site.name);
+      setDescription(site.description ?? "");
+      setTz(site.tz);
+    } else {
+      setName("");
+      setDescription("");
+      setTz("UTC");
+    }
+    setIsSubmitting(false);
+    setSubmitError(null);
+  }, [mode, open, site]);
 
   async function handleSubmit() {
     setIsSubmitting(true);
@@ -55,8 +81,12 @@ export function SiteDialog({ open, onClose, onSubmit }: SiteDialogProps) {
   return (
     <Dialog
       open={open}
-      title="Create site"
-      description={`Add a deployment location to the ${brandName} fleet and attach its operating time zone.`}
+      title={mode === "edit" ? "Edit site" : "Create site"}
+      description={
+        mode === "edit"
+          ? `Update this deployment location without changing its linked scenes.`
+          : `Add a deployment location to the ${brandName} fleet and attach its operating time zone.`
+      }
     >
       <div className="grid gap-4">
         <label className="grid gap-2 text-sm text-[#d8e2f2]">

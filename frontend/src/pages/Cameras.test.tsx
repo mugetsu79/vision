@@ -172,7 +172,10 @@ describe("CamerasPage", () => {
         );
       }
 
-      if (url.pathname === "/api/v1/cameras/camera-1" && request.method === "DELETE") {
+      if (
+        url.pathname === "/api/v1/cameras/camera-1" &&
+        request.method === "DELETE"
+      ) {
         return new Response(
           JSON.stringify({
             detail: "Scene still has dependent runtime records.",
@@ -219,12 +222,15 @@ describe("CamerasPage", () => {
     });
 
     renderPage();
+    await user.type(screen.getByLabelText(/search scene inventory/i), "dock");
 
     await user.click(
       await screen.findByRole("button", { name: /delete dock camera/i }),
     );
 
-    expect(confirm).toHaveBeenCalledWith("Delete Dock Camera? This cannot be undone.");
+    expect(confirm).toHaveBeenCalledWith(
+      "Delete Dock Camera? This cannot be undone.",
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Scene still has dependent runtime records.",
     );
@@ -319,6 +325,7 @@ describe("CamerasPage", () => {
 
     const inventory = await screen.findByTestId("scene-inventory-table");
     expect(inventory).toHaveClass("overflow-x-auto");
+    await user.type(screen.getByLabelText(/search scene inventory/i), "dock");
     await user.click(
       await screen.findByRole("button", { name: "Edit Dock Camera" }),
     );
@@ -329,7 +336,7 @@ describe("CamerasPage", () => {
     expect(screen.getByLabelText(/camera name/i)).toHaveValue("Dock Camera");
   });
 
-  test("uses search and selection instead of showing every scene inventory row", async () => {
+  test("does not show scene inventory rows until an operator searches or selects", async () => {
     const user = userEvent.setup();
 
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
@@ -457,16 +464,29 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    await screen.findByText("1 of 2 scenes shown");
+    await screen.findByText("No scenes selected");
     const inventory = await screen.findByTestId("scene-inventory-table");
-    expect(within(inventory).getByText("Dock Camera")).toBeInTheDocument();
-    expect(within(inventory).queryByText("Gate Camera")).not.toBeInTheDocument();
-    expect(screen.getByText("1 of 2 scenes shown")).toBeInTheDocument();
+    expect(
+      within(inventory).getByText(
+        /select or search scenes to inspect inventory/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(inventory).queryByText("Dock Camera"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(inventory).queryByText("Gate Camera"),
+    ).not.toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/search scene inventory/i), "gate house");
+    await user.type(
+      screen.getByLabelText(/search scene inventory/i),
+      "gate house",
+    );
 
     expect(within(inventory).getByText("Gate Camera")).toBeInTheDocument();
-    expect(within(inventory).queryByText("Dock Camera")).not.toBeInTheDocument();
+    expect(
+      within(inventory).queryByText("Dock Camera"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("1 matching")).toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: "Gate Camera" }));
@@ -706,7 +726,10 @@ describe("CamerasPage", () => {
     );
     await user.click(screen.getByRole("button", { name: /next/i }));
 
-    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
+    await user.selectOptions(
+      screen.getByLabelText(/primary model/i),
+      "model-1",
+    );
 
     expect(
       await screen.findByText(/TensorRT artifact: valid/i),
@@ -1102,6 +1125,8 @@ describe("CamerasPage", () => {
   });
 
   test("shows source capability next to the browser delivery profile", async () => {
+    const user = userEvent.setup();
+
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       await Promise.resolve();
       const request = input as Request;
@@ -1220,7 +1245,9 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    await screen.findByText("1 of 1 scenes shown");
+    await screen.findByText("No scenes selected");
+    await user.type(screen.getByLabelText(/search scene inventory/i), "dock");
+    await screen.findByText("1 matching");
     const inventory = screen.getByTestId("scene-inventory-table");
     expect(within(inventory).getByText("Dock Camera")).toBeInTheDocument();
     expect(
@@ -1377,7 +1404,9 @@ describe("CamerasPage", () => {
 
     renderPage();
 
-    await screen.findByText("1 of 2 scenes shown");
+    await screen.findByText("No scenes selected");
+    await user.type(screen.getByLabelText(/search scene inventory/i), "dock");
+    await screen.findByText("1 matching");
     const inventory = screen.getByTestId("scene-inventory-table");
     const dockRow = within(inventory).getByText("Dock Camera").closest("tr");
 
@@ -1395,6 +1424,7 @@ describe("CamerasPage", () => {
       within(dockRow as HTMLElement).getByText("Speed off"),
     ).toBeInTheDocument();
 
+    await user.clear(screen.getByLabelText(/search scene inventory/i));
     await user.type(screen.getByLabelText(/search scene inventory/i), "gate");
     const gateRow = within(inventory).getByText("Gate Camera").closest("tr");
     expect(gateRow).not.toBeNull();
@@ -1564,9 +1594,12 @@ describe("CamerasPage", () => {
     });
 
     renderPage();
+    await user.type(screen.getByLabelText(/search scene inventory/i), "dock");
 
     await user.click(
-      await screen.findByRole("button", { name: /open rules for dock camera/i }),
+      await screen.findByRole("button", {
+        name: /open rules for dock camera/i,
+      }),
     );
 
     expect(

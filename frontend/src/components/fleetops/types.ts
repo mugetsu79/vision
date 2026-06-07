@@ -63,7 +63,9 @@ export function asRecord(value: unknown): JsonRecord {
 }
 
 export function textValue(value: unknown, fallback = "Unknown"): string {
-  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : fallback;
 }
 
 export function scalarText(value: unknown, fallback = "0"): string {
@@ -78,13 +80,4 @@ export function scalarText(value: unknown, fallback = "0"): string {
 
 export function humanizeKey(value: string): string {
   return value.replaceAll("_", " ");
-}
-
-export function firstFleetOpsSiteId(vessels: FleetOpsVessel[]): string | null {
-  return (
-    vessels.find(
-      (vessel) =>
-        typeof vessel.site_id === "string" && vessel.site_id.trim().length > 0,
-    )?.site_id ?? null
-  );
 }

@@ -5,6 +5,8 @@ import { HistoryBucketDetail } from "@/components/history/HistoryBucketDetail";
 import { HistoryToolbar } from "@/components/history/HistoryToolbar";
 import { HistoryTrendPanel } from "@/components/history/HistoryTrendPanel";
 import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
+import { SceneFocusPicker } from "@/components/scenes/SceneFocusPicker";
+import type { SceneFocusItem } from "@/components/scenes/scene-focus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -34,11 +36,13 @@ import {
   useHistoryClasses,
   useHistorySeries,
 } from "@/hooks/use-history";
+import { useSites } from "@/hooks/use-sites";
 
 export function HistoryPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: cameras = [] } = useCameras();
+  const { data: sites = [] } = useSites();
   const selfWrittenSearchRef = useRef<string | null>(null);
 
   const [state, setState] = useState<HistoryFilterState>(() =>
@@ -51,6 +55,7 @@ export function HistoryPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [sceneSearch, setSceneSearch] = useState("");
   const [, setFollowNowRefreshKey] = useState(0);
 
   const applyState = useCallback(
@@ -136,14 +141,42 @@ export function HistoryPage() {
 
   const metric = filters.metric;
   const metricCopy = useMemo(() => historyMetricCopy(metric), [metric]);
+  const hasHistoryScope = state.cameraIds.length > 0;
+  const selectedHistorySceneIds = useMemo(
+    () => new Set(state.cameraIds),
+    [state.cameraIds],
+  );
+  const siteNameById = useMemo(
+    () => new Map(sites.map((site) => [site.id, site.name])),
+    [sites],
+  );
+  const historySceneItems = useMemo<SceneFocusItem[]>(
+    () =>
+      cameras.map((camera) => ({
+        id: camera.id,
+        name: camera.name,
+        siteId: camera.site_id,
+        siteName: siteNameById.get(camera.site_id) ?? "Unknown site",
+      })),
+    [cameras, siteNameById],
+  );
 
-  const { data, isLoading, error } = useHistorySeries(filters);
-  const { data: classesData } = useHistoryClasses({
-    from: resolvedWindow.from,
-    to: resolvedWindow.to,
-    metric,
-    cameraIds: state.cameraIds,
+  const { data, isFetching, isLoading, error } = useHistorySeries(filters, {
+    enabled: hasHistoryScope,
+    placeholderData: (previousData) => previousData,
   });
+  const { data: classesData } = useHistoryClasses(
+    {
+      from: resolvedWindow.from,
+      to: resolvedWindow.to,
+      metric,
+      cameraIds: state.cameraIds,
+    },
+    {
+      enabled: hasHistoryScope,
+      placeholderData: (previousData) => previousData,
+    },
+  );
 
   const observedClasses = useMemo(
     () => classesData?.classes ?? [],
@@ -183,7 +216,8 @@ export function HistoryPage() {
     [data?.coverage_status],
   );
 
-  const chartEmpty = !isLoading && (data?.rows.length ?? 0) === 0;
+  const chartEmpty =
+    hasHistoryScope && !isLoading && (data?.rows.length ?? 0) === 0;
   const granularityBumped = data?.granularity_adjusted === true;
   const speedCapped = data?.speed_classes_capped === true;
   const speedRequestedButEmpty =
@@ -253,6 +287,21 @@ export function HistoryPage() {
     setSearch("");
   }
 
+  function toggleHistoryScene(sceneId: string) {
+    applyState((previous) => {
+      const nextCameraIds = new Set(previous.cameraIds);
+      if (nextCameraIds.has(sceneId)) {
+        nextCameraIds.delete(sceneId);
+      } else {
+        nextCameraIds.add(sceneId);
+      }
+      return {
+        ...previous,
+        cameraIds: Array.from(nextCameraIds),
+      };
+    });
+  }
+
   return (
     <div
       data-testid="patterns-workspace"
@@ -304,13 +353,13 @@ export function HistoryPage() {
                 Last 7d
               </Button>
               <Button
-                disabled={isDownloading !== null}
+                disabled={!hasHistoryScope || isDownloading !== null}
                 onClick={() => void handleDownload("csv")}
               >
                 {isDownloading === "csv" ? "Downloading..." : "Download CSV"}
               </Button>
               <Button
-                disabled={isDownloading !== null}
+                disabled={!hasHistoryScope || isDownloading !== null}
                 className="bg-white/[0.06] text-[#edf3ff] shadow-none hover:bg-white/[0.1]"
                 onClick={() => void handleDownload("parquet")}
               >
@@ -325,7 +374,11 @@ export function HistoryPage() {
           ) : null}
         </section>
 
-        {isLoading ? (
+        {!hasHistoryScope ? (
+          <div className="rounded-[1rem] border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
+            Select or search scenes to review historical patterns.
+          </div>
+        ) : isLoading && !data ? (
           <div className="rounded-[1rem] border border-white/10 bg-[#050912] px-6 py-16 text-sm text-[#93a7c5]">
             Loading patterns...
           </div>
@@ -344,6 +397,11 @@ export function HistoryPage() {
           </div>
         ) : data ? (
           <div className="space-y-3">
+            {isFetching ? (
+              <p className="rounded-[0.85rem] border border-white/10 bg-white/[0.025] px-4 py-3 text-sm text-[#93a7c5]">
+                Refreshing pattern view...
+              </p>
+            ) : null}
             {granularityBumped ? (
               <p className="rounded-[0.85rem] border border-[#705e29] bg-[#1d1b08]/80 px-4 py-3 text-sm text-[#ffe5a8]">
                 Granularity adjusted to {data.granularity}.
@@ -453,33 +511,21 @@ export function HistoryPage() {
               </Select>
             </label>
 
-            <label className="space-y-2 text-sm text-[#d9e5f7]">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
-                Scene filters
-              </span>
-              <Select
-                aria-label="Scene filters"
-                multiple
-                className="min-h-36 py-3"
-                value={state.cameraIds}
-                onChange={(e) => {
-                  const cameraIds = Array.from(
-                    e.currentTarget.selectedOptions,
-                    (o) => o.value,
-                  );
-                  applyState((p) => ({
-                    ...p,
-                    cameraIds,
-                  }));
-                }}
-              >
-                {cameras.map((camera) => (
-                  <option key={camera.id} value={camera.id}>
-                    {camera.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
+            <SceneFocusPicker
+              defaultSummary="No scenes selected"
+              emptyLabel="No scenes match this search."
+              items={historySceneItems}
+              onClearSelection={() =>
+                applyState((previous) => ({ ...previous, cameraIds: [] }))
+              }
+              onSearchChange={setSceneSearch}
+              onToggleScene={toggleHistoryScene}
+              searchLabel="Search scene filters"
+              searchPlaceholder="Search scenes or sites"
+              searchValue={sceneSearch}
+              selectedSceneIds={selectedHistorySceneIds}
+              title="Scene filters"
+            />
 
             <div className="space-y-2 text-sm text-[#d9e5f7]">
               <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8ea8cf]">
@@ -577,10 +623,13 @@ function resolveHistoryMetric(
     return explicitMetric;
   }
 
-  const selectedCameras =
-    selectedCameraIds.length === 0
-      ? cameras
-      : cameras.filter((camera) => selectedCameraIds.includes(camera.id));
+  if (selectedCameraIds.length === 0) {
+    return "occupancy";
+  }
+
+  const selectedCameras = cameras.filter((camera) =>
+    selectedCameraIds.includes(camera.id),
+  );
   return selectedCameras.length > 0 &&
     selectedCameras.every(cameraHasCountBoundaries)
     ? "count_events"

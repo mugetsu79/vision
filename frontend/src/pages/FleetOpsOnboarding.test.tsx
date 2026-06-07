@@ -42,6 +42,11 @@ const onboardingMocks = vi.hoisted(() => ({
       name: "MV Resolute",
       site_id: "00000000-0000-4000-8000-000000000020",
     },
+    {
+      id: "00000000-0000-4000-8000-000000000011",
+      name: "MV Horizon",
+      site_id: "00000000-0000-4000-8000-000000000021",
+    },
   ],
 }));
 
@@ -86,25 +91,44 @@ describe("FleetOpsOnboarding", () => {
     });
   });
 
-  test("FleetOps onboarding renders setup checks separately from support readiness", async () => {
+  test("FleetOps onboarding requires explicit vessel scope before running checks", async () => {
     const user = userEvent.setup();
     renderWithProviders(<FleetOpsOnboarding />);
 
     expect(
       await screen.findByRole("heading", { name: /Onboarding/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/search fleetops vessel scope/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/choose a vessel or site to review onboarding/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /run checks/i }),
+    ).not.toBeInTheDocument();
+    expect(onboardingMocks.onboardingCheckSiteIds.at(-1)).toBeNull();
+
+    await user.type(
+      screen.getByLabelText(/search fleetops vessel scope/i),
+      "horizon",
+    );
+    await user.click(screen.getByRole("button", { name: /mv horizon/i }));
+
     expect(screen.getAllByText(/setup checks/i).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: /run checks/i }));
     expect(onboardingMocks.runChecks).toHaveBeenCalledWith(
       expect.objectContaining({
         pack_id: "maritime-fleet",
-        site_id: "00000000-0000-4000-8000-000000000020",
+        site_id: "00000000-0000-4000-8000-000000000021",
       }),
     );
     expect(screen.queryByText(/Generate bundle/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Satellite fallback/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Satellite fallback/i).length).toBeGreaterThan(
+      0,
+    );
     expect(onboardingMocks.onboardingCheckSiteIds).toContain(
-      "00000000-0000-4000-8000-000000000020",
+      "00000000-0000-4000-8000-000000000021",
     );
   });
 });

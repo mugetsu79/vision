@@ -138,6 +138,17 @@ class FakeWebSocket {
   }
 }
 
+async function focusLiveScenes(
+  names: string[],
+  user = userEvent.setup(),
+) {
+  await screen.findByLabelText(/search scenes/i);
+
+  for (const name of names) {
+    await user.click(await screen.findByRole("checkbox", { name }));
+  }
+}
+
 describe("LivePage", () => {
   beforeEach(() => {
     telemetryCanvasMock.mockClear();
@@ -172,6 +183,72 @@ describe("LivePage", () => {
         tenantId: null,
       });
     });
+  });
+
+  test("keeps the live wall empty until the operator focuses scenes", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: null,
+            name: "North Gate",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "central",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["car", "bus"],
+            attribute_rules: [],
+            zones: [],
+            homography: null,
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p10",
+              allow_native_on_demand: true,
+              profiles: [],
+            },
+            frame_skip: 1,
+            fps_cap: 25,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole("checkbox", { name: "North Gate" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/select or search scenes to open the live wall/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "North Gate" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "North Gate" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "North Gate" }),
+    ).toBeInTheDocument();
   });
 
   test("does not mark workspace telemetry live before a scene heartbeat arrives", async () => {
@@ -222,6 +299,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"]);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
@@ -286,6 +364,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"]);
     await screen.findByRole("heading", { name: "North Gate" });
 
     act(() => {
@@ -432,6 +511,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate", "Depot Yard"], user);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
@@ -635,8 +715,16 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
-    await screen.findByRole("heading", { name: "North Gate" });
-    expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("checkbox", { name: "North Gate" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Depot Yard" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "North Gate" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Depot Yard" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Harbor HQ")).toBeInTheDocument();
     expect(screen.getByText("Depot")).toBeInTheDocument();
 
@@ -722,6 +810,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"]);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
@@ -844,6 +933,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"], user);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
@@ -983,6 +1073,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate", "Depot Yard"], user);
     await screen.findByRole("heading", { name: "North Gate" });
     expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument();
 
@@ -1089,6 +1180,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"]);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
@@ -1170,6 +1262,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"]);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );
@@ -1310,6 +1403,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"], user);
     await screen.findByRole("heading", { name: "North Gate" });
     const renditionSelect = screen.getByLabelText(/north gate live rendition/i);
     expect(within(renditionSelect).queryByRole("option", { name: /native camera/i })).toBeNull();
@@ -1384,6 +1478,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"], user);
     await screen.findByRole("heading", { name: "North Gate" });
     expect(telemetryCanvasMock.mock.calls.at(-1)?.[0]).toMatchObject({
       disabled: false,
@@ -1460,6 +1555,7 @@ describe("LivePage", () => {
       </QueryClientProvider>,
     );
 
+    await focusLiveScenes(["North Gate"]);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument(),
     );

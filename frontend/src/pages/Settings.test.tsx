@@ -617,8 +617,18 @@ describe("SettingsPage operations workbench", () => {
     );
     expect(configurationContent).toBeInTheDocument();
     expect(configurationContent).not.toBeVisible();
-    expect(screen.queryByTestId("configuration-workspace")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("runtime-artifact-rail")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("configuration-workspace"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("runtime-artifact-rail"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("No scenes focused")).toBeInTheDocument();
+    await user.type(
+      screen.getByLabelText(/search operations scenes/i),
+      "lobby",
+    );
+    expect(screen.getByText("1 matching")).toBeInTheDocument();
     expect(sceneMatrix).toBeInTheDocument();
     expect(
       within(sceneMatrix).getByText(/scene readiness/i),
@@ -684,7 +694,9 @@ describe("SettingsPage operations workbench", () => {
         name: /hide configuration/i,
       }),
     ).toHaveAttribute("aria-expanded", "true");
-    const configurationWorkspace = screen.getByTestId("configuration-workspace");
+    const configurationWorkspace = screen.getByTestId(
+      "configuration-workspace",
+    );
     expect(configurationWorkspace).toBeVisible();
     expect(screen.getByTestId("runtime-artifact-rail")).toBeVisible();
 
@@ -712,7 +724,8 @@ describe("SettingsPage operations workbench", () => {
     expect(screen.getByTestId("runtime-artifact-rail")).toBeVisible();
   });
 
-  test("shows live telemetry status when operations receives retained live frames", () => {
+  test("shows live telemetry status when operations receives retained live frames", async () => {
+    const user = userEvent.setup();
     settingsMocks.framesByCamera = {
       "00000000-0000-0000-0000-000000000101": {
         camera_id: "00000000-0000-0000-0000-000000000101",
@@ -726,13 +739,17 @@ describe("SettingsPage operations workbench", () => {
 
     renderPage();
 
+    await user.type(
+      screen.getByLabelText(/search operations scenes/i),
+      "lobby",
+    );
     const sceneMatrix = screen.getByTestId("scene-intelligence-matrix");
     expect(
       within(sceneMatrix).getByText(/telemetry live/i),
     ).toBeInTheDocument();
   });
 
-  test("filters readiness workers patterns and delivery by searchable scene focus", async () => {
+  test("does not show operations detail until an operator searches or selects scenes", async () => {
     const user = userEvent.setup();
     settingsMocks.cameras = [
       {
@@ -884,27 +901,61 @@ describe("SettingsPage operations workbench", () => {
     const diagnosticsRail = screen.getByTestId("stream-diagnostics-rail");
     const memoryPanel = screen.getByTestId("operational-memory-panel");
 
-    expect(screen.getByText("1 of 2 scenes focused")).toBeInTheDocument();
-    expect(within(sceneMatrix).getByText("Lobby")).toBeInTheDocument();
+    expect(screen.getByText("No scenes focused")).toBeInTheDocument();
+    expect(
+      within(sceneMatrix).getByText(
+        /select or search scenes to review readiness/i,
+      ),
+    ).toBeInTheDocument();
+    expect(within(sceneMatrix).queryByText("Lobby")).not.toBeInTheDocument();
     expect(within(sceneMatrix).queryByText("Driveway")).not.toBeInTheDocument();
-    expect(within(workerRail).getByText("Lobby")).toBeInTheDocument();
+    expect(
+      within(workerRail).getByText(
+        /select or search scenes to review workers/i,
+      ),
+    ).toBeInTheDocument();
+    expect(within(workerRail).queryByText("Lobby")).not.toBeInTheDocument();
     expect(within(workerRail).queryByText("Driveway")).not.toBeInTheDocument();
-    expect(within(diagnosticsRail).getByText(/Lobby scene delivery/i)).toBeInTheDocument();
-    expect(within(diagnosticsRail).queryByText(/Driveway scene delivery/i)).not.toBeInTheDocument();
-    expect(within(memoryPanel).getByText(/Lobby pattern/i)).toBeInTheDocument();
-    expect(within(memoryPanel).queryByText(/Driveway pattern/i)).not.toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).getByText(
+        /select or search scenes to review stream diagnostics/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).queryByText(/Lobby scene delivery/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).queryByText(/Driveway scene delivery/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(memoryPanel).queryByText(/Lobby pattern/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(memoryPanel).queryByText(/Driveway pattern/i),
+    ).not.toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/search operations scenes/i), "drive");
+    await user.type(
+      screen.getByLabelText(/search operations scenes/i),
+      "drive",
+    );
 
     expect(screen.getByText("1 matching")).toBeInTheDocument();
     expect(within(sceneMatrix).getByText("Driveway")).toBeInTheDocument();
     expect(within(sceneMatrix).queryByText("Lobby")).not.toBeInTheDocument();
     expect(within(workerRail).getByText("Driveway")).toBeInTheDocument();
     expect(within(workerRail).queryByText("Lobby")).not.toBeInTheDocument();
-    expect(within(diagnosticsRail).getByText(/Driveway scene delivery/i)).toBeInTheDocument();
-    expect(within(diagnosticsRail).queryByText(/Lobby scene delivery/i)).not.toBeInTheDocument();
-    expect(within(memoryPanel).getByText(/Driveway pattern/i)).toBeInTheDocument();
-    expect(within(memoryPanel).queryByText(/Lobby pattern/i)).not.toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).getByText(/Driveway scene delivery/i),
+    ).toBeInTheDocument();
+    expect(
+      within(diagnosticsRail).queryByText(/Lobby scene delivery/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(memoryPanel).getByText(/Driveway pattern/i),
+    ).toBeInTheDocument();
+    expect(
+      within(memoryPanel).queryByText(/Lobby pattern/i),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: "Driveway" }));
 
@@ -966,6 +1017,10 @@ describe("SettingsPage operations workbench", () => {
     const user = userEvent.setup();
 
     renderPage();
+    await user.type(
+      screen.getByLabelText(/search operations scenes/i),
+      "lobby",
+    );
 
     expect(
       within(screen.getByTestId("worker-rail")).getByText("Lobby"),
@@ -1022,7 +1077,11 @@ describe("SettingsPage operations workbench", () => {
       within(diagnosticsRail).getByText(/1280 x 720/i),
     ).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/search operations scenes/i), "drive");
+    await user.clear(screen.getByLabelText(/search operations scenes/i));
+    await user.type(
+      screen.getByLabelText(/search operations scenes/i),
+      "drive",
+    );
     expect(screen.getByText("1 matching")).toBeInTheDocument();
     expect(
       within(screen.getByTestId("worker-rail")).getByText("Driveway"),
@@ -1112,7 +1171,10 @@ describe("SettingsPage operations workbench", () => {
 
     renderPage();
 
-    await user.type(screen.getByLabelText(/search operations scenes/i), "drive");
+    await user.type(
+      screen.getByLabelText(/search operations scenes/i),
+      "drive",
+    );
 
     const workerRail = screen.getByTestId("worker-rail");
     expect(within(workerRail).getByText("Driveway")).toBeInTheDocument();

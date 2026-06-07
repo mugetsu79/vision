@@ -100,10 +100,26 @@ function cameraResponse(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderPage(initialEntry = "/history") {
+function appendCameraScope(initialEntry: string) {
+  if (initialEntry.includes("cameras=")) {
+    return initialEntry;
+  }
+  const separator = initialEntry.includes("?") ? "&" : "?";
+  return `${initialEntry}${separator}cameras=cam-1`;
+}
+
+function renderPage(
+  initialEntry = "/history",
+  options: { withCameraScope?: boolean } = {},
+) {
+  const scopedEntry =
+    options.withCameraScope === false
+      ? initialEntry
+      : appendCameraScope(initialEntry);
+
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter future={routerFuture} initialEntries={[initialEntry]}>
+      <MemoryRouter future={routerFuture} initialEntries={[scopedEntry]}>
         <HistoryPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -194,7 +210,7 @@ describe("HistoryPage", () => {
 
   test("hydrates filter state from URL and calls endpoint with include_speed", async () => {
     renderPage(
-      "/history?metric=observations&speed=1&speedThreshold=50&granularity=5m",
+      "/history?metric=observations&speed=1&speedThreshold=50&granularity=5m&cameras=cam-1",
     );
     expect(
       await screen.findByRole("heading", {
@@ -204,12 +220,14 @@ describe("HistoryPage", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByTestId("patterns-workspace")).toBeInTheDocument();
-    expect(screen.getByTestId("patterns-workbench-toolbar")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("patterns-workbench-toolbar"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("patterns-instrument-rail")).toBeInTheDocument();
     expect(screen.getByTestId("pattern-export-surface")).toBeInTheDocument();
     expect(screen.getByTestId("pattern-filter-rail")).toBeInTheDocument();
     expect(screen.getByLabelText(/search patterns/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/scene filters/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/search scene filters/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/camera filters/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/as .* buckets/i)).not.toBeInTheDocument();
     await waitFor(() =>
@@ -226,7 +244,30 @@ describe("HistoryPage", () => {
     ).toBeDefined();
   });
 
-  test("scene and class multi-select filters update without stale event targets", async () => {
+  test("does not load pattern detail until an operator selects a scene", async () => {
+    renderPage("/history", { withCameraScope: false });
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /history & patterns/i,
+        level: 1,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /select or search scenes to review historical patterns/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      recordedRequests.some(
+        (url) =>
+          url.pathname === "/api/v1/history/series" ||
+          url.pathname === "/api/v1/history/classes",
+      ),
+    ).toBe(false);
+  });
+
+  test("searchable scene filters update history scope without native multi-selects", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request =
@@ -248,11 +289,14 @@ describe("HistoryPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    renderPage();
-    await screen.findByTestId("history-trend-chart");
+    renderPage("/history", { withCameraScope: false });
+    await screen.findByText(
+      /select or search scenes to review historical patterns/i,
+    );
 
     recordedRequests = [];
-    await user.selectOptions(screen.getByLabelText(/scene filters/i), ["cam-1"]);
+    await user.type(screen.getByLabelText(/search scene filters/i), "gate");
+    await user.click(screen.getByRole("checkbox", { name: /gate camera/i }));
 
     await waitFor(() => {
       const request = recordedRequests.find(
@@ -357,7 +401,7 @@ describe("HistoryPage", () => {
     expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
   });
 
-  test("defaults to count_events with no explicit camera filter when the camera inventory has count boundaries", async () => {
+  test("does not infer a metric or load history from unselected camera inventory", async () => {
     vi.spyOn(global, "fetch").mockImplementation((input, init) => {
       const request =
         input instanceof Request ? input : new Request(String(input), init);
@@ -375,17 +419,18 @@ describe("HistoryPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    renderPage("/history");
+    renderPage("/history", { withCameraScope: false });
 
-    await waitFor(() => {
-      expect(
-        findHistoryRequest("/api/v1/history/series", "count_events"),
-      ).toBeDefined();
-      expect(
-        findHistoryRequest("/api/v1/history/classes", "count_events"),
-      ).toBeDefined();
-    });
-    expect(screen.getByLabelText("Metric")).toHaveValue("count_events");
+    await screen.findByText(
+      /select or search scenes to review historical patterns/i,
+    );
+    expect(
+      findHistoryRequest("/api/v1/history/series", "count_events"),
+    ).toBeUndefined();
+    expect(
+      findHistoryRequest("/api/v1/history/classes", "count_events"),
+    ).toBeUndefined();
+    expect(screen.getByLabelText("Metric")).toHaveValue("occupancy");
   });
 
   test("stays on occupancy when only some selected cameras have count boundaries", async () => {
@@ -424,7 +469,7 @@ describe("HistoryPage", () => {
 
   test("toggling Show speed and entering a threshold updates the chart props", async () => {
     const user = userEvent.setup();
-    renderPage();
+    renderPage("/history?cameras=cam-2");
     await screen.findByRole("button", { name: /download csv/i });
 
     await user.click(screen.getByLabelText(/show speed/i));
@@ -453,7 +498,7 @@ describe("HistoryPage", () => {
       }
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
-    renderPage();
+    renderPage("/history?cameras=cam-2");
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: /try last 7 days/i }),
@@ -989,7 +1034,7 @@ describe("HistoryPage", () => {
       return Promise.resolve(new Response("Not found", { status: 404 }));
     });
 
-    renderPage();
+    renderPage("/history?cameras=cam-2");
     await screen.findByTestId("history-trend-chart");
     recordedRequests = [];
 
@@ -1000,7 +1045,7 @@ describe("HistoryPage", () => {
       const request = recordedRequests.find(
         (url) =>
           url.pathname === "/api/v1/history/series" &&
-          url.searchParams.get("camera_ids") === "cam-1",
+          url.searchParams.getAll("camera_ids").includes("cam-1"),
       );
       expect(request).toBeDefined();
     });

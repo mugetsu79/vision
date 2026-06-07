@@ -5,6 +5,7 @@ import { apiClient, toApiError } from "@/lib/api";
 
 export type Site = components["schemas"]["SiteResponse"];
 export type CreateSiteInput = components["schemas"]["SiteCreate"];
+export type UpdateSiteInput = components["schemas"]["SiteUpdate"];
 
 export function useSites() {
   return useQuery({
@@ -54,6 +55,34 @@ export function useDeleteSite() {
       if (error) {
         throw toApiError(error, "Failed to delete site.");
       }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+  });
+}
+
+export function useUpdateSite() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      siteId,
+      payload,
+    }: {
+      siteId: string;
+      payload: UpdateSiteInput;
+    }) => {
+      const { data, error } = await apiClient.PATCH("/api/v1/sites/{site_id}", {
+        params: { path: { site_id: siteId } },
+        body: payload,
+      });
+
+      if (error) {
+        throw toApiError(error, "Failed to update site.");
+      }
+
+      return data;
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["sites"] });

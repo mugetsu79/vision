@@ -54,6 +54,11 @@ const supportMocks = vi.hoisted(() => ({
       name: "MV Resolute",
       site_id: "00000000-0000-4000-8000-000000000020",
     },
+    {
+      id: "00000000-0000-4000-8000-000000000011",
+      name: "MV Horizon",
+      site_id: "00000000-0000-4000-8000-000000000021",
+    },
   ],
 }));
 
@@ -115,20 +120,37 @@ describe("FleetOpsSupport", () => {
     });
   });
 
-  test("FleetOps support renders support readiness and support actions", async () => {
+  test("FleetOps support requires explicit vessel scope before actions run", async () => {
     const user = userEvent.setup();
     renderWithProviders(<FleetOpsSupport />);
 
     expect(
       await screen.findByRole("heading", { name: /^Support$/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/search fleetops vessel scope/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/choose a vessel or site to review support/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Support readiness/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /generate bundle/i }),
+    ).not.toBeInTheDocument();
+
+    await user.type(
+      screen.getByLabelText(/search fleetops vessel scope/i),
+      "horizon",
+    );
+    await user.click(screen.getByRole("button", { name: /mv horizon/i }));
+
     expect(screen.getByText(/Support readiness/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /generate bundle/i }));
     expect(supportMocks.createBundle).toHaveBeenCalledWith(
       expect.objectContaining({
         include_logs: true,
         pack_id: "maritime-fleet",
-        site_id: "00000000-0000-4000-8000-000000000020",
+        site_id: "00000000-0000-4000-8000-000000000021",
       }),
     );
     expect(screen.getByText(/Tunnel lifecycle/i)).toBeInTheDocument();

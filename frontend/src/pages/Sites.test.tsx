@@ -98,9 +98,38 @@ function mockSitesApi({
       return jsonResponse(createdSite, 201);
     }
 
-    if (url.pathname.startsWith("/api/v1/sites/") && request.method === "DELETE") {
+    if (
+      url.pathname.startsWith("/api/v1/sites/") &&
+      request.method === "PATCH"
+    ) {
+      const payload = (await request.clone().json()) as Record<string, unknown>;
+      const siteId = url.pathname.split("/").pop();
+      let updatedSite: unknown = null;
+      currentSites = currentSites.map((site) => {
+        if (
+          typeof site === "object" &&
+          site !== null &&
+          "id" in site &&
+          typeof site.id === "string" &&
+          site.id === siteId
+        ) {
+          updatedSite = { ...site, ...payload };
+          return updatedSite;
+        }
+        return site;
+      });
+      return jsonResponse(updatedSite ?? { ...hqSite, id: siteId, ...payload });
+    }
+
+    if (
+      url.pathname.startsWith("/api/v1/sites/") &&
+      request.method === "DELETE"
+    ) {
       if (deleteStatus >= 400) {
-        return jsonResponse(deleteBody ?? { detail: "Site is still in use." }, deleteStatus);
+        return jsonResponse(
+          deleteBody ?? { detail: "Site is still in use." },
+          deleteStatus,
+        );
       }
       const siteId = url.pathname.split("/").pop();
       currentSites = currentSites.filter((site) => {
@@ -171,7 +200,9 @@ describe("SitesPage", () => {
     const grid = await screen.findByTestId("site-context-grid");
     const table = within(grid).getByRole("table");
     expect(table).toBeInTheDocument();
-    expect(within(table).getByRole("rowheader", { name: "HQ" })).toBeInTheDocument();
+    expect(
+      within(table).getByRole("rowheader", { name: "HQ" }),
+    ).toBeInTheDocument();
     expect(
       within(table).getByRole("rowheader", { name: "Depot" }),
     ).toBeInTheDocument();
@@ -186,6 +217,89 @@ describe("SitesPage", () => {
     ).toBeInTheDocument();
   });
 
+  test("filters sites by search and limits visible rows to selected page size", async () => {
+    const user = userEvent.setup();
+    const sites = Array.from({ length: 12 }, (_, index) => ({
+      ...hqSite,
+      id: `11111111-1111-1111-1111-${String(index + 1).padStart(12, "0")}`,
+      name: `FleetOps Site ${index + 1}`,
+      description: index === 10 ? "Central marina" : "Remote berth",
+    }));
+    mockSitesApi({ sites });
+
+    renderSitesPage();
+
+    const grid = await screen.findByTestId("site-context-grid");
+    const table = within(grid).getByRole("table");
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(10);
+    expect(
+      within(table).queryByRole("rowheader", { name: "FleetOps Site 11" }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/sites per page/i), "25");
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(12);
+
+    await user.clear(screen.getByLabelText(/search sites/i));
+    await user.type(screen.getByLabelText(/search sites/i), "central");
+    expect(
+      within(table).getByRole("rowheader", { name: "FleetOps Site 11" }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).queryByRole("rowheader", { name: "FleetOps Site 1" }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("edits an existing site through the shared site dialog", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockSitesApi({
+      sites: [hqSite, depotSite],
+      cameras: [dockScene, yardScene],
+    });
+
+    renderSitesPage();
+
+    const grid = await screen.findByTestId("site-context-grid");
+    await user.click(
+      within(grid).getAllByRole("button", { name: /edit hq/i })[0],
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: /edit site/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/site name/i)).toHaveValue("HQ");
+    await user.clear(screen.getByLabelText(/site name/i));
+    await user.type(screen.getByLabelText(/site name/i), "HQ West");
+    await user.clear(screen.getByLabelText(/description/i));
+    await user.type(
+      screen.getByLabelText(/description/i),
+      "Updated operations hub",
+    );
+    await user.click(screen.getByRole("button", { name: /save site/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      within(grid).getByRole("rowheader", { name: "HQ West" }),
+    ).toBeInTheDocument();
+
+    const siteUpdateRequest = fetchMock.mock.calls
+      .map((call) => call[0])
+      .find(
+        (request) =>
+          request instanceof Request &&
+          request.method === "PATCH" &&
+          new URL(request.url).pathname === `/api/v1/sites/${hqSite.id}`,
+      );
+    expect(siteUpdateRequest).toBeInstanceOf(Request);
+    await expect(
+      (siteUpdateRequest as Request).clone().json(),
+    ).resolves.toMatchObject({
+      name: "HQ West",
+      description: "Updated operations hub",
+    });
+  });
+
   test("shows empty state when there are no sites", async () => {
     mockSitesApi();
 
@@ -194,7 +308,9 @@ describe("SitesPage", () => {
     expect(
       await screen.findByText(/no deployment sites yet/i),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /add site/i }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /add site/i }).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByTestId("site-context-grid")).toBeNull();
   });
 
@@ -236,9 +352,13 @@ describe("SitesPage", () => {
     );
     const grid = screen.getByTestId("site-context-grid");
     const table = within(grid).getByRole("table");
-    expect(within(table).getByRole("rowheader", { name: "HQ" })).toBeInTheDocument();
+    expect(
+      within(table).getByRole("rowheader", { name: "HQ" }),
+    ).toBeInTheDocument();
     expect(within(grid).getAllByText(/deployment location/i)).toHaveLength(1);
-    expect(within(grid).getByRole("heading", { name: "HQ" })).toBeInTheDocument();
+    expect(
+      within(grid).getByRole("heading", { name: "HQ" }),
+    ).toBeInTheDocument();
     expect(within(grid).getAllByText("1 scene")).toHaveLength(2);
 
     const siteCreateRequest = fetchMock.mock.calls
@@ -278,13 +398,19 @@ describe("SitesPage", () => {
 
     expect(hqCard).not.toBeNull();
     await user.click(
-      within(hqCard as HTMLElement).getByRole("button", { name: /delete site/i }),
+      within(hqCard as HTMLElement).getByRole("button", {
+        name: /delete site/i,
+      }),
     );
 
     await waitFor(() =>
-      expect(within(grid).queryByRole("heading", { name: "HQ" })).not.toBeInTheDocument(),
+      expect(
+        within(grid).queryByRole("heading", { name: "HQ" }),
+      ).not.toBeInTheDocument(),
     );
-    expect(confirmSpy).toHaveBeenCalledWith("Delete HQ? This cannot be undone.");
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Delete HQ? This cannot be undone.",
+    );
 
     const siteDeleteRequest = fetchMock.mock.calls
       .map((call) => call[0])
@@ -309,7 +435,8 @@ describe("SitesPage", () => {
       cameras: [dockScene],
       deleteStatus: 409,
       deleteBody: {
-        detail: "Delete scenes and dependent records before deleting this site.",
+        detail:
+          "Delete scenes and dependent records before deleting this site.",
       },
     });
 
@@ -322,7 +449,9 @@ describe("SitesPage", () => {
 
     expect(hqCard).not.toBeNull();
     await user.click(
-      within(hqCard as HTMLElement).getByRole("button", { name: /delete site/i }),
+      within(hqCard as HTMLElement).getByRole("button", {
+        name: /delete site/i,
+      }),
     );
 
     expect(
@@ -330,6 +459,8 @@ describe("SitesPage", () => {
         /delete scenes and dependent records before deleting this site/i,
       ),
     ).toBeInTheDocument();
-    expect(within(grid).getByRole("rowheader", { name: "HQ" })).toBeInTheDocument();
+    expect(
+      within(grid).getByRole("rowheader", { name: "HQ" }),
+    ).toBeInTheDocument();
   });
 });

@@ -11,10 +11,12 @@ import {
 } from "@/lib/operational-health";
 
 type SceneIntelligenceMatrixProps = {
+  emptyLabel?: string;
   rows: SceneHealthRow[];
 };
 
 export function SceneIntelligenceMatrix({
+  emptyLabel = "No scenes configured.",
   rows,
 }: SceneIntelligenceMatrixProps) {
   return (
@@ -30,7 +32,7 @@ export function SceneIntelligenceMatrix({
 
       {rows.length === 0 ? (
         <p className="px-4 py-5 text-sm text-[var(--vz-text-secondary)]">
-          No scenes configured.
+          {emptyLabel}
         </p>
       ) : (
         <div className="grid gap-3 p-4">

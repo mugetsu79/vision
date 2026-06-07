@@ -116,8 +116,8 @@ function CamerasContent() {
       return new Set(searchedSceneFocusItems.map((item) => item.id));
     }
 
-    return new Set(sceneFocusItems.slice(0, 1).map((item) => item.id));
-  }, [cameraIdSet, sceneFocusItems, sceneSearch, searchedSceneFocusItems, selectedSceneIds]);
+    return new Set<string>();
+  }, [cameraIdSet, sceneSearch, searchedSceneFocusItems, selectedSceneIds]);
   const focusedInventoryCameras = useMemo(
     () => cameras.filter((camera) => focusedSceneIds.has(camera.id)),
     [cameras, focusedSceneIds],
@@ -125,7 +125,9 @@ function CamerasContent() {
   const sceneInventorySummary =
     cameras.length === 0
       ? "0 of 0 scenes shown"
-      : `${focusedInventoryCameras.length} of ${cameras.length} scenes shown`;
+      : selectedSceneIds.size === 0 && sceneSearch.trim().length === 0
+        ? "No scenes selected"
+        : `${focusedInventoryCameras.length} of ${cameras.length} scenes shown`;
   const sceneHealthRows = useMemo(
     () => deriveSceneReadinessRows({ cameras, fleet: fleet.data }),
     [cameras, fleet.data],
@@ -160,10 +162,7 @@ function CamerasContent() {
     () =>
       toWizardModelOptions(
         models,
-        [
-          selectedCamera?.primary_model_id,
-          selectedCamera?.secondary_model_id,
-        ],
+        [selectedCamera?.primary_model_id, selectedCamera?.secondary_model_id],
         modelRuntimeArtifacts.data ?? {},
       ),
     [
@@ -332,138 +331,141 @@ function CamerasContent() {
           data-testid="scene-inventory-table"
           className="overflow-x-auto rounded-[0.9rem] border border-white/8 bg-[#0b1320]"
         >
-        <Table className="min-w-[76rem]">
-          <THead>
-            <TR>
-              <TH>Scene</TH>
-              <TH>Site</TH>
-              <TH>Mode</TH>
-              <TH>Vision</TH>
-              <TH>Stream</TH>
-              <TH>Tracker</TH>
-              <TH>Readiness</TH>
-              <TH>Actions</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {camerasLoading ? (
+          <Table className="min-w-[76rem]">
+            <THead>
               <TR>
-                <TD colSpan={8} className="text-[#9eb2cf]">
-                  Loading scenes...
-                </TD>
+                <TH>Scene</TH>
+                <TH>Site</TH>
+                <TH>Mode</TH>
+                <TH>Vision</TH>
+                <TH>Stream</TH>
+                <TH>Tracker</TH>
+                <TH>Readiness</TH>
+                <TH>Actions</TH>
               </TR>
-            ) : cameras.length === 0 ? (
-              <TR>
-                <TD colSpan={8} className="text-[#9eb2cf]">
-                  {omniEmptyStates.noScenes}
-                </TD>
-              </TR>
-            ) : focusedInventoryCameras.length === 0 ? (
-              <TR>
-                <TD colSpan={8} className="text-[#9eb2cf]">
-                  No scenes match this selection.
-                </TD>
-              </TR>
-            ) : (
-              focusedInventoryCameras.map((camera) => {
-                const sceneHealth = sceneHealthByCamera.get(camera.id);
-                const visionSummary = getCameraVisionSummary(camera);
+            </THead>
+            <TBody>
+              {camerasLoading ? (
+                <TR>
+                  <TD colSpan={8} className="text-[#9eb2cf]">
+                    Loading scenes...
+                  </TD>
+                </TR>
+              ) : cameras.length === 0 ? (
+                <TR>
+                  <TD colSpan={8} className="text-[#9eb2cf]">
+                    {omniEmptyStates.noScenes}
+                  </TD>
+                </TR>
+              ) : focusedInventoryCameras.length === 0 ? (
+                <TR>
+                  <TD colSpan={8} className="text-[#9eb2cf]">
+                    {selectedSceneIds.size === 0 &&
+                    sceneSearch.trim().length === 0
+                      ? "Select or search scenes to inspect inventory."
+                      : "No scenes match this selection."}
+                  </TD>
+                </TR>
+              ) : (
+                focusedInventoryCameras.map((camera) => {
+                  const sceneHealth = sceneHealthByCamera.get(camera.id);
+                  const visionSummary = getCameraVisionSummary(camera);
 
-                return (
-                  <TR key={camera.id}>
-                    <TD className="font-medium text-[#eef4ff]">
-                      {camera.name}
-                    </TD>
-                    <TD>
-                      {siteNameById.get(camera.site_id) ?? "Unknown site"}
-                    </TD>
-                    <TD>{camera.processing_mode}</TD>
-                    <TD>
-                      <div className="min-w-[8rem] leading-tight">
+                  return (
+                    <TR key={camera.id}>
+                      <TD className="font-medium text-[#eef4ff]">
+                        {camera.name}
+                      </TD>
+                      <TD>
+                        {siteNameById.get(camera.site_id) ?? "Unknown site"}
+                      </TD>
+                      <TD>{camera.processing_mode}</TD>
+                      <TD>
+                        <div className="min-w-[8rem] leading-tight">
+                          <div className="font-medium text-[#eef4ff]">
+                            {visionSummary.accuracy}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#93a7c5]">
+                            <span>{visionSummary.compute}</span>
+                            <span
+                              className={
+                                visionSummary.speedEnabled
+                                  ? "text-[#a9dfc0]"
+                                  : "text-[#93a7c5]"
+                              }
+                            >
+                              {visionSummary.speed}
+                            </span>
+                          </div>
+                        </div>
+                      </TD>
+                      <TD>
                         <div className="font-medium text-[#eef4ff]">
-                          {visionSummary.accuracy}
+                          {camera.browser_delivery?.default_profile ?? "720p10"}
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#93a7c5]">
-                          <span>{visionSummary.compute}</span>
-                          <span
-                            className={
-                              visionSummary.speedEnabled
-                                ? "text-[#a9dfc0]"
-                                : "text-[#93a7c5]"
-                            }
+                        {camera.source_capability ? (
+                          <div className="mt-1 text-xs text-[#93a7c5]">
+                            source{" "}
+                            {`${camera.source_capability.width}×${camera.source_capability.height}`}
+                          </div>
+                        ) : null}
+                      </TD>
+                      <TD>{camera.tracker_type}</TD>
+                      <TD>
+                        {sceneHealth ? (
+                          <StatusToneBadge
+                            tone={healthToTone(sceneHealth.readiness.health)}
                           >
-                            {visionSummary.speed}
-                          </span>
+                            {sceneHealth.readiness.label}
+                          </StatusToneBadge>
+                        ) : (
+                          <StatusToneBadge tone="muted">
+                            Readiness pending
+                          </StatusToneBadge>
+                        )}
+                      </TD>
+                      <TD>
+                        <div className="flex gap-2">
+                          <button
+                            aria-label={`Open rules for ${camera.name}`}
+                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                            type="button"
+                            onClick={() => openRulesPanel(camera)}
+                          >
+                            Rules
+                          </button>
+                          <button
+                            aria-label={`Open policy for ${camera.name}`}
+                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                            type="button"
+                            onClick={() => openPolicyDraftPanel(camera)}
+                          >
+                            Policy
+                          </button>
+                          <button
+                            aria-label={`Edit ${camera.name}`}
+                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+                            type="button"
+                            onClick={() => openEditWizard(camera)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            aria-label={`Delete ${camera.name}`}
+                            className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722]"
+                            type="button"
+                            onClick={() => void handleDeleteCamera(camera)}
+                          >
+                            Delete
+                          </button>
                         </div>
-                      </div>
-                    </TD>
-                    <TD>
-                      <div className="font-medium text-[#eef4ff]">
-                        {camera.browser_delivery?.default_profile ?? "720p10"}
-                      </div>
-                      {camera.source_capability ? (
-                        <div className="mt-1 text-xs text-[#93a7c5]">
-                          source{" "}
-                          {`${camera.source_capability.width}×${camera.source_capability.height}`}
-                        </div>
-                      ) : null}
-                    </TD>
-                    <TD>{camera.tracker_type}</TD>
-                    <TD>
-                      {sceneHealth ? (
-                        <StatusToneBadge
-                          tone={healthToTone(sceneHealth.readiness.health)}
-                        >
-                          {sceneHealth.readiness.label}
-                        </StatusToneBadge>
-                      ) : (
-                        <StatusToneBadge tone="muted">
-                          Readiness pending
-                        </StatusToneBadge>
-                      )}
-                    </TD>
-                    <TD>
-                      <div className="flex gap-2">
-                        <button
-                          aria-label={`Open rules for ${camera.name}`}
-                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
-                          type="button"
-                          onClick={() => openRulesPanel(camera)}
-                        >
-                          Rules
-                        </button>
-                        <button
-                          aria-label={`Open policy for ${camera.name}`}
-                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
-                          type="button"
-                          onClick={() => openPolicyDraftPanel(camera)}
-                        >
-                          Policy
-                        </button>
-                        <button
-                          aria-label={`Edit ${camera.name}`}
-                          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
-                          type="button"
-                          onClick={() => openEditWizard(camera)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          aria-label={`Delete ${camera.name}`}
-                          className="rounded-full border border-[#5a2330] bg-[#241118] px-3 py-1.5 text-xs font-medium text-[#ffc2cd] transition hover:bg-[#311722]"
-                          type="button"
-                          onClick={() => void handleDeleteCamera(camera)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </TD>
-                  </TR>
-                );
-              })
-            )}
-          </TBody>
-        </Table>
+                      </TD>
+                    </TR>
+                  );
+                })
+              )}
+            </TBody>
+          </Table>
         </div>
       </section>
 

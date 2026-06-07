@@ -108,16 +108,22 @@ function WorkspacePage() {
     () => new Map(sites.map((site) => [site.id, site.name])),
     [sites],
   );
+  const activeQueryScope = activeQuery?.scope ?? null;
   const visibleCameras = useMemo(
     () =>
       filterLiveCameras({
         cameras,
+        activeQueryScope,
         search: sceneSearch,
         selectedSceneIds,
         siteNameById,
       }),
-    [cameras, sceneSearch, selectedSceneIds, siteNameById],
+    [activeQueryScope, cameras, sceneSearch, selectedSceneIds, siteNameById],
   );
+  const hasLiveSceneFocus =
+    selectedSceneIds.size > 0 ||
+    sceneSearch.trim().length > 0 ||
+    activeQuery !== null;
   const visibleCameraIds = useMemo(
     () => new Set(visibleCameras.map((camera) => camera.id)),
     [visibleCameras],
@@ -380,7 +386,7 @@ function WorkspacePage() {
         />
 
         <AgentInput
-          cameras={visibleCameras.map((camera) => ({
+          cameras={cameras.map((camera) => ({
             id: camera.id,
             name: camera.name,
             siteName: siteNameById.get(camera.site_id) ?? "Unknown site",
@@ -445,7 +451,9 @@ function WorkspacePage() {
 
             {visibleCameras.length === 0 ? (
               <div className="rounded-[1rem] border border-white/8 bg-white/[0.03] px-5 py-6 text-sm text-[#9bb0d0]">
-                No scenes match the current view.
+                {hasLiveSceneFocus
+                  ? "No scenes match the current view."
+                  : "Select or search scenes to open the live wall."}
               </div>
             ) : (
               <div
@@ -599,16 +607,30 @@ function LiveSceneBrowser({
 
 function filterLiveCameras({
   cameras,
+  activeQueryScope,
   search,
   selectedSceneIds,
   siteNameById,
 }: {
   cameras: CameraResponse[];
+  activeQueryScope: LiveQueryScope | null;
   search: string;
   selectedSceneIds: Set<string>;
   siteNameById: Map<string, string>;
 }) {
   const normalizedSearch = search.trim().toLowerCase();
+
+  if (activeQueryScope?.scope === "camera") {
+    return cameras.filter((camera) => camera.id === activeQueryScope.cameraId);
+  }
+
+  if (
+    selectedSceneIds.size === 0 &&
+    normalizedSearch.length === 0 &&
+    activeQueryScope?.scope !== "all"
+  ) {
+    return [];
+  }
 
   return cameras.filter((camera) => {
     if (selectedSceneIds.size > 0 && !selectedSceneIds.has(camera.id)) {

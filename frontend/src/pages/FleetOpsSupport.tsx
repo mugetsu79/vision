@@ -1,3 +1,6 @@
+import { useMemo, useState } from "react";
+
+import { FleetOpsScopeSelector } from "@/components/fleetops/FleetOpsScopeSelector";
 import { SupportReadinessPanel } from "@/components/fleetops/SupportReadinessPanel";
 import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
 import {
@@ -12,13 +15,22 @@ import type {
   FleetOpsVessel,
   SupportDiagnosticsPayload,
 } from "@/components/fleetops/types";
-import { firstFleetOpsSiteId } from "@/components/fleetops/types";
 
 export function FleetOpsSupport() {
   const bundles = useSupportBundles();
   const diagnostics = useMaritimeSupportDiagnostics();
   const vessels = useMaritimeVessels();
-  const siteId = firstFleetOpsSiteId((vessels.data ?? []) as FleetOpsVessel[]);
+  const fleetVessels = useMemo(
+    () => (vessels.data ?? []) as FleetOpsVessel[],
+    [vessels.data],
+  );
+  const [scopeSearch, setScopeSearch] = useState("");
+  const [selectedVesselId, setSelectedVesselId] = useState<string | null>(null);
+  const selectedVessel = useMemo(
+    () => fleetVessels.find((vessel) => vessel.id === selectedVesselId) ?? null,
+    [fleetVessels, selectedVesselId],
+  );
+  const siteId = selectedVessel?.site_id ?? null;
   const createBundle = useCreateSupportBundle();
   const createSession = useCreateSupportSession();
   const openBreakGlass = useOpenBreakGlass();
@@ -65,17 +77,29 @@ export function FleetOpsSupport() {
         eyebrow="FleetOps"
         title="Support"
       />
-      <SupportReadinessPanel
-        bundles={bundles.data ?? []}
-        diagnostics={diagnostics.data as SupportDiagnosticsPayload | undefined}
-        isCreatingSession={createSession.isPending}
-        isGeneratingBundle={createBundle.isPending}
-        isOpeningBreakGlass={openBreakGlass.isPending}
-        onCreateSession={() => void handleCreateSession()}
-        onGenerateBundle={() => void handleGenerateBundle()}
-        onOpenBreakGlass={() => void handleOpenBreakGlass()}
-        siteId={siteId}
+      <FleetOpsScopeSelector
+        emptyLabel="Choose a vessel or site to review support."
+        onSearchChange={setScopeSearch}
+        onSelectVessel={setSelectedVesselId}
+        searchValue={scopeSearch}
+        selectedVesselId={selectedVesselId}
+        vessels={fleetVessels}
       />
+      {selectedVessel ? (
+        <SupportReadinessPanel
+          bundles={bundles.data ?? []}
+          diagnostics={
+            diagnostics.data as SupportDiagnosticsPayload | undefined
+          }
+          isCreatingSession={createSession.isPending}
+          isGeneratingBundle={createBundle.isPending}
+          isOpeningBreakGlass={openBreakGlass.isPending}
+          onCreateSession={() => void handleCreateSession()}
+          onGenerateBundle={() => void handleGenerateBundle()}
+          onOpenBreakGlass={() => void handleOpenBreakGlass()}
+          siteId={siteId}
+        />
+      ) : null}
     </main>
   );
 }

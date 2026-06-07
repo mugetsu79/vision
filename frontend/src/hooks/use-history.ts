@@ -4,10 +4,15 @@ import type { components } from "@/lib/api.generated";
 import { apiClient, toApiError } from "@/lib/api";
 import { buildApiUrl } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth-store";
-import { type HistoryGranularity, type HistoryMetric } from "@/lib/history-url-state";
+import {
+  type HistoryGranularity,
+  type HistoryMetric,
+} from "@/lib/history-url-state";
 
-export type HistorySeriesResponse = components["schemas"]["HistorySeriesResponse"];
-export type HistoryClassesResponse = components["schemas"]["HistoryClassesResponse"];
+export type HistorySeriesResponse =
+  components["schemas"]["HistorySeriesResponse"];
+export type HistoryClassesResponse =
+  components["schemas"]["HistoryClassesResponse"];
 
 export type ResolvedHistoryFilters = {
   from: Date;
@@ -20,7 +25,14 @@ export type ResolvedHistoryFilters = {
   speedThreshold?: number | null;
 };
 
-export function createDefaultHistoryFilters(now = new Date()): ResolvedHistoryFilters {
+type HistoryQueryOptions<TData> = {
+  enabled?: boolean;
+  placeholderData?: (previousData: TData | undefined) => TData | undefined;
+};
+
+export function createDefaultHistoryFilters(
+  now = new Date(),
+): ResolvedHistoryFilters {
   const to = new Date(now);
   to.setSeconds(0, 0);
   const from = new Date(to);
@@ -38,8 +50,12 @@ export function createDefaultHistoryFilters(now = new Date()): ResolvedHistoryFi
   };
 }
 
-export function historySeriesQueryOptions(filters: ResolvedHistoryFilters) {
+export function historySeriesQueryOptions(
+  filters: ResolvedHistoryFilters,
+  options: HistoryQueryOptions<HistorySeriesResponse> = {},
+) {
   return queryOptions({
+    enabled: options.enabled ?? true,
     queryKey: [
       "history-series",
       filters.from.toISOString(),
@@ -59,11 +75,15 @@ export function historySeriesQueryOptions(filters: ResolvedHistoryFilters) {
             to: filters.to.toISOString(),
             granularity: filters.granularity,
             metric: filters.metric,
-            camera_ids: filters.cameraIds.length > 0 ? filters.cameraIds : undefined,
-            class_names: filters.classNames.length > 0 ? filters.classNames : undefined,
+            camera_ids:
+              filters.cameraIds.length > 0 ? filters.cameraIds : undefined,
+            class_names:
+              filters.classNames.length > 0 ? filters.classNames : undefined,
             include_speed: filters.includeSpeed ? true : undefined,
             speed_threshold:
-              filters.includeSpeed && filters.speedThreshold !== null && filters.speedThreshold !== undefined
+              filters.includeSpeed &&
+              filters.speedThreshold !== null &&
+              filters.speedThreshold !== undefined
                 ? filters.speedThreshold
                 : undefined,
           },
@@ -74,17 +94,28 @@ export function historySeriesQueryOptions(filters: ResolvedHistoryFilters) {
       }
       return data;
     },
+    placeholderData: options.placeholderData,
   });
 }
 
-export function useHistorySeries(filters: ResolvedHistoryFilters) {
-  return useQuery(historySeriesQueryOptions(filters));
+export function useHistorySeries(
+  filters: ResolvedHistoryFilters,
+  options: HistoryQueryOptions<HistorySeriesResponse> = {},
+) {
+  return useQuery(historySeriesQueryOptions(filters, options));
 }
 
-type HistoryClassesFilters = Pick<ResolvedHistoryFilters, "from" | "to" | "metric" | "cameraIds">;
+type HistoryClassesFilters = Pick<
+  ResolvedHistoryFilters,
+  "from" | "to" | "metric" | "cameraIds"
+>;
 
-export function historyClassesQueryOptions(params: HistoryClassesFilters) {
+export function historyClassesQueryOptions(
+  params: HistoryClassesFilters,
+  options: HistoryQueryOptions<HistoryClassesResponse> = {},
+) {
   return queryOptions({
+    enabled: options.enabled ?? true,
     queryKey: [
       "history-classes",
       params.from.toISOString(),
@@ -99,7 +130,8 @@ export function historyClassesQueryOptions(params: HistoryClassesFilters) {
             from: params.from.toISOString(),
             to: params.to.toISOString(),
             metric: params.metric,
-            camera_ids: params.cameraIds.length > 0 ? params.cameraIds : undefined,
+            camera_ids:
+              params.cameraIds.length > 0 ? params.cameraIds : undefined,
           },
         },
       });
@@ -108,11 +140,15 @@ export function historyClassesQueryOptions(params: HistoryClassesFilters) {
       }
       return data;
     },
+    placeholderData: options.placeholderData,
   });
 }
 
-export function useHistoryClasses(params: HistoryClassesFilters) {
-  return useQuery(historyClassesQueryOptions(params));
+export function useHistoryClasses(
+  params: HistoryClassesFilters,
+  options: HistoryQueryOptions<HistoryClassesResponse> = {},
+) {
+  return useQuery(historyClassesQueryOptions(params, options));
 }
 
 export async function downloadHistoryExport(
@@ -146,9 +182,15 @@ export async function downloadHistoryExport(
   }
 
   const blob = await response.blob();
-  const filename = parseFilename(response.headers.get("Content-Disposition"), format);
+  const filename = parseFilename(
+    response.headers.get("Content-Disposition"),
+    format,
+  );
 
-  if (typeof window === "undefined" || typeof window.URL.createObjectURL !== "function") {
+  if (
+    typeof window === "undefined" ||
+    typeof window.URL.createObjectURL !== "function"
+  ) {
     return;
   }
 
@@ -163,7 +205,10 @@ export async function downloadHistoryExport(
   window.URL.revokeObjectURL(objectUrl);
 }
 
-function parseFilename(header: string | null, format: "csv" | "parquet"): string {
+function parseFilename(
+  header: string | null,
+  format: "csv" | "parquet",
+): string {
   const match = header?.match(/filename="(?<filename>[^"]+)"/);
   return match?.groups?.filename ?? `history.${format}`;
 }

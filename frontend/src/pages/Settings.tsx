@@ -84,17 +84,22 @@ export function SettingsPage() {
   const operationSceneItems = useMemo(() => {
     const itemsById = new Map<string, SceneFocusItem>();
 
-    function addSceneItem(cameraId: string, name: string, siteId?: string | null) {
+    function addSceneItem(
+      cameraId: string,
+      name: string,
+      siteId?: string | null,
+    ) {
       if (itemsById.has(cameraId)) {
         return;
       }
-      const resolvedSiteId = siteId ?? camerasById.get(cameraId)?.site_id ?? null;
+      const resolvedSiteId =
+        siteId ?? camerasById.get(cameraId)?.site_id ?? null;
       itemsById.set(cameraId, {
         id: cameraId,
         name,
         siteId: resolvedSiteId,
         siteName: resolvedSiteId
-          ? siteNameById.get(resolvedSiteId) ?? "Unknown site"
+          ? (siteNameById.get(resolvedSiteId) ?? "Unknown site")
           : "Unknown site",
       });
     }
@@ -130,13 +135,16 @@ export function SettingsPage() {
       return searchedOperationSceneItems;
     }
 
-    return operationSceneItems.slice(0, 1);
+    return [];
   }, [
     operationSceneItems,
     operationsSceneSearch,
     searchedOperationSceneItems,
     selectedOperationsSceneIds,
   ]);
+  const hasOperationsSceneFocus =
+    selectedOperationsSceneIds.size > 0 ||
+    operationsSceneSearch.trim().length > 0;
   const focusedOperationSceneIds = useMemo(
     () => new Set(focusedOperationSceneItems.map((item) => item.id)),
     [focusedOperationSceneItems],
@@ -153,7 +161,9 @@ export function SettingsPage() {
   const operationsSceneFocusSummary =
     operationSceneItems.length === 0
       ? "0 of 0 scenes focused"
-      : `${focusedOperationSceneItems.length} of ${operationSceneItems.length} scenes focused`;
+      : !hasOperationsSceneFocus
+        ? "No scenes focused"
+        : `${focusedOperationSceneItems.length} of ${operationSceneItems.length} scenes focused`;
 
   const modeCopy = useMemo(() => {
     if (fleet.data?.mode === "supervised") {
@@ -164,7 +174,10 @@ export function SettingsPage() {
     }
     return "Manual dev mode";
   }, [fleet.data?.mode]);
-  const fleetHealth = useMemo(() => deriveFleetHealth(fleet.data), [fleet.data]);
+  const fleetHealth = useMemo(
+    () => deriveFleetHealth(fleet.data),
+    [fleet.data],
+  );
   const attentionItems = useMemo(
     () =>
       deriveAttentionItems({
@@ -217,17 +230,17 @@ export function SettingsPage() {
   const focusedDeliveryDiagnostics = fleet.data.delivery_diagnostics.filter(
     (diagnostic) => focusedOperationSceneIds.has(diagnostic.camera_id),
   );
-  const focusedOperationalMemoryPatterns = (operationalMemory.data ?? []).filter(
-    (pattern) => {
-      if (pattern.camera_id) {
-        return focusedOperationSceneIds.has(pattern.camera_id);
-      }
-      if (pattern.site_id) {
-        return focusedOperationSiteIds.has(pattern.site_id);
-      }
-      return true;
-    },
-  );
+  const focusedOperationalMemoryPatterns = (
+    operationalMemory.data ?? []
+  ).filter((pattern) => {
+    if (pattern.camera_id) {
+      return focusedOperationSceneIds.has(pattern.camera_id);
+    }
+    if (pattern.site_id) {
+      return focusedOperationSiteIds.has(pattern.site_id);
+    }
+    return hasOperationsSceneFocus;
+  });
   const edgeNodes = fleet.data.nodes
     .filter((node) => node.id !== null)
     .map((node) => ({
@@ -288,7 +301,14 @@ export function SettingsPage() {
         title="Focus scene view"
       />
 
-      <SceneIntelligenceMatrix rows={focusedSceneHealthRows} />
+      <SceneIntelligenceMatrix
+        rows={focusedSceneHealthRows}
+        emptyLabel={
+          hasOperationsSceneFocus
+            ? "No scenes match this focus."
+            : "Select or search scenes to review readiness."
+        }
+      />
 
       <OperationsSectionNav />
 
@@ -310,7 +330,9 @@ export function SettingsPage() {
               </p>
             ) : focusedCameraWorkers.length === 0 ? (
               <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
-                No workers match the focused scenes.
+                {hasOperationsSceneFocus
+                  ? "No workers match the focused scenes."
+                  : "Select or search scenes to review workers."}
               </p>
             ) : (
               focusedCameraWorkers.map((worker) => {
@@ -415,7 +437,9 @@ export function SettingsPage() {
               </p>
             ) : focusedDeliveryDiagnostics.length === 0 ? (
               <p className="rounded-[1rem] border border-dashed border-white/15 p-3 text-sm text-[#93a7c5]">
-                No stream diagnostics match the focused scenes.
+                {hasOperationsSceneFocus
+                  ? "No stream diagnostics match the focused scenes."
+                  : "Select or search scenes to review stream diagnostics."}
               </p>
             ) : (
               focusedDeliveryDiagnostics.map((diagnostic) => (
@@ -501,9 +525,8 @@ export function SettingsPage() {
                           {node.hostname}
                         </p>
                         <p className="mt-1 text-xs text-[#93a7c5]">
-                          {node.kind} -{" "}
-                          {node.assigned_camera_ids?.length ?? 0} assigned
-                          scenes
+                          {node.kind} - {node.assigned_camera_ids?.length ?? 0}{" "}
+                          assigned scenes
                         </p>
                       </div>
                       <StatusToneBadge tone={statusTone(node.status)}>
@@ -569,8 +592,8 @@ export function SettingsPage() {
         </div>
         {!configurationOpen ? (
           <p className="mt-3 text-sm text-[var(--vz-text-secondary)]">
-            Profiles, bindings, effective runtime hashes, and installer
-            defaults are available when needed.
+            Profiles, bindings, effective runtime hashes, and installer defaults
+            are available when needed.
           </p>
         ) : null}
       </OperationalSection>
