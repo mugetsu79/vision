@@ -177,7 +177,8 @@ class LinkHealthProbe(UUIDPrimaryKeyMixin, Base):
             name="probe_type",
         ),
         CheckConstraint(
-            "source_type IN ('manual', 'backend_synthetic', 'edge_agent', 'provider_api', 'import')",
+            "source_type IN "
+            "('manual', 'backend_synthetic', 'edge_agent', 'provider_api', 'import')",
             name="source_type",
         ),
         CheckConstraint(

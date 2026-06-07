@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
 from argus.api.contracts import TenantContext
@@ -19,6 +19,9 @@ from argus.link.contracts import (
     LinkHealthProbeRecord,
     LinkPassportSnapshotRecord,
     LinkPriorityLane,
+    LinkProbeSampleKind,
+    LinkProbeSourceType,
+    LinkProbeType,
     LinkQueueItemRecord,
     LinkSiteSummaryRecord,
     LinkTransportKind,
@@ -56,6 +59,13 @@ class LinkProbeCreate(BaseModel):
     packet_loss_percent: float = Field(ge=0)
     reachable: bool
     source: str = Field(min_length=1, max_length=128)
+    target_id: str | None = Field(default=None, max_length=96)
+    target_label: str | None = Field(default=None, max_length=160)
+    target_address: str | None = None
+    probe_type: LinkProbeType | None = None
+    source_type: LinkProbeSourceType = "manual"
+    source_label: str | None = Field(default=None, max_length=128)
+    sample_kind: LinkProbeSampleKind = "manual"
 
 
 class LinkPolicyUpdate(BaseModel):
@@ -370,10 +380,39 @@ async def post_link_probe(
             packet_loss_percent=payload.packet_loss_percent,
             reachable=payload.reachable,
             source=payload.source,
+            target_id=payload.target_id,
+            target_label=payload.target_label,
+            target_address=payload.target_address,
+            probe_type=payload.probe_type,
+            source_type=payload.source_type,
+            source_label=payload.source_label,
+            sample_kind=payload.sample_kind,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _probe_payload(probe)
+
+
+@router.delete("/sites/{site_id}/probes/{probe_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_link_probe(
+    site_id: UUID,
+    probe_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> Response:
+    await _ensure_tenant_site(services, tenant_context, site_id)
+    deleted = await services.link.adelete_probe(
+        tenant_id=tenant_context.tenant_id,
+        site_id=site_id,
+        probe_id=probe_id,
+    )
+    if deleted is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Probe sample not found.",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/sites/{site_id}/policies")
@@ -603,4 +642,12 @@ def _probe_payload(probe: LinkHealthProbeRecord) -> JsonObject:
         "reachable": probe.reachable,
         "source": probe.source,
         "recorded_at": probe.recorded_at.isoformat(),
+        "target_id": probe.target_id,
+        "target_label": probe.target_label,
+        "target_address": probe.target_address,
+        "probe_type": probe.probe_type,
+        "source_type": probe.source_type,
+        "source_label": probe.source_label,
+        "sample_kind": probe.sample_kind,
+        "deleted_at": probe.deleted_at.isoformat() if probe.deleted_at is not None else None,
     }

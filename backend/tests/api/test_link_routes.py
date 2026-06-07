@@ -230,6 +230,60 @@ async def test_link_probe_rejects_unknown_connection_id(client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
+async def test_create_link_probe_accepts_structured_source_fields(client: AsyncClient) -> None:
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probes",
+        json={
+            "latency_ms": 42,
+            "throughput_mbps": 180.0,
+            "packet_loss_percent": 0.1,
+            "reachable": True,
+            "source": "manual:operator-console",
+            "target_id": "target-vezor-ingest",
+            "target_label": "Vezor ingest",
+            "target_address": "ingest.example.vezor",
+            "probe_type": "https",
+            "source_type": "manual",
+            "source_label": "operator-console",
+            "sample_kind": "manual",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["target_id"] == "target-vezor-ingest"
+    assert payload["target_label"] == "Vezor ingest"
+    assert payload["target_address"] == "ingest.example.vezor"
+    assert payload["probe_type"] == "https"
+    assert payload["source_type"] == "manual"
+    assert payload["source_label"] == "operator-console"
+    assert payload["sample_kind"] == "manual"
+    assert payload["deleted_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_delete_link_probe_hides_sample(client: AsyncClient) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probes",
+        json={
+            "latency_ms": 42,
+            "throughput_mbps": 180.0,
+            "packet_loss_percent": 0.1,
+            "reachable": True,
+            "source": "manual:operator-console",
+        },
+    )
+    probe_id = created.json()["id"]
+
+    deleted = await client.delete(f"/api/v1/link/sites/{KNOWN_SITE_ID}/probes/{probe_id}")
+    history = await client.get(f"/api/v1/link/sites/{KNOWN_SITE_ID}/probes")
+
+    assert deleted.status_code == 204
+    assert history.status_code == 200
+    assert history.json() == []
+
+
+@pytest.mark.asyncio
 async def test_link_connection_patch_rejects_null_required_fields(
     client: AsyncClient,
 ) -> None:
