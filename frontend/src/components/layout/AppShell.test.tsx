@@ -85,11 +85,14 @@ describe("AppShell", () => {
       "omnisight-field--shell",
     );
     expect(
-      screen.getByTestId("omnisight-field").querySelector(".omnisight-field__mark-stack"),
+      screen
+        .getByTestId("omnisight-field")
+        .querySelector(".omnisight-field__mark-stack"),
     ).toBeNull();
-    expect(
-      screen.getByAltText(/vezor 2d logo/i),
-    ).toHaveAttribute("src", "/brand/2d_logo_no_ring.png");
+    expect(screen.getByAltText(/vezor 2d logo/i)).toHaveAttribute(
+      "src",
+      "/brand/2d_logo_no_ring.png",
+    );
     expect(screen.getByTestId("workspace-transition")).toBeInTheDocument();
     const intelligenceNav = screen.getByRole("navigation", {
       name: /intelligence/i,
@@ -197,6 +200,29 @@ describe("AppShell", () => {
     expect(
       within(packsNav).getByRole("link", { name: "Onboarding" }),
     ).toHaveAttribute("href", "/fleetops/onboarding");
+  });
+
+  test("exposes core link performance in the control rail", () => {
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <MemoryRouter
+          initialEntries={["/links"]}
+          future={{
+            v7_relativeSplatPath: true,
+            v7_startTransition: true,
+          }}
+        >
+          <AppShell>
+            <div>Links page</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const controlNav = screen.getByRole("navigation", { name: /control/i });
+    expect(
+      within(controlNav).getByRole("link", { name: "Links" }),
+    ).toHaveAttribute("href", "/links");
   });
 
   test("lets operators collapse the grouped section rail without losing the icon rail", async () => {

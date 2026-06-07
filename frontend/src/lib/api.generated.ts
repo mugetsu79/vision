@@ -1111,6 +1111,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/link/sites/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Site Summaries */
+        get: operations["get_link_site_summaries_api_v1_link_sites_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/link/sites/{site_id}/budget": {
         parameters: {
             query?: never;
@@ -4358,6 +4375,46 @@ export interface components {
             source: string;
             /** Throughput Mbps */
             throughput_mbps: number;
+        };
+        /** LinkSiteSummaryResponse */
+        LinkSiteSummaryResponse: {
+            /** Active Connection */
+            active_connection?: {
+                [key: string]: unknown;
+            } | null;
+            /** Budget */
+            budget?: {
+                [key: string]: unknown;
+            } | null;
+            /** Connection Count */
+            connection_count: number;
+            /** Last Sync At */
+            last_sync_at?: string | null;
+            /** Latest Probe */
+            latest_probe?: {
+                [key: string]: unknown;
+            } | null;
+            /** Link State */
+            link_state: string;
+            /** Metered Connection Count */
+            metered_connection_count: number;
+            /** Passport Hash */
+            passport_hash: string;
+            /** Queue Depth */
+            queue_depth?: {
+                [key: string]: number;
+            };
+            /** Queued Bytes */
+            queued_bytes: number;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Site Name */
+            site_name: string;
+            /** Site Tz */
+            site_tz: string;
         };
         /** MaritimeVesselLinkStatusResponse */
         MaritimeVesselLinkStatusResponse: {
@@ -10072,6 +10129,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_site_summaries_api_v1_link_sites_summary_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkSiteSummaryResponse"][];
                 };
             };
             /** @description Validation Error */

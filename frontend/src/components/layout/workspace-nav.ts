@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   MapPinned,
+  Network,
   Radio,
   ServerCog,
   Settings2,
@@ -52,9 +53,23 @@ const baseWorkspaceNavGroups = omniNavGroups.map((group) => ({
                   ? MapPinned
                   : item.to === "/cameras"
                     ? Video
-                    : Settings2,
+                    : item.to === "/links"
+                      ? Network
+                      : Settings2,
   })),
 })) as readonly WorkspaceNavGroup[];
+
+const controlLinks = [
+  { label: "Links", to: "/links", icon: Network },
+] as const satisfies readonly WorkspaceNavItem[];
+
+const workspaceNavGroupsWithLinks: readonly WorkspaceNavGroup[] =
+  baseWorkspaceNavGroups.map(
+    (group): WorkspaceNavGroup =>
+      group.label === "Control"
+        ? { label: group.label, items: [...controlLinks, ...group.items] }
+        : group,
+  );
 
 const fleetOpsChildren = [
   { label: "Vessels", to: "/fleetops/vessels" },
@@ -65,7 +80,7 @@ const fleetOpsChildren = [
 ] as const satisfies readonly WorkspaceNavChildItem[];
 
 export const workspaceNavGroups = [
-  ...baseWorkspaceNavGroups,
+  ...workspaceNavGroupsWithLinks,
   {
     label: "Packs",
     items: [
@@ -79,7 +94,9 @@ export const workspaceNavGroups = [
   },
 ] as const satisfies readonly WorkspaceNavGroup[];
 
-export const workspaceNavItems = workspaceNavGroups.flatMap((group) => group.items);
+export const workspaceNavItems = workspaceNavGroups.flatMap(
+  (group) => group.items,
+);
 
 async function prefetchHistoryQuery(queryClient: QueryClient) {
   const { createDefaultHistoryFilters, historySeriesQueryOptions } =
@@ -113,6 +130,10 @@ export function prefetchWorkspaceRoute(
 
   if (route === "/deployment") {
     void import("@/pages/Deployment");
+  }
+
+  if (route === "/links") {
+    void import("@/pages/Links");
   }
 
   if (route === "/fleetops") {

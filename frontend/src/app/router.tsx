@@ -65,6 +65,12 @@ export const router = createBrowserRouter(
           }),
         },
         {
+          path: "links",
+          lazy: async () => ({
+            Component: (await import("@/pages/Links")).LinksPage,
+          }),
+        },
+        {
           path: "incidents",
           lazy: async () => ({
             Component: (await import("@/pages/Incidents")).IncidentsPage,
@@ -103,7 +109,8 @@ export const router = createBrowserRouter(
         {
           path: "fleetops/vessels",
           lazy: async () => ({
-            Component: (await import("@/pages/FleetOpsVessels")).FleetOpsVesselsPage,
+            Component: (await import("@/pages/FleetOpsVessels"))
+              .FleetOpsVesselsPage,
           }),
         },
         {
@@ -123,13 +130,15 @@ export const router = createBrowserRouter(
         {
           path: "fleetops/billing",
           lazy: async () => ({
-            Component: (await import("@/pages/FleetOpsBilling")).FleetOpsBillingPage,
+            Component: (await import("@/pages/FleetOpsBilling"))
+              .FleetOpsBillingPage,
           }),
         },
         {
           path: "fleetops/support",
           lazy: async () => ({
-            Component: (await import("@/pages/FleetOpsSupport")).FleetOpsSupportPage,
+            Component: (await import("@/pages/FleetOpsSupport"))
+              .FleetOpsSupportPage,
           }),
         },
         {

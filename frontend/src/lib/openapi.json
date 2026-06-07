@@ -5545,6 +5545,110 @@
         "title": "LinkProbeCreate",
         "type": "object"
       },
+      "LinkSiteSummaryResponse": {
+        "properties": {
+          "active_connection": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Connection"
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget"
+          },
+          "connection_count": {
+            "title": "Connection Count",
+            "type": "integer"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "latest_probe": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Probe"
+          },
+          "link_state": {
+            "title": "Link State",
+            "type": "string"
+          },
+          "metered_connection_count": {
+            "title": "Metered Connection Count",
+            "type": "integer"
+          },
+          "passport_hash": {
+            "title": "Passport Hash",
+            "type": "string"
+          },
+          "queue_depth": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Queue Depth",
+            "type": "object"
+          },
+          "queued_bytes": {
+            "title": "Queued Bytes",
+            "type": "integer"
+          },
+          "site_id": {
+            "format": "uuid",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "site_name": {
+            "title": "Site Name",
+            "type": "string"
+          },
+          "site_tz": {
+            "title": "Site Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "site_id",
+          "site_name",
+          "site_tz",
+          "link_state",
+          "connection_count",
+          "metered_connection_count",
+          "queued_bytes",
+          "passport_hash"
+        ],
+        "title": "LinkSiteSummaryResponse",
+        "type": "object"
+      },
       "MaritimeVesselLinkStatusResponse": {
         "properties": {
           "budget": {
@@ -19301,6 +19405,59 @@
           }
         },
         "summary": "Retry Link Queue Item",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/sites/summary": {
+      "get": {
+        "operationId": "get_link_site_summaries_api_v1_link_sites_summary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LinkSiteSummaryResponse"
+                  },
+                  "title": "Response Get Link Site Summaries Api V1 Link Sites Summary Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Link Site Summaries",
         "tags": [
           "link"
         ]

@@ -3,16 +3,32 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@/lib/api.generated";
 import { apiClient, toApiError } from "@/lib/api";
 
-export type LinkConnectionCreateInput = components["schemas"]["LinkConnectionCreate"];
-export type LinkConnectionPatchInput = components["schemas"]["LinkConnectionPatch"];
+export type LinkConnectionCreateInput =
+  components["schemas"]["LinkConnectionCreate"];
+export type LinkConnectionPatchInput =
+  components["schemas"]["LinkConnectionPatch"];
 export type LinkBudgetUpdateInput = components["schemas"]["LinkBudgetUpdate"];
 export type LinkPolicyUpdateInput = components["schemas"]["LinkPolicyUpdate"];
 export type LinkProbeCreateInput = components["schemas"]["LinkProbeCreate"];
+export type LinkSiteSummary = components["schemas"]["LinkSiteSummaryResponse"];
 
 type LinkMutationContext = {
   siteId?: string | null;
   vesselId?: string | null;
 };
+
+export function useLinkSiteSummaries() {
+  return useQuery({
+    queryKey: ["link", "sites", "summary"],
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET("/api/v1/link/sites/summary");
+      if (error) {
+        throw toApiError(error, "Failed to load link summaries.");
+      }
+      return data ?? [];
+    },
+  });
+}
 
 export function useLinkSiteStatus(siteId?: string | null) {
   return useQuery({
@@ -54,7 +70,10 @@ export function useLinkConnections(siteId?: string | null) {
   });
 }
 
-export function useCreateLinkConnection({ siteId, vesselId }: LinkMutationContext) {
+export function useCreateLinkConnection({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -76,7 +95,10 @@ export function useCreateLinkConnection({ siteId, vesselId }: LinkMutationContex
   });
 }
 
-export function useUpdateLinkConnection({ siteId, vesselId }: LinkMutationContext) {
+export function useUpdateLinkConnection({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -107,7 +129,10 @@ export function useUpdateLinkConnection({ siteId, vesselId }: LinkMutationContex
   });
 }
 
-export function useDeleteLinkConnection({ siteId, vesselId }: LinkMutationContext) {
+export function useDeleteLinkConnection({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -191,7 +216,10 @@ export function useLinkPolicies(siteId?: string | null) {
   });
 }
 
-export function useUpdateLinkPolicies({ siteId, vesselId }: LinkMutationContext) {
+export function useUpdateLinkPolicies({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -275,7 +303,10 @@ export function useLinkSiteQueue(siteId?: string | null) {
   });
 }
 
-export function useRetryLinkQueueItem({ siteId, vesselId }: LinkMutationContext) {
+export function useRetryLinkQueueItem({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
   return useQueueItemMutation({
     siteId,
     vesselId,
@@ -284,7 +315,10 @@ export function useRetryLinkQueueItem({ siteId, vesselId }: LinkMutationContext)
   });
 }
 
-export function usePauseLinkQueueItem({ siteId, vesselId }: LinkMutationContext) {
+export function usePauseLinkQueueItem({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
   return useQueueItemMutation({
     siteId,
     vesselId,
@@ -293,7 +327,10 @@ export function usePauseLinkQueueItem({ siteId, vesselId }: LinkMutationContext)
   });
 }
 
-export function useResumeLinkQueueItem({ siteId, vesselId }: LinkMutationContext) {
+export function useResumeLinkQueueItem({
+  siteId,
+  vesselId,
+}: LinkMutationContext) {
   return useQueueItemMutation({
     siteId,
     vesselId,
@@ -337,6 +374,9 @@ async function invalidateLinkSiteQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   { siteId, vesselId }: LinkMutationContext,
 ) {
+  await queryClient.invalidateQueries({
+    queryKey: ["link", "sites", "summary"],
+  });
   if (siteId) {
     await queryClient.invalidateQueries({
       queryKey: ["link", "sites", siteId],
