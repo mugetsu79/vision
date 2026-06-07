@@ -77,6 +77,12 @@ class _FakeSiteService:
         sites = await self.list_sites(tenant_context)
         return [site for site in sites if site.id in self.edge_site_ids]
 
+    async def list_link_performance_sites(
+        self,
+        tenant_context: TenantContext,
+    ) -> list[SiteResponse]:
+        return await self.list_sites(tenant_context)
+
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         if site_id == KNOWN_SITE_ID:
             return self._site_response(tenant_context, site_id, "Packless Site")
@@ -103,6 +109,7 @@ class _FakeSiteService:
             description=None,
             tz="UTC",
             geo_point=None,
+            site_kind="control_plane" if site_id == MASTER_SITE_ID else "edge",
             created_at=datetime.now(tz=UTC),
         )
 
@@ -177,19 +184,26 @@ async def test_link_site_summary_route_is_packless_and_domain_neutral(
         "queue_depth",
         "queued_bytes",
         "passport_hash",
+        "site_role",
+        "capabilities",
     } <= set(payload[0])
     assert "vessel" not in payload[0]
     assert "voyage" not in payload[0]
 
 
 @pytest.mark.asyncio
-async def test_link_site_summary_route_only_lists_edge_sites(client: AsyncClient) -> None:
+async def test_link_site_summary_route_lists_edge_and_control_plane_target_sites(
+    client: AsyncClient,
+) -> None:
     response = await client.get("/api/v1/link/sites/summary")
 
     assert response.status_code == 200
-    site_ids = {item["site_id"] for item in response.json()}
-    assert str(KNOWN_SITE_ID) in site_ids
-    assert str(MASTER_SITE_ID) not in site_ids
+    sites_by_id = {item["site_id"]: item for item in response.json()}
+    assert sites_by_id[str(KNOWN_SITE_ID)]["site_role"] == "edge"
+    assert sites_by_id[str(MASTER_SITE_ID)]["site_role"] == "control_plane"
+    assert sites_by_id[str(KNOWN_SITE_ID)]["capabilities"]["can_configure_links"] is True
+    assert sites_by_id[str(MASTER_SITE_ID)]["capabilities"]["can_configure_links"] is False
+    assert sites_by_id[str(MASTER_SITE_ID)]["capabilities"]["can_receive_edge_probes"] is True
 
 
 @pytest.mark.asyncio
@@ -422,6 +436,60 @@ async def test_edge_agent_sample_computes_loss_from_packet_counts(client: AsyncC
     assert payload["measurement_metadata"]["packet_count"] == 20
     assert payload["measurement_metadata"]["packets_received"] == 19
     assert payload["measurement_metadata"]["packets_lost"] == 1
+
+
+@pytest.mark.asyncio
+async def test_edge_agent_sample_can_target_control_plane_site(client: AsyncClient) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+            "metadata": {
+                "monitoring_targets": [
+                    {
+                        "id": "target-vezor-master",
+                        "label": "Vezor Master",
+                        "address": "master.vezor.local",
+                        "target_site_id": str(MASTER_SITE_ID),
+                        "probe_type": "udp",
+                        "purpose": "control_plane",
+                        "monitoring": {
+                            "enabled": True,
+                            "source_type": "edge_agent",
+                            "interval_seconds": 300,
+                        },
+                    }
+                ]
+            },
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-vezor-master/edge-samples",
+        json={
+            "agent_id": "macbook-home",
+            "agent_label": "MacBook at home",
+            "method": "udp_sequence",
+            "packet_count": 25,
+            "packets_received": 24,
+            "latency_ms": 31,
+        },
+    )
+    master_history = await client.get(f"/api/v1/link/sites/{MASTER_SITE_ID}/probes")
+
+    assert created.status_code == 201
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["site_id"] == str(KNOWN_SITE_ID)
+    assert payload["target_site_id"] == str(MASTER_SITE_ID)
+    assert master_history.status_code == 200
+    assert master_history.json()[0]["id"] == payload["id"]
+    assert master_history.json()[0]["site_id"] == str(KNOWN_SITE_ID)
 
 
 @pytest.mark.asyncio

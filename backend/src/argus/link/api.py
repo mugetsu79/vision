@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field, model_validator
 
-from argus.api.contracts import TenantContext
+from argus.api.contracts import SiteResponse, TenantContext
 from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
 from argus.link.contracts import (
@@ -44,6 +44,7 @@ TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 PriorityLaneQuery = Annotated[LinkPriorityLane, Query()]
 RemainingBudgetBytesQuery = Annotated[int, Query(ge=0)]
 LinkEdgeProbeMethod = Literal["icmp_sequence", "stamp", "twamp", "udp_sequence"]
+LinkSiteRole = Literal["edge", "control_plane"]
 REQUIRED_CONNECTION_PATCH_FIELDS = {
     "label",
     "transport_kind",
@@ -61,6 +62,7 @@ class LinkBudgetUpdate(BaseModel):
 
 class LinkProbeCreate(BaseModel):
     connection_id: UUID | None = None
+    target_site_id: UUID | None = None
     latency_ms: int = Field(ge=0)
     throughput_mbps: float = Field(ge=0)
     packet_loss_percent: float = Field(ge=0)
@@ -139,6 +141,8 @@ class LinkSiteSummaryResponse(BaseModel):
     site_id: UUID
     site_name: str
     site_tz: str
+    site_role: LinkSiteRole = "edge"
+    capabilities: dict[str, bool] = Field(default_factory=dict)
     link_state: str
     active_connection: dict[str, object] | None = None
     connection_count: int
@@ -157,12 +161,37 @@ async def get_link_site_summaries(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[LinkSiteSummaryResponse]:
-    sites = await services.sites.list_edge_sites(tenant_context)
+    sites = await services.sites.list_link_performance_sites(tenant_context)
     summary_records = await services.link.alist_site_summaries(
         tenant_id=tenant_context.tenant_id,
         sites=[{"id": site.id, "name": site.name, "tz": site.tz} for site in sites],
     )
-    return [_site_summary_payload(summary) for summary in summary_records]
+    sites_by_id = {site.id: site for site in sites}
+    summaries: list[LinkSiteSummaryResponse] = []
+    for summary in summary_records:
+        site = sites_by_id[summary.site_id]
+        site_role = _site_role(site)
+        latest_probe = summary.latest_probe
+        link_state = summary.link_state
+        last_sync_at = summary.last_sync_at
+        if site_role == "control_plane":
+            target_probes = await services.link.alist_target_site_probes(
+                tenant_id=tenant_context.tenant_id,
+                target_site_id=summary.site_id,
+            )
+            latest_probe = target_probes[0] if target_probes else None
+            link_state = services.link.derive_link_state(latest_probe)
+            last_sync_at = latest_probe.recorded_at if latest_probe is not None else None
+        summaries.append(
+            _site_summary_payload(
+                summary,
+                site_role=site_role,
+                latest_probe=latest_probe,
+                link_state=link_state,
+                last_sync_at=last_sync_at,
+            )
+        )
+    return summaries
 
 
 @router.get("/sites/{site_id}/status")
@@ -172,7 +201,13 @@ async def get_link_status(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
-    await _ensure_link_edge_site(services, tenant_context, site_id)
+    site = await _ensure_link_site(services, tenant_context, site_id)
+    if _site_role(site) == "control_plane":
+        return await _target_site_status_payload(
+            services,
+            tenant_id=tenant_context.tenant_id,
+            site_id=site_id,
+        )
     passport = await services.link.abuild_passport(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -378,19 +413,18 @@ async def get_link_probes(
     tenant_context: TenantDependency,
     services: ServicesDependency,
 ) -> list[JsonObject]:
-    await _ensure_link_edge_site(
-        services,
-        tenant_context,
-        site_id,
-        detail="Core Link probes can only be recorded for edge sites.",
-    )
-    return [
-        _probe_payload(probe)
-        for probe in await services.link.alist_probes(
+    site = await _ensure_link_site(services, tenant_context, site_id)
+    if _site_role(site) == "control_plane":
+        probes = await services.link.alist_target_site_probes(
+            tenant_id=tenant_context.tenant_id,
+            target_site_id=site_id,
+        )
+    else:
+        probes = await services.link.alist_probes(
             tenant_id=tenant_context.tenant_id,
             site_id=site_id,
         )
-    ]
+    return [_probe_payload(probe) for probe in probes]
 
 
 @router.post("/sites/{site_id}/probes", status_code=status.HTTP_201_CREATED)
@@ -407,6 +441,8 @@ async def post_link_probe(
         site_id,
         detail="Core Link probes can only be recorded for edge sites.",
     )
+    if payload.target_site_id is not None:
+        await _ensure_link_site(services, tenant_context, payload.target_site_id)
     try:
         probe = await services.link.arecord_probe(
             tenant_id=tenant_context.tenant_id,
@@ -417,6 +453,7 @@ async def post_link_probe(
             packet_loss_percent=payload.packet_loss_percent,
             reachable=payload.reachable,
             source=payload.source,
+            target_site_id=payload.target_site_id,
             target_id=payload.target_id,
             target_label=payload.target_label,
             target_address=payload.target_address,
@@ -457,6 +494,7 @@ async def post_link_edge_probe_sample(
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
 
+    target_site_id = await _target_site_id_from_metadata(services, tenant_context, target)
     packets_lost = payload.packet_count - payload.packets_received
     packet_loss_percent = round((packets_lost / payload.packet_count) * 100, 4)
     source_label = payload.agent_label or payload.agent_id
@@ -468,6 +506,7 @@ async def post_link_edge_probe_sample(
         packet_loss_percent=packet_loss_percent,
         reachable=payload.packets_received > 0,
         source=f"edge_agent:{payload.agent_id}",
+        target_site_id=target_site_id,
         target_id=target_id,
         target_label=_target_text(target, "label"),
         target_address=_target_text(target, "address"),
@@ -531,6 +570,7 @@ async def run_link_probe_target(
     )
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
+    target_site_id = await _target_site_id_from_metadata(services, tenant_context, target)
     result = await run_backend_probe(_probe_target_from_metadata(target))
     probe = await services.link.arecord_probe(
         tenant_id=tenant_context.tenant_id,
@@ -540,6 +580,7 @@ async def run_link_probe_target(
         packet_loss_percent=result.packet_loss_percent,
         reachable=result.reachable,
         source=result.source,
+        target_site_id=target_site_id,
         target_id=result.target_id,
         target_label=result.target_label,
         target_address=result.target_address,
@@ -575,6 +616,7 @@ async def measure_link_probe_target_throughput(
     )
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
+    target_site_id = await _target_site_id_from_metadata(services, tenant_context, target)
     result = await measure_backend_throughput(_throughput_target_from_metadata(target))
     probe = await services.link.arecord_probe(
         tenant_id=tenant_context.tenant_id,
@@ -584,6 +626,7 @@ async def measure_link_probe_target_throughput(
         packet_loss_percent=result.packet_loss_percent,
         reachable=result.reachable,
         source=result.source,
+        target_site_id=target_site_id,
         target_id=result.target_id,
         target_label=result.target_label,
         target_address=result.target_address,
@@ -698,30 +741,64 @@ def _status_payload(passport: LinkPassportSnapshotRecord) -> JsonObject:
     return payload
 
 
-def _site_summary_payload(summary: LinkSiteSummaryRecord) -> LinkSiteSummaryResponse:
+def _site_summary_payload(
+    summary: LinkSiteSummaryRecord,
+    *,
+    site_role: LinkSiteRole,
+    latest_probe: LinkHealthProbeRecord | None,
+    link_state: str,
+    last_sync_at: datetime | None,
+) -> LinkSiteSummaryResponse:
     return LinkSiteSummaryResponse(
         site_id=summary.site_id,
         site_name=summary.site_name,
         site_tz=summary.site_tz,
-        link_state=summary.link_state,
+        site_role=site_role,
+        capabilities=_site_capabilities(site_role),
+        link_state=link_state,
         active_connection=(
             _connection_payload(summary.active_connection)
             if summary.active_connection is not None
+            and site_role == "edge"
             else None
         ),
         connection_count=summary.connection_count,
         metered_connection_count=summary.metered_connection_count,
         latest_probe=(
-            _probe_payload(summary.latest_probe)
-            if summary.latest_probe is not None
+            _probe_payload(latest_probe)
+            if latest_probe is not None
             else None
         ),
         queue_depth={str(lane): count for lane, count in summary.queue_depth.items()},
         queued_bytes=summary.queued_bytes,
-        budget=_budget_payload(summary.budget) if summary.budget is not None else None,
-        last_sync_at=summary.last_sync_at,
+        budget=(
+            _budget_payload(summary.budget)
+            if summary.budget is not None and site_role == "edge"
+            else None
+        ),
+        last_sync_at=last_sync_at,
         passport_hash=summary.passport_hash,
     )
+
+
+def _site_role(site: SiteResponse) -> LinkSiteRole:
+    return "control_plane" if site.site_kind == "control_plane" else "edge"
+
+
+def _site_capabilities(site_role: LinkSiteRole) -> dict[str, bool]:
+    return {
+        "can_configure_links": site_role == "edge",
+        "can_record_manual_samples": site_role == "edge",
+        "can_receive_edge_probes": site_role == "control_plane",
+    }
+
+
+async def _ensure_link_site(
+    services: AppServices,
+    tenant_context: TenantContext,
+    site_id: UUID,
+) -> SiteResponse:
+    return await services.sites.get_site(tenant_context, site_id)
 
 
 async def _ensure_link_edge_site(
@@ -731,12 +808,40 @@ async def _ensure_link_edge_site(
     *,
     detail: str = "Core Link can only be configured for edge sites.",
 ) -> None:
-    try:
-        await services.sites.get_site(tenant_context, site_id)
-    except HTTPException:
-        raise
+    await _ensure_link_site(services, tenant_context, site_id)
     if not await services.sites.is_edge_site(tenant_context, site_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
+async def _target_site_status_payload(
+    services: AppServices,
+    *,
+    tenant_id: UUID,
+    site_id: UUID,
+) -> JsonObject:
+    probes = await services.link.alist_target_site_probes(
+        tenant_id=tenant_id,
+        target_site_id=site_id,
+    )
+    latest_probe = probes[0] if probes else None
+    payload: JsonObject = {
+        "schema_version": 1,
+        "tenant_id": str(tenant_id),
+        "site_id": str(site_id),
+        "camera_id": None,
+        "incident_id": None,
+        "evidence_artifact_id": None,
+        "pack_id": None,
+        "link_state": services.link.derive_link_state(latest_probe),
+        "active_connection": None,
+        "connections": [],
+        "budget": None,
+        "queue_depth": {},
+        "latest_probe": _probe_payload(latest_probe) if latest_probe is not None else None,
+        "last_sync_at": latest_probe.recorded_at.isoformat() if latest_probe is not None else None,
+    }
+    payload["passport_hash"] = services.link.hash_passport_payload(payload)
+    return payload
 
 
 def _reject_null_required_connection_fields(updates: dict[str, object]) -> None:
@@ -819,6 +924,7 @@ def _probe_payload(probe: LinkHealthProbeRecord) -> JsonObject:
         "id": str(probe.id),
         "tenant_id": str(probe.tenant_id),
         "site_id": str(probe.site_id),
+        "target_site_id": str(probe.target_site_id) if probe.target_site_id is not None else None,
         "connection_id": str(probe.connection_id) if probe.connection_id is not None else None,
         "latency_ms": probe.latency_ms,
         "throughput_mbps": probe.throughput_mbps,
@@ -841,6 +947,33 @@ def _probe_payload(probe: LinkHealthProbeRecord) -> JsonObject:
 def _target_text(target: JsonObject, field: str) -> str | None:
     value = target.get(field)
     return value if isinstance(value, str) else None
+
+
+async def _target_site_id_from_metadata(
+    services: AppServices,
+    tenant_context: TenantContext,
+    target: JsonObject,
+) -> UUID | None:
+    value = target.get("target_site_id")
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        target_site_id = value
+    elif isinstance(value, str):
+        try:
+            target_site_id = UUID(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Probe target target_site_id must be a UUID.",
+            ) from exc
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Probe target target_site_id must be a UUID.",
+        )
+    await _ensure_link_site(services, tenant_context, target_site_id)
+    return target_site_id
 
 
 def _edge_probe_type_from_metadata(
