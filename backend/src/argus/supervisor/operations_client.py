@@ -5,17 +5,24 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 
 from argus.api.contracts import (
+    DeploymentModelInventoryReport,
+    DeploymentModelSyncJobResponse,
     EdgeNodeHardwareReportCreate,
     EdgeNodeHardwareReportResponse,
     FleetCameraWorkerSummary,
     FleetOverviewResponse,
     OperationsLifecycleRequestResponse,
+    SupervisorModelJobComplete,
+    SupervisorModelJobEventCreate,
+    SupervisorModelJobPollRequest,
+    SupervisorModelJobPollResponse,
     SupervisorPollResponse,
     SupervisorRuntimeReportCreate,
     SupervisorRuntimeReportResponse,
@@ -163,6 +170,68 @@ class SupervisorOperationsClient:
         )
         return SupervisorServiceReportResponse.model_validate(body)
 
+    async def poll_model_jobs(self, limit: int = 10) -> list[DeploymentModelSyncJobResponse]:
+        payload = SupervisorModelJobPollRequest(limit=limit)
+        body = await self._request(
+            "POST",
+            f"/api/v1/deployment/supervisors/{self.supervisor_id}/model-jobs/poll",
+            json=payload.model_dump(mode="json"),
+        )
+        return SupervisorModelJobPollResponse.model_validate(body).jobs
+
+    async def record_model_job_event(
+        self,
+        job_id: UUID,
+        event: SupervisorModelJobEventCreate,
+    ) -> DeploymentModelSyncJobResponse:
+        body = await self._request(
+            "POST",
+            f"/api/v1/deployment/supervisors/{self.supervisor_id}/model-jobs/{job_id}/events",
+            json=event.model_dump(mode="json"),
+        )
+        return DeploymentModelSyncJobResponse.model_validate(body)
+
+    async def complete_model_job(
+        self,
+        job_id: UUID,
+        completion: SupervisorModelJobComplete,
+    ) -> DeploymentModelSyncJobResponse:
+        body = await self._request(
+            "POST",
+            f"/api/v1/deployment/supervisors/{self.supervisor_id}/model-jobs/{job_id}/complete",
+            json=completion.model_dump(mode="json"),
+        )
+        return DeploymentModelSyncJobResponse.model_validate(body)
+
+    async def record_model_inventory(
+        self,
+        report: DeploymentModelInventoryReport,
+    ) -> DeploymentModelInventoryReport:
+        body = await self._request(
+            "POST",
+            f"/api/v1/deployment/supervisors/{self.supervisor_id}/model-inventory",
+            json=report.model_dump(mode="json"),
+        )
+        return DeploymentModelInventoryReport.model_validate(body)
+
+    async def download_model_asset(self, asset_id: UUID, destination_path: str | Path) -> Path:
+        destination = Path(destination_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+        path = f"/api/v1/model-assets/{asset_id}/download"
+        response = await self._download(path)
+        try:
+            with temporary_path.open("wb") as handle:
+                async for chunk in response.aiter_bytes():
+                    handle.write(chunk)
+            temporary_path.replace(destination)
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
+        finally:
+            await response.aclose()
+        return destination
+
     async def fetch_fleet_overview(self) -> FleetOverviewResponse:
         body = await self._request("GET", "/api/v1/operations/fleet")
         return FleetOverviewResponse.model_validate(body)
@@ -307,6 +376,40 @@ class SupervisorOperationsClient:
                 response_body=response.text,
             )
         return response.json()
+
+    async def _download(self, path: str) -> httpx.Response:
+        client = self._client()
+        response = await client.send(
+            client.build_request(
+                "GET",
+                f"{self.api_base_url}{path}",
+                headers={"Authorization": f"Bearer {await self._bearer_token()}"},
+            ),
+            stream=True,
+        )
+        if response.status_code == 401 and self.token_provider is not None:
+            await response.aclose()
+            invalidate = getattr(self.token_provider, "invalidate", None)
+            if callable(invalidate):
+                invalidate()
+            response = await client.send(
+                client.build_request(
+                    "GET",
+                    f"{self.api_base_url}{path}",
+                    headers={"Authorization": f"Bearer {await self._bearer_token()}"},
+                ),
+                stream=True,
+            )
+        if response.status_code < 200 or response.status_code >= 300:
+            body = await response.aread()
+            await response.aclose()
+            raise SupervisorClientError(
+                method="GET",
+                path=path,
+                status_code=response.status_code,
+                response_body=body.decode(errors="replace"),
+            )
+        return response
 
     async def _bearer_token(self) -> str:
         if self.token_provider is None:

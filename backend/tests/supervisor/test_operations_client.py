@@ -8,14 +8,20 @@ import httpx
 import pytest
 
 from argus.api.contracts import (
+    DeploymentModelInventoryItem,
+    DeploymentModelInventoryReport,
+    DeploymentModelSyncJobResponse,
     EdgeNodeHardwareReportCreate,
     FleetOverviewResponse,
     HardwarePerformanceSample,
     OperationsLifecycleRequestResponse,
+    SupervisorModelJobComplete,
+    SupervisorModelJobEventCreate,
 )
 from argus.models.enums import (
     DetectorCapability,
     ModelAdmissionStatus,
+    ModelLifecycleJobStatus,
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
 )
@@ -364,6 +370,111 @@ async def test_client_can_use_credential_store_without_static_bearer() -> None:
 
 
 @pytest.mark.asyncio
+async def test_client_calls_model_job_inventory_and_download_routes(tmp_path) -> None:
+    tenant_id = uuid4()
+    deployment_node_id = uuid4()
+    assignment_id = uuid4()
+    model_id = uuid4()
+    job = _model_job_json(
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+        assignment_id=assignment_id,
+        model_id=model_id,
+    )
+    events_path = (
+        f"/api/v1/deployment/supervisors/edge-supervisor-1/model-jobs/{job['id']}/events"
+    )
+    complete_path = (
+        f"/api/v1/deployment/supervisors/edge-supervisor-1/model-jobs/{job['id']}/complete"
+    )
+    seen: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        path = request.url.path
+        if path == "/api/v1/deployment/supervisors/edge-supervisor-1/model-jobs/poll":
+            return httpx.Response(
+                200,
+                json={"supervisor_id": "edge-supervisor-1", "jobs": [job]},
+            )
+        if path == events_path:
+            return httpx.Response(201, json={**job, "status": "running"})
+        if path == complete_path:
+            return httpx.Response(
+                200,
+                json={
+                    **job,
+                    "status": "succeeded",
+                    "completed_at": "2026-06-08T09:00:00Z",
+                },
+            )
+        if path == "/api/v1/deployment/supervisors/edge-supervisor-1/model-inventory":
+            return httpx.Response(201, json=json.loads(request.content))
+        if path == f"/api/v1/model-assets/{model_id}/download":
+            return httpx.Response(200, content=b"model-bytes")
+        return httpx.Response(404, text=path)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as http_client:
+        client = SupervisorOperationsClient(
+            api_base_url="http://api.local",
+            supervisor_id="edge-supervisor-1",
+            bearer_token="secret-token",
+            http_client=http_client,
+        )
+
+        polled = await client.poll_model_jobs(limit=3)
+        await client.record_model_job_event(
+            polled[0].id,
+            SupervisorModelJobEventCreate(
+                job_kind="model_sync",
+                status=ModelLifecycleJobStatus.RUNNING,
+                message="copying",
+                payload={"progress": 0.5},
+            ),
+        )
+        await client.complete_model_job(
+            polled[0].id,
+            SupervisorModelJobComplete(
+                status=ModelLifecycleJobStatus.SUCCEEDED,
+                local_path="/models/yolo26n.onnx",
+                sha256="a" * 64,
+                size_bytes=11,
+            ),
+        )
+        await client.record_model_inventory(
+            DeploymentModelInventoryReport(
+                items=[
+                    DeploymentModelInventoryItem(
+                        asset_kind="model",
+                        asset_id=model_id,
+                        local_path="/models/yolo26n.onnx",
+                        sha256="a" * 64,
+                        size_bytes=11,
+                        reported_at=datetime(2026, 6, 8, 9, 0, tzinfo=UTC),
+                    )
+                ]
+            )
+        )
+        destination = tmp_path / "downloaded.onnx"
+        downloaded_path = await client.download_model_asset(model_id, destination)
+
+    assert downloaded_path == destination
+    assert destination.read_bytes() == b"model-bytes"
+    assert [request.url.path for request in seen] == [
+        "/api/v1/deployment/supervisors/edge-supervisor-1/model-jobs/poll",
+        events_path,
+        complete_path,
+        "/api/v1/deployment/supervisors/edge-supervisor-1/model-inventory",
+        f"/api/v1/model-assets/{model_id}/download",
+    ]
+    assert all(request.headers["authorization"] == "Bearer secret-token" for request in seen)
+    assert json.loads(seen[0].content) == {"limit": 3}
+    assert json.loads(seen[1].content)["status"] == "running"
+    assert json.loads(seen[2].content)["status"] == "succeeded"
+    assert json.loads(seen[3].content)["items"][0]["asset_id"] == str(model_id)
+
+
+@pytest.mark.asyncio
 async def test_password_grant_token_provider_caches_and_can_refresh() -> None:
     seen: list[httpx.Request] = []
 
@@ -534,4 +645,34 @@ def _fleet_overview_json(
             ],
             "delivery_diagnostics": [],
         }
+    ).model_dump(mode="json")
+
+
+def _model_job_json(
+    *,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    assignment_id: UUID,
+    model_id: UUID,
+) -> dict[str, object]:
+    return DeploymentModelSyncJobResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+        assignment_id=assignment_id,
+        model_id=model_id,
+        status=ModelLifecycleJobStatus.ACCEPTED,
+        payload={
+            "job_type": "model_sync",
+            "source_path": "/central/models/yolo26n.onnx",
+            "target_path": "/models/yolo26n.onnx",
+            "expected_sha256": "a" * 64,
+            "size_bytes": 11,
+        },
+        claimed_by_supervisor_id="edge-supervisor-1",
+        claimed_at=datetime(2026, 6, 8, 9, 0, tzinfo=UTC),
+        completed_at=None,
+        error=None,
+        created_at=datetime(2026, 6, 8, 8, 55, tzinfo=UTC),
+        updated_at=datetime(2026, 6, 8, 9, 0, tzinfo=UTC),
     ).model_dump(mode="json")
