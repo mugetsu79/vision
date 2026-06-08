@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from argus.api.contracts import (
     DeploymentModelAssignmentCreate,
@@ -91,13 +92,83 @@ async def test_inventory_report_upserts_node_assets() -> None:
         supervisor_id=node.supervisor_id,
         authenticated_node_id=node.id,
         payload=DeploymentModelInventoryReport(
-            items=[_inventory_item(model, reported_at=second_reported_at)]
+            items=[
+                _inventory_item(
+                    model,
+                    local_path="/var/lib/vezor/models/yolo26n-updated.onnx",
+                    reported_at=second_reported_at,
+                    runtime_versions={"onnxruntime": "1.21.0"},
+                    size_bytes=23_456,
+                    target_profile="linux-x86_64-cuda",
+                )
+            ]
         ),
     )
 
     rows = _rows(session_factory, DeploymentModelInventory)
     assert len(rows) == 1
+    assert rows[0].local_path == "/var/lib/vezor/models/yolo26n-updated.onnx"
+    assert rows[0].size_bytes == 23_456
+    assert rows[0].target_profile == "linux-x86_64-cuda"
+    assert rows[0].runtime_versions == {"onnxruntime": "1.21.0"}
     assert rows[0].reported_at == second_reported_at
+
+
+@pytest.mark.asyncio
+async def test_inventory_report_handles_unique_conflict_idempotently() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    reported_at = datetime(2026, 6, 8, 9, 0, tzinfo=UTC)
+    session_factory = _MemorySessionFactory(
+        [tenant, model, node],
+        raise_inventory_insert_conflict=True,
+    )
+    service = ModelLifecycleService(session_factory=session_factory)
+
+    await service.record_model_inventory(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        payload=DeploymentModelInventoryReport(
+            items=[_inventory_item(model, reported_at=reported_at)]
+        ),
+    )
+
+    rows = _rows(session_factory, DeploymentModelInventory)
+    assert len(rows) == 1
+    assert rows[0].deployment_node_id == node.id
+    assert rows[0].sha256 == model.sha256
+
+
+@pytest.mark.asyncio
+async def test_inventory_report_with_wrong_hash_does_not_sync_assignment() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    assignment = await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+
+    await service.record_model_inventory(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        payload=DeploymentModelInventoryReport(
+            items=[
+                _inventory_item(
+                    model,
+                    reported_at=datetime(2026, 6, 8, 9, 0, tzinfo=UTC),
+                    sha256="b" * 64,
+                )
+            ]
+        ),
+    )
+
+    rows = _rows(session_factory, DeploymentModelAssignment)
+    assert rows[0].id == assignment.id
+    assert rows[0].status is DeploymentModelAssignmentStatus.DESIRED
 
 
 @pytest.mark.asyncio
@@ -155,15 +226,24 @@ def _deployment_node(*, tenant_id: UUID, supervisor_id: str) -> DeploymentNode:
     )
 
 
-def _inventory_item(model: Model, *, reported_at: datetime) -> DeploymentModelInventoryItem:
+def _inventory_item(
+    model: Model,
+    *,
+    reported_at: datetime,
+    local_path: str = "/var/lib/vezor/models/yolo26n.onnx",
+    runtime_versions: dict[str, object] | None = None,
+    sha256: str | None = None,
+    size_bytes: int | None = None,
+    target_profile: str | None = "linux-aarch64-nvidia-jetson",
+) -> DeploymentModelInventoryItem:
     return DeploymentModelInventoryItem(
         asset_kind="model",
         asset_id=model.id,
-        local_path="/var/lib/vezor/models/yolo26n.onnx",
-        sha256=model.sha256,
-        size_bytes=model.size_bytes,
-        target_profile="linux-aarch64-nvidia-jetson",
-        runtime_versions={"onnxruntime": "1.20.0"},
+        local_path=local_path,
+        sha256=sha256 or model.sha256,
+        size_bytes=size_bytes or model.size_bytes,
+        target_profile=target_profile,
+        runtime_versions=runtime_versions or {"onnxruntime": "1.20.0"},
         reported_at=reported_at,
     )
 
@@ -173,8 +253,15 @@ def _rows(session_factory: _MemorySessionFactory, entity: type[object]) -> list:
 
 
 class _MemorySessionFactory:
-    def __init__(self, rows: list[object]) -> None:
+    def __init__(
+        self,
+        rows: list[object],
+        *,
+        raise_inventory_insert_conflict: bool = False,
+    ) -> None:
         self.rows = rows
+        self.raise_inventory_insert_conflict = raise_inventory_insert_conflict
+        self.inventory_insert_added = False
 
     def __call__(self) -> _MemorySession:
         return _MemorySession(self)
@@ -192,9 +279,17 @@ class _MemorySession:
 
     def add(self, row: object) -> None:
         _ensure_persisted(row)
+        if isinstance(row, DeploymentModelInventory):
+            self.session_factory.inventory_insert_added = True
         self.session_factory.rows.append(row)
 
     async def commit(self) -> None:
+        if (
+            self.session_factory.raise_inventory_insert_conflict
+            and self.session_factory.inventory_insert_added
+        ):
+            self.session_factory.inventory_insert_added = False
+            raise IntegrityError("insert", {}, Exception("unique conflict"))
         return None
 
     async def refresh(self, row: object) -> None:
@@ -211,6 +306,8 @@ class _MemorySession:
         )
 
     async def execute(self, statement):  # noqa: ANN001
+        if _is_inventory_insert(statement):
+            return _Result([self._execute_inventory_upsert(statement.compile().params)])
         entities = {
             description.get("entity") for description in statement.column_descriptions
         }
@@ -222,6 +319,47 @@ class _MemorySession:
         compiled = statement.compile()
         rows = _filter_statement_rows(rows, compiled.params)
         return _Result(rows)
+
+    def _execute_inventory_upsert(
+        self,
+        params: dict[str, object],
+    ) -> DeploymentModelInventory:
+        existing = next(
+            (
+                row
+                for row in _rows(self.session_factory, DeploymentModelInventory)
+                if row.deployment_node_id == params["deployment_node_id"]
+                and row.asset_kind == params["asset_kind"]
+                and row.asset_id == params["asset_id"]
+                and row.sha256 == params["sha256"]
+            ),
+            None,
+        )
+        if existing is None:
+            inventory = DeploymentModelInventory(
+                id=params["id"],
+                tenant_id=params["tenant_id"],
+                deployment_node_id=params["deployment_node_id"],
+                asset_kind=params["asset_kind"],
+                asset_id=params["asset_id"],
+                local_path=params["local_path"],
+                sha256=params["sha256"],
+                size_bytes=params["size_bytes"],
+                target_profile=params["target_profile"],
+                runtime_versions=params["runtime_versions"],
+                reported_at=params["reported_at"],
+            )
+            _ensure_persisted(inventory)
+            self.session_factory.rows.append(inventory)
+            return inventory
+
+        existing.local_path = params["local_path"]
+        existing.size_bytes = params["size_bytes"]
+        existing.target_profile = params["target_profile"]
+        existing.runtime_versions = params["runtime_versions"]
+        existing.reported_at = params["reported_at"]
+        existing.updated_at = datetime.now(UTC)
+        return existing
 
 
 class _Result:
@@ -264,6 +402,10 @@ def _filter_statement_rows(rows: list[object], params: dict[str, object]) -> lis
         elif key.startswith("status"):
             rows = [row for row in rows if getattr(row, "status", None) == value]
     return rows
+
+
+def _is_inventory_insert(statement) -> bool:  # noqa: ANN001
+    return getattr(statement, "table", None) == DeploymentModelInventory.__table__
 
 
 def _ensure_persisted(row: object) -> None:

@@ -7,7 +7,8 @@ from uuid import UUID, uuid4
 
 import anyio
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -761,24 +762,8 @@ async def _upsert_inventory_item(
     deployment_node_id: UUID,
     item: DeploymentModelInventoryItem,
 ) -> DeploymentModelInventory:
-    statement = (
-        select(DeploymentModelInventory)
-        .where(DeploymentModelInventory.tenant_id == tenant_id)
-        .where(DeploymentModelInventory.deployment_node_id == deployment_node_id)
-        .where(DeploymentModelInventory.asset_kind == item.asset_kind)
-        .where(DeploymentModelInventory.asset_id == item.asset_id)
-        .where(DeploymentModelInventory.sha256 == item.sha256)
-    )
-    existing = (await session.execute(statement)).scalars().first()
-    if isinstance(existing, DeploymentModelInventory):
-        existing.local_path = item.local_path
-        existing.size_bytes = item.size_bytes
-        existing.target_profile = item.target_profile
-        existing.runtime_versions = dict(item.runtime_versions)
-        existing.reported_at = item.reported_at
-        return existing
-
-    inventory = DeploymentModelInventory(
+    insert_statement = pg_insert(DeploymentModelInventory).values(
+        id=uuid4(),
         tenant_id=tenant_id,
         deployment_node_id=deployment_node_id,
         asset_kind=item.asset_kind,
@@ -790,8 +775,21 @@ async def _upsert_inventory_item(
         runtime_versions=dict(item.runtime_versions),
         reported_at=item.reported_at,
     )
-    session.add(inventory)
-    return inventory
+    statement = insert_statement.on_conflict_do_update(
+        constraint="uq_deployment_model_inventory_asset",
+        set_={
+            "local_path": insert_statement.excluded.local_path,
+            "size_bytes": insert_statement.excluded.size_bytes,
+            "target_profile": insert_statement.excluded.target_profile,
+            "runtime_versions": insert_statement.excluded.runtime_versions,
+            "reported_at": insert_statement.excluded.reported_at,
+            "updated_at": func.now(),
+        },
+    ).returning(DeploymentModelInventory)
+    row = (await session.execute(statement)).scalars().first()
+    if not isinstance(row, DeploymentModelInventory):
+        raise RuntimeError("Deployment model inventory upsert did not return a row.")
+    return row
 
 
 async def _mark_synced_assignments(
