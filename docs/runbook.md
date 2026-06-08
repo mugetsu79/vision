@@ -51,6 +51,19 @@ The first service-wrapper templates live in `infra/install/`:
   pairing session when supplied, and enables the `vezor-edge.service` systemd
   unit.
 
+For new installs, prefer the repository-level front door:
+
+```bash
+sudo ./bin/vezor install master --public-url http://MASTER_HOST_OR_IP:3000
+./bin/vezor ctl bootstrap-master --api-url http://MASTER_HOST_OR_IP:8000 --rotate-local-token --json
+./bin/vezor status --json
+./bin/vezor validate
+```
+
+The scripts listed above are still the implementation artifacts and remain
+useful for audits and break-glass support; `bin/vezor` is the normal operator
+entry point.
+
 The backend may render or validate these artifacts, but it must not install,
 start, or shell into a node. Installation is a bootstrap responsibility; daily
 operation is UI intent plus node-local supervisor reconciliation.
@@ -58,6 +71,41 @@ operation is UI intent plus node-local supervisor reconciliation.
 For step-by-step installation, first-run, pairing, reboot validation, support
 bundle, upgrade, and uninstall instructions, use
 `docs/product-installer-and-first-run-guide.md`.
+
+## Linux Master Model Bundle And Smoke Gate
+
+The Linux master appliance bundles `yolo26n.onnx` and `yolo26s.onnx` in
+`installer/assets/models/`. During install, the bundle is copied into
+`/var/lib/vezor/models/` and mounted into containers at `/models`.
+First-run smoke validation must register `/models/yolo26n.onnx` and
+`/models/yolo26s.onnx`; falling back to YOLO11 is a BLOCKED result for the
+YOLO26 bundle check.
+
+Use deterministic smoke first:
+
+```bash
+scripts/validation/whole_product_live_smoke.py \
+  --api-url http://127.0.0.1:8000 \
+  --report /tmp/vezor-whole-smoke/report.json \
+  --real-rtsp none
+```
+
+Use real RTSP only after deterministic smoke passes. Store camera URLs in a
+local env file outside the repository and source it before running:
+
+```bash
+set -a
+. /tmp/vezor-real-camera.env
+set +a
+scripts/validation/whole_product_live_smoke.py \
+  --api-url http://127.0.0.1:8000 \
+  --report /tmp/vezor-whole-smoke/report-real-720p.json \
+  --real-rtsp 720p
+```
+
+Keep real camera URLs local and uncommitted. The local-only env var names are
+`VEZOR_SMOKE_REAL_RTSP_720P_URL` and
+`VEZOR_SMOKE_REAL_RTSP_1296P_URL`.
 
 ## Core Link Performance Operations
 
@@ -125,9 +173,22 @@ not installed or the Compose plugin is unavailable, the Compose render is
 skipped with a clear `docker unavailable` message; DeepStream files are not part
 of this installer gate.
 
-### Local Vezorctl Utility
+### Local Vezor Utility
 
-Installed packages include `vezorctl` for local host operations:
+Installed packages include `vezor` as the front door and `vezorctl` as the
+lower-level local host utility. Prefer:
+
+- `vezor status --json` for local install and node status
+- `vezor ctl pair --api-url ... --session-id ... --pairing-code ...` to claim
+  a Control -> Deployment pairing session and write the node credential with
+  owner-only permissions
+- `vezor ctl bootstrap-master --api-url ... --rotate-local-token --json` to
+  rotate the short-lived local master bootstrap token
+- `vezor ctl support-bundle --redact --json` to print local diagnostics with
+  token-like values redacted
+- `vezor ctl doctor --json` to report local installer prerequisites
+
+`vezorctl` remains available for automation and break-glass support:
 
 - `vezorctl status --json` reads local config and service status
 - `vezorctl pair --api-url ... --session-id ... --pairing-code ...` claims a
@@ -302,7 +363,7 @@ For installed Jetson edge nodes, create a one-time edge pairing session in
 Control -> Deployment and run the local edge installer on the Jetson:
 
 ```bash
-sudo /opt/vezor/current/installer/linux/install-edge.sh \
+sudo /opt/vezor/current/bin/vezor install edge \
   --api-url "https://vezor.example.com" \
   --session-id "<pairing-session-id>" \
   --pairing-code "<one-time-code>" \

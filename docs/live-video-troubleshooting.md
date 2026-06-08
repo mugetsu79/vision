@@ -112,7 +112,7 @@ git fetch origin
 git switch main
 git pull --ff-only origin main
 
-sudo ./installer/linux/install-edge.sh \
+sudo ./bin/vezor install edge \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --api-url "$MASTER_API_URL" \

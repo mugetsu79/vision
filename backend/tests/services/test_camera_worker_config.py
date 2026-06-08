@@ -955,7 +955,7 @@ async def test_worker_config_snapshots_redact_source_and_reflect_tenant_privacy(
         audit_logger=_FakeAuditLogger(),
     )
 
-    await service.get_worker_config(_tenant_context(tenant_id), camera.id)
+    config = await service.get_worker_config(_tenant_context(tenant_id), camera.id)
 
     privacy_snapshots = session_factory.state["privacy_manifest_snapshots"]
     scene_snapshots = session_factory.state["scene_contract_snapshots"]
@@ -964,6 +964,8 @@ async def test_worker_config_snapshots_redact_source_and_reflect_tenant_privacy(
     privacy_manifest = privacy_snapshots[0].manifest
     scene_contract = scene_snapshots[0].contract
     source = scene_contract["camera"]["source"]
+    assert config.privacy_manifest_snapshot_id == privacy_snapshots[0].id
+    assert config.scene_contract_snapshot_id == scene_snapshots[0].id
     assert privacy_manifest["plates"]["plaintext_storage"] == "allowed"
     assert privacy_manifest["plates"]["plaintext_justification"] == "Dock audit policy"
     assert source["uri"] == "rtsp://camera.local/live"

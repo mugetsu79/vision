@@ -13,6 +13,33 @@ Control -> Operations. The installer may use local privileged commands because
 an operator runs it on the target host; the backend and browser must not become
 a remote shell.
 
+## Fast Operator Path
+
+Use the repository-level `bin/vezor` wrapper for normal installs:
+
+```bash
+sudo ./bin/vezor install master --public-url http://MASTER_IP:3000
+./bin/vezor ctl bootstrap-master --api-url http://MASTER_IP:8000 --rotate-local-token --json
+./bin/vezor status
+./bin/vezor validate
+```
+
+For a Jetson or Linux edge host, create a one-time pairing session in Control
+-> Deployment, then run:
+
+```bash
+sudo ./bin/vezor install edge \
+  --api-url http://MASTER_IP:8000 \
+  --session-id SESSION \
+  --pairing-code CODE \
+  --edge-name jetson-portable-1
+```
+
+`bin/vezor install master` chooses the macOS or Linux master installer from the
+current host. `bin/vezor install edge` delegates to the Linux edge installer.
+`bin/vezor ctl ...`, `bin/vezor master ...`, and `bin/vezor edge ...` pass
+through to the existing local service tools.
+
 ## Linux Master Artifact
 
 The Linux master path is a systemd-owned appliance:

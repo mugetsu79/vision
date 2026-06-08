@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 from pydantic import SecretStr
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import (
@@ -928,60 +929,74 @@ class OperatorConfigurationService:
             session = self.session_factory()
             await session.__aenter__()
         try:
-            seeded: list[OperatorConfigProfile] = []
-            existing = await self._load_profiles(session, tenant_context.tenant_id)
-            for payload in self._bootstrap_profiles():
-                same_slug = [
-                    profile
-                    for profile in existing
-                    if profile.kind == payload.kind and profile.slug == payload.slug
-                ]
-                if same_slug:
-                    continue
-                payload_is_default = payload.is_default
-                if payload.is_default:
-                    kind_profiles = [
+            for attempt in range(2):
+                seeded: list[OperatorConfigProfile] = []
+                existing = await self._load_profiles(session, tenant_context.tenant_id)
+                for payload in self._bootstrap_profiles():
+                    same_slug = [
                         profile
-                        for profile in existing + seeded
-                        if profile.kind == payload.kind
+                        for profile in existing
+                        if profile.kind == payload.kind and profile.slug == payload.slug
                     ]
-                    if any(profile.is_default for profile in kind_profiles):
-                        payload_is_default = False
-                    else:
-                        _clear_default(kind_profiles)
-                profile = OperatorConfigProfile(
-                    id=uuid4(),
-                    tenant_id=tenant_context.tenant_id,
-                    site_id=None,
-                    edge_node_id=None,
-                    camera_id=None,
-                    kind=payload.kind,
-                    scope=payload.scope,
-                    name=payload.name,
-                    slug=payload.slug,
-                    enabled=payload.enabled,
-                    is_default=payload_is_default,
-                    config=payload.config,
-                    validation_status=OperatorConfigValidationStatus.UNVALIDATED,
-                    validation_message=None,
-                    validated_at=None,
-                    config_hash=hash_config(payload.config),
-                )
-                session.add(profile)
-                for key, value in payload.secrets.items():
-                    session.add(
-                        _secret_row(tenant_context.tenant_id, profile.id, key, value, self.settings)
+                    if same_slug:
+                        continue
+                    payload_is_default = payload.is_default
+                    if payload.is_default:
+                        kind_profiles = [
+                            profile
+                            for profile in existing + seeded
+                            if profile.kind == payload.kind
+                        ]
+                        if any(profile.is_default for profile in kind_profiles):
+                            payload_is_default = False
+                        else:
+                            _clear_default(kind_profiles)
+                    profile = OperatorConfigProfile(
+                        id=uuid4(),
+                        tenant_id=tenant_context.tenant_id,
+                        site_id=None,
+                        edge_node_id=None,
+                        camera_id=None,
+                        kind=payload.kind,
+                        scope=payload.scope,
+                        name=payload.name,
+                        slug=payload.slug,
+                        enabled=payload.enabled,
+                        is_default=payload_is_default,
+                        config=payload.config,
+                        validation_status=OperatorConfigValidationStatus.UNVALIDATED,
+                        validation_message=None,
+                        validated_at=None,
+                        config_hash=hash_config(payload.config),
                     )
-                seeded.append(profile)
-            if seeded:
-                await session.commit()
-                for profile in seeded:
-                    await session.refresh(profile)
-            secrets = await self._load_secrets(session)
-            return [
-                _profile_to_response(profile, _secrets_for_profile(secrets, profile.id))
-                for profile in seeded
-            ]
+                    session.add(profile)
+                    for key, value in payload.secrets.items():
+                        session.add(
+                            _secret_row(
+                                tenant_context.tenant_id,
+                                profile.id,
+                                key,
+                                value,
+                                self.settings,
+                            )
+                        )
+                    seeded.append(profile)
+                if seeded:
+                    try:
+                        await session.commit()
+                    except IntegrityError as exc:
+                        if attempt == 0 and _is_profile_slug_integrity_error(exc):
+                            await session.rollback()
+                            continue
+                        raise
+                    for profile in seeded:
+                        await session.refresh(profile)
+                secrets = await self._load_secrets(session)
+                return [
+                    _profile_to_response(profile, _secrets_for_profile(secrets, profile.id))
+                    for profile in seeded
+                ]
+            return []
         finally:
             if owns_session:
                 await session.__aexit__(None, None, None)
@@ -1250,7 +1265,6 @@ class OperatorConfigurationService:
                 is_default=True,
                 config={
                     "delivery_mode": "native",
-                    "public_base_url": self.settings.mediamtx_webrtc_base_url,
                 },
             ),
             OperatorConfigProfileCreate(
@@ -1292,7 +1306,7 @@ class OperatorConfigurationService:
                 name="Default operations mode",
                 slug="default-operations-mode",
                 is_default=True,
-                config={},
+                config=_default_operations_mode_config(self.settings),
             ),
         ]
 
@@ -1316,6 +1330,20 @@ class OperatorConfigurationService:
 
 def hash_config(config: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_json(config).encode("utf-8")).hexdigest()
+
+
+def _default_operations_mode_config(settings: Settings) -> dict[str, str]:
+    if settings.environment == "development":
+        return {}
+    return {
+        "lifecycle_owner": "central_supervisor",
+        "supervisor_mode": "polling",
+        "restart_policy": "on_failure",
+    }
+
+
+def _is_profile_slug_integrity_error(exc: IntegrityError) -> bool:
+    return "uq_op_cfg_profile_slug" in str(exc)
 
 
 def _canonical_json(payload: dict[str, Any]) -> str:

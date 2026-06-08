@@ -54,6 +54,7 @@ class KeycloakBootstrapProvisioner:
         for role in (RoleEnum.VIEWER, RoleEnum.OPERATOR, RoleEnum.ADMIN):
             await self._ensure_realm_role(token, role.value)
         client_id = await self._ensure_frontend_client(token)
+        await self._ensure_tenant_user_profile_attributes(token)
         await self._ensure_user_attribute_mapper(token, client_id, "tenant_id")
         await self._ensure_user_attribute_mapper(token, client_id, "tenant")
         cli_client_id = await self._ensure_cli_client(token)
@@ -217,6 +218,74 @@ class KeycloakBootstrapProvisioner:
             f"update Keycloak client {self.settings.keycloak_cli_client_id}",
         )
         return client_id
+
+    async def _ensure_tenant_user_profile_attributes(self, token: str) -> None:
+        response = await self.http_client.get(
+            f"{self.base_url}/admin/realms/{self.realm}/users/profile",
+            headers=self._headers(token),
+        )
+        if response.status_code == 404:
+            return
+        self._raise_for_status(response, "read Keycloak user profile")
+        profile = response.json()
+        if not isinstance(profile, dict):
+            raise KeycloakBootstrapError("Keycloak user profile response was invalid.")
+
+        attributes = profile.get("attributes")
+        if not isinstance(attributes, list):
+            raise KeycloakBootstrapError("Keycloak user profile attributes were invalid.")
+
+        desired_attributes = [
+            {
+                "name": "tenant",
+                "displayName": "Tenant",
+                "multivalued": False,
+                "permissions": {"view": ["admin"], "edit": ["admin"]},
+                "validations": {"length": {"max": 255}},
+            },
+            {
+                "name": "tenant_id",
+                "displayName": "Tenant ID",
+                "multivalued": False,
+                "permissions": {"view": ["admin"], "edit": ["admin"]},
+                "validations": {"length": {"max": 64}},
+            },
+        ]
+
+        changed = False
+        updated_attributes: list[object] = []
+        desired_by_name = {str(attribute["name"]): attribute for attribute in desired_attributes}
+        seen_names: set[str] = set()
+        for attribute in attributes:
+            if not isinstance(attribute, dict):
+                updated_attributes.append(attribute)
+                continue
+            name = attribute.get("name")
+            if not isinstance(name, str) or name not in desired_by_name:
+                updated_attributes.append(attribute)
+                continue
+            seen_names.add(name)
+            desired = desired_by_name[name]
+            merged = {**attribute, **desired}
+            if merged != attribute:
+                changed = True
+            updated_attributes.append(merged)
+
+        for desired in desired_attributes:
+            if desired["name"] not in seen_names:
+                updated_attributes.append(desired)
+                changed = True
+
+        if not changed:
+            return
+
+        update_payload = {**profile, "attributes": updated_attributes}
+        update = await self.http_client.put(
+            f"{self.base_url}/admin/realms/{self.realm}/users/profile",
+            headers=self._headers(token),
+            json=update_payload,
+        )
+        self._raise_for_status(update, "update Keycloak user profile")
 
     async def _find_client(self, token: str, client_id: str) -> dict[str, Any] | None:
         response = await self.http_client.get(

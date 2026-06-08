@@ -2214,9 +2214,16 @@ async def test_engine_applies_stream_profile_command_without_restart() -> None:
 @pytest.mark.asyncio
 async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> None:
     camera_id = uuid4()
+    scene_contract_snapshot_id = uuid4()
+    privacy_manifest_snapshot_id = uuid4()
     event_client = _FakeEventClient()
     engine = InferenceEngine(
-        config=_engine_config(camera_id),
+        config=_engine_config(camera_id).model_copy(
+            update={
+                "scene_contract_snapshot_id": scene_contract_snapshot_id,
+                "privacy_manifest_snapshot_id": privacy_manifest_snapshot_id,
+            }
+        ),
         frame_source=_FakeFrameSource([np.zeros((32, 32, 3), dtype=np.uint8)]),
         detector=_FakeDetector(),
         tracker_factory=lambda tracker_type: _FakeTracker(tracker_type),
@@ -2235,6 +2242,8 @@ async def test_engine_publishes_incident_events_for_non_count_rule_matches() -> 
     assert subject == f"incident.triggered.{camera_id}"
     assert isinstance(payload, IncidentTriggeredEvent)
     assert payload.type == "rule.restricted_person"
+    assert payload.scene_contract_snapshot_id == scene_contract_snapshot_id
+    assert payload.privacy_manifest_snapshot_id == privacy_manifest_snapshot_id
     assert payload.payload["trigger_rule"]["name"] == "wrong-way"
     assert payload.payload["trigger_rule"]["severity"] == "critical"
     assert payload.payload["trigger_rule"]["rule_hash"] == "e" * 64

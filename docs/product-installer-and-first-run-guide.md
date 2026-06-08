@@ -23,6 +23,45 @@ This document is deliberately explicit. It covers host preparation, models,
 first-run, node pairing, camera setup, validation, support bundles, upgrades,
 and the source-checkout details that are easy to miss.
 
+## Start Here: Fast Install
+
+Use `bin/vezor` as the normal operator front door. It delegates to the
+host-appropriate installer and local service tools while keeping one happy path
+in the docs.
+
+From the release checkout on the master host:
+
+```bash
+sudo ./bin/vezor install master --public-url http://MASTER_HOST_OR_IP:3000
+./bin/vezor ctl bootstrap-master --api-url http://MASTER_HOST_OR_IP:8000 --rotate-local-token --json
+./bin/vezor status
+./bin/vezor validate
+```
+
+Open `http://MASTER_HOST_OR_IP:3000/first-run`, use the returned
+`vzboot_...` token, and create the tenant and first admin account.
+
+For a Jetson or Linux edge node, create a one-time pairing session in Control
+-> Deployment, then run on the edge host:
+
+```bash
+sudo ./bin/vezor install edge \
+  --api-url http://MASTER_HOST_OR_IP:8000 \
+  --session-id PAIRING_SESSION_ID \
+  --pairing-code PAIRING_CODE \
+  --edge-name jetson-portable-1
+```
+
+The master installer copies the bundled YOLO26n and YOLO26s ONNX artifacts into
+the installed model directory. Register `/models/yolo26n.onnx` and
+`/models/yolo26s.onnx` during smoke; use the manual model-export sections only
+for optional fallback, comparison, or open-vocab models.
+
+The lower-level `installer/macos/install-master.sh`,
+`installer/linux/install-master.sh`, `installer/linux/install-edge.sh`, and
+`vezorctl` commands remain documented below for reference, automation, and
+break-glass support. Prefer the wrapper commands above for new installs.
+
 ## Scope And Product Rules
 
 The installer path is for normal product operation:
@@ -35,8 +74,8 @@ The installer path is for normal product operation:
    FleetOps, and Deployment
 
 The browser and backend are a control plane. They must not become a remote
-shell. Host installation and diagnostics happen locally on the host through the
-installer or `vezorctl`.
+shell. Host installation and diagnostics happen locally on the host through
+`vezor`, the underlying installer, or `vezorctl`.
 
 Normal installed operation must not depend on:
 
@@ -121,6 +160,7 @@ current release branch, tag, or `main` at a commit that includes the package
 wrapper commands:
 
 ```bash
+test -x /opt/vezor/current/bin/vezor
 test -x /opt/vezor/current/bin/vezor-master
 test -x /opt/vezor/current/bin/vezor-edge
 test -x /opt/vezor/current/bin/vezorctl
@@ -141,7 +181,7 @@ Then rerun the wrapper checks above.
 Final production packages will include:
 
 - signed macOS `.pkg` and Linux `.deb` or `.rpm` artifacts
-- `/opt/vezor/current/bin/vezor-master`, `vezor-edge`, and `vezorctl`
+- `/opt/vezor/current/bin/vezor`, `vezor-master`, `vezor-edge`, and `vezorctl`
 - pinned image digests and manifest verification
 - generated `/etc/vezor` configs, secrets, NATS config, and MediaMTX config
 - rollback metadata
@@ -260,6 +300,13 @@ Register it as:
 /models/yolo26n.onnx
 ```
 
+The Linux master appliance bundles `yolo26n.onnx` and `yolo26s.onnx` in
+`installer/assets/models/`. During install, the bundle is copied into
+`/var/lib/vezor/models/` and mounted into containers at `/models`.
+First-run smoke validation must register `/models/yolo26n.onnx` and
+`/models/yolo26s.onnx`; falling back to YOLO11 is a BLOCKED result for the
+YOLO26 bundle check.
+
 Add open-vocab `.pt` models only after the first fixed-vocab camera works
 through Live, History, Evidence, and Operations. Target-specific runtime
 artifacts are covered with the node installation that owns them.
@@ -277,7 +324,11 @@ artifacts are covered with the node installation that owns them.
 | `yoloe-26s-seg.pt` | open vocab | higher quality open-vocab source |
 | `yolov8s-worldv2.pt` | open vocab | smaller open-vocab fallback |
 
-### Where To Get The Models
+### Where To Get Optional Models
+
+The installed master path already bundles `yolo26n.onnx` and `yolo26s.onnx`.
+Use the export flow below only when preparing optional fallback, comparison, or
+open-vocab models.
 
 Use official Ultralytics weights and exports:
 
@@ -381,6 +432,7 @@ make verify-installers
 Confirm the local wrapper entrypoints are present:
 
 ```bash
+test -x /opt/vezor/current/bin/vezor
 test -x /opt/vezor/current/bin/vezor-master
 test -x /opt/vezor/current/bin/vezor-edge
 test -x /opt/vezor/current/bin/vezorctl
@@ -419,7 +471,7 @@ several minutes because Docker has to build the backend and frontend images.
 
 ```bash
 cd /opt/vezor/current
-sudo ./installer/macos/install-master.sh \
+sudo ./bin/vezor install master \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --public-url "http://127.0.0.1:3000" \
@@ -495,7 +547,7 @@ builds the local master images before systemd starts the appliance.
 
 ```bash
 cd /opt/vezor/current
-sudo ./installer/linux/install-master.sh \
+sudo ./bin/vezor install master \
   --version "pilot-2026-05" \
   --manifest installer/manifests/dev-example.json \
   --public-url "http://MASTER_HOST_OR_IP:3000" \
@@ -525,7 +577,7 @@ http://MASTER_HOST_OR_IP:3000/first-run
 Generate a short-lived local bootstrap token on the master host:
 
 ```bash
-/opt/vezor/current/bin/vezorctl bootstrap-master \
+/opt/vezor/current/bin/vezor ctl bootstrap-master \
   --api-url http://127.0.0.1:8000 \
   --rotate-local-token \
   --json
@@ -545,6 +597,10 @@ After first-run completes, sign in and open Control -> Deployment.
 
 If the token expires, rotate another local token from the master host. Do not
 try to mint bootstrap tokens from another machine.
+
+`/opt/vezor/current/bin/vezorctl` remains available as the lower-level utility
+for automation and break-glass support; new operator docs prefer
+`/opt/vezor/current/bin/vezor ctl ...`.
 
 ## Register Models For Installed Product Testing
 
@@ -738,10 +794,11 @@ register_model() {
 }
 ```
 
-Register the default fixed-vocab model:
+Register both bundled fixed-vocab models for the first-run bundle check:
 
 ```bash
 register_model yolo26n-coco-onnx /models/yolo26n.onnx
+register_model yolo26s-coco-onnx /models/yolo26s.onnx
 ```
 
 A successful registration prints a JSON model response that includes an `id`,
@@ -753,9 +810,12 @@ registration command again.
 Optional fixed-vocab models:
 
 ```bash
-register_model yolo26s-coco-onnx /models/yolo26s.onnx
 register_model yolo11n-coco-onnx /models/yolo11n.onnx
 ```
+
+Use YOLO11 only for fallback comparison after the YOLO26 bundle check is already
+accounted for. It is not a substitute for registering and validating the bundled
+YOLO26n/YOLO26s models.
 
 Optional open-vocab model:
 
@@ -794,14 +854,14 @@ From Control -> Deployment:
    - `Pairing code`
 
 The short value such as `wabV2jeN` is only the pairing code. It is not enough
-by itself because `vezorctl pair` also needs the session id. If your UI shows
+by itself because `vezor ctl pair` also needs the session id. If your UI shows
 only the code, pull the latest source ref or release tag, rerun the master
 installer to rebuild the frontend, and create a new pairing session.
 
 On the master host:
 
 ```bash
-sudo /opt/vezor/current/bin/vezorctl pair \
+sudo /opt/vezor/current/bin/vezor ctl pair \
   --api-url "http://127.0.0.1:8000" \
   --session-id "PAIRING_SESSION_ID" \
   --pairing-code "PAIRING_CODE" \
@@ -978,6 +1038,7 @@ sudo ln -sfn "$HOME/vision" /opt/vezor/current
 Confirm the Jetson now has the expected entrypoints:
 
 ```bash
+test -x /opt/vezor/current/bin/vezor && echo "vezor OK"
 test -x /opt/vezor/current/bin/vezor-edge && echo "vezor-edge OK"
 test -x /opt/vezor/current/bin/vezorctl && echo "vezorctl OK"
 ```
@@ -1046,7 +1107,7 @@ MASTER_API_URL="http://MASTER_HOST_OR_IP:8000"
 JETSON_STREAM_HOST="JETSON_HOST_OR_IP_REACHABLE_FROM_MASTER"
 JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 
-sudo ./installer/linux/install-edge.sh \
+sudo ./bin/vezor install edge \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --api-url "$MASTER_API_URL" \
@@ -1098,7 +1159,7 @@ Validate:
 
 ```bash
 systemctl status vezor-edge.service
-/opt/vezor/current/bin/vezorctl status --json
+/opt/vezor/current/bin/vezor status --json
 docker ps --filter name=vezor
 docker logs --tail 60 vezor-edge-nats-leaf
 ```
@@ -1379,6 +1440,33 @@ running.
 
 Run this checklist before taking the kit to a demo.
 
+Start with deterministic smoke. This mode must register the bundled
+`/models/yolo26n.onnx` and `/models/yolo26s.onnx` models and must not fall back
+to YOLO11 for the YOLO26 bundle check:
+
+```bash
+scripts/validation/whole_product_live_smoke.py \
+  --api-url http://127.0.0.1:8000 \
+  --report /tmp/vezor-whole-smoke/report.json \
+  --real-rtsp none
+```
+
+Use real RTSP only after deterministic smoke passes. Store camera URLs in a
+local env file outside the repository and source it before running. Keep real
+camera URLs local and uncommitted; the local-only env var names are
+`VEZOR_SMOKE_REAL_RTSP_720P_URL` and
+`VEZOR_SMOKE_REAL_RTSP_1296P_URL`.
+
+```bash
+set -a
+. /tmp/vezor-real-camera.env
+set +a
+scripts/validation/whole_product_live_smoke.py \
+  --api-url http://127.0.0.1:8000 \
+  --report /tmp/vezor-whole-smoke/report-real-720p.json \
+  --real-rtsp 720p
+```
+
 Deployment:
 
 - `/deployment` loads
@@ -1473,16 +1561,16 @@ or foreground terminal supervisors.
 Use Control -> Deployment first. For a local redaction check:
 
 ```bash
-/opt/vezor/current/bin/vezorctl support-bundle \
+/opt/vezor/current/bin/vezor ctl support-bundle \
   --input /var/lib/vezor/support/latest.json \
   --redact \
   --json
 ```
 
-Use `vezorctl doctor` locally:
+Use `vezor ctl doctor` locally:
 
 ```bash
-/opt/vezor/current/bin/vezorctl doctor --json
+/opt/vezor/current/bin/vezor ctl doctor --json
 ```
 
 Never send unredacted bundles outside the trusted operator boundary.
@@ -1515,7 +1603,7 @@ macOS:
 cd /opt/vezor/current
 git fetch origin
 git pull --ff-only origin main
-sudo ./installer/macos/install-master.sh \
+sudo ./bin/vezor install master \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --public-url "http://127.0.0.1:3000" \
@@ -1530,7 +1618,7 @@ cd /opt/vezor/current
 git fetch origin
 git pull --ff-only origin main
 
-sudo ./installer/linux/install-edge.sh \
+sudo ./bin/vezor install edge \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --api-url "$MASTER_API_URL" \
@@ -1598,7 +1686,7 @@ Live page is blank, or when a rendition change appears stuck, use
 Check wrapper commands first:
 
 ```bash
-ls -l /opt/vezor/current/bin/vezor-master /opt/vezor/current/bin/vezor-edge
+ls -l /opt/vezor/current/bin/vezor /opt/vezor/current/bin/vezor-master /opt/vezor/current/bin/vezor-edge
 ```
 
 If they are missing, update `/opt/vezor/current` to a newer source checkout or
@@ -1739,7 +1827,7 @@ curl -fsS http://127.0.0.1:9997/v3/paths/list
 
 If `vezor-supervisor` logs `Connect call failed ('127.0.0.1', 4222)`, the edge
 compose environment is stale. Pull the latest source ref or release tag and
-rerun `install-edge.sh`; the installed worker must inherit
+rerun `./bin/vezor install edge`; the installed worker must inherit
 `ARGUS_NATS_URL=nats://nats-leaf:4222`.
 
 If `vezor-supervisor` can post fleet, service, hardware, and runtime reports but
@@ -1790,7 +1878,7 @@ sudo env \
 sudo docker rm -f vezor-supervisor vezor-edge-mediamtx vezor-edge-nats-leaf || true
 ```
 
-Then rerun `install-edge.sh`. Do not delete `/var/lib/vezor/models` or
+Then rerun `./bin/vezor install edge`. Do not delete `/var/lib/vezor/models` or
 `/var/lib/vezor/credentials` for this case.
 
 If the portable network changed, rerun the edge installer with
@@ -1813,7 +1901,7 @@ If an older installer expired the pairing session after a long Jetson image
 build, that attempt usually built `vezor/edge-worker:portable-demo` but did not
 claim a credential or complete the systemd service install. Pull the latest
 source ref or `main` on the Jetson, create a fresh Pair Jetson edge session in
-the UI, and rerun `installer/linux/install-edge.sh` with the new session id, new
+the UI, and rerun `./bin/vezor install edge` with the new session id, new
 pairing code, and required `--jetson-ort-wheel-url`.
 
 ### The edge node pairs but has no heartbeat
@@ -1831,7 +1919,7 @@ sudo ls -l /var/lib/vezor/credentials/supervisor.credential
 The supervisor config should be world-readable because it contains no secret,
 and the credential file should be owned by container UID `10001` with mode
 `0600`. If the log says `edge supervisor config requires edge_node_id`, or if a
-normal `vezorctl status --json` cannot read `/etc/vezor/supervisor.json`, pull
+normal `vezor status --json` cannot read `/etc/vezor/supervisor.json`, pull
 the latest source ref or `main`, create a fresh Pair Jetson edge session, and
 rerun the edge installer without `--unpaired`. A current installer preserves the claimed
 `edge_node_id` during later unpaired updates, fixes config permissions, and

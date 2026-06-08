@@ -60,6 +60,31 @@ operator back to Deployment to install or pair one. Copied bearer-token
 commands, foreground supervisor runners, and ad hoc Docker commands are
 development fallback or break-glass material only.
 
+### Installer Fast Path
+
+Use `bin/vezor` for the normal source-checkout install flow:
+
+```bash
+sudo ./bin/vezor install master --public-url http://MASTER_HOST_OR_IP:3000
+./bin/vezor ctl bootstrap-master --api-url http://MASTER_HOST_OR_IP:8000 --rotate-local-token --json
+./bin/vezor status --json
+./bin/vezor validate
+```
+
+For a Jetson or Linux edge node, create a one-time pairing session in Control
+-> Deployment, then run on the edge host:
+
+```bash
+sudo ./bin/vezor install edge \
+  --api-url http://MASTER_HOST_OR_IP:8000 \
+  --session-id PAIRING_SESSION_ID \
+  --pairing-code PAIRING_CODE \
+  --edge-name jetson-portable-1
+```
+
+The lower-level installer scripts stay available as implementation artifacts
+and support tools, but `bin/vezor` is the operator happy path.
+
 ### Development
 
 - one workstation can run the full stack with `make dev-up`

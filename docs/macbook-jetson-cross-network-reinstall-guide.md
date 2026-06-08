@@ -7,6 +7,7 @@ VPN, routed subnet, tunnel, or port-forwarded address.
 Command sources:
 
 - `docs/product-installer-and-first-run-guide.md`
+- `bin/vezor --help`
 - `installer/macos/install-master.sh --help`
 - `installer/linux/install-edge.sh --help`
 - `archive/macbook-pro-jetson-portable-demo-install-guide.md` for older network
@@ -35,7 +36,7 @@ On the Jetson:
 
 ```bash
 systemctl status vezor-edge.service
-/opt/vezor/current/bin/vezorctl status --json
+/opt/vezor/current/bin/vezor status --json
 docker ps --filter name=vezor
 docker logs --tail 80 vezor-supervisor
 ```
@@ -130,7 +131,7 @@ installer derives the public frontend, API, and Keycloak URLs from it.
 ```bash
 cd /opt/vezor/current
 
-sudo ./installer/macos/install-master.sh \
+sudo ./bin/vezor install master \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --public-url "$MASTER_PUBLIC_URL" \
@@ -229,7 +230,7 @@ http://MASTER_VPN_IP_OR_DNS_REACHABLE_BY_BROWSER_AND_JETSON:3000/first-run
 and generate a fresh bootstrap token on the MacBook:
 
 ```bash
-/opt/vezor/current/bin/vezorctl bootstrap-master \
+/opt/vezor/current/bin/vezor ctl bootstrap-master \
   --api-url http://127.0.0.1:8000 \
   --rotate-local-token \
   --json
@@ -254,7 +255,7 @@ master frontend origin allow list, and public Jetson stream host.
 ```bash
 cd /opt/vezor/current
 
-sudo ./installer/linux/install-edge.sh \
+sudo ./bin/vezor install edge \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --api-url "$MASTER_API_URL" \
@@ -268,7 +269,7 @@ sudo ./installer/linux/install-edge.sh \
 If the Jetson stream uses a forwarded RTSP port, use this variant:
 
 ```bash
-sudo ./installer/linux/install-edge.sh \
+sudo ./bin/vezor install edge \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --api-url "$MASTER_API_URL" \
@@ -304,7 +305,7 @@ Then run this on the Jetson:
 ```bash
 cd /opt/vezor/current
 
-sudo ./installer/linux/install-edge.sh \
+sudo ./bin/vezor install edge \
   --version "portable-demo" \
   --manifest installer/manifests/dev-example.json \
   --api-url "$MASTER_API_URL" \
@@ -337,7 +338,7 @@ On the Jetson:
 
 ```bash
 systemctl status vezor-edge.service
-/opt/vezor/current/bin/vezorctl status --json
+/opt/vezor/current/bin/vezor status --json
 docker ps --filter name=vezor
 docker logs --tail 80 vezor-edge-nats-leaf
 docker logs --tail 120 vezor-supervisor

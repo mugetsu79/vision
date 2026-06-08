@@ -32,6 +32,11 @@ STREAM_DEFINITIONS = (
         description="Tracking telemetry events",
     ),
     js_api.StreamConfig(
+        name="ARGUS_RULE_EVENTS",
+        subjects=["evt.rule.*"],
+        description="Rule evaluation events",
+    ),
+    js_api.StreamConfig(
         name="ARGUS_CAMERA_COMMANDS",
         subjects=["cmd.camera.*"],
         description="Camera control messages",

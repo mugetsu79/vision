@@ -63,6 +63,21 @@ async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_use
             "/admin/realms/vezor/clients/"
         ):
             return httpx.Response(204)
+        if request.method == "GET" and request.url.path == "/admin/realms/vezor/users/profile":
+            return httpx.Response(
+                200,
+                json={
+                    "attributes": [
+                        {
+                            "name": "username",
+                            "permissions": {"view": ["admin", "user"], "edit": ["admin", "user"]},
+                        }
+                    ],
+                    "groups": [{"name": "user-metadata"}],
+                },
+            )
+        if request.method == "PUT" and request.url.path == "/admin/realms/vezor/users/profile":
+            return httpx.Response(204)
         if request.method == "GET" and request.url.path.endswith("/protocol-mappers/models"):
             return httpx.Response(200, json=[])
         if request.method == "POST" and request.url.path.endswith("/protocol-mappers/models"):
@@ -140,6 +155,39 @@ async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_use
         if method == "POST" and path.endswith("/protocol-mappers/models")
     }
     assert mapper_client_uuids == {"argus-frontend-uuid", "argus-cli-uuid"}
+    profile_update_body = next(
+        body
+        for method, path, body in calls
+        if method == "PUT" and path == "/admin/realms/vezor/users/profile"
+    )
+    assert isinstance(profile_update_body, dict)
+    profile_attribute_names = [
+        attribute.get("name")
+        for attribute in profile_update_body["attributes"]
+        if isinstance(attribute, dict)
+    ]
+    assert profile_attribute_names == ["username", "tenant", "tenant_id"]
+    tenant_attributes = {
+        attribute["name"]: attribute
+        for attribute in profile_update_body["attributes"]
+        if isinstance(attribute, dict) and attribute.get("name") in {"tenant", "tenant_id"}
+    }
+    assert tenant_attributes == {
+        "tenant": {
+            "name": "tenant",
+            "displayName": "Tenant",
+            "multivalued": False,
+            "permissions": {"view": ["admin"], "edit": ["admin"]},
+            "validations": {"length": {"max": 255}},
+        },
+        "tenant_id": {
+            "name": "tenant_id",
+            "displayName": "Tenant ID",
+            "multivalued": False,
+            "permissions": {"view": ["admin"], "edit": ["admin"]},
+            "validations": {"length": {"max": 64}},
+        },
+    }
 
 
 @pytest.mark.asyncio

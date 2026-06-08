@@ -11,6 +11,7 @@ from argus.api.contracts import (
     OperationsLifecycleRequestResponse,
     WorkerDesiredState,
     WorkerModelAdmissionResponse,
+    WorkerRuntimeStatus,
 )
 from argus.compat import UTC
 from argus.models.enums import (
@@ -198,6 +199,15 @@ class SupervisorReconciler:
             return 0
         processed = 0
         for worker in fleet.camera_workers:
+            if self._should_record_running_heartbeat(worker):
+                request = self._request_from_desired_worker(worker)
+                await self.operations.record_runtime_report_for_request(
+                    tenant_id=self.tenant_id,
+                    request=request,
+                    runtime_state="running",
+                    last_error=None,
+                )
+                continue
             if not self._should_start_desired_worker(worker):
                 continue
             request = self._request_from_desired_worker(worker)
@@ -217,6 +227,14 @@ class SupervisorReconciler:
             )
             processed += 1
         return processed
+
+    def _should_record_running_heartbeat(self, worker: FleetCameraWorkerSummary) -> bool:
+        if worker.desired_state not in _DESIRED_RUNNING_STATES:
+            return False
+        if not _worker_owner_matches_supervisor(worker, edge_node_id=self.edge_node_id):
+            return False
+        is_running = getattr(self.process_adapter, "is_running", None)
+        return bool(callable(is_running) and is_running(worker.camera_id))
 
     def _should_start_desired_worker(self, worker: FleetCameraWorkerSummary) -> bool:
         if getattr(self.process_adapter, "accepting_new_work", True) is False:
@@ -297,6 +315,11 @@ def _restart_policy_allows_recovery(worker: FleetCameraWorkerSummary) -> bool:
     if worker.restart_policy == "never":
         return False
     if worker.restart_policy == "on_failure":
+        if worker.runtime_status in {
+            WorkerRuntimeStatus.STALE,
+            WorkerRuntimeStatus.UNKNOWN,
+        }:
+            return True
         return (
             runtime_report.runtime_state is WorkerRuntimeState.ERROR
             and runtime_report.restart_count < _MAX_ON_FAILURE_RESTARTS

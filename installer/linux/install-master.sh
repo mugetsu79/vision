@@ -203,6 +203,72 @@ write_backend_db_url_secret() {
     "postgresql+asyncpg://${VEZOR_POSTGRES_USER:-argus}:${postgres_password}@postgres:5432/${VEZOR_POSTGRES_DB:-argus}"
 }
 
+install_bundled_models() {
+  local bundle_dir="/opt/vezor/current/installer/assets/models"
+  local manifest_path="$bundle_dir/manifest.json"
+
+  if [[ "$DRY_RUN" -eq 0 && ! -f "$manifest_path" ]]; then
+    echo "Bundled model manifest not found: $manifest_path" >&2
+    exit 1
+  fi
+
+  run install -d -m 0755 "$DATA_DIR/models"
+  run install -m 0644 "$bundle_dir/yolo26n.onnx" "$DATA_DIR/models/yolo26n.onnx"
+  run install -m 0644 "$bundle_dir/yolo26s.onnx" "$DATA_DIR/models/yolo26s.onnx"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] verify bundled model checksums from $manifest_path"
+    return 0
+  fi
+
+  python3 - "$manifest_path" "$DATA_DIR/models" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+models_dir = Path(sys.argv[2])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if manifest.get("schema_version") != 1:
+    raise SystemExit(
+        f"unsupported bundled model manifest schema: {manifest.get('schema_version')}"
+    )
+
+required_models = {
+    "yolo26n-coco-onnx": "yolo26n.onnx",
+    "yolo26s-coco-onnx": "yolo26s.onnx",
+}
+entries = {
+    entry.get("catalog_id"): entry
+    for entry in manifest.get("models", [])
+    if isinstance(entry, dict)
+}
+
+for catalog_id, filename in required_models.items():
+    entry = entries.get(catalog_id)
+    if entry is None:
+        raise SystemExit(f"bundled model missing from manifest: {catalog_id}")
+    if entry.get("path") != filename:
+        raise SystemExit(f"unsafe path for bundled model: {entry.get('path')}")
+
+    model_path = models_dir / filename
+    if not model_path.is_file():
+        raise SystemExit(f"bundled model missing after install: {filename}")
+    if model_path.stat().st_size != entry.get("size_bytes"):
+        raise SystemExit(f"size mismatch for bundled model: {filename}")
+
+    digest = hashlib.sha256()
+    with model_path.open("rb") as model_file:
+        for chunk in iter(lambda: model_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != entry.get("sha256"):
+        raise SystemExit(f"sha256 mismatch for bundled model: {filename}")
+PY
+}
+
 manifest_image_ref() {
   local image_key="$1"
   local fallback="$2"
@@ -386,6 +452,8 @@ run install -d -m 0755 \
   "$DATA_DIR/credentials" \
   "$DATA_DIR/evidence" \
   "$DATA_DIR/bootstrap"
+
+install_bundled_models
 
 write_secret_if_missing "$CONFIG_DIR/secrets/postgres_password"
 write_backend_db_url_secret

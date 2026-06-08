@@ -100,6 +100,21 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS" in compose
 
 
+def test_linux_master_compose_disables_unconfigured_tracing_by_default() -> None:
+    compose = _read(MASTER_COMPOSE)
+    backend = _service_block(compose, "backend")
+
+    assert "ARGUS_ENABLE_TRACING: ${VEZOR_ENABLE_TRACING:-false}" in backend
+    assert "ARGUS_OTLP_ENDPOINT: ${VEZOR_OTLP_ENDPOINT:-http://otel-collector:4318}" in backend
+
+
+def test_linux_master_compose_runs_backend_with_product_environment_defaults() -> None:
+    compose = _read(MASTER_COMPOSE)
+    backend = _service_block(compose, "backend")
+
+    assert "ARGUS_ENVIRONMENT: ${VEZOR_ENVIRONMENT:-production}" in backend
+
+
 def test_linux_master_supervisor_provides_runtime_worker_connectivity() -> None:
     compose = _read(MASTER_COMPOSE)
     supervisor = _service_block(compose, "vezor-supervisor")
@@ -168,6 +183,7 @@ def test_linux_master_compose_uses_installer_runtime_entrypoints() -> None:
     assert "      - -lc" not in compose
     assert "      - -c" in compose
     assert "/app/.venv/bin/alembic upgrade head && /app/.venv/bin/uvicorn" in compose
+    assert "--no-access-log" in compose
     assert "      - /app/.venv/bin/python" in compose
     assert '["CMD", "/app/.venv/bin/python", "-m", "argus.supervisor.runner"' in compose
 
@@ -226,6 +242,26 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert 'old_umask="$(umask)"' in script
     assert "manifest_image_ref backend" in script
     assert "timescale/timescaledb:latest-pg16" in script
+
+
+def test_linux_master_installs_bundled_yolo26_models() -> None:
+    script = _read(INSTALL_SCRIPT)
+    function_start = script.index("install_bundled_models() {")
+    function_end = script.index("\n}\n\nmanifest_image_ref", function_start)
+    function_block = script[function_start:function_end]
+
+    assert "install_bundled_models" in script
+    assert "/opt/vezor/current/installer/assets/models" in script
+    assert "$DATA_DIR/models/yolo26n.onnx" in script
+    assert "$DATA_DIR/models/yolo26s.onnx" in script
+    assert "sha256 mismatch for bundled model" in script
+    assert 'if [[ "$DRY_RUN" -eq 0 && ! -f "$manifest_path" ]]; then' in function_block
+    assert 'if [[ ! -f "$manifest_path" ]]; then' not in function_block
+    copy_index = function_block.index(
+        'run install -m 0644 "$bundle_dir/yolo26n.onnx" "$DATA_DIR/models/yolo26n.onnx"'
+    )
+    dry_run_index = function_block.index('if [[ "$DRY_RUN" -eq 1 ]]; then')
+    assert copy_index < dry_run_index
 
 
 def test_linux_master_installer_exposes_browser_auth_for_non_loopback_public_url() -> None:

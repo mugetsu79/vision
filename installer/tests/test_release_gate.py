@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -10,14 +11,19 @@ REPO_ROOT = Path(__file__).parents[2]
 VALIDATE_SCRIPT = REPO_ROOT / "scripts" / "validate-installers.sh"
 PRODUCT_GUIDE = REPO_ROOT / "docs" / "product-installer-and-first-run-guide.md"
 MAKEFILE = REPO_ROOT / "Makefile"
+MODEL_BUNDLE_MANIFEST = REPO_ROOT / "installer" / "assets" / "models" / "manifest.json"
 
 REQUIRED_FILES = (
     REPO_ROOT / "installer" / "manifests" / "dev-example.json",
+    MODEL_BUNDLE_MANIFEST,
+    REPO_ROOT / "installer" / "assets" / "models" / "yolo26n.onnx",
+    REPO_ROOT / "installer" / "assets" / "models" / "yolo26s.onnx",
     REPO_ROOT / "installer" / "linux" / "install-master.sh",
     REPO_ROOT / "installer" / "linux" / "install-edge.sh",
     REPO_ROOT / "installer" / "linux" / "uninstall.sh",
     REPO_ROOT / "installer" / "macos" / "install-master.sh",
     REPO_ROOT / "installer" / "macos" / "uninstall.sh",
+    REPO_ROOT / "bin" / "vezor",
     REPO_ROOT / "bin" / "vezor-appliance",
     REPO_ROOT / "bin" / "vezor-master",
     REPO_ROOT / "bin" / "vezor-edge",
@@ -30,7 +36,9 @@ REQUIRED_FILES = (
     PRODUCT_GUIDE,
 )
 
-PRODUCT_ARTIFACTS = tuple(path for path in REQUIRED_FILES if path.suffix != ".md")
+PRODUCT_ARTIFACTS = tuple(
+    path for path in REQUIRED_FILES if path.suffix not in {".md", ".onnx"}
+)
 EXECUTABLE_INSTALLER_SCRIPTS = (
     REPO_ROOT / "installer" / "linux" / "install-master.sh",
     REPO_ROOT / "installer" / "linux" / "install-edge.sh",
@@ -52,6 +60,14 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as artifact:
+        for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def test_release_gate_script_exists_and_runs_installer_checks() -> None:
     script = _read(VALIDATE_SCRIPT)
 
@@ -61,6 +77,7 @@ def test_release_gate_script_exists_and_runs_installer_checks() -> None:
     assert "run_installer_uv pytest installer/tests -q" in script
     assert "bash -n installer/linux/install-master.sh" in script
     assert "bash -n installer/linux/install-edge.sh" in script
+    assert "bash -n bin/vezor" in script
     assert "bash -n bin/vezor-appliance" in script
     assert "bash -n bin/vezor-master" in script
     assert "bash -n bin/vezor-edge" in script
@@ -84,6 +101,27 @@ def test_release_gate_required_files_exist_without_deepstream_dependency() -> No
     assert missing == []
     assert not any("deepstream" in str(path).lower() for path in REQUIRED_FILES)
     assert "deepstream" not in _read(VALIDATE_SCRIPT).lower()
+
+
+def test_release_gate_bundled_model_manifest_matches_files() -> None:
+    manifest = json.loads(_read(MODEL_BUNDLE_MANIFEST))
+    expected_models = {
+        "yolo26n-coco-onnx": (
+            REPO_ROOT / "installer" / "assets" / "models" / "yolo26n.onnx"
+        ),
+        "yolo26s-coco-onnx": (
+            REPO_ROOT / "installer" / "assets" / "models" / "yolo26s.onnx"
+        ),
+    }
+    entries = {entry["catalog_id"]: entry for entry in manifest["models"]}
+
+    assert manifest["schema_version"] == 1
+    assert set(entries) == set(expected_models)
+    for catalog_id, model_path in expected_models.items():
+        entry = entries[catalog_id]
+        assert entry["path"] == model_path.name
+        assert entry["size_bytes"] == model_path.stat().st_size
+        assert entry["sha256"] == _sha256_file(model_path)
 
 
 def test_installer_shell_scripts_are_directly_executable() -> None:

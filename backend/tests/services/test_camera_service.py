@@ -333,6 +333,67 @@ async def test_create_camera_allows_detection_only_scene_without_homography(
 
 
 @pytest.mark.asyncio
+async def test_create_camera_does_not_block_on_unreachable_rtsp_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=True,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    site_id = uuid4()
+    model_id = uuid4()
+    model = _detector_model(model_id)
+    site = _site(site_id, tenant_id)
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+
+    async def fake_load_model(session, model_id_arg):  # noqa: ANN001
+        assert model_id_arg == model_id
+        return model
+
+    async def fake_load_site(session, tenant_id_arg, site_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert site_id_arg == site_id
+        return site
+
+    async def unexpected_probe(source, *, settings):  # noqa: ANN001
+        del source, settings
+        raise AssertionError("camera creation must not synchronously probe RTSP sources")
+
+    monkeypatch.setattr(app_services, "_load_model", fake_load_model)
+    monkeypatch.setattr(app_services, "_load_site", fake_load_site)
+    monkeypatch.setattr(app_services, "_probe_camera_source_capability", unexpected_probe)
+
+    response = await service.create_camera(
+        _tenant_context(tenant_id),
+        CameraCreate(
+            site_id=site_id,
+            name="Unreachable Dummy Source",
+            rtsp_url="rtsp://camera.local/live",
+            processing_mode=ProcessingMode.CENTRAL,
+            primary_model_id=model_id,
+            tracker_type=TrackerType.BOTSORT,
+            active_classes=["person"],
+            vision_profile=SCENE_VISION_PROFILE,
+            detection_regions=[DETECTION_REGION],
+            privacy=PrivacySettings(),
+            frame_skip=1,
+            fps_cap=25,
+        ),
+    )
+
+    assert response.name == "Unreachable Dummy Source"
+    assert response.source_capability is None
+    assert response.rtsp_url_masked == "rtsp://***"
+
+
+@pytest.mark.asyncio
 async def test_create_camera_serializes_browser_delivery_profile_id_for_jsonb(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

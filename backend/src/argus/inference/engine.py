@@ -270,7 +270,9 @@ class EngineConfig(BaseModel):
 
     camera_id: UUID
     mode: ProcessingMode
+    scene_contract_snapshot_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    privacy_manifest_snapshot_id: UUID | None = None
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     runtime_passport_snapshot_id: UUID | None = None
     runtime_passport_hash: str | None = Field(default=None, min_length=64, max_length=64)
@@ -1637,8 +1639,12 @@ class InferenceEngine:
     ) -> IncidentTriggeredEvent:
         return event.model_copy(
             update={
+                "scene_contract_snapshot_id": event.scene_contract_snapshot_id
+                or self.config.scene_contract_snapshot_id,
                 "scene_contract_hash": event.scene_contract_hash
                 or self.config.scene_contract_hash,
+                "privacy_manifest_snapshot_id": event.privacy_manifest_snapshot_id
+                or self.config.privacy_manifest_snapshot_id,
                 "privacy_manifest_hash": event.privacy_manifest_hash
                 or self.config.privacy_manifest_hash,
                 "runtime_passport_snapshot_id": event.runtime_passport_snapshot_id

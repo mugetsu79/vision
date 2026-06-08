@@ -1,0 +1,17 @@
+{
+  "models": [
+    {
+      "catalog_id": "yolo26n-coco-onnx",
+      "path": "yolo26n.onnx",
+      "sha256": "a689b0d65b5ccc6b19d88cf7fe3864ab9af552f929c16781602cfe944c8a1b35",
+      "size_bytes": 9941944
+    },
+    {
+      "catalog_id": "yolo26s-coco-onnx",
+      "path": "yolo26s.onnx",
+      "sha256": "aefbbd3df73aeaf6047af9642ae01c93d8436028f6be586f18094feb4f456e58",
+      "size_bytes": 38291117
+    }
+  ],
+  "schema_version": 1
+}

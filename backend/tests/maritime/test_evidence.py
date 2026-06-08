@@ -14,6 +14,7 @@ from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
 
 from argus.api.contracts import TenantContext
 from argus.api.v1 import router
+from argus.billing.service import BillingService
 from argus.compat import UTC
 from argus.core.security import AuthenticatedUser
 from argus.link.service import LinkService
@@ -223,6 +224,24 @@ async def test_export_includes_scene_runtime_link_passports_and_ledger_summary(
 
 
 @pytest.mark.asyncio
+async def test_maritime_evidence_export_records_pack_billing_usage(
+    evidence_service: MaritimeEvidenceService,
+) -> None:
+    billing = BillingService()
+    evidence_service.billing_service = billing
+
+    export = await evidence_service.create_export(incident_id=INCIDENT_ID)
+
+    usage = billing.list_usage(tenant_id=TENANT_ID, pack_id="maritime-fleet")
+    assert len(usage) == 1
+    assert usage[0].meter_key == "evidence_pack_export"
+    assert usage[0].quantity == 1
+    assert usage[0].source_object_type == "maritime_evidence_export"
+    assert usage[0].source_object_id == export.id
+    assert usage[0].metadata["incident_id"] == str(INCIDENT_ID)
+
+
+@pytest.mark.asyncio
 async def test_db_incident_lookup_rejects_cross_tenant_camera_site() -> None:
     incident = Incident(
         id=INCIDENT_ID,
@@ -293,7 +312,10 @@ def test_maritime_evidence_tables_and_migration_are_registered() -> None:
 
 
 @pytest.mark.asyncio
-async def test_maritime_evidence_export_route(client: AsyncClient) -> None:
+async def test_maritime_evidence_export_route(
+    client: AsyncClient,
+    route_app_services: SimpleNamespace,
+) -> None:
     response = await client.post(
         "/api/v1/maritime/evidence-exports",
         json={
@@ -307,6 +329,12 @@ async def test_maritime_evidence_export_route(client: AsyncClient) -> None:
     payload = response.json()
     assert payload["metadata"]["maritime_context"]["vessel_name"] == "MV Resolute"
     assert payload["metadata"]["link_passport_hash"].startswith("sha256:")
+    usage = route_app_services.billing.list_usage(
+        tenant_id=TENANT_ID,
+        pack_id="maritime-fleet",
+    )
+    assert len(usage) == 1
+    assert usage[0].source_object_id == UUID(payload["id"])
 
 
 class _FakeTenancyService:
@@ -406,15 +434,21 @@ def _user(role: RoleEnum) -> AuthenticatedUser:
 
 
 @pytest_asyncio.fixture
-async def client(evidence_service: MaritimeEvidenceService) -> AsyncIterator[AsyncClient]:
-    app = FastAPI()
-    app.include_router(router)
-    app.state.services = SimpleNamespace(
+async def route_app_services(evidence_service: MaritimeEvidenceService) -> SimpleNamespace:
+    return SimpleNamespace(
         tenancy=_FakeTenancyService(_user(RoleEnum.ADMIN)),
         maritime=evidence_service.maritime_service,
         link=evidence_service.link_service,
         maritime_evidence=evidence_service,
+        billing=BillingService(),
     )
+
+
+@pytest_asyncio.fixture
+async def client(route_app_services: SimpleNamespace) -> AsyncIterator[AsyncClient]:
+    app = FastAPI()
+    app.include_router(router)
+    app.state.services = route_app_services
     app.state.security = _FakeSecurity(_user(RoleEnum.ADMIN))
     async with AsyncClient(
         transport=ASGITransport(app=app),

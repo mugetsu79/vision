@@ -9,6 +9,9 @@ together the lab guide and runbook.
 
 ## Quick Rules
 
+- Installed master setup through `./bin/vezor install master` bundles
+  YOLO26n and YOLO26s; manual export is for optional fallback, comparison, or
+  open-vocab models.
 - Put local model files under `models/` in this checkout.
 - Register portable camera models first. A camera can only select registered
   `/api/v1/models` rows.
@@ -33,6 +36,41 @@ together the lab guide and runbook.
 | `yolov8s-worldv2-open-vocab-pt` | `models/yolov8s-worldv2.pt` | Open vocab | Smaller experimental open-vocab fallback |
 | `yolo26n-coco-tensorrt-engine` | `models/yolo26n.engine` | Planned engine | Do not register as a camera model |
 | `yolo26s-coco-tensorrt-engine` | `models/yolo26s.engine` | Planned engine | Do not register as a camera model |
+
+## Installed Bundle And First-Run Smoke
+
+The Linux master appliance bundles `yolo26n.onnx` and `yolo26s.onnx` in
+`installer/assets/models/`. During install, the bundle is copied into
+`/var/lib/vezor/models/` and mounted into containers at `/models`.
+First-run smoke validation must register `/models/yolo26n.onnx` and
+`/models/yolo26s.onnx`; falling back to YOLO11 is a BLOCKED result for the
+YOLO26 bundle check.
+
+Use deterministic smoke first:
+
+```bash
+scripts/validation/whole_product_live_smoke.py \
+  --api-url http://127.0.0.1:8000 \
+  --report /tmp/vezor-whole-smoke/report.json \
+  --real-rtsp none
+```
+
+Use real RTSP only after deterministic smoke passes. Store camera URLs in a
+local env file outside the repository and source it before running:
+
+```bash
+set -a
+. /tmp/vezor-real-camera.env
+set +a
+scripts/validation/whole_product_live_smoke.py \
+  --api-url http://127.0.0.1:8000 \
+  --report /tmp/vezor-whole-smoke/report-real-720p.json \
+  --real-rtsp 720p
+```
+
+Keep real camera URLs local and uncommitted. The local-only env var names are
+`VEZOR_SMOKE_REAL_RTSP_720P_URL` and
+`VEZOR_SMOKE_REAL_RTSP_1296P_URL`.
 
 ## One-Time Setup
 

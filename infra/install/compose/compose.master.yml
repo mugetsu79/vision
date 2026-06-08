@@ -139,10 +139,11 @@ services:
     command:
       - /bin/sh
       - -c
-      - /app/.venv/bin/alembic upgrade head && /app/.venv/bin/uvicorn argus.main:app --host 0.0.0.0 --port 8000
+      - /app/.venv/bin/alembic upgrade head && /app/.venv/bin/uvicorn argus.main:app --host 0.0.0.0 --port 8000 --no-access-log
     env_file:
       - ${VEZOR_MASTER_ENV_FILE:-/etc/vezor/master.env}
     environment:
+      ARGUS_ENVIRONMENT: ${VEZOR_ENVIRONMENT:-production}
       ARGUS_REDIS_URL: redis://redis:6379/0
       ARGUS_NATS_URL: nats://nats:4222
       ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
@@ -153,6 +154,8 @@ services:
       ARGUS_MEDIAMTX_WHIP_BASE_URL: http://mediamtx:8889
       ARGUS_MINIO_ENDPOINT: minio:9000
       ARGUS_MINIO_SECURE: "false"
+      ARGUS_ENABLE_TRACING: ${VEZOR_ENABLE_TRACING:-false}
+      ARGUS_OTLP_ENDPOINT: ${VEZOR_OTLP_ENDPOINT:-http://otel-collector:4318}
       ARGUS_KEYCLOAK_SERVER_URL: http://keycloak:8080
       ARGUS_KEYCLOAK_PUBLIC_SERVER_URL: ${VEZOR_PUBLIC_KEYCLOAK_URL:-http://localhost:8080}
       ARGUS_KEYCLOAK_ISSUER: ${VEZOR_PUBLIC_OIDC_AUTHORITY:-http://localhost:8080/realms/argus-dev}

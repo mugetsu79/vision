@@ -1444,12 +1444,15 @@ def _maritime_evidence_service(
 ) -> MaritimeEvidenceService:
     configured = getattr(services, "maritime_evidence", None)
     if isinstance(configured, MaritimeEvidenceService):
+        if getattr(configured, "billing_service", None) is None:
+            configured.billing_service = services.billing
         return configured
     return MaritimeEvidenceService(
         maritime_service=services.maritime,
         link_service=services.link,
         tenant_id=tenant_context.tenant_id,
         session_factory=getattr(services.maritime, "session_factory", None),
+        billing_service=services.billing,
     )
 
 

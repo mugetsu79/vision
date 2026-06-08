@@ -37,6 +37,7 @@ bash -n installer/linux/uninstall.sh
 bash -n installer/macos/install-master.sh
 bash -n installer/macos/uninstall.sh
 bash -n scripts/jetson-preflight.sh
+bash -n bin/vezor
 bash -n bin/vezor-appliance
 bash -n bin/vezor-master
 bash -n bin/vezor-edge
@@ -49,6 +50,7 @@ for executable in \
   installer/linux/uninstall.sh \
   installer/macos/install-master.sh \
   installer/macos/uninstall.sh \
+  bin/vezor \
   bin/vezor-appliance \
   bin/vezor-master \
   bin/vezor-edge \
@@ -79,6 +81,7 @@ product_artifacts = [
     Path("infra/install/systemd/vezor-master.service"),
     Path("infra/install/systemd/vezor-edge.service"),
     Path("infra/install/launchd/com.vezor.master.plist"),
+    Path("bin/vezor"),
     Path("bin/vezor-appliance"),
     Path("bin/vezor-master"),
     Path("bin/vezor-edge"),

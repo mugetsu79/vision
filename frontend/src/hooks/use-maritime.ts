@@ -168,15 +168,41 @@ export function useMaritimeVesselLinkStatus(vesselId?: string | null) {
   });
 }
 
-export function useMaritimeEvidenceContext() {
+type MaritimeEvidenceContextInput = {
+  incidentId?: string | null;
+  cameraId?: string | null;
+  incidentTime?: string | null;
+};
+
+export function useMaritimeEvidenceContext(input: MaritimeEvidenceContextInput = {}) {
+  const hasIncidentContext = Boolean(input.incidentId);
+  const hasCameraContext = Boolean(input.cameraId && input.incidentTime);
+  const enabled = hasIncidentContext || hasCameraContext;
+
   return useQuery({
-    queryKey: ["maritime", "evidence-context"],
+    queryKey: [
+      "maritime",
+      "evidence-context",
+      input.incidentId ?? null,
+      input.cameraId ?? null,
+      input.incidentTime ?? null,
+    ],
+    enabled,
     queryFn: async () => {
-      const { data, error } = await apiClient.GET("/api/v1/maritime/evidence-context");
+      const query = {
+        ...(input.incidentId ? { incident_id: input.incidentId } : {}),
+        ...(input.cameraId && input.incidentTime
+          ? { camera_id: input.cameraId, incident_time: input.incidentTime }
+          : {}),
+      };
+      const { data, error } = await apiClient.GET(
+        "/api/v1/maritime/evidence-context",
+        { params: { query } },
+      );
       if (error) {
         throw toApiError(error, "Failed to load maritime evidence context.");
       }
-      return data ?? {};
+      return data ?? null;
     },
   });
 }

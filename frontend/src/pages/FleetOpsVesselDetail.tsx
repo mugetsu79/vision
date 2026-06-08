@@ -19,7 +19,7 @@ import {
   useUpdateMaritimeVessel,
   type MaritimeVesselUpdateInput,
 } from "@/hooks/use-maritime";
-import { useLinkConnections, useLinkSiteStatus } from "@/hooks/use-link";
+import { useLinkSiteStatus } from "@/hooks/use-link";
 import type {
   FleetOpsVessel,
   JsonRecord,
@@ -37,7 +37,6 @@ export function FleetOpsVesselDetail() {
   const effectiveVesselId = typeof vessel?.id === "string" ? vessel.id : "";
   const effectiveSiteId = typeof vessel?.site_id === "string" ? vessel.site_id : null;
   const coreLinkStatus = useLinkSiteStatus(effectiveSiteId);
-  const linkConnections = useLinkConnections(effectiveSiteId);
   const updateVessel = useUpdateMaritimeVessel(effectiveVesselId);
   const deactivateVessel = useDeactivateMaritimeVessel();
   const maritimeLinkStatus =
@@ -45,7 +44,6 @@ export function FleetOpsVesselDetail() {
   const linkConnectionStatus = linkPanelStatus(
     maritimeLinkStatus,
     coreLinkStatus.data as JsonRecord | null | undefined,
-    (linkConnections.data ?? []) as JsonRecord[],
   );
 
   async function handleUpdateVessel(payload: MaritimeVesselUpdateInput) {
@@ -150,16 +148,13 @@ export const FleetOpsVesselDetailPage = FleetOpsVesselDetail;
 function linkPanelStatus(
   maritimeLinkStatus?: MaritimeVesselLinkStatus | JsonRecord | null,
   coreLinkStatus?: JsonRecord | null,
-  linkConnections: JsonRecord[] = [],
 ): JsonRecord {
   const maritimeStatus = asRecord(maritimeLinkStatus);
   const coreStatus = asRecord(coreLinkStatus);
   const coreStatusConnections = Array.isArray(coreStatus.connections)
     ? coreStatus.connections
     : [];
-  const coreConnections = linkConnections.length
-    ? linkConnections
-    : coreStatusConnections.map(asRecord);
+  const coreConnections = coreStatusConnections.map(asRecord);
 
   return {
     ...coreStatus,

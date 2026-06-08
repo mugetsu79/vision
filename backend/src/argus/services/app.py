@@ -987,7 +987,9 @@ class CameraService:
         )
         return base_config.model_copy(
             update={
+                "scene_contract_snapshot_id": contract_snapshot.id,
                 "scene_contract_hash": contract_snapshot.contract_hash,
+                "privacy_manifest_snapshot_id": privacy_snapshot.id,
                 "privacy_manifest_hash": privacy_snapshot.manifest_hash,
                 "runtime_passport_snapshot_id": runtime_passport_snapshot.id,
                 "runtime_passport_hash": runtime_passport_snapshot.passport_hash,
@@ -1237,10 +1239,7 @@ class CameraService:
                 tenant_context=tenant_context,
                 privacy=payload.privacy.model_dump(mode="python"),
             )
-            source_capability = await _probe_camera_source_capability(
-                normalized_source,
-                settings=self.settings,
-            )
+            source_capability: SourceCapability | None = None
             browser_delivery = _build_source_aware_browser_delivery(
                 requested=payload.browser_delivery,
                 source_capability=source_capability,
@@ -2177,7 +2176,7 @@ class OperationsService:
             ),
         )
         return FleetOverviewResponse(
-            mode=FleetLifecycleMode.MANUAL_DEV,
+            mode=_fleet_lifecycle_mode(camera_workers),
             generated_at=now,
             summary=summary,
             nodes=nodes,
@@ -4764,6 +4763,26 @@ def _fleet_hardware_report_is_fresh(report: object | None, now: datetime) -> boo
     return now - reported_at <= REPORT_STALE_AFTER
 
 
+def _fleet_lifecycle_mode(
+    camera_workers: Sequence[FleetCameraWorkerSummary],
+) -> FleetLifecycleMode:
+    desired_owners = {
+        worker.lifecycle_owner
+        for worker in camera_workers
+        if worker.desired_state
+        in {
+            WorkerDesiredState.DESIRED,
+            WorkerDesiredState.MANUAL,
+            WorkerDesiredState.SUPERVISED,
+        }
+    }
+    if not desired_owners or desired_owners <= {"manual_dev", "none"}:
+        return FleetLifecycleMode.MANUAL_DEV
+    if "manual_dev" in desired_owners:
+        return FleetLifecycleMode.MIXED
+    return FleetLifecycleMode.SUPERVISED
+
+
 def _derive_worker_lifecycle(
     *,
     camera: Camera,
@@ -5587,7 +5606,9 @@ def _camera_to_worker_config(
     stream_delivery: WorkerStreamDeliverySettings | None = None,
     runtime_selection: WorkerRuntimeSelectionSettings | None = None,
     privacy_policy: WorkerPrivacyPolicySettings | None = None,
+    scene_contract_snapshot_id: UUID | None = None,
     scene_contract_hash: str | None = None,
+    privacy_manifest_snapshot_id: UUID | None = None,
     privacy_manifest_hash: str | None = None,
     runtime_passport_snapshot_id: UUID | None = None,
     runtime_passport_hash: str | None = None,
@@ -5651,7 +5672,9 @@ def _camera_to_worker_config(
     return WorkerConfigResponse(
         camera_id=camera.id,
         mode=camera.processing_mode,
+        scene_contract_snapshot_id=scene_contract_snapshot_id,
         scene_contract_hash=scene_contract_hash,
+        privacy_manifest_snapshot_id=privacy_manifest_snapshot_id,
         privacy_manifest_hash=privacy_manifest_hash,
         runtime_passport_snapshot_id=runtime_passport_snapshot_id,
         runtime_passport_hash=runtime_passport_hash,

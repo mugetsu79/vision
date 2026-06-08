@@ -1304,7 +1304,9 @@ class WorkerRuntimeCapability(BaseModel):
 class WorkerConfigResponse(BaseModel):
     camera_id: UUID
     mode: ProcessingMode
+    scene_contract_snapshot_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    privacy_manifest_snapshot_id: UUID | None = None
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     runtime_passport_snapshot_id: UUID | None = None
     runtime_passport_hash: str | None = Field(default=None, min_length=64, max_length=64)

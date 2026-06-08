@@ -51,7 +51,33 @@ export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/down
 
 ## Installer Quick Start
 
-For product-mode validation, start with [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). It covers:
+For product-mode validation, use `bin/vezor` as the operator front door. From a
+release checkout on the target master:
+
+```bash
+sudo ./bin/vezor install master --public-url http://MASTER_IP:3000
+./bin/vezor ctl bootstrap-master --api-url http://MASTER_IP:8000 --rotate-local-token --json
+./bin/vezor status
+./bin/vezor validate
+```
+
+For a Jetson or Linux edge node, create a one-time pairing session in Control
+-> Deployment, then run on the edge host:
+
+```bash
+sudo ./bin/vezor install edge \
+  --api-url http://MASTER_IP:8000 \
+  --session-id SESSION \
+  --pairing-code CODE \
+  --edge-name jetson-portable-1
+```
+
+`bin/vezor` delegates to the host-appropriate macOS or Linux installer and to
+the existing local service tools. The lower-level scripts remain available for
+reference and break-glass support, but the wrapper is the documented happy path.
+
+For complete product-mode validation, start with
+[docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). It covers:
 
 - Linux master installer
 - macOS master installer for the portable MacBook Pro pilot path

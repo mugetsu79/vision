@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  vezor install master [installer options...]
+  vezor install edge [installer options...]
+  vezor status [local CLI options...]
+  vezor validate
+  vezor master COMMAND [service options...]
+  vezor edge COMMAND [service options...]
+  vezor ctl COMMAND [local CLI options...]
+
+Fast path:
+  sudo ./bin/vezor install master --public-url http://MASTER_IP:3000
+  ./bin/vezor ctl bootstrap-master --api-url http://MASTER_IP:8000 --rotate-local-token --json
+  sudo ./bin/vezor install edge --api-url http://MASTER_IP:8000 --session-id SESSION --pairing-code CODE
+
+Commands:
+  install master   Run the host-appropriate master installer.
+  install edge     Run the Linux/Jetson edge installer.
+  status           Show local install and node status.
+  validate         Run installer release-gate checks.
+  master           Pass through to bin/vezor-master.
+  edge             Pass through to bin/vezor-edge.
+  ctl              Pass through to bin/vezorctl.
+USAGE
+}
+
+if [[ $# -lt 1 ]]; then
+  usage >&2
+  exit 2
+fi
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+  install)
+    if [[ $# -lt 1 ]]; then
+      echo "install requires master or edge." >&2
+      usage >&2
+      exit 2
+    fi
+    TARGET="$1"
+    shift
+    case "$TARGET" in
+      master)
+        case "$(uname -s)" in
+          Darwin)
+            exec "$ROOT_DIR/installer/macos/install-master.sh" "$@"
+            ;;
+          Linux)
+            exec "$ROOT_DIR/installer/linux/install-master.sh" "$@"
+            ;;
+          *)
+            echo "Unsupported master install host: $(uname -s)" >&2
+            exit 2
+            ;;
+        esac
+        ;;
+      edge)
+        exec "$ROOT_DIR/installer/linux/install-edge.sh" "$@"
+        ;;
+      *)
+        echo "Unknown install target: $TARGET" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  status)
+    exec "$ROOT_DIR/bin/vezorctl" status "$@"
+    ;;
+  validate)
+    exec "$ROOT_DIR/scripts/validate-installers.sh" "$@"
+    ;;
+  master)
+    exec "$ROOT_DIR/bin/vezor-master" "$@"
+    ;;
+  edge)
+    exec "$ROOT_DIR/bin/vezor-edge" "$@"
+    ;;
+  ctl|vezorctl)
+    exec "$ROOT_DIR/bin/vezorctl" "$@"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

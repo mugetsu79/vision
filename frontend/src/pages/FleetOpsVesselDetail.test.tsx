@@ -60,6 +60,16 @@ const vesselDetailMocks = vi.hoisted(() => ({
           availability_scope: "local",
           metered: false,
         },
+        connections: [
+          {
+            id: "connection-1",
+            label: "Fiber berth",
+            transport_kind: "fiber",
+            status: "online",
+            availability_scope: "local",
+            metered: false,
+          },
+        ],
       },
       isLoading: false,
       isError: false,
@@ -96,6 +106,7 @@ const vesselDetailMocks = vi.hoisted(() => ({
   },
   updateVessel: vi.fn(),
   deactivateVessel: vi.fn(),
+  useLinkConnections: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-maritime", () => ({
@@ -112,11 +123,7 @@ vi.mock("@/hooks/use-maritime", () => ({
 
 vi.mock("@/hooks/use-link", () => ({
   useLinkSiteStatus: () => vesselDetailMocks.detail.coreLinkStatus,
-  useLinkConnections: () => ({
-    data: vesselDetailMocks.detail.linkConnections,
-    isLoading: false,
-    isError: false,
-  }),
+  useLinkConnections: vesselDetailMocks.useLinkConnections,
 }));
 
 function renderWithProviders(ui: ReactElement) {
@@ -145,6 +152,11 @@ describe("FleetOpsVesselDetail", () => {
     vesselDetailMocks.deactivateVessel.mockResolvedValue(
       "00000000-0000-4000-8000-000000000010",
     );
+    vesselDetailMocks.useLinkConnections.mockReturnValue({
+      data: vesselDetailMocks.detail.linkConnections,
+      isLoading: false,
+      isError: false,
+    });
   });
 
   test("Vessel detail renders voyage timeline, templates, telemetry, and evidence context", async () => {
@@ -180,6 +192,13 @@ describe("FleetOpsVesselDetail", () => {
     expect(screen.getByText(/Budget/i)).toBeInTheDocument();
     expect(screen.getByText(/Latest probe/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Evidence queue/i).length).toBeGreaterThan(0);
+  });
+
+  test("Vessel detail does not query raw Core Link connections before edge pairing", async () => {
+    renderWithProviders(<FleetOpsVesselDetail />);
+
+    expect(await screen.findByText(/Active connection/i)).toBeInTheDocument();
+    expect(vesselDetailMocks.useLinkConnections).not.toHaveBeenCalled();
   });
 
   test("edit vessel action submits an update payload", async () => {

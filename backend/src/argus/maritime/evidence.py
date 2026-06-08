@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -53,6 +55,42 @@ class MaritimeEvidenceNotFoundError(MaritimeEvidenceError):
     pass
 
 
+class BillingUsageRecorder(Protocol):
+    def record_usage(
+        self,
+        *,
+        tenant_id: UUID,
+        meter_key: str,
+        quantity: Decimal | int | str,
+        source_object_type: str,
+        source_object_id: UUID,
+        account_id: UUID | None = None,
+        node_id: UUID | None = None,
+        occurred_on: date | None = None,
+        pack_id: str | None = None,
+        source_started_on: date | None = None,
+        source_ended_on: date | None = None,
+        metadata: Mapping[str, object] | None = None,
+    ) -> object: ...
+
+    async def arecord_usage(
+        self,
+        *,
+        tenant_id: UUID,
+        meter_key: str,
+        quantity: Decimal | int | str,
+        source_object_type: str,
+        source_object_id: UUID,
+        account_id: UUID | None = None,
+        node_id: UUID | None = None,
+        occurred_on: date | None = None,
+        pack_id: str | None = None,
+        source_started_on: date | None = None,
+        source_ended_on: date | None = None,
+        metadata: Mapping[str, object] | None = None,
+    ) -> object: ...
+
+
 class MaritimeEvidenceService:
     def __init__(
         self,
@@ -61,11 +99,13 @@ class MaritimeEvidenceService:
         link_service: LinkService,
         tenant_id: UUID,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
+        billing_service: BillingUsageRecorder | None = None,
     ) -> None:
         self.maritime_service = maritime_service
         self.link_service = link_service
         self.tenant_id = tenant_id
         self.session_factory = session_factory
+        self.billing_service = billing_service
         self._camera_sites: dict[UUID, UUID] = {}
         self._incidents: dict[UUID, CoreIncidentEvidenceRecord] = {}
         self._contexts: dict[UUID, MaritimeEvidenceContextRecord] = {}
@@ -290,6 +330,7 @@ class MaritimeEvidenceService:
         )
         if self.session_factory is None:
             self._exports.append(export)
+            await self._record_export_usage(export)
             return export
         async with self.session_factory() as session:
             row = MaritimeEvidenceExport(
@@ -303,7 +344,9 @@ class MaritimeEvidenceService:
             session.add(row)
             await session.commit()
             await session.refresh(row)
-        return _export_record(row)
+        export = _export_record(row)
+        await self._record_export_usage(export)
+        return export
 
     async def list_exports(
         self,
@@ -468,6 +511,19 @@ class MaritimeEvidenceService:
             )
         )
         return result.scalar_one_or_none()
+
+    async def _record_export_usage(self, export: MaritimeEvidenceExportRecord) -> None:
+        if self.billing_service is None:
+            return
+        await self.billing_service.arecord_usage(
+            tenant_id=self.tenant_id,
+            meter_key="evidence_pack_export",
+            quantity=1,
+            source_object_type="maritime_evidence_export",
+            source_object_id=export.id,
+            pack_id="maritime-fleet",
+            metadata={"incident_id": str(export.incident_id)},
+        )
 
     def _partial_context(
         self,

@@ -398,15 +398,19 @@ Security boundary check:
 Model-dependent camera and worker smoke cannot pass unless a real model file is
 available.
 
-Current repository `models/` may only contain `.gitkeep`. If so, either export
-`yolo26n.onnx` from official Ultralytics weights per
-`docs/product-installer-and-first-run-guide.md`, or mark model-dependent flows
-as blocked.
+The repository now bundles `yolo26n.onnx` and `yolo26s.onnx` under
+`installer/assets/models/`, and validation scripts are present under
+`scripts/validation/`. The installed Linux master path should copy those files
+into `/var/lib/vezor/models/` and mount them into containers at `/models`.
+Do not mark real RTSP PASS unless the actual camera probe and live checks
+succeed with a local, uncommitted camera URL.
 
 Installed product path:
 
 - host file: `/var/lib/vezor/models/yolo26n.onnx`
+- host file: `/var/lib/vezor/models/yolo26s.onnx`
 - backend/container path: `/models/yolo26n.onnx`
+- backend/container path: `/models/yolo26s.onnx`
 
 Register:
 
@@ -422,6 +426,10 @@ docker exec \
     --bearer-token "$VEZOR_ADMIN_ACCESS_TOKEN"
 '
 ```
+
+For the first-run YOLO26 bundle check, also register `yolo26s-coco-onnx` at
+`/models/yolo26s.onnx`. If either bundled YOLO26 model is unavailable, mark that
+bundle check blocked; do not substitute YOLO11 for this gate.
 
 Dev-stack path:
 

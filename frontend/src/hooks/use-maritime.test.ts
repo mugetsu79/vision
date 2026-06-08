@@ -61,7 +61,7 @@ describe("maritime hooks", () => {
     });
   });
 
-  test("useFleetOpsVesselDetail composes vessel telemetry link evidence billing and support queries", async () => {
+  test("useFleetOpsVesselDetail composes vessel telemetry link billing and support queries", async () => {
     const vesselId = "00000000-0000-4000-8000-000000000010";
 
     renderHook(() => useFleetOpsVesselDetail(vesselId), {
@@ -81,12 +81,14 @@ describe("maritime hooks", () => {
         "/api/v1/maritime/vessels/{vessel_id}/link-status",
         { params: { path: { vessel_id: vesselId } } },
       );
-      expect(apiClient.GET).toHaveBeenCalledWith("/api/v1/maritime/evidence-context");
       expect(apiClient.GET).toHaveBeenCalledWith("/api/v1/maritime/billing/usage");
       expect(apiClient.GET).toHaveBeenCalledWith(
         "/api/v1/maritime/support/diagnostics",
       );
     });
+    expect(apiClient.GET).not.toHaveBeenCalledWith(
+      "/api/v1/maritime/evidence-context",
+    );
   });
 
   test("useCreateMaritimeVessel posts create_site payload and refreshes vessel data", async () => {

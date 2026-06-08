@@ -13,6 +13,7 @@ from argus.api.contracts import (
     FleetSummary,
     HardwarePerformanceSample,
     OperationsLifecycleRequestResponse,
+    SupervisorRuntimeReportResponse,
     SupervisorServiceReportCreate,
     WorkerAssignmentResponse,
     WorkerDesiredState,
@@ -27,6 +28,7 @@ from argus.models.enums import (
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
     ProcessingMode,
+    WorkerRuntimeState,
 )
 from argus.supervisor.process_adapter import WorkerProcessResult
 from argus.supervisor.runner import SupervisorRunner, parse_args
@@ -330,6 +332,102 @@ async def test_runner_recovers_desired_worker_from_fleet_after_restart() -> None
     assert processed == 1
     assert adapter.calls == [("start", worker.camera_id)]
     assert operations.runtime_reports[0]["camera_id"] == worker.camera_id
+
+
+@pytest.mark.asyncio
+async def test_runner_refreshes_runtime_report_for_already_running_worker() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.STALE,
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    operations = _FakeOperations(
+        requests=[],
+        fleet=_fleet_overview(worker),
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    adapter = _FakeProcessAdapter()
+    adapter.running.add(worker.camera_id)
+    runner = SupervisorRunner(
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+    )
+
+    processed = await runner.run_once()
+
+    assert processed == 0
+    assert adapter.calls == []
+    assert operations.runtime_reports == [
+        {
+            "camera_id": worker.camera_id,
+            "runtime_state": "running",
+            "last_error": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_runner_recovers_desired_worker_from_unknown_running_report_after_restart() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.UNKNOWN,
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    worker.runtime_report = SupervisorRuntimeReportResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=worker.camera_id,
+        edge_node_id=edge_node_id,
+        assignment_id=worker.assignment.id if worker.assignment is not None else None,
+        heartbeat_at=datetime(2026, 5, 13, 11, 40, tzinfo=UTC),
+        runtime_state=WorkerRuntimeState.RUNNING,
+        restart_count=0,
+        last_error=None,
+        runtime_artifact_id=None,
+        scene_contract_hash=None,
+        created_at=datetime(2026, 5, 13, 11, 40, tzinfo=UTC),
+    )
+    worker.restart_policy = "on_failure"
+    operations = _FakeOperations(
+        requests=[],
+        fleet=_fleet_overview(worker),
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    adapter = _FakeProcessAdapter()
+    runner = SupervisorRunner(
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+    )
+
+    processed = await runner.run_once()
+
+    assert processed == 1
+    assert adapter.calls == [("start", worker.camera_id)]
+    assert operations.runtime_reports == [
+        {
+            "camera_id": worker.camera_id,
+            "runtime_state": "running",
+            "last_error": None,
+        }
+    ]
 
 
 @pytest.mark.asyncio

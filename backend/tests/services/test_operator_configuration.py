@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from argus.api.contracts import (
     EvidenceStorageProfileConfig,
@@ -34,7 +35,7 @@ from argus.models.tables import (
     OperatorConfigSecret,
     Site,
 )
-from argus.services.operator_configuration import OperatorConfigurationService
+from argus.services.operator_configuration import OperatorConfigurationService, hash_config
 
 
 def test_operator_configuration_enums_define_product_profile_surface() -> None:
@@ -469,6 +470,94 @@ async def test_runtime_resolution_bootstraps_missing_new_profile_kind(
 
 
 @pytest.mark.asyncio
+async def test_runtime_resolution_bootstraps_product_operations_mode_as_supervised(
+    tmp_path: Path,
+) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path, environment="production"),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+
+    resolved = await service.runtime_configuration.resolve_profile_for_runtime(
+        context,
+        OperatorConfigProfileKind.OPERATIONS_MODE,
+    )
+
+    assert resolved.kind is OperatorConfigProfileKind.OPERATIONS_MODE
+    assert resolved.profile_name == "Default operations mode"
+    assert resolved.config == {
+        "lifecycle_owner": "central_supervisor",
+        "supervisor_mode": "polling",
+        "restart_policy": "on_failure",
+    }
+
+
+@pytest.mark.asyncio
+async def test_runtime_resolution_tolerates_concurrent_default_bootstrap(
+    tmp_path: Path,
+) -> None:
+    session_factory = _BootstrapConflictSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(tmp_path, environment="production"),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+    session_factory.concurrent_profiles = [
+        _operator_profile_from_payload(context.tenant_id, payload)
+        for payload in service._bootstrap_profiles()
+    ]
+
+    resolved = await service.runtime_configuration.resolve_profile_for_runtime(
+        context,
+        OperatorConfigProfileKind.OPERATIONS_MODE,
+    )
+
+    assert resolved.kind is OperatorConfigProfileKind.OPERATIONS_MODE
+    assert resolved.profile_slug == "default-operations-mode"
+    assert resolved.config == {
+        "lifecycle_owner": "central_supervisor",
+        "supervisor_mode": "polling",
+        "restart_policy": "on_failure",
+    }
+    assert session_factory.rollback_count == 1
+    assert [
+        (profile.kind, profile.slug)
+        for profile in session_factory.state["profiles"]
+        if profile.tenant_id == context.tenant_id
+    ].count((OperatorConfigProfileKind.EVIDENCE_STORAGE, "dev-minio")) == 1
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_default_stream_delivery_keeps_route_specific_base_urls(
+    tmp_path: Path,
+) -> None:
+    session_factory = _OperatorConfigSessionFactory()
+    service = OperatorConfigurationService(
+        session_factory=session_factory,
+        settings=_settings(
+            tmp_path,
+            mediamtx_webrtc_base_url="http://mediamtx:8889",
+            mediamtx_hls_base_url="http://mediamtx:8888",
+        ),
+        audit_logger=_FakeAuditLogger(),
+    )
+    context = _tenant_context()
+
+    seeded = await service.seed_bootstrap_defaults(context)
+
+    stream_delivery = next(
+        profile
+        for profile in seeded
+        if profile.kind is OperatorConfigProfileKind.STREAM_DELIVERY
+    )
+    assert stream_delivery.config == {"delivery_mode": "native"}
+
+
+@pytest.mark.asyncio
 async def test_operator_config_service_tests_local_and_remote_storage_profiles(
     tmp_path: Path,
 ) -> None:
@@ -827,13 +916,14 @@ def _tenant_context() -> TenantContext:
     )
 
 
-def _settings(tmp_path: Path) -> Settings:
+def _settings(tmp_path: Path, **overrides: Any) -> Settings:
     return Settings(
         _env_file=None,
         enable_startup_services=False,
         enable_nats=False,
         config_encryption_key="argus-dev-config-key",
         incident_local_storage_root=str(tmp_path / "evidence"),
+        **overrides,
     )
 
 
@@ -995,3 +1085,74 @@ class _OperatorConfigSessionFactory:
 
     def __call__(self) -> _OperatorConfigSession:
         return _OperatorConfigSession(self.state)
+
+
+class _BootstrapConflictSession(_OperatorConfigSession):
+    def __init__(self, factory: _BootstrapConflictSessionFactory) -> None:
+        super().__init__(factory.state)
+        self.factory = factory
+        self.pending: list[Any] = []
+
+    def add(self, item: Any) -> None:
+        item.id = item.id or uuid4()
+        self.pending.append(item)
+
+    async def commit(self) -> None:
+        self.state["commits"] += 1
+        if self.factory.raise_conflict_once:
+            self.factory.raise_conflict_once = False
+            self.pending.clear()
+            self.state["profiles"] = list(self.factory.concurrent_profiles)
+            raise IntegrityError(
+                "insert",
+                {},
+                Exception('duplicate key value violates unique constraint "uq_op_cfg_profile_slug"'),
+            )
+        for item in self.pending:
+            if isinstance(item, OperatorConfigProfile):
+                self.state["profiles"].append(item)
+            elif isinstance(item, OperatorConfigSecret):
+                self.state["secrets"].append(item)
+            elif isinstance(item, OperatorConfigBinding):
+                self.state["bindings"].append(item)
+        self.pending.clear()
+
+    async def rollback(self) -> None:
+        await super().rollback()
+        self.factory.rollback_count += 1
+        self.pending.clear()
+
+
+class _BootstrapConflictSessionFactory(_OperatorConfigSessionFactory):
+    def __init__(self) -> None:
+        super().__init__()
+        self.raise_conflict_once = True
+        self.rollback_count = 0
+        self.concurrent_profiles: list[OperatorConfigProfile] = []
+
+    def __call__(self) -> _BootstrapConflictSession:
+        return _BootstrapConflictSession(self)
+
+
+def _operator_profile_from_payload(
+    tenant_id: Any,
+    payload: OperatorConfigProfileCreate,
+) -> OperatorConfigProfile:
+    return OperatorConfigProfile(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        site_id=None,
+        edge_node_id=None,
+        camera_id=None,
+        kind=payload.kind,
+        scope=payload.scope,
+        name=payload.name,
+        slug=payload.slug,
+        enabled=payload.enabled,
+        is_default=payload.is_default,
+        config=payload.config,
+        validation_status=OperatorConfigValidationStatus.UNVALIDATED,
+        validation_message=None,
+        validated_at=None,
+        config_hash=hash_config(payload.config),
+    )

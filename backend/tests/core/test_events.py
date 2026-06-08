@@ -8,11 +8,21 @@ import pytest
 from pydantic import BaseModel
 
 from argus.core.config import Settings
-from argus.core.events import EventMessage, NatsJetStreamClient
+from argus.core.events import EventMessage, NatsJetStreamClient, STREAM_DEFINITIONS
 
 
 class CameraCommand(BaseModel):
     command: str
+
+
+def test_stream_definitions_include_rule_events() -> None:
+    subjects = {
+        subject
+        for stream in STREAM_DEFINITIONS
+        for subject in stream.subjects
+    }
+
+    assert "evt.rule.*" in subjects
 
 
 @pytest.mark.asyncio

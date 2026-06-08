@@ -89,6 +89,12 @@ python -m argus.link.edge_agent \
   --once
 ```
 
+For installed edge nodes, use `./bin/vezor install edge` from the release
+checkout after creating the one-time pairing session in Control -> Deployment.
+The direct `python -m argus.link.edge_agent ... --bearer-token ...` examples in
+this guide are validation and break-glass probes until paired edge-agent
+credential packaging is complete.
+
 ICMP can be filtered or deprioritized by networks. Treat it as useful
 source-side evidence, not a universal proof of application-path loss.
 
