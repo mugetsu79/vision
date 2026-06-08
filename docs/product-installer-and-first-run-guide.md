@@ -65,9 +65,9 @@ port mapping support. A real reflector listener requires
 `ARGUS_LINK_REFLECTOR_ENABLED=true`, `ARGUS_LINK_REFLECTOR_SECRET`, and an
 edge-reachable public address in the master backend environment before startup.
 The current UI exposes profile enable/disable/rotate controls and target
-metadata; a later product hardening pass should add paired edge-agent
-credentials, reflector secret distribution, and dynamic runtime/profile
-reconciliation.
+metadata, and reconciles profile changes into the running backend listener. A
+later product hardening pass should add paired edge-agent credentials,
+reflector secret distribution, and service packaging.
 
 ### FleetOps Pack Packaging And Smoke
 
@@ -193,6 +193,8 @@ Fill this in before you start:
 | Master public URL | `http://MASTER_IP:3000` |
 | Master API URL | `http://MASTER_IP:8000` |
 | First admin email | |
+| First admin first name | |
+| First admin last name | |
 | Tenant name | |
 | Central supervisor id | value chosen in first-run, for example `100` |
 | Jetson hostname | |
@@ -534,6 +536,8 @@ Use the returned `vzboot_...` token in `/first-run`, then create:
 - tenant name
 - first admin email
 - first admin password
+- first admin first name
+- first admin last name
 - master node name
 - optional central supervisor id
 
@@ -559,10 +563,12 @@ short-lived; if you come back later, generate a new one.
 The final packaged product should replace this CLI token flow with an
 operator-visible model import path or packaged model bundle.
 
-### One-Time: Enable The Validation CLI Token Client
+### Validation CLI Token Client
 
-Run this once on the MacBook master after first-run has created the installed
-tenant realm:
+Current first-run provisioning creates or repairs the `argus-cli` direct-grant
+client and tenant-claim mappers for the installed tenant realm. Use the script
+below only when validating an older install or when the fresh admin token is
+missing `tenant` or `tenant_id` claims.
 
 ```bash
 sudo -v
@@ -639,9 +645,11 @@ export VEZOR_ADMIN_ACCESS_TOKEN="$(
 )"
 ```
 
-If this command fails, confirm the one-time `argus-cli` client setup completed
-and that you are using the first-run admin account, not the Keycloak master
-admin account.
+The token must include tenant context. If API calls with this token are
+rejected, decode the token payload locally and confirm it contains `tenant` or
+`tenant_id`; then confirm the `argus-cli` client has the user-attribute protocol
+mappers and that you are using the first-run admin account, not the Keycloak
+master admin account.
 
 ### Alternative: Copy A Token From The Browser Session
 

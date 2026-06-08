@@ -46,6 +46,8 @@ class KeycloakBootstrapProvisioner:
         tenant_slug: str,
         admin_email: str,
         admin_password: str,
+        admin_first_name: str,
+        admin_last_name: str,
     ) -> str:
         token = await self._admin_token()
         await self._ensure_realm(token, tenant_name=tenant_name)
@@ -54,12 +56,17 @@ class KeycloakBootstrapProvisioner:
         client_id = await self._ensure_frontend_client(token)
         await self._ensure_user_attribute_mapper(token, client_id, "tenant_id")
         await self._ensure_user_attribute_mapper(token, client_id, "tenant")
+        cli_client_id = await self._ensure_cli_client(token)
+        await self._ensure_user_attribute_mapper(token, cli_client_id, "tenant_id")
+        await self._ensure_user_attribute_mapper(token, cli_client_id, "tenant")
         user_id = await self._ensure_admin_user(
             token,
             tenant_id=tenant_id,
             tenant_slug=tenant_slug,
             admin_email=admin_email,
             admin_password=admin_password,
+            admin_first_name=admin_first_name,
+            admin_last_name=admin_last_name,
         )
         await self._ensure_realm_role_assignment(token, user_id, RoleEnum.ADMIN.value)
         return user_id
@@ -147,7 +154,7 @@ class KeycloakBootstrapProvisioner:
         return dict(payload)
 
     async def _ensure_frontend_client(self, token: str) -> str:
-        client = await self._find_client(token)
+        client = await self._find_client(token, self.settings.keycloak_frontend_client_id)
         if client is None:
             response = await self.http_client.post(
                 f"{self.base_url}/admin/realms/{self.realm}/clients",
@@ -158,7 +165,7 @@ class KeycloakBootstrapProvisioner:
                 response,
                 f"create Keycloak client {self.settings.keycloak_frontend_client_id}",
             )
-            client = await self._find_client(token)
+            client = await self._find_client(token, self.settings.keycloak_frontend_client_id)
         if client is None or not isinstance(client.get("id"), str):
             raise KeycloakBootstrapError(
                 f"Unable to resolve Keycloak client {self.settings.keycloak_frontend_client_id}."
@@ -180,15 +187,46 @@ class KeycloakBootstrapProvisioner:
         )
         return client_id
 
-    async def _find_client(self, token: str) -> dict[str, Any] | None:
-        response = await self.http_client.get(
-            f"{self.base_url}/admin/realms/{self.realm}/clients",
+    async def _ensure_cli_client(self, token: str) -> str:
+        client = await self._find_client(token, self.settings.keycloak_cli_client_id)
+        if client is None:
+            response = await self.http_client.post(
+                f"{self.base_url}/admin/realms/{self.realm}/clients",
+                headers=self._headers(token),
+                json=self._cli_client_payload(),
+            )
+            self._raise_for_status(
+                response,
+                f"create Keycloak client {self.settings.keycloak_cli_client_id}",
+            )
+            client = await self._find_client(token, self.settings.keycloak_cli_client_id)
+        if client is None or not isinstance(client.get("id"), str):
+            raise KeycloakBootstrapError(
+                f"Unable to resolve Keycloak client {self.settings.keycloak_cli_client_id}."
+            )
+
+        client_id = str(client["id"])
+        merged = {**client, **self._cli_client_payload()}
+        response = await self.http_client.put(
+            f"{self.base_url}/admin/realms/{self.realm}/clients/{client_id}",
             headers=self._headers(token),
-            params={"clientId": self.settings.keycloak_frontend_client_id},
+            json=merged,
         )
         self._raise_for_status(
             response,
-            f"find Keycloak client {self.settings.keycloak_frontend_client_id}",
+            f"update Keycloak client {self.settings.keycloak_cli_client_id}",
+        )
+        return client_id
+
+    async def _find_client(self, token: str, client_id: str) -> dict[str, Any] | None:
+        response = await self.http_client.get(
+            f"{self.base_url}/admin/realms/{self.realm}/clients",
+            headers=self._headers(token),
+            params={"clientId": client_id},
+        )
+        self._raise_for_status(
+            response,
+            f"find Keycloak client {client_id}",
         )
         payload = response.json()
         if not isinstance(payload, list):
@@ -243,11 +281,15 @@ class KeycloakBootstrapProvisioner:
         tenant_slug: str,
         admin_email: str,
         admin_password: str,
+        admin_first_name: str,
+        admin_last_name: str,
     ) -> str:
         user = await self._find_user(token, admin_email)
         user_payload = {
             "username": admin_email,
             "email": admin_email,
+            "firstName": admin_first_name,
+            "lastName": admin_last_name,
             "enabled": True,
             "emailVerified": True,
             "requiredActions": [],
@@ -360,6 +402,17 @@ class KeycloakBootstrapProvisioner:
             "redirectUris": [f"{origin}/*" for origin in origins],
             "webOrigins": origins,
             "attributes": attributes,
+        }
+
+    def _cli_client_payload(self) -> dict[str, Any]:
+        return {
+            "clientId": self.settings.keycloak_cli_client_id,
+            "name": "Vezor CLI",
+            "enabled": True,
+            "publicClient": True,
+            "protocol": "openid-connect",
+            "standardFlowEnabled": False,
+            "directAccessGrantsEnabled": True,
         }
 
     def _headers(self, token: str) -> dict[str, str]:

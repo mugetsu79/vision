@@ -34,19 +34,33 @@ async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_use
             role_name = request.url.path.rsplit("/", 1)[-1]
             return httpx.Response(200, json={"id": f"role-{role_name}", "name": role_name})
         if request.method == "GET" and request.url.path == "/admin/realms/vezor/clients":
-            if not any(
-                method == "POST" and path == "/admin/realms/vezor/clients"
-                for method, path, _body in calls
-            ):
+            client_id = request.url.params.get("clientId")
+            posted_client = next(
+                (
+                    body
+                    for method, path, body in calls
+                    if method == "POST"
+                    and path == "/admin/realms/vezor/clients"
+                    and isinstance(body, dict)
+                    and body.get("clientId") == client_id
+                ),
+                None,
+            )
+            if posted_client is None:
                 return httpx.Response(200, json=[])
             return httpx.Response(
                 200,
-                json=[{"id": "client-uuid", "clientId": "argus-frontend"}],
+                json=[
+                    {
+                        "id": f"{client_id}-uuid",
+                        "clientId": client_id,
+                    }
+                ],
             )
         if request.method == "POST" and request.url.path == "/admin/realms/vezor/clients":
             return httpx.Response(201)
-        if request.method == "PUT" and request.url.path == (
-            "/admin/realms/vezor/clients/client-uuid"
+        if request.method == "PUT" and request.url.path.startswith(
+            "/admin/realms/vezor/clients/"
         ):
             return httpx.Response(204)
         if request.method == "GET" and request.url.path.endswith("/protocol-mappers/models"):
@@ -89,6 +103,8 @@ async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_use
             tenant_slug="vezor-pilot",
             admin_email="admin@vezor.local",
             admin_password="first-run-password",
+            admin_first_name="Vezor",
+            admin_last_name="Admin",
         )
 
     assert subject == "kc-user-123"
@@ -100,6 +116,8 @@ async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_use
     assert user_create_body == {
         "username": "admin@vezor.local",
         "email": "admin@vezor.local",
+        "firstName": "Vezor",
+        "lastName": "Admin",
         "enabled": True,
         "emailVerified": True,
         "requiredActions": [],
@@ -116,6 +134,12 @@ async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_use
         "value": "first-run-password",
         "temporary": False,
     }
+    mapper_client_uuids = {
+        path.split("/clients/", 1)[1].split("/", 1)[0]
+        for method, path, _body in calls
+        if method == "POST" and path.endswith("/protocol-mappers/models")
+    }
+    assert mapper_client_uuids == {"argus-frontend-uuid", "argus-cli-uuid"}
 
 
 @pytest.mark.asyncio

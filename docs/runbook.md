@@ -89,8 +89,7 @@ Current edge-agent modes:
 
 Master reflector operations:
 
-1. Set deployment config before backend startup when the master should bind the
-   UDP listener:
+1. Set deployment config when the master is allowed to bind the UDP listener:
 
    ```env
    ARGUS_LINK_REFLECTOR_ENABLED=true
@@ -100,16 +99,18 @@ Master reflector operations:
    ```
 
 2. In `/links`, select the Vezor master target site and confirm the reflector
-   profile status, endpoint, key id, secret state, and rate limit.
+   profile status, endpoint, key id, secret state, and rate limit. Profile
+   enable, disable, endpoint, rate-limit, and key rotation changes reconcile
+   into the running backend listener without a process restart.
 3. On an edge site, add a link path and a monitoring target. Use the Vezor
    Master preset for edge-to-master checks, or custom UDP sequence fields for a
    third-party/customer reflector.
 4. Run `python -m argus.link.edge_agent` from the edge site with the configured
    target id and reflector secret.
 
-Open gaps: dynamic runtime/profile reconciliation, edge-agent service
-packaging, paired edge-agent credentials, polished reflector secret
-distribution, and STAMP/TWAMP/provider responder modes.
+Open gaps: edge-agent service packaging, paired edge-agent credentials,
+polished reflector secret distribution, and STAMP/TWAMP/provider responder
+modes.
 
 Before publishing or field-testing an installer build, run:
 

@@ -94,6 +94,8 @@ class BootstrapIdentityProvisioner(Protocol):
         tenant_slug: str,
         admin_email: str,
         admin_password: str,
+        admin_first_name: str,
+        admin_last_name: str,
     ) -> str: ...
 
 
@@ -251,6 +253,8 @@ class DeploymentNodeService:
                     tenant_slug=tenant_slug,
                     admin_email=payload.admin_email,
                     admin_password=payload.admin_password,
+                    admin_first_name=payload.admin_first_name,
+                    admin_last_name=payload.admin_last_name,
                 )
 
             if repair_placeholder_identity:
@@ -492,6 +496,7 @@ class DeploymentNodeService:
                 model=SupervisorServiceStatusReport,
                 tenant_id=tenant_id,
                 deployment_node_id=node.id,
+                edge_node_id=node.edge_node_id,
             )
             lifecycle_requests = await _query_rows(
                 session=session,

@@ -169,12 +169,11 @@ ARGUS_LINK_REFLECTOR_PUBLIC_ADDRESS=<host-or-ip-reachable-from-edges>
 ```
 
 The Link Performance master target panel exposes the persisted master reflector
-profile with enable, disable, and rotate-key actions. The current
-implementation stores profile intent and key metadata in Vezor; the backend
-UDP listener itself is still started from deployment settings at process
-startup. A future reconciliation task should hot-apply profile changes to the
-running listener and provide a safe secret-distribution flow for paired edge
-agents.
+profile with enable, disable, and rotate-key actions. Deployment settings still
+control whether the reflector may bind at backend startup, and profile changes
+are reconciled into the running backend listener so enable, disable, endpoint,
+rate-limit, and key rotation changes take effect without a process restart.
+Paired edge-agent secret distribution remains a product-hardening task.
 
 For an edge-to-master measurement, select the edge site, add a link path, use
 the `Vezor Master` preset, choose UDP sequence fields, and run the edge agent
@@ -210,7 +209,5 @@ UDP sequence samples also preserve:
 
 - Edge-agent pairing credentials and service installation are not packaged yet.
 - Reflector secrets are not distributed through a polished admin UI.
-- Master reflector profile changes are not hot-reconciled into an already
-  running backend listener.
 - STAMP/TWAMP/provider SD-WAN responder modes are not operational yet.
 - Continuous throughput measurement is intentionally out of scope.

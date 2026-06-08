@@ -6,7 +6,7 @@ The current edge-agent implementation gives Vezor an honest source-side packet-l
 
 The next step is an edge-agent plus reflector flow. The edge agent sends sequenced measurement packets from the site. A known reflector at the far end replies to those packets. The edge agent computes packet loss, latency, jitter, duplicates, and out-of-order delivery, then posts a summarized sample to Vezor.
 
-Current branch status: phase 1 is implemented for Vezor UDP sequence. The branch includes the authenticated UDP sequence packet codec, reflector, deployment settings, edge-agent sender, API sample ingestion, and UI controls. STAMP/TWAMP/provider responder modes remain future work, and master reflector profile changes do not hot-reconcile into an already-running backend listener yet.
+Current branch status: phase 1 is implemented for Vezor UDP sequence. The branch includes the authenticated UDP sequence packet codec, reflector, deployment settings, edge-agent sender, API sample ingestion, UI controls, and runtime reconciliation for master reflector profile changes. STAMP/TWAMP/provider responder modes remain future work.
 
 ## Plain Model
 

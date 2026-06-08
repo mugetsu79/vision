@@ -195,6 +195,7 @@ from argus.models.tables import (
     SupervisorServiceStatusReport,
     Tenant,
     TrackingEvent,
+    User,
     WorkerAssignment,
     WorkerModelAdmissionReport,
     WorkerRuntimeReport,
@@ -457,6 +458,35 @@ class TenancyService:
                 )
             return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
 
+        tenant_context = str(user.tenant_context or "").strip()
+        if tenant_context:
+            tenant = await self._load_tenant_by_slug(tenant_context)
+            if explicit_tenant_id is not None and explicit_tenant_id != tenant.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Tenant users cannot switch tenant context.",
+                )
+            return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
+
+        tenant_for_subject = await self._load_tenant_by_user_subject(str(user.subject))
+        if tenant_for_subject is not None:
+            if explicit_tenant_id is not None and explicit_tenant_id != tenant_for_subject.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Tenant users cannot switch tenant context.",
+                )
+            return TenantContext(
+                tenant_id=tenant_for_subject.id,
+                tenant_slug=tenant_for_subject.slug,
+                user=user,
+            )
+
+        if await self._has_local_users():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Token does not include a tenant context.",
+            )
+
         tenant = await self._load_or_bootstrap_tenant_by_slug(user.realm)
         return TenantContext(tenant_id=tenant.id, tenant_slug=tenant.slug, user=user)
 
@@ -474,6 +504,23 @@ class TenancyService:
         if tenant is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found.")
         return tenant
+
+    async def _load_tenant_by_user_subject(self, subject: str) -> Tenant | None:
+        async with self.session_factory() as session:
+            statement = select(User).where(User.oidc_sub == subject).limit(1)
+            user = (await session.execute(statement)).scalar_one_or_none()
+            if not isinstance(user, User):
+                return None
+            tenant = await session.get(Tenant, user.tenant_id)
+        if tenant is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found.")
+        return tenant
+
+    async def _has_local_users(self) -> bool:
+        async with self.session_factory() as session:
+            statement = select(User).limit(1)
+            user = (await session.execute(statement)).scalar_one_or_none()
+        return isinstance(user, User)
 
     async def _load_or_bootstrap_tenant_by_slug(self, slug: str) -> Tenant:
         try:
@@ -548,6 +595,18 @@ class SiteService:
             )
             sites = (await session.execute(statement)).scalars().all()
         return [_site_to_response(site) for site in sites]
+
+    async def ensure_control_plane_site(self, tenant_context: TenantContext) -> SiteResponse:
+        now = datetime.now(tz=UTC)
+        async with self.session_factory() as session:
+            site = await _ensure_control_plane_site(
+                session,
+                tenant_id=tenant_context.tenant_id,
+                now=now,
+            )
+            await session.commit()
+            await session.refresh(site)
+        return _site_to_response(site)
 
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         site = await _get_site(

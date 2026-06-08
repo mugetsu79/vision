@@ -242,6 +242,43 @@ def test_backend_synthetic_probe_does_not_degrade_for_unmeasured_throughput(
     assert summaries[0].link_state == "healthy"
 
 
+def test_edge_agent_udp_sequence_probe_does_not_degrade_for_unmeasured_throughput(
+    link_service: LinkService,
+) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        latency_ms=1,
+        throughput_mbps=0.0,
+        packet_loss_percent=0.0,
+        reachable=True,
+        source="edge_agent:live-validation-agent",
+        source_type="edge_agent",
+        source_label="Live validation edge agent",
+        sample_kind="automated",
+        probe_type="udp",
+        target_id="vezor-master-udp-reflector",
+        target_label="Vezor Master reflector",
+        target_address="127.0.0.1",
+        measurement_metadata={
+            "method": "udp_sequence",
+            "packet_count": 8,
+            "packets_received": 8,
+            "packets_lost": 0,
+        },
+    )
+
+    summaries = link_service.list_site_summaries(
+        tenant_id=tenant_id,
+        sites=[{"id": site_id, "name": "Edge Site", "tz": "UTC"}],
+    )
+
+    assert summaries[0].link_state == "healthy"
+
+
 def test_bulk_selection_prefers_online_before_unmetered(link_service: LinkService) -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000001")
     site_id = UUID("00000000-0000-4000-8000-000000000002")

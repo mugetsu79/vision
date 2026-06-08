@@ -89,6 +89,8 @@ async def test_master_bootstrap_complete_creates_initial_tenant_admin_node() -> 
             tenant_slug="vezor-pilot",
             admin_email="admin@vezor.local",
             admin_password="not-persisted-password",
+            admin_first_name="Vezor",
+            admin_last_name="Admin",
             central_node_name="macbook-pro-master",
             central_supervisor_id="central-macbook-pro",
         )
@@ -128,6 +130,8 @@ async def test_master_bootstrap_complete_creates_initial_tenant_admin_node() -> 
                 tenant_slug="vezor-pilot",
                 admin_email="admin@vezor.local",
                 admin_password="not-persisted-password",
+                admin_first_name="Vezor",
+                admin_last_name="Admin",
                 central_node_name="macbook-pro-master",
                 central_supervisor_id="central-macbook-pro",
             )
@@ -152,6 +156,8 @@ async def test_master_bootstrap_complete_provisions_oidc_admin_identity() -> Non
             tenant_slug="vezor-pilot",
             admin_email="admin@vezor.local",
             admin_password="not-persisted-password",
+            admin_first_name="Vezor",
+            admin_last_name="Admin",
             central_node_name="macbook-pro-master",
         )
     )
@@ -169,6 +175,8 @@ async def test_master_bootstrap_complete_provisions_oidc_admin_identity() -> Non
             "tenant_slug": "vezor-pilot",
             "admin_email": "admin@vezor.local",
             "admin_password": "not-persisted-password",
+            "admin_first_name": "Vezor",
+            "admin_last_name": "Admin",
         }
     ]
     assert "not-persisted-password" not in serialized_rows
@@ -192,6 +200,8 @@ async def test_master_bootstrap_repairs_preexisting_placeholder_admin_identity()
             tenant_slug="vezor-pilot",
             admin_email="admin@vezor.local",
             admin_password="old-password",
+            admin_first_name="Vezor",
+            admin_last_name="Admin",
             central_node_name="macbook-pro-master",
         )
     )
@@ -212,6 +222,8 @@ async def test_master_bootstrap_repairs_preexisting_placeholder_admin_identity()
             tenant_slug="vezor-pilot",
             admin_email="admin@vezor.local",
             admin_password="new-password",
+            admin_first_name="Vezor",
+            admin_last_name="Admin",
             central_node_name="macbook-pro-master",
         )
     )
@@ -241,6 +253,8 @@ async def test_master_bootstrap_complete_rejects_missing_or_wrong_token() -> Non
                 tenant_name="Vezor Pilot",
                 admin_email="admin@vezor.local",
                 admin_password="not-persisted-password",
+                admin_first_name="Vezor",
+                admin_last_name="Admin",
                 central_node_name="macbook-pro-master",
             )
         )
@@ -857,6 +871,42 @@ async def test_support_bundle_redacts_diagnostics_and_summarizes_node_context() 
 
 
 @pytest.mark.asyncio
+async def test_support_bundle_includes_edge_service_reports() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    now = datetime(2026, 5, 13, 9, 35, tzinfo=UTC)
+    session_factory = _MemorySessionFactory()
+    _seed_edge_node_scope(session_factory, tenant_id=tenant_id, edge_node_id=edge_node_id)
+    service = DeploymentNodeService(session_factory, now_factory=lambda: now)
+
+    node = await service.record_service_report(
+        tenant_id=tenant_id,
+        supervisor_id="edge-orin-1",
+        payload=SupervisorServiceReportCreate(
+            node_kind=DeploymentNodeKind.EDGE,
+            edge_node_id=edge_node_id,
+            hostname="orin-nano-01",
+            service_manager=DeploymentServiceManager.SYSTEMD,
+            service_status="running",
+            install_status=DeploymentInstallStatus.HEALTHY,
+            credential_status=DeploymentCredentialStatus.ACTIVE,
+            version="0.21.0",
+            os_name="linux",
+            host_profile="linux-aarch64-nvidia-jetson",
+            heartbeat_at=now,
+            diagnostics={"token": "raw-token", "status": "ok"},
+        ),
+    )
+
+    bundle = await service.get_support_bundle(tenant_id=tenant_id, node_id=node.node.id)
+
+    assert [report.id for report in bundle.service_reports] == [node.id]
+    assert bundle.service_reports[0].edge_node_id == edge_node_id
+    assert bundle.service_reports[0].diagnostics["token"] == "[redacted]"
+    assert bundle.diagnostics["service_reports"][0]["token"] == "[redacted]"
+
+
+@pytest.mark.asyncio
 async def test_edge_service_reports_must_reference_edge_node_in_tenant_scope() -> None:
     tenant_id = uuid4()
     other_tenant_id = uuid4()
@@ -924,6 +974,7 @@ class _MemorySession:
         return None
 
     async def execute(self, statement) -> _Result:  # noqa: ANN001
+        compiled_sql = str(statement)
         params = statement.compile().params
         tenant_id = params.get("tenant_id_1")
         session_id = params.get("id_1")
@@ -969,6 +1020,8 @@ class _MemorySession:
             rows = [
                 row for row in rows if getattr(row, "edge_node_id", None) == deployment_edge_node_id
             ]
+        if "edge_node_id IS NULL" in compiled_sql:
+            rows = [row for row in rows if getattr(row, "edge_node_id", None) is None]
         if credential_hash is not None and SupervisorNodeCredential in entities:
             rows = [row for row in rows if getattr(row, "credential_hash", None) == credential_hash]
         if deployment_node_id is not None and DeploymentCredentialEvent in entities:
@@ -1044,6 +1097,8 @@ class _RecordingIdentityProvisioner:
         tenant_slug: str,
         admin_email: str,
         admin_password: str,
+        admin_first_name: str,
+        admin_last_name: str,
     ) -> str:
         self.calls.append(
             {
@@ -1052,6 +1107,8 @@ class _RecordingIdentityProvisioner:
                 "tenant_slug": tenant_slug,
                 "admin_email": admin_email,
                 "admin_password": admin_password,
+                "admin_first_name": admin_first_name,
+                "admin_last_name": admin_last_name,
             }
         )
         return self.subject

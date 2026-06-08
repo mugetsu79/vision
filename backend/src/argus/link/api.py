@@ -1070,10 +1070,7 @@ async def _master_control_plane_site(
     for site in sites:
         if _site_role(site) == "control_plane":
             return site
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Vezor Master control-plane target site not found.",
-    )
+    return await services.sites.ensure_control_plane_site(tenant_context)
 
 
 def _reflector_profile_payload(

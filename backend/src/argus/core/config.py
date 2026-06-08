@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     keycloak_admin_username: str | None = None
     keycloak_admin_password: SecretStr | None = None
     keycloak_frontend_client_id: str = "argus-frontend"
+    keycloak_cli_client_id: str = "argus-cli"
     keycloak_frontend_url: str = "http://localhost:3000"
     keycloak_frontend_disable_pkce: bool = False
 

@@ -143,14 +143,21 @@ class _FakeOperationsService:
 
 
 class _FakeSiteService:
-    def __init__(self, *, edge_site_ids: set[UUID] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        edge_site_ids: set[UUID] | None = None,
+        include_master: bool = True,
+    ) -> None:
         self.edge_site_ids = edge_site_ids or {KNOWN_SITE_ID}
+        self.include_master = include_master
+        self.ensure_control_plane_calls = 0
 
     async def list_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
-        return [
-            self._site_response(tenant_context, KNOWN_SITE_ID, "Packless Site"),
-            self._site_response(tenant_context, MASTER_SITE_ID, "Vezor Master"),
-        ]
+        sites = [self._site_response(tenant_context, KNOWN_SITE_ID, "Packless Site")]
+        if self.include_master:
+            sites.append(self._site_response(tenant_context, MASTER_SITE_ID, "Vezor Master"))
+        return sites
 
     async def list_edge_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
         sites = await self.list_sites(tenant_context)
@@ -172,6 +179,11 @@ class _FakeSiteService:
     async def is_edge_site(self, tenant_context: TenantContext, site_id: UUID) -> bool:
         await self.get_site(tenant_context, site_id)
         return site_id in self.edge_site_ids
+
+    async def ensure_control_plane_site(self, tenant_context: TenantContext) -> SiteResponse:
+        self.ensure_control_plane_calls += 1
+        self.include_master = True
+        return self._site_response(tenant_context, MASTER_SITE_ID, "Vezor Master")
 
     def _site_response(
         self,
@@ -198,6 +210,7 @@ def _create_app(
     *,
     include_sites: bool = True,
     edge_site_ids: set[UUID] | None = None,
+    include_master_site: bool = True,
     invalid_bearer_tokens: set[str] | None = None,
     include_deployment: bool = False,
     supervisor_node_edge_id: UUID | None = None,
@@ -211,7 +224,10 @@ def _create_app(
         link=LinkService(),
     )
     if include_sites:
-        services.sites = _FakeSiteService(edge_site_ids=edge_site_ids)
+        services.sites = _FakeSiteService(
+            edge_site_ids=edge_site_ids,
+            include_master=include_master_site,
+        )
     if include_deployment:
         services.deployment = _FakeDeploymentService(tenancy.context)
     services.operations = _FakeOperationsService(supervisor_node_edge_id=supervisor_node_edge_id)
@@ -847,6 +863,21 @@ async def test_master_reflector_profile_api_defaults_disabled(client: AsyncClien
     assert payload["last_status"] == "disabled"
     assert payload["secret_state"] == "missing"
     assert "encrypted_secret" not in payload
+
+
+@pytest.mark.asyncio
+async def test_master_reflector_profile_api_repairs_missing_control_plane_site() -> None:
+    app = _create_app(_user(RoleEnum.ADMIN), include_master_site=False)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer admin-token"},
+    ) as http_client:
+        response = await http_client.get("/api/v1/link/reflectors/master")
+
+    assert response.status_code == 200
+    assert response.json()["site_id"] == str(MASTER_SITE_ID)
+    assert app.state.services.sites.ensure_control_plane_calls == 1
 
 
 @pytest.mark.asyncio

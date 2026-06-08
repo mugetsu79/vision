@@ -1755,6 +1755,8 @@ class MasterBootstrapComplete(BaseModel):
     tenant_slug: str | None = Field(default=None, min_length=1, max_length=255)
     admin_email: str = Field(min_length=3, max_length=320)
     admin_password: str = Field(min_length=8, max_length=256)
+    admin_first_name: str = Field(min_length=1, max_length=128)
+    admin_last_name: str = Field(min_length=1, max_length=128)
     central_node_name: str = Field(min_length=1, max_length=255)
     central_supervisor_id: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -1772,6 +1774,11 @@ class MasterBootstrapComplete(BaseModel):
     @classmethod
     def _normalize_admin_email(cls, value: str) -> str:
         return value.strip().lower()
+
+    @field_validator("admin_first_name", "admin_last_name")
+    @classmethod
+    def _normalize_admin_name(cls, value: str) -> str:
+        return value.strip()
 
 
 class MasterBootstrapCompleteResponse(BaseModel):

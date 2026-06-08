@@ -114,6 +114,8 @@ describe("FirstRunPage", () => {
     await userEvent.type(screen.getByLabelText(/tenant name/i), "Vezor Pilot");
     await userEvent.type(screen.getByLabelText(/admin email/i), "admin@vezor.local");
     await userEvent.type(screen.getByLabelText(/admin password/i), "strong-password");
+    await userEvent.type(screen.getByLabelText(/admin first name/i), "Vezor");
+    await userEvent.type(screen.getByLabelText(/admin last name/i), "Admin");
     await userEvent.type(screen.getByLabelText(/master node name/i), "macbook-pro-master");
 
     expect(screen.getByRole("button", { name: /complete setup/i })).toBeEnabled();
@@ -128,6 +130,8 @@ describe("FirstRunPage", () => {
     await user.type(screen.getByLabelText(/tenant name/i), "Vezor Pilot");
     await user.type(screen.getByLabelText(/admin email/i), "admin@vezor.local");
     await user.type(screen.getByLabelText(/admin password/i), "strong-password");
+    await user.type(screen.getByLabelText(/admin first name/i), "Vezor");
+    await user.type(screen.getByLabelText(/admin last name/i), "Admin");
     await user.type(screen.getByLabelText(/master node name/i), "macbook-pro-master");
     await user.type(screen.getByLabelText(/supervisor id/i), "central-master");
     await user.click(screen.getByRole("button", { name: /complete setup/i }));
@@ -139,6 +143,8 @@ describe("FirstRunPage", () => {
         tenant_slug: undefined,
         admin_email: "admin@vezor.local",
         admin_password: "strong-password",
+        admin_first_name: "Vezor",
+        admin_last_name: "Admin",
         central_node_name: "macbook-pro-master",
         central_supervisor_id: "central-master",
       }),

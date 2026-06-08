@@ -16,6 +16,8 @@ export function FirstRunPage() {
   const [tenantName, setTenantName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [adminFirstName, setAdminFirstName] = useState("");
+  const [adminLastName, setAdminLastName] = useState("");
   const [centralNodeName, setCentralNodeName] = useState("");
   const [centralSupervisorId, setCentralSupervisorId] = useState("");
 
@@ -26,9 +28,19 @@ export function FirstRunPage() {
           tenantName.trim() &&
           adminEmail.trim() &&
           adminPassword.trim() &&
+          adminFirstName.trim() &&
+          adminLastName.trim() &&
           centralNodeName.trim(),
       ),
-    [adminEmail, adminPassword, bootstrapToken, centralNodeName, tenantName],
+    [
+      adminEmail,
+      adminFirstName,
+      adminLastName,
+      adminPassword,
+      bootstrapToken,
+      centralNodeName,
+      tenantName,
+    ],
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -42,6 +54,8 @@ export function FirstRunPage() {
       tenant_slug: undefined,
       admin_email: adminEmail.trim(),
       admin_password: adminPassword,
+      admin_first_name: adminFirstName.trim(),
+      admin_last_name: adminLastName.trim(),
       central_node_name: centralNodeName.trim(),
       central_supervisor_id: centralSupervisorId.trim() || undefined,
     });
@@ -122,6 +136,24 @@ export function FirstRunPage() {
                   onChange={(event) => setAdminPassword(event.target.value)}
                 />
               </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Admin first name" htmlFor="admin-first-name">
+                  <Input
+                    id="admin-first-name"
+                    autoComplete="given-name"
+                    value={adminFirstName}
+                    onChange={(event) => setAdminFirstName(event.target.value)}
+                  />
+                </Field>
+                <Field label="Admin last name" htmlFor="admin-last-name">
+                  <Input
+                    id="admin-last-name"
+                    autoComplete="family-name"
+                    value={adminLastName}
+                    onChange={(event) => setAdminLastName(event.target.value)}
+                  />
+                </Field>
+              </div>
               <Field label="Master node name" htmlFor="central-node-name">
                 <Input
                   id="central-node-name"

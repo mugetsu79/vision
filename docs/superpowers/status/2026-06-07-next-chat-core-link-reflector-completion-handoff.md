@@ -66,8 +66,8 @@ Current product behavior:
   backend UDP listener starts only when deployment env enables it at process
   startup and provides a shared HMAC secret.
 - The UI persists the master reflector profile intent/key metadata and exposes
-  enable, disable, and rotate controls. Profile changes do not yet hot-start or
-  hot-stop an already-running listener.
+  enable, disable, and rotate controls. Profile changes now reconcile into the
+  running backend listener.
 
 ## Verification Evidence
 
@@ -120,15 +120,13 @@ The docs now reflect the current product model:
 
 Recommended next work, in priority order:
 
-1. Dynamic reflector profile/runtime reconciliation: safely hot-start, hot-stop,
-   and rotate the backend UDP listener from persisted profile changes.
-2. Edge-agent service packaging, pairing credentials, and reflector secret
+1. Edge-agent service packaging, pairing credentials, and reflector secret
    distribution UX.
-3. Authenticated browser smoke with realistic dev data for `/links`, including
+2. Authenticated browser smoke with realistic dev data for `/links`, including
    master target and edge-to-master reflector flows.
-4. Deployment hardening for reflector secrets in installer/Helm/service-manager
+3. Deployment hardening for reflector secrets in installer/Helm/service-manager
    contexts.
-5. STAMP/TWAMP/provider responder integrations behind the existing measurement
+4. STAMP/TWAMP/provider responder integrations behind the existing measurement
    model.
 
 ## Working Tree Warning

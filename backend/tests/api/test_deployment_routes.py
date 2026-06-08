@@ -533,6 +533,8 @@ async def test_bootstrap_complete_route_consumes_local_token_without_admin_jwt()
                 "bootstrap_token": "vzboot_local_once",
                 "tenant_name": "Vezor Pilot",
                 "tenant_slug": "vezor-pilot",
+                "admin_first_name": "Vezor",
+                "admin_last_name": "Admin",
                 "admin_email": "admin@vezor.local",
                 "admin_password": "not-returned",
                 "central_node_name": "macbook-pro-master",

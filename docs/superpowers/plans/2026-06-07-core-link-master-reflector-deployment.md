@@ -4,9 +4,9 @@
 
 Status: implemented on `codex/sceneops-pack-registry` through commit
 `3b66ebfa`. Use this plan as historical implementation trace and verification
-evidence, not as pending work. The currently open product gaps are dynamic
-runtime/profile reconciliation, edge-agent service packaging/pairing,
-reflector secret distribution UX, and STAMP/TWAMP/provider responder modes.
+evidence, not as pending work. The currently open product gaps are edge-agent
+service packaging/pairing, reflector secret distribution UX, and
+STAMP/TWAMP/provider responder modes.
 
 **Goal:** Make the Vezor master an optional authenticated UDP sequence reflector for edge-to-master Link Performance monitoring, with operator-controlled enablement during control-link setup.
 

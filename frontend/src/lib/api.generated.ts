@@ -4803,6 +4803,10 @@ export interface components {
         MasterBootstrapComplete: {
             /** Admin Email */
             admin_email: string;
+            /** Admin First Name */
+            admin_first_name: string;
+            /** Admin Last Name */
+            admin_last_name: string;
             /** Admin Password */
             admin_password: string;
             /** Bootstrap Token */

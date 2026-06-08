@@ -2638,7 +2638,7 @@ def _probe_payload(probe: LinkHealthProbeRecord | None) -> JsonObject | None:
 def _probe_throughput_measured(probe: LinkHealthProbeRecord) -> bool:
     if probe.throughput_mbps > 0:
         return True
-    return probe.source_type != "backend_synthetic"
+    return probe.source_type not in {"backend_synthetic", "edge_agent"}
 
 
 def _sort_connections(

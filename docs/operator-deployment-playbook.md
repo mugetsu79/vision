@@ -144,8 +144,10 @@ The master deployment can host a UDP sequence reflector on port `8622`, but it
 is disabled by default. Binding the listener requires deployment settings,
 including `ARGUS_LINK_REFLECTOR_ENABLED=true` and
 `ARGUS_LINK_REFLECTOR_SECRET`. The UI/profile controls expose reflector intent,
-endpoint metadata, and key rotation; a later hardening pass should add dynamic
-runtime reconciliation and paired edge-agent secret distribution.
+endpoint metadata, and key rotation. Profile enable, disable, endpoint,
+rate-limit, and key rotation changes reconcile into the running backend
+listener; a later hardening pass should add paired edge-agent secret
+distribution and service packaging.
 
 For operator steps and examples, use
 [core-link-performance-guide.md](/Users/yann.moren/vision/docs/core-link-performance-guide.md).
