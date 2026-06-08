@@ -12,11 +12,17 @@ from argus.api.contracts import (
     DeploymentModelAssignmentCreate,
     DeploymentModelAssignmentResponse,
     DeploymentModelInventoryReport,
+    EdgeConfigurationResponse,
+    EdgeConfigurationUpdate,
     TenantContext,
 )
 from argus.api.v1 import router
 from argus.core.security import AuthenticatedUser
-from argus.models.enums import DeploymentModelAssignmentStatus, RoleEnum
+from argus.models.enums import (
+    DeploymentModelAssignmentStatus,
+    EdgeConfigurationApplyStatus,
+    RoleEnum,
+)
 
 NODE_ID = UUID("00000000-0000-0000-0000-000000000901")
 OTHER_NODE_ID = UUID("00000000-0000-0000-0000-000000000902")
@@ -121,8 +127,16 @@ class _FakeModelLifecycleService:
     def __init__(self) -> None:
         self.assignment_payload: DeploymentModelAssignmentCreate | None = None
         self.report_payload: DeploymentModelInventoryReport | None = None
+        self.edge_configuration_payload: EdgeConfigurationUpdate | None = None
+        self.edge_configuration_report: dict[str, object] | None = None
         self.supervisor_node_ids = {SUPERVISOR_ID: NODE_ID}
         self.inventory = DeploymentModelInventoryReport(items=[_inventory_item()])
+        self.edge_configuration = _edge_configuration_response(
+            tenant_id=UUID("00000000-0000-0000-0000-000000000900"),
+            deployment_node_id=NODE_ID,
+            revision=1,
+            apply_status=EdgeConfigurationApplyStatus.PENDING,
+        )
 
     async def assign_model_to_node(
         self,
@@ -173,6 +187,84 @@ class _FakeModelLifecycleService:
         self.report_payload = payload
         self.inventory = payload
         return payload
+
+    async def get_edge_configuration(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+    ) -> EdgeConfigurationResponse:
+        del tenant_id
+        if deployment_node_id != self.edge_configuration.deployment_node_id:
+            raise ValueError("Edge configuration assignment not found.")
+        return self.edge_configuration
+
+    async def update_edge_configuration(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+        payload: EdgeConfigurationUpdate,
+        actor_subject: str,
+    ) -> EdgeConfigurationResponse:
+        del actor_subject
+        self.edge_configuration_payload = payload
+        self.edge_configuration = _edge_configuration_response(
+            tenant_id=tenant_id,
+            deployment_node_id=deployment_node_id,
+            revision=self.edge_configuration.revision + 1,
+            apply_status=EdgeConfigurationApplyStatus.PENDING,
+            desired_config=payload.desired_config,
+        )
+        return self.edge_configuration
+
+    async def get_supervisor_edge_configuration(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+    ) -> EdgeConfigurationResponse:
+        del tenant_id
+        expected_node_id = self.supervisor_node_ids[supervisor_id]
+        if authenticated_node_id is not None and authenticated_node_id != expected_node_id:
+            raise PermissionError(
+                "Supervisor credential cannot manage edge configuration for another "
+                "deployment node."
+            )
+        return self.edge_configuration
+
+    async def record_edge_configuration_apply_report(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+        revision: int,
+        status: EdgeConfigurationApplyStatus,
+        error: str | None,
+    ) -> EdgeConfigurationResponse:
+        del tenant_id
+        expected_node_id = self.supervisor_node_ids[supervisor_id]
+        if authenticated_node_id is not None and authenticated_node_id != expected_node_id:
+            raise PermissionError(
+                "Supervisor credential cannot manage edge configuration for another "
+                "deployment node."
+            )
+        self.edge_configuration_report = {
+            "revision": revision,
+            "status": status,
+            "error": error,
+        }
+        self.edge_configuration = _edge_configuration_response(
+            tenant_id=self.edge_configuration.tenant_id,
+            deployment_node_id=self.edge_configuration.deployment_node_id,
+            revision=revision,
+            apply_status=status,
+            desired_config=self.edge_configuration.desired_config,
+            applied_revision=revision if status is EdgeConfigurationApplyStatus.APPLIED else None,
+        )
+        return self.edge_configuration
 
 
 def _create_app(
@@ -234,6 +326,34 @@ async def test_admin_can_list_node_inventory() -> None:
 
 
 @pytest.mark.asyncio
+async def test_admin_can_update_and_get_edge_configuration() -> None:
+    context = _tenant_context()
+    model_lifecycle = _FakeModelLifecycleService()
+    app = _create_app(context, model_lifecycle)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        update_response = await client.put(
+            f"/api/v1/deployment/nodes/{NODE_ID}/edge-configuration",
+            headers={"Authorization": "Bearer token"},
+            json={"desired_config": {"model_store_path": "/srv/vezor/models"}},
+        )
+        get_response = await client.get(
+            f"/api/v1/deployment/nodes/{NODE_ID}/edge-configuration",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert update_response.status_code == 200
+    assert get_response.status_code == 200
+    assert update_response.json()["desired_config"]["model_store_path"] == (
+        "/srv/vezor/models"
+    )
+    assert model_lifecycle.edge_configuration_payload is not None
+
+
+@pytest.mark.asyncio
 async def test_supervisor_can_report_own_inventory() -> None:
     context = _tenant_context()
     model_lifecycle = _FakeModelLifecycleService()
@@ -251,6 +371,58 @@ async def test_supervisor_can_report_own_inventory() -> None:
 
     assert response.status_code == 201
     assert model_lifecycle.report_payload is not None
+
+
+@pytest.mark.asyncio
+async def test_supervisor_can_fetch_and_report_own_edge_configuration() -> None:
+    context = _tenant_context()
+    model_lifecycle = _FakeModelLifecycleService()
+    app = _create_app(context, model_lifecycle)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        get_response = await client.get(
+            f"/api/v1/deployment/supervisors/{SUPERVISOR_ID}/edge-configuration",
+            headers={"Authorization": "Bearer node-credential"},
+        )
+        report_response = await client.post(
+            f"/api/v1/deployment/supervisors/{SUPERVISOR_ID}/edge-configuration/apply-report",
+            headers={"Authorization": "Bearer node-credential"},
+            json={"revision": 1, "status": "applied", "error": None},
+        )
+
+    assert get_response.status_code == 200
+    assert report_response.status_code == 200
+    assert report_response.json()["apply_status"] == "applied"
+    assert model_lifecycle.edge_configuration_report == {
+        "revision": 1,
+        "status": EdgeConfigurationApplyStatus.APPLIED,
+        "error": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_supervisor_cannot_report_other_node_edge_configuration() -> None:
+    context = _tenant_context()
+    app = _create_app(
+        context,
+        _FakeModelLifecycleService(),
+        credential_node_id=OTHER_NODE_ID,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/deployment/supervisors/{SUPERVISOR_ID}/edge-configuration/apply-report",
+            headers={"Authorization": "Bearer node-credential"},
+            json={"revision": 1, "status": "applied"},
+        )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -299,6 +471,30 @@ async def test_supervisor_inventory_report_fails_closed_for_malformed_node_claim
 
 def _inventory_item() -> dict[str, object]:
     return _inventory_item_json()
+
+
+def _edge_configuration_response(
+    *,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    revision: int,
+    apply_status: EdgeConfigurationApplyStatus,
+    desired_config: dict[str, object] | None = None,
+    applied_revision: int | None = None,
+) -> EdgeConfigurationResponse:
+    return EdgeConfigurationResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+        revision=revision,
+        desired_config=desired_config or {"model_store_path": "/var/lib/vezor/models"},
+        applied_revision=applied_revision,
+        apply_status=apply_status,
+        last_applied_at=REPORTED_AT if applied_revision is not None else None,
+        error=None,
+        created_at=REPORTED_AT,
+        updated_at=REPORTED_AT,
+    )
 
 
 def _inventory_item_json() -> dict[str, object]:

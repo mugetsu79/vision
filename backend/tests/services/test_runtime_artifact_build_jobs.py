@@ -7,6 +7,7 @@ import pytest
 
 from argus.api.contracts import (
     DeploymentModelAssignmentCreate,
+    EdgeConfigurationUpdate,
     RuntimeArtifactBuildJobCreate,
     SupervisorModelJobComplete,
     SupervisorModelJobEventCreate,
@@ -164,6 +165,37 @@ async def test_complete_runtime_artifact_build_job_creates_artifact() -> None:
     assert artifact_rows[0].kind is RuntimeArtifactKind.TENSORRT_ENGINE
     completion_statement = _for_update_statement(session_factory, RuntimeArtifactBuildJob)
     assert completion_statement._for_update_arg.skip_locked is False
+
+
+@pytest.mark.asyncio
+async def test_artifact_build_job_uses_configured_artifact_store_path() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    node.host_profile = "linux-aarch64-nvidia-jetson"
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.update_edge_configuration(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=EdgeConfigurationUpdate(
+            desired_config={"artifact_store_path": "/srv/vezor/artifacts"}
+        ),
+        actor_subject="admin@example.test",
+    )
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+
+    job = await service.create_runtime_artifact_build_job(
+        tenant_id=tenant.id,
+        model_id=model.id,
+        payload=_build_job_payload(node.id, builder_options={}),
+        actor_subject="admin@example.test",
+    )
+
+    assert job.payload["output_dir"] == f"/srv/vezor/artifacts/{model.id}"
 
 
 @pytest.mark.asyncio
@@ -511,6 +543,7 @@ def _build_job_payload(
     *,
     camera_id: UUID | None = None,
     export_formats: list[RuntimeArtifactBuildFormat] | None = None,
+    builder_options: dict[str, object] | None = None,
 ) -> RuntimeArtifactBuildJobCreate:
     return RuntimeArtifactBuildJobCreate(
         deployment_node_id=deployment_node_id,
@@ -520,7 +553,11 @@ def _build_job_payload(
         precision=RuntimeArtifactPrecision.FP16,
         input_shape={"width": 640, "height": 640},
         export_formats=export_formats or [RuntimeArtifactBuildFormat.TENSORRT_ENGINE],
-        builder_options={"output_dir": "/var/lib/vezor/artifacts"},
+        builder_options=(
+            {"output_dir": "/var/lib/vezor/artifacts"}
+            if builder_options is None
+            else builder_options
+        ),
     )
 
 

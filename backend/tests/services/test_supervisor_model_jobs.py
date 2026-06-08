@@ -8,6 +8,7 @@ import pytest
 
 from argus.api.contracts import (
     DeploymentModelAssignmentCreate,
+    EdgeConfigurationUpdate,
     SupervisorModelJobComplete,
     SupervisorModelJobEventCreate,
 )
@@ -69,6 +70,35 @@ async def test_create_model_sync_job_for_assigned_model_sets_assignment_syncing(
     }
     assert assignment_row.status is DeploymentModelAssignmentStatus.SYNCING
     assert assignment_row.last_sync_job_id == job.id
+
+
+@pytest.mark.asyncio
+async def test_model_sync_job_uses_configured_model_store_path_without_assignment_path() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.update_edge_configuration(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=EdgeConfigurationUpdate(
+            desired_config={"model_store_path": "/srv/vezor/models"}
+        ),
+        actor_subject="admin@example.test",
+    )
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+
+    job = await service.create_model_sync_job(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        actor_subject="admin@example.test",
+    )
+
+    assert job.payload["target_path"] == "/srv/vezor/models/yolo26n.onnx"
 
 
 @pytest.mark.asyncio

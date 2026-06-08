@@ -68,6 +68,8 @@ class SupervisorModelJobExecutor:
         tensorrt_engine_builder: TensorRTEngineBuilder | None = None,
         yoloe_loader: Callable[[str], Any] | None = None,
         runtime_versions: dict[str, object] | None = None,
+        model_store_path: Path | None = None,
+        artifact_store_path: Path | None = None,
     ) -> None:
         self.operations_client = operations_client
         self.limit = limit
@@ -75,6 +77,8 @@ class SupervisorModelJobExecutor:
         self.tensorrt_engine_builder = tensorrt_engine_builder
         self.yoloe_loader = yoloe_loader
         self.runtime_versions = runtime_versions or {}
+        self.model_store_path = model_store_path
+        self.artifact_store_path = artifact_store_path
 
     async def execute_once(self) -> int:
         jobs = await self.operations_client.poll_model_jobs(limit=self.limit)
@@ -106,7 +110,10 @@ class SupervisorModelJobExecutor:
 
     async def execute_model_sync(self, job: DeploymentModelSyncJobResponse) -> None:
         source_path = _path_field(job.payload, "source_path")
-        target_path = _path_field(job.payload, "target_path")
+        target_path = _path_field(job.payload, "target_path") or _default_store_path(
+            self.model_store_path,
+            source_path,
+        )
         expected_sha256 = _optional_string(job.payload.get("expected_sha256"))
         expected_size = _optional_int(job.payload.get("size_bytes"))
         if target_path is None:
@@ -224,7 +231,12 @@ class SupervisorModelJobExecutor:
     ) -> dict[str, object]:
         if self.tensorrt_engine_builder is None:
             raise ValueError("TensorRT engine builder is not configured.")
-        output_dir = _required_path_field(job.payload, "output_dir")
+        output_dir = _path_field(job.payload, "output_dir") or _default_artifact_output_dir(
+            self.artifact_store_path,
+            job.model_id,
+        )
+        if output_dir is None:
+            raise ValueError("Artifact build job is missing output_dir.")
         precision = _optional_string(job.payload.get("precision")) or "fp16"
         input_shape = _dict_int_field(job.payload, "input_shape")
         output_path = output_dir / f"{source_path.stem}.engine"
@@ -262,7 +274,12 @@ class SupervisorModelJobExecutor:
         export_formats = _string_list(job.payload.get("export_formats"))
         if not export_formats:
             export_formats = [_required_string_field(job.payload, "build_format")]
-        output_dir = _required_path_field(job.payload, "output_dir")
+        output_dir = _path_field(job.payload, "output_dir") or _default_artifact_output_dir(
+            self.artifact_store_path,
+            job.model_id,
+        )
+        if output_dir is None:
+            raise ValueError("Artifact build job is missing output_dir.")
         return build_open_vocab_scene_artifact_payloads(
             source_model_path=source_path,
             camera_id=camera_id,
@@ -397,6 +414,18 @@ def _path_field(payload: Mapping[str, Any], key: str) -> Path | None:
     if isinstance(value, str) and value:
         return Path(value)
     return None
+
+
+def _default_store_path(store_path: Path | None, source_path: Path | None) -> Path | None:
+    if store_path is None or source_path is None or not source_path.name:
+        return None
+    return store_path / source_path.name
+
+
+def _default_artifact_output_dir(store_path: Path | None, model_id: UUID) -> Path | None:
+    if store_path is None:
+        return None
+    return store_path / str(model_id)
 
 
 def _required_path_field(payload: Mapping[str, Any], key: str) -> Path:

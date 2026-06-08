@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from argus.api.contracts import (
     DeploymentModelAssignmentCreate,
@@ -12,6 +13,8 @@ from argus.api.contracts import (
     DeploymentModelSyncJobResponse,
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
+    EdgeConfigurationResponse,
+    EdgeConfigurationUpdate,
     MasterBootstrapComplete,
     MasterBootstrapCompleteResponse,
     MasterBootstrapRotateResponse,
@@ -36,13 +39,19 @@ from argus.api.dependencies import (
     get_tenant_context,
 )
 from argus.core.security import AuthenticatedUser, require
-from argus.models.enums import RoleEnum
+from argus.models.enums import EdgeConfigurationApplyStatus, RoleEnum
 from argus.services.app import AppServices
 
 router = APIRouter(prefix="/api/v1/deployment", tags=["deployment"])
 AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
+
+
+class EdgeConfigurationApplyReport(BaseModel):
+    revision: int = Field(ge=1)
+    status: EdgeConfigurationApplyStatus
+    error: str | None = None
 
 
 @router.get("/bootstrap/status", response_model=MasterBootstrapStatusResponse)
@@ -201,6 +210,47 @@ async def get_node_support_bundle(
         return await services.deployment.get_support_bundle(
             tenant_id=tenant_context.tenant_id,
             node_id=node_id,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.get(
+    "/nodes/{node_id}/edge-configuration",
+    response_model=EdgeConfigurationResponse,
+)
+async def get_node_edge_configuration(
+    node_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> EdgeConfigurationResponse:
+    try:
+        return await services.model_lifecycle.get_edge_configuration(
+            tenant_id=tenant_context.tenant_id,
+            deployment_node_id=node_id,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.put(
+    "/nodes/{node_id}/edge-configuration",
+    response_model=EdgeConfigurationResponse,
+)
+async def update_node_edge_configuration(
+    node_id: UUID,
+    payload: EdgeConfigurationUpdate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> EdgeConfigurationResponse:
+    try:
+        return await services.model_lifecycle.update_edge_configuration(
+            tenant_id=tenant_context.tenant_id,
+            deployment_node_id=node_id,
+            payload=payload,
+            actor_subject=current_user.subject,
         )
     except ValueError as exc:
         raise _deployment_http_error(exc) from exc
@@ -433,6 +483,58 @@ async def record_supervisor_model_inventory(
             supervisor_id=supervisor_id,
             authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
             payload=payload,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.get(
+    "/supervisors/{supervisor_id}/edge-configuration",
+    response_model=EdgeConfigurationResponse,
+)
+async def get_supervisor_edge_configuration(
+    supervisor_id: str,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> EdgeConfigurationResponse:
+    try:
+        return await services.model_lifecycle.get_supervisor_edge_configuration(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.post(
+    "/supervisors/{supervisor_id}/edge-configuration/apply-report",
+    response_model=EdgeConfigurationResponse,
+)
+async def record_supervisor_edge_configuration_apply_report(
+    supervisor_id: str,
+    payload: EdgeConfigurationApplyReport,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> EdgeConfigurationResponse:
+    try:
+        return await services.model_lifecycle.record_edge_configuration_apply_report(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
+            revision=payload.revision,
+            status=payload.status,
+            error=payload.error,
         )
     except PermissionError as exc:
         raise HTTPException(

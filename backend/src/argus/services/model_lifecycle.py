@@ -21,6 +21,8 @@ from argus.api.contracts import (
     DeploymentModelInventoryItem,
     DeploymentModelInventoryReport,
     DeploymentModelSyncJobResponse,
+    EdgeConfigurationResponse,
+    EdgeConfigurationUpdate,
     ModelCapabilityConfig,
     ModelImportJobResponse,
     ModelImportRequest,
@@ -35,6 +37,7 @@ from argus.models.enums import (
     DeploymentModelAssignmentStatus,
     DeploymentNodeKind,
     DetectorCapability,
+    EdgeConfigurationApplyStatus,
     ModelFormat,
     ModelImportSource,
     ModelLifecycleJobStatus,
@@ -47,6 +50,7 @@ from argus.models.tables import (
     DeploymentModelInventory,
     DeploymentModelSyncJob,
     DeploymentNode,
+    EdgeConfigurationAssignment,
     EdgeNodeHardwareReport,
     Model,
     ModelImportJob,
@@ -61,6 +65,25 @@ _TERMINAL_MODEL_LIFECYCLE_JOB_STATUSES = {
     ModelLifecycleJobStatus.SUCCEEDED,
     ModelLifecycleJobStatus.FAILED,
     ModelLifecycleJobStatus.CANCELLED,
+}
+
+EDGE_CONFIGURATION_ALLOWED_KEYS = {
+    "model_store_path",
+    "artifact_store_path",
+    "model_store_max_bytes",
+    "artifact_store_max_bytes",
+    "worker_concurrency",
+    "runtime_preference",
+    "fallback_policy",
+    "service_report_interval_seconds",
+    "hardware_report_interval_seconds",
+    "stream_delivery_profile",
+    "webrtc_additional_hosts",
+    "webrtc_allowed_origins",
+    "operations_mode",
+    "support_bundle_policy",
+    "evidence_retention_profile",
+    "privacy_profile",
 }
 
 
@@ -80,6 +103,154 @@ class ModelLifecycleService:
     ) -> None:
         self.session_factory = session_factory
         self.model_store_path = model_store_path
+
+    async def get_edge_configuration(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+    ) -> EdgeConfigurationResponse:
+        async with self.session_factory() as session:
+            await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            assignment = await _load_edge_configuration_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            if assignment is None:
+                raise ValueError("Edge configuration assignment not found.")
+        return _edge_configuration_to_response(assignment)
+
+    async def update_edge_configuration(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+        payload: EdgeConfigurationUpdate,
+        actor_subject: str,
+    ) -> EdgeConfigurationResponse:
+        desired_config = _validated_edge_configuration(payload.desired_config)
+        async with self.session_factory() as session:
+            node = await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            _require_assignable_deployment_node(node)
+            assignment = await _load_edge_configuration_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+                for_update=True,
+            )
+            if assignment is None:
+                assignment = EdgeConfigurationAssignment(
+                    tenant_id=tenant_id,
+                    deployment_node_id=deployment_node_id,
+                    revision=1,
+                    desired_config=desired_config,
+                    apply_status=EdgeConfigurationApplyStatus.PENDING,
+                    actor_subject=actor_subject,
+                    error=None,
+                )
+                session.add(assignment)
+            else:
+                assignment.revision += 1
+                assignment.desired_config = desired_config
+                assignment.apply_status = EdgeConfigurationApplyStatus.PENDING
+                assignment.actor_subject = actor_subject
+                assignment.error = None
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                assignment = await _load_edge_configuration_assignment(
+                    session=session,
+                    tenant_id=tenant_id,
+                    deployment_node_id=deployment_node_id,
+                    for_update=True,
+                )
+                if assignment is None:
+                    raise
+                assignment.revision += 1
+                assignment.desired_config = desired_config
+                assignment.apply_status = EdgeConfigurationApplyStatus.PENDING
+                assignment.actor_subject = actor_subject
+                assignment.error = None
+                await session.commit()
+            await session.refresh(assignment)
+        return _edge_configuration_to_response(assignment)
+
+    async def get_supervisor_edge_configuration(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+    ) -> EdgeConfigurationResponse:
+        async with self.session_factory() as session:
+            node = await _load_supervisor_edge_configuration_node(
+                session=session,
+                tenant_id=tenant_id,
+                supervisor_id=supervisor_id,
+                authenticated_node_id=authenticated_node_id,
+            )
+            assignment = await _load_edge_configuration_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=node.id,
+            )
+            if assignment is None:
+                raise ValueError("Edge configuration assignment not found.")
+        return _edge_configuration_to_response(assignment)
+
+    async def record_edge_configuration_apply_report(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+        revision: int,
+        status: EdgeConfigurationApplyStatus,
+        error: str | None,
+    ) -> EdgeConfigurationResponse:
+        apply_status = _edge_configuration_apply_status(status)
+        if apply_status is EdgeConfigurationApplyStatus.PENDING:
+            raise ValueError("Edge configuration apply report status must be applied or failed.")
+        async with self.session_factory() as session:
+            node = await _load_supervisor_edge_configuration_node(
+                session=session,
+                tenant_id=tenant_id,
+                supervisor_id=supervisor_id,
+                authenticated_node_id=authenticated_node_id,
+            )
+            assignment = await _load_edge_configuration_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=node.id,
+                for_update=True,
+            )
+            if assignment is None:
+                raise ValueError("Edge configuration assignment not found.")
+            if assignment.revision != revision:
+                raise ValueError(
+                    "Edge configuration apply report revision does not match current revision."
+                )
+            if apply_status is EdgeConfigurationApplyStatus.APPLIED:
+                assignment.applied_revision = revision
+                assignment.apply_status = EdgeConfigurationApplyStatus.APPLIED
+                assignment.last_applied_at = datetime.now(tz=UTC)
+                assignment.error = None
+            else:
+                assignment.apply_status = EdgeConfigurationApplyStatus.FAILED
+                assignment.error = error or "Edge configuration apply failed."
+            await session.commit()
+            await session.refresh(assignment)
+        return _edge_configuration_to_response(assignment)
 
     async def import_model_from_request(
         self,
@@ -450,6 +621,11 @@ class ModelLifecycleService:
             model = await session.get(Model, assignment.model_id)
             if not isinstance(model, Model):
                 raise ValueError("Model not found.")
+            edge_configuration = await _load_edge_configuration_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
 
             job = DeploymentModelSyncJob(
                 id=uuid4(),
@@ -462,6 +638,7 @@ class ModelLifecycleService:
                     deployment_node_id=deployment_node_id,
                     assignment=assignment,
                     model=model,
+                    edge_configuration=edge_configuration,
                 ),
                 actor_subject=actor_subject,
                 error=None,
@@ -536,7 +713,16 @@ class ModelLifecycleService:
             ]
             if not export_formats:
                 export_formats = [payload.build_format.value]
-            output_dir = _artifact_output_dir(model=model, payload=payload)
+            edge_configuration = await _load_edge_configuration_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=payload.deployment_node_id,
+            )
+            output_dir = _artifact_output_dir(
+                model=model,
+                payload=payload,
+                edge_configuration=edge_configuration,
+            )
             job = RuntimeArtifactBuildJob(
                 id=uuid4(),
                 tenant_id=tenant_id,
@@ -1199,6 +1385,79 @@ def _model_to_import_job_response(job: ModelImportJob) -> ModelImportJobResponse
     )
 
 
+def _edge_configuration_to_response(
+    assignment: EdgeConfigurationAssignment,
+) -> EdgeConfigurationResponse:
+    return EdgeConfigurationResponse(
+        id=assignment.id,
+        tenant_id=assignment.tenant_id,
+        deployment_node_id=assignment.deployment_node_id,
+        revision=assignment.revision,
+        desired_config=dict(assignment.desired_config or {}),
+        applied_revision=assignment.applied_revision,
+        apply_status=assignment.apply_status,
+        last_applied_at=assignment.last_applied_at,
+        error=assignment.error,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+    )
+
+
+async def _load_edge_configuration_assignment(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    for_update: bool = False,
+) -> EdgeConfigurationAssignment | None:
+    statement = (
+        select(EdgeConfigurationAssignment)
+        .where(EdgeConfigurationAssignment.tenant_id == tenant_id)
+        .where(EdgeConfigurationAssignment.deployment_node_id == deployment_node_id)
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    row = (await session.execute(statement)).scalars().first()
+    return row if isinstance(row, EdgeConfigurationAssignment) else None
+
+
+async def _load_supervisor_edge_configuration_node(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    supervisor_id: str,
+    authenticated_node_id: UUID | None,
+) -> DeploymentNode:
+    node = await _load_deployment_node_by_supervisor(
+        session=session,
+        tenant_id=tenant_id,
+        supervisor_id=supervisor_id,
+    )
+    if node is None:
+        raise ValueError("Deployment node not found.")
+    if authenticated_node_id is not None and authenticated_node_id != node.id:
+        raise PermissionError(
+            "Supervisor credential cannot manage edge configuration for another deployment node."
+        )
+    return node
+
+
+def _validated_edge_configuration(config: dict[str, object]) -> dict[str, object]:
+    unsupported_keys = sorted(set(config) - EDGE_CONFIGURATION_ALLOWED_KEYS)
+    if unsupported_keys:
+        joined = ", ".join(unsupported_keys)
+        raise ValueError(f"Unsupported edge configuration key: {joined}.")
+    return dict(config)
+
+
+def _edge_configuration_apply_status(
+    status: EdgeConfigurationApplyStatus | str,
+) -> EdgeConfigurationApplyStatus:
+    if isinstance(status, EdgeConfigurationApplyStatus):
+        return status
+    return EdgeConfigurationApplyStatus(str(status))
+
+
 async def _load_next_desired_model_assignment(
     *,
     session: AsyncSession,
@@ -1315,7 +1574,13 @@ def _model_sync_job_payload(
     deployment_node_id: UUID,
     assignment: DeploymentModelAssignment,
     model: Model,
+    edge_configuration: EdgeConfigurationAssignment | None = None,
 ) -> dict[str, object]:
+    target_path = assignment.desired_path or _configured_store_path(
+        edge_configuration=edge_configuration,
+        key="model_store_path",
+        source_path=model.path,
+    ) or model.path
     return {
         "job_type": "model_sync",
         "schema_version": 1,
@@ -1325,7 +1590,7 @@ def _model_sync_job_payload(
         "source_path": model.path,
         "expected_sha256": model.sha256,
         "size_bytes": model.size_bytes,
-        "target_path": assignment.desired_path or model.path,
+        "target_path": target_path,
     }
 
 
@@ -1496,11 +1761,46 @@ async def _require_target_profile_supported(
     raise ValueError("Runtime artifact target profile does not match deployment node.")
 
 
-def _artifact_output_dir(*, model: Model, payload: RuntimeArtifactBuildJobCreate) -> str:
+def _artifact_output_dir(
+    *,
+    model: Model,
+    payload: RuntimeArtifactBuildJobCreate,
+    edge_configuration: EdgeConfigurationAssignment | None = None,
+) -> str:
     output_dir = payload.builder_options.get("output_dir")
     if isinstance(output_dir, str) and output_dir:
         return output_dir
+    artifact_store = _configured_directory(edge_configuration, "artifact_store_path")
+    if artifact_store is not None:
+        return str(artifact_store / str(model.id))
     return str(Path(model.path).parent / "runtime-artifacts" / str(model.id))
+
+
+def _configured_store_path(
+    *,
+    edge_configuration: EdgeConfigurationAssignment | None,
+    key: str,
+    source_path: str,
+) -> str | None:
+    directory = _configured_directory(edge_configuration, key)
+    if directory is None:
+        return None
+    filename = Path(source_path).name
+    if not filename:
+        return None
+    return str(directory / filename)
+
+
+def _configured_directory(
+    edge_configuration: EdgeConfigurationAssignment | None,
+    key: str,
+) -> Path | None:
+    if edge_configuration is None:
+        return None
+    value = dict(edge_configuration.desired_config or {}).get(key)
+    if not isinstance(value, str) or not value:
+        return None
+    return Path(value)
 
 
 def _completion_artifact_payloads(

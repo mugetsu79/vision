@@ -13,6 +13,7 @@ from typing import Protocol, cast
 from uuid import UUID
 
 from argus.api.contracts import (
+    EdgeConfigurationResponse,
     EdgeNodeHardwareReportCreate,
     FleetOverviewResponse,
     HardwarePerformanceSample,
@@ -23,14 +24,18 @@ from argus.models.enums import (
     DeploymentInstallStatus,
     DeploymentNodeKind,
     DeploymentServiceManager,
+    EdgeConfigurationApplyStatus,
 )
 from argus.streaming.mediamtx import MediaMTXClient, PublishProfile
 from argus.supervisor.credential_store import FileCredentialStore
+from argus.supervisor.edge_configuration import EdgeConfigurationApplier
 from argus.supervisor.hardware_probe import HostCapabilityProbe
 from argus.supervisor.metrics_probe import MetricsSnapshot, WorkerMetricsContext, WorkerMetricsProbe
+from argus.supervisor.model_jobs import SupervisorModelJobExecutor
 from argus.supervisor.operations_client import (
     BearerTokenProvider,
     PasswordGrantTokenProvider,
+    SupervisorClientError,
     SupervisorOperationsClient,
 )
 from argus.supervisor.process_adapter import LocalWorkerProcessAdapter, WorkerLaunchConfig
@@ -60,6 +65,13 @@ class MetricsProbe(Protocol):
 
 class StreamProvisioner(Protocol):
     async def ensure_fleet_streams(self, fleet: FleetOverviewResponse | None) -> None: ...
+
+
+class ModelJobExecutor(Protocol):
+    model_store_path: Path | None
+    artifact_store_path: Path | None
+
+    async def execute_once(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +127,8 @@ class SupervisorRunner:
         product_mode: bool = False,
         auth_mode: str = "static_bearer_dev",
         stream_provisioner: StreamProvisioner | None = None,
+        edge_configuration_applier: EdgeConfigurationApplier | None = None,
+        model_job_executor: ModelJobExecutor | None = None,
     ) -> None:
         self.supervisor_id = supervisor_id
         self.edge_node_id = edge_node_id
@@ -131,6 +145,13 @@ class SupervisorRunner:
         self.product_mode = product_mode
         self.auth_mode = auth_mode
         self.stream_provisioner = stream_provisioner
+        self.edge_configuration_applier = edge_configuration_applier
+        self.model_job_executor = model_job_executor
+        self._last_applied_edge_configuration_revision: int | None = None
+        self._last_reported_edge_configuration_revision: int | None = None
+        self._hardware_report_interval_seconds: float | None = None
+        self._service_report_interval_seconds: float | None = None
+        self._poll_interval_seconds: float | None = None
         self.reconciler = SupervisorReconciler(
             operations=operations,  # type: ignore[arg-type]
             process_adapter=process_adapter,  # type: ignore[arg-type]
@@ -212,14 +233,16 @@ class SupervisorRunner:
     ) -> None:
         next_hardware_report_after = 0.0
         loop = asyncio.get_running_loop()
+        self._hardware_report_interval_seconds = hardware_report_interval_seconds
+        self._poll_interval_seconds = poll_interval_seconds
         while True:
             now = loop.time()
             if now >= next_hardware_report_after:
                 await self.run_once()
-                next_hardware_report_after = now + hardware_report_interval_seconds
+                next_hardware_report_after = now + self._hardware_report_interval()
             else:
                 await self._reconcile_once()
-            await asyncio.sleep(poll_interval_seconds)
+            await asyncio.sleep(self._poll_interval_seconds or poll_interval_seconds)
 
     async def _fetch_fleet_overview(self) -> FleetOverviewResponse | None:
         fetch = getattr(self.operations, "fetch_fleet_overview", None)
@@ -232,11 +255,89 @@ class SupervisorRunner:
             return None
 
     async def _reconcile_once(self, *, fleet: FleetOverviewResponse | None = None) -> int:
+        await self._apply_edge_configuration_once()
+        processed = await self._execute_model_jobs_once()
         try:
-            return await self.reconciler.reconcile_once(fleet=fleet)
+            return processed + await self.reconciler.reconcile_once(fleet=fleet)
         except Exception as exc:
             LOGGER.warning("Supervisor reconciliation failed: %s", exc)
+            return processed
+
+    async def _execute_model_jobs_once(self) -> int:
+        if self.model_job_executor is None:
             return 0
+        try:
+            return await self.model_job_executor.execute_once()
+        except Exception as exc:
+            LOGGER.warning("Supervisor model job execution failed: %s", exc)
+            return 0
+
+    async def _apply_edge_configuration_once(self) -> None:
+        if self.edge_configuration_applier is None:
+            return
+        fetch = getattr(self.operations, "fetch_edge_configuration", None)
+        recorder = getattr(self.operations, "record_edge_configuration_apply_report", None)
+        if fetch is None or recorder is None:
+            return
+        try:
+            configuration = cast(EdgeConfigurationResponse, await fetch())
+        except SupervisorClientError as exc:
+            if exc.status_code != 404:
+                LOGGER.warning("Supervisor edge configuration fetch failed: %s", exc)
+            return
+        except Exception as exc:
+            LOGGER.warning("Supervisor edge configuration fetch failed: %s", exc)
+            return
+        if self._edge_configuration_revision_already_reported(configuration):
+            return
+
+        report = await self.edge_configuration_applier.apply(configuration)
+        try:
+            await recorder(
+                revision=report.revision,
+                status=report.status,
+                error=report.error,
+            )
+        except Exception as exc:
+            LOGGER.warning("Supervisor edge configuration apply report failed: %s", exc)
+            return
+        self._last_reported_edge_configuration_revision = report.revision
+        if report.status is EdgeConfigurationApplyStatus.APPLIED:
+            self._last_applied_edge_configuration_revision = report.revision
+            self._sync_applied_edge_configuration()
+
+    def _edge_configuration_revision_already_reported(
+        self,
+        configuration: EdgeConfigurationResponse,
+    ) -> bool:
+        if self._last_reported_edge_configuration_revision == configuration.revision:
+            return True
+        return configuration.apply_status is EdgeConfigurationApplyStatus.FAILED
+
+    def _sync_applied_edge_configuration(self) -> None:
+        applier = self.edge_configuration_applier
+        if applier is None:
+            return
+        if applier.hardware_report_interval_seconds is not None:
+            self._hardware_report_interval_seconds = applier.hardware_report_interval_seconds
+        if applier.service_report_interval_seconds is not None:
+            self._service_report_interval_seconds = applier.service_report_interval_seconds
+        if self.model_job_executor is not None:
+            if applier.model_store_path is not None:
+                self.model_job_executor.model_store_path = applier.model_store_path
+            if applier.artifact_store_path is not None:
+                self.model_job_executor.artifact_store_path = applier.artifact_store_path
+
+    def _hardware_report_interval(self) -> float:
+        intervals = [
+            interval
+            for interval in (
+                self._hardware_report_interval_seconds,
+                self._service_report_interval_seconds,
+            )
+            if interval is not None
+        ]
+        return min(intervals) if intervals else 60.0
 
     async def _ensure_stream_paths(self, fleet: FleetOverviewResponse | None) -> None:
         if self.stream_provisioner is None:
@@ -297,6 +398,8 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
         product_mode=config.product_mode,
         auth_mode=config.auth_mode,
         stream_provisioner=stream_provisioner,
+        edge_configuration_applier=EdgeConfigurationApplier(),
+        model_job_executor=SupervisorModelJobExecutor(operations_client=operations),
     )
 
 

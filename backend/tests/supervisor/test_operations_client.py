@@ -11,6 +11,7 @@ from argus.api.contracts import (
     DeploymentModelInventoryItem,
     DeploymentModelInventoryReport,
     DeploymentModelSyncJobResponse,
+    EdgeConfigurationResponse,
     EdgeNodeHardwareReportCreate,
     FleetOverviewResponse,
     HardwarePerformanceSample,
@@ -20,6 +21,7 @@ from argus.api.contracts import (
 )
 from argus.models.enums import (
     DetectorCapability,
+    EdgeConfigurationApplyStatus,
     ModelAdmissionStatus,
     ModelLifecycleJobStatus,
     OperationsLifecycleAction,
@@ -475,6 +477,66 @@ async def test_client_calls_model_job_inventory_and_download_routes(tmp_path) ->
 
 
 @pytest.mark.asyncio
+async def test_client_fetches_and_reports_edge_configuration() -> None:
+    tenant_id = uuid4()
+    deployment_node_id = uuid4()
+    configuration = _edge_configuration_json(
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+        revision=3,
+        apply_status=EdgeConfigurationApplyStatus.PENDING,
+    )
+    seen: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        path = request.url.path
+        if path == "/api/v1/deployment/supervisors/edge-supervisor-1/edge-configuration":
+            return httpx.Response(200, json=configuration)
+        if (
+            path
+            == "/api/v1/deployment/supervisors/edge-supervisor-1/edge-configuration/apply-report"
+        ):
+            return httpx.Response(
+                200,
+                json={
+                    **configuration,
+                    "apply_status": "applied",
+                    "applied_revision": 3,
+                    "last_applied_at": "2026-06-08T09:00:00Z",
+                    "error": None,
+                },
+            )
+        return httpx.Response(404, text=path)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_handler)) as http_client:
+        client = SupervisorOperationsClient(
+            api_base_url="http://api.local",
+            supervisor_id="edge-supervisor-1",
+            bearer_token="secret-token",
+            http_client=http_client,
+        )
+
+        fetched = await client.fetch_edge_configuration()
+        reported = await client.record_edge_configuration_apply_report(
+            revision=fetched.revision,
+            status=EdgeConfigurationApplyStatus.APPLIED,
+        )
+
+    assert fetched.revision == 3
+    assert reported.apply_status is EdgeConfigurationApplyStatus.APPLIED
+    assert [request.url.path for request in seen] == [
+        "/api/v1/deployment/supervisors/edge-supervisor-1/edge-configuration",
+        "/api/v1/deployment/supervisors/edge-supervisor-1/edge-configuration/apply-report",
+    ]
+    assert json.loads(seen[1].content) == {
+        "revision": 3,
+        "status": "applied",
+        "error": None,
+    }
+
+
+@pytest.mark.asyncio
 async def test_password_grant_token_provider_caches_and_can_refresh() -> None:
     seen: list[httpx.Request] = []
 
@@ -535,6 +597,29 @@ def _hardware_report_response_json(
         "report_hash": "a" * 64,
         "created_at": "2026-05-13T12:00:00Z",
     }
+
+
+def _edge_configuration_json(
+    *,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    revision: int,
+    apply_status: EdgeConfigurationApplyStatus,
+) -> dict[str, object]:
+    now = datetime(2026, 6, 8, 9, 0, tzinfo=UTC)
+    return EdgeConfigurationResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+        revision=revision,
+        desired_config={"model_store_path": "/var/lib/vezor/models"},
+        applied_revision=None,
+        apply_status=apply_status,
+        last_applied_at=None,
+        error=None,
+        created_at=now,
+        updated_at=now,
+    ).model_dump(mode="json")
 
 
 def _lifecycle_request_json(

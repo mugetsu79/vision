@@ -14,6 +14,7 @@ import httpx
 from argus.api.contracts import (
     DeploymentModelInventoryReport,
     DeploymentModelSyncJobResponse,
+    EdgeConfigurationResponse,
     EdgeNodeHardwareReportCreate,
     EdgeNodeHardwareReportResponse,
     FleetCameraWorkerSummary,
@@ -33,7 +34,12 @@ from argus.api.contracts import (
     WorkerModelAdmissionResponse,
 )
 from argus.compat import UTC
-from argus.models.enums import DetectorCapability, OperationsLifecycleStatus, WorkerRuntimeState
+from argus.models.enums import (
+    DetectorCapability,
+    EdgeConfigurationApplyStatus,
+    OperationsLifecycleStatus,
+    WorkerRuntimeState,
+)
 from argus.supervisor.credential_store import SupervisorCredentialStore
 
 BearerTokenProvider = Callable[[], str | Awaitable[str]]
@@ -213,6 +219,34 @@ class SupervisorOperationsClient:
             json=report.model_dump(mode="json"),
         )
         return DeploymentModelInventoryReport.model_validate(body)
+
+    async def fetch_edge_configuration(self) -> EdgeConfigurationResponse:
+        body = await self._request(
+            "GET",
+            f"/api/v1/deployment/supervisors/{self.supervisor_id}/edge-configuration",
+        )
+        return EdgeConfigurationResponse.model_validate(body)
+
+    async def record_edge_configuration_apply_report(
+        self,
+        *,
+        revision: int,
+        status: EdgeConfigurationApplyStatus,
+        error: str | None = None,
+    ) -> EdgeConfigurationResponse:
+        body = await self._request(
+            "POST",
+            (
+                f"/api/v1/deployment/supervisors/{self.supervisor_id}"
+                "/edge-configuration/apply-report"
+            ),
+            json={
+                "revision": revision,
+                "status": status.value,
+                "error": error,
+            },
+        )
+        return EdgeConfigurationResponse.model_validate(body)
 
     async def download_model_asset(self, asset_id: UUID, destination_path: str | Path) -> Path:
         destination = Path(destination_path)

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
 
 import argus.supervisor.runner as runner_module
 from argus.api.contracts import (
+    EdgeConfigurationResponse,
     EdgeNodeHardwareReportCreate,
     FleetCameraWorkerSummary,
     FleetOverviewResponse,
@@ -24,12 +26,14 @@ from argus.models.enums import (
     DeploymentCredentialStatus,
     DeploymentInstallStatus,
     DeploymentServiceManager,
+    EdgeConfigurationApplyStatus,
     ModelAdmissionStatus,
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
     ProcessingMode,
     WorkerRuntimeState,
 )
+from argus.supervisor.edge_configuration import EdgeConfigurationApplyReport
 from argus.supervisor.process_adapter import WorkerProcessResult
 from argus.supervisor.runner import SupervisorRunner, parse_args
 
@@ -147,6 +151,101 @@ async def test_runner_posts_service_and_hardware_reports_before_polling() -> Non
     assert operations.service_reports[0].credential_status is DeploymentCredentialStatus.ACTIVE
     assert operations.hardware_reports[0].host_profile == "macos-x86_64-intel"
     assert operations.hardware_reports[0].observed_performance == []
+
+
+@pytest.mark.asyncio
+async def test_runner_applies_edge_configuration_before_jobs_and_lifecycle(tmp_path) -> None:
+    operations = _FakeOperations(
+        requests=[],
+        edge_configuration=_edge_configuration(
+            revision=3,
+            desired_config={
+                "model_store_path": str(tmp_path / "models"),
+                "artifact_store_path": str(tmp_path / "artifacts"),
+                "hardware_report_interval_seconds": 45,
+                "service_report_interval_seconds": 20,
+            },
+            apply_status=EdgeConfigurationApplyStatus.PENDING,
+        ),
+    )
+    model_jobs = _FakeModelJobExecutor(operations.events)
+    runner = SupervisorRunner(
+        supervisor_id="central-imac",
+        edge_node_id=None,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=_FakeProcessAdapter(),
+        tenant_id=uuid4(),
+        edge_configuration_applier=_FakeEdgeConfigurationApplier(
+            status=EdgeConfigurationApplyStatus.APPLIED,
+            model_store_path=tmp_path / "models",
+            artifact_store_path=tmp_path / "artifacts",
+            hardware_report_interval_seconds=45,
+            service_report_interval_seconds=20,
+        ),
+        model_job_executor=model_jobs,
+    )
+
+    processed = await runner.run_once()
+
+    assert processed == 0
+    assert operations.events == [
+        "service",
+        "hardware",
+        "edge_config_fetch",
+        "edge_config_report",
+        "model_jobs",
+        "poll",
+    ]
+    assert runner._hardware_report_interval() == 20
+    assert model_jobs.model_store_path == tmp_path / "models"
+    assert model_jobs.artifact_store_path == tmp_path / "artifacts"
+    assert operations.edge_configuration_reports == [
+        {
+            "revision": 3,
+            "status": EdgeConfigurationApplyStatus.APPLIED,
+            "error": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_runner_does_not_repost_failed_edge_configuration_revision(tmp_path) -> None:
+    operations = _FakeOperations(
+        requests=[],
+        edge_configuration=_edge_configuration(
+            revision=5,
+            desired_config={"model_store_path": str(tmp_path / "models")},
+            apply_status=EdgeConfigurationApplyStatus.PENDING,
+        ),
+    )
+    applier = _FakeEdgeConfigurationApplier(
+        status=EdgeConfigurationApplyStatus.FAILED,
+        error="Unsupported edge configuration key: shell_command.",
+    )
+    runner = SupervisorRunner(
+        supervisor_id="central-imac",
+        edge_node_id=None,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=_FakeProcessAdapter(),
+        tenant_id=uuid4(),
+        edge_configuration_applier=applier,
+    )
+
+    await runner._reconcile_once()
+    await runner._reconcile_once()
+
+    assert applier.applied_revisions == [5]
+    assert operations.edge_configuration_reports == [
+        {
+            "revision": 5,
+            "status": EdgeConfigurationApplyStatus.FAILED,
+            "error": "Unsupported edge configuration key: shell_command.",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -522,15 +621,18 @@ class _FakeOperations:
         requests: list[OperationsLifecycleRequestResponse],
         admission_status: ModelAdmissionStatus = ModelAdmissionStatus.RECOMMENDED,
         fleet: FleetOverviewResponse | None = None,
+        edge_configuration: EdgeConfigurationResponse | None = None,
     ) -> None:
         self.requests = requests
         self.admission_status = admission_status
         self.fleet = fleet
+        self.edge_configuration = edge_configuration
         self.events: list[str] = []
         self.service_reports: list[SupervisorServiceReportCreate] = []
         self.hardware_reports: list[EdgeNodeHardwareReportCreate] = []
         self.completions: list[dict[str, object]] = []
         self.runtime_reports: list[dict[str, object]] = []
+        self.edge_configuration_reports: list[dict[str, object]] = []
 
     async def record_service_report(self, report: SupervisorServiceReportCreate) -> None:
         self.events.append("service")
@@ -542,6 +644,35 @@ class _FakeOperations:
 
     async def fetch_fleet_overview(self) -> FleetOverviewResponse | None:
         return self.fleet
+
+    async def fetch_edge_configuration(self) -> EdgeConfigurationResponse:
+        self.events.append("edge_config_fetch")
+        if self.edge_configuration is None:
+            raise RuntimeError("Edge configuration is not configured.")
+        return self.edge_configuration
+
+    async def record_edge_configuration_apply_report(
+        self,
+        *,
+        revision: int,
+        status: EdgeConfigurationApplyStatus,
+        error: str | None = None,
+    ) -> EdgeConfigurationResponse:
+        self.events.append("edge_config_report")
+        self.edge_configuration_reports.append(
+            {
+                "revision": revision,
+                "status": status,
+                "error": error,
+            }
+        )
+        if self.edge_configuration is None:
+            raise RuntimeError("Edge configuration is not configured.")
+        self.edge_configuration.apply_status = status
+        self.edge_configuration.error = error
+        if status is EdgeConfigurationApplyStatus.APPLIED:
+            self.edge_configuration.applied_revision = revision
+        return self.edge_configuration
 
     async def poll_lifecycle_requests(
         self,
@@ -655,6 +786,45 @@ class _UnavailableOperations:
         raise RuntimeError("Supervisor API bearer token is not configured.")
 
 
+class _FakeEdgeConfigurationApplier:
+    def __init__(
+        self,
+        *,
+        status: EdgeConfigurationApplyStatus,
+        model_store_path: Path | None = None,
+        artifact_store_path: Path | None = None,
+        hardware_report_interval_seconds: float | None = None,
+        service_report_interval_seconds: float | None = None,
+        error: str | None = None,
+    ) -> None:
+        self.status = status
+        self.model_store_path = model_store_path
+        self.artifact_store_path = artifact_store_path
+        self.hardware_report_interval_seconds = hardware_report_interval_seconds
+        self.service_report_interval_seconds = service_report_interval_seconds
+        self.error = error
+        self.applied_revisions: list[int] = []
+
+    async def apply(self, configuration: EdgeConfigurationResponse):
+        self.applied_revisions.append(configuration.revision)
+        return EdgeConfigurationApplyReport(
+            revision=configuration.revision,
+            status=self.status,
+            error=self.error,
+        )
+
+
+class _FakeModelJobExecutor:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.model_store_path: Path | None = None
+        self.artifact_store_path: Path | None = None
+
+    async def execute_once(self) -> int:
+        self.events.append("model_jobs")
+        return 0
+
+
 class _FakeProcessAdapter:
     def __init__(self) -> None:
         self.calls: list[tuple[str, UUID]] = []
@@ -746,6 +916,28 @@ def _fleet_overview(worker: FleetCameraWorkerSummary) -> FleetOverviewResponse:
         nodes=[],
         camera_workers=[worker],
         delivery_diagnostics=[],
+    )
+
+
+def _edge_configuration(
+    *,
+    revision: int,
+    desired_config: dict[str, object],
+    apply_status: EdgeConfigurationApplyStatus,
+) -> EdgeConfigurationResponse:
+    now = datetime(2026, 6, 8, 9, 0, tzinfo=UTC)
+    return EdgeConfigurationResponse(
+        id=uuid4(),
+        tenant_id=uuid4(),
+        deployment_node_id=uuid4(),
+        revision=revision,
+        desired_config=desired_config,
+        applied_revision=revision if apply_status is EdgeConfigurationApplyStatus.APPLIED else None,
+        apply_status=apply_status,
+        last_applied_at=now if apply_status is EdgeConfigurationApplyStatus.APPLIED else None,
+        error=None,
+        created_at=now,
+        updated_at=now,
     )
 
 
