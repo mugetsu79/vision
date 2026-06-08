@@ -77,7 +77,11 @@ class _FakeSecurity:
 
 
 class _FakeDeploymentService:
-    def __init__(self, context: TenantContext, credential_node_id: UUID = NODE_ID) -> None:
+    def __init__(
+        self,
+        context: TenantContext,
+        credential_node_id: UUID | str | None = NODE_ID,
+    ) -> None:
         self.context = context
         self.credential_node_id = credential_node_id
 
@@ -99,7 +103,11 @@ class _FakeDeploymentService:
             tenant_context=str(self.context.tenant_id),
             claims={
                 "auth_type": "supervisor_node_credential",
-                "deployment_node_id": str(self.credential_node_id),
+                **(
+                    {"deployment_node_id": str(self.credential_node_id)}
+                    if self.credential_node_id is not None
+                    else {}
+                ),
             },
         )
         return TenantContext(
@@ -252,6 +260,28 @@ async def test_supervisor_cannot_report_other_node_inventory() -> None:
         context,
         _FakeModelLifecycleService(),
         credential_node_id=OTHER_NODE_ID,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/deployment/supervisors/{SUPERVISOR_ID}/model-inventory",
+            headers={"Authorization": "Bearer node-credential"},
+            json={"items": [_inventory_item_json()]},
+        )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_supervisor_inventory_report_fails_closed_for_malformed_node_claim() -> None:
+    context = _tenant_context()
+    app = _create_app(
+        context,
+        _FakeModelLifecycleService(),
+        credential_node_id="not-a-uuid",
     )
 
     async with AsyncClient(

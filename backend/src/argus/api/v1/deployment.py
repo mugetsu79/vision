@@ -474,8 +474,14 @@ def _authenticated_deployment_node_id(tenant_context: TenantContext) -> UUID | N
         return None
     raw_node_id = tenant_context.user.claims.get("deployment_node_id")
     if not isinstance(raw_node_id, str):
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential is missing deployment node scope.",
+        )
     try:
         return UUID(raw_node_id)
     except ValueError:
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential has invalid deployment node scope.",
+        ) from None

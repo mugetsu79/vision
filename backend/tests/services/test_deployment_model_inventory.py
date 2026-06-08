@@ -140,6 +140,25 @@ async def test_inventory_report_handles_unique_conflict_idempotently() -> None:
 
 
 @pytest.mark.asyncio
+async def test_inventory_upsert_conflict_updates_reported_hash_column() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    reported_at = datetime(2026, 6, 8, 9, 0, tzinfo=UTC)
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+
+    await service.record_model_inventory(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        payload=DeploymentModelInventoryReport(
+            items=[_inventory_item(model, reported_at=reported_at)]
+        ),
+    )
+
+    assert "sha256" in session_factory.inventory_upsert_update_columns
+
+
+@pytest.mark.asyncio
 async def test_inventory_report_with_wrong_hash_does_not_sync_assignment() -> None:
     tenant, model, node = _tenant_model_and_node()
     session_factory = _MemorySessionFactory([tenant, model, node])
@@ -161,6 +180,41 @@ async def test_inventory_report_with_wrong_hash_does_not_sync_assignment() -> No
                     model,
                     reported_at=datetime(2026, 6, 8, 9, 0, tzinfo=UTC),
                     sha256="b" * 64,
+                )
+            ]
+        ),
+    )
+
+    rows = _rows(session_factory, DeploymentModelAssignment)
+    assert rows[0].id == assignment.id
+    assert rows[0].status is DeploymentModelAssignmentStatus.DESIRED
+
+
+@pytest.mark.asyncio
+async def test_inventory_report_with_wrong_path_does_not_sync_assignment() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    assignment = await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(
+            model_id=model.id,
+            desired_path="/var/lib/vezor/models/yolo26n.onnx",
+        ),
+        actor_subject="admin@example.test",
+    )
+
+    await service.record_model_inventory(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        payload=DeploymentModelInventoryReport(
+            items=[
+                _inventory_item(
+                    model,
+                    local_path="/tmp/yolo26n.onnx",
+                    reported_at=datetime(2026, 6, 8, 9, 0, tzinfo=UTC),
                 )
             ]
         ),
@@ -262,6 +316,7 @@ class _MemorySessionFactory:
         self.rows = rows
         self.raise_inventory_insert_conflict = raise_inventory_insert_conflict
         self.inventory_insert_added = False
+        self.inventory_upsert_update_columns: set[str] = set()
 
     def __call__(self) -> _MemorySession:
         return _MemorySession(self)
@@ -307,6 +362,11 @@ class _MemorySession:
 
     async def execute(self, statement):  # noqa: ANN001
         if _is_inventory_insert(statement):
+            post_values_clause = getattr(statement, "_post_values_clause", None)
+            update_values_to_set = getattr(post_values_clause, "update_values_to_set", [])
+            self.session_factory.inventory_upsert_update_columns = {
+                str(column_name) for column_name, _ in update_values_to_set
+            }
             return _Result([self._execute_inventory_upsert(statement.compile().params)])
         entities = {
             description.get("entity") for description in statement.column_descriptions

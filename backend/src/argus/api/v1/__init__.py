@@ -11,6 +11,7 @@ from argus.api.v1 import (
     history,
     incident_rules,
     incidents,
+    model_assets,
     model_catalog,
     models,
     operations,
@@ -39,6 +40,7 @@ router.include_router(deployment.router)
 router.include_router(models.router)
 router.include_router(runtime_artifacts.router)
 router.include_router(runtime_soak.router)
+router.include_router(model_assets.router)
 router.include_router(model_catalog.router)
 router.include_router(packs.router)
 router.include_router(edge.router)

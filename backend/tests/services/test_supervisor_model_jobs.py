@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -195,6 +196,54 @@ async def test_job_event_updates_status_and_records_event() -> None:
 
 
 @pytest.mark.asyncio
+async def test_terminal_job_event_does_not_complete_sync_job() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+    job = await service.create_model_sync_job(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        actor_subject="admin@example.test",
+    )
+    await service.record_supervisor_model_job_event(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        job_id=job.id,
+        payload=SupervisorModelJobEventCreate(
+            job_kind="model_sync",
+            status=ModelLifecycleJobStatus.RUNNING,
+            message="copy started",
+            payload={},
+        ),
+    )
+
+    updated = await service.record_supervisor_model_job_event(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        job_id=job.id,
+        payload=SupervisorModelJobEventCreate(
+            job_kind="model_sync",
+            status=ModelLifecycleJobStatus.SUCCEEDED,
+            message="copy complete locally",
+            payload={},
+        ),
+    )
+
+    job_row = _row(session_factory, DeploymentModelSyncJob, job.id)
+    assert updated.status is ModelLifecycleJobStatus.RUNNING
+    assert job_row.status is ModelLifecycleJobStatus.RUNNING
+    assert job_row.completed_at is None
+
+
+@pytest.mark.asyncio
 async def test_complete_model_sync_job_marks_assignment_synced() -> None:
     tenant, model, node = _tenant_model_and_node()
     session_factory = _MemorySessionFactory([tenant, model, node])
@@ -237,7 +286,7 @@ async def test_complete_model_sync_job_marks_assignment_synced() -> None:
 
 
 @pytest.mark.asyncio
-async def test_complete_model_sync_job_with_wrong_path_does_not_sync_assignment() -> None:
+async def test_complete_model_sync_job_with_wrong_path_is_rejected() -> None:
     tenant, model, node = _tenant_model_and_node()
     session_factory = _MemorySessionFactory([tenant, model, node])
     service = ModelLifecycleService(session_factory=session_factory)
@@ -256,22 +305,91 @@ async def test_complete_model_sync_job_with_wrong_path_does_not_sync_assignment(
         actor_subject="admin@example.test",
     )
 
-    completed = await service.complete_supervisor_model_job(
-        tenant_id=tenant.id,
-        supervisor_id=node.supervisor_id,
-        authenticated_node_id=node.id,
-        job_id=job.id,
-        payload=SupervisorModelJobComplete(
-            status=ModelLifecycleJobStatus.SUCCEEDED,
-            local_path="/tmp/yolo26n.onnx",
-            sha256=model.sha256,
-            size_bytes=model.size_bytes,
-        ),
-    )
+    with pytest.raises(ValueError, match="does not match"):
+        await service.complete_supervisor_model_job(
+            tenant_id=tenant.id,
+            supervisor_id=node.supervisor_id,
+            authenticated_node_id=node.id,
+            job_id=job.id,
+            payload=SupervisorModelJobComplete(
+                status=ModelLifecycleJobStatus.SUCCEEDED,
+                local_path="/tmp/yolo26n.onnx",
+                sha256=model.sha256,
+                size_bytes=model.size_bytes,
+            ),
+        )
 
     assignment_row = _row(session_factory, DeploymentModelAssignment, assignment.id)
-    assert completed.status is ModelLifecycleJobStatus.SUCCEEDED
+    job_row = _row(session_factory, DeploymentModelSyncJob, job.id)
+    assert job_row.status is ModelLifecycleJobStatus.QUEUED
+    assert job_row.completed_at is None
     assert assignment_row.status is DeploymentModelAssignmentStatus.SYNCING
+
+
+@pytest.mark.asyncio
+async def test_supervisor_can_open_assigned_model_asset_download(tmp_path: Path) -> None:
+    tenant, model, node = _tenant_model_and_node()
+    model_path = tmp_path / "yolo26n.onnx"
+    model_path.write_bytes(b"model-bytes")
+    model.path = str(model_path)
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+
+    asset = await service.get_model_asset_download(
+        tenant_id=tenant.id,
+        asset_id=model.id,
+        authenticated_node_id=node.id,
+    )
+
+    assert asset.path == model_path
+    assert asset.filename == "yolo26n.onnx"
+    assert asset.sha256 == model.sha256
+    assert asset.size_bytes == model.size_bytes
+
+
+@pytest.mark.asyncio
+async def test_supervisor_cannot_open_unassigned_model_asset_download(tmp_path: Path) -> None:
+    tenant, model, node = _tenant_model_and_node()
+    other_node = _deployment_node(tenant_id=tenant.id, supervisor_id="other-edge")
+    model_path = tmp_path / "yolo26n.onnx"
+    model_path.write_bytes(b"model-bytes")
+    model.path = str(model_path)
+    session_factory = _MemorySessionFactory([tenant, model, node, other_node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=other_node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+
+    with pytest.raises(PermissionError, match="not assigned"):
+        await service.get_model_asset_download(
+            tenant_id=tenant.id,
+            asset_id=model.id,
+            authenticated_node_id=node.id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_model_asset_download_requires_existing_file(tmp_path: Path) -> None:
+    tenant, model, node = _tenant_model_and_node()
+    model.path = str(tmp_path / "missing.onnx")
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+
+    with pytest.raises(ValueError, match="file not found"):
+        await service.get_model_asset_download(
+            tenant_id=tenant.id,
+            asset_id=model.id,
+            authenticated_node_id=None,
+        )
 
 
 def _tenant_model_and_node(

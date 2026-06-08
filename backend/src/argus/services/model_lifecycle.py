@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -45,6 +46,14 @@ from argus.models.tables import (
     SupervisorModelJobEvent,
 )
 from argus.services.model_catalog import ModelCatalogEntry, get_model_catalog_entry
+
+
+@dataclass(frozen=True, slots=True)
+class ModelAssetDownload:
+    path: Path
+    filename: str
+    sha256: str
+    size_bytes: int
 
 
 class ModelLifecycleService:
@@ -173,6 +182,47 @@ class ModelLifecycleService:
             )
             jobs = (await session.execute(statement)).scalars().all()
         return [_model_to_import_job_response(job) for job in jobs]
+
+    async def get_model_asset_download(
+        self,
+        *,
+        tenant_id: UUID,
+        asset_id: UUID,
+        authenticated_node_id: UUID | None,
+    ) -> ModelAssetDownload:
+        async with self.session_factory() as session:
+            model = await session.get(Model, asset_id)
+            if not isinstance(model, Model):
+                raise ValueError("Model asset not found.")
+            if authenticated_node_id is not None:
+                await _load_deployment_node(
+                    session=session,
+                    tenant_id=tenant_id,
+                    deployment_node_id=authenticated_node_id,
+                )
+                assignment = await _load_model_assignment(
+                    session=session,
+                    tenant_id=tenant_id,
+                    deployment_node_id=authenticated_node_id,
+                    model_id=asset_id,
+                )
+                assignment_removed = (
+                    assignment is None
+                    or assignment.status is DeploymentModelAssignmentStatus.REMOVED
+                )
+                if assignment_removed:
+                    raise PermissionError(
+                        "Model asset is not assigned to this deployment node."
+                    )
+            path = Path(model.path)
+            if not await anyio.to_thread.run_sync(path.is_file):
+                raise ValueError("Model asset file not found.")
+            return ModelAssetDownload(
+                path=path,
+                filename=path.name,
+                sha256=model.sha256,
+                size_bytes=model.size_bytes,
+            )
 
     async def list_model_assignments(
         self,
@@ -535,12 +585,19 @@ class ModelLifecycleService:
                 deployment_node_id=job.deployment_node_id,
                 assignment_id=job.assignment_id,
             )
+            if (
+                payload.status is ModelLifecycleJobStatus.SUCCEEDED
+                and not _completion_matches_sync_job(job, payload)
+            ):
+                raise ValueError(
+                    "Supervisor model job completion does not match expected path/hash."
+                )
             now = datetime.now(tz=UTC)
             job.status = payload.status
             job.completed_at = now
             job.error = payload.error if payload.status is ModelLifecycleJobStatus.FAILED else None
             if payload.status is ModelLifecycleJobStatus.SUCCEEDED:
-                if assignment is not None and _completion_matches_sync_job(job, payload):
+                if assignment is not None:
                     assignment.status = DeploymentModelAssignmentStatus.SYNCED
                     assignment.error = None
             elif assignment is not None:
@@ -986,27 +1043,9 @@ def _apply_model_job_event_status(
     if payload.status in {
         ModelLifecycleJobStatus.ACCEPTED,
         ModelLifecycleJobStatus.RUNNING,
-        ModelLifecycleJobStatus.SUCCEEDED,
-        ModelLifecycleJobStatus.FAILED,
-        ModelLifecycleJobStatus.CANCELLED,
     }:
         job.status = payload.status
-    if payload.status is ModelLifecycleJobStatus.FAILED:
-        job.error = payload.message or _payload_error(payload.payload)
-        job.completed_at = datetime.now(tz=UTC)
-    elif payload.status in {
-        ModelLifecycleJobStatus.ACCEPTED,
-        ModelLifecycleJobStatus.RUNNING,
-        ModelLifecycleJobStatus.SUCCEEDED,
-    }:
         job.error = None
-        if payload.status is ModelLifecycleJobStatus.SUCCEEDED:
-            job.completed_at = datetime.now(tz=UTC)
-
-
-def _payload_error(payload: dict[str, object]) -> str | None:
-    error = payload.get("error")
-    return error if isinstance(error, str) else None
 
 
 def _completion_matches_sync_job(
@@ -1015,6 +1054,7 @@ def _completion_matches_sync_job(
 ) -> bool:
     expected_sha256 = job.payload.get("expected_sha256") if job.payload else None
     expected_path = job.payload.get("target_path") if job.payload else None
+    expected_size = job.payload.get("size_bytes") if job.payload else None
     reported_sha256 = payload.sha256
     if reported_sha256 is None:
         payload_sha256 = payload.payload.get("sha256")
@@ -1029,11 +1069,19 @@ def _completion_matches_sync_job(
                 reported_path = payload_path
                 break
 
+    reported_size = payload.size_bytes
+    if reported_size is None:
+        payload_size = payload.payload.get("size_bytes")
+        if isinstance(payload_size, int):
+            reported_size = payload_size
+
     return (
         isinstance(expected_sha256, str)
         and reported_sha256 == expected_sha256
         and isinstance(expected_path, str)
         and reported_path == expected_path
+        and isinstance(expected_size, int)
+        and reported_size == expected_size
     )
 
 
@@ -1150,6 +1198,7 @@ async def _upsert_inventory_item(
         constraint="uq_deployment_model_inventory_asset",
         set_={
             "local_path": insert_statement.excluded.local_path,
+            "sha256": insert_statement.excluded.sha256,
             "size_bytes": insert_statement.excluded.size_bytes,
             "target_profile": insert_statement.excluded.target_profile,
             "runtime_versions": insert_statement.excluded.runtime_versions,
@@ -1183,6 +1232,9 @@ async def _mark_synced_assignments(
             model_id=item.asset_id,
         )
         if assignment is None or assignment.status is DeploymentModelAssignmentStatus.REMOVED:
+            continue
+        expected_path = assignment.desired_path or model.path
+        if item.local_path != expected_path or item.size_bytes != model.size_bytes:
             continue
         assignment.status = DeploymentModelAssignmentStatus.SYNCED
         assignment.error = None

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
+import anyio
 import pytest
 
 from argus.api.contracts import (
@@ -63,6 +65,67 @@ async def test_model_sync_job_copies_file_and_reports_inventory(tmp_path) -> Non
     assert completed.local_path == str(target_path)
     assert completed.sha256 == expected_sha256
     assert completed.size_bytes == len(model_bytes)
+
+
+@pytest.mark.asyncio
+async def test_execute_model_sync_public_method_copies_file_and_reports_inventory(
+    tmp_path,
+) -> None:
+    source_path = tmp_path / "source.onnx"
+    model_bytes = b"edge model payload"
+    source_path.write_bytes(model_bytes)
+    target_path = tmp_path / "models" / "yolo26n.onnx"
+    expected_sha256 = hashlib.sha256(model_bytes).hexdigest()
+    job = _model_job(
+        payload={
+            "job_type": "model_sync",
+            "source_path": str(source_path),
+            "target_path": str(target_path),
+            "expected_sha256": expected_sha256,
+            "size_bytes": len(model_bytes),
+        },
+    )
+    client = _FakeOperationsClient([job])
+    executor = SupervisorModelJobExecutor(operations_client=client)
+
+    await executor.execute_model_sync(job)
+
+    assert target_path.read_bytes() == model_bytes
+    assert [event.status for _, event in client.events] == [
+        ModelLifecycleJobStatus.RUNNING,
+        ModelLifecycleJobStatus.SUCCEEDED,
+    ]
+    assert len(client.completed) == 1
+    assert len(client.inventory_reports) == 1
+
+
+@pytest.mark.asyncio
+async def test_model_sync_job_downloads_asset_when_source_path_is_not_local(
+    tmp_path,
+) -> None:
+    target_path = tmp_path / "models" / "yolo26n.onnx"
+    model_bytes = b"downloaded model payload"
+    expected_sha256 = hashlib.sha256(model_bytes).hexdigest()
+    model_id = uuid4()
+    job = _model_job(
+        model_id=model_id,
+        payload={
+            "job_type": "model_sync",
+            "target_path": str(target_path),
+            "expected_sha256": expected_sha256,
+            "size_bytes": len(model_bytes),
+        },
+    )
+    client = _FakeOperationsClient([job], download_bytes=model_bytes)
+    executor = SupervisorModelJobExecutor(operations_client=client)
+
+    await executor.execute_once()
+
+    assert target_path.read_bytes() == model_bytes
+    assert len(client.downloaded_assets) == 1
+    assert client.downloaded_assets[0][0] == model_id
+    assert Path(client.downloaded_assets[0][1]).parent == target_path.parent
+    assert len(client.inventory_reports) == 1
 
 
 @pytest.mark.asyncio
@@ -148,8 +211,14 @@ def _model_job(
 
 
 class _FakeOperationsClient:
-    def __init__(self, jobs: list[DeploymentModelSyncJobResponse]) -> None:
+    def __init__(
+        self,
+        jobs: list[DeploymentModelSyncJobResponse],
+        *,
+        download_bytes: bytes | None = None,
+    ) -> None:
         self.jobs = jobs
+        self.download_bytes = download_bytes
         self.events: list[tuple[UUID, SupervisorModelJobEventCreate]] = []
         self.completed: list[tuple[UUID, SupervisorModelJobComplete]] = []
         self.inventory_reports: list[DeploymentModelInventoryReport] = []
@@ -183,4 +252,7 @@ class _FakeOperationsClient:
 
     async def download_model_asset(self, asset_id: UUID, destination_path: str) -> str:
         self.downloaded_assets.append((asset_id, destination_path))
-        raise AssertionError("download_model_asset should not be called for local source paths")
+        if self.download_bytes is None:
+            raise AssertionError("download_model_asset should not be called for local source paths")
+        await anyio.to_thread.run_sync(Path(destination_path).write_bytes, self.download_bytes)
+        return destination_path

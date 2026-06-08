@@ -5,7 +5,9 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
+
+import anyio
 
 from argus.api.contracts import (
     DeploymentModelInventoryReport,
@@ -37,6 +39,8 @@ class ModelJobOperationsClient(Protocol):
         self,
         report: DeploymentModelInventoryReport,
     ) -> DeploymentModelInventoryReport: ...
+
+    async def download_model_asset(self, asset_id: UUID, destination_path: str | Path) -> Path: ...
 
 
 class SupervisorModelJobExecutor:
@@ -70,33 +74,36 @@ class SupervisorModelJobExecutor:
             if job_type != "model_sync":
                 await self._fail_job(job, f"Unsupported model job type: {job_type or 'missing'}.")
                 return
-            await self._execute_model_sync(job)
+            await self.execute_model_sync(job)
         except Exception as exc:
             await self._fail_job(job, str(exc))
 
-    async def _execute_model_sync(self, job: DeploymentModelSyncJobResponse) -> None:
+    async def execute_model_sync(self, job: DeploymentModelSyncJobResponse) -> None:
         source_path = _path_field(job.payload, "source_path")
         target_path = _path_field(job.payload, "target_path")
         expected_sha256 = _optional_string(job.payload.get("expected_sha256"))
         expected_size = _optional_int(job.payload.get("size_bytes"))
-        if source_path is None:
-            raise ValueError("Model sync job is missing source_path.")
         if target_path is None:
             raise ValueError("Model sync job is missing target_path.")
-        if not source_path.exists() or not source_path.is_file():
-            raise ValueError(f"Model source file does not exist: {source_path}.")
 
         await self._record_event(
             job,
             ModelLifecycleJobStatus.RUNNING,
-            "Copying model file.",
-            payload={"source_path": str(source_path), "target_path": str(target_path)},
+            "Staging model file.",
+            payload={
+                "source_path": str(source_path) if source_path is not None else None,
+                "target_path": str(target_path),
+            },
         )
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = target_path.with_name(f".{target_path.name}.tmp")
+        temporary_path = target_path.with_name(f".{target_path.name}.{uuid4().hex}.tmp")
         try:
-            observed_sha256, observed_size = _copy_with_hash(source_path, temporary_path)
+            observed_sha256, observed_size = await self._stage_model_file(
+                job=job,
+                source_path=source_path,
+                temporary_path=temporary_path,
+            )
             _verify_model_file(
                 expected_sha256=expected_sha256,
                 observed_sha256=observed_sha256,
@@ -157,6 +164,23 @@ class SupervisorModelJobExecutor:
                 DeploymentModelInventoryReport(items=items)
             )
 
+    async def _stage_model_file(
+        self,
+        *,
+        job: DeploymentModelSyncJobResponse,
+        source_path: Path | None,
+        temporary_path: Path,
+    ) -> tuple[str, int]:
+        if source_path is not None and await anyio.to_thread.run_sync(
+            _is_regular_file,
+            source_path,
+        ):
+            return _copy_with_hash(source_path, temporary_path)
+        await self.operations_client.download_model_asset(job.model_id, temporary_path)
+        if not await anyio.to_thread.run_sync(_is_regular_file, temporary_path):
+            raise ValueError("Downloaded model asset was not written to the staging path.")
+        return _hash_existing_file(temporary_path)
+
     async def _fail_job(self, job: DeploymentModelSyncJobResponse, message: str) -> None:
         await self._record_event(job, ModelLifecycleJobStatus.FAILED, message)
         await self.operations_client.complete_model_job(
@@ -195,6 +219,20 @@ def _copy_with_hash(source_path: Path, temporary_path: Path) -> tuple[str, int]:
             size_bytes += len(chunk)
             target.write(chunk)
     return digest.hexdigest(), size_bytes
+
+
+def _hash_existing_file(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size_bytes = 0
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+            size_bytes += len(chunk)
+    return digest.hexdigest(), size_bytes
+
+
+def _is_regular_file(path: Path) -> bool:
+    return path.exists() and path.is_file()
 
 
 def _verify_model_file(
