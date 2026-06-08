@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 import anyio
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +24,9 @@ from argus.api.contracts import (
     ModelCapabilityConfig,
     ModelImportJobResponse,
     ModelImportRequest,
+    RuntimeArtifactBuildJobCreate,
+    RuntimeArtifactBuildJobResponse,
+    RuntimeArtifactCreate,
     SupervisorModelJobComplete,
     SupervisorModelJobEventCreate,
 )
@@ -35,17 +39,29 @@ from argus.models.enums import (
     ModelImportSource,
     ModelLifecycleJobStatus,
     ModelTask,
+    RuntimeArtifactBuildFormat,
 )
 from argus.models.tables import (
+    Camera,
     DeploymentModelAssignment,
     DeploymentModelInventory,
     DeploymentModelSyncJob,
     DeploymentNode,
+    EdgeNodeHardwareReport,
     Model,
     ModelImportJob,
+    RuntimeArtifactBuildJob,
     SupervisorModelJobEvent,
 )
 from argus.services.model_catalog import ModelCatalogEntry, get_model_catalog_entry
+from argus.services.runtime_artifacts import create_runtime_artifacts_for_model_in_session
+from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
+
+_TERMINAL_MODEL_LIFECYCLE_JOB_STATUSES = {
+    ModelLifecycleJobStatus.SUCCEEDED,
+    ModelLifecycleJobStatus.FAILED,
+    ModelLifecycleJobStatus.CANCELLED,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -459,6 +475,186 @@ class ModelLifecycleService:
             await session.refresh(assignment)
         return _model_to_sync_job_response(job)
 
+    async def create_runtime_artifact_build_job(
+        self,
+        tenant_id: UUID,
+        model_id: UUID,
+        payload: RuntimeArtifactBuildJobCreate,
+        actor_subject: str,
+    ) -> RuntimeArtifactBuildJobResponse:
+        async with self.session_factory() as session:
+            node = await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=payload.deployment_node_id,
+            )
+            _require_assignable_deployment_node(node)
+            await _require_target_profile_supported(
+                session=session,
+                tenant_id=tenant_id,
+                node=node,
+                target_profile=payload.target_profile,
+            )
+            model = await session.get(Model, model_id)
+            if not isinstance(model, Model):
+                raise ValueError("Model not found.")
+
+            camera: Camera | None = None
+            runtime_vocabulary: list[str] = []
+            vocabulary_hash: str | None = None
+            vocabulary_version: int | None = None
+            if _model_capability(model) is DetectorCapability.OPEN_VOCAB:
+                if payload.camera_id is None:
+                    raise ValueError("camera_id is required for open-vocab artifact builds.")
+                camera = await session.get(Camera, payload.camera_id)
+                if not isinstance(camera, Camera):
+                    raise ValueError("Camera not found.")
+                if camera.primary_model_id != model_id and camera.secondary_model_id != model_id:
+                    raise ValueError("Camera does not use model.")
+                runtime_vocabulary = normalize_vocabulary_terms(camera.runtime_vocabulary)
+                if not runtime_vocabulary:
+                    raise ValueError("Open-vocab artifact builds require camera vocabulary.")
+                vocabulary_hash = hash_vocabulary(runtime_vocabulary)
+                vocabulary_version = camera.runtime_vocabulary_version
+            else:
+                if payload.build_format is not RuntimeArtifactBuildFormat.TENSORRT_ENGINE:
+                    raise ValueError("Fixed-vocab artifact builds require TensorRT engine format.")
+                assignment = await _load_model_assignment(
+                    session=session,
+                    tenant_id=tenant_id,
+                    deployment_node_id=payload.deployment_node_id,
+                    model_id=model_id,
+                )
+                if (
+                    assignment is None
+                    or assignment.status is DeploymentModelAssignmentStatus.REMOVED
+                ):
+                    raise ValueError("Fixed-vocab TensorRT jobs require a model assignment.")
+
+            export_formats = [
+                export_format.value for export_format in (payload.export_formats or [])
+            ]
+            if not export_formats:
+                export_formats = [payload.build_format.value]
+            output_dir = _artifact_output_dir(model=model, payload=payload)
+            job = RuntimeArtifactBuildJob(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                deployment_node_id=payload.deployment_node_id,
+                model_id=model_id,
+                camera_id=payload.camera_id,
+                artifact_id=None,
+                status=ModelLifecycleJobStatus.QUEUED,
+                build_format=payload.build_format,
+                target_profile=payload.target_profile,
+                precision=payload.precision,
+                payload={
+                    "job_type": "artifact_build",
+                    "schema_version": 1,
+                    "deployment_node_id": str(payload.deployment_node_id),
+                    "model_id": str(model_id),
+                    "camera_id": str(payload.camera_id) if payload.camera_id is not None else None,
+                    "source_model_sha256": model.sha256,
+                    "source_model_path": model.path,
+                    "build_format": payload.build_format.value,
+                    "export_formats": export_formats,
+                    "target_profile": payload.target_profile,
+                    "precision": payload.precision.value,
+                    "input_shape": dict(payload.input_shape),
+                    "classes": list(model.classes or []),
+                    "runtime_vocabulary": runtime_vocabulary,
+                    "vocabulary_hash": vocabulary_hash,
+                    "vocabulary_version": vocabulary_version,
+                    "output_dir": output_dir,
+                    "builder_options": dict(payload.builder_options),
+                },
+                actor_subject=actor_subject,
+                error=None,
+            )
+            session.add(job)
+            await session.commit()
+            await session.refresh(job)
+        return _model_to_artifact_build_job_response(job)
+
+    async def list_runtime_artifact_build_jobs(
+        self,
+        tenant_id: UUID,
+        model_id: UUID,
+    ) -> list[RuntimeArtifactBuildJobResponse]:
+        async with self.session_factory() as session:
+            statement = (
+                select(RuntimeArtifactBuildJob)
+                .where(RuntimeArtifactBuildJob.tenant_id == tenant_id)
+                .where(RuntimeArtifactBuildJob.model_id == model_id)
+                .order_by(RuntimeArtifactBuildJob.created_at.desc())
+            )
+            jobs = (await session.execute(statement)).scalars().all()
+        return [
+            _model_to_artifact_build_job_response(job)
+            for job in jobs
+            if isinstance(job, RuntimeArtifactBuildJob)
+        ]
+
+    async def complete_runtime_artifact_build_job(
+        self,
+        tenant_id: UUID,
+        authenticated_node_id: UUID | None,
+        job_id: UUID,
+        result: SupervisorModelJobComplete,
+    ) -> RuntimeArtifactBuildJobResponse:
+        if result.status not in {
+            ModelLifecycleJobStatus.SUCCEEDED,
+            ModelLifecycleJobStatus.FAILED,
+        }:
+            raise ValueError("Runtime artifact build completion must be succeeded or failed.")
+
+        async with self.session_factory() as session:
+            job = await _load_runtime_artifact_build_job(
+                session=session,
+                tenant_id=tenant_id,
+                job_id=job_id,
+                for_update=True,
+            )
+            if (
+                authenticated_node_id is not None
+                and authenticated_node_id != job.deployment_node_id
+            ):
+                raise PermissionError(
+                    "Supervisor credential cannot complete artifact build for another node."
+                )
+            if job.status in _TERMINAL_MODEL_LIFECYCLE_JOB_STATUSES:
+                return _model_to_artifact_build_job_response(job)
+            if result.status is ModelLifecycleJobStatus.FAILED:
+                job.status = ModelLifecycleJobStatus.FAILED
+                job.error = result.error or "Runtime artifact build failed."
+                job.completed_at = datetime.now(tz=UTC)
+                await session.commit()
+                await session.refresh(job)
+                return _model_to_artifact_build_job_response(job)
+
+            try:
+                artifact_payloads = _completion_runtime_artifact_payloads(job, result)
+                _, created_artifacts = await create_runtime_artifacts_for_model_in_session(
+                    session,
+                    job.model_id,
+                    artifact_payloads,
+                )
+            except (HTTPException, ValidationError, ValueError) as exc:
+                job.status = ModelLifecycleJobStatus.FAILED
+                job.error = _artifact_build_completion_error(exc)
+                job.completed_at = datetime.now(tz=UTC)
+                await session.commit()
+                await session.refresh(job)
+                return _model_to_artifact_build_job_response(job)
+            created_artifact_ids = [artifact.id for artifact in created_artifacts]
+            job.status = ModelLifecycleJobStatus.SUCCEEDED
+            job.artifact_id = created_artifact_ids[0] if created_artifact_ids else None
+            job.error = None
+            job.completed_at = datetime.now(tz=UTC)
+            await session.commit()
+            await session.refresh(job)
+            return _model_to_artifact_build_job_response(job)
+
     async def poll_supervisor_model_jobs(
         self,
         *,
@@ -475,7 +671,7 @@ class ModelLifecycleService:
                 supervisor_id=supervisor_id,
                 authenticated_node_id=authenticated_node_id,
             )
-            statement = (
+            sync_statement = (
                 select(DeploymentModelSyncJob)
                 .where(DeploymentModelSyncJob.tenant_id == tenant_id)
                 .where(DeploymentModelSyncJob.deployment_node_id == node.id)
@@ -491,7 +687,7 @@ class ModelLifecycleService:
                 .order_by(DeploymentModelSyncJob.created_at.asc())
                 .limit(bounded_limit)
             )
-            rows = (await session.execute(statement)).scalars().all()
+            rows = (await session.execute(sync_statement)).scalars().all()
             jobs = [
                 row
                 for row in rows
@@ -508,7 +704,35 @@ class ModelLifecycleService:
             await session.commit()
             for job in jobs:
                 await session.refresh(job)
-        return [_model_to_sync_job_response(job) for job in jobs]
+
+            remaining_limit = max(0, bounded_limit - len(jobs))
+            artifact_jobs: list[RuntimeArtifactBuildJob] = []
+            if remaining_limit:
+                artifact_statement = (
+                    select(RuntimeArtifactBuildJob)
+                    .where(RuntimeArtifactBuildJob.tenant_id == tenant_id)
+                    .where(RuntimeArtifactBuildJob.deployment_node_id == node.id)
+                    .where(RuntimeArtifactBuildJob.status == ModelLifecycleJobStatus.QUEUED)
+                    .where(RuntimeArtifactBuildJob.claimed_by_supervisor_id.is_(None))
+                    .order_by(RuntimeArtifactBuildJob.created_at.asc())
+                    .limit(remaining_limit)
+                    .with_for_update(skip_locked=True)
+                )
+                artifact_rows = (await session.execute(artifact_statement)).scalars().all()
+                artifact_jobs = [
+                    row for row in artifact_rows if isinstance(row, RuntimeArtifactBuildJob)
+                ]
+                for artifact_job in artifact_jobs:
+                    artifact_job.claimed_by_supervisor_id = supervisor_id
+                    artifact_job.claimed_at = now
+                    artifact_job.status = ModelLifecycleJobStatus.ACCEPTED
+                await session.commit()
+                for artifact_job in artifact_jobs:
+                    await session.refresh(artifact_job)
+        return [
+            *[_model_to_sync_job_response(job) for job in jobs],
+            *[_artifact_build_job_to_supervisor_response(job) for job in artifact_jobs],
+        ]
 
     async def record_supervisor_model_job_event(
         self,
@@ -519,8 +743,38 @@ class ModelLifecycleService:
         job_id: UUID,
         payload: SupervisorModelJobEventCreate,
     ) -> DeploymentModelSyncJobResponse:
-        if payload.job_kind != "model_sync":
-            raise ValueError("Supervisor model job event kind must be model_sync.")
+        if payload.job_kind not in {"model_sync", "artifact_build"}:
+            raise ValueError("Unsupported supervisor model job event kind.")
+        if payload.job_kind == "artifact_build":
+            async with self.session_factory() as session:
+                job = await _load_runtime_artifact_build_job(
+                    session=session,
+                    tenant_id=tenant_id,
+                    job_id=job_id,
+                    for_update=True,
+                )
+                await _require_supervisor_model_job_scope(
+                    session=session,
+                    tenant_id=tenant_id,
+                    supervisor_id=supervisor_id,
+                    authenticated_node_id=authenticated_node_id,
+                    deployment_node_id=job.deployment_node_id,
+                )
+                event = SupervisorModelJobEvent(
+                    id=uuid4(),
+                    tenant_id=tenant_id,
+                    deployment_node_id=job.deployment_node_id,
+                    job_kind=payload.job_kind,
+                    job_id=job.id,
+                    status=payload.status,
+                    message=payload.message,
+                    payload=dict(payload.payload),
+                )
+                session.add(event)
+                _apply_artifact_build_job_event_status(job, payload)
+                await session.commit()
+                await session.refresh(job)
+            return _artifact_build_job_to_supervisor_response(job)
 
         async with self.session_factory() as session:
             job = await _load_model_sync_job(
@@ -567,11 +821,33 @@ class ModelLifecycleService:
             raise ValueError("Supervisor model job completion status must be succeeded or failed.")
 
         async with self.session_factory() as session:
-            job = await _load_model_sync_job(
+            job = await _try_load_model_sync_job(
                 session=session,
                 tenant_id=tenant_id,
                 job_id=job_id,
             )
+            if job is None:
+                artifact_job = await _load_runtime_artifact_build_job(
+                    session=session,
+                    tenant_id=tenant_id,
+                    job_id=job_id,
+                )
+                await _require_supervisor_model_job_scope(
+                    session=session,
+                    tenant_id=tenant_id,
+                    supervisor_id=supervisor_id,
+                    authenticated_node_id=authenticated_node_id,
+                    deployment_node_id=artifact_job.deployment_node_id,
+                )
+                completed_artifact_job = await self.complete_runtime_artifact_build_job(
+                    tenant_id=tenant_id,
+                    authenticated_node_id=authenticated_node_id,
+                    job_id=job_id,
+                    result=payload,
+                )
+                return _artifact_build_job_response_to_supervisor_response(
+                    completed_artifact_job
+                )
             await _require_supervisor_model_job_scope(
                 session=session,
                 tenant_id=tenant_id,
@@ -958,6 +1234,41 @@ async def _load_model_sync_job(
     return row
 
 
+async def _try_load_model_sync_job(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    job_id: UUID,
+) -> DeploymentModelSyncJob | None:
+    statement = (
+        select(DeploymentModelSyncJob)
+        .where(DeploymentModelSyncJob.tenant_id == tenant_id)
+        .where(DeploymentModelSyncJob.id == job_id)
+    )
+    row = (await session.execute(statement)).scalars().first()
+    return row if isinstance(row, DeploymentModelSyncJob) else None
+
+
+async def _load_runtime_artifact_build_job(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    job_id: UUID,
+    for_update: bool = False,
+) -> RuntimeArtifactBuildJob:
+    statement = (
+        select(RuntimeArtifactBuildJob)
+        .where(RuntimeArtifactBuildJob.tenant_id == tenant_id)
+        .where(RuntimeArtifactBuildJob.id == job_id)
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    row = (await session.execute(statement)).scalars().first()
+    if not isinstance(row, RuntimeArtifactBuildJob):
+        raise ValueError("Runtime artifact build job not found.")
+    return row
+
+
 async def _load_supervisor_model_job_node(
     *,
     session: AsyncSession,
@@ -1018,6 +1329,30 @@ def _model_sync_job_payload(
     }
 
 
+def _model_to_artifact_build_job_response(
+    job: RuntimeArtifactBuildJob,
+) -> RuntimeArtifactBuildJobResponse:
+    return RuntimeArtifactBuildJobResponse(
+        id=job.id,
+        tenant_id=job.tenant_id,
+        deployment_node_id=job.deployment_node_id,
+        model_id=job.model_id,
+        camera_id=job.camera_id,
+        artifact_id=job.artifact_id,
+        status=job.status,
+        build_format=job.build_format,
+        target_profile=job.target_profile,
+        precision=job.precision,
+        payload=dict(job.payload or {}),
+        claimed_by_supervisor_id=job.claimed_by_supervisor_id,
+        claimed_at=job.claimed_at,
+        completed_at=job.completed_at,
+        error=job.error,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )
+
+
 def _model_to_sync_job_response(job: DeploymentModelSyncJob) -> DeploymentModelSyncJobResponse:
     return DeploymentModelSyncJobResponse(
         id=job.id,
@@ -1036,10 +1371,64 @@ def _model_to_sync_job_response(job: DeploymentModelSyncJob) -> DeploymentModelS
     )
 
 
+def _artifact_build_job_to_supervisor_response(
+    job: RuntimeArtifactBuildJob,
+) -> DeploymentModelSyncJobResponse:
+    return DeploymentModelSyncJobResponse(
+        id=job.id,
+        tenant_id=job.tenant_id,
+        deployment_node_id=job.deployment_node_id,
+        assignment_id=job.id,
+        model_id=job.model_id,
+        status=job.status,
+        payload=dict(job.payload or {}),
+        claimed_by_supervisor_id=job.claimed_by_supervisor_id,
+        claimed_at=job.claimed_at,
+        completed_at=job.completed_at,
+        error=job.error,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )
+
+
+def _artifact_build_job_response_to_supervisor_response(
+    job: RuntimeArtifactBuildJobResponse,
+) -> DeploymentModelSyncJobResponse:
+    return DeploymentModelSyncJobResponse(
+        id=job.id,
+        tenant_id=job.tenant_id,
+        deployment_node_id=job.deployment_node_id,
+        assignment_id=job.id,
+        model_id=job.model_id,
+        status=job.status,
+        payload=dict(job.payload or {}),
+        claimed_by_supervisor_id=job.claimed_by_supervisor_id,
+        claimed_at=job.claimed_at,
+        completed_at=job.completed_at,
+        error=job.error,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )
+
+
 def _apply_model_job_event_status(
     job: DeploymentModelSyncJob,
     payload: SupervisorModelJobEventCreate,
 ) -> None:
+    if payload.status in {
+        ModelLifecycleJobStatus.ACCEPTED,
+        ModelLifecycleJobStatus.RUNNING,
+    }:
+        job.status = payload.status
+        job.error = None
+
+
+def _apply_artifact_build_job_event_status(
+    job: RuntimeArtifactBuildJob,
+    payload: SupervisorModelJobEventCreate,
+) -> None:
+    if job.status in _TERMINAL_MODEL_LIFECYCLE_JOB_STATUSES:
+        return
     if payload.status in {
         ModelLifecycleJobStatus.ACCEPTED,
         ModelLifecycleJobStatus.RUNNING,
@@ -1083,6 +1472,132 @@ def _completion_matches_sync_job(
         and isinstance(expected_size, int)
         and reported_size == expected_size
     )
+
+
+async def _require_target_profile_supported(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    node: DeploymentNode,
+    target_profile: str,
+) -> None:
+    if getattr(node, "host_profile", None) == target_profile:
+        return
+    statement = (
+        select(EdgeNodeHardwareReport)
+        .where(EdgeNodeHardwareReport.tenant_id == tenant_id)
+        .where(EdgeNodeHardwareReport.supervisor_id == node.supervisor_id)
+        .order_by(EdgeNodeHardwareReport.reported_at.desc())
+        .limit(1)
+    )
+    latest = (await session.execute(statement)).scalars().first()
+    if isinstance(latest, EdgeNodeHardwareReport) and latest.host_profile == target_profile:
+        return
+    raise ValueError("Runtime artifact target profile does not match deployment node.")
+
+
+def _artifact_output_dir(*, model: Model, payload: RuntimeArtifactBuildJobCreate) -> str:
+    output_dir = payload.builder_options.get("output_dir")
+    if isinstance(output_dir, str) and output_dir:
+        return output_dir
+    return str(Path(model.path).parent / "runtime-artifacts" / str(model.id))
+
+
+def _completion_artifact_payloads(
+    result: SupervisorModelJobComplete,
+) -> list[dict[str, object]]:
+    artifacts = result.payload.get("artifacts")
+    if isinstance(artifacts, list):
+        payloads = [artifact for artifact in artifacts if isinstance(artifact, dict)]
+    else:
+        artifact = result.payload.get("artifact")
+        if isinstance(artifact, dict):
+            payloads = [artifact]
+        elif "scope" in result.payload:
+            payloads = [result.payload]
+        else:
+            payloads = []
+    if not payloads:
+        raise ValueError("Successful artifact build completion must include artifact payload.")
+    return [dict(payload) for payload in payloads]
+
+
+def _completion_runtime_artifact_payloads(
+    job: RuntimeArtifactBuildJob,
+    result: SupervisorModelJobComplete,
+) -> list[RuntimeArtifactCreate]:
+    artifacts = [
+        RuntimeArtifactCreate.model_validate(payload)
+        for payload in _completion_artifact_payloads(result)
+    ]
+    for artifact in artifacts:
+        _validate_runtime_artifact_matches_build_job(job, artifact)
+    return artifacts
+
+
+def _validate_runtime_artifact_matches_build_job(
+    job: RuntimeArtifactBuildJob,
+    artifact: RuntimeArtifactCreate,
+) -> None:
+    if artifact.target_profile != job.target_profile:
+        raise ValueError("Runtime artifact target_profile must match build job target_profile.")
+    if artifact.precision is not job.precision:
+        raise ValueError("Runtime artifact precision must match build job precision.")
+    expected_input_shape = _mapping_or_none(job.payload.get("input_shape")) or {}
+    if dict(artifact.input_shape) != dict(expected_input_shape):
+        raise ValueError("Runtime artifact input_shape must match build job input_shape.")
+    if artifact.camera_id != job.camera_id:
+        raise ValueError("Runtime artifact camera_id must match build job camera_id.")
+    expected_source_hash = _optional_string(job.payload.get("source_model_sha256"))
+    if expected_source_hash is not None and artifact.source_model_sha256 != expected_source_hash:
+        raise ValueError(
+            "Runtime artifact source_model_sha256 must match build job source_model_sha256."
+        )
+    expected_vocabulary_hash = _optional_string(job.payload.get("vocabulary_hash"))
+    if (
+        expected_vocabulary_hash is not None
+        and artifact.vocabulary_hash != expected_vocabulary_hash
+    ):
+        raise ValueError(
+            "Runtime artifact vocabulary_hash must match build job vocabulary_hash."
+        )
+    allowed_kinds = _string_list(job.payload.get("export_formats"))
+    if not allowed_kinds:
+        allowed_kinds = [job.build_format.value]
+    if artifact.kind.value not in allowed_kinds:
+        raise ValueError("Runtime artifact kind must match a build job export format.")
+
+
+def _optional_string(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _mapping_or_none(value: object) -> dict[str, object] | None:
+    return dict(value) if isinstance(value, dict) else None
+
+
+def _artifact_build_completion_error(exc: Exception) -> str:
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+        if isinstance(detail, str):
+            return detail
+        return str(detail)
+    return str(exc) or exc.__class__.__name__
+
+
+def _model_capability(model: Model) -> DetectorCapability:
+    capability = getattr(model, "capability", None)
+    if isinstance(capability, DetectorCapability):
+        return capability
+    if capability is None:
+        return DetectorCapability.FIXED_VOCAB
+    return DetectorCapability(str(capability))
 
 
 async def _load_deployment_node(

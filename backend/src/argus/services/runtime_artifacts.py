@@ -56,45 +56,24 @@ class RuntimeArtifactService:
         model_id: UUID,
         payload: RuntimeArtifactCreate,
     ) -> RuntimeArtifactResponse:
-        async with self.session_factory() as session:
-            model = await _load_model(session, model_id)
-            _validate_artifact_matches_model(model, payload)
-            if payload.scope is RuntimeArtifactScope.SCENE:
-                camera = await _load_camera(session, payload.camera_id)
-                _validate_camera_uses_model(camera, model_id)
+        responses = await self.create_many_for_model(model_id, [payload])
+        return responses[0]
 
-            now = datetime.now(tz=UTC)
-            artifact = ModelRuntimeArtifact(
-                model_id=model_id,
-                camera_id=payload.camera_id,
-                scope=payload.scope,
-                kind=payload.kind,
-                capability=payload.capability,
-                runtime_backend=payload.runtime_backend,
-                path=payload.path,
-                target_profile=payload.target_profile,
-                precision=payload.precision,
-                input_shape=payload.input_shape,
-                classes=payload.classes,
-                vocabulary_hash=payload.vocabulary_hash,
-                vocabulary_version=payload.vocabulary_version,
-                source_model_sha256=payload.source_model_sha256,
-                sha256=payload.sha256,
-                size_bytes=payload.size_bytes,
-                builder=payload.builder,
-                runtime_versions=payload.runtime_versions,
-                validation_status=payload.validation_status,
-                validation_error=payload.validation_error,
-                build_duration_seconds=payload.build_duration_seconds,
-                validation_duration_seconds=payload.validation_duration_seconds,
-                validated_at=payload.validated_at,
-                created_at=now,
-                updated_at=now,
+    async def create_many_for_model(
+        self,
+        model_id: UUID,
+        payloads: list[RuntimeArtifactCreate],
+    ) -> list[RuntimeArtifactResponse]:
+        async with self.session_factory() as session:
+            model, artifacts = await create_runtime_artifacts_for_model_in_session(
+                session,
+                model_id,
+                payloads,
             )
-            session.add(artifact)
             await session.commit()
-            await session.refresh(artifact)
-        return _artifact_to_response(artifact, model=model)
+            for artifact in artifacts:
+                await session.refresh(artifact)
+        return [_artifact_to_response(artifact, model=model) for artifact in artifacts]
 
     async def update_artifact(
         self,
@@ -237,6 +216,62 @@ def _artifact_to_response(
         validated_at=artifact.validated_at,
         created_at=artifact.created_at,
         updated_at=artifact.updated_at,
+    )
+
+
+async def create_runtime_artifacts_for_model_in_session(
+    session: AsyncSession,
+    model_id: UUID,
+    payloads: list[RuntimeArtifactCreate],
+) -> tuple[Model, list[ModelRuntimeArtifact]]:
+    model = await _load_model(session, model_id)
+    now = datetime.now(tz=UTC)
+    artifacts: list[ModelRuntimeArtifact] = []
+    for payload in payloads:
+        _validate_artifact_matches_model(model, payload)
+        if payload.scope is RuntimeArtifactScope.SCENE:
+            camera = await _load_camera(session, payload.camera_id)
+            _validate_camera_uses_model(camera, model_id)
+        artifacts.append(_artifact_from_payload(model_id, payload, now))
+    for artifact in artifacts:
+        session.add(artifact)
+    flush = getattr(session, "flush", None)
+    if callable(flush):
+        await flush()
+    return model, artifacts
+
+
+def _artifact_from_payload(
+    model_id: UUID,
+    payload: RuntimeArtifactCreate,
+    now: datetime,
+) -> ModelRuntimeArtifact:
+    return ModelRuntimeArtifact(
+        model_id=model_id,
+        camera_id=payload.camera_id,
+        scope=payload.scope,
+        kind=payload.kind,
+        capability=payload.capability,
+        runtime_backend=payload.runtime_backend,
+        path=payload.path,
+        target_profile=payload.target_profile,
+        precision=payload.precision,
+        input_shape=payload.input_shape,
+        classes=payload.classes,
+        vocabulary_hash=payload.vocabulary_hash,
+        vocabulary_version=payload.vocabulary_version,
+        source_model_sha256=payload.source_model_sha256,
+        sha256=payload.sha256,
+        size_bytes=payload.size_bytes,
+        builder=payload.builder,
+        runtime_versions=payload.runtime_versions,
+        validation_status=payload.validation_status,
+        validation_error=payload.validation_error,
+        build_duration_seconds=payload.build_duration_seconds,
+        validation_duration_seconds=payload.validation_duration_seconds,
+        validated_at=payload.validated_at,
+        created_at=now,
+        updated_at=now,
     )
 
 

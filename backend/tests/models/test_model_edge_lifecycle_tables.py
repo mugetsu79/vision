@@ -26,3 +26,6 @@ def test_runtime_artifact_build_jobs_include_build_format() -> None:
     table = Base.metadata.tables["runtime_artifact_build_jobs"]
 
     assert "build_format" in table.c
+    assert "claimed_by_supervisor_id" in table.c
+    assert "claimed_at" in table.c
+    assert "completed_at" in table.c

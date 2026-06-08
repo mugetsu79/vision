@@ -301,6 +301,9 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
         sa.Column("actor_subject", sa.String(length=255), nullable=False),
+        sa.Column("claimed_by_supervisor_id", sa.String(length=128), nullable=True),
+        sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column(
             "created_at",

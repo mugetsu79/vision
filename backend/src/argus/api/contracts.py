@@ -584,6 +584,9 @@ class RuntimeArtifactBuildJobResponse(BaseModel):
     target_profile: str
     precision: RuntimeArtifactPrecision
     payload: dict[str, Any] = Field(default_factory=dict)
+    claimed_by_supervisor_id: str | None = None
+    claimed_at: datetime | None = None
+    completed_at: datetime | None = None
     error: str | None = None
     created_at: datetime
     updated_at: datetime

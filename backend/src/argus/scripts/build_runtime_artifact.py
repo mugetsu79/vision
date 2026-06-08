@@ -3,30 +3,28 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
+from argus.vision.runtime_artifact_builder import (
+    build_fixed_vocab_artifact_payload,
+    build_open_vocab_scene_artifact_payloads,
+    file_size,
+    sha256_file,
+)
+
+__all__ = [
+    "build_fixed_vocab_artifact_payload",
+    "build_open_vocab_scene_artifact_payloads",
+    "file_size",
+    "post_json",
+    "sha256_file",
+]
 
 _OPEN_VOCAB_EXPORT_METADATA = {
     "onnx": ("onnx_export", "onnxruntime"),
     "engine": ("tensorrt_engine", "tensorrt_engine"),
 }
-
-
-def sha256_file(path: Path) -> str:
-    import hashlib
-
-    digest = hashlib.sha256()
-    with path.open("rb") as file_obj:
-        for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def file_size(path: Path) -> int:
-    return path.stat().st_size
 
 
 def post_json(
@@ -48,128 +46,6 @@ def post_json(
     )
     response.raise_for_status()
     return dict(response.json())
-
-
-def build_fixed_vocab_artifact_payload(
-    *,
-    source_model_path: Path,
-    prebuilt_engine_path: Path,
-    classes: list[str],
-    input_shape: dict[str, int],
-    target_profile: str,
-    build_duration_seconds: float | None = None,
-) -> dict[str, object]:
-    if not source_model_path.exists():
-        raise FileNotFoundError(f"Source model does not exist: {source_model_path}")
-    if not prebuilt_engine_path.exists():
-        raise FileNotFoundError(f"Prebuilt engine does not exist: {prebuilt_engine_path}")
-    return {
-        "scope": "model",
-        "kind": "tensorrt_engine",
-        "capability": "fixed_vocab",
-        "runtime_backend": "tensorrt_engine",
-        "path": str(prebuilt_engine_path),
-        "target_profile": target_profile,
-        "precision": "fp16",
-        "input_shape": dict(input_shape),
-        "classes": list(classes),
-        "source_model_sha256": sha256_file(source_model_path),
-        "sha256": sha256_file(prebuilt_engine_path),
-        "size_bytes": file_size(prebuilt_engine_path),
-        "builder": {"mode": "prebuilt_engine"},
-        "runtime_versions": {},
-        "build_duration_seconds": build_duration_seconds,
-    }
-
-
-def build_open_vocab_scene_artifact_payloads(
-    *,
-    source_model_path: Path,
-    camera_id: str,
-    runtime_vocabulary: Iterable[object],
-    export_formats: Sequence[str],
-    input_shape: dict[str, int],
-    target_profile: str,
-    vocabulary_version: int | None = None,
-    yoloe_loader: Callable[[str], Any] | None = None,
-) -> list[dict[str, object]]:
-    if not source_model_path.exists():
-        raise FileNotFoundError(f"Open-vocab source model does not exist: {source_model_path}")
-    terms = normalize_vocabulary_terms(runtime_vocabulary)
-    if not terms:
-        raise ValueError("runtime_vocabulary must include at least one term.")
-    formats = list(export_formats)
-    if not formats:
-        raise ValueError("At least one export format is required.")
-    unsupported_formats = [
-        export_format
-        for export_format in formats
-        if export_format not in _OPEN_VOCAB_EXPORT_METADATA
-    ]
-    if unsupported_formats:
-        raise ValueError(f"Unsupported open-vocab export format(s): {unsupported_formats}")
-
-    loader = yoloe_loader or _load_yoloe
-    vocabulary_hash = hash_vocabulary(terms)
-    source_sha256 = sha256_file(source_model_path)
-    model = loader(str(source_model_path))
-    model.set_classes(terms)
-
-    payloads: list[dict[str, object]] = []
-    for export_format in formats:
-        started_at = time.perf_counter()
-        export_result = model.export(format=export_format)
-        build_duration_seconds = time.perf_counter() - started_at
-        artifact_path = _coerce_export_path(export_result, export_format)
-        kind, runtime_backend = _OPEN_VOCAB_EXPORT_METADATA[export_format]
-        payloads.append(
-            {
-                "camera_id": camera_id,
-                "scope": "scene",
-                "kind": kind,
-                "capability": "open_vocab",
-                "runtime_backend": runtime_backend,
-                "path": str(artifact_path),
-                "target_profile": target_profile,
-                "precision": "fp16",
-                "input_shape": dict(input_shape),
-                "classes": list(terms),
-                "vocabulary_hash": vocabulary_hash,
-                "vocabulary_version": vocabulary_version,
-                "source_model_sha256": source_sha256,
-                "sha256": sha256_file(artifact_path),
-                "size_bytes": file_size(artifact_path),
-                "builder": {
-                    "mode": "open_vocab_yoloe_export",
-                    "source_pt": str(source_model_path),
-                    "export_format": export_format,
-                    "vocabulary_hash": vocabulary_hash,
-                },
-                "runtime_versions": {},
-                "build_duration_seconds": build_duration_seconds,
-            }
-        )
-    return payloads
-
-
-def _load_yoloe(source_model_path: str) -> Any:
-    from ultralytics import YOLOE  # type: ignore[attr-defined]
-
-    return YOLOE(source_model_path)
-
-
-def _coerce_export_path(export_result: object, export_format: str) -> Path:
-    if isinstance(export_result, Path):
-        path = export_result
-    elif isinstance(export_result, str):
-        path = Path(export_result)
-    else:
-        raise RuntimeError(
-            f"YOLOE {export_format} export did not return a filesystem path."
-        )
-    if not path.exists():
-        raise FileNotFoundError(f"YOLOE export did not produce an artifact: {path}")
-    return path
 
 
 def main(argv: list[str] | None = None) -> int:

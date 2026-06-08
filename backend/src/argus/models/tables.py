@@ -1205,6 +1205,9 @@ class RuntimeArtifactBuildJob(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixi
     )
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     actor_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    claimed_by_supervisor_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
