@@ -20,6 +20,16 @@ export type NodeCredentialRotateResponse =
 export type NodeCredentialRevokeResponse =
   components["schemas"]["NodeCredentialRevokeResponse"];
 
+export {
+  useAssignDeploymentModel,
+  useCreateModelSyncJob,
+  useDeploymentModelAssignments,
+  useDeploymentModelInventory,
+  useEdgeConfiguration,
+  useRemoveDeploymentModelAssignment,
+  useUpdateEdgeConfiguration,
+} from "@/hooks/use-model-lifecycle";
+
 export function deploymentNodesQueryOptions() {
   return queryOptions({
     queryKey: ["deployment", "nodes"],

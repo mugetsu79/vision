@@ -1541,6 +1541,306 @@
         "title": "DeploymentInstallStatus",
         "type": "string"
       },
+      "DeploymentModelAssignmentCreate": {
+        "properties": {
+          "desired_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Path"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "DeploymentModelAssignmentCreate",
+        "type": "object"
+      },
+      "DeploymentModelAssignmentResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment_node_id": {
+            "format": "uuid",
+            "title": "Deployment Node Id",
+            "type": "string"
+          },
+          "desired_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Path"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Job Id"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeploymentModelAssignmentStatus"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "deployment_node_id",
+          "model_id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DeploymentModelAssignmentResponse",
+        "type": "object"
+      },
+      "DeploymentModelAssignmentStatus": {
+        "enum": [
+          "desired",
+          "syncing",
+          "synced",
+          "failed",
+          "removed"
+        ],
+        "title": "DeploymentModelAssignmentStatus",
+        "type": "string"
+      },
+      "DeploymentModelInventoryItem": {
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "asset_kind": {
+            "enum": [
+              "model",
+              "runtime_artifact"
+            ],
+            "title": "Asset Kind",
+            "type": "string"
+          },
+          "local_path": {
+            "minLength": 1,
+            "title": "Local Path",
+            "type": "string"
+          },
+          "reported_at": {
+            "format": "date-time",
+            "title": "Reported At",
+            "type": "string"
+          },
+          "runtime_versions": {
+            "additionalProperties": true,
+            "title": "Runtime Versions",
+            "type": "object"
+          },
+          "sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "target_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Profile"
+          }
+        },
+        "required": [
+          "asset_kind",
+          "asset_id",
+          "local_path",
+          "sha256",
+          "size_bytes",
+          "reported_at"
+        ],
+        "title": "DeploymentModelInventoryItem",
+        "type": "object"
+      },
+      "DeploymentModelInventoryReport": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentModelInventoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "DeploymentModelInventoryReport",
+        "type": "object"
+      },
+      "DeploymentModelSyncJobResponse": {
+        "properties": {
+          "assignment_id": {
+            "format": "uuid",
+            "title": "Assignment Id",
+            "type": "string"
+          },
+          "claimed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "claimed_by_supervisor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By Supervisor Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment_node_id": {
+            "format": "uuid",
+            "title": "Deployment Node Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelLifecycleJobStatus"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "deployment_node_id",
+          "assignment_id",
+          "model_id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DeploymentModelSyncJobResponse",
+        "type": "object"
+      },
       "DeploymentNodeKind": {
         "enum": [
           "central",
@@ -1862,6 +2162,142 @@
         ],
         "title": "DetectorCapability",
         "type": "string"
+      },
+      "EdgeConfigurationApplyReport": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EdgeConfigurationApplyStatus"
+          }
+        },
+        "required": [
+          "revision",
+          "status"
+        ],
+        "title": "EdgeConfigurationApplyReport",
+        "type": "object"
+      },
+      "EdgeConfigurationApplyStatus": {
+        "enum": [
+          "pending",
+          "applied",
+          "failed"
+        ],
+        "title": "EdgeConfigurationApplyStatus",
+        "type": "string"
+      },
+      "EdgeConfigurationResponse": {
+        "properties": {
+          "applied_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Revision"
+          },
+          "apply_status": {
+            "$ref": "#/components/schemas/EdgeConfigurationApplyStatus"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment_node_id": {
+            "format": "uuid",
+            "title": "Deployment Node Id",
+            "type": "string"
+          },
+          "desired_config": {
+            "additionalProperties": true,
+            "title": "Desired Config",
+            "type": "object"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_applied_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Applied At"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "deployment_node_id",
+          "revision",
+          "desired_config",
+          "apply_status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EdgeConfigurationResponse",
+        "type": "object"
+      },
+      "EdgeConfigurationUpdate": {
+        "properties": {
+          "desired_config": {
+            "additionalProperties": true,
+            "title": "Desired Config",
+            "type": "object"
+          }
+        },
+        "title": "EdgeConfigurationUpdate",
+        "type": "object"
       },
       "EdgeHeartbeatRequest": {
         "properties": {
@@ -6618,6 +7054,19 @@
             ],
             "title": "Runtime Backend"
           },
+          "source_sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sha256"
+          },
           "source_url": {
             "anyOf": [
               {
@@ -6868,6 +7317,254 @@
           "pt"
         ],
         "title": "ModelFormat",
+        "type": "string"
+      },
+      "ModelImportJobResponse": {
+        "properties": {
+          "actor_subject": {
+            "title": "Actor Subject",
+            "type": "string"
+          },
+          "catalog_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "observed_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Sha256"
+          },
+          "progress": {
+            "additionalProperties": true,
+            "title": "Progress",
+            "type": "object"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ModelImportSource"
+          },
+          "source_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Uri"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelLifecycleJobStatus"
+          },
+          "target_path": {
+            "title": "Target Path",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "source",
+          "status",
+          "actor_subject",
+          "target_path",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ModelImportJobResponse",
+        "type": "object"
+      },
+      "ModelImportRequest": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/DetectorCapability",
+            "default": "fixed_vocab"
+          },
+          "capability_config": {
+            "$ref": "#/components/schemas/ModelCapabilityConfig"
+          },
+          "classes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256"
+          },
+          "format": {
+            "$ref": "#/components/schemas/ModelFormat"
+          },
+          "input_shape": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Input Shape",
+            "type": "object"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ModelImportSource"
+          },
+          "source_uri": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Uri"
+          },
+          "task": {
+            "$ref": "#/components/schemas/ModelTask"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "name",
+          "version",
+          "task",
+          "format",
+          "input_shape"
+        ],
+        "title": "ModelImportRequest",
+        "type": "object"
+      },
+      "ModelImportSource": {
+        "enum": [
+          "catalog",
+          "url",
+          "master_path",
+          "upload"
+        ],
+        "title": "ModelImportSource",
+        "type": "string"
+      },
+      "ModelLifecycleJobStatus": {
+        "enum": [
+          "queued",
+          "accepted",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ModelLifecycleJobStatus",
         "type": "string"
       },
       "ModelResponse": {
@@ -9748,6 +10445,211 @@
         "title": "RuleAction",
         "type": "string"
       },
+      "RuntimeArtifactBuildFormat": {
+        "enum": [
+          "onnx_export",
+          "tensorrt_engine"
+        ],
+        "title": "RuntimeArtifactBuildFormat",
+        "type": "string"
+      },
+      "RuntimeArtifactBuildJobCreate": {
+        "properties": {
+          "build_format": {
+            "$ref": "#/components/schemas/RuntimeArtifactBuildFormat"
+          },
+          "builder_options": {
+            "additionalProperties": true,
+            "title": "Builder Options",
+            "type": "object"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "deployment_node_id": {
+            "format": "uuid",
+            "title": "Deployment Node Id",
+            "type": "string"
+          },
+          "export_formats": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimeArtifactBuildFormat"
+            },
+            "title": "Export Formats",
+            "type": "array"
+          },
+          "input_shape": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Input Shape",
+            "type": "object"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/RuntimeArtifactPrecision"
+          },
+          "target_profile": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment_node_id",
+          "build_format",
+          "target_profile",
+          "precision",
+          "input_shape"
+        ],
+        "title": "RuntimeArtifactBuildJobCreate",
+        "type": "object"
+      },
+      "RuntimeArtifactBuildJobResponse": {
+        "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "build_format": {
+            "$ref": "#/components/schemas/RuntimeArtifactBuildFormat"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "claimed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "claimed_by_supervisor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By Supervisor Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment_node_id": {
+            "format": "uuid",
+            "title": "Deployment Node Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/RuntimeArtifactPrecision"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelLifecycleJobStatus"
+          },
+          "target_profile": {
+            "title": "Target Profile",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "deployment_node_id",
+          "model_id",
+          "status",
+          "build_format",
+          "target_profile",
+          "precision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RuntimeArtifactBuildJobResponse",
+        "type": "object"
+      },
       "RuntimeArtifactCreate": {
         "properties": {
           "build_duration_seconds": {
@@ -11464,6 +12366,153 @@
         ],
         "title": "SupervisorMode",
         "type": "string"
+      },
+      "SupervisorModelJobComplete": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "local_path": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Path"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelLifecycleJobStatus"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "SupervisorModelJobComplete",
+        "type": "object"
+      },
+      "SupervisorModelJobEventCreate": {
+        "properties": {
+          "job_kind": {
+            "enum": [
+              "model_sync",
+              "artifact_build"
+            ],
+            "title": "Job Kind",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelLifecycleJobStatus"
+          }
+        },
+        "required": [
+          "job_kind",
+          "status"
+        ],
+        "title": "SupervisorModelJobEventCreate",
+        "type": "object"
+      },
+      "SupervisorModelJobPollRequest": {
+        "properties": {
+          "limit": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "SupervisorModelJobPollRequest",
+        "type": "object"
+      },
+      "SupervisorModelJobPollResponse": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentModelSyncJobResponse"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "supervisor_id": {
+            "title": "Supervisor Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "supervisor_id"
+        ],
+        "title": "SupervisorModelJobPollResponse",
+        "type": "object"
       },
       "SupervisorPollRequest": {
         "properties": {
@@ -13280,6 +14329,18 @@
             ],
             "title": "Privacy Manifest Hash"
           },
+          "privacy_manifest_snapshot_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Manifest Snapshot Id"
+          },
           "privacy_policy": {
             "anyOf": [
               {
@@ -13349,6 +14410,18 @@
               }
             ],
             "title": "Scene Contract Hash"
+          },
+          "scene_contract_snapshot_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Contract Snapshot Id"
           },
           "secondary_model": {
             "anyOf": [
@@ -17530,6 +18603,449 @@
         ]
       }
     },
+    "/api/v1/deployment/nodes/{node_id}/edge-configuration": {
+      "get": {
+        "operationId": "get_node_edge_configuration_api_v1_deployment_nodes__node_id__edge_configuration_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeConfigurationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Node Edge Configuration",
+        "tags": [
+          "deployment"
+        ]
+      },
+      "put": {
+        "operationId": "update_node_edge_configuration_api_v1_deployment_nodes__node_id__edge_configuration_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EdgeConfigurationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeConfigurationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Node Edge Configuration",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/nodes/{node_id}/model-assignments": {
+      "get": {
+        "operationId": "list_node_model_assignments_api_v1_deployment_nodes__node_id__model_assignments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeploymentModelAssignmentResponse"
+                  },
+                  "title": "Response List Node Model Assignments Api V1 Deployment Nodes  Node Id  Model Assignments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Node Model Assignments",
+        "tags": [
+          "deployment"
+        ]
+      },
+      "post": {
+        "operationId": "assign_model_to_node_api_v1_deployment_nodes__node_id__model_assignments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentModelAssignmentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentModelAssignmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Model To Node",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/nodes/{node_id}/model-assignments/{assignment_id}": {
+      "delete": {
+        "operationId": "remove_model_assignment_api_v1_deployment_nodes__node_id__model_assignments__assignment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentModelAssignmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Model Assignment",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/nodes/{node_id}/model-inventory": {
+      "get": {
+        "operationId": "list_node_model_inventory_api_v1_deployment_nodes__node_id__model_inventory_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentModelInventoryReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Node Model Inventory",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/nodes/{node_id}/model-sync-jobs": {
+      "post": {
+        "operationId": "create_model_sync_job_api_v1_deployment_nodes__node_id__model_sync_jobs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentModelSyncJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Model Sync Job",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
     "/api/v1/deployment/nodes/{node_id}/support-bundle": {
       "get": {
         "operationId": "get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get",
@@ -17755,6 +19271,466 @@
           }
         },
         "summary": "Claim Pairing Session",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/supervisors/{supervisor_id}/edge-configuration": {
+      "get": {
+        "operationId": "get_supervisor_edge_configuration_api_v1_deployment_supervisors__supervisor_id__edge_configuration_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supervisor_id",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeConfigurationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Supervisor Edge Configuration",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/supervisors/{supervisor_id}/edge-configuration/apply-report": {
+      "post": {
+        "operationId": "record_supervisor_edge_configuration_apply_report_api_v1_deployment_supervisors__supervisor_id__edge_configuration_apply_report_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supervisor_id",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EdgeConfigurationApplyReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeConfigurationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Supervisor Edge Configuration Apply Report",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-inventory": {
+      "post": {
+        "operationId": "record_supervisor_model_inventory_api_v1_deployment_supervisors__supervisor_id__model_inventory_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supervisor_id",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentModelInventoryReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentModelInventoryReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Supervisor Model Inventory",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-jobs/poll": {
+      "post": {
+        "operationId": "poll_supervisor_model_jobs_api_v1_deployment_supervisors__supervisor_id__model_jobs_poll_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supervisor_id",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupervisorModelJobPollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupervisorModelJobPollResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Poll Supervisor Model Jobs",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-jobs/{job_id}/complete": {
+      "post": {
+        "operationId": "complete_supervisor_model_job_api_v1_deployment_supervisors__supervisor_id__model_jobs__job_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supervisor_id",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupervisorModelJobComplete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentModelSyncJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Supervisor Model Job",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-jobs/{job_id}/events": {
+      "post": {
+        "operationId": "record_supervisor_model_job_event_api_v1_deployment_supervisors__supervisor_id__model_jobs__job_id__events_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "supervisor_id",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupervisorModelJobEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentModelSyncJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Supervisor Model Job Event",
         "tags": [
           "deployment"
         ]
@@ -23557,6 +25533,79 @@
         ]
       }
     },
+    "/api/v1/model-assets/{asset_id}/download": {
+      "get": {
+        "operationId": "download_model_asset_api_v1_model_assets__asset_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supervisor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Model Asset",
+        "tags": [
+          "model-assets"
+        ]
+      }
+    },
     "/api/v1/model-catalog": {
       "get": {
         "operationId": "list_model_catalog_api_v1_model_catalog_get",
@@ -23579,6 +25628,175 @@
         "summary": "List Model Catalog",
         "tags": [
           "model-catalog"
+        ]
+      }
+    },
+    "/api/v1/model-catalog/{catalog_id}/download": {
+      "post": {
+        "operationId": "download_model_catalog_entry_api_v1_model_catalog__catalog_id__download_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "catalog_id",
+            "required": true,
+            "schema": {
+              "title": "Catalog Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelImportJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Model Catalog Entry",
+        "tags": [
+          "model-catalog"
+        ]
+      }
+    },
+    "/api/v1/model-catalog/{catalog_id}/register": {
+      "post": {
+        "operationId": "register_model_catalog_entry_api_v1_model_catalog__catalog_id__register_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "catalog_id",
+            "required": true,
+            "schema": {
+              "title": "Catalog Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelImportJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Model Catalog Entry",
+        "tags": [
+          "model-catalog"
+        ]
+      }
+    },
+    "/api/v1/model-import-jobs": {
+      "get": {
+        "operationId": "list_model_import_jobs_api_v1_model_import_jobs_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelImportJobResponse"
+                  },
+                  "title": "Response List Model Import Jobs Api V1 Model Import Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Model Import Jobs",
+        "tags": [
+          "models"
         ]
       }
     },
@@ -23646,6 +25864,65 @@
         ]
       }
     },
+    "/api/v1/models/import-url": {
+      "post": {
+        "operationId": "import_model_url_api_v1_models_import_url_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelImportJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Model Url",
+        "tags": [
+          "models"
+        ]
+      }
+    },
     "/api/v1/models/{model_id}": {
       "patch": {
         "operationId": "update_model_api_v1_models__model_id__patch",
@@ -23696,6 +25973,136 @@
         "summary": "Update Model",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/api/v1/models/{model_id}/runtime-artifact-build-jobs": {
+      "get": {
+        "operationId": "list_runtime_artifact_build_jobs_api_v1_models__model_id__runtime_artifact_build_jobs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RuntimeArtifactBuildJobResponse"
+                  },
+                  "title": "Response List Runtime Artifact Build Jobs Api V1 Models  Model Id  Runtime Artifact Build Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runtime Artifact Build Jobs",
+        "tags": [
+          "runtime-artifacts"
+        ]
+      },
+      "post": {
+        "operationId": "create_runtime_artifact_build_job_api_v1_models__model_id__runtime_artifact_build_jobs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeArtifactBuildJobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeArtifactBuildJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Runtime Artifact Build Job",
+        "tags": [
+          "runtime-artifacts"
         ]
       }
     },

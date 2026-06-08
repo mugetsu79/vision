@@ -580,6 +580,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/deployment/nodes/{node_id}/edge-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Node Edge Configuration */
+        get: operations["get_node_edge_configuration_api_v1_deployment_nodes__node_id__edge_configuration_get"];
+        /** Update Node Edge Configuration */
+        put: operations["update_node_edge_configuration_api_v1_deployment_nodes__node_id__edge_configuration_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/model-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Node Model Assignments */
+        get: operations["list_node_model_assignments_api_v1_deployment_nodes__node_id__model_assignments_get"];
+        put?: never;
+        /** Assign Model To Node */
+        post: operations["assign_model_to_node_api_v1_deployment_nodes__node_id__model_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/model-assignments/{assignment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Model Assignment */
+        delete: operations["remove_model_assignment_api_v1_deployment_nodes__node_id__model_assignments__assignment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/model-inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Node Model Inventory */
+        get: operations["list_node_model_inventory_api_v1_deployment_nodes__node_id__model_inventory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/nodes/{node_id}/model-sync-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Model Sync Job */
+        post: operations["create_model_sync_job_api_v1_deployment_nodes__node_id__model_sync_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/deployment/nodes/{node_id}/support-bundle": {
         parameters: {
             query?: never;
@@ -642,6 +729,108 @@ export interface paths {
         put?: never;
         /** Claim Pairing Session */
         post: operations["claim_pairing_session_api_v1_deployment_pairing_sessions__session_id__claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/supervisors/{supervisor_id}/edge-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Supervisor Edge Configuration */
+        get: operations["get_supervisor_edge_configuration_api_v1_deployment_supervisors__supervisor_id__edge_configuration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/supervisors/{supervisor_id}/edge-configuration/apply-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Supervisor Edge Configuration Apply Report */
+        post: operations["record_supervisor_edge_configuration_apply_report_api_v1_deployment_supervisors__supervisor_id__edge_configuration_apply_report_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Supervisor Model Inventory */
+        post: operations["record_supervisor_model_inventory_api_v1_deployment_supervisors__supervisor_id__model_inventory_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-jobs/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll Supervisor Model Jobs */
+        post: operations["poll_supervisor_model_jobs_api_v1_deployment_supervisors__supervisor_id__model_jobs_poll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-jobs/{job_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Supervisor Model Job */
+        post: operations["complete_supervisor_model_job_api_v1_deployment_supervisors__supervisor_id__model_jobs__job_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/deployment/supervisors/{supervisor_id}/model-jobs/{job_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Supervisor Model Job Event */
+        post: operations["record_supervisor_model_job_event_api_v1_deployment_supervisors__supervisor_id__model_jobs__job_id__events_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1889,6 +2078,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/model-assets/{asset_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Model Asset */
+        get: operations["download_model_asset_api_v1_model_assets__asset_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/model-catalog": {
         parameters: {
             query?: never;
@@ -1898,6 +2104,57 @@ export interface paths {
         };
         /** List Model Catalog */
         get: operations["list_model_catalog_api_v1_model_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/model-catalog/{catalog_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download Model Catalog Entry */
+        post: operations["download_model_catalog_entry_api_v1_model_catalog__catalog_id__download_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/model-catalog/{catalog_id}/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register Model Catalog Entry */
+        post: operations["register_model_catalog_entry_api_v1_model_catalog__catalog_id__register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/model-import-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Model Import Jobs */
+        get: operations["list_model_import_jobs_api_v1_model_import_jobs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1924,6 +2181,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/models/import-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Model Url */
+        post: operations["import_model_url_api_v1_models_import_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/models/{model_id}": {
         parameters: {
             query?: never;
@@ -1939,6 +2213,24 @@ export interface paths {
         head?: never;
         /** Update Model */
         patch: operations["update_model_api_v1_models__model_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/models/{model_id}/runtime-artifact-build-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runtime Artifact Build Jobs */
+        get: operations["list_runtime_artifact_build_jobs_api_v1_models__model_id__runtime_artifact_build_jobs_get"];
+        put?: never;
+        /** Create Runtime Artifact Build Job */
+        post: operations["create_runtime_artifact_build_job_api_v1_models__model_id__runtime_artifact_build_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/models/{model_id}/runtime-artifacts": {
@@ -3162,6 +3454,147 @@ export interface components {
          * @enum {string}
          */
         DeploymentInstallStatus: "not_installed" | "pairing_pending" | "installed" | "healthy" | "degraded" | "offline" | "revoked";
+        /** DeploymentModelAssignmentCreate */
+        DeploymentModelAssignmentCreate: {
+            /** Desired Path */
+            desired_path?: string | null;
+            /**
+             * Model Id
+             * Format: uuid
+             */
+            model_id: string;
+        };
+        /** DeploymentModelAssignmentResponse */
+        DeploymentModelAssignmentResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deployment Node Id
+             * Format: uuid
+             */
+            deployment_node_id: string;
+            /** Desired Path */
+            desired_path?: string | null;
+            /** Error */
+            error?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Sync Job Id */
+            last_sync_job_id?: string | null;
+            /**
+             * Model Id
+             * Format: uuid
+             */
+            model_id: string;
+            status: components["schemas"]["DeploymentModelAssignmentStatus"];
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * DeploymentModelAssignmentStatus
+         * @enum {string}
+         */
+        DeploymentModelAssignmentStatus: "desired" | "syncing" | "synced" | "failed" | "removed";
+        /** DeploymentModelInventoryItem */
+        DeploymentModelInventoryItem: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Asset Kind
+             * @enum {string}
+             */
+            asset_kind: "model" | "runtime_artifact";
+            /** Local Path */
+            local_path: string;
+            /**
+             * Reported At
+             * Format: date-time
+             */
+            reported_at: string;
+            /** Runtime Versions */
+            runtime_versions?: {
+                [key: string]: unknown;
+            };
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Target Profile */
+            target_profile?: string | null;
+        };
+        /** DeploymentModelInventoryReport */
+        DeploymentModelInventoryReport: {
+            /** Items */
+            items?: components["schemas"]["DeploymentModelInventoryItem"][];
+        };
+        /** DeploymentModelSyncJobResponse */
+        DeploymentModelSyncJobResponse: {
+            /**
+             * Assignment Id
+             * Format: uuid
+             */
+            assignment_id: string;
+            /** Claimed At */
+            claimed_at?: string | null;
+            /** Claimed By Supervisor Id */
+            claimed_by_supervisor_id?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deployment Node Id
+             * Format: uuid
+             */
+            deployment_node_id: string;
+            /** Error */
+            error?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Model Id
+             * Format: uuid
+             */
+            model_id: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            status: components["schemas"]["ModelLifecycleJobStatus"];
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * DeploymentNodeKind
          * @enum {string}
@@ -3288,6 +3721,67 @@ export interface components {
          * @enum {string}
          */
         DetectorCapability: "fixed_vocab" | "open_vocab";
+        /** EdgeConfigurationApplyReport */
+        EdgeConfigurationApplyReport: {
+            /** Error */
+            error?: string | null;
+            /** Revision */
+            revision: number;
+            status: components["schemas"]["EdgeConfigurationApplyStatus"];
+        };
+        /**
+         * EdgeConfigurationApplyStatus
+         * @enum {string}
+         */
+        EdgeConfigurationApplyStatus: "pending" | "applied" | "failed";
+        /** EdgeConfigurationResponse */
+        EdgeConfigurationResponse: {
+            /** Applied Revision */
+            applied_revision?: number | null;
+            apply_status: components["schemas"]["EdgeConfigurationApplyStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deployment Node Id
+             * Format: uuid
+             */
+            deployment_node_id: string;
+            /** Desired Config */
+            desired_config: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Applied At */
+            last_applied_at?: string | null;
+            /** Revision */
+            revision: number;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** EdgeConfigurationUpdate */
+        EdgeConfigurationUpdate: {
+            /** Desired Config */
+            desired_config?: {
+                [key: string]: unknown;
+            };
+        };
         /** EdgeHeartbeatRequest */
         EdgeHeartbeatRequest: {
             /** Cameras */
@@ -4889,6 +5383,8 @@ export interface components {
             requires_gpu: boolean;
             /** Runtime Backend */
             runtime_backend?: ("onnxruntime" | "ultralytics_yolo_world" | "ultralytics_yoloe" | "tensorrt_engine") | null;
+            /** Source Sha256 */
+            source_sha256?: string | null;
             /** Source Url */
             source_url?: string | null;
             /**
@@ -4975,6 +5471,88 @@ export interface components {
          * @enum {string}
          */
         ModelFormat: "onnx" | "engine" | "pt";
+        /** ModelImportJobResponse */
+        ModelImportJobResponse: {
+            /** Actor Subject */
+            actor_subject: string;
+            /** Catalog Id */
+            catalog_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error */
+            error?: string | null;
+            /** Expected Sha256 */
+            expected_sha256?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model Id */
+            model_id?: string | null;
+            /** Observed Sha256 */
+            observed_sha256?: string | null;
+            /** Progress */
+            progress?: {
+                [key: string]: unknown;
+            };
+            /** Size Bytes */
+            size_bytes?: number | null;
+            source: components["schemas"]["ModelImportSource"];
+            /** Source Uri */
+            source_uri?: string | null;
+            status: components["schemas"]["ModelLifecycleJobStatus"];
+            /** Target Path */
+            target_path: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ModelImportRequest */
+        ModelImportRequest: {
+            /** @default fixed_vocab */
+            capability: components["schemas"]["DetectorCapability"];
+            capability_config?: components["schemas"]["ModelCapabilityConfig"];
+            /** Classes */
+            classes?: string[];
+            /** Expected Sha256 */
+            expected_sha256?: string | null;
+            format: components["schemas"]["ModelFormat"];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            /** License */
+            license?: string | null;
+            /** Name */
+            name: string;
+            source: components["schemas"]["ModelImportSource"];
+            /** Source Uri */
+            source_uri?: string | null;
+            task: components["schemas"]["ModelTask"];
+            /** Version */
+            version: string;
+        };
+        /**
+         * ModelImportSource
+         * @enum {string}
+         */
+        ModelImportSource: "catalog" | "url" | "master_path" | "upload";
+        /**
+         * ModelLifecycleJobStatus
+         * @enum {string}
+         */
+        ModelLifecycleJobStatus: "queued" | "accepted" | "running" | "succeeded" | "failed" | "cancelled";
         /** ModelResponse */
         ModelResponse: {
             /** @default fixed_vocab */
@@ -6017,6 +6595,89 @@ export interface components {
          * @enum {string}
          */
         RuleAction: "count" | "alert" | "record_clip" | "webhook";
+        /**
+         * RuntimeArtifactBuildFormat
+         * @enum {string}
+         */
+        RuntimeArtifactBuildFormat: "onnx_export" | "tensorrt_engine";
+        /** RuntimeArtifactBuildJobCreate */
+        RuntimeArtifactBuildJobCreate: {
+            build_format: components["schemas"]["RuntimeArtifactBuildFormat"];
+            /** Builder Options */
+            builder_options?: {
+                [key: string]: unknown;
+            };
+            /** Camera Id */
+            camera_id?: string | null;
+            /**
+             * Deployment Node Id
+             * Format: uuid
+             */
+            deployment_node_id: string;
+            /** Export Formats */
+            export_formats?: components["schemas"]["RuntimeArtifactBuildFormat"][];
+            /** Input Shape */
+            input_shape: {
+                [key: string]: number;
+            };
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
+            /** Target Profile */
+            target_profile: string;
+        };
+        /** RuntimeArtifactBuildJobResponse */
+        RuntimeArtifactBuildJobResponse: {
+            /** Artifact Id */
+            artifact_id?: string | null;
+            build_format: components["schemas"]["RuntimeArtifactBuildFormat"];
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Claimed At */
+            claimed_at?: string | null;
+            /** Claimed By Supervisor Id */
+            claimed_by_supervisor_id?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deployment Node Id
+             * Format: uuid
+             */
+            deployment_node_id: string;
+            /** Error */
+            error?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Model Id
+             * Format: uuid
+             */
+            model_id: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            precision: components["schemas"]["RuntimeArtifactPrecision"];
+            status: components["schemas"]["ModelLifecycleJobStatus"];
+            /** Target Profile */
+            target_profile: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** RuntimeArtifactCreate */
         RuntimeArtifactCreate: {
             /** Build Duration Seconds */
@@ -6568,6 +7229,54 @@ export interface components {
          * @enum {string}
          */
         SupervisorMode: "disabled" | "polling" | "push";
+        /** SupervisorModelJobComplete */
+        SupervisorModelJobComplete: {
+            /** Error */
+            error?: string | null;
+            /** Local Path */
+            local_path?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            status: components["schemas"]["ModelLifecycleJobStatus"];
+        };
+        /** SupervisorModelJobEventCreate */
+        SupervisorModelJobEventCreate: {
+            /**
+             * Job Kind
+             * @enum {string}
+             */
+            job_kind: "model_sync" | "artifact_build";
+            /** Message */
+            message?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            status: components["schemas"]["ModelLifecycleJobStatus"];
+        };
+        /** SupervisorModelJobPollRequest */
+        SupervisorModelJobPollRequest: {
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+        };
+        /** SupervisorModelJobPollResponse */
+        SupervisorModelJobPollResponse: {
+            /** Jobs */
+            jobs?: components["schemas"]["DeploymentModelSyncJobResponse"][];
+            /** Supervisor Id */
+            supervisor_id: string;
+        };
         /** SupervisorPollRequest */
         SupervisorPollRequest: {
             /** Edge Node Id */
@@ -7198,6 +7907,8 @@ export interface components {
             privacy?: components["schemas"]["WorkerPrivacySettings"];
             /** Privacy Manifest Hash */
             privacy_manifest_hash?: string | null;
+            /** Privacy Manifest Snapshot Id */
+            privacy_manifest_snapshot_id?: string | null;
             privacy_policy?: components["schemas"]["WorkerPrivacyPolicySettings"] | null;
             publish?: components["schemas"]["WorkerPublishSettings"];
             recording_policy?: components["schemas"]["EvidenceRecordingPolicy"];
@@ -7212,6 +7923,8 @@ export interface components {
             runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
             /** Scene Contract Hash */
             scene_contract_hash?: string | null;
+            /** Scene Contract Snapshot Id */
+            scene_contract_snapshot_id?: string | null;
             secondary_model?: components["schemas"]["WorkerModelSettings"] | null;
             stream?: components["schemas"]["WorkerStreamSettings"];
             stream_delivery?: components["schemas"]["WorkerStreamDeliverySettings"] | null;
@@ -9269,6 +9982,246 @@ export interface operations {
             };
         };
     };
+    get_node_edge_configuration_api_v1_deployment_nodes__node_id__edge_configuration_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_node_edge_configuration_api_v1_deployment_nodes__node_id__edge_configuration_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeConfigurationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_node_model_assignments_api_v1_deployment_nodes__node_id__model_assignments_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelAssignmentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_model_to_node_api_v1_deployment_nodes__node_id__model_assignments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentModelAssignmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_model_assignment_api_v1_deployment_nodes__node_id__model_assignments__assignment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_node_model_inventory_api_v1_deployment_nodes__node_id__model_inventory_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelInventoryReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_model_sync_job_api_v1_deployment_nodes__node_id__model_sync_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelSyncJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_node_support_bundle_api_v1_deployment_nodes__node_id__support_bundle_get: {
         parameters: {
             query?: never;
@@ -9392,6 +10345,226 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NodePairingClaimResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_supervisor_edge_configuration_api_v1_deployment_supervisors__supervisor_id__edge_configuration_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_supervisor_edge_configuration_apply_report_api_v1_deployment_supervisors__supervisor_id__edge_configuration_apply_report_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeConfigurationApplyReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_supervisor_model_inventory_api_v1_deployment_supervisors__supervisor_id__model_inventory_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentModelInventoryReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelInventoryReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    poll_supervisor_model_jobs_api_v1_deployment_supervisors__supervisor_id__model_jobs_poll_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorModelJobPollRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupervisorModelJobPollResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_supervisor_model_job_api_v1_deployment_supervisors__supervisor_id__model_jobs__job_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string | null;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorModelJobComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelSyncJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_supervisor_model_job_event_api_v1_deployment_supervisors__supervisor_id__model_jobs__job_id__events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                supervisor_id: string | null;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupervisorModelJobEventCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentModelSyncJobResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12510,6 +13683,41 @@ export interface operations {
             };
         };
     };
+    download_model_asset_api_v1_model_assets__asset_id__download_get: {
+        parameters: {
+            query?: {
+                supervisor_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_model_catalog_api_v1_model_catalog_get: {
         parameters: {
             query?: never;
@@ -12526,6 +13734,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelCatalogEntryResponse"][];
+                };
+            };
+        };
+    };
+    download_model_catalog_entry_api_v1_model_catalog__catalog_id__download_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                catalog_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelImportJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_model_catalog_entry_api_v1_model_catalog__catalog_id__register_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                catalog_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelImportJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_model_import_jobs_api_v1_model_import_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelImportJobResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -12583,6 +13888,41 @@ export interface operations {
             };
         };
     };
+    import_model_url_api_v1_models_import_url_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelImportJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_model_api_v1_models__model_id__patch: {
         parameters: {
             query?: never;
@@ -12605,6 +13945,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runtime_artifact_build_jobs_api_v1_models__model_id__runtime_artifact_build_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactBuildJobResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_runtime_artifact_build_job_api_v1_models__model_id__runtime_artifact_build_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeArtifactBuildJobCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeArtifactBuildJobResponse"];
                 };
             };
             /** @description Validation Error */

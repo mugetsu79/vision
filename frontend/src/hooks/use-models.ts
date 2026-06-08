@@ -7,6 +7,13 @@ import { useAuthStore } from "@/stores/auth-store";
 export type Model = components["schemas"]["ModelResponse"];
 export type RuntimeArtifact = components["schemas"]["RuntimeArtifactResponse"];
 
+export {
+  useCreateRuntimeArtifactBuildJob,
+  useImportModelFromUrl,
+  useModelImportJobs,
+  useRuntimeArtifactBuildJobs,
+} from "@/hooks/use-model-lifecycle";
+
 export function useModels() {
   const accessToken = useAuthStore((state) => state.accessToken);
 

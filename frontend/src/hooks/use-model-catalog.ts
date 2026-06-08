@@ -6,6 +6,11 @@ import { useAuthStore } from "@/stores/auth-store";
 
 export type ModelCatalogEntry = components["schemas"]["ModelCatalogEntryResponse"];
 
+export {
+  useDownloadCatalogModel,
+  useRegisterCatalogModel,
+} from "@/hooks/use-model-lifecycle";
+
 export function useModelCatalog() {
   const accessToken = useAuthStore((state) => state.accessToken);
 
