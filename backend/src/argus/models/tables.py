@@ -11,6 +11,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -1044,6 +1045,11 @@ class ModelImportJob(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
 class DeploymentModelAssignment(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "deployment_model_assignments"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["last_sync_job_id"],
+            ["deployment_model_sync_jobs.id"],
+            name="fk_deployment_model_assignments_last_sync_job",
+        ),
         UniqueConstraint("deployment_node_id", "model_id", name="uq_deployment_model_assignment"),
         Index("ix_deployment_model_assignment_node", "deployment_node_id"),
     )

@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0042_central_model_edge_lifecycle"
+revision: str = "0042_model_edge_lifecycle"
 down_revision: str | Sequence[str] | None = "0041_core_link_reflector"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -227,6 +227,13 @@ def upgrade() -> None:
         "deployment_model_sync_jobs",
         ["assignment_id"],
     )
+    op.create_foreign_key(
+        "fk_deployment_model_assignments_last_sync_job",
+        "deployment_model_assignments",
+        "deployment_model_sync_jobs",
+        ["last_sync_job_id"],
+        ["id"],
+    )
 
     op.create_table(
         "deployment_model_inventory",
@@ -419,6 +426,12 @@ def downgrade() -> None:
         table_name="deployment_model_inventory",
     )
     op.drop_table("deployment_model_inventory")
+
+    op.drop_constraint(
+        "fk_deployment_model_assignments_last_sync_job",
+        "deployment_model_assignments",
+        type_="foreignkey",
+    )
 
     op.drop_index(
         "ix_deployment_model_sync_jobs_assignment",
