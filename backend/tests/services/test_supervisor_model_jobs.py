@@ -117,6 +117,42 @@ async def test_poll_model_jobs_returns_only_jobs_for_authenticated_node() -> Non
 
 
 @pytest.mark.asyncio
+async def test_poll_model_jobs_keeps_accepted_jobs_visible_after_claim() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+    job = await service.create_model_sync_job(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        actor_subject="admin@example.test",
+    )
+
+    first_poll = await service.poll_supervisor_model_jobs(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        limit=10,
+    )
+    second_poll = await service.poll_supervisor_model_jobs(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        limit=10,
+    )
+
+    assert [polled_job.id for polled_job in first_poll] == [job.id]
+    assert first_poll[0].status is ModelLifecycleJobStatus.ACCEPTED
+    assert [polled_job.id for polled_job in second_poll] == [job.id]
+    assert second_poll[0].status is ModelLifecycleJobStatus.ACCEPTED
+
+
+@pytest.mark.asyncio
 async def test_job_event_updates_status_and_records_event() -> None:
     tenant, model, node = _tenant_model_and_node()
     session_factory = _MemorySessionFactory([tenant, model, node])
@@ -198,6 +234,44 @@ async def test_complete_model_sync_job_marks_assignment_synced() -> None:
     assert job_row.completed_at is not None
     assert assignment_row.status is DeploymentModelAssignmentStatus.SYNCED
     assert assignment_row.error is None
+
+
+@pytest.mark.asyncio
+async def test_complete_model_sync_job_with_wrong_path_does_not_sync_assignment() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    assignment = await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(
+            model_id=model.id,
+            desired_path="/var/lib/vezor/models/yolo26n.onnx",
+        ),
+        actor_subject="admin@example.test",
+    )
+    job = await service.create_model_sync_job(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        actor_subject="admin@example.test",
+    )
+
+    completed = await service.complete_supervisor_model_job(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        job_id=job.id,
+        payload=SupervisorModelJobComplete(
+            status=ModelLifecycleJobStatus.SUCCEEDED,
+            local_path="/tmp/yolo26n.onnx",
+            sha256=model.sha256,
+            size_bytes=model.size_bytes,
+        ),
+    )
+
+    assignment_row = _row(session_factory, DeploymentModelAssignment, assignment.id)
+    assert completed.status is ModelLifecycleJobStatus.SUCCEEDED
+    assert assignment_row.status is DeploymentModelAssignmentStatus.SYNCING
 
 
 def _tenant_model_and_node(

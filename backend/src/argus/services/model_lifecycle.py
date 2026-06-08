@@ -433,6 +433,7 @@ class ModelLifecycleService:
                     DeploymentModelSyncJob.status.in_(
                         [
                             ModelLifecycleJobStatus.QUEUED,
+                            ModelLifecycleJobStatus.ACCEPTED,
                             ModelLifecycleJobStatus.RUNNING,
                         ]
                     )
@@ -1013,12 +1014,27 @@ def _completion_matches_sync_job(
     payload: SupervisorModelJobComplete,
 ) -> bool:
     expected_sha256 = job.payload.get("expected_sha256") if job.payload else None
+    expected_path = job.payload.get("target_path") if job.payload else None
     reported_sha256 = payload.sha256
     if reported_sha256 is None:
         payload_sha256 = payload.payload.get("sha256")
         if isinstance(payload_sha256, str):
             reported_sha256 = payload_sha256
-    return isinstance(expected_sha256, str) and reported_sha256 == expected_sha256
+
+    reported_path = payload.local_path or payload.path
+    if reported_path is None:
+        for key in ("local_path", "path"):
+            payload_path = payload.payload.get(key)
+            if isinstance(payload_path, str):
+                reported_path = payload_path
+                break
+
+    return (
+        isinstance(expected_sha256, str)
+        and reported_sha256 == expected_sha256
+        and isinstance(expected_path, str)
+        and reported_path == expected_path
+    )
 
 
 async def _load_deployment_node(

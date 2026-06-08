@@ -246,6 +246,7 @@ class SupervisorModelJobComplete(BaseModel):
     status: ModelLifecycleJobStatus
     error: str | None = None
     local_path: str | None = Field(default=None, min_length=1)
+    path: str | None = Field(default=None, min_length=1)
     sha256: str | None = Field(default=None, min_length=64, max_length=64)
     size_bytes: int | None = Field(default=None, gt=0)
     payload: dict[str, Any] = Field(default_factory=dict)
