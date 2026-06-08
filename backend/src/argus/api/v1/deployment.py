@@ -6,6 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from argus.api.contracts import (
+    DeploymentModelAssignmentCreate,
+    DeploymentModelAssignmentResponse,
+    DeploymentModelInventoryReport,
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
     MasterBootstrapComplete,
@@ -198,6 +201,89 @@ async def get_node_support_bundle(
         raise _deployment_http_error(exc) from exc
 
 
+@router.get(
+    "/nodes/{node_id}/model-assignments",
+    response_model=list[DeploymentModelAssignmentResponse],
+)
+async def list_node_model_assignments(
+    node_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> list[DeploymentModelAssignmentResponse]:
+    try:
+        return await services.model_lifecycle.list_model_assignments(
+            tenant_id=tenant_context.tenant_id,
+            deployment_node_id=node_id,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.post(
+    "/nodes/{node_id}/model-assignments",
+    response_model=DeploymentModelAssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def assign_model_to_node(
+    node_id: UUID,
+    payload: DeploymentModelAssignmentCreate,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> DeploymentModelAssignmentResponse:
+    try:
+        return await services.model_lifecycle.assign_model_to_node(
+            tenant_id=tenant_context.tenant_id,
+            deployment_node_id=node_id,
+            payload=payload,
+            actor_subject=current_user.subject,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.delete(
+    "/nodes/{node_id}/model-assignments/{assignment_id}",
+    response_model=DeploymentModelAssignmentResponse,
+)
+async def remove_model_assignment(
+    node_id: UUID,
+    assignment_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> DeploymentModelAssignmentResponse:
+    try:
+        return await services.model_lifecycle.remove_model_assignment(
+            tenant_id=tenant_context.tenant_id,
+            deployment_node_id=node_id,
+            assignment_id=assignment_id,
+            actor_subject=current_user.subject,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.get(
+    "/nodes/{node_id}/model-inventory",
+    response_model=DeploymentModelInventoryReport,
+)
+async def list_node_model_inventory(
+    node_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> DeploymentModelInventoryReport:
+    try:
+        return await services.model_lifecycle.list_model_inventory(
+            tenant_id=tenant_context.tenant_id,
+            deployment_node_id=node_id,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
 @router.post(
     "/supervisors/{supervisor_id}/service-reports",
     response_model=SupervisorServiceReportResponse,
@@ -216,6 +302,33 @@ async def record_supervisor_service_report(
             payload=payload,
             authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
         )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.post(
+    "/supervisors/{supervisor_id}/model-inventory",
+    response_model=DeploymentModelInventoryReport,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_supervisor_model_inventory(
+    supervisor_id: str,
+    payload: DeploymentModelInventoryReport,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> DeploymentModelInventoryReport:
+    try:
+        return await services.model_lifecycle.record_model_inventory(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
+            payload=payload,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise _deployment_http_error(exc) from exc
 

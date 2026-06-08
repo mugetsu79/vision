@@ -11,15 +11,31 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from argus.api.contracts import ModelCapabilityConfig, ModelImportJobResponse, ModelImportRequest
+from argus.api.contracts import (
+    DeploymentModelAssignmentCreate,
+    DeploymentModelAssignmentResponse,
+    DeploymentModelInventoryItem,
+    DeploymentModelInventoryReport,
+    ModelCapabilityConfig,
+    ModelImportJobResponse,
+    ModelImportRequest,
+)
 from argus.models.enums import (
+    DeploymentModelAssignmentStatus,
+    DeploymentNodeKind,
     DetectorCapability,
     ModelFormat,
     ModelImportSource,
     ModelLifecycleJobStatus,
     ModelTask,
 )
-from argus.models.tables import Model, ModelImportJob
+from argus.models.tables import (
+    DeploymentModelAssignment,
+    DeploymentModelInventory,
+    DeploymentNode,
+    Model,
+    ModelImportJob,
+)
 from argus.services.model_catalog import ModelCatalogEntry, get_model_catalog_entry
 
 
@@ -149,6 +165,191 @@ class ModelLifecycleService:
             )
             jobs = (await session.execute(statement)).scalars().all()
         return [_model_to_import_job_response(job) for job in jobs]
+
+    async def list_model_assignments(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+    ) -> list[DeploymentModelAssignmentResponse]:
+        async with self.session_factory() as session:
+            await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            statement = (
+                select(DeploymentModelAssignment)
+                .where(DeploymentModelAssignment.tenant_id == tenant_id)
+                .where(DeploymentModelAssignment.deployment_node_id == deployment_node_id)
+                .order_by(DeploymentModelAssignment.created_at.asc())
+            )
+            assignments = (await session.execute(statement)).scalars().all()
+        return [
+            _model_to_assignment_response(assignment)
+            for assignment in assignments
+            if isinstance(assignment, DeploymentModelAssignment)
+        ]
+
+    async def assign_model_to_node(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+        payload: DeploymentModelAssignmentCreate,
+        actor_subject: str,
+    ) -> DeploymentModelAssignmentResponse:
+        async with self.session_factory() as session:
+            node = await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            _require_assignable_deployment_node(node)
+            model = await session.get(Model, payload.model_id)
+            if not isinstance(model, Model):
+                raise ValueError("Model not found.")
+
+            existing = await _load_model_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+                model_id=payload.model_id,
+            )
+            if existing is not None:
+                if existing.status is DeploymentModelAssignmentStatus.REMOVED:
+                    existing.status = DeploymentModelAssignmentStatus.DESIRED
+                    existing.desired_path = payload.desired_path
+                    existing.actor_subject = actor_subject
+                    existing.error = None
+                    await session.commit()
+                    await session.refresh(existing)
+                return _model_to_assignment_response(existing)
+
+            assignment = DeploymentModelAssignment(
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+                model_id=payload.model_id,
+                status=DeploymentModelAssignmentStatus.DESIRED,
+                desired_path=payload.desired_path,
+                actor_subject=actor_subject,
+                error=None,
+            )
+            session.add(assignment)
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                existing = await _load_model_assignment(
+                    session=session,
+                    tenant_id=tenant_id,
+                    deployment_node_id=deployment_node_id,
+                    model_id=payload.model_id,
+                )
+                if existing is None:
+                    raise
+                return _model_to_assignment_response(existing)
+            await session.refresh(assignment)
+        return _model_to_assignment_response(assignment)
+
+    async def remove_model_assignment(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+        assignment_id: UUID,
+        actor_subject: str,
+    ) -> DeploymentModelAssignmentResponse:
+        async with self.session_factory() as session:
+            await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            assignment = await _load_assignment_by_id(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+                assignment_id=assignment_id,
+            )
+            if assignment is None:
+                raise ValueError("Deployment model assignment not found.")
+            assignment.status = DeploymentModelAssignmentStatus.REMOVED
+            assignment.actor_subject = actor_subject
+            assignment.error = None
+            await session.commit()
+            await session.refresh(assignment)
+        return _model_to_assignment_response(assignment)
+
+    async def list_model_inventory(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+    ) -> DeploymentModelInventoryReport:
+        async with self.session_factory() as session:
+            await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            inventory_rows = await _load_inventory_rows(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+        return DeploymentModelInventoryReport(
+            items=[
+                _model_to_inventory_item(row)
+                for row in inventory_rows
+                if isinstance(row, DeploymentModelInventory)
+            ]
+        )
+
+    async def record_model_inventory(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+        payload: DeploymentModelInventoryReport,
+    ) -> DeploymentModelInventoryReport:
+        async with self.session_factory() as session:
+            node = await _load_deployment_node_by_supervisor(
+                session=session,
+                tenant_id=tenant_id,
+                supervisor_id=supervisor_id,
+            )
+            if node is None:
+                raise ValueError("Deployment node not found.")
+            if authenticated_node_id is not None and authenticated_node_id != node.id:
+                raise PermissionError(
+                    "Supervisor credential cannot report inventory for another deployment node."
+                )
+
+            inventory_rows: list[DeploymentModelInventory] = []
+            for item in payload.items:
+                inventory_rows.append(
+                    await _upsert_inventory_item(
+                        session=session,
+                        tenant_id=tenant_id,
+                        deployment_node_id=node.id,
+                        item=item,
+                    )
+                )
+
+            await _mark_synced_assignments(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=node.id,
+                items=payload.items,
+            )
+            await session.commit()
+            for row in inventory_rows:
+                await session.refresh(row)
+        return DeploymentModelInventoryReport(
+            items=[_model_to_inventory_item(row) for row in inventory_rows]
+        )
 
     async def _queue_url_import(
         self,
@@ -461,6 +662,190 @@ def _model_to_import_job_response(job: ModelImportJob) -> ModelImportJobResponse
         error=job.error,
         created_at=job.created_at,
         updated_at=job.updated_at,
+    )
+
+
+async def _load_deployment_node(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+) -> DeploymentNode:
+    node = await session.get(DeploymentNode, deployment_node_id)
+    if not isinstance(node, DeploymentNode) or node.tenant_id != tenant_id:
+        raise ValueError("Deployment node not found.")
+    return node
+
+
+async def _load_deployment_node_by_supervisor(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    supervisor_id: str,
+) -> DeploymentNode | None:
+    statement = (
+        select(DeploymentNode)
+        .where(DeploymentNode.tenant_id == tenant_id)
+        .where(DeploymentNode.supervisor_id == supervisor_id)
+    )
+    row = (await session.execute(statement)).scalars().first()
+    return row if isinstance(row, DeploymentNode) else None
+
+
+def _require_assignable_deployment_node(node: DeploymentNode) -> None:
+    if node.node_kind not in {DeploymentNodeKind.CENTRAL, DeploymentNodeKind.EDGE}:
+        raise ValueError("Deployment node must be a central or edge node.")
+    if node.node_kind is DeploymentNodeKind.CENTRAL and node.edge_node_id is not None:
+        raise ValueError("Central deployment node must not reference an edge node.")
+    if node.node_kind is DeploymentNodeKind.EDGE and node.edge_node_id is None:
+        raise ValueError("Edge deployment node must reference an edge node.")
+
+
+async def _load_model_assignment(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    model_id: UUID,
+) -> DeploymentModelAssignment | None:
+    statement = (
+        select(DeploymentModelAssignment)
+        .where(DeploymentModelAssignment.tenant_id == tenant_id)
+        .where(DeploymentModelAssignment.deployment_node_id == deployment_node_id)
+        .where(DeploymentModelAssignment.model_id == model_id)
+    )
+    row = (await session.execute(statement)).scalars().first()
+    return row if isinstance(row, DeploymentModelAssignment) else None
+
+
+async def _load_assignment_by_id(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    assignment_id: UUID,
+) -> DeploymentModelAssignment | None:
+    statement = (
+        select(DeploymentModelAssignment)
+        .where(DeploymentModelAssignment.tenant_id == tenant_id)
+        .where(DeploymentModelAssignment.deployment_node_id == deployment_node_id)
+        .where(DeploymentModelAssignment.id == assignment_id)
+    )
+    row = (await session.execute(statement)).scalars().first()
+    return row if isinstance(row, DeploymentModelAssignment) else None
+
+
+async def _load_inventory_rows(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+) -> list[DeploymentModelInventory]:
+    statement = (
+        select(DeploymentModelInventory)
+        .where(DeploymentModelInventory.tenant_id == tenant_id)
+        .where(DeploymentModelInventory.deployment_node_id == deployment_node_id)
+        .order_by(
+            DeploymentModelInventory.asset_kind.asc(),
+            DeploymentModelInventory.reported_at.desc(),
+        )
+    )
+    rows = (await session.execute(statement)).scalars().all()
+    return [row for row in rows if isinstance(row, DeploymentModelInventory)]
+
+
+async def _upsert_inventory_item(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    item: DeploymentModelInventoryItem,
+) -> DeploymentModelInventory:
+    statement = (
+        select(DeploymentModelInventory)
+        .where(DeploymentModelInventory.tenant_id == tenant_id)
+        .where(DeploymentModelInventory.deployment_node_id == deployment_node_id)
+        .where(DeploymentModelInventory.asset_kind == item.asset_kind)
+        .where(DeploymentModelInventory.asset_id == item.asset_id)
+        .where(DeploymentModelInventory.sha256 == item.sha256)
+    )
+    existing = (await session.execute(statement)).scalars().first()
+    if isinstance(existing, DeploymentModelInventory):
+        existing.local_path = item.local_path
+        existing.size_bytes = item.size_bytes
+        existing.target_profile = item.target_profile
+        existing.runtime_versions = dict(item.runtime_versions)
+        existing.reported_at = item.reported_at
+        return existing
+
+    inventory = DeploymentModelInventory(
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+        asset_kind=item.asset_kind,
+        asset_id=item.asset_id,
+        local_path=item.local_path,
+        sha256=item.sha256,
+        size_bytes=item.size_bytes,
+        target_profile=item.target_profile,
+        runtime_versions=dict(item.runtime_versions),
+        reported_at=item.reported_at,
+    )
+    session.add(inventory)
+    return inventory
+
+
+async def _mark_synced_assignments(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    items: list[DeploymentModelInventoryItem],
+) -> None:
+    for item in items:
+        if item.asset_kind != "model":
+            continue
+        model = await session.get(Model, item.asset_id)
+        if not isinstance(model, Model) or model.sha256 != item.sha256:
+            continue
+        assignment = await _load_model_assignment(
+            session=session,
+            tenant_id=tenant_id,
+            deployment_node_id=deployment_node_id,
+            model_id=item.asset_id,
+        )
+        if assignment is None or assignment.status is DeploymentModelAssignmentStatus.REMOVED:
+            continue
+        assignment.status = DeploymentModelAssignmentStatus.SYNCED
+        assignment.error = None
+
+
+def _model_to_assignment_response(
+    assignment: DeploymentModelAssignment,
+) -> DeploymentModelAssignmentResponse:
+    return DeploymentModelAssignmentResponse(
+        id=assignment.id,
+        tenant_id=assignment.tenant_id,
+        deployment_node_id=assignment.deployment_node_id,
+        model_id=assignment.model_id,
+        status=assignment.status,
+        desired_path=assignment.desired_path,
+        last_sync_job_id=assignment.last_sync_job_id,
+        error=assignment.error,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+    )
+
+
+def _model_to_inventory_item(row: DeploymentModelInventory) -> DeploymentModelInventoryItem:
+    return DeploymentModelInventoryItem(
+        asset_kind=row.asset_kind,  # type: ignore[arg-type]
+        asset_id=row.asset_id,
+        local_path=row.local_path,
+        sha256=row.sha256,
+        size_bytes=row.size_bytes,
+        target_profile=row.target_profile,
+        runtime_versions=dict(row.runtime_versions or {}),
+        reported_at=row.reported_at,
     )
 
 
