@@ -119,6 +119,13 @@ def list_model_catalog_entries() -> list[ModelCatalogEntry]:
     ]
 
 
+def get_model_catalog_entry(catalog_id: str) -> ModelCatalogEntry | None:
+    for entry in list_model_catalog_entries():
+        if entry.id == catalog_id:
+            return entry
+    return None
+
+
 def resolve_catalog_status(models: list[Model]) -> list[ModelCatalogEntryResponse]:
     registered_by_catalog_id = {
         str((model.capability_config or {}).get("catalog_id")): model

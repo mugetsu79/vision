@@ -217,6 +217,7 @@ from argus.services.incident_rules import IncidentRuleService
 from argus.services.local_first_sync import LocalFirstEvidenceSyncService
 from argus.services.model_admission import evaluate_worker_model_admission
 from argus.services.model_catalog import resolve_catalog_status
+from argus.services.model_lifecycle import ModelLifecycleService
 from argus.services.operational_memory import OperationalMemoryService
 from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.pack_registry import PackRegistry
@@ -329,6 +330,7 @@ class AppServices:
     sites: SiteService
     cameras: CameraService
     models: ModelService
+    model_lifecycle: ModelLifecycleService
     packs: PackRegistry
     runtime_artifacts: RuntimeArtifactService
     runtime_soak: RuntimeSoakService
@@ -4627,6 +4629,7 @@ def build_app_services(
         sites=SiteService(db.session_factory, audit_logger),
         cameras=camera_service,
         models=ModelService(db.session_factory, audit_logger),
+        model_lifecycle=ModelLifecycleService(db.session_factory),
         packs=pack_registry,
         runtime_artifacts=RuntimeArtifactService(db.session_factory),
         runtime_soak=RuntimeSoakService(db.session_factory),

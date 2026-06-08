@@ -3,21 +3,29 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from argus.api.contracts import ModelCreate, ModelResponse, ModelUpdate
-from argus.api.dependencies import get_app_services
+from argus.api.contracts import (
+    ModelCreate,
+    ModelImportJobResponse,
+    ModelImportRequest,
+    ModelResponse,
+    ModelUpdate,
+    TenantContext,
+)
+from argus.api.dependencies import get_app_services, get_tenant_context
 from argus.core.security import AuthenticatedUser, require
-from argus.models.enums import RoleEnum
+from argus.models.enums import ModelImportSource, RoleEnum
 from argus.services.app import AppServices
 
-router = APIRouter(prefix="/api/v1/models", tags=["models"])
+router = APIRouter(prefix="/api/v1", tags=["models"])
 ViewerUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.VIEWER))]
 AdminUser = Annotated[AuthenticatedUser, Depends(require(RoleEnum.ADMIN))]
+TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 
 
-@router.get("", response_model=list[ModelResponse])
+@router.get("/models", response_model=list[ModelResponse])
 async def list_models(
     current_user: ViewerUser,
     services: ServicesDependency,
@@ -25,7 +33,7 @@ async def list_models(
     return await services.models.list_models()
 
 
-@router.post("", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/models", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
 async def create_model(
     payload: ModelCreate,
     current_user: AdminUser,
@@ -34,7 +42,39 @@ async def create_model(
     return await services.models.create_model(payload)
 
 
-@router.patch("/{model_id}", response_model=ModelResponse)
+@router.post(
+    "/models/import-url",
+    response_model=ModelImportJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def import_model_url(
+    payload: ModelImportRequest,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> ModelImportJobResponse:
+    if payload.source is not ModelImportSource.URL:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="source must be url for this endpoint.",
+        )
+    return await services.model_lifecycle.import_model_from_request(
+        tenant_id=tenant_context.tenant_id,
+        actor_subject=current_user.subject,
+        payload=payload,
+    )
+
+
+@router.get("/model-import-jobs", response_model=list[ModelImportJobResponse])
+async def list_model_import_jobs(
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> list[ModelImportJobResponse]:
+    return await services.model_lifecycle.list_import_jobs(tenant_context.tenant_id)
+
+
+@router.patch("/models/{model_id}", response_model=ModelResponse)
 async def update_model(
     model_id: UUID,
     payload: ModelUpdate,
