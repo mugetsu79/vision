@@ -150,6 +150,32 @@ async def test_run_udp_sequence_probe_measures_loopback_reflector() -> None:
     assert stats.measurement_metadata["packets_lost"] == 0
 
 
+@pytest.mark.asyncio
+async def test_run_udp_sequence_probe_uses_reply_arrival_time_not_drain_time() -> None:
+    runtime = await start_reflector(
+        bind_host="127.0.0.1",
+        port=0,
+        secret=b"reflector-secret",
+        key_id="master-reflector-test",
+    )
+    assert runtime is not None
+    try:
+        stats = await run_udp_sequence_probe(
+            reflector_host="127.0.0.1",
+            reflector_port=runtime.port,
+            reflector_secret="reflector-secret",
+            reflector_key_id="master-reflector-test",
+            packet_count=4,
+            packet_spacing_ms=30,
+            loss_timeout_ms=250,
+        )
+    finally:
+        stop_reflector(runtime)
+
+    assert stats.packets_received == 4
+    assert stats.measurement_metadata["rtt_max_ms"] < 30
+
+
 def test_build_udp_sequence_edge_sample_payload_includes_sequence_metadata() -> None:
     payload = build_udp_sequence_edge_sample_payload(
         agent_id="macbook-home",

@@ -8,8 +8,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0041_core_link_master_reflector_profiles"
-down_revision: str | Sequence[str] | None = "0040_core_link_master_target_site"
+revision: str = "0041_core_link_reflector"
+down_revision: str | Sequence[str] | None = "0040_core_link_master_target"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

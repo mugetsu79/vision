@@ -18,6 +18,9 @@ central:
       port: 8622
       keyId: master-reflector-default
       rateLimitPps: 100
+      allowedSourceCidrs: ""
+      secretName: ""
+      secretKey: ARGUS_LINK_REFLECTOR_SECRET
     env:
       ARGUS_DB_URL: postgresql+asyncpg://argus:argus@postgresql:5432/argus
       ARGUS_NATS_URL: nats://nats:4222

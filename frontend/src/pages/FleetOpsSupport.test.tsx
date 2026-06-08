@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { FleetOpsSupport } from "@/pages/FleetOpsSupport";
+import { TestMemoryRouter } from "@/test/router";
 
 const supportMocks = vi.hoisted(() => ({
   onboardingCheckSiteIds: [] as Array<string | null | undefined>,
@@ -108,7 +108,7 @@ vi.mock("@/hooks/use-maritime", () => ({
 }));
 
 function renderWithProviders(ui: ReactElement) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(<TestMemoryRouter>{ui}</TestMemoryRouter>);
 }
 
 describe("FleetOpsSupport", () => {
@@ -131,7 +131,7 @@ describe("FleetOpsSupport", () => {
       screen.getByLabelText(/search fleetops vessel scope/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/choose a vessel or site to review support/i),
+      screen.getByText(/choose a vessel to review support/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Support readiness/i)).not.toBeInTheDocument();
     expect(

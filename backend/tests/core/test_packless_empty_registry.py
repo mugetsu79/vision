@@ -67,9 +67,19 @@ class _FakeSiteService:
                 description=None,
                 tz="UTC",
                 geo_point=None,
+                site_kind="edge",
                 created_at=datetime.now(tz=UTC),
             )
         ]
+
+    async def list_edge_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        return await self.list_sites(tenant_context)
+
+    async def list_link_performance_sites(
+        self,
+        tenant_context: TenantContext,
+    ) -> list[SiteResponse]:
+        return await self.list_sites(tenant_context)
 
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         return SiteResponse(
@@ -79,8 +89,13 @@ class _FakeSiteService:
             description=None,
             tz="UTC",
             geo_point=None,
+            site_kind="edge",
             created_at=datetime.now(tz=UTC),
         )
+
+    async def is_edge_site(self, tenant_context: TenantContext, site_id: UUID) -> bool:
+        site = await self.get_site(tenant_context, site_id)
+        return site.site_kind == "edge"
 
 
 @pytest.fixture

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import Literal
+import json
+import os
+from ipaddress import ip_network
+from pathlib import Path
+from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from argus.vision.runtime import ExecutionProfile, ExecutionProvider
@@ -108,6 +112,7 @@ class Settings(BaseSettings):
     link_reflector_key_id: str = "master-reflector-default"
     link_reflector_secret: SecretStr | None = None
     link_reflector_rate_limit_pps: int = Field(default=100, ge=0)
+    link_reflector_allowed_source_cidrs: str = ""
 
     enable_startup_services: bool = True
     enable_nats: bool = True
@@ -132,9 +137,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="ARGUS_",
         env_file=(".env", ".env.local"),
-        secrets_dir="/run/secrets",
         extra="ignore",
     )
+
+    def __init__(self, **values: Any) -> None:
+        if "_secrets_dir" not in values:
+            values["_secrets_dir"] = _settings_secrets_dir()
+        super().__init__(**values)
 
     @property
     def keycloak_realms_base_url(self) -> str:
@@ -156,6 +165,57 @@ class Settings(BaseSettings):
     @property
     def keycloak_bootstrap_realm(self) -> str:
         return self.keycloak_issuer.rstrip("/").rsplit("/", 1)[-1]
+
+    @property
+    def link_reflector_allowed_source_cidr_list(self) -> tuple[str, ...]:
+        return _parse_link_reflector_allowed_source_cidrs(
+            self.link_reflector_allowed_source_cidrs
+        )
+
+    @field_validator("link_reflector_allowed_source_cidrs")
+    @classmethod
+    def _validate_link_reflector_allowed_source_cidrs(cls, value: str) -> str:
+        _parse_link_reflector_allowed_source_cidrs(value)
+        return value
+
+
+def _settings_secrets_dir() -> str | None:
+    configured = os.getenv("ARGUS_SECRETS_DIR")
+    if configured:
+        return configured
+    default_path = Path("/run/secrets")
+    return str(default_path) if default_path.is_dir() else None
+
+
+def _parse_link_reflector_allowed_source_cidrs(raw_value: str) -> tuple[str, ...]:
+    normalized_value = raw_value.strip()
+    if not normalized_value:
+        return ()
+    if normalized_value.startswith("["):
+        try:
+            decoded = json.loads(normalized_value)
+        except json.JSONDecodeError as exc:
+            msg = (
+                "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS must be a valid JSON array "
+                "or comma-separated CIDR list."
+            )
+            raise ValueError(msg) from exc
+        if not isinstance(decoded, list):
+            msg = "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS must be a valid JSON array."
+            raise ValueError(msg)
+        candidates = [str(item).strip() for item in decoded if str(item).strip()]
+    else:
+        candidates = [part.strip() for part in normalized_value.split(",") if part.strip()]
+    for candidate in candidates:
+        try:
+            ip_network(candidate, strict=False)
+        except ValueError as exc:
+            msg = (
+                "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS entries must be valid CIDR "
+                f"networks: {candidate}"
+            )
+            raise ValueError(msg) from exc
+    return tuple(candidates)
 
 
 settings = Settings()

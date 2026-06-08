@@ -2,17 +2,19 @@ name: vezor-master
 
 secrets:
   postgres_password:
-    file: /etc/vezor/secrets/postgres_password
+    file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/postgres_password
   backend_db_url:
-    file: /etc/vezor/secrets/backend_db_url
+    file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/backend_db_url
   minio_root_user:
-    file: /etc/vezor/secrets/minio_root_user
+    file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/minio_root_user
   minio_root_password:
-    file: /etc/vezor/secrets/minio_root_password
+    file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/minio_root_password
   keycloak_admin_username:
-    file: /etc/vezor/secrets/keycloak_admin_username
+    file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/keycloak_admin_username
   keycloak_admin_password:
-    file: /etc/vezor/secrets/keycloak_admin_password
+    file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/keycloak_admin_password
+  link_reflector_secret:
+    file: ${VEZOR_LINK_REFLECTOR_SECRET_FILE:-${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/link_reflector_secret}
 
 services:
   postgres:
@@ -26,7 +28,7 @@ services:
     ports:
       - "${VEZOR_POSTGRES_BIND:-127.0.0.1}:5432:5432"
     volumes:
-      - /var/lib/vezor/postgres:/var/lib/postgresql/data
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/postgres:/var/lib/postgresql/data
     secrets:
       - postgres_password
     healthcheck:
@@ -41,7 +43,7 @@ services:
     ports:
       - "${VEZOR_REDIS_BIND:-127.0.0.1}:6379:6379"
     volumes:
-      - /var/lib/vezor/redis:/data
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -57,8 +59,8 @@ services:
       - "${VEZOR_NATS_HTTP_BIND:-127.0.0.1}:8222:8222"
       - "${VEZOR_NATS_LEAF_BIND:-0.0.0.0}:7422:7422"
     volumes:
-      - /etc/vezor/nats/nats.conf:/etc/nats/nats.conf:ro
-      - /var/lib/vezor/nats:/data
+      - ${VEZOR_CONFIG_DIR:-/etc/vezor}/nats/nats.conf:/etc/nats/nats.conf:ro
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/nats:/data
     healthcheck:
       test: ["CMD", "/nats-server", "-t", "-c", "/etc/nats/nats.conf"]
       interval: 10s
@@ -76,7 +78,7 @@ services:
       - "${VEZOR_MINIO_BIND:-127.0.0.1}:9000:9000"
       - "${VEZOR_MINIO_CONSOLE_BIND:-127.0.0.1}:9001:9001"
     volumes:
-      - /var/lib/vezor/minio:/data
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/minio:/data
     secrets:
       - minio_root_user
       - minio_root_password
@@ -128,8 +130,8 @@ services:
       - "${VEZOR_MEDIAMTX_WEBRTC_UDP_BIND:-0.0.0.0}:8189:8189/udp"
       - "${VEZOR_MEDIAMTX_API_BIND:-127.0.0.1}:9997:9997"
     volumes:
-      - /etc/vezor/mediamtx/mediamtx.yml:/mediamtx.yml:ro
-      - /var/lib/vezor/mediamtx:/data
+      - ${VEZOR_CONFIG_DIR:-/etc/vezor}/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/mediamtx:/data
 
   backend:
     image: ${VEZOR_BACKEND_IMAGE:?set VEZOR_BACKEND_IMAGE}
@@ -164,13 +166,14 @@ services:
       ARGUS_LINK_REFLECTOR_PORT: ${VEZOR_LINK_REFLECTOR_CONTAINER_PORT:-8622}
       ARGUS_LINK_REFLECTOR_KEY_ID: ${VEZOR_LINK_REFLECTOR_KEY_ID:-master-reflector-default}
       ARGUS_LINK_REFLECTOR_RATE_LIMIT_PPS: ${VEZOR_LINK_REFLECTOR_RATE_LIMIT_PPS:-100}
+      ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS: ${VEZOR_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS:-}
     ports:
       - "${VEZOR_API_BIND:-0.0.0.0}:8000:8000"
       - "${VEZOR_LINK_REFLECTOR_BIND:-0.0.0.0}:${VEZOR_LINK_REFLECTOR_PORT:-8622}:8622/udp"
     volumes:
-      - /etc/vezor/master.json:/etc/vezor/master.json:ro
-      - /var/lib/vezor/models:/models:ro
-      - /var/lib/vezor/evidence:/var/lib/vezor/evidence
+      - ${VEZOR_CONFIG_DIR:-/etc/vezor}/master.json:/etc/vezor/master.json:ro
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/models:/models:ro
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/evidence:/var/lib/vezor/evidence
       - /var/log/vezor/backend:/var/log/vezor/backend
     secrets:
       - source: backend_db_url
@@ -183,6 +186,8 @@ services:
         target: ARGUS_KEYCLOAK_ADMIN_USERNAME
       - source: keycloak_admin_password
         target: ARGUS_KEYCLOAK_ADMIN_PASSWORD
+      - source: link_reflector_secret
+        target: ARGUS_LINK_REFLECTOR_SECRET
     depends_on:
       postgres:
         condition: service_healthy
@@ -241,10 +246,10 @@ services:
       ARGUS_MINIO_ENDPOINT: minio:9000
       ARGUS_MINIO_SECURE: "false"
     volumes:
-      - /etc/vezor/supervisor.json:/etc/vezor/supervisor.json:ro
+      - ${VEZOR_CONFIG_DIR:-/etc/vezor}/supervisor.json:/etc/vezor/supervisor.json:ro
       - ${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}:/run/vezor/credentials:ro
-      - /var/lib/vezor/models:/models:ro
-      - /var/lib/vezor:/var/lib/vezor
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}/models:/models:ro
+      - ${VEZOR_DATA_DIR:-/var/lib/vezor}:/var/lib/vezor
       - /var/log/vezor:/var/log/vezor
     secrets:
       - source: backend_db_url

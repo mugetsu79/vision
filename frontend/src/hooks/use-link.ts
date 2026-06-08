@@ -11,38 +11,13 @@ export type LinkBudgetUpdateInput = components["schemas"]["LinkBudgetUpdate"];
 export type LinkPolicyUpdateInput = components["schemas"]["LinkPolicyUpdate"];
 export type LinkProbeCreateInput = components["schemas"]["LinkProbeCreate"];
 export type LinkSiteSummary = components["schemas"]["LinkSiteSummaryResponse"];
-export type LinkReflectorProfile = {
-  id?: string;
-  tenant_id?: string;
-  site_id?: string;
-  profile_kind?: string;
-  enabled: boolean;
-  mode?: string;
-  public_address?: string | null;
-  bind_address?: string | null;
-  udp_port: number;
-  key_id?: string;
-  allowed_edge_site_ids?: string[];
-  allowed_source_cidrs?: string[];
-  rate_limit_pps_per_source?: number;
-  last_status?: string;
-  last_error?: string | null;
-  secret_state?: string;
-  created_at?: string;
-  updated_at?: string;
-};
-export type LinkReflectorProfileUpdateInput = {
-  public_address?: string | null;
-  bind_address?: string | null;
-  udp_port?: number | null;
-  allowed_edge_site_ids?: string[] | null;
-  allowed_source_cidrs?: string[] | null;
-  rate_limit_pps_per_source?: number | null;
-};
+export type LinkReflectorProfile =
+  components["schemas"]["LinkReflectorProfileResponse"];
+export type LinkReflectorProfileUpdateInput =
+  components["schemas"]["LinkReflectorProfileUpdate"];
 
 type LinkMutationContext = {
   siteId?: string | null;
-  vesselId?: string | null;
 };
 
 export function useLinkSiteSummaries() {
@@ -165,10 +140,7 @@ export function useLinkConnections(siteId?: string | null) {
   });
 }
 
-export function useCreateLinkConnection({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useCreateLinkConnection({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -186,14 +158,11 @@ export function useCreateLinkConnection({
       return data ?? null;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
-export function useUpdateLinkConnection({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useUpdateLinkConnection({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -220,14 +189,11 @@ export function useUpdateLinkConnection({
       return data ?? null;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
-export function useDeleteLinkConnection({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useDeleteLinkConnection({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -245,7 +211,7 @@ export function useDeleteLinkConnection({
       return connectionId;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
@@ -269,7 +235,7 @@ export function useLinkSiteBudget(siteId?: string | null) {
   });
 }
 
-export function useUpdateLinkBudget({ siteId, vesselId }: LinkMutationContext) {
+export function useUpdateLinkBudget({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -287,7 +253,7 @@ export function useUpdateLinkBudget({ siteId, vesselId }: LinkMutationContext) {
       return data ?? null;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
@@ -311,10 +277,7 @@ export function useLinkPolicies(siteId?: string | null) {
   });
 }
 
-export function useUpdateLinkPolicies({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useUpdateLinkPolicies({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -332,7 +295,7 @@ export function useUpdateLinkPolicies({
       return data ?? {};
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
@@ -356,7 +319,7 @@ export function useLinkProbes(siteId?: string | null) {
   });
 }
 
-export function useCreateLinkProbe({ siteId, vesselId }: LinkMutationContext) {
+export function useCreateLinkProbe({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -374,11 +337,11 @@ export function useCreateLinkProbe({ siteId, vesselId }: LinkMutationContext) {
       return data ?? null;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
-export function useDeleteLinkProbe({ siteId, vesselId }: LinkMutationContext) {
+export function useDeleteLinkProbe({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -396,14 +359,11 @@ export function useDeleteLinkProbe({ siteId, vesselId }: LinkMutationContext) {
       return probeId;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
-export function useRunLinkProbeTarget({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useRunLinkProbeTarget({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -421,14 +381,11 @@ export function useRunLinkProbeTarget({
       return data ?? null;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
-export function useMeasureLinkProbeTargetThroughput({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useMeasureLinkProbeTargetThroughput({ siteId }: LinkMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -446,7 +403,7 @@ export function useMeasureLinkProbeTargetThroughput({
       return data ?? null;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
@@ -470,37 +427,25 @@ export function useLinkSiteQueue(siteId?: string | null) {
   });
 }
 
-export function useRetryLinkQueueItem({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useRetryLinkQueueItem({ siteId }: LinkMutationContext) {
   return useQueueItemMutation({
     siteId,
-    vesselId,
     path: "/api/v1/link/queue/{queue_item_id}/retry",
     failureMessage: "Failed to retry queued link work.",
   });
 }
 
-export function usePauseLinkQueueItem({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function usePauseLinkQueueItem({ siteId }: LinkMutationContext) {
   return useQueueItemMutation({
     siteId,
-    vesselId,
     path: "/api/v1/link/queue/{queue_item_id}/pause",
     failureMessage: "Failed to pause queued link work.",
   });
 }
 
-export function useResumeLinkQueueItem({
-  siteId,
-  vesselId,
-}: LinkMutationContext) {
+export function useResumeLinkQueueItem({ siteId }: LinkMutationContext) {
   return useQueueItemMutation({
     siteId,
-    vesselId,
     path: "/api/v1/link/queue/{queue_item_id}/resume",
     failureMessage: "Failed to resume queued link work.",
   });
@@ -513,7 +458,6 @@ type QueueMutationPath =
 
 function useQueueItemMutation({
   siteId,
-  vesselId,
   path,
   failureMessage,
 }: LinkMutationContext & {
@@ -533,13 +477,13 @@ function useQueueItemMutation({
       return data ?? null;
     },
     onSuccess: async () =>
-      invalidateLinkSiteQueries(queryClient, { siteId, vesselId }),
+      invalidateLinkSiteQueries(queryClient, { siteId }),
   });
 }
 
 async function invalidateLinkSiteQueries(
   queryClient: ReturnType<typeof useQueryClient>,
-  { siteId, vesselId }: LinkMutationContext,
+  { siteId }: LinkMutationContext,
 ) {
   await queryClient.invalidateQueries({
     queryKey: ["link", "sites", "summary"],
@@ -547,11 +491,6 @@ async function invalidateLinkSiteQueries(
   if (siteId) {
     await queryClient.invalidateQueries({
       queryKey: ["link", "sites", siteId],
-    });
-  }
-  if (vesselId) {
-    await queryClient.invalidateQueries({
-      queryKey: ["maritime", "vessels", vesselId, "link-status"],
     });
   }
 }

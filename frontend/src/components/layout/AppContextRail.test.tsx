@@ -1,23 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test } from "vitest";
 
 import { AppContextRail } from "@/components/layout/AppContextRail";
+import { TestMemoryRouter } from "@/test/router";
 
 function renderWith(initialPath: string) {
   const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter
-        future={{
-          v7_relativeSplatPath: true,
-          v7_startTransition: true,
-        }}
-        initialEntries={[initialPath]}
-      >
+      <TestMemoryRouter initialEntries={[initialPath]}>
         <AppContextRail />
-      </MemoryRouter>
+      </TestMemoryRouter>
     </QueryClientProvider>,
   );
 }

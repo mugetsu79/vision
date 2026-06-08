@@ -38,13 +38,7 @@ export function LinkSiteSelector({
     [searchValue, summaries],
   );
   const paginated = paginateItems(filtered, pageSize, pageIndex);
-  const selectedSummary =
-    summaries.find((summary) => summary.site_id === selectedSiteId) ?? null;
-  const hasSearch = searchValue.trim().length > 0;
-  const showScopedSelection = Boolean(selectedSummary && !hasSearch);
-  const visibleItems = showScopedSelection && selectedSummary
-    ? [selectedSummary]
-    : paginated.items;
+  const visibleItems = paginated.items;
 
   useEffect(() => {
     setPageIndex(0);
@@ -106,18 +100,16 @@ export function LinkSiteSelector({
           No link sites match this search.
         </p>
       ) : null}
-      {!showScopedSelection ? (
-        <PaginationControls
-          className="mt-3"
-          itemLabel="sites"
-          pageIndex={paginated.currentPageIndex}
-          pageSize={pageSize}
-          pageSizeLabel="Link sites per page"
-          totalCount={filtered.length}
-          onPageIndexChange={setPageIndex}
-          onPageSizeChange={setPageSize}
-        />
-      ) : null}
+      <PaginationControls
+        className="mt-3"
+        itemLabel="sites"
+        pageIndex={paginated.currentPageIndex}
+        pageSize={pageSize}
+        pageSizeLabel="Link sites per page"
+        totalCount={filtered.length}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={setPageSize}
+      />
     </WorkspaceSurface>
   );
 }

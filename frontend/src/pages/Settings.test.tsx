@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const settingsMocks = vi.hoisted(() => ({
@@ -525,6 +524,7 @@ vi.mock("@/hooks/use-configuration", () => ({
 }));
 
 import { SettingsPage } from "@/pages/Settings";
+import { TestMemoryRouter } from "@/test/router";
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -532,9 +532,9 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <TestMemoryRouter>
         <SettingsPage />
-      </MemoryRouter>
+      </TestMemoryRouter>
     </QueryClientProvider>,
   );
 }

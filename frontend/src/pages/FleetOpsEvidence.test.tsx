@@ -1,17 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { FleetOpsEvidence } from "@/pages/FleetOpsEvidence";
+import { TestMemoryRouter } from "@/test/router";
 
 const evidenceMocks = vi.hoisted(() => ({
   queueSiteIds: [] as Array<string | null | undefined>,
   statusSiteIds: [] as Array<string | null | undefined>,
   retryContexts: [] as Array<{
     siteId?: string | null;
-    vesselId?: string | null;
   }>,
   vessels: [
     {
@@ -74,7 +73,6 @@ vi.mock("@/hooks/use-link", () => ({
   },
   useRetryLinkQueueItem: (context: {
     siteId?: string | null;
-    vesselId?: string | null;
   }) => {
     evidenceMocks.retryContexts.push(context);
     return {
@@ -85,7 +83,7 @@ vi.mock("@/hooks/use-link", () => ({
 }));
 
 function renderWithProviders(ui: ReactElement) {
-  return <MemoryRouter>{ui}</MemoryRouter>;
+  return <TestMemoryRouter>{ui}</TestMemoryRouter>;
 }
 
 describe("FleetOpsEvidence", () => {
@@ -107,7 +105,7 @@ describe("FleetOpsEvidence", () => {
       screen.getByLabelText(/search fleetops vessel scope/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/choose a vessel or site to review evidence/i),
+      screen.getByText(/choose a vessel to review evidence/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/pending/i)).not.toBeInTheDocument();
     expect(
@@ -117,7 +115,6 @@ describe("FleetOpsEvidence", () => {
     expect(evidenceMocks.statusSiteIds.at(-1)).toBeNull();
     expect(evidenceMocks.retryContexts.at(-1)).toMatchObject({
       siteId: null,
-      vesselId: null,
     });
 
     await user.click(screen.getByRole("button", { name: /mv resolute/i }));

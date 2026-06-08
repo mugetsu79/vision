@@ -96,6 +96,10 @@ class _FakeSiteService:
     async def delete_site(self, tenant_context: TenantContext, site_id: UUID) -> None:
         self.sites.pop((tenant_context.tenant_id, site_id))
 
+    async def is_edge_site(self, tenant_context: TenantContext, site_id: UUID) -> bool:
+        site = await self.get_site(tenant_context, site_id)
+        return site.site_kind == "edge"
+
 
 class _ConflictMaritimeService:
     async def aensure_vessel_identifiers_available(self, **kwargs: object) -> None:

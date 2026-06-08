@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import type React from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { HlsClientConstructor } from "@/lib/hls";
 
@@ -80,19 +81,123 @@ import { useAuthStore } from "@/stores/auth-store";
 
 const initialAuthState = useAuthStore.getState();
 
+async function flushAsyncEffects(cycles = 3) {
+  for (let index = 0; index < cycles; index += 1) {
+    await Promise.resolve();
+  }
+}
+
+async function renderVideoStream(ui: React.ReactElement) {
+  let result: ReturnType<typeof render> | undefined;
+  await act(async () => {
+    result = render(ui);
+    await flushAsyncEffects();
+  });
+  if (!result) {
+    throw new Error("renderVideoStream failed to render.");
+  }
+  return result;
+}
+
+async function rerenderVideoStream(
+  view: ReturnType<typeof render>,
+  ui: React.ReactElement,
+) {
+  await act(async () => {
+    view.rerender(ui);
+    await flushAsyncEffects();
+  });
+}
+
+async function unmountVideoStream(view: ReturnType<typeof render>) {
+  await act(async () => {
+    view.unmount();
+    await flushAsyncEffects();
+  });
+}
+
+async function advanceTimersByTime(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+    await flushAsyncEffects();
+  });
+}
+
+async function emitPeerConnectionState(
+  peerConnection: FakeRTCPeerConnection | undefined,
+  connectionState: string,
+  iceConnectionState = connectionState,
+) {
+  await act(async () => {
+    peerConnection?.emitConnectionState(connectionState, iceConnectionState);
+    await flushAsyncEffects();
+  });
+}
+
+async function emitIntersection(element: Element, isIntersecting: boolean) {
+  await act(async () => {
+    observedElements.get(element)?.(
+      [
+        {
+          boundingClientRect: element.getBoundingClientRect(),
+          intersectionRatio: isIntersecting ? 1 : 0,
+          intersectionRect: element.getBoundingClientRect(),
+          isIntersecting,
+          rootBounds: null,
+          target: element,
+          time: 0,
+        },
+      ] as IntersectionObserverEntry[],
+      {} as IntersectionObserver,
+    );
+    await flushAsyncEffects();
+  });
+}
+
+async function emitHlsEvent(
+  listener: ((event: string, data?: { fatal?: boolean }) => void) | undefined,
+  eventName: string,
+  data?: { fatal?: boolean },
+) {
+  await act(async () => {
+    listener?.(eventName, data);
+    await flushAsyncEffects();
+  });
+}
+
+async function emitTrack(
+  peerConnection: FakeRTCPeerConnection | undefined,
+  stream: MediaStream,
+) {
+  await act(async () => {
+    peerConnection?.ontrack?.({ streams: [stream] });
+    await flushAsyncEffects();
+  });
+}
+
+async function dispatchElementEvent(element: Element, event: Event) {
+  await act(async () => {
+    element.dispatchEvent(event);
+    await flushAsyncEffects();
+  });
+}
+
 describe("VideoStream", () => {
-  beforeEach(() => {
-    useAuthStore.setState({
-      status: "authenticated",
-      accessToken: "stream-token",
-      user: {
-        sub: "viewer-1",
-        email: "viewer@argus.local",
-        role: "viewer",
-        realm: "argus-dev",
-        tenantId: "tenant-1",
-        isSuperadmin: false,
-      },
+  beforeEach(async () => {
+    await act(async () => {
+      useAuthStore.setState({
+        status: "authenticated",
+        accessToken: "stream-token",
+        user: {
+          sub: "viewer-1",
+          email: "viewer@argus.local",
+          role: "viewer",
+          realm: "argus-dev",
+          tenantId: "tenant-1",
+          isSuperadmin: false,
+        },
+      });
+      await flushAsyncEffects();
     });
 
     FakeRTCPeerConnection.reset();
@@ -138,12 +243,15 @@ describe("VideoStream", () => {
     );
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     FakeRTCPeerConnection.reset();
-    useAuthStore.setState(initialAuthState, true);
+    await act(async () => {
+      useAuthStore.setState(initialAuthState, true);
+      await flushAsyncEffects();
+    });
     destroyMock.mockReset();
     loadSourceMock.mockReset();
     attachMediaMock.mockReset();
@@ -153,17 +261,14 @@ describe("VideoStream", () => {
   });
 
   test("preserves the full decoded frame inside resized panels", async () => {
-    await act(async () => {
-      render(
-        <VideoStream
-          activeProfileId="native"
-          cameraId="11111111-1111-1111-1111-111111111111"
-          cameraName="North Gate"
-          defaultProfile="720p10"
-        />,
-      );
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        activeProfileId="native"
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="720p10"
+      />,
+    );
 
     const video = screen.getByLabelText(/north gate live video/i);
     expect(video).toHaveClass("object-contain");
@@ -190,15 +295,13 @@ describe("VideoStream", () => {
       },
     });
 
-    act(() => {
-      render(
-        <VideoStream
-          cameraId="11111111-1111-1111-1111-111111111111"
-          cameraName="North Gate"
-          defaultProfile="720p10"
-        />,
-      );
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="720p10"
+      />,
+    );
 
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
     expect(loadSourceMock.mock.calls[0]?.[0]).toContain(
@@ -234,7 +337,7 @@ describe("VideoStream", () => {
       },
     });
 
-    render(
+    await renderVideoStream(
       <VideoStream
         cameraId="11111111-1111-1111-1111-111111111111"
         cameraName="North Gate"
@@ -271,7 +374,7 @@ describe("VideoStream", () => {
       },
     });
 
-    const firstView = render(
+    const firstView = await renderVideoStream(
       <VideoStream
         cameraId="11111111-1111-1111-1111-111111111111"
         cameraName="North Gate"
@@ -282,9 +385,9 @@ describe("VideoStream", () => {
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
     const firstUrl = String(loadSourceMock.mock.calls[0]?.[0]);
 
-    firstView.unmount();
+    await unmountVideoStream(firstView);
 
-    render(
+    await renderVideoStream(
       <VideoStream
         cameraId="11111111-1111-1111-1111-111111111111"
         cameraName="North Gate"
@@ -318,7 +421,7 @@ describe("VideoStream", () => {
       },
     });
 
-    const view = render(
+    const view = await renderVideoStream(
       <VideoStream
         cameraId="11111111-1111-1111-1111-111111111111"
         cameraName="North Gate"
@@ -329,7 +432,8 @@ describe("VideoStream", () => {
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
     const firstUrl = String(loadSourceMock.mock.calls[0]?.[0]);
 
-    view.rerender(
+    await rerenderVideoStream(
+      view,
       <VideoStream
         cameraId="11111111-1111-1111-1111-111111111111"
         cameraName="North Gate"
@@ -365,7 +469,7 @@ describe("VideoStream", () => {
       }),
     );
 
-    render(
+    await renderVideoStream(
       <VideoStream
         cameraId="11111111-1111-1111-1111-111111111111"
         cameraName="North Gate"
@@ -391,25 +495,20 @@ describe("VideoStream", () => {
       }),
     );
 
-    const view = await act(async () => {
-      const rendered = render(
-        <VideoStream
-          activeProfileId="native"
-          cameraId="11111111-1111-1111-1111-111111111111"
-          cameraName="North Gate"
-          defaultProfile="720p25"
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      return rendered;
-    });
+    const view = await renderVideoStream(
+      <VideoStream
+        activeProfileId="native"
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="720p25"
+      />,
+    );
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
 
-    view.rerender(
+    await rerenderVideoStream(
+      view,
       <VideoStream
         activeProfileId="720p25"
         cameraId="11111111-1111-1111-1111-111111111111"
@@ -436,38 +535,29 @@ describe("VideoStream", () => {
       }),
     );
 
-    const view = await act(async () => {
-      const rendered = render(
-        <VideoStream
-          activeProfileId="annotated"
-          activeStreamMode="passthrough"
-          cameraId="11111111-1111-1111-1111-111111111111"
-          cameraName="North Gate"
-          defaultProfile="annotated"
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      return rendered;
-    });
+    const view = await renderVideoStream(
+      <VideoStream
+        activeProfileId="annotated"
+        activeStreamMode="passthrough"
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="annotated"
+      />,
+    );
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
 
-    await act(async () => {
-      view.rerender(
-        <VideoStream
-          activeProfileId="annotated"
-          activeStreamMode="annotated-whip"
-          cameraId="11111111-1111-1111-1111-111111111111"
-          cameraName="North Gate"
-          defaultProfile="annotated"
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await rerenderVideoStream(
+      view,
+      <VideoStream
+        activeProfileId="annotated"
+        activeStreamMode="annotated-whip"
+        cameraId="11111111-1111-1111-1111-111111111111"
+        cameraName="North Gate"
+        defaultProfile="annotated"
+      />,
+    );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const requestBody = fetchMock.mock.calls[0]?.[1]?.body;
@@ -503,33 +593,22 @@ describe("VideoStream", () => {
       },
     });
 
-    await act(async () => {
-      render(
-        <VideoStream
-          cameraId="12121212-1212-1212-1212-121212121212"
-          cameraName="Stream Not Ready"
-          defaultProfile="annotated"
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="12121212-1212-1212-1212-121212121212"
+        cameraName="Stream Not Ready"
+        defaultProfile="annotated"
+      />,
+    );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(loadHlsClientMock).not.toHaveBeenCalled();
     expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(1_000);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flushAsyncEffects();
 
     expect(loadHlsClientMock).toHaveBeenCalledTimes(1);
     expect(loadSourceMock).toHaveBeenCalledTimes(1);
@@ -565,7 +644,7 @@ describe("VideoStream", () => {
       },
     });
 
-    render(
+    await renderVideoStream(
       <VideoStream
         cameraId="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         cameraName="Warehouse North"
@@ -577,9 +656,7 @@ describe("VideoStream", () => {
     const manifestParsedListener = hlsListeners.get("manifestParsed");
     expect(manifestParsedListener).toBeDefined();
 
-    act(() => {
-      manifestParsedListener?.("manifestParsed");
-    });
+    await emitHlsEvent(manifestParsedListener, "manifestParsed");
 
     await waitFor(() => expect(mediaPlayMock).toHaveBeenCalled());
     expect(screen.getByText(/ll-hls fallback/i)).toBeInTheDocument();
@@ -607,30 +684,21 @@ describe("VideoStream", () => {
       },
     });
 
-    await act(async () => {
-      render(
-        <VideoStream
-          cameraId="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-          cameraName="Warehouse South"
-          defaultProfile="720p10"
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        cameraName="Warehouse South"
+        defaultProfile="720p10"
+      />,
+    );
 
     expect(loadSourceMock).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-    });
+    await advanceTimersByTime(5_000);
 
     expect(destroyMock).toHaveBeenCalled();
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flushAsyncEffects();
 
     expect(loadSourceMock).toHaveBeenCalledTimes(2);
   });
@@ -657,38 +725,22 @@ describe("VideoStream", () => {
       },
     });
 
-    await act(async () => {
-      render(
-        <VideoStream
-          cameraId="cccccccc-cccc-cccc-cccc-cccccccccccc"
-          cameraName="Warehouse West"
-          defaultProfile="720p10"
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="cccccccc-cccc-cccc-cccc-cccccccccccc"
+        cameraName="Warehouse West"
+        defaultProfile="720p10"
+      />,
+    );
     expect(loadSourceMock).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(5_000);
     expect(loadSourceMock).toHaveBeenCalledTimes(2);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(5_000);
     expect(loadSourceMock).toHaveBeenCalledTimes(3);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(4_000);
 
     const image = screen.getByRole("img", { name: /warehouse west live stream/i });
     expect(image).toHaveAttribute(
@@ -709,37 +761,21 @@ describe("VideoStream", () => {
     );
     vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
 
-    await act(async () => {
-      render(
-        <VideoStream
-          cameraId="dddddddd-dddd-dddd-dddd-dddddddddddd"
-          cameraName="Warehouse East"
-          defaultProfile="720p10"
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="dddddddd-dddd-dddd-dddd-dddddddddddd"
+        cameraName="Warehouse East"
+        defaultProfile="720p10"
+      />,
+    );
 
     expect(loadHlsClientMock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(5_000);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(5_000);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(4_000);
 
     const image = screen.getByRole("img", { name: /warehouse east live stream/i });
     expect(image).toHaveAttribute(
@@ -769,15 +805,13 @@ describe("VideoStream", () => {
       },
     });
 
-    act(() => {
-      render(
-        <VideoStream
-          cameraId="22222222-2222-2222-2222-222222222222"
-          cameraName="Depot Yard"
-          defaultProfile="540p5"
-        />,
-      );
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="22222222-2222-2222-2222-222222222222"
+        cameraName="Depot Yard"
+        defaultProfile="540p5"
+      />,
+    );
 
     expect(
       screen.getByRole("region", { name: /depot yard stream panel/i }),
@@ -812,7 +846,7 @@ describe("VideoStream", () => {
       },
     });
 
-    render(
+    await renderVideoStream(
       <VideoStream
         cameraId="23232323-2323-2323-2323-232323232323"
         cameraName="Depot Recovery"
@@ -823,9 +857,7 @@ describe("VideoStream", () => {
     const image = await screen.findByRole("img", { name: /depot recovery live stream/i });
     const initialFetchCount = fetchMock.mock.calls.length;
 
-    act(() => {
-      image.dispatchEvent(new Event("error"));
-    });
+    await dispatchElementEvent(image, new Event("error"));
 
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount), {
       timeout: 2_500,
@@ -859,7 +891,7 @@ describe("VideoStream", () => {
       },
     });
 
-    render(
+    await renderVideoStream(
       <VideoStream
         cameraId="34343434-3434-3434-3434-343434343434"
         cameraName="North Recovery"
@@ -868,14 +900,10 @@ describe("VideoStream", () => {
     );
 
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
-    act(() => {
-      hlsListeners.get("manifestParsed")?.("manifestParsed");
-    });
+    await emitHlsEvent(hlsListeners.get("manifestParsed"), "manifestParsed");
     const initialFetchCount = fetchMock.mock.calls.length;
 
-    act(() => {
-      hlsListeners.get("error")?.("error", { fatal: true });
-    });
+    await emitHlsEvent(hlsListeners.get("error"), "error", { fatal: true });
 
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount), {
       timeout: 2_500,
@@ -905,51 +933,35 @@ describe("VideoStream", () => {
 
     const staleHeartbeatTs = new Date(Date.now() - 20_000).toISOString();
     const freshHeartbeatTs = new Date().toISOString();
-    const { rerender } = await act(async () => {
-      const view = render(
-        <VideoStream
-          cameraId="45454545-4545-4545-4545-454545454545"
-          cameraName="Heartbeat Recovery"
-          defaultProfile="720p10"
-          heartbeatTs={staleHeartbeatTs}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      return view;
-    });
+    const view = await renderVideoStream(
+      <VideoStream
+        cameraId="45454545-4545-4545-4545-454545454545"
+        cameraName="Heartbeat Recovery"
+        defaultProfile="720p10"
+        heartbeatTs={staleHeartbeatTs}
+      />,
+    );
 
     expect(screen.getByRole("img", { name: /heartbeat recovery live stream/i })).toBeInTheDocument();
     const initialFetchCount = fetchMock.mock.calls.length;
 
-    await act(async () => {
-      rerender(
-        <VideoStream
-          cameraId="45454545-4545-4545-4545-454545454545"
-          cameraName="Heartbeat Recovery"
-          defaultProfile="720p10"
-          heartbeatTs={freshHeartbeatTs}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await rerenderVideoStream(
+      view,
+      <VideoStream
+        cameraId="45454545-4545-4545-4545-454545454545"
+        cameraName="Heartbeat Recovery"
+        defaultProfile="720p10"
+        heartbeatTs={freshHeartbeatTs}
+      />,
+    );
 
     expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_500);
-    });
+    await advanceTimersByTime(2_500);
 
     expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(1_000);
 
     expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount);
   });
@@ -976,51 +988,35 @@ describe("VideoStream", () => {
     });
 
     const freshHeartbeatTs = new Date().toISOString();
-    const { rerender } = await act(async () => {
-      const view = render(
-        <VideoStream
-          cameraId="46464646-4646-4646-4646-464646464646"
-          cameraName="Late Worker"
-          defaultProfile="720p10"
-          heartbeatTs={null}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      return view;
-    });
+    const view = await renderVideoStream(
+      <VideoStream
+        cameraId="46464646-4646-4646-4646-464646464646"
+        cameraName="Late Worker"
+        defaultProfile="720p10"
+        heartbeatTs={null}
+      />,
+    );
 
     expect(screen.getByRole("img", { name: /late worker live stream/i })).toBeInTheDocument();
     const initialFetchCount = fetchMock.mock.calls.length;
 
-    await act(async () => {
-      rerender(
-        <VideoStream
-          cameraId="46464646-4646-4646-4646-464646464646"
-          cameraName="Late Worker"
-          defaultProfile="720p10"
-          heartbeatTs={freshHeartbeatTs}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await rerenderVideoStream(
+      view,
+      <VideoStream
+        cameraId="46464646-4646-4646-4646-464646464646"
+        cameraName="Late Worker"
+        defaultProfile="720p10"
+        heartbeatTs={freshHeartbeatTs}
+      />,
+    );
 
     expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_500);
-    });
+    await advanceTimersByTime(2_500);
 
     expect(fetchMock.mock.calls.length).toBe(initialFetchCount);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(1_000);
 
     expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount);
   });
@@ -1050,27 +1046,19 @@ describe("VideoStream", () => {
       },
     });
 
-    await act(async () => {
-      render(
-        <VideoStream
-          cameraId="47474747-4747-4747-4747-474747474747"
-          cameraName="Silent WebRTC"
-          defaultProfile="720p10"
-          heartbeatTs={new Date().toISOString()}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="47474747-4747-4747-4747-474747474747"
+        cameraName="Silent WebRTC"
+        defaultProfile="720p10"
+        heartbeatTs={new Date().toISOString()}
+      />,
+    );
 
     expect(screen.getByText(/webrtc live/i)).toBeInTheDocument();
     expect(loadSourceMock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(9_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await advanceTimersByTime(9_000);
 
     expect(loadSourceMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/standby preview/i)).toBeInTheDocument();
@@ -1087,24 +1075,18 @@ describe("VideoStream", () => {
 
     const nearlyStaleHeartbeatTs = new Date(Date.now() - 10_000).toISOString();
 
-    await act(async () => {
-      render(
-        <VideoStream
-          cameraId="56565656-5656-5656-5656-565656565656"
-          cameraName="Stable WebRTC"
-          defaultProfile="720p10"
-          heartbeatTs={nearlyStaleHeartbeatTs}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="56565656-5656-5656-5656-565656565656"
+        cameraName="Stable WebRTC"
+        defaultProfile="720p10"
+        heartbeatTs={nearlyStaleHeartbeatTs}
+      />,
+    );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(6_500);
-    });
+    await advanceTimersByTime(6_500);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -1118,40 +1100,28 @@ describe("VideoStream", () => {
       }),
     );
 
-    await act(async () => {
-      render(
-        <VideoStream
-          cameraId="67676767-6767-6767-6767-676767676767"
-          cameraName="Transient Disconnect"
-          defaultProfile="720p10"
-          heartbeatTs={new Date().toISOString()}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        cameraId="67676767-6767-6767-6767-676767676767"
+        cameraName="Transient Disconnect"
+        defaultProfile="720p10"
+        heartbeatTs={new Date().toISOString()}
+      />,
+    );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const peerConnection = FakeRTCPeerConnection.instances[0];
     expect(peerConnection).toBeDefined();
 
-    act(() => {
-      peerConnection?.emitConnectionState("disconnected");
-    });
+    await emitPeerConnectionState(peerConnection, "disconnected");
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_500);
-    });
+    await advanceTimersByTime(1_500);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      peerConnection?.emitConnectionState("connected");
-    });
+    await emitPeerConnectionState(peerConnection, "connected");
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-    });
+    await advanceTimersByTime(1_000);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -1164,20 +1134,16 @@ describe("VideoStream", () => {
       }),
     );
 
-    await act(async () => {
-      render(
-        <VideoStream
-          activeProfileId="native"
-          activeStreamMode="passthrough"
-          cameraId="68686868-6868-6868-6868-686868686868"
-          cameraName="Native Passthrough"
-          defaultProfile="native"
-          heartbeatTs={new Date().toISOString()}
-        />,
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderVideoStream(
+      <VideoStream
+        activeProfileId="native"
+        activeStreamMode="passthrough"
+        cameraId="68686868-6868-6868-6868-686868686868"
+        cameraName="Native Passthrough"
+        defaultProfile="native"
+        heartbeatTs={new Date().toISOString()}
+      />,
+    );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await waitFor(() =>
@@ -1188,23 +1154,15 @@ describe("VideoStream", () => {
 
     vi.useFakeTimers();
 
-    act(() => {
-      peerConnection?.emitConnectionState("disconnected");
-    });
+    await emitPeerConnectionState(peerConnection, "disconnected");
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_500);
-    });
+    await advanceTimersByTime(4_500);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      peerConnection?.emitConnectionState("connected");
-    });
+    await emitPeerConnectionState(peerConnection, "connected");
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-    });
+    await advanceTimersByTime(1_000);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -1221,7 +1179,7 @@ describe("VideoStream", () => {
       }),
     );
 
-    const view = render(
+    const view = await renderVideoStream(
       <VideoStream
         cameraId="78787878-7878-7878-7878-787878787878"
         cameraName="Unmounting WebRTC"
@@ -1234,10 +1192,10 @@ describe("VideoStream", () => {
     const peerConnection = FakeRTCPeerConnection.instances[0];
     expect(peerConnection).toBeDefined();
 
-    view.unmount();
+    await unmountVideoStream(view);
     await act(async () => {
       releaseRemoteDescription();
-      await Promise.resolve();
+      await flushAsyncEffects();
     });
 
     expect(peerConnection?.closed).toBe(true);
@@ -1251,7 +1209,7 @@ describe("VideoStream", () => {
       }),
     );
 
-    const view = render(
+    const view = await renderVideoStream(
       <VideoStream
         cameraId="89898989-8989-8989-8989-898989898989"
         cameraName="Detaching WebRTC"
@@ -1265,13 +1223,11 @@ describe("VideoStream", () => {
     const video = screen.getByLabelText<HTMLVideoElement>(/detaching webrtc live video/i);
     const stream = {} as MediaStream;
 
-    act(() => {
-      peerConnection?.ontrack?.({ streams: [stream] });
-    });
+    await emitTrack(peerConnection, stream);
 
     expect(video.srcObject).toBe(stream);
 
-    view.unmount();
+    await unmountVideoStream(view);
 
     expect(peerConnection?.closed).toBe(true);
     expect(video.srcObject).toBeNull();
@@ -1298,7 +1254,7 @@ describe("VideoStream", () => {
       },
     });
 
-    const view = render(
+    const view = await renderVideoStream(
       <VideoStream
         cameraId="33333333-3333-3333-3333-333333333333"
         cameraName="South Lot"
@@ -1315,22 +1271,7 @@ describe("VideoStream", () => {
       throw new Error("Expected stream root.");
     }
 
-    act(() => {
-      observedElements.get(root)?.(
-        [
-          {
-            boundingClientRect: root.getBoundingClientRect(),
-            intersectionRatio: 1,
-            intersectionRect: root.getBoundingClientRect(),
-            isIntersecting: true,
-            rootBounds: null,
-            target: root,
-            time: 1,
-          },
-        ] as IntersectionObserverEntry[],
-        {} as IntersectionObserver,
-      );
-    });
+    await emitIntersection(root, true);
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(loadSourceMock).toHaveBeenCalledTimes(1));
@@ -1368,7 +1309,7 @@ describe("VideoStream", () => {
       },
     });
 
-    const view = render(
+    const view = await renderVideoStream(
       <VideoStream
         cameraId="44444444-4444-4444-4444-444444444444"
         cameraName="East Dock"
@@ -1380,18 +1321,14 @@ describe("VideoStream", () => {
     const manifestParsedListener = hlsListeners.get("manifestParsed");
     expect(manifestParsedListener).toBeDefined();
 
-    act(() => {
-      manifestParsedListener?.("manifestParsed");
-    });
+    await emitHlsEvent(manifestParsedListener, "manifestParsed");
 
     const video = view.container.querySelector("video");
     if (!video) {
       throw new Error("Expected video element.");
     }
 
-    act(() => {
-      video.dispatchEvent(new Event("loadeddata"));
-    });
+    await dispatchElementEvent(video, new Event("loadeddata"));
 
     await waitFor(() => expect(metrics).toHaveLength(1));
     expect(metrics[0]).toMatchObject({

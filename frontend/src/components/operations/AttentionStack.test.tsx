@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test } from "vitest";
 
 import { AttentionStack } from "@/components/operations/AttentionStack";
 import type { AttentionItem, FleetHealth } from "@/lib/operational-health";
+import { TestMemoryRouter } from "@/test/router";
 
 describe("AttentionStack", () => {
   test("renders ordered attention items with route links", () => {
@@ -25,7 +25,7 @@ describe("AttentionStack", () => {
     ];
 
     render(
-      <MemoryRouter>
+      <TestMemoryRouter>
         <AttentionStack
           items={items}
           fleetHealth={{
@@ -34,7 +34,7 @@ describe("AttentionStack", () => {
             reasons: [],
           }}
         />
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(
@@ -60,9 +60,9 @@ describe("AttentionStack", () => {
     };
 
     render(
-      <MemoryRouter>
+      <TestMemoryRouter>
         <AttentionStack items={[]} fleetHealth={fleetHealth} />
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(screen.getByText(/no operational attention needed/i)).toBeInTheDocument();

@@ -38,6 +38,10 @@ from argus.api.v1 import router
 from argus.core.security import AuthenticatedUser
 from argus.models.enums import ModelAdmissionStatus, ProcessingMode, RoleEnum
 
+DEPLOYMENT_NODE_ID = UUID("00000000-0000-0000-0000-000000000211")
+SUPERVISOR_EDGE_NODE_ID = UUID("00000000-0000-0000-0000-000000000212")
+OTHER_EDGE_NODE_ID = UUID("00000000-0000-0000-0000-000000000213")
+
 
 def _tenant_context() -> TenantContext:
     return TenantContext(
@@ -113,7 +117,10 @@ class _FakeDeploymentService:
                 realm=self.context.tenant_slug,
                 is_superadmin=False,
                 tenant_context=str(self.context.tenant_id),
-                claims={"auth_type": "supervisor_node_credential"},
+                claims={
+                    "auth_type": "supervisor_node_credential",
+                    "deployment_node_id": str(DEPLOYMENT_NODE_ID),
+                },
             ),
         )
 
@@ -132,6 +139,19 @@ class _FakeOperationsService:
         self.admission_payload: WorkerModelAdmissionRequest | None = None
         self.rotated_edge_node_id: UUID | None = None
         self.deployment: _FakeDeploymentService | None = None
+
+    async def assert_supervisor_edge_node_scope(
+        self,
+        tenant_context: TenantContext,
+        edge_node_id: UUID | None,
+    ) -> None:
+        if tenant_context.user.claims.get("auth_type") != "supervisor_node_credential":
+            return
+        if edge_node_id != SUPERVISOR_EDGE_NODE_ID:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor credential is not authorized for this edge node.",
+            )
 
     async def get_fleet_overview(self, tenant_context: TenantContext) -> FleetOverviewResponse:
         return FleetOverviewResponse(
@@ -722,6 +742,31 @@ async def test_runtime_report_route_records_supervisor_truth() -> None:
 
 
 @pytest.mark.asyncio
+async def test_node_credential_runtime_report_cannot_spoof_another_edge_node() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/runtime-reports",
+            headers={"Authorization": "Bearer node-credential"},
+            json={
+                "camera_id": str(uuid4()),
+                "edge_node_id": str(OTHER_EDGE_NODE_ID),
+                "heartbeat_at": datetime(2026, 5, 13, 8, 1, tzinfo=UTC).isoformat(),
+                "runtime_state": "running",
+            },
+        )
+
+    assert response.status_code == 403
+    assert operations.runtime_report_payload is None
+
+
+@pytest.mark.asyncio
 async def test_lifecycle_request_route_records_intent_without_shelling_out() -> None:
     context = _tenant_context()
     operations = _FakeOperationsService()
@@ -959,6 +1004,26 @@ async def test_hardware_report_routes_record_and_return_latest_capability() -> N
 
 
 @pytest.mark.asyncio
+async def test_node_credential_hardware_report_cannot_spoof_another_edge_node() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/operations/supervisors/edge-supervisor-1/hardware-reports",
+            headers={"Authorization": "Bearer node-credential"},
+            json=_hardware_payload(OTHER_EDGE_NODE_ID).model_dump(mode="json"),
+        )
+
+    assert response.status_code == 403
+    assert operations.hardware_payload is None
+
+
+@pytest.mark.asyncio
 async def test_worker_model_admission_route_returns_recommendation() -> None:
     context = _tenant_context()
     operations = _FakeOperationsService()
@@ -992,3 +1057,31 @@ async def test_worker_model_admission_route_returns_recommendation() -> None:
     assert body["recommended_backend"] == "CoreMLExecutionProvider"
     assert operations.admission_payload is not None
     assert operations.admission_payload.model_id == model_id
+
+
+@pytest.mark.asyncio
+async def test_node_credential_model_admission_cannot_spoof_another_edge_node() -> None:
+    context = _tenant_context()
+    operations = _FakeOperationsService()
+    app = _create_app(context, operations)
+    camera_id = uuid4()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/operations/workers/{camera_id}/model-admission/evaluate",
+            headers={"Authorization": "Bearer node-credential"},
+            json={
+                "camera_id": str(camera_id),
+                "edge_node_id": str(OTHER_EDGE_NODE_ID),
+                "model_name": "YOLO26n COCO",
+                "model_capability": "fixed_vocab",
+                "selected_backend": "CoreMLExecutionProvider",
+                "stream_profile": {"width": 1280, "height": 720, "fps": 10},
+            },
+        )
+
+    assert response.status_code == 403
+    assert operations.admission_payload is None

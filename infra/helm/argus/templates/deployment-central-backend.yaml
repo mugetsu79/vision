@@ -1,4 +1,7 @@
 {{- if .Values.central.enabled }}
+{{- if and .Values.central.backend.reflector.enabled (not .Values.central.backend.reflector.secretName) }}
+{{- fail "central.backend.reflector.secretName is required when central.backend.reflector.enabled=true" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,6 +53,15 @@ spec:
               value: {{ .Values.central.backend.reflector.keyId | quote }}
             - name: ARGUS_LINK_REFLECTOR_RATE_LIMIT_PPS
               value: {{ .Values.central.backend.reflector.rateLimitPps | quote }}
+            - name: ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS
+              value: {{ .Values.central.backend.reflector.allowedSourceCidrs | quote }}
+            {{- if .Values.central.backend.reflector.secretName }}
+            - name: ARGUS_LINK_REFLECTOR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.central.backend.reflector.secretName | quote }}
+                  key: {{ .Values.central.backend.reflector.secretKey | quote }}
+            {{- end }}
             {{- range $name, $value := .Values.central.backend.env }}
             - name: {{ $name }}
               value: {{ $value | quote }}

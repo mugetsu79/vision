@@ -4,8 +4,9 @@ import argparse
 import asyncio
 import os
 from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from ipaddress import ip_address, ip_network
 from time import monotonic
 from typing import cast
 
@@ -17,6 +18,7 @@ class SourceCounters:
     received: int = 0
     replied: int = 0
     dropped_auth: int = 0
+    dropped_source_disallowed: int = 0
     dropped_rate_limited: int = 0
     packet_times: deque[float] = field(default_factory=deque)
 
@@ -37,11 +39,15 @@ class UdpSequenceReflectorProtocol(asyncio.DatagramProtocol):
         secret: bytes,
         key_id: str,
         rate_limit_pps: int = 100,
+        allowed_source_cidrs: Sequence[str] | None = None,
         clock: Callable[[], float] = monotonic,
     ) -> None:
         self.secret = secret
         self.key_id = key_id
         self.rate_limit_pps = rate_limit_pps
+        self.allowed_source_networks = tuple(
+            ip_network(cidr, strict=False) for cidr in (allowed_source_cidrs or [])
+        )
         self.clock = clock
         self.counters: dict[str, SourceCounters] = defaultdict(SourceCounters)
         self.transport: asyncio.DatagramTransport | None = None
@@ -53,6 +59,10 @@ class UdpSequenceReflectorProtocol(asyncio.DatagramProtocol):
         source = addr[0]
         counters = self.counters[source]
         counters.received += 1
+
+        if not self._source_allowed(source):
+            counters.dropped_source_disallowed += 1
+            return
 
         if self._rate_limited(counters):
             counters.dropped_rate_limited += 1
@@ -82,6 +92,15 @@ class UdpSequenceReflectorProtocol(asyncio.DatagramProtocol):
         self.transport.sendto(reply, addr)
         counters.replied += 1
 
+    def _source_allowed(self, source: str) -> bool:
+        if not self.allowed_source_networks:
+            return True
+        try:
+            source_address = ip_address(source)
+        except ValueError:
+            return False
+        return any(source_address in network for network in self.allowed_source_networks)
+
     def _rate_limited(self, counters: SourceCounters) -> bool:
         if self.rate_limit_pps <= 0:
             return False
@@ -102,6 +121,7 @@ async def start_reflector(
     secret: bytes,
     key_id: str,
     rate_limit_pps: int = 100,
+    allowed_source_cidrs: Sequence[str] | None = None,
     enabled: bool = True,
 ) -> ReflectorRuntime | None:
     if not enabled:
@@ -111,6 +131,7 @@ async def start_reflector(
         secret=secret,
         key_id=key_id,
         rate_limit_pps=rate_limit_pps,
+        allowed_source_cidrs=allowed_source_cidrs,
     )
     transport, _ = await loop.create_datagram_endpoint(
         lambda: protocol,

@@ -21,6 +21,57 @@ def test_link_reflector_settings_default_to_disabled() -> None:
     assert settings.link_reflector_key_id == "master-reflector-default"
     assert settings.link_reflector_secret is None
     assert settings.link_reflector_rate_limit_pps == 100
+    assert settings.link_reflector_allowed_source_cidr_list == ()
+
+
+def test_link_reflector_allowed_source_cidrs_accept_comma_separated_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS",
+        "192.0.2.0/24, 198.51.100.0/24",
+    )
+
+    settings = Settings(_env_file=None)
+
+    assert settings.link_reflector_allowed_source_cidr_list == (
+        "192.0.2.0/24",
+        "198.51.100.0/24",
+    )
+
+
+def test_link_reflector_allowed_source_cidrs_accept_json_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS",
+        '["192.0.2.0/24", "198.51.100.0/24"]',
+    )
+
+    settings = Settings(_env_file=None)
+
+    assert settings.link_reflector_allowed_source_cidr_list == (
+        "192.0.2.0/24",
+        "198.51.100.0/24",
+    )
+
+
+def test_link_reflector_allowed_source_cidrs_reject_malformed_json_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS", '["192.0.2.0/24"')
+
+    with pytest.raises(ValueError, match="valid JSON array"):
+        Settings(_env_file=None)
+
+
+def test_link_reflector_allowed_source_cidrs_reject_invalid_cidr_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS", "not-a-cidr")
+
+    with pytest.raises(ValueError, match="valid CIDR"):
+        Settings(_env_file=None)
 
 
 def test_master_deployment_manifests_include_disabled_reflector_configuration() -> None:
@@ -39,10 +90,16 @@ def test_master_deployment_manifests_include_disabled_reflector_configuration() 
 
     assert "ARGUS_LINK_REFLECTOR_ENABLED" in compose_text
     assert "VEZOR_LINK_REFLECTOR_ENABLED:-false" in compose_text
+    assert "target: ARGUS_LINK_REFLECTOR_SECRET" in compose_text
+    assert "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS" in compose_text
     assert "8622/udp" in compose_text
     assert "reflector:" in helm_values_text
     assert "enabled: false" in helm_values_text
+    assert "secretName:" in helm_values_text
+    assert "ARGUS_LINK_REFLECTOR_SECRET" in helm_deployment_text
+    assert "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS" in helm_deployment_text
     assert "ARGUS_LINK_REFLECTOR_ENABLED" in helm_deployment_text
+    assert "fail \"central.backend.reflector.secretName is required" in helm_deployment_text
     assert "link-reflector" in helm_service_text
 
 
@@ -107,6 +164,37 @@ async def test_udp_reflector_drops_unauthenticated_request() -> None:
             transmit_ns=123_456,
             nonce=77,
             secret=b"wrong-secret",
+            reply=False,
+        )
+
+        with pytest.raises(TimeoutError):
+            await _send_udp_packet(
+                request,
+                host="127.0.0.1",
+                port=runtime.port,
+                wait_seconds=0.1,
+            )
+    finally:
+        stop_reflector(runtime)
+
+
+@pytest.mark.asyncio
+async def test_udp_reflector_drops_disallowed_source_cidr() -> None:
+    runtime = await start_reflector(
+        bind_host="127.0.0.1",
+        port=0,
+        secret=b"reflector-secret",
+        key_id="master-reflector-test",
+        allowed_source_cidrs=["192.0.2.0/24"],
+    )
+    assert runtime is not None
+    try:
+        request = build_probe_packet(
+            session_id=bytes.fromhex("66" * 16),
+            sequence=5,
+            transmit_ns=123_456,
+            nonce=88,
+            secret=b"reflector-secret",
             reply=False,
         )
 

@@ -33,10 +33,9 @@ export function FleetOpsEvidence() {
     [fleetVessels, selectedVesselId],
   );
   const siteId = selectedVessel?.site_id ?? null;
-  const vesselId = selectedVessel?.id ?? null;
   const queue = useLinkSiteQueue(siteId);
   const linkStatus = useLinkSiteStatus(siteId);
-  const retryQueueItem = useRetryLinkQueueItem({ siteId, vesselId });
+  const retryQueueItem = useRetryLinkQueueItem({ siteId });
 
   return (
     <main className="space-y-5 p-4 sm:p-6">
@@ -46,7 +45,7 @@ export function FleetOpsEvidence() {
         title="Evidence"
       />
       <FleetOpsScopeSelector
-        emptyLabel="Choose a vessel or site to review evidence."
+        emptyLabel="Choose a vessel to review evidence."
         onSearchChange={setScopeSearch}
         onSelectVessel={setSelectedVesselId}
         searchValue={scopeSearch}

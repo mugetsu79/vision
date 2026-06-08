@@ -63,24 +63,35 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "check_port_available" in script
     assert "check_udp_port_available" in script
     assert "for port in 3000 8000 8080 8554 8888 8889 9000" in script
-    assert "for port in 8189" in script
+    assert "for port in 8189 8622" in script
     assert 'port_owner="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null)"' in script
     assert 'port_owner="$(lsof -nP -iUDP:"$port" 2>/dev/null)"' in script
     assert 'printf \'%s\\n\' "$port_owner" >&2' in script
     assert "stop_existing_master" in script
     assert "launchctl bootstrap system" in script
+    assert "write_launchd_plist" in script
+    assert '"ProgramArguments"' in script
+    assert '"--config"' in script
+    assert "master_config" in script
+    assert '"VEZOR_MASTER_CONFIG": master_config' in script
+    assert '"VEZOR_MASTER_ENV_FILE": master_env' in script
     assert "$CONFIG_DIR/master.env" in script
     assert "$CONFIG_DIR/supervisor.json" in script
     assert "$CONFIG_DIR/secrets/postgres_password" in script
     assert "$CONFIG_DIR/secrets/backend_db_url" in script
+    assert "$CONFIG_DIR/secrets/link_reflector_secret" in script
     assert "write_backend_db_url_secret" in script
     assert "$CONFIG_DIR/nats/nats.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
+    assert "VEZOR_CONFIG_DIR=$CONFIG_DIR" in script
+    assert "VEZOR_DATA_DIR=$DATA_DIR" in script
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert "VEZOR_PUBLIC_KEYCLOAK_URL=" in script
-    assert "VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev" in script
+    assert "VEZOR_PUBLIC_OIDC_AUTHORITY=$PUBLIC_OIDC_AUTHORITY" in script
+    assert "${PUBLIC_URL%:*}" not in script
     assert "VEZOR_OIDC_CLIENT_ID=argus-frontend" in script
+    assert "VEZOR_LINK_REFLECTOR_SECRET_FILE=$CONFIG_DIR/secrets/link_reflector_secret" in script
     assert "  /run/vezor" not in script
     assert 'chmod 0644 "$MASTER_ENV"' in script
     assert 'old_umask="$(umask)"' in script
@@ -150,6 +161,7 @@ def test_macos_installer_exposes_safe_install_options() -> None:
         "--manifest",
         "--public-url",
         "--data-dir",
+        "--config-dir",
     ):
         assert option in script
 
@@ -163,6 +175,7 @@ def test_macos_installer_exposes_browser_auth_for_non_loopback_public_url() -> N
     script = _read(INSTALL_SCRIPT)
 
     assert "public_hostname_from_url" in script
+    assert "public_origin_with_port" in script
     assert "oidc_disable_pkce_for_public_url" in script
     assert 'KEYCLOAK_BIND="0.0.0.0"' in script
     assert "printf 'true\\n'" in script
@@ -170,7 +183,9 @@ def test_macos_installer_exposes_browser_auth_for_non_loopback_public_url() -> N
         'OIDC_DISABLE_PKCE="$(oidc_disable_pkce_for_public_url '
         '"$PUBLIC_URL" "$PUBLIC_HOSTNAME")"'
     ) in script
-    assert "PUBLIC_KEYCLOAK_URL=\"${PUBLIC_URL%:*}:8080\"" in script
+    assert 'PUBLIC_API_BASE_URL="$(public_origin_with_port "$PUBLIC_URL" 8000)"' in script
+    assert 'PUBLIC_KEYCLOAK_URL="$(public_origin_with_port "$PUBLIC_URL" 8080)"' in script
+    assert 'PUBLIC_OIDC_AUTHORITY="$PUBLIC_KEYCLOAK_URL/realms/argus-dev"' in script
     assert "VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND" in script
     assert "VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL" in script
     assert "VEZOR_OIDC_DISABLE_PKCE=$OIDC_DISABLE_PKCE" in script

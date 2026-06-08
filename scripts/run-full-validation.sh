@@ -101,6 +101,9 @@ log_step "Running frontend checks"
   corepack pnpm build
 )
 
+log_step "Running test warning gates"
+./scripts/verify-no-test-warnings.sh
+
 log_step "Running frontend Playwright suite"
 (
   cd frontend

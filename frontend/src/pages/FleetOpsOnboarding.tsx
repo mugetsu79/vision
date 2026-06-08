@@ -49,7 +49,7 @@ export function FleetOpsOnboarding() {
         title="Onboarding"
       />
       <FleetOpsScopeSelector
-        emptyLabel="Choose a vessel or site to review onboarding."
+        emptyLabel="Choose a vessel to review onboarding."
         onSearchChange={setScopeSearch}
         onSelectVessel={setSelectedVesselId}
         searchValue={scopeSearch}

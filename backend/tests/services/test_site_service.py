@@ -42,6 +42,48 @@ class _AuditLogger:
         del kwargs
 
 
+class _Result:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    def scalars(self) -> _Result:
+        return self
+
+    def all(self) -> list[object]:
+        return self.rows
+
+    def scalar_one_or_none(self) -> object | None:
+        return self.rows[0] if self.rows else None
+
+
+class _CompiledStatementSession:
+    def __init__(self, factory: _CompiledStatementSessionFactory) -> None:
+        self.factory = factory
+
+    async def __aenter__(self) -> _CompiledStatementSession:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+        return None
+
+    async def execute(self, statement: object) -> _Result:
+        self.factory.compiled_statements.append(str(statement))
+        return _Result(self.factory.rows)
+
+    async def commit(self) -> None:
+        self.factory.commit_count += 1
+
+
+class _CompiledStatementSessionFactory:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+        self.compiled_statements: list[str] = []
+        self.commit_count = 0
+
+    def __call__(self) -> _CompiledStatementSession:
+        return _CompiledStatementSession(self)
+
+
 def _tenant_context(tenant_id) -> TenantContext:  # noqa: ANN001
     return TenantContext(
         tenant_id=tenant_id,
@@ -75,6 +117,49 @@ async def test_site_response_exposes_site_kind() -> None:
     response = app_services._site_to_response(site)
 
     assert response.site_kind == "control_plane"
+
+
+@pytest.mark.asyncio
+async def test_list_link_performance_sites_does_not_bootstrap_control_plane_on_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = uuid4()
+    site = Site(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        name="Edge Site",
+        description=None,
+        tz="UTC",
+        geo_point=None,
+        site_kind="edge",
+        created_at=datetime(2026, 6, 7, tzinfo=UTC),
+    )
+    session_factory = _CompiledStatementSessionFactory([site])
+
+    async def fail_if_bootstrapped(*args: object, **kwargs: object) -> Site:
+        raise AssertionError("Link summary reads must not create control-plane sites.")
+
+    monkeypatch.setattr(app_services, "_ensure_control_plane_site", fail_if_bootstrapped)
+    service = SiteService(session_factory=session_factory, audit_logger=_AuditLogger())
+
+    sites = await service.list_link_performance_sites(_tenant_context(tenant_id))
+
+    assert [item.id for item in sites] == [site.id]
+    assert session_factory.commit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_is_edge_site_requires_edge_site_kind() -> None:
+    service = SiteService(
+        session_factory=_CompiledStatementSessionFactory([uuid4()]),
+        audit_logger=_AuditLogger(),
+    )
+
+    assert await service.is_edge_site(_tenant_context(uuid4()), uuid4()) is True
+
+    compiled = service.session_factory.compiled_statements[0]  # type: ignore[attr-defined]
+    assert "sites.site_kind" in compiled
+    assert "edge" in compiled
 
 
 @pytest.mark.asyncio

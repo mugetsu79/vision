@@ -1,7 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/config", () => ({
@@ -46,12 +45,9 @@ vi.mock("@/components/history/HistoryTrendChart", () => ({
 import { createQueryClient } from "@/app/query-client";
 import { HistoryPage } from "@/pages/History";
 import { useAuthStore } from "@/stores/auth-store";
+import { TestMemoryRouter } from "@/test/router";
 
 const initialAuthState = useAuthStore.getState();
-const routerFuture = {
-  v7_relativeSplatPath: true,
-  v7_startTransition: true,
-} as const;
 let recordedRequests: URL[] = [];
 
 function jsonResponse(body: unknown) {
@@ -119,9 +115,9 @@ function renderPage(
 
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter future={routerFuture} initialEntries={[scopedEntry]}>
+      <TestMemoryRouter initialEntries={[scopedEntry]}>
         <HistoryPage />
-      </MemoryRouter>
+      </TestMemoryRouter>
     </QueryClientProvider>,
   );
 }

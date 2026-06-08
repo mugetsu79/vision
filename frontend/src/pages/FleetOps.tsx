@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
 
 import { FleetOverviewPanel } from "@/components/fleetops/FleetOverviewPanel";
-import { WorkspaceBand } from "@/components/layout/workspace-surfaces";
+import {
+  WorkspaceBand,
+  WorkspaceSurface,
+} from "@/components/layout/workspace-surfaces";
 import { useBillingUsage } from "@/hooks/use-billing";
 import { useFleetExceptions } from "@/hooks/use-fleet";
 import {
@@ -34,6 +37,18 @@ export function FleetOps() {
   const exceptionCount = Array.isArray(fleetExceptions.data?.items)
     ? fleetExceptions.data.items.length
     : 0;
+  const isLoading =
+    runtime.isLoading ||
+    vessels.isLoading ||
+    billingUsage.isLoading ||
+    supportDiagnostics.isLoading ||
+    fleetExceptions.isLoading;
+  const hasError =
+    runtime.isError ||
+    vessels.isError ||
+    billingUsage.isError ||
+    supportDiagnostics.isError ||
+    fleetExceptions.isError;
 
   return (
     <main className="space-y-5 p-4 sm:p-6" data-testid="fleetops-workspace">
@@ -59,13 +74,23 @@ export function FleetOps() {
           {exceptionCount} fleet exceptions
         </p>
       </WorkspaceBand>
-      <FleetOverviewPanel
-        billingUsage={billingUsage.data as BillingUsagePayload | undefined}
-        supportDiagnostics={
-          supportDiagnostics.data as SupportDiagnosticsPayload | undefined
-        }
-        vessels={vesselItems}
-      />
+      {isLoading ? (
+        <WorkspaceSurface className="p-5 text-sm text-[var(--vz-text-secondary)]">
+          Loading FleetOps runtime...
+        </WorkspaceSurface>
+      ) : hasError ? (
+        <WorkspaceSurface className="p-5 text-sm text-[var(--vz-state-risk)]">
+          FleetOps data could not be loaded.
+        </WorkspaceSurface>
+      ) : (
+        <FleetOverviewPanel
+          billingUsage={billingUsage.data as BillingUsagePayload | undefined}
+          supportDiagnostics={
+            supportDiagnostics.data as SupportDiagnosticsPayload | undefined
+          }
+          vessels={vesselItems}
+        />
+      )}
     </main>
   );
 }

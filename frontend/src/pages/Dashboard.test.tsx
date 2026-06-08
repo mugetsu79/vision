@@ -1,9 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test, vi } from "vitest";
 
 import type { components } from "@/lib/api.generated";
 import { DashboardPage } from "@/pages/Dashboard";
+import { TestMemoryRouter } from "@/test/router";
 
 type Camera = components["schemas"]["CameraResponse"];
 type FleetOverview = components["schemas"]["FleetOverviewResponse"];
@@ -165,9 +165,9 @@ vi.mock("@/hooks/use-operations", () => ({
 describe("DashboardPage", () => {
   test("renders a command overview before the attention stack", () => {
     render(
-      <MemoryRouter>
+      <TestMemoryRouter>
         <DashboardPage />
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(

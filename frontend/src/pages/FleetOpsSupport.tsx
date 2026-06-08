@@ -79,7 +79,7 @@ export function FleetOpsSupport() {
         title="Support"
       />
       <FleetOpsScopeSelector
-        emptyLabel="Choose a vessel or site to review support."
+        emptyLabel="Choose a vessel to review support."
         onSearchChange={setScopeSearch}
         onSelectVessel={setSelectedVesselId}
         searchValue={scopeSearch}

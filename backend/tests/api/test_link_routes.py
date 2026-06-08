@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from collections.abc import AsyncIterator
 from datetime import datetime
 from types import SimpleNamespace
@@ -14,6 +15,7 @@ from argus.api.contracts import SiteResponse, TenantContext
 from argus.api.v1 import router
 from argus.compat import UTC
 from argus.core.security import AuthenticatedUser
+from argus.link.reflector import stop_reflector
 from argus.link.service import LinkService
 from argus.models.enums import RoleEnum
 from argus.services.pack_registry import PackRegistry
@@ -21,6 +23,15 @@ from argus.services.pack_registry import PackRegistry
 TENANT_ID = UUID("00000000-0000-4000-8000-000000000001")
 KNOWN_SITE_ID = UUID("00000000-0000-4000-8000-000000000002")
 MASTER_SITE_ID = UUID("00000000-0000-4000-8000-000000000003")
+SUPERVISOR_DEPLOYMENT_NODE_ID = UUID("00000000-0000-4000-8000-000000000004")
+KNOWN_EDGE_NODE_ID = UUID("00000000-0000-4000-8000-000000000005")
+OTHER_EDGE_NODE_ID = UUID("00000000-0000-4000-8000-000000000006")
+
+
+def _free_udp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def _user(role: RoleEnum) -> AuthenticatedUser:
@@ -33,6 +44,22 @@ def _user(role: RoleEnum) -> AuthenticatedUser:
         is_superadmin=False,
         tenant_context=str(TENANT_ID),
         claims={},
+    )
+
+
+def _supervisor_user(deployment_node_id: UUID) -> AuthenticatedUser:
+    return AuthenticatedUser(
+        subject="supervisor:edge-supervisor-1",
+        email=None,
+        role=RoleEnum.OPERATOR,
+        issuer="vezor-node-credential",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=str(TENANT_ID),
+        claims={
+            "auth_type": "supervisor_node_credential",
+            "deployment_node_id": str(deployment_node_id),
+        },
     )
 
 
@@ -56,11 +83,63 @@ class _FakeTenancyService:
 
 
 class _FakeSecurity:
-    def __init__(self, user: AuthenticatedUser) -> None:
+    def __init__(
+        self,
+        user: AuthenticatedUser,
+        *,
+        invalid_bearer_tokens: set[str] | None = None,
+    ) -> None:
         self.user = user
+        self.invalid_bearer_tokens = invalid_bearer_tokens or set()
 
     async def authenticate_request(self, request: object) -> AuthenticatedUser:
+        headers = getattr(request, "headers", {})
+        authorization = headers.get("Authorization")
+        if authorization is not None:
+            scheme, _, token = authorization.partition(" ")
+            if scheme.lower() == "bearer" and token.strip() in self.invalid_bearer_tokens:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token issuer is not trusted.",
+                )
         return self.user
+
+
+class _FakeDeploymentService:
+    def __init__(self, tenant_context: TenantContext) -> None:
+        self.tenant_context = tenant_context
+        self.credential_material: str | None = None
+        self.supervisor_id: str | None = None
+
+    async def authenticate_supervisor_credential(
+        self,
+        *,
+        credential_material: str,
+        supervisor_id: str | None = None,
+    ) -> TenantContext:
+        self.credential_material = credential_material
+        self.supervisor_id = supervisor_id
+        if credential_material != "node-credential":
+            raise ValueError("Invalid supervisor credential.")
+        return self.tenant_context
+
+
+class _FakeOperationsService:
+    def __init__(self, *, supervisor_node_edge_id: UUID | None) -> None:
+        self.supervisor_node_edge_id = supervisor_node_edge_id
+
+    async def assert_supervisor_edge_site_scope(
+        self,
+        tenant_context: TenantContext,
+        site_id: UUID,
+    ) -> None:
+        if tenant_context.user.claims.get("auth_type") != "supervisor_node_credential":
+            return
+        if site_id != KNOWN_SITE_ID or self.supervisor_node_edge_id != KNOWN_EDGE_NODE_ID:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor credential is not authorized for this edge site.",
+            )
 
 
 class _FakeSiteService:
@@ -119,18 +198,25 @@ def _create_app(
     *,
     include_sites: bool = True,
     edge_site_ids: set[UUID] | None = None,
+    invalid_bearer_tokens: set[str] | None = None,
+    include_deployment: bool = False,
+    supervisor_node_edge_id: UUID | None = None,
 ) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
+    tenancy = _FakeTenancyService(user)
     services = SimpleNamespace(
-        tenancy=_FakeTenancyService(user),
+        tenancy=tenancy,
         packs=PackRegistry(),
         link=LinkService(),
     )
     if include_sites:
         services.sites = _FakeSiteService(edge_site_ids=edge_site_ids)
+    if include_deployment:
+        services.deployment = _FakeDeploymentService(tenancy.context)
+    services.operations = _FakeOperationsService(supervisor_node_edge_id=supervisor_node_edge_id)
     app.state.services = services
-    app.state.security = _FakeSecurity(user)
+    app.state.security = _FakeSecurity(user, invalid_bearer_tokens=invalid_bearer_tokens)
     return app
 
 
@@ -139,6 +225,7 @@ async def client() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
         transport=ASGITransport(app=_create_app(_user(RoleEnum.ADMIN))),
         base_url="http://test",
+        headers={"Authorization": "Bearer admin-token"},
     ) as http_client:
         yield http_client
 
@@ -148,6 +235,7 @@ async def viewer_client() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
         transport=ASGITransport(app=_create_app(_user(RoleEnum.VIEWER))),
         base_url="http://test",
+        headers={"Authorization": "Bearer viewer-token"},
     ) as http_client:
         yield http_client
 
@@ -162,6 +250,23 @@ async def test_packless_link_status_route_returns_budget_queue_probe_and_state(
     assert payload["site_id"] == "00000000-0000-4000-8000-000000000002"
     assert payload["pack_id"] is None
     assert set(payload) >= {"budget", "queue_depth", "latest_probe", "link_state", "last_sync_at"}
+
+
+@pytest.mark.asyncio
+async def test_link_status_route_does_not_store_passport_snapshot() -> None:
+    app = _create_app(_user(RoleEnum.ADMIN))
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer admin-token"},
+    ) as http_client:
+        response = await http_client.get(f"/api/v1/link/sites/{KNOWN_SITE_ID}/status")
+        repeat = await http_client.get(f"/api/v1/link/sites/{KNOWN_SITE_ID}/status")
+
+    assert response.status_code == 200
+    assert repeat.status_code == 200
+    assert response.json()["passport_hash"] == repeat.json()["passport_hash"]
+    assert app.state.services.link._passports == []
 
 
 @pytest.mark.asyncio
@@ -439,6 +544,60 @@ async def test_edge_agent_sample_computes_loss_from_packet_counts(client: AsyncC
 
 
 @pytest.mark.asyncio
+async def test_edge_agent_sample_accepts_supervisor_credential() -> None:
+    app = _create_app(
+        _user(RoleEnum.ADMIN),
+        invalid_bearer_tokens={"node-credential"},
+        include_deployment=True,
+    )
+    app.state.services.link.upsert_connection(
+        tenant_id=TENANT_ID,
+        site_id=KNOWN_SITE_ID,
+        label="Home",
+        transport_kind="ethernet",
+        status="online",
+        priority_rank=5,
+        availability_scope="always",
+        metered=False,
+        metadata={
+            "monitoring_targets": [
+                {
+                    "id": "target-google-dns",
+                    "label": "Google DNS",
+                    "address": "8.8.8.8",
+                    "probe_type": "icmp",
+                    "purpose": "custom",
+                    "monitoring": {
+                        "enabled": True,
+                        "source_type": "edge_agent",
+                        "interval_seconds": 300,
+                    },
+                }
+            ]
+        },
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as http_client:
+        response = await http_client.post(
+            f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-google-dns/edge-samples",
+            headers={"Authorization": "Bearer node-credential"},
+            json={
+                "agent_id": "edge-agent-home",
+                "method": "icmp_sequence",
+                "packet_count": 10,
+                "packets_received": 10,
+                "latency_ms": 18,
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json()["source"] == "edge_agent:edge-agent-home"
+    assert app.state.services.deployment.credential_material == "node-credential"
+
+
+@pytest.mark.asyncio
 async def test_edge_agent_sample_can_target_control_plane_site(client: AsyncClient) -> None:
     created = await client.post(
         f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
@@ -490,6 +649,54 @@ async def test_edge_agent_sample_can_target_control_plane_site(client: AsyncClie
     assert master_history.status_code == 200
     assert master_history.json()[0]["id"] == payload["id"]
     assert master_history.json()[0]["site_id"] == str(KNOWN_SITE_ID)
+
+
+@pytest.mark.asyncio
+async def test_node_credential_edge_sample_cannot_spoof_another_edge_site() -> None:
+    app = _create_app(
+        _supervisor_user(SUPERVISOR_DEPLOYMENT_NODE_ID),
+        include_deployment=True,
+        invalid_bearer_tokens={"node-credential"},
+        supervisor_node_edge_id=OTHER_EDGE_NODE_ID,
+    )
+    app.state.services.link.upsert_connection(
+        tenant_id=TENANT_ID,
+        site_id=KNOWN_SITE_ID,
+        label="Home",
+        transport_kind="ethernet",
+        status="online",
+        metadata={
+            "monitoring_targets": [
+                {
+                    "id": "target-vezor-master",
+                    "label": "Vezor Master reflector",
+                    "address": "master.vezor.local",
+                    "target_site_id": str(MASTER_SITE_ID),
+                    "probe_type": "udp",
+                    "monitoring": {"enabled": True, "source_type": "edge_agent"},
+                }
+            ]
+        },
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer node-credential"},
+    ) as http_client:
+        response = await http_client.post(
+            f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-vezor-master/edge-samples",
+            json={
+                "agent_id": "edge-kit-02",
+                "method": "udp_sequence",
+                "packet_count": 20,
+                "packets_received": 20,
+                "latency_ms": 24,
+            },
+        )
+
+    assert response.status_code == 403
+    assert app.state.services.link._probes == []
 
 
 @pytest.mark.asyncio
@@ -611,6 +818,22 @@ async def test_edge_agent_udp_sequence_sample_rejects_non_udp_target(
 
 
 @pytest.mark.asyncio
+async def test_edge_agent_sample_rejects_unimplemented_loss_methods(client: AsyncClient) -> None:
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/target-google-dns/edge-samples",
+        json={
+            "agent_id": "macbook-home",
+            "method": "stamp",
+            "packet_count": 20,
+            "packets_received": 20,
+            "latency_ms": 24,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_master_reflector_profile_api_defaults_disabled(client: AsyncClient) -> None:
     response = await client.get("/api/v1/link/reflectors/master")
 
@@ -636,6 +859,23 @@ async def test_master_reflector_profile_mutations_require_admin(
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_master_reflector_profile_read_does_not_create_profile() -> None:
+    app = _create_app(_user(RoleEnum.VIEWER))
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as http_client:
+        response = await http_client.get("/api/v1/link/reflectors/master")
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+    assert app.state.services.link.get_master_reflector_profile(
+        tenant_id=TENANT_ID,
+        site_id=MASTER_SITE_ID,
+    ) is None
 
 
 @pytest.mark.asyncio
@@ -675,6 +915,49 @@ async def test_master_reflector_profile_enable_update_disable_and_rotate(
     assert disabled.status_code == 200
     assert disabled.json()["enabled"] is False
     assert disabled.json()["last_status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_master_reflector_profile_mutations_reconcile_running_runtime() -> None:
+    app = _create_app(_user(RoleEnum.ADMIN))
+    app.state.link_reflector_runtime = None
+    udp_port = _free_udp_port()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer admin-token"},
+    ) as http_client:
+        try:
+            enabled = await http_client.post(
+                "/api/v1/link/reflectors/master/enable",
+                json={
+                    "public_address": "vezor.example.local",
+                    "bind_address": "127.0.0.1",
+                    "udp_port": udp_port,
+                    "allowed_source_cidrs": ["192.0.2.0/24"],
+                    "rate_limit_pps_per_source": 75,
+                },
+            )
+            runtime = app.state.link_reflector_runtime
+
+            disabled = await http_client.post("/api/v1/link/reflectors/master/disable")
+        finally:
+            stop_reflector(app.state.link_reflector_runtime)
+            app.state.link_reflector_runtime = None
+
+    assert enabled.status_code == 200
+    assert enabled.json()["last_status"] == "listening"
+    assert runtime is not None
+    assert runtime.port == udp_port
+    assert runtime.protocol.rate_limit_pps == 75
+    assert [str(network) for network in runtime.protocol.allowed_source_networks] == [
+        "192.0.2.0/24"
+    ]
+    assert disabled.status_code == 200
+    assert disabled.json()["last_status"] == "disabled"
+    assert app.state.link_reflector_runtime is None
+    assert runtime.transport.is_closing()
 
 
 @pytest.mark.asyncio

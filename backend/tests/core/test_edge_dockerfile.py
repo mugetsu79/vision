@@ -75,3 +75,13 @@ def test_argus_runtime_uses_compat_shims_for_python_310_stdlib_gaps() -> None:
     }
 
     assert offenders == {}
+
+
+def test_argus_runtime_does_not_use_deprecated_fastapi_status_aliases() -> None:
+    offenders = [
+        path.relative_to(BACKEND_ROOT)
+        for path in ARGUS_SOURCE_ROOT.rglob("*.py")
+        if "HTTP_422_UNPROCESSABLE_ENTITY" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []

@@ -1,10 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { Links } from "@/pages/Links";
+import { TestMemoryRouter } from "@/test/router";
 
 const linkPageMocks = vi.hoisted(() => ({
   summaries: [] as unknown[],
@@ -15,6 +15,8 @@ const linkPageMocks = vi.hoisted(() => ({
   queue: [] as unknown[],
   policies: {} as unknown,
   reflectorProfile: null as unknown,
+  summariesIsLoading: false,
+  summariesError: null as unknown,
   createConnection: vi.fn(),
   updateConnection: vi.fn(),
   deleteConnection: vi.fn(),
@@ -35,8 +37,9 @@ const linkPageMocks = vi.hoisted(() => ({
 vi.mock("@/hooks/use-link", () => ({
   useLinkSiteSummaries: () => ({
     data: linkPageMocks.summaries,
-    isLoading: false,
-    isError: false,
+    isLoading: linkPageMocks.summariesIsLoading,
+    error: linkPageMocks.summariesError,
+    isError: Boolean(linkPageMocks.summariesError),
   }),
   useLinkSiteStatus: () => ({
     data: linkPageMocks.status,
@@ -184,6 +187,8 @@ function mockLinkHooks({
   retryQueueItem = vi.fn().mockResolvedValue({}),
   pauseQueueItem = vi.fn().mockResolvedValue({}),
   resumeQueueItem = vi.fn().mockResolvedValue({}),
+  summariesIsLoading = false,
+  summariesError = null,
 }: {
   summaries?: unknown[];
   status?: unknown;
@@ -208,6 +213,8 @@ function mockLinkHooks({
   retryQueueItem?: ReturnType<typeof vi.fn>;
   pauseQueueItem?: ReturnType<typeof vi.fn>;
   resumeQueueItem?: ReturnType<typeof vi.fn>;
+  summariesIsLoading?: boolean;
+  summariesError?: unknown;
 } = {}) {
   linkPageMocks.summaries = summaries;
   linkPageMocks.status = status;
@@ -232,6 +239,8 @@ function mockLinkHooks({
   linkPageMocks.retryQueueItem = retryQueueItem;
   linkPageMocks.pauseQueueItem = pauseQueueItem;
   linkPageMocks.resumeQueueItem = resumeQueueItem;
+  linkPageMocks.summariesIsLoading = summariesIsLoading;
+  linkPageMocks.summariesError = summariesError;
 }
 
 function renderWithProviders(
@@ -239,15 +248,9 @@ function renderWithProviders(
   { route = "/links" }: { route?: string } = {},
 ) {
   return render(
-    <MemoryRouter
-      initialEntries={[route]}
-      future={{
-        v7_relativeSplatPath: true,
-        v7_startTransition: true,
-      }}
-    >
+    <TestMemoryRouter initialEntries={[route]}>
       {ui}
-    </MemoryRouter>,
+    </TestMemoryRouter>,
   );
 }
 
@@ -262,6 +265,8 @@ describe("Links", () => {
     linkPageMocks.queue = [];
     linkPageMocks.policies = {};
     linkPageMocks.reflectorProfile = null;
+    linkPageMocks.summariesIsLoading = false;
+    linkPageMocks.summariesError = null;
     linkPageMocks.createConnection = vi.fn().mockResolvedValue({});
     linkPageMocks.updateConnection = vi.fn().mockResolvedValue({});
     linkPageMocks.deleteConnection = vi.fn().mockResolvedValue({});
@@ -300,6 +305,21 @@ describe("Links", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("Link Performance surfaces summary loading and error states", async () => {
+    mockLinkHooks({ summariesIsLoading: true });
+
+    renderWithProviders(<Links />);
+
+    expect(await screen.findByText(/Loading link sites/i)).toBeInTheDocument();
+
+    mockLinkHooks({ summariesError: new Error("summary failure") });
+    renderWithProviders(<Links />);
+
+    expect(
+      await screen.findByText(/Link summaries could not be loaded/i),
+    ).toBeInTheDocument();
+  });
+
   test("Link Performance filters and paginates site summaries", async () => {
     const user = userEvent.setup();
     mockLinkHooks({
@@ -336,7 +356,7 @@ describe("Links", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("selected Link Performance scope hides the unfiltered site list", async () => {
+  test("selected Link Performance scope keeps the site list available", async () => {
     const user = userEvent.setup();
     mockLinkHooks({
       summaries: Array.from({ length: 12 }, (_, index) =>
@@ -351,16 +371,36 @@ describe("Links", () => {
 
     const selector = await screen.findByTestId("link-site-selector");
     expect(within(selector).getByText("Remote Site 1")).toBeInTheDocument();
+    expect(within(selector).getByText("Remote Site 2")).toBeInTheDocument();
     expect(
-      within(selector).queryByText("Remote Site 2"),
-    ).not.toBeInTheDocument();
-    expect(
-      within(selector).queryByLabelText(/link sites per page/i),
-    ).not.toBeInTheDocument();
+      within(selector).getByLabelText(/link sites per page/i),
+    ).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/search link sites/i), "12");
 
     expect(within(selector).getByText("Remote Site 12")).toBeInTheDocument();
+  });
+
+  test("selected site with no probe sample renders unknown reachability", async () => {
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1", site_name: "North Gate" })],
+      status: {
+        link_state: "unknown",
+        passport_hash: "",
+        active_connection: null,
+        queue_depth: {},
+        latest_probe: null,
+      },
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    expect(
+      await screen.findByRole("heading", { name: /Current posture/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/No probe sample/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Unknown/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/0 ms/i)).not.toBeInTheDocument();
   });
 
   test("selected site renders link posture link paths budget probes queue and passport", async () => {
@@ -534,6 +574,37 @@ describe("Links", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("control plane site with no edge sample does not display fake latency", async () => {
+    mockLinkHooks({
+      summaries: [
+        createSummary({
+          site_id: "master-site",
+          site_name: "Vezor Master",
+          site_role: "control_plane",
+          capabilities: {
+            can_configure_links: false,
+            can_receive_edge_probes: true,
+            can_record_manual_samples: false,
+          },
+          latest_probe: null,
+        }),
+      ],
+      status: {
+        link_state: "unknown",
+        latest_probe: null,
+      },
+      probes: [],
+    });
+
+    renderWithProviders(<Links />, { route: "/links?site=master-site" });
+
+    expect(
+      await screen.findByRole("heading", { name: /Edge probe ingress/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/No edge sample/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/0 ms/i)).not.toBeInTheDocument();
+  });
+
   test("control plane site exposes master reflector status and actions", async () => {
     const user = userEvent.setup();
     const enableMasterReflector = vi.fn().mockResolvedValue({});
@@ -670,12 +741,14 @@ describe("Links", () => {
           metadata?: {
             external_reference?: string | null;
             link_model?: string;
-            monitoring_targets?: Array<{
-              address?: string;
-              label?: string;
-              port?: number | null;
-              probe_type?: string;
-            }>;
+	            monitoring_targets?: Array<{
+	              address?: string;
+	              label?: string;
+	              port?: number | null;
+	              probe_type?: string;
+	              reflector_port?: number | null;
+	              reflector_profile_id?: string | null;
+	            }>;
             visibility?: string;
           };
         }
@@ -688,12 +761,38 @@ describe("Links", () => {
     );
     expect(createCall?.metadata?.link_model).toBe("provider_managed");
     expect(createCall?.metadata?.visibility).toBe("handoff_only");
-    expect(createCall?.metadata?.monitoring_targets?.[0]).toMatchObject({
-      address: "ingest.example.vezor",
-      label: "Vezor ingest",
-      port: 443,
-      probe_type: "https",
+	    expect(createCall?.metadata?.monitoring_targets?.[0]).toMatchObject({
+	      address: "ingest.example.vezor",
+	      label: "Vezor ingest",
+	      port: 443,
+	      probe_type: "https",
+	      reflector_port: null,
+	      reflector_profile_id: null,
+	    });
+	  });
+
+  test("edge-agent loss method selector only exposes implemented methods", async () => {
+    const user = userEvent.setup();
+    mockLinkHooks({
+      summaries: [createSummary({ site_id: "site-1" })],
     });
+
+    renderWithProviders(<Links />, { route: "/links?site=site-1" });
+
+    await user.click(
+      await screen.findByRole("button", { name: /add link path/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /add monitoring target/i }));
+    await user.selectOptions(
+      screen.getByLabelText(/monitoring source/i),
+      "edge_agent",
+    );
+
+    const lossMethod = screen.getByLabelText(/loss method/i);
+    expect(within(lossMethod).getByRole("option", { name: /ICMP sequence/i })).toBeInTheDocument();
+    expect(within(lossMethod).getByRole("option", { name: /UDP sequence/i })).toBeInTheDocument();
+    expect(within(lossMethod).queryByRole("option", { name: /STAMP/i })).not.toBeInTheDocument();
+    expect(within(lossMethod).queryByRole("option", { name: /TWAMP/i })).not.toBeInTheDocument();
   });
 
   test("link path form can preset a Vezor Master monitoring target", async () => {
@@ -1334,7 +1433,7 @@ describe("Links", () => {
       loss_method: "icmp_sequence",
       loss_packet_count: 20,
       monitoring: { source_type: "edge_agent" },
-      probe_type: "udp",
+      probe_type: "icmp",
     });
   });
 

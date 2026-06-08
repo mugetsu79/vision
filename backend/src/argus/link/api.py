@@ -3,13 +3,18 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Literal, cast
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, model_validator
 
 from argus.api.contracts import SiteResponse, TenantContext
-from argus.api.dependencies import get_app_services, get_tenant_context
+from argus.api.dependencies import (
+    SupervisorOrAdminTenantDependency,
+    get_app_services,
+    get_tenant_context,
+)
+from argus.compat import UTC
 from argus.core.security import AuthenticatedUser, require
 from argus.link.contracts import (
     JsonObject,
@@ -34,8 +39,12 @@ from argus.link.probe_runner import (
     measure_backend_throughput,
     run_backend_probe,
 )
+from argus.link.reflector import start_reflector, stop_reflector
+from argus.link.reflector_profiles import decrypt_reflector_secret
 from argus.models.enums import RoleEnum
 from argus.services.app import AppServices
+
+HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 router = APIRouter(prefix="/api/v1/link", tags=["link"])
 
@@ -45,7 +54,7 @@ ServicesDependency = Annotated[AppServices, Depends(get_app_services)]
 TenantDependency = Annotated[TenantContext, Depends(get_tenant_context)]
 PriorityLaneQuery = Annotated[LinkPriorityLane, Query()]
 RemainingBudgetBytesQuery = Annotated[int, Query(ge=0)]
-LinkEdgeProbeMethod = Literal["icmp_sequence", "stamp", "twamp", "udp_sequence"]
+LinkEdgeProbeMethod = Literal["icmp_sequence", "udp_sequence"]
 LinkSiteRole = Literal["edge", "control_plane"]
 LinkReflectorSecretState = Literal["missing", "present"]
 LinkControlTargetMode = Literal["https_only", "udp_reflector", "https_and_udp_reflector"]
@@ -209,15 +218,22 @@ async def get_master_reflector_profile(
     services: ServicesDependency,
 ) -> LinkReflectorProfileResponse:
     master_site = await _master_control_plane_site(services, tenant_context)
-    profile = await services.link.aensure_master_reflector_profile(
+    profile = await services.link.aget_master_reflector_profile(
         tenant_id=tenant_context.tenant_id,
         site_id=master_site.id,
     )
-    return _reflector_profile_payload(profile)
+    return _reflector_profile_payload(
+        profile
+        or _default_master_reflector_profile(
+            tenant_id=tenant_context.tenant_id,
+            site_id=master_site.id,
+        )
+    )
 
 
 @router.put("/reflectors/master", response_model=LinkReflectorProfileResponse)
 async def put_master_reflector_profile(
+    request: Request,
     payload: LinkReflectorProfileUpdate,
     current_user: AdminUser,
     tenant_context: TenantDependency,
@@ -237,11 +253,18 @@ async def put_master_reflector_profile(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    profile = await _reconcile_master_reflector_runtime(
+        request,
+        services,
+        tenant_context,
+        profile,
+    )
     return _reflector_profile_payload(profile)
 
 
 @router.post("/reflectors/master/enable", response_model=LinkReflectorProfileResponse)
 async def enable_master_reflector_profile(
+    request: Request,
     payload: LinkReflectorProfileUpdate,
     current_user: AdminUser,
     tenant_context: TenantDependency,
@@ -276,11 +299,18 @@ async def enable_master_reflector_profile(
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    profile = await _reconcile_master_reflector_runtime(
+        request,
+        services,
+        tenant_context,
+        profile,
+    )
     return _reflector_profile_payload(profile)
 
 
 @router.post("/reflectors/master/disable", response_model=LinkReflectorProfileResponse)
 async def disable_master_reflector_profile(
+    request: Request,
     current_user: AdminUser,
     tenant_context: TenantDependency,
     services: ServicesDependency,
@@ -290,11 +320,18 @@ async def disable_master_reflector_profile(
         tenant_id=tenant_context.tenant_id,
         site_id=master_site.id,
     )
+    profile = await _reconcile_master_reflector_runtime(
+        request,
+        services,
+        tenant_context,
+        profile,
+    )
     return _reflector_profile_payload(profile)
 
 
 @router.post("/reflectors/master/rotate-key", response_model=LinkReflectorProfileResponse)
 async def rotate_master_reflector_key(
+    request: Request,
     current_user: AdminUser,
     tenant_context: TenantDependency,
     services: ServicesDependency,
@@ -303,6 +340,12 @@ async def rotate_master_reflector_key(
     profile = await services.link.arotate_master_reflector_key(
         tenant_id=tenant_context.tenant_id,
         site_id=master_site.id,
+    )
+    profile = await _reconcile_master_reflector_runtime(
+        request,
+        services,
+        tenant_context,
+        profile,
     )
     return _reflector_profile_payload(profile)
 
@@ -360,7 +403,7 @@ async def get_link_status(
             tenant_id=tenant_context.tenant_id,
             site_id=site_id,
         )
-    passport = await services.link.abuild_passport(
+    passport = await services.link.apreview_passport(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
     )
@@ -677,8 +720,7 @@ async def post_link_edge_probe_sample(
     site_id: UUID,
     target_id: str,
     payload: LinkEdgeProbeSampleCreate,
-    current_user: AdminUser,
-    tenant_context: TenantDependency,
+    tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> JsonObject:
     await _ensure_link_edge_site(
@@ -687,6 +729,7 @@ async def post_link_edge_probe_sample(
         site_id,
         detail="Core Link probes can only be recorded for edge sites.",
     )
+    await services.operations.assert_supervisor_edge_site_scope(tenant_context, site_id)
     target = await services.link.atarget_for_connection_metadata(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
@@ -696,7 +739,7 @@ async def post_link_edge_probe_sample(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
     if payload.method == "udp_sequence" and target.get("probe_type") != "udp":
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=HTTP_422_UNPROCESSABLE,
             detail="UDP sequence samples require a UDP probe target.",
         )
 
@@ -1058,6 +1101,86 @@ def _reflector_profile_payload(
     )
 
 
+def _default_master_reflector_profile(
+    *,
+    tenant_id: UUID,
+    site_id: UUID,
+) -> LinkReflectorProfileRecord:
+    now = datetime.now(tz=UTC)
+    return LinkReflectorProfileRecord(
+        id=uuid5(NAMESPACE_URL, f"argus:link-reflector-profile:{tenant_id}:{site_id}:master"),
+        tenant_id=tenant_id,
+        site_id=site_id,
+        profile_kind="master",
+        enabled=False,
+        mode="vezor_udp_sequence",
+        public_address=None,
+        bind_address="0.0.0.0",
+        udp_port=8622,
+        key_id="master-reflector-default",
+        encrypted_secret=None,
+        allowed_edge_site_ids=[],
+        allowed_source_cidrs=[],
+        rate_limit_pps_per_source=100,
+        last_status="disabled",
+        last_error=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def _reconcile_master_reflector_runtime(
+    request: Request,
+    services: AppServices,
+    tenant_context: TenantContext,
+    profile: LinkReflectorProfileRecord,
+) -> LinkReflectorProfileRecord:
+    if not hasattr(request.app.state, "link_reflector_runtime"):
+        return profile
+
+    stop_reflector(request.app.state.link_reflector_runtime)
+    request.app.state.link_reflector_runtime = None
+
+    if not profile.enabled:
+        return profile
+    if profile.encrypted_secret is None:
+        return await services.link.aupdate_master_reflector_profile(
+            tenant_id=tenant_context.tenant_id,
+            site_id=profile.site_id,
+            last_status="unhealthy",
+            last_error="Reflector profile is enabled without a secret.",
+        )
+
+    try:
+        secret = decrypt_reflector_secret(
+            profile.encrypted_secret,
+            settings=services.link.settings,
+        )
+        runtime = await start_reflector(
+            bind_host=profile.bind_address,
+            port=profile.udp_port,
+            secret=secret.encode("utf-8"),
+            key_id=profile.key_id,
+            rate_limit_pps=profile.rate_limit_pps_per_source,
+            allowed_source_cidrs=profile.allowed_source_cidrs,
+        )
+    except Exception as exc:
+        return await services.link.aupdate_master_reflector_profile(
+            tenant_id=tenant_context.tenant_id,
+            site_id=profile.site_id,
+            last_status="unhealthy",
+            last_error=str(exc),
+        )
+
+    request.app.state.link_reflector_runtime = runtime
+    return await services.link.aupdate_master_reflector_profile(
+        tenant_id=tenant_context.tenant_id,
+        site_id=profile.site_id,
+        last_status="listening",
+        last_error=None,
+    )
+
+
 async def _connection_for_control_target(
     services: AppServices,
     *,
@@ -1353,12 +1476,12 @@ async def _target_site_id_from_metadata(
             target_site_id = UUID(value)
         except ValueError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=HTTP_422_UNPROCESSABLE,
                 detail="Probe target target_site_id must be a UUID.",
             ) from exc
     else:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE,
             detail="Probe target target_site_id must be a UUID.",
         )
     await _ensure_link_site(services, tenant_context, target_site_id)

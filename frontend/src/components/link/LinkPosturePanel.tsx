@@ -31,6 +31,7 @@ export function LinkPosturePanel({
   const payload = asRecord(status);
   const activeConnection = asRecord(payload.active_connection);
   const latestProbe = asRecord(payload.latest_probe);
+  const hasLatestProbe = Boolean(payload.latest_probe);
   const queueDepth = asRecord(payload.queue_depth);
   const passportHash = textValue(payload.passport_hash, "");
   const shortHash = passportHash ? passportHash.slice(0, 8) : "Not recorded";
@@ -90,13 +91,23 @@ export function LinkPosturePanel({
             {textValue(activeConnection.status, "unknown")}
           </Metric>
           <Metric label="Latest probe">
-            {numberValue(latestProbe.latency_ms)} ms /{" "}
-            {probeThroughputLabel(latestProbe)} /{" "}
-            {probePacketLossLabel(latestProbe)}
+            {hasLatestProbe ? (
+              <>
+                {numberValue(latestProbe.latency_ms)} ms /{" "}
+                {probeThroughputLabel(latestProbe)} /{" "}
+                {probePacketLossLabel(latestProbe)}
+              </>
+            ) : (
+              "No probe sample"
+            )}
           </Metric>
           <Metric label="Passport hash">{shortHash}</Metric>
           <Metric label="Reachable">
-            {latestProbe.reachable === false ? "No" : "Yes"}
+            {hasLatestProbe
+              ? latestProbe.reachable === false
+                ? "No"
+                : "Yes"
+              : "Unknown"}
           </Metric>
           <Metric label="Queued transfers">
             {queuedTransferLabel(queueDepth)}

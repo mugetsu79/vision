@@ -18,6 +18,8 @@ from argus.models.enums import DetectorCapability, QueryResolutionMode, RuntimeV
 from argus.models.tables import AuditLog, Camera, CameraVocabularySnapshot, Model, Site, Tenant
 from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
+HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+
 
 @dataclass(slots=True, frozen=True)
 class QueryServiceResult:
@@ -155,7 +157,7 @@ class QueryService:
             and len(resolved_terms) > detector_context.max_runtime_terms
         ):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=HTTP_422_UNPROCESSABLE,
                 detail=(
                     "runtime_vocabulary exceeds "
                     f"max_runtime_terms={detector_context.max_runtime_terms}."
@@ -280,7 +282,7 @@ class SQLCameraClassInventory:
         capabilities = {_coerce_detector_capability(row.capability) for row in rows}
         if len(capabilities) > 1:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=HTTP_422_UNPROCESSABLE,
                 detail="Selected cameras have incompatible detector query semantics.",
             )
         capability = next(iter(capabilities), DetectorCapability.FIXED_VOCAB)

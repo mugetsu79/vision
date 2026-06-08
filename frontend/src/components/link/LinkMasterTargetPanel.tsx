@@ -54,6 +54,7 @@ export function LinkMasterTargetPanel({
   const payload = asRecord(status);
   const reflector = asRecord(reflectorProfile);
   const latestProbe = asRecord(payload.latest_probe ?? summary.latest_probe);
+  const hasLatestProbe = Boolean(payload.latest_probe ?? summary.latest_probe);
   const sortedProbes = [...probes].sort((left, right) =>
     textValue(asRecord(right).recorded_at, "").localeCompare(
       textValue(asRecord(left).recorded_at, ""),
@@ -101,8 +102,14 @@ export function LinkMasterTargetPanel({
               </StatusToneBadge>
             </Metric>
             <Metric label="Latest sample">
-              {numberValue(latestProbe.latency_ms)} ms /{" "}
-              {probePacketLossLabel(latestProbe)}
+              {hasLatestProbe ? (
+                <>
+                  {numberValue(latestProbe.latency_ms)} ms /{" "}
+                  {probePacketLossLabel(latestProbe)}
+                </>
+              ) : (
+                "No edge sample"
+              )}
             </Metric>
             <Metric label="Source edges">{sourceCount}</Metric>
           </div>
@@ -263,13 +270,19 @@ function SampleRow({ probe }: { probe: unknown }) {
           </p>
         </div>
         <p className="text-sm font-medium text-[var(--vz-text-primary)]">
-          {numberValue(item.latency_ms)} ms
+          {typeof item.latency_ms === "number" ? `${item.latency_ms} ms` : "No latency"}
         </p>
       </div>
       <div className="mt-2 flex flex-wrap gap-2 text-xs uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
         <span>{textValue(item.probe_type, "probe")}</span>
         <span>{probePacketLossLabel(probe)}</span>
-        <span>{item.reachable === false ? "unreachable" : "reachable"}</span>
+        <span>
+          {typeof item.reachable === "boolean"
+            ? item.reachable
+              ? "reachable"
+              : "unreachable"
+            : "reachability unknown"}
+        </span>
       </div>
       {textValue(item.source_type, "") === "edge_agent" ? (
         <p className="mt-2 text-xs text-[var(--vz-text-muted)]">

@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
@@ -21,12 +21,9 @@ vi.mock("@/hooks/use-bootstrap", () => ({
 
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuthStore } from "@/stores/auth-store";
+import { TestMemoryRouter } from "@/test/router";
 
 const initialAuthState = useAuthStore.getState();
-const routerFuture = {
-  v7_relativeSplatPath: true,
-  v7_startTransition: true,
-} as const;
 
 describe("RequireAuth", () => {
   beforeEach(() => {
@@ -43,7 +40,7 @@ describe("RequireAuth", () => {
 
   test("redirects anonymous users to the sign-in page", async () => {
     render(
-      <MemoryRouter future={routerFuture} initialEntries={["/live"]}>
+      <TestMemoryRouter initialEntries={["/live"]}>
         <Routes>
           <Route path="/signin" element={<div>Sign in page</div>} />
           <Route
@@ -55,7 +52,7 @@ describe("RequireAuth", () => {
             }
           />
         </Routes>
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(await screen.findByText("Sign in page")).toBeInTheDocument();

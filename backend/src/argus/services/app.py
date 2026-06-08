@@ -95,6 +95,7 @@ from argus.api.contracts import (
     SceneContractSnapshotResponse,
     SceneVisionProfile,
     SiteCreate,
+    SiteKind,
     SiteResponse,
     SiteUpdate,
     SourceCapability,
@@ -168,6 +169,7 @@ from argus.models.tables import (
     Camera,
     CameraVocabularySnapshot,
     CountEvent,
+    DeploymentNode,
     DetectionRule,
     EdgeNode,
     EdgeNodeHardwareReport,
@@ -259,8 +261,8 @@ TRANSCODE_ROUTE_NORMALIZED_MESSAGE = (
     "for output size and FPS."
 )
 CONTROL_PLANE_SITE_NAME = "Vezor Master"
-CONTROL_PLANE_SITE_KIND = "control_plane"
-EDGE_SITE_KIND = "edge"
+CONTROL_PLANE_SITE_KIND: SiteKind = "control_plane"
+EDGE_SITE_KIND: SiteKind = "edge"
 
 if TYPE_CHECKING:
     from argus.services.query import QueryService
@@ -519,6 +521,7 @@ class SiteService:
                 select(Site)
                 .join(EdgeNode, EdgeNode.site_id == Site.id)
                 .where(Site.tenant_id == tenant_context.tenant_id)
+                .where(Site.site_kind == EDGE_SITE_KIND)
                 .distinct()
                 .order_by(Site.name)
             )
@@ -530,11 +533,6 @@ class SiteService:
         tenant_context: TenantContext,
     ) -> list[SiteResponse]:
         async with self.session_factory() as session:
-            await _ensure_control_plane_site(
-                session,
-                tenant_id=tenant_context.tenant_id,
-                now=datetime.now(tz=UTC),
-            )
             statement = (
                 select(Site)
                 .outerjoin(EdgeNode, EdgeNode.site_id == Site.id)
@@ -549,7 +547,6 @@ class SiteService:
                 .order_by(Site.site_kind.desc(), Site.name)
             )
             sites = (await session.execute(statement)).scalars().all()
-            await session.commit()
         return [_site_to_response(site) for site in sites]
 
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
@@ -565,7 +562,11 @@ class SiteService:
             statement = (
                 select(EdgeNode.id)
                 .join(Site, Site.id == EdgeNode.site_id)
-                .where(Site.tenant_id == tenant_context.tenant_id, Site.id == site_id)
+                .where(
+                    Site.tenant_id == tenant_context.tenant_id,
+                    Site.id == site_id,
+                    Site.site_kind == EDGE_SITE_KIND,
+                )
                 .limit(1)
             )
             edge_node_id = (await session.execute(statement)).scalar_one_or_none()
@@ -773,6 +774,11 @@ class CameraService:
     ) -> WorkerConfigResponse:
         async with self.session_factory() as session:
             camera = await _load_camera(session, tenant_context.tenant_id, camera_id)
+            await _assert_supervisor_camera_scope(
+                session,
+                tenant_context=tenant_context,
+                camera=camera,
+            )
             primary_model = await _load_model(session, camera.primary_model_id)
             secondary_model = None
             if camera.secondary_model_id is not None:
@@ -2178,11 +2184,41 @@ class OperationsService:
         )
         return worker_assignment_response(row)
 
+    async def assert_supervisor_edge_node_scope(
+        self,
+        tenant_context: TenantContext,
+        edge_node_id: UUID | None,
+    ) -> None:
+        async with self.session_factory() as session:
+            await _assert_supervisor_edge_node_scope(
+                session,
+                tenant_context=tenant_context,
+                edge_node_id=edge_node_id,
+            )
+
+    async def assert_supervisor_edge_site_scope(
+        self,
+        tenant_context: TenantContext,
+        site_id: UUID,
+    ) -> None:
+        async with self.session_factory() as session:
+            edge_node_id = await _edge_node_id_for_site(
+                session,
+                tenant_id=tenant_context.tenant_id,
+                site_id=site_id,
+            )
+            await _assert_supervisor_edge_node_scope(
+                session,
+                tenant_context=tenant_context,
+                edge_node_id=edge_node_id,
+            )
+
     async def record_worker_runtime_report(
         self,
         tenant_context: TenantContext,
         payload: SupervisorRuntimeReportCreate,
     ) -> SupervisorRuntimeReportResponse:
+        await self.assert_supervisor_edge_node_scope(tenant_context, payload.edge_node_id)
         row = await self._supervisor_operations().record_runtime_report(
             tenant_id=tenant_context.tenant_id,
             payload=payload,
@@ -2272,6 +2308,7 @@ class OperationsService:
         supervisor_id: str,
         payload: EdgeNodeHardwareReportCreate,
     ) -> EdgeNodeHardwareReportResponse:
+        await self.assert_supervisor_edge_node_scope(tenant_context, payload.edge_node_id)
         row = await self._supervisor_operations().record_hardware_report(
             tenant_id=tenant_context.tenant_id,
             supervisor_id=supervisor_id,
@@ -2319,6 +2356,7 @@ class OperationsService:
         camera_id: UUID,
         payload: WorkerModelAdmissionRequest,
     ) -> WorkerModelAdmissionResponse:
+        await self.assert_supervisor_edge_node_scope(tenant_context, payload.edge_node_id)
         hardware_report = None
         if payload.edge_node_id is not None:
             hardware_reports = (
@@ -4575,7 +4613,7 @@ def build_app_services(
             settings=settings,
         ),
         billing=BillingService(db.session_factory),
-        link=LinkService(db.session_factory),
+        link=LinkService(db.session_factory, settings=settings),
         fleet=FleetService(db.session_factory),
         support=SupportService(db.session_factory),
         maritime=MaritimeRuntimeService(
@@ -4891,9 +4929,16 @@ def _site_to_response(site: Site) -> SiteResponse:
         description=site.description,
         tz=site.tz,
         geo_point=geo_point,
-        site_kind=getattr(cast(Any, site), "site_kind", None) or EDGE_SITE_KIND,
+        site_kind=_site_kind_value(site),
         created_at=site.created_at,
     )
+
+
+def _site_kind_value(site: Site) -> SiteKind:
+    raw_site_kind = getattr(cast(Any, site), "site_kind", EDGE_SITE_KIND)
+    if raw_site_kind == CONTROL_PLANE_SITE_KIND:
+        return CONTROL_PLANE_SITE_KIND
+    return EDGE_SITE_KIND
 
 
 async def _ensure_control_plane_site(
@@ -5301,6 +5346,95 @@ async def _effective_stream_edge_node_id(
     if not isinstance(assignment, WorkerAssignment):
         return None
     return assignment.edge_node_id
+
+
+def _supervisor_deployment_node_id(tenant_context: TenantContext) -> UUID | None:
+    if tenant_context.user.claims.get("auth_type") != "supervisor_node_credential":
+        return None
+    raw_node_id = tenant_context.user.claims.get("deployment_node_id")
+    if not isinstance(raw_node_id, str):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential is missing deployment node scope.",
+        )
+    try:
+        return UUID(raw_node_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential has invalid deployment node scope.",
+        ) from exc
+
+
+async def _supervisor_allowed_edge_node_id(
+    session: AsyncSession,
+    *,
+    tenant_context: TenantContext,
+) -> UUID | None:
+    deployment_node_id = _supervisor_deployment_node_id(tenant_context)
+    if deployment_node_id is None:
+        return None
+    node = await session.get(DeploymentNode, deployment_node_id)
+    if not isinstance(node, DeploymentNode) or node.tenant_id != tenant_context.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential is not authorized for this tenant.",
+        )
+    return node.edge_node_id
+
+
+async def _assert_supervisor_edge_node_scope(
+    session: AsyncSession,
+    *,
+    tenant_context: TenantContext,
+    edge_node_id: UUID | None,
+) -> None:
+    if _supervisor_deployment_node_id(tenant_context) is None:
+        return
+    allowed_edge_node_id = await _supervisor_allowed_edge_node_id(
+        session,
+        tenant_context=tenant_context,
+    )
+    if allowed_edge_node_id != edge_node_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential is not authorized for this edge node.",
+        )
+
+
+async def _assert_supervisor_camera_scope(
+    session: AsyncSession,
+    *,
+    tenant_context: TenantContext,
+    camera: Camera,
+) -> None:
+    if _supervisor_deployment_node_id(tenant_context) is None:
+        return
+    edge_node_id = await _effective_stream_edge_node_id(
+        session=session,
+        tenant_id=tenant_context.tenant_id,
+        camera=camera,
+    )
+    await _assert_supervisor_edge_node_scope(
+        session,
+        tenant_context=tenant_context,
+        edge_node_id=edge_node_id,
+    )
+
+
+async def _edge_node_id_for_site(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    site_id: UUID,
+) -> UUID | None:
+    statement = (
+        select(EdgeNode.id)
+        .join(Site, Site.id == EdgeNode.site_id)
+        .where(Site.tenant_id == tenant_id, Site.id == site_id)
+        .limit(1)
+    )
+    return (await session.execute(statement)).scalar_one_or_none()
 
 
 async def _latest_edge_stream_rtsp_base_url(

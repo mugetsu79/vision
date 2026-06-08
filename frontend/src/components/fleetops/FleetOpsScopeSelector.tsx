@@ -31,7 +31,7 @@ export function FleetOpsScopeSelector({
   onSelectVessel,
   searchValue,
   selectedVesselId,
-  title = "Choose vessel or site",
+  title = "Choose vessel",
   vessels,
 }: FleetOpsScopeSelectorProps) {
   const [pageSize, setPageSize] = useState<PaginationPageSize>(10);
@@ -69,7 +69,7 @@ export function FleetOpsScopeSelector({
         <Input
           aria-label="Search FleetOps vessel scope"
           className="max-w-xl border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-obsidian)] text-[var(--vz-text-primary)] placeholder:text-[var(--vz-text-muted)]"
-          placeholder="Search vessel, site, port, or IMO"
+          placeholder="Search vessel, assigned site, port, or IMO"
           value={searchValue}
           onChange={(event) => onSearchChange(event.target.value)}
         />

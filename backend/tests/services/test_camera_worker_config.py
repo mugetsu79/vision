@@ -18,6 +18,7 @@ from argus.core.config import Settings
 from argus.core.security import encrypt_rtsp_url
 from argus.models.enums import (
     CameraSourceKind,
+    DeploymentNodeKind,
     DetectorCapability,
     IncidentRuleSeverity,
     ModelFormat,
@@ -33,6 +34,7 @@ from argus.models.enums import (
 )
 from argus.models.tables import (
     Camera,
+    DeploymentNode,
     DetectionRule,
     Model,
     ModelRuntimeArtifact,
@@ -181,6 +183,9 @@ class _WorkerConfigSession:
         if model_cls is Tenant:
             tenant = self.state.get("tenant")
             return tenant if getattr(tenant, "id", None) == model_id else None
+        if model_cls is DeploymentNode:
+            node = self.state.get("deployment_node")
+            return node if getattr(node, "id", None) == model_id else None
         return None
 
     async def execute(self, statement):  # noqa: ANN001
@@ -268,6 +273,7 @@ class _WorkerConfigSessionFactory:
         artifacts: list[ModelRuntimeArtifact],
         tenant: Tenant | None = None,
         detection_rules: list[DetectionRule] | None = None,
+        deployment_node: DeploymentNode | None = None,
     ) -> None:
         self.state: dict[str, object] = {
             "camera": camera,
@@ -278,6 +284,7 @@ class _WorkerConfigSessionFactory:
             "runtime_passport_snapshots": [],
             "tenant": tenant,
             "detection_rules": detection_rules or [],
+            "deployment_node": deployment_node,
         }
 
     def __call__(self) -> _WorkerConfigSession:
@@ -385,6 +392,27 @@ def _tenant_context(tenant_id=None):  # noqa: ANN001
     return TenantContext(tenant_id=tenant_id, tenant_slug="argus-dev", user=user)
 
 
+def _supervisor_tenant_context(tenant_id, deployment_node_id):  # noqa: ANN001
+    from argus.api.contracts import TenantContext
+    from argus.core.security import AuthenticatedUser
+    from argus.models.enums import RoleEnum
+
+    user = AuthenticatedUser(
+        subject="supervisor:edge-kit-1",
+        email=None,
+        role=RoleEnum.OPERATOR,
+        issuer="vezor-node-credential",
+        realm="argus-dev",
+        is_superadmin=False,
+        tenant_context=str(tenant_id),
+        claims={
+            "auth_type": "supervisor_node_credential",
+            "deployment_node_id": str(deployment_node_id),
+        },
+    )
+    return TenantContext(tenant_id=tenant_id, tenant_slug="argus-dev", user=user)
+
+
 def _tenant(tenant_id, *, allow_plaintext_plates: bool = False) -> Tenant:  # noqa: ANN001
     return Tenant(
         id=tenant_id,
@@ -392,6 +420,16 @@ def _tenant(tenant_id, *, allow_plaintext_plates: bool = False) -> Tenant:  # no
         slug="worker-test",
         anpr_store_plaintext=allow_plaintext_plates,
         anpr_plaintext_justification="Dock audit policy" if allow_plaintext_plates else None,
+    )
+
+
+def _deployment_node(tenant_id, edge_node_id, node_id):  # noqa: ANN001
+    return DeploymentNode(
+        id=node_id,
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        supervisor_id="edge-kit-1",
+        node_kind=DeploymentNodeKind.EDGE,
     )
 
 
@@ -632,6 +670,43 @@ async def test_worker_config_includes_valid_fixed_vocab_runtime_artifact() -> No
 
     assert [candidate.id for candidate in config.runtime_artifacts] == [artifact.id]
     assert config.runtime_artifacts[0].runtime_backend == "tensorrt_engine"
+
+
+@pytest.mark.asyncio
+async def test_supervisor_worker_config_rejects_camera_assigned_to_other_edge_node() -> None:
+    settings = _settings()
+    tenant_id = uuid4()
+    deployment_node_id = uuid4()
+    supervisor_edge_node_id = uuid4()
+    other_edge_node_id = uuid4()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        edge_node_id=other_edge_node_id,
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[],
+        deployment_node=_deployment_node(tenant_id, supervisor_edge_node_id, deployment_node_id),
+    )
+    service = CameraService(
+        session_factory=session_factory,
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_worker_config(
+            _supervisor_tenant_context(tenant_id, deployment_node_id),
+            camera.id,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "not authorized" in str(exc_info.value.detail).lower()
+    assert session_factory.state["privacy_manifest_snapshots"] == []
+    assert session_factory.state["scene_contract_snapshots"] == []
 
 
 @pytest.mark.asyncio

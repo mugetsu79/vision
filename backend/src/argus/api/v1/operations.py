@@ -107,6 +107,10 @@ async def record_worker_runtime_report(
     tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> SupervisorRuntimeReportResponse:
+    await services.operations.assert_supervisor_edge_node_scope(
+        tenant_context,
+        payload.edge_node_id,
+    )
     return await services.operations.record_worker_runtime_report(
         tenant_context,
         payload,
@@ -191,6 +195,10 @@ async def record_hardware_report(
     tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> EdgeNodeHardwareReportResponse:
+    await services.operations.assert_supervisor_edge_node_scope(
+        tenant_context,
+        payload.edge_node_id,
+    )
     return await services.operations.record_hardware_report(
         tenant_context,
         supervisor_id,
@@ -256,6 +264,10 @@ async def evaluate_worker_model_admission(
     tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
 ) -> WorkerModelAdmissionResponse:
+    await services.operations.assert_supervisor_edge_node_scope(
+        tenant_context,
+        payload.edge_node_id,
+    )
     return await services.operations.evaluate_worker_model_admission(
         tenant_context,
         camera_id,

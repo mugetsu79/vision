@@ -62,6 +62,13 @@ export function Links() {
   const rotateReflectorKey = useRotateMasterLinkReflectorKey();
   const connectionItems = connections.data ?? [];
   const statusBudget = asRecord(status.data).budget ?? null;
+  const edgeSiteCount = summaryItems.filter(
+    (summary) => linkSiteRole(summary) === "edge",
+  ).length;
+  const controlPlaneCount = summaryItems.length - edgeSiteCount;
+  const degradedSiteCount = summaryItems.filter((summary) =>
+    String(summary.link_state).toLowerCase().includes("degraded"),
+  ).length;
 
   function selectSite(siteId: string) {
     setSearchParams({ site: siteId });
@@ -81,6 +88,24 @@ export function Links() {
         title="Link Performance"
         description="Monitor site connectivity, transfer posture, budgets, probes, and link passports across Vezor."
       />
+      <WorkspaceSurface className="p-4">
+        {summaries.isLoading ? (
+          <p className="text-sm text-[var(--vz-text-secondary)]">
+            Loading link sites...
+          </p>
+        ) : summaries.error ? (
+          <p className="text-sm text-[var(--vz-state-risk)]">
+            Link summaries could not be loaded.
+          </p>
+        ) : (
+          <div className="grid gap-3 text-sm text-[var(--vz-text-secondary)] sm:grid-cols-4">
+            <SummaryMetric label="Sites" value={summaryItems.length} />
+            <SummaryMetric label="Edge sites" value={edgeSiteCount} />
+            <SummaryMetric label="Control planes" value={controlPlaneCount} />
+            <SummaryMetric label="Degraded" value={degradedSiteCount} />
+          </div>
+        )}
+      </WorkspaceSurface>
       <LinkSiteSelector
         summaries={summaryItems}
         searchValue={searchValue}
@@ -149,3 +174,16 @@ export function Links() {
 }
 
 export const LinksPage = Links;
+
+function SummaryMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
+        {label}
+      </p>
+      <p className="mt-1 text-base font-semibold text-[var(--vz-text-primary)]">
+        {value}
+      </p>
+    </div>
+  );
+}

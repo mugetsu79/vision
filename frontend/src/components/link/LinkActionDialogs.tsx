@@ -261,10 +261,28 @@ export function LinkConnectionDialog({
           return {
             ...target,
             [field]: value,
+            lossMethod:
+              probeType === "udp" && target.lossMethod === "icmp_sequence"
+                ? "udp_sequence"
+                : probeType !== "udp" && target.lossMethod === "udp_sequence"
+                  ? "icmp_sequence"
+                  : target.lossMethod,
             port:
               target.port === "" || target.port === defaultPort(target.probeType)
                 ? defaultPort(probeType)
                 : target.port,
+          };
+        }
+        if (field === "lossMethod") {
+          const lossMethod = value as LinkProbeLossMethod;
+          return {
+            ...target,
+            lossMethod,
+            port:
+              target.port === "" || target.port === defaultPort(target.probeType)
+                ? defaultPort(lossMethod === "udp_sequence" ? "udp" : "icmp")
+                : target.port,
+            probeType: lossMethod === "udp_sequence" ? "udp" : "icmp",
           };
         }
         return { ...target, [field]: value };
@@ -1034,35 +1052,44 @@ function buildConnectionMetadata(form: ConnectionFormState): LinkPathMetadata {
   return {
     external_reference: nullableText(form.externalReference),
     link_model: form.linkModel,
-    monitoring_targets: form.targets.map((target) => ({
-      address: target.address.trim(),
-      expected_latency_ms: optionalNumber(target.expectedLatencyMs),
-      id: target.id,
-      label: target.label.trim(),
-      loss_dscp: optionalNumber(target.lossDscp),
-      loss_method: target.lossMethod,
-      loss_packet_count: optionalNumber(target.lossPacketCount),
-      loss_packet_spacing_ms: optionalNumber(target.lossPacketSpacingMs),
-      loss_timeout_ms: optionalNumber(target.lossTimeoutMs),
-      monitoring: {
-        enabled: target.monitoringEnabled,
-        interval_seconds: optionalNumber(target.monitoringIntervalSeconds),
-        source_type: target.monitoringSourceType,
-      },
-      port: optionalNumber(target.port),
-      probe_type: target.probeType,
-      purpose: target.purpose,
-      reflector_address:
-        nullableText(target.reflectorAddress) ??
-        (target.lossMethod === "udp_sequence" ? nullableText(target.address) : null),
-      reflector_key_id: nullableText(target.reflectorKeyId),
-      reflector_mode: nullableText(target.reflectorMode),
-      reflector_port: optionalNumber(target.reflectorPort),
-      reflector_profile_id: nullableText(target.reflectorProfileId),
-      target_site_id: nullableText(target.targetSiteId),
-      throughput_test_max_bytes: optionalNumber(target.throughputTestMaxBytes),
-      throughput_test_url: nullableText(target.throughputTestUrl),
-    })),
+    monitoring_targets: form.targets.map((target) => {
+      const usesUdpSequence = target.lossMethod === "udp_sequence";
+      return {
+        address: target.address.trim(),
+        expected_latency_ms: optionalNumber(target.expectedLatencyMs),
+        id: target.id,
+        label: target.label.trim(),
+        loss_dscp: optionalNumber(target.lossDscp),
+        loss_method: target.lossMethod,
+        loss_packet_count: optionalNumber(target.lossPacketCount),
+        loss_packet_spacing_ms: usesUdpSequence
+          ? optionalNumber(target.lossPacketSpacingMs)
+          : null,
+        loss_timeout_ms: usesUdpSequence
+          ? optionalNumber(target.lossTimeoutMs)
+          : null,
+        monitoring: {
+          enabled: target.monitoringEnabled,
+          interval_seconds: optionalNumber(target.monitoringIntervalSeconds),
+          source_type: target.monitoringSourceType,
+        },
+        port: optionalNumber(target.port),
+        probe_type: target.probeType,
+        purpose: target.purpose,
+        reflector_address: usesUdpSequence
+          ? nullableText(target.reflectorAddress) ?? nullableText(target.address)
+          : null,
+        reflector_key_id: usesUdpSequence ? nullableText(target.reflectorKeyId) : null,
+        reflector_mode: usesUdpSequence ? nullableText(target.reflectorMode) : null,
+        reflector_port: usesUdpSequence ? optionalNumber(target.reflectorPort) : null,
+        reflector_profile_id: usesUdpSequence
+          ? nullableText(target.reflectorProfileId)
+          : null,
+        target_site_id: nullableText(target.targetSiteId),
+        throughput_test_max_bytes: optionalNumber(target.throughputTestMaxBytes),
+        throughput_test_url: nullableText(target.throughputTestUrl),
+      };
+    }),
     visibility: form.visibility,
   };
 }

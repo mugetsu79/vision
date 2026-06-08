@@ -1,10 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test } from "vitest";
 
 import { SceneIntelligenceMatrix } from "@/components/operations/SceneIntelligenceMatrix";
 import type { SceneHealthRow } from "@/lib/operational-health";
+import { TestMemoryRouter } from "@/test/router";
 
 const rows: SceneHealthRow[] = [
   {
@@ -68,9 +68,9 @@ const rows: SceneHealthRow[] = [
 describe("SceneIntelligenceMatrix", () => {
   test("renders scene readiness rows with grouped runtime and stream signals", () => {
     render(
-      <MemoryRouter>
+      <TestMemoryRouter>
         <SceneIntelligenceMatrix rows={rows} />
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(
@@ -110,9 +110,9 @@ describe("SceneIntelligenceMatrix", () => {
 
   test("renders an empty state when no scenes exist", () => {
     render(
-      <MemoryRouter>
+      <TestMemoryRouter>
         <SceneIntelligenceMatrix rows={[]} />
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(screen.getByText(/no scenes configured/i)).toBeInTheDocument();
@@ -127,9 +127,9 @@ describe("SceneIntelligenceMatrix", () => {
     }));
 
     render(
-      <MemoryRouter>
+      <TestMemoryRouter>
         <SceneIntelligenceMatrix rows={manyRows} />
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     const matrix = screen.getByTestId("scene-intelligence-matrix");

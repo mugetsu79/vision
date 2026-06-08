@@ -1674,7 +1674,7 @@ class LinkService:
             pause_reason=None,
         )
 
-    def build_passport(
+    def preview_passport(
         self,
         *,
         tenant_id: UUID,
@@ -1700,6 +1700,108 @@ class LinkService:
             site_id=site_id,
             incident_id=incident_id,
         )
+        return self._passport_record_for_state(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            camera_id=camera_id,
+            incident_id=incident_id,
+            evidence_artifact_id=evidence_artifact_id,
+            link_state=link_state,
+            selected_connection=selected_connection,
+            connections=connections,
+            budget=budget,
+            queue_depth=queue_depth,
+            latest_probe=latest_probe,
+            last_sync_at=last_sync_at,
+        )
+
+    def build_passport(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        camera_id: UUID | None = None,
+        incident_id: UUID | None = None,
+        evidence_artifact_id: UUID | None = None,
+    ) -> LinkPassportSnapshotRecord:
+        passport = self.preview_passport(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            camera_id=camera_id,
+            incident_id=incident_id,
+            evidence_artifact_id=evidence_artifact_id,
+        )
+        self._passports.append(passport)
+        return passport
+
+    async def apreview_passport(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        camera_id: UUID | None = None,
+        incident_id: UUID | None = None,
+        evidence_artifact_id: UUID | None = None,
+    ) -> LinkPassportSnapshotRecord:
+        if self.session_factory is None:
+            return self.preview_passport(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                camera_id=camera_id,
+                incident_id=incident_id,
+                evidence_artifact_id=evidence_artifact_id,
+            )
+        budget = await self.aget_budget(tenant_id=tenant_id, site_id=site_id)
+        connections = await self.alist_connections(tenant_id=tenant_id, site_id=site_id)
+        selected_connection = _select_connection(
+            connections,
+            priority_lane="bulk",
+            remaining_budget_bytes=budget.bulk_daily_bytes if budget is not None else 0,
+        )
+        latest_probe = await self.alatest_probe(tenant_id=tenant_id, site_id=site_id)
+        queue = await self.alist_queue(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            incident_id=incident_id,
+        )
+        queue_depth = self.queue_depth_by_lane(queue)
+        link_state = self.derive_link_state(latest_probe)
+        last_sync_at = await self.alast_successful_transfer_at(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            incident_id=incident_id,
+        )
+        return self._passport_record_for_state(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            camera_id=camera_id,
+            incident_id=incident_id,
+            evidence_artifact_id=evidence_artifact_id,
+            link_state=link_state,
+            selected_connection=selected_connection,
+            connections=connections,
+            budget=budget,
+            queue_depth=queue_depth,
+            latest_probe=latest_probe,
+            last_sync_at=last_sync_at,
+        )
+
+    def _passport_record_for_state(
+        self,
+        *,
+        tenant_id: UUID,
+        site_id: UUID,
+        camera_id: UUID | None,
+        incident_id: UUID | None,
+        evidence_artifact_id: UUID | None,
+        link_state: LinkState,
+        selected_connection: LinkConnectionRecord | None,
+        connections: Sequence[LinkConnectionRecord],
+        budget: LinkBudgetSnapshot | None,
+        queue_depth: Mapping[LinkPriorityLane, int],
+        latest_probe: LinkHealthProbeRecord | None,
+        last_sync_at: datetime | None,
+    ) -> LinkPassportSnapshotRecord:
         payload = {
             "schema_version": 1,
             "tenant_id": str(tenant_id),
@@ -1722,7 +1824,7 @@ class LinkService:
             "latest_probe": _probe_payload(latest_probe),
             "last_sync_at": last_sync_at.isoformat() if last_sync_at is not None else None,
         }
-        passport = LinkPassportSnapshotRecord(
+        return LinkPassportSnapshotRecord(
             id=uuid4(),
             tenant_id=tenant_id,
             site_id=site_id,
@@ -1736,8 +1838,6 @@ class LinkService:
             created_at=_now(),
             last_sync_at=last_sync_at,
         )
-        self._passports.append(passport)
-        return passport
 
     async def abuild_passport(
         self,

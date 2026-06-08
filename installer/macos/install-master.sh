@@ -22,6 +22,7 @@ Options:
   --manifest PATH       Release manifest path.
   --public-url URL      Public frontend URL for first-run links.
   --data-dir PATH       Persistent data directory. Default: /var/lib/vezor.
+  --config-dir PATH     Configuration directory. Default: /etc/vezor.
   -h, --help            Show this help.
 USAGE
 }
@@ -46,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --data-dir)
       DATA_DIR="${2:?--data-dir requires a value}"
+      shift 2
+      ;;
+    --config-dir)
+      CONFIG_DIR="${2:?--config-dir requires a value}"
       shift 2
       ;;
     -h|--help)
@@ -110,6 +115,28 @@ public_hostname_from_url() {
   fi
 
   printf '%s\n' "$host_port"
+}
+
+public_origin_with_port() {
+  local url="$1"
+  local port="$2"
+
+  python3 - "$url" "$port" <<'PY'
+from __future__ import annotations
+
+import sys
+from urllib.parse import urlsplit, urlunsplit
+
+url = sys.argv[1]
+port = sys.argv[2]
+parsed = urlsplit(url)
+if not parsed.scheme or not parsed.hostname:
+    raise SystemExit(f"Invalid public URL: {url}")
+host = parsed.hostname
+if ":" in host and not host.startswith("["):
+    host = f"[{host}]"
+print(urlunsplit((parsed.scheme, f"{host}:{port}", "", "", "")))
+PY
 }
 
 oidc_disable_pkce_for_public_url() {
@@ -320,6 +347,52 @@ start_local_master_containers() {
   run /opt/vezor/current/bin/vezor-master up --config "$MASTER_CONFIG"
 }
 
+write_launchd_plist() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] write $PLIST_PATH"
+    return 0
+  fi
+
+  python3 - "$PLIST_PATH" "$MASTER_CONFIG" "$MASTER_ENV" <<'PY'
+from __future__ import annotations
+
+import plistlib
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+master_config = sys.argv[2]
+master_env = sys.argv[3]
+payload = {
+    "Label": "com.vezor.master",
+    "ProgramArguments": [
+        "/opt/vezor/current/bin/vezor-master",
+        "up",
+        "--config",
+        master_config,
+    ],
+    "WorkingDirectory": "/opt/vezor/current",
+    "RunAtLoad": True,
+    "KeepAlive": {"SuccessfulExit": False},
+    "StandardOutPath": "/var/log/vezor/master.log",
+    "StandardErrorPath": "/var/log/vezor/master.err.log",
+    "EnvironmentVariables": {
+        "PATH": (
+            "/opt/homebrew/bin:/usr/local/bin:"
+            "/Applications/Docker.app/Contents/Resources/bin:"
+            "/usr/bin:/bin:/usr/sbin:/sbin"
+        ),
+        "VEZOR_MASTER_CONFIG": master_config,
+        "VEZOR_MASTER_ENV_FILE": master_env,
+    },
+}
+path.parent.mkdir(parents=True, exist_ok=True)
+with path.open("wb") as handle:
+    plistlib.dump(payload, handle)
+PY
+  chmod 0644 "$PLIST_PATH"
+}
+
 stop_existing_master() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "[dry-run] stop existing com.vezor.master launchd job"
@@ -331,6 +404,10 @@ stop_existing_master() {
   if [[ -x /opt/vezor/current/bin/vezor-master && -f "$DEFAULT_MASTER_CONFIG" ]]; then
     /opt/vezor/current/bin/vezor-master down \
       --config "$DEFAULT_MASTER_CONFIG" >/dev/null 2>&1 || true
+  fi
+  if [[ -x /opt/vezor/current/bin/vezor-master && "$CONFIG_DIR/master.json" != "$DEFAULT_MASTER_CONFIG" && -f "$CONFIG_DIR/master.json" ]]; then
+    /opt/vezor/current/bin/vezor-master down \
+      --config "$CONFIG_DIR/master.json" >/dev/null 2>&1 || true
   fi
 }
 
@@ -395,7 +472,9 @@ MEDIAMTX_IMAGE="$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)"
 BACKEND_IMAGE="$(manifest_image_ref backend vezor/backend:portable-demo)"
 FRONTEND_IMAGE="$(manifest_image_ref frontend vezor/frontend:portable-demo)"
 SUPERVISOR_IMAGE="$(manifest_image_ref supervisor "$BACKEND_IMAGE")"
-PUBLIC_KEYCLOAK_URL="${PUBLIC_URL%:*}:8080"
+PUBLIC_API_BASE_URL="$(public_origin_with_port "$PUBLIC_URL" 8000)"
+PUBLIC_KEYCLOAK_URL="$(public_origin_with_port "$PUBLIC_URL" 8080)"
+PUBLIC_OIDC_AUTHORITY="$PUBLIC_KEYCLOAK_URL/realms/argus-dev"
 PUBLIC_HOSTNAME="$(public_hostname_from_url "$PUBLIC_URL")"
 OIDC_DISABLE_PKCE="$(oidc_disable_pkce_for_public_url "$PUBLIC_URL" "$PUBLIC_HOSTNAME")"
 KEYCLOAK_BIND="127.0.0.1"
@@ -412,7 +491,7 @@ stop_existing_master
 for port in 3000 8000 8080 8554 8888 8889 9000; do
   check_port_available "$port"
 done
-for port in 8189; do
+for port in 8189 8622; do
   check_udp_port_available "$port"
 done
 
@@ -455,6 +534,7 @@ write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_user" "vezor-minio"
 write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_password"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_username" "admin"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_password"
+write_secret_if_missing "$CONFIG_DIR/secrets/link_reflector_secret"
 
 run install -m 0644 /opt/vezor/current/infra/nats/nats.conf "$CONFIG_DIR/nats/nats.conf"
 run python3 /opt/vezor/current/installer/lib/render_mediamtx_config.py \
@@ -482,15 +562,18 @@ VEZOR_MEDIAMTX_IMAGE=$MEDIAMTX_IMAGE
 VEZOR_BACKEND_IMAGE=$BACKEND_IMAGE
 VEZOR_FRONTEND_IMAGE=$FRONTEND_IMAGE
 VEZOR_SUPERVISOR_IMAGE=$SUPERVISOR_IMAGE
+VEZOR_CONFIG_DIR=$CONFIG_DIR
+VEZOR_DATA_DIR=$DATA_DIR
 VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
 VEZOR_PUBLIC_FRONTEND_URL=$PUBLIC_URL
-VEZOR_PUBLIC_API_BASE_URL=${PUBLIC_URL%:*}:8000
+VEZOR_PUBLIC_API_BASE_URL=$PUBLIC_API_BASE_URL
 VEZOR_PUBLIC_KEYCLOAK_URL=$PUBLIC_KEYCLOAK_URL
-VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev
+VEZOR_PUBLIC_OIDC_AUTHORITY=$PUBLIC_OIDC_AUTHORITY
 VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND
 VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL
 VEZOR_OIDC_CLIENT_ID=argus-frontend
 VEZOR_OIDC_DISABLE_PKCE=$OIDC_DISABLE_PKCE
+VEZOR_LINK_REFLECTOR_SECRET_FILE=$CONFIG_DIR/secrets/link_reflector_secret
 ENV
   chmod 0644 "$MASTER_ENV"
 fi
@@ -541,9 +624,7 @@ prepare_config_for_docker_desktop "$SUPERVISOR_CONFIG"
 build_local_master_images
 start_local_master_containers
 
-run install -m 0644 \
-  /opt/vezor/current/infra/install/launchd/com.vezor.master.plist \
-  "$PLIST_PATH"
+write_launchd_plist
 
 run launchctl bootstrap system "$PLIST_PATH"
 run launchctl enable system/com.vezor.master

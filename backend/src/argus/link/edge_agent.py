@@ -182,7 +182,7 @@ async def run_udp_sequence_probe(
     dscp: int | None = None,
 ) -> PingStatistics:
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    queue: asyncio.Queue[tuple[bytes, int]] = asyncio.Queue()
 
     class ClientProtocol(asyncio.DatagramProtocol):
         transport: asyncio.DatagramTransport
@@ -195,7 +195,7 @@ async def run_udp_sequence_probe(
                     socket_info.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, dscp << 2)
 
         def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
-            queue.put_nowait(data)
+            queue.put_nowait((data, time.monotonic_ns()))
 
     transport, protocol = await loop.create_datagram_endpoint(
         ClientProtocol,
@@ -205,12 +205,14 @@ async def run_udp_sequence_probe(
     secret_bytes = reflector_secret.encode("utf-8")
     session_id = os.urandom(16)
     sent_sequences: list[int] = []
+    sequence_deadlines_ns: dict[int, int] = {}
     replies: list[SequenceReply] = []
     start_ns = time.monotonic_ns()
     try:
         for sequence in range(1, packet_count + 1):
             transmit_ns = time.monotonic_ns()
             sent_sequences.append(sequence)
+            sequence_deadlines_ns[sequence] = transmit_ns + (loss_timeout_ms * 1_000_000)
             datagram_transport.sendto(
                 build_probe_packet(
                     session_id=session_id,
@@ -225,14 +227,13 @@ async def run_udp_sequence_probe(
                 await asyncio.sleep(packet_spacing_ms / 1000)
 
         deadline = loop.time() + (loss_timeout_ms / 1000)
-        received_sequences: set[int] = set()
-        while loop.time() < deadline and len(received_sequences) < packet_count:
+        seen_sequences: set[int] = set()
+        while loop.time() < deadline and len(seen_sequences) < packet_count:
             remaining = max(0.0, deadline - loop.time())
             try:
-                data = await asyncio.wait_for(queue.get(), timeout=remaining)
+                data, received_ns = await asyncio.wait_for(queue.get(), timeout=remaining)
             except TimeoutError:
                 break
-            received_ns = time.monotonic_ns()
             try:
                 packet = parse_probe_packet(data, secret=secret_bytes)
             except ValueError:
@@ -240,8 +241,15 @@ async def run_udp_sequence_probe(
             if packet.session_id != session_id or not packet.reply:
                 continue
             rtt_ms = (received_ns - packet.transmit_ns) / 1_000_000
-            replies.append(SequenceReply(sequence=packet.sequence, rtt_ms=rtt_ms, late=False))
-            received_sequences.add(packet.sequence)
+            sequence_deadline_ns = sequence_deadlines_ns.get(packet.sequence, received_ns)
+            replies.append(
+                SequenceReply(
+                    sequence=packet.sequence,
+                    rtt_ms=rtt_ms,
+                    late=received_ns > sequence_deadline_ns,
+                )
+            )
+            seen_sequences.add(packet.sequence)
     finally:
         transport.close()
 

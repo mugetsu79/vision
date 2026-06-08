@@ -51,13 +51,11 @@ case "$ROLE" in
     DEFAULT_CONFIG="/etc/vezor/master.json"
     DEFAULT_COMPOSE="$ROOT_DIR/infra/install/compose/compose.master.yml"
     COMPOSE_ENV_VAR="VEZOR_MASTER_COMPOSE"
-    ENV_FILE="${VEZOR_MASTER_ENV_FILE:-/etc/vezor/master.env}"
     ;;
   edge)
     DEFAULT_CONFIG="/etc/vezor/edge.json"
     DEFAULT_COMPOSE="$ROOT_DIR/infra/install/compose/compose.supervisor.yml"
     COMPOSE_ENV_VAR="VEZOR_EDGE_COMPOSE"
-    ENV_FILE="${VEZOR_EDGE_ENV_FILE:-/etc/vezor/edge.env}"
     ;;
   *)
     echo "Unknown role: $ROLE" >&2
@@ -116,9 +114,15 @@ print(value if isinstance(value, str) and value else fallback)
 PY
 }
 
-env_override="${!COMPOSE_ENV_VAR:-}"
-COMPOSE_FILE="${env_override:-$(json_config_value compose_file "$DEFAULT_COMPOSE")}"
-CONTAINER_ENGINE="${VEZOR_CONTAINER_ENGINE:-$(json_config_value container_engine "")}"
+CONFIG_DIR="$(json_config_value config_dir "/etc/vezor")"
+case "$ROLE" in
+  master)
+    ENV_FILE="${VEZOR_MASTER_ENV_FILE:-$CONFIG_DIR/master.env}"
+    ;;
+  edge)
+    ENV_FILE="${VEZOR_EDGE_ENV_FILE:-$CONFIG_DIR/edge.env}"
+    ;;
+esac
 
 if [[ -f "$ENV_FILE" ]]; then
   set -a
@@ -126,6 +130,10 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
   set +a
 fi
+
+env_override="${!COMPOSE_ENV_VAR:-}"
+COMPOSE_FILE="${env_override:-$(json_config_value compose_file "$DEFAULT_COMPOSE")}"
+CONTAINER_ENGINE="${VEZOR_CONTAINER_ENGINE:-$(json_config_value container_engine "")}"
 
 if [[ -z "$CONTAINER_ENGINE" ]]; then
   if command -v docker >/dev/null 2>&1; then

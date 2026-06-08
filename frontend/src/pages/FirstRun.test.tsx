@@ -1,11 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { FirstRunPage } from "@/pages/FirstRun";
 import { useAuthStore } from "@/stores/auth-store";
+import { TestMemoryRouter } from "@/test/router";
 
 const bootstrapMocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -22,12 +23,12 @@ vi.mock("@/hooks/use-bootstrap", () => ({
 
 function renderFirstRun(initialPath = "/first-run") {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <TestMemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/first-run" element={<FirstRunPage />} />
         <Route path="/signin" element={<div>Sign-in route</div>} />
       </Routes>
-    </MemoryRouter>,
+    </TestMemoryRouter>,
   );
 }
 
@@ -81,7 +82,7 @@ describe("FirstRunPage", () => {
 
   test("fresh install redirects an anonymous local user to first-run", async () => {
     render(
-      <MemoryRouter initialEntries={["/dashboard"]}>
+      <TestMemoryRouter initialEntries={["/dashboard"]}>
         <Routes>
           <Route
             path="/dashboard"
@@ -94,7 +95,7 @@ describe("FirstRunPage", () => {
           <Route path="/first-run" element={<div>First-run route</div>} />
           <Route path="/signin" element={<div>Sign-in route</div>} />
         </Routes>
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(await screen.findByText("First-run route")).toBeInTheDocument();

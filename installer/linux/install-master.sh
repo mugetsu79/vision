@@ -113,6 +113,28 @@ public_hostname_from_url() {
   printf '%s\n' "$host_port"
 }
 
+public_origin_with_port() {
+  local url="$1"
+  local port="$2"
+
+  python3 - "$url" "$port" <<'PY'
+from __future__ import annotations
+
+import sys
+from urllib.parse import urlsplit, urlunsplit
+
+url = sys.argv[1]
+port = sys.argv[2]
+parsed = urlsplit(url)
+if not parsed.scheme or not parsed.hostname:
+    raise SystemExit(f"Invalid public URL: {url}")
+host = parsed.hostname
+if ":" in host and not host.startswith("["):
+    host = f"[{host}]"
+print(urlunsplit((parsed.scheme, f"{host}:{port}", "", "", "")))
+PY
+}
+
 oidc_disable_pkce_for_public_url() {
   local url="$1"
   local hostname="$2"
@@ -253,6 +275,28 @@ build_local_master_images() {
   run $CONTAINER_ENGINE build -f /opt/vezor/current/frontend/Dockerfile -t "$FRONTEND_IMAGE" /opt/vezor/current/frontend
 }
 
+write_systemd_path_override() {
+  local override_dir="/etc/systemd/system/vezor-master.service.d"
+  local override_file="$override_dir/10-install-paths.conf"
+
+  run install -d -m 0755 "$override_dir"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] write $override_file"
+    return 0
+  fi
+
+  cat > "$override_file" <<UNIT
+[Service]
+Environment="VEZOR_MASTER_CONFIG=$MASTER_CONFIG"
+Environment="VEZOR_MASTER_ENV_FILE=$MASTER_ENV"
+ExecStart=
+ExecStart=/opt/vezor/current/bin/vezor-master up --config "$MASTER_CONFIG"
+ExecStop=
+ExecStop=/opt/vezor/current/bin/vezor-master down --config "$MASTER_CONFIG"
+UNIT
+  chmod 0644 "$override_file"
+}
+
 require_linux() {
   if [[ "$(uname -s)" != "Linux" ]]; then
     echo "This installer target is Linux master. Detected: $(uname -s)" >&2
@@ -292,7 +336,7 @@ fi
 for port in 3000 8000 8080 8554 8888 8889 9000; do
   check_port_available "$port"
 done
-for port in 8189; do
+for port in 8189 8622; do
   check_udp_port_available "$port"
 done
 
@@ -310,7 +354,9 @@ MEDIAMTX_IMAGE="$(manifest_image_ref mediamtx bluenviron/mediamtx:latest)"
 BACKEND_IMAGE="$(manifest_image_ref backend vezor/backend:portable-demo)"
 FRONTEND_IMAGE="$(manifest_image_ref frontend vezor/frontend:portable-demo)"
 SUPERVISOR_IMAGE="$(manifest_image_ref supervisor "$BACKEND_IMAGE")"
-PUBLIC_KEYCLOAK_URL="${PUBLIC_URL%:*}:8080"
+PUBLIC_API_BASE_URL="$(public_origin_with_port "$PUBLIC_URL" 8000)"
+PUBLIC_KEYCLOAK_URL="$(public_origin_with_port "$PUBLIC_URL" 8080)"
+PUBLIC_OIDC_AUTHORITY="$PUBLIC_KEYCLOAK_URL/realms/argus-dev"
 PUBLIC_HOSTNAME="$(public_hostname_from_url "$PUBLIC_URL")"
 OIDC_DISABLE_PKCE="$(oidc_disable_pkce_for_public_url "$PUBLIC_URL" "$PUBLIC_HOSTNAME")"
 KEYCLOAK_BIND="127.0.0.1"
@@ -347,6 +393,7 @@ write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_user" "vezor-minio"
 write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_password"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_username" "admin"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_password"
+write_secret_if_missing "$CONFIG_DIR/secrets/link_reflector_secret"
 
 run install -m 0644 /opt/vezor/current/infra/nats/nats.conf "$CONFIG_DIR/nats/nats.conf"
 run python3 /opt/vezor/current/installer/lib/render_mediamtx_config.py \
@@ -374,15 +421,18 @@ VEZOR_MEDIAMTX_IMAGE=$MEDIAMTX_IMAGE
 VEZOR_BACKEND_IMAGE=$BACKEND_IMAGE
 VEZOR_FRONTEND_IMAGE=$FRONTEND_IMAGE
 VEZOR_SUPERVISOR_IMAGE=$SUPERVISOR_IMAGE
+VEZOR_CONFIG_DIR=$CONFIG_DIR
+VEZOR_DATA_DIR=$DATA_DIR
 VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials
 VEZOR_PUBLIC_FRONTEND_URL=$PUBLIC_URL
-VEZOR_PUBLIC_API_BASE_URL=${PUBLIC_URL%:*}:8000
+VEZOR_PUBLIC_API_BASE_URL=$PUBLIC_API_BASE_URL
 VEZOR_PUBLIC_KEYCLOAK_URL=$PUBLIC_KEYCLOAK_URL
-VEZOR_PUBLIC_OIDC_AUTHORITY=${PUBLIC_URL%:*}:8080/realms/argus-dev
+VEZOR_PUBLIC_OIDC_AUTHORITY=$PUBLIC_OIDC_AUTHORITY
 VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND
 VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL
 VEZOR_OIDC_CLIENT_ID=argus-frontend
 VEZOR_OIDC_DISABLE_PKCE=$OIDC_DISABLE_PKCE
+VEZOR_LINK_REFLECTOR_SECRET_FILE=$CONFIG_DIR/secrets/link_reflector_secret
 ENV
   chmod 0644 "$MASTER_ENV"
 fi
@@ -433,6 +483,7 @@ build_local_master_images
 run install -m 0644 \
   /opt/vezor/current/infra/install/systemd/vezor-master.service \
   /etc/systemd/system/vezor-master.service
+write_systemd_path_override
 
 run systemctl daemon-reload
 run systemctl enable vezor-master.service

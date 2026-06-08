@@ -20,11 +20,7 @@ export type MonitoringSourceType =
   | "edge_agent"
   | "provider_api"
   | "import";
-export type LinkProbeLossMethod =
-  | "icmp_sequence"
-  | "stamp"
-  | "twamp"
-  | "udp_sequence";
+export type LinkProbeLossMethod = "icmp_sequence" | "udp_sequence";
 export type LinkProbeSampleKind = "manual" | "automated" | "imported";
 export type MonitoringPurpose =
   | "vezor_control"
@@ -97,8 +93,6 @@ export const monitoringSourceTypes = [
 ] as const;
 export const linkProbeLossMethods = [
   "icmp_sequence",
-  "stamp",
-  "twamp",
   "udp_sequence",
 ] as const;
 export const monitoringPurposes = [
@@ -222,8 +216,6 @@ export function monitoringSourceTypeLabel(value: MonitoringSourceType) {
 export function probeLossMethodLabel(value: unknown) {
   const labels: Record<LinkProbeLossMethod, string> = {
     icmp_sequence: "ICMP sequence",
-    stamp: "STAMP",
-    twamp: "TWAMP",
     udp_sequence: "UDP sequence",
   };
   return labels[enumValue(value, linkProbeLossMethods, "icmp_sequence")];

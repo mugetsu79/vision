@@ -9,6 +9,8 @@ from argus.api.contracts import CameraSourceSettings
 from argus.core.logging import redact_url_secrets
 from argus.models.enums import CameraSourceKind, ProcessingMode
 
+HTTP_422_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+
 
 @dataclass(frozen=True, slots=True)
 class NormalizedCameraSource:
@@ -24,7 +26,7 @@ def normalize_camera_source(source: CameraSourceSettings) -> NormalizedCameraSou
         path = source.uri.removeprefix("usb://")
         if not path.startswith("/dev/video"):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=HTTP_422_UNPROCESSABLE,
                 detail="USB sources must use usb:///dev/videoN.",
             )
         return NormalizedCameraSource(
@@ -70,6 +72,6 @@ def validate_camera_source_assignment(
         processing_mode is not ProcessingMode.EDGE or edge_node_id is None
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE,
             detail="USB sources require edge processing and an edge node.",
         )

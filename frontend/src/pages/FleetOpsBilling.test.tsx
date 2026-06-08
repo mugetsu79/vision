@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { FleetOpsBilling } from "@/pages/FleetOpsBilling";
+import { TestMemoryRouter } from "@/test/router";
 
 const billingMocks = vi.hoisted(() => ({
   meters: [
@@ -86,7 +86,7 @@ vi.mock("@/hooks/use-maritime", () => ({
 }));
 
 function renderWithProviders(ui: ReactElement) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(<TestMemoryRouter>{ui}</TestMemoryRouter>);
 }
 
 describe("FleetOpsBilling", () => {

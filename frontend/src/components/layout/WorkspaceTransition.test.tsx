@@ -3,10 +3,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test } from "vitest";
 
 import { WorkspaceTransition } from "@/components/layout/WorkspaceTransition";
+import { TestMemoryRouter } from "@/test/router";
 
 const srcRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -30,11 +30,11 @@ function workspaceEnterBlock(css: string) {
 describe("WorkspaceTransition", () => {
   test("wraps routed content with a transition surface", () => {
     render(
-      <MemoryRouter initialEntries={["/live"]}>
+      <TestMemoryRouter initialEntries={["/live"]}>
         <WorkspaceTransition>
           <h1>Live Intelligence</h1>
         </WorkspaceTransition>
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(screen.getByRole("heading", { name: /live intelligence/i })).toBeInTheDocument();
@@ -46,11 +46,11 @@ describe("WorkspaceTransition", () => {
 
   test("uses product motion tokens for workspace-enter", () => {
     render(
-      <MemoryRouter initialEntries={["/live"]}>
+      <TestMemoryRouter initialEntries={["/live"]}>
         <WorkspaceTransition>
           <h1>Live Intelligence</h1>
         </WorkspaceTransition>
-      </MemoryRouter>,
+      </TestMemoryRouter>,
     );
 
     expect(screen.getByTestId("workspace-transition")).toHaveClass(

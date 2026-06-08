@@ -48,6 +48,9 @@ def test_appliance_driver_supports_service_required_commands() -> None:
     assert 'run_compose_with_extra_args down' in driver
     assert "VEZOR_MASTER_ENV_FILE" in driver
     assert "VEZOR_EDGE_ENV_FILE" in driver
+    assert 'json_config_value config_dir "/etc/vezor"' in driver
+    assert 'ENV_FILE="${VEZOR_MASTER_ENV_FILE:-$CONFIG_DIR/master.env}"' in driver
+    assert driver.index('source "$ENV_FILE"') < driver.index('env_override="${!COMPOSE_ENV_VAR:-}"')
     assert "/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin" in driver
     assert 'if [[ "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]' in driver
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import warnings
+
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from argus.core.config import Settings
 from argus.vision.runtime import ExecutionProfile, ExecutionProvider
@@ -9,6 +11,33 @@ from argus.vision.runtime import ExecutionProfile, ExecutionProvider
 
 def test_settings_default_app_name() -> None:
     assert Settings(_env_file=None).app_name == "Vezor | The OmniSight Platform"
+
+
+def test_default_settings_do_not_warn_when_run_secrets_is_missing(monkeypatch) -> None:
+    monkeypatch.delenv("ARGUS_SECRETS_DIR", raising=False)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        Settings(_env_file=None)
+
+    assert not [
+        warning for warning in caught if "/run/secrets" in str(warning.message)
+    ]
+
+
+def test_settings_honor_argus_secrets_dir(monkeypatch, tmp_path) -> None:
+    secrets_dir = tmp_path / "secrets"
+    secrets_dir.mkdir()
+    (secrets_dir / "ARGUS_RTSP_ENCRYPTION_KEY").write_text(
+        "secret-from-env-dir\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ARGUS_SECRETS_DIR", str(secrets_dir))
+
+    settings = Settings(_env_file=None)
+
+    assert isinstance(settings.rtsp_encryption_key, SecretStr)
+    assert settings.rtsp_encryption_key.get_secret_value() == "secret-from-env-dir"
 
 
 def test_settings_load_environment_and_secrets(monkeypatch, tmp_path) -> None:

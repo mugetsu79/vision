@@ -1,7 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/config", () => ({
@@ -32,6 +31,7 @@ import {
   workspaceNavGroups,
 } from "@/components/layout/workspace-nav";
 import { useAuthStore } from "@/stores/auth-store";
+import { TestMemoryRouter } from "@/test/router";
 
 const initialAuthState = useAuthStore.getState();
 
@@ -63,16 +63,11 @@ describe("AppShell", () => {
   test("renders the unified left rail workspace shell", () => {
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter
-          future={{
-            v7_relativeSplatPath: true,
-            v7_startTransition: true,
-          }}
-        >
+        <TestMemoryRouter>
           <AppShell>
             <div>Page body</div>
           </AppShell>
-        </MemoryRouter>
+        </TestMemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -155,17 +150,11 @@ describe("AppShell", () => {
   test("exposes FleetOps child pages in the expanded section rail", () => {
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter
-          initialEntries={["/fleetops/vessels"]}
-          future={{
-            v7_relativeSplatPath: true,
-            v7_startTransition: true,
-          }}
-        >
+        <TestMemoryRouter initialEntries={["/fleetops/vessels"]}>
           <AppShell>
             <div>FleetOps page</div>
           </AppShell>
-        </MemoryRouter>
+        </TestMemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -205,17 +194,11 @@ describe("AppShell", () => {
   test("exposes core link performance in the control rail", () => {
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter
-          initialEntries={["/links"]}
-          future={{
-            v7_relativeSplatPath: true,
-            v7_startTransition: true,
-          }}
-        >
+        <TestMemoryRouter initialEntries={["/links"]}>
           <AppShell>
             <div>Links page</div>
           </AppShell>
-        </MemoryRouter>
+        </TestMemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -230,16 +213,11 @@ describe("AppShell", () => {
 
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter
-          future={{
-            v7_relativeSplatPath: true,
-            v7_startTransition: true,
-          }}
-        >
+        <TestMemoryRouter>
           <AppShell>
             <div>Page body</div>
           </AppShell>
-        </MemoryRouter>
+        </TestMemoryRouter>
       </QueryClientProvider>,
     );
 

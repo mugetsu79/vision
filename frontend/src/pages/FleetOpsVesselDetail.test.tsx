@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { FleetOpsVesselDetail } from "@/pages/FleetOpsVesselDetail";
+import { TestMemoryRouter } from "@/test/router";
 
 const vesselDetailMocks = vi.hoisted(() => ({
   detail: {
@@ -121,14 +121,9 @@ vi.mock("@/hooks/use-link", () => ({
 
 function renderWithProviders(ui: ReactElement) {
   return render(
-    <MemoryRouter
-      future={{
-        v7_relativeSplatPath: true,
-        v7_startTransition: true,
-      }}
-    >
+    <TestMemoryRouter>
       {ui}
-    </MemoryRouter>,
+    </TestMemoryRouter>,
   );
 }
 

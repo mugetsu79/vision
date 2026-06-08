@@ -5567,8 +5567,6 @@
             "default": "icmp_sequence",
             "enum": [
               "icmp_sequence",
-              "stamp",
-              "twamp",
               "udp_sequence"
             ],
             "title": "Method",
@@ -20993,6 +20991,22 @@
             "schema": {
               "title": "Target Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supervisor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
             }
           },
           {

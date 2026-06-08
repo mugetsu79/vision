@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
@@ -15,12 +15,9 @@ vi.mock("@/lib/auth", () => ({
 
 import { AuthCallbackPage } from "@/pages/AuthCallback";
 import { useAuthStore } from "@/stores/auth-store";
+import { TestMemoryRouter } from "@/test/router";
 
 const initialAuthState = useAuthStore.getState();
-const routerFuture = {
-  v7_relativeSplatPath: true,
-  v7_startTransition: true,
-} as const;
 
 describe("AuthCallbackPage", () => {
   beforeEach(() => {
@@ -47,12 +44,12 @@ describe("AuthCallbackPage", () => {
 
     render(
       <React.StrictMode>
-        <MemoryRouter future={routerFuture} initialEntries={["/auth/callback"]}>
+        <TestMemoryRouter initialEntries={["/auth/callback"]}>
           <Routes>
             <Route path="/signin" element={<div>Sign in page</div>} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />
           </Routes>
-        </MemoryRouter>
+        </TestMemoryRouter>
       </React.StrictMode>,
     );
 

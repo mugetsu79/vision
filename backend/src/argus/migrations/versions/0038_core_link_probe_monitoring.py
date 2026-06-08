@@ -18,7 +18,10 @@ def upgrade() -> None:
         sa.Column("target_label", sa.String(length=160), nullable=True),
     )
     op.add_column("link_health_probes", sa.Column("target_address", sa.Text(), nullable=True))
-    op.add_column("link_health_probes", sa.Column("probe_type", sa.String(length=16), nullable=True))
+    op.add_column(
+        "link_health_probes",
+        sa.Column("probe_type", sa.String(length=16), nullable=True),
+    )
     op.add_column(
         "link_health_probes",
         sa.Column(

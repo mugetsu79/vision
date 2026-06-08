@@ -4533,7 +4533,7 @@ export interface components {
              * @default icmp_sequence
              * @enum {string}
              */
-            method: "icmp_sequence" | "stamp" | "twamp" | "udp_sequence";
+            method: "icmp_sequence" | "udp_sequence";
             /** Packet Count */
             packet_count: number;
             /** Packets Received */
@@ -11049,7 +11049,9 @@ export interface operations {
     };
     post_link_edge_probe_sample_api_v1_link_sites__site_id__probe_targets__target_id__edge_samples_post: {
         parameters: {
-            query?: never;
+            query?: {
+                supervisor_id?: string | null;
+            };
             header?: {
                 "X-Tenant-ID"?: string | null;
             };

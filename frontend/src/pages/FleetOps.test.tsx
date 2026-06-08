@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { workspaceNavItems } from "@/components/layout/workspace-nav";
 import { FleetOps } from "@/pages/FleetOps";
+import { TestMemoryRouter } from "@/test/router";
 
 const fleetOpsMocks = vi.hoisted(() => ({
   vessels: [
@@ -38,6 +38,10 @@ const fleetOpsMocks = vi.hoisted(() => ({
       },
     ],
   },
+  runtimeLoading: false,
+  runtimeError: false,
+  vesselsLoading: false,
+  vesselsError: false,
   useBillingUsage: vi.fn(),
   useMaritimeBillingUsage: vi.fn(),
 }));
@@ -45,13 +49,13 @@ const fleetOpsMocks = vi.hoisted(() => ({
 vi.mock("@/hooks/use-maritime", () => ({
   useMaritimeRuntime: () => ({
     data: { pack_id: "maritime-fleet", enabled: true },
-    isLoading: false,
-    isError: false,
+    isLoading: fleetOpsMocks.runtimeLoading,
+    isError: fleetOpsMocks.runtimeError,
   }),
   useMaritimeVessels: () => ({
     data: fleetOpsMocks.vessels,
-    isLoading: false,
-    isError: false,
+    isLoading: fleetOpsMocks.vesselsLoading,
+    isError: fleetOpsMocks.vesselsError,
   }),
   useMaritimeBillingUsage: fleetOpsMocks.useMaritimeBillingUsage,
 }));
@@ -77,12 +81,16 @@ vi.mock("@/hooks/use-support", () => ({
 }));
 
 function renderWithProviders(ui: ReactElement) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(<TestMemoryRouter>{ui}</TestMemoryRouter>);
 }
 
 describe("FleetOps", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fleetOpsMocks.runtimeLoading = false;
+    fleetOpsMocks.runtimeError = false;
+    fleetOpsMocks.vesselsLoading = false;
+    fleetOpsMocks.vesselsError = false;
     fleetOpsMocks.useBillingUsage.mockReturnValue({
       data: fleetOpsMocks.billingUsage,
       isLoading: false,
@@ -129,6 +137,23 @@ describe("FleetOps", () => {
     expectLink(/Open Billing/i, "/fleetops/billing");
     expectLink(/Open Support/i, "/fleetops/support");
     expectLink(/Open Onboarding/i, "/fleetops/onboarding");
+  });
+
+  test("FleetOps overview surfaces loading and error states", async () => {
+    fleetOpsMocks.vesselsLoading = true;
+    renderWithProviders(<FleetOps />);
+
+    expect(
+      await screen.findByText(/Loading FleetOps runtime/i),
+    ).toBeInTheDocument();
+
+    fleetOpsMocks.vesselsLoading = false;
+    fleetOpsMocks.vesselsError = true;
+    renderWithProviders(<FleetOps />);
+
+    expect(
+      await screen.findByText(/FleetOps data could not be loaded/i),
+    ).toBeInTheDocument();
   });
 
   test("traffic public space route is not present in workspace navigation", () => {

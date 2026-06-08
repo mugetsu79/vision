@@ -80,6 +80,7 @@ async def start_link_reflector_for_startup(settings: Settings) -> ReflectorRunti
         secret=settings.link_reflector_secret.get_secret_value().encode("utf-8"),
         key_id=settings.link_reflector_key_id,
         rate_limit_pps=settings.link_reflector_rate_limit_pps,
+        allowed_source_cidrs=settings.link_reflector_allowed_source_cidr_list,
     )
 
 

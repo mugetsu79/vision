@@ -85,6 +85,7 @@ class _FakeSiteService:
             description=None,
             tz="UTC",
             geo_point=None,
+            site_kind="edge",
             created_at=datetime.now(tz=UTC),
         )
         self.sites[(tenant_id, site_id)] = site
@@ -97,6 +98,24 @@ class _FakeSiteService:
             name=payload.name,
         )
 
+    async def list_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        return [
+            site
+            for (tenant_id, _site_id), site in self.sites.items()
+            if tenant_id == tenant_context.tenant_id
+        ]
+
+    async def list_edge_sites(self, tenant_context: TenantContext) -> list[SiteResponse]:
+        return [
+            site for site in await self.list_sites(tenant_context) if site.site_kind == "edge"
+        ]
+
+    async def list_link_performance_sites(
+        self,
+        tenant_context: TenantContext,
+    ) -> list[SiteResponse]:
+        return await self.list_sites(tenant_context)
+
     async def get_site(self, tenant_context: TenantContext, site_id: UUID) -> SiteResponse:
         site = self.sites.get((tenant_context.tenant_id, site_id))
         if site is None:
@@ -108,6 +127,10 @@ class _FakeSiteService:
 
     async def delete_site(self, tenant_context: TenantContext, site_id: UUID) -> None:
         self.sites.pop((tenant_context.tenant_id, site_id), None)
+
+    async def is_edge_site(self, tenant_context: TenantContext, site_id: UUID) -> bool:
+        site = await self.get_site(tenant_context, site_id)
+        return site.site_kind == "edge"
 
 
 class _FakeSupportResourceValidator:
