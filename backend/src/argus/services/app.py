@@ -6406,9 +6406,20 @@ def derive_browser_profiles(source: SourceCapability | None) -> DerivedBrowserPr
             and candidate.w <= source.width
             and candidate.h <= source.height
         ):
+            if (
+                source.fps is not None
+                and candidate.fps is not None
+                and candidate.fps > source.fps
+            ):
+                unsupported.append(
+                    candidate.model_copy(update={"reason": "source_fps_too_high"})
+                )
+                continue
             allowed.append(candidate)
             continue
-        unsupported.append(candidate.model_copy(update={"reason": "source_resolution_too_small"}))
+        unsupported.append(
+            candidate.model_copy(update={"reason": "source_resolution_too_small"})
+        )
     return DerivedBrowserProfiles(allowed=allowed, unsupported=unsupported)
 
 

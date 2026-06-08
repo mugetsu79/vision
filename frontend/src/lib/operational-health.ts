@@ -564,12 +564,6 @@ function deriveReadinessSignal({
   if (privacy.health === "unknown") {
     missingSetup.push("privacy posture");
   }
-  if (camera.zones.length === 0 && camera.attribute_rules.length === 0) {
-    missingSetup.push("zones or rules");
-  }
-  if (camera.active_classes.length === 0 && !camera.runtime_vocabulary) {
-    missingSetup.push("model classes");
-  }
   if (!camera.browser_delivery.default_profile) {
     missingSetup.push("delivery profile");
   }

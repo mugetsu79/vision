@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  ChevronLeft,
+  ChevronRight,
+  Grid2X2,
+  LayoutGrid,
   Maximize2,
   Minimize2,
   PanelTopOpen,
@@ -67,6 +71,59 @@ type WorkspaceTelemetryBadge = {
   label: string;
   tone: StatusTone;
 };
+type LiveGridLayoutId = "mosaic" | "single" | "two" | "2x2" | "3x4" | "4x4";
+type LiveGridLayout = {
+  id: LiveGridLayoutId;
+  label: string;
+  capacity: number;
+  gridClassName: string;
+  usesTileSpans: boolean;
+};
+
+const LIVE_GRID_LAYOUTS: LiveGridLayout[] = [
+  {
+    id: "mosaic",
+    label: "Mosaic",
+    capacity: 10,
+    gridClassName: "md:grid-cols-2 xl:grid-cols-6",
+    usesTileSpans: true,
+  },
+  {
+    id: "single",
+    label: "Single",
+    capacity: 1,
+    gridClassName: "grid-cols-1",
+    usesTileSpans: false,
+  },
+  {
+    id: "two",
+    label: "2",
+    capacity: 2,
+    gridClassName: "grid-cols-1 lg:grid-cols-2",
+    usesTileSpans: false,
+  },
+  {
+    id: "2x2",
+    label: "2x2",
+    capacity: 4,
+    gridClassName: "grid-cols-1 md:grid-cols-2",
+    usesTileSpans: false,
+  },
+  {
+    id: "3x4",
+    label: "3x4",
+    capacity: 12,
+    gridClassName: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4",
+    usesTileSpans: false,
+  },
+  {
+    id: "4x4",
+    label: "4x4",
+    capacity: 16,
+    gridClassName: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4",
+    usesTileSpans: false,
+  },
+];
 
 export function LivePage() {
   return <WorkspacePage />;
@@ -94,8 +151,8 @@ function WorkspacePage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const [liveScenePageSize, setLiveScenePageSize] =
-    useState<PaginationPageSize>(10);
+  const [liveGridLayoutId, setLiveGridLayoutId] =
+    useState<LiveGridLayoutId>("mosaic");
   const [liveScenePageIndex, setLiveScenePageIndex] = useState(0);
   const [signalRowsByCamera, setSignalRowsByCamera] = useState(
     () => new Map<string, SignalCountRow[]>(),
@@ -128,9 +185,10 @@ function WorkspacePage() {
       }),
     [activeQueryScope, cameras, sceneSearch, selectedSceneIds, siteNameById],
   );
-  const paginatedLiveCameras = paginateItems(
+  const activeLiveGridLayout = liveGridLayoutById(liveGridLayoutId);
+  const paginatedLiveCameras = paginateLiveItems(
     matchedLiveCameras,
-    liveScenePageSize,
+    activeLiveGridLayout.capacity,
     liveScenePageIndex,
   );
   const visibleCameras = paginatedLiveCameras.items;
@@ -280,7 +338,7 @@ function WorkspacePage() {
     setLiveScenePageIndex(0);
   }, [
     activeQueryScope,
-    liveScenePageSize,
+    activeLiveGridLayout.capacity,
     matchedLiveCameras.length,
     sceneSearch,
     selectedSceneIds,
@@ -349,6 +407,7 @@ function WorkspacePage() {
     const classFilter = classFiltersByCamera.get(camera.id) ?? null;
     const sceneHealth = sceneHealthByCamera.get(camera.id);
     const tileSize = tileSizeFor(camera.id);
+    const usesTileSpans = activeLiveGridLayout.usesTileSpans;
 
     return (
       <ScenePortalCard
@@ -356,6 +415,7 @@ function WorkspacePage() {
         camera={camera}
         tileSize={tileSize}
         onTileSizeChange={(size) => setTileSize(camera.id, size)}
+        usesTileSpans={usesTileSpans}
         isFocused={isFocused}
         onFocus={() => setFocusedCameraId(camera.id)}
         onCloseFocus={() => setFocusedCameraId(null)}
@@ -472,14 +532,18 @@ function WorkspacePage() {
                 {`${visibleCameras.length} of ${cameras.length} scenes in view`}
               </Badge>
             </div>
-            <PaginationControls
-              itemLabel="scenes"
+            <LiveWallLayoutControls
+              layoutId={liveGridLayoutId}
+              pageCount={paginatedLiveCameras.pageCount}
               pageIndex={paginatedLiveCameras.currentPageIndex}
-              pageSize={liveScenePageSize}
-              pageSizeLabel="Live scenes per page"
+              rangeEnd={paginatedLiveCameras.endIndex}
+              rangeStart={paginatedLiveCameras.startIndex}
               totalCount={matchedLiveCameras.length}
+              onLayoutChange={(layoutId) => {
+                setLiveGridLayoutId(layoutId);
+                setLiveScenePageIndex(0);
+              }}
               onPageIndexChange={setLiveScenePageIndex}
-              onPageSizeChange={setLiveScenePageSize}
             />
 
             {visibleCameras.length === 0 ? (
@@ -491,7 +555,8 @@ function WorkspacePage() {
             ) : (
               <div
                 data-testid="scene-portal-grid"
-                className="grid gap-4 md:grid-cols-2 xl:grid-cols-6"
+                data-live-grid-layout={activeLiveGridLayout.id}
+                className={`grid gap-4 ${activeLiveGridLayout.gridClassName}`}
               >
                 {visibleCameras.map((camera) =>
                   camera.id === focusedCameraId
@@ -538,6 +603,83 @@ function WorkspacePage() {
           )}
         </InspectorPanel>
       </aside>
+    </div>
+  );
+}
+
+function LiveWallLayoutControls({
+  layoutId,
+  pageCount,
+  pageIndex,
+  rangeEnd,
+  rangeStart,
+  totalCount,
+  onLayoutChange,
+  onPageIndexChange,
+}: {
+  layoutId: LiveGridLayoutId;
+  pageCount: number;
+  pageIndex: number;
+  rangeEnd: number;
+  rangeStart: number;
+  totalCount: number;
+  onLayoutChange: (layoutId: LiveGridLayoutId) => void;
+  onPageIndexChange: (pageIndex: number) => void;
+}) {
+  const rangeLabel =
+    totalCount === 0
+      ? "0 scenes"
+      : `${rangeStart + 1}-${rangeEnd} of ${totalCount} scenes`;
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2 text-sm text-[var(--vz-text-secondary)]">
+      <label className="flex items-center gap-2">
+        <LayoutGrid className="size-4 text-[var(--vz-text-muted)]" />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--vz-text-muted)]">
+          Layout
+        </span>
+        <select
+          aria-label="Live wall layout"
+          className="rounded-[0.5rem] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-obsidian)] px-2.5 py-1.5 text-sm text-[var(--vz-text-primary)] outline-none transition focus:border-[color:var(--vz-hair-focus)] focus:ring-2 focus:ring-[color:var(--vz-hair-focus)]/25"
+          value={layoutId}
+          onChange={(event) =>
+            onLayoutChange(event.currentTarget.value as LiveGridLayoutId)
+          }
+        >
+          {LIVE_GRID_LAYOUTS.map((layout) => (
+            <option key={layout.id} value={layout.id}>
+              {layout.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--vz-hair)] bg-white/[0.025] px-3 py-1.5 font-medium">
+        <Grid2X2 className="size-4" />
+        {rangeLabel}
+      </span>
+      <button
+        aria-label="Previous scene page"
+        className="inline-flex items-center gap-1 rounded-full border border-[color:var(--vz-hair)] px-3 py-1.5 transition hover:text-[var(--vz-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={pageIndex === 0}
+        type="button"
+        onClick={() => onPageIndexChange(pageIndex - 1)}
+      >
+        <ChevronLeft className="size-4" />
+        Previous
+      </button>
+      <span>
+        Page {pageIndex + 1} of {pageCount}
+      </span>
+      <button
+        aria-label="Next scene page"
+        className="inline-flex items-center gap-1 rounded-full border border-[color:var(--vz-hair)] px-3 py-1.5 transition hover:text-[var(--vz-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={pageIndex >= pageCount - 1}
+        type="button"
+        onClick={() => onPageIndexChange(pageIndex + 1)}
+      >
+        Next
+        <ChevronRight className="size-4" />
+      </button>
     </div>
   );
 }
@@ -698,6 +840,29 @@ function filterLiveCameras({
   });
 }
 
+function liveGridLayoutById(layoutId: LiveGridLayoutId): LiveGridLayout {
+  return (
+    LIVE_GRID_LAYOUTS.find((layout) => layout.id === layoutId) ??
+    LIVE_GRID_LAYOUTS[0]
+  );
+}
+
+function paginateLiveItems<T>(items: T[], pageSize: number, pageIndex: number) {
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPageIndex = Math.min(Math.max(0, pageIndex), pageCount - 1);
+  const startIndex = items.length === 0 ? 0 : currentPageIndex * pageSize;
+  const endIndex =
+    items.length === 0 ? 0 : Math.min(startIndex + pageSize, items.length);
+
+  return {
+    currentPageIndex,
+    endIndex,
+    items: items.slice(startIndex, endIndex),
+    pageCount,
+    startIndex,
+  };
+}
+
 function groupLiveCamerasBySite(
   cameras: CameraResponse[],
   siteNameById: Map<string, string>,
@@ -772,6 +937,7 @@ function ScenePortalCard({
   camera,
   tileSize,
   onTileSizeChange,
+  usesTileSpans,
   isFocused,
   onFocus,
   onCloseFocus,
@@ -786,6 +952,7 @@ function ScenePortalCard({
   camera: CameraResponse;
   tileSize: LiveTileSize;
   onTileSizeChange: (size: LiveTileSize) => void;
+  usesTileSpans: boolean;
   isFocused: boolean;
   onFocus: () => void;
   onCloseFocus: () => void;
@@ -805,7 +972,12 @@ function ScenePortalCard({
     [camera],
   );
   const currentProfile = camera.browser_delivery?.default_profile ?? "720p10";
-  const [stagedProfile, setStagedProfile] = useState<string>(currentProfile);
+  const effectiveProfile = useMemo(
+    () => resolveEffectiveRenditionProfile(currentProfile, renditionOptions),
+    [currentProfile, renditionOptions],
+  );
+  const [stagedProfile, setStagedProfile] =
+    useState<string>(effectiveProfile);
   const sourceSize = getCameraSourceSize(camera);
   const overlayTracks = useMemo(
     () => selectDrawableSignalTracks(stableSignal.tracks, frame?.stream_mode),
@@ -816,7 +988,7 @@ function ScenePortalCard({
       ? `${stableSignal.counts.total} visible now`
       : "0 visible now";
   const heartbeatStatus = getHeartbeatStatus(frame);
-  const deliveryProfileLabel = formatDeliveryProfile(camera);
+  const deliveryProfileLabel = formatDeliveryProfile(camera, effectiveProfile);
   const deliveryOperatorMessage = readBrowserDeliveryOperatorMessage(
     camera.browser_delivery,
   );
@@ -841,8 +1013,8 @@ function ScenePortalCard({
     !updateCamera.isPending;
 
   useEffect(() => {
-    setStagedProfile(currentProfile);
-  }, [currentProfile]);
+    setStagedProfile(effectiveProfile);
+  }, [effectiveProfile]);
 
   useEffect(() => {
     onSignalRowsChange(camera.id, stableSignal.counts.rows);
@@ -870,7 +1042,13 @@ function ScenePortalCard({
         },
       },
     });
-  }, [camera.browser_delivery, camera.id, currentProfile, stagedProfile, updateCamera]);
+  }, [
+    camera.browser_delivery,
+    camera.id,
+    currentProfile,
+    stagedProfile,
+    updateCamera,
+  ]);
 
   return (
     <article
@@ -893,7 +1071,9 @@ function ScenePortalCard({
         "group relative overflow-hidden rounded-[var(--vz-r-lg)] border border-[color:var(--vz-hair)] bg-[color:var(--vz-canvas-graphite)] shadow-[var(--vz-elev-1)] outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--vz-elev-glow-cerulean)] focus-within:shadow-[var(--vz-elev-glow-cerulean)]",
         isFocused
           ? "overflow-x-hidden overflow-y-auto shadow-[var(--vz-elev-3)]"
-          : tileSpanClass(tileSize),
+          : usesTileSpans
+            ? tileSpanClass(tileSize)
+            : "min-w-0",
       ].join(" ")}
     >
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
@@ -937,7 +1117,9 @@ function ScenePortalCard({
                 aria-label={`Return ${camera.name} to scene grid`}
                 title="Return to scene grid"
                 onClick={() => {
-                  onTileSizeChange("standard");
+                  if (usesTileSpans) {
+                    onTileSizeChange("standard");
+                  }
                   onCloseFocus();
                 }}
                 className={tileToolButtonClass(false)}
@@ -946,36 +1128,40 @@ function ScenePortalCard({
               </button>
             ) : (
               <>
-                <button
-                  type="button"
-                  aria-label={`Use compact tile for ${camera.name}`}
-                  aria-pressed={tileSize === "compact"}
-                  title="Compact tile"
-                  onClick={() => onTileSizeChange("compact")}
-                  className={tileToolButtonClass(tileSize === "compact")}
-                >
-                  <Minimize2 className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Use standard tile for ${camera.name}`}
-                  aria-pressed={tileSize === "standard"}
-                  title="Standard tile"
-                  onClick={() => onTileSizeChange("standard")}
-                  className={tileToolButtonClass(tileSize === "standard")}
-                >
-                  <Square className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Use large tile for ${camera.name}`}
-                  aria-pressed={tileSize === "large"}
-                  title="Large tile"
-                  onClick={() => onTileSizeChange("large")}
-                  className={tileToolButtonClass(tileSize === "large")}
-                >
-                  <PanelTopOpen className="size-4" />
-                </button>
+                {usesTileSpans ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`Use compact tile for ${camera.name}`}
+                      aria-pressed={tileSize === "compact"}
+                      title="Compact tile"
+                      onClick={() => onTileSizeChange("compact")}
+                      className={tileToolButtonClass(tileSize === "compact")}
+                    >
+                      <Minimize2 className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Use standard tile for ${camera.name}`}
+                      aria-pressed={tileSize === "standard"}
+                      title="Standard tile"
+                      onClick={() => onTileSizeChange("standard")}
+                      className={tileToolButtonClass(tileSize === "standard")}
+                    >
+                      <Square className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Use large tile for ${camera.name}`}
+                      aria-pressed={tileSize === "large"}
+                      title="Large tile"
+                      onClick={() => onTileSizeChange("large")}
+                      className={tileToolButtonClass(tileSize === "large")}
+                    >
+                      <PanelTopOpen className="size-4" />
+                    </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   aria-label={`Focus scene ${camera.name}`}
@@ -1033,7 +1219,7 @@ function ScenePortalCard({
             activeStreamMode={frame?.stream_mode ?? null}
             cameraId={camera.id}
             cameraName={camera.name}
-            defaultProfile={camera.browser_delivery?.default_profile ?? "720p10"}
+            defaultProfile={effectiveProfile}
             deliveryMode={camera.browser_delivery?.delivery_mode ?? null}
             heartbeatTs={frame?.ts ?? null}
           />
@@ -1212,39 +1398,53 @@ function heartbeatBadgeClass(status: "unknown" | "fresh" | "stale"): string {
   return "border-[#29436f] bg-[#08111d]/80 text-[#d7e4ff]";
 }
 
-function formatDeliveryProfile(camera: CameraResponse): string {
-  const defaultProfile = camera.browser_delivery?.default_profile ?? "720p10";
+function formatDeliveryProfile(
+  camera: CameraResponse,
+  profileId: string = camera.browser_delivery?.default_profile ?? "720p10",
+): string {
   const profiles = camera.browser_delivery?.profiles ?? [];
-  const profile = profiles.find((candidate) => candidate.id === defaultProfile);
+  const profile = profiles.find((candidate) => candidate.id === profileId);
   if (typeof profile?.label === "string" && profile.label.length > 0) {
     return profile.label;
   }
 
   const isEdge = camera.processing_mode === "edge" || camera.edge_node_id !== null;
-  if (defaultProfile === "native") {
+  if (profileId === "native") {
     return isEdge ? "Native edge passthrough" : "Native camera";
   }
-  if (defaultProfile === "annotated") {
+  if (profileId === "annotated") {
     return isEdge ? "Annotated edge stream" : "Annotated";
   }
   return isEdge
-    ? `${defaultProfile} edge bandwidth saver`
-    : `${defaultProfile} viewer preview`;
+    ? `${profileId} edge bandwidth saver`
+    : `${profileId} viewer preview`;
 }
 
 function getAvailableRenditionOptions(
   camera: CameraResponse,
 ): LiveRenditionOption[] {
   const profiles = camera.browser_delivery?.profiles ?? [];
+  const unsupportedProfileIds = new Set(
+    (camera.browser_delivery?.unsupported_profiles ?? [])
+      .map((profile) => readProfileId(profile))
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+
   return profiles.flatMap((profile) => {
     const id = readProfileId(profile);
     if (typeof id !== "string" || id.length === 0) {
+      return [];
+    }
+    if (unsupportedProfileIds.has(id)) {
       return [];
     }
     if (
       id === "native" &&
       camera.browser_delivery?.native_status?.available === false
     ) {
+      return [];
+    }
+    if (!profileFitsSourceCapability(profile, id, camera.source_capability)) {
       return [];
     }
 
@@ -1256,6 +1456,86 @@ function getAvailableRenditionOptions(
       },
     ];
   });
+}
+
+function resolveEffectiveRenditionProfile(
+  requestedProfile: string,
+  options: LiveRenditionOption[],
+): string {
+  if (options.some((option) => option.id === requestedProfile)) {
+    return requestedProfile;
+  }
+  return options[0]?.id ?? requestedProfile;
+}
+
+function profileFitsSourceCapability(
+  profile: BrowserDeliveryProfile,
+  profileId: string,
+  source: CameraResponse["source_capability"],
+): boolean {
+  if (!source) {
+    return true;
+  }
+
+  const target = readProfileTarget(profile, profileId);
+  if (
+    target.width !== null &&
+    target.height !== null &&
+    (target.width > source.width || target.height > source.height)
+  ) {
+    return false;
+  }
+  if (
+    target.fps !== null &&
+    source.fps !== null &&
+    source.fps !== undefined &&
+    target.fps > source.fps
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function readProfileTarget(
+  profile: BrowserDeliveryProfile,
+  profileId: string,
+): { width: number | null; height: number | null; fps: number | null } {
+  const parsed = parseProfileTarget(profileId);
+  return {
+    width: readProfileNumber(profile, "w") ?? parsed?.width ?? null,
+    height: readProfileNumber(profile, "h") ?? parsed?.height ?? null,
+    fps: readProfileNumber(profile, "fps") ?? parsed?.fps ?? null,
+  };
+}
+
+function parseProfileTarget(
+  profileId: string,
+): { width: number; height: number; fps: number } | null {
+  const match = /^(\d+)p(\d+)$/.exec(profileId);
+  if (!match) {
+    return null;
+  }
+
+  const height = Number(match[1]);
+  const fps = Number(match[2]);
+  const sizeByHeight: Record<number, { width: number; height: number }> = {
+    1080: { width: 1920, height: 1080 },
+    900: { width: 1600, height: 900 },
+    720: { width: 1280, height: 720 },
+    540: { width: 960, height: 540 },
+    360: { width: 640, height: 360 },
+    240: { width: 426, height: 240 },
+  };
+  const size = sizeByHeight[height];
+  return size ? { ...size, fps } : null;
+}
+
+function readProfileNumber(
+  profile: BrowserDeliveryProfile,
+  key: "w" | "h" | "fps",
+): number | null {
+  const value = profile[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function readProfileId(profile: BrowserDeliveryProfile): unknown {
@@ -1287,13 +1567,7 @@ function formatProfileId(
   camera: CameraResponse,
 ): string {
   if (profileId === "native" || profileId === "annotated") {
-    return formatDeliveryProfile({
-      ...camera,
-      browser_delivery: {
-        ...camera.browser_delivery,
-        default_profile: profileId,
-      },
-    });
+    return formatDeliveryProfile(camera, profileId);
   }
 
   const match = /^(\d+p)(\d+)$/.exec(profileId);

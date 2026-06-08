@@ -54,7 +54,7 @@ DETECTION_REGION = {
     "frame_size": {"width": 1280, "height": 720},
 }
 
-_EXPECTED_720P_SOURCE_BROWSER_PROFILE_IDS = [
+_EXPECTED_720P_UNKNOWN_FPS_SOURCE_BROWSER_PROFILE_IDS = [
     "native",
     "annotated",
     "720p25",
@@ -78,13 +78,25 @@ _EXPECTED_720P_SOURCE_BROWSER_PROFILE_IDS = [
     "240p10",
     "240p5",
 ]
+_EXPECTED_720P20_SOURCE_BROWSER_PROFILE_IDS = [
+    profile_id
+    for profile_id in _EXPECTED_720P_UNKNOWN_FPS_SOURCE_BROWSER_PROFILE_IDS
+    if not profile_id.endswith("p25")
+]
 
 
 def _assert_browser_profiles_match_720p_source(
     profiles: list[dict[str, object]],
+    *,
+    source_fps: int | None = 20,
 ) -> None:
     profile_ids = [profile["id"] for profile in profiles]
-    assert profile_ids == _EXPECTED_720P_SOURCE_BROWSER_PROFILE_IDS
+    expected_profile_ids = (
+        _EXPECTED_720P20_SOURCE_BROWSER_PROFILE_IDS
+        if source_fps == 20
+        else _EXPECTED_720P_UNKNOWN_FPS_SOURCE_BROWSER_PROFILE_IDS
+    )
+    assert profile_ids == expected_profile_ids
     assert "1080p5" not in profile_ids
     assert "900p5" not in profile_ids
 
@@ -94,7 +106,7 @@ def _assert_1080p_profile_marked_unsupported(
 ) -> None:
     unsupported_ids = [profile["id"] for profile in unsupported_profiles]
     assert "1080p15" in unsupported_ids
-    assert "720p25" not in unsupported_ids
+    assert "720p25" in unsupported_ids
 
 
 class _FakeSession:
@@ -1460,7 +1472,10 @@ async def test_probe_camera_source_falls_back_to_still_capture_without_ffprobe(
         aspect_ratio="16:9",
     )
     assert response.browser_delivery.default_profile == "720p10"
-    _assert_browser_profiles_match_720p_source(response.browser_delivery.profiles)
+    _assert_browser_profiles_match_720p_source(
+        response.browser_delivery.profiles,
+        source_fps=None,
+    )
 
 
 @pytest.mark.asyncio

@@ -292,7 +292,7 @@ describe("operational health", () => {
     expect(rows[1]).toMatchObject({
       cameraId: "camera-2",
       cameraName: "Depot Yard",
-      readiness: { health: "attention", label: "Needs setup" },
+      readiness: { health: "danger", label: "Needs attention" },
       worker: { health: "attention", label: "Worker stale" },
       delivery: { health: "danger", label: "Direct stream unavailable" },
       transport: { health: "healthy", label: "Inherited transport" },
@@ -302,8 +302,90 @@ describe("operational health", () => {
         detail: "source unavailable",
       },
       telemetry: { health: "unknown", label: "Awaiting telemetry" },
-      actionHref: "/cameras",
-      actionLabel: "Review setup",
+      actionHref: "/settings",
+      actionLabel: "Inspect delivery",
+    });
+  });
+
+  test("does not treat optional rules zones or all-class filters as missing setup", () => {
+    const officeCamera = createCamera({
+      id: "camera-4",
+      name: "Office",
+      active_classes: [],
+      attribute_rules: [],
+      zones: [],
+      browser_delivery: {
+        default_profile: "720p10",
+        allow_native_on_demand: true,
+        profiles: [],
+        unsupported_profiles: [],
+        native_status: { available: false, reason: "privacy_filtering_required" },
+      },
+      source_capability: { width: 1280, height: 720, fps: 20, codec: "h264" },
+    });
+    const officeFleet: FleetOverview = {
+      ...fleet,
+      camera_workers: [
+        {
+          camera_id: "camera-4",
+          camera_name: "Office",
+          site_id: "site-1",
+          node_id: null,
+          node_hostname: null,
+          processing_mode: "central",
+          desired_state: "supervised",
+          runtime_status: "running",
+          lifecycle_owner: "central_supervisor",
+          dev_run_command: null,
+          detail: null,
+          supervisor_mode: "polling",
+          restart_policy: "on_failure",
+        },
+      ],
+      delivery_diagnostics: [
+        {
+          camera_id: "camera-4",
+          camera_name: "Office",
+          processing_mode: "central",
+          assigned_node_id: null,
+          source_capability: { width: 1280, height: 720, fps: 20, codec: "h264" },
+          default_profile: "720p10",
+          available_profiles: [],
+          native_status: { available: false, reason: "privacy_filtering_required" },
+          selected_stream_mode: "transcode",
+        },
+      ],
+    };
+
+    const rows = deriveSceneReadinessRows({
+      cameras: [officeCamera],
+      sites,
+      fleet: officeFleet,
+      framesByCamera: {
+        "camera-4": {
+          ...freshFrame,
+          camera_id: "camera-4",
+          stream_profile_id: "720p10",
+          stream_mode: "annotated-whip",
+        },
+      },
+    });
+
+    expect(rows[0]).toMatchObject({
+      readiness: { health: "attention", label: "Needs attention" },
+      worker: { health: "healthy", label: "Worker running" },
+      delivery: {
+        health: "attention",
+        label: "Direct stream unavailable",
+        detail: "privacy filtering required",
+      },
+      liveRendition: {
+        health: "healthy",
+        label: "720p / 10 fps",
+        detail: "transcode stream",
+      },
+      actionHref: "/settings",
+      actionLabel: "Inspect delivery",
     });
   });
 

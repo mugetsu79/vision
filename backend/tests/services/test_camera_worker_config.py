@@ -492,21 +492,27 @@ def _runtime_artifact(
     )
 
 
-def test_derive_browser_profiles_includes_full_resolution_fps_grid() -> None:
+def test_derive_browser_profiles_filters_profiles_above_source_fps() -> None:
     source = SourceCapability(width=1920, height=1080, fps=20, codec="h264")
 
     profiles = derive_browser_profiles(source)
     ids = [profile.id for profile in profiles.allowed]
+    unsupported_ids = [profile.id for profile in profiles.unsupported]
 
     assert ids[:2] == ["native", "annotated"]
-    assert "1080p25" in ids
+    assert "1080p25" not in ids
     assert "1080p20" in ids
     assert "900p15" in ids
     assert "720p10" in ids
     assert "540p5" in ids
-    assert "360p25" in ids
+    assert "360p25" not in ids
     assert "240p5" in ids
-    assert profiles.unsupported == []
+    assert "1080p25" in unsupported_ids
+    assert "360p25" in unsupported_ids
+    assert all(
+        profile.reason == "source_fps_too_high"
+        for profile in profiles.unsupported
+    )
 
 
 def test_source_capability_hides_profiles_above_720p_source() -> None:
@@ -516,13 +522,19 @@ def test_source_capability_hides_profiles_above_720p_source() -> None:
     allowed_ids = [profile.id for profile in profiles.allowed]
     unsupported_ids = [profile.id for profile in profiles.unsupported]
 
-    assert "720p25" in allowed_ids
+    assert "720p25" not in allowed_ids
     assert "720p10" in allowed_ids
-    assert "540p25" in allowed_ids
+    assert "540p25" not in allowed_ids
     assert "240p5" in allowed_ids
+    assert "720p25" in unsupported_ids
     assert "900p5" in unsupported_ids
     assert "1080p5" in unsupported_ids
-    assert all(profile.reason == "source_resolution_too_small" for profile in profiles.unsupported)
+    assert {
+        profile.id: profile.reason for profile in profiles.unsupported
+    }["720p25"] == "source_fps_too_high"
+    assert {
+        profile.id: profile.reason for profile in profiles.unsupported
+    }["1080p5"] == "source_resolution_too_small"
 
 
 def test_worker_stream_settings_resolves_selected_reduced_profile() -> None:

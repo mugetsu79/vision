@@ -1429,6 +1429,188 @@ describe("LivePage", () => {
     expect(screen.getByRole("button", { name: /apply to scene/i })).toBeDisabled();
   });
 
+  test("filters native and source-incompatible live rendition choices", async () => {
+    const camera = {
+      id: "11111111-1111-1111-1111-111111111111",
+      site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      edge_node_id: null,
+      name: "North Gate",
+      rtsp_url_masked: "rtsp://***",
+      processing_mode: "central",
+      primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      secondary_model_id: null,
+      tracker_type: "botsort",
+      active_classes: ["person"],
+      attribute_rules: [],
+      zones: [],
+      homography: null,
+      privacy: {
+        blur_faces: true,
+        blur_plates: true,
+        method: "gaussian",
+        strength: 7,
+      },
+      browser_delivery: {
+        default_profile: "720p25",
+        allow_native_on_demand: true,
+        delivery_mode: "hls",
+        profiles: [
+          { id: "native", kind: "passthrough", label: "Native camera" },
+          { id: "annotated", kind: "transcode", label: "Annotated" },
+          { id: "1080p15", kind: "transcode", w: 1920, h: 1080, fps: 15, label: "1080p / 15 fps" },
+          { id: "900p10", kind: "transcode", w: 1600, h: 900, fps: 10, label: "900p / 10 fps" },
+          { id: "720p25", kind: "transcode", w: 1280, h: 720, fps: 25, label: "720p / 25 fps" },
+          { id: "720p20", kind: "transcode", w: 1280, h: 720, fps: 20, label: "720p / 20 fps" },
+          { id: "540p10", kind: "transcode", w: 960, h: 540, fps: 10, label: "540p / 10 fps" },
+        ],
+        unsupported_profiles: [
+          { id: "1080p15", reason: "source_resolution_too_small" },
+        ],
+        native_status: {
+          available: false,
+          reason: "privacy_filtering_required",
+        },
+      },
+      source_capability: {
+        width: 1280,
+        height: 720,
+        fps: 20,
+        codec: "h264",
+        aspect_ratio: "16:9",
+      },
+      frame_skip: 1,
+      fps_cap: 20,
+      created_at: "2026-04-18T10:00:00Z",
+      updated_at: "2026-04-18T10:00:00Z",
+    };
+
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify([camera]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await focusLiveScenes(["North Gate"]);
+    await screen.findByRole("heading", { name: "North Gate" });
+    const renditionSelect = screen.getByLabelText(/north gate live rendition/i);
+
+    expect(
+      within(renditionSelect).queryByRole("option", { name: /native camera/i }),
+    ).toBeNull();
+    expect(
+      within(renditionSelect).queryByRole("option", { name: /1080p \/ 15 fps/i }),
+    ).toBeNull();
+    expect(
+      within(renditionSelect).queryByRole("option", { name: /900p \/ 10 fps/i }),
+    ).toBeNull();
+    expect(
+      within(renditionSelect).queryByRole("option", { name: /720p \/ 25 fps/i }),
+    ).toBeNull();
+    expect(
+      within(renditionSelect).getByRole("option", { name: /annotated/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(renditionSelect).getByRole("option", { name: /720p \/ 20 fps/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("stream-North Gate")).toHaveTextContent(
+      "North Gate stream annotated",
+    );
+  });
+
+  test("lets operators switch the live wall between array layouts", async () => {
+    const user = userEvent.setup();
+    const makeCamera = (id: string, name: string) => ({
+      id,
+      site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      edge_node_id: null,
+      name,
+      rtsp_url_masked: "rtsp://***",
+      processing_mode: "central",
+      primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      secondary_model_id: null,
+      tracker_type: "botsort",
+      active_classes: ["person"],
+      attribute_rules: [],
+      zones: [],
+      homography: null,
+      privacy: {
+        blur_faces: true,
+        blur_plates: true,
+        method: "gaussian",
+        strength: 7,
+      },
+      browser_delivery: {
+        default_profile: "720p10",
+        allow_native_on_demand: true,
+        profiles: [],
+      },
+      source_capability: {
+        width: 1280,
+        height: 720,
+        fps: 20,
+        codec: "h264",
+        aspect_ratio: "16:9",
+      },
+      frame_skip: 1,
+      fps_cap: 20,
+      created_at: "2026-04-18T10:00:00Z",
+      updated_at: "2026-04-18T10:00:00Z",
+    });
+
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          makeCamera("11111111-1111-1111-1111-111111111111", "North Gate"),
+          makeCamera("22222222-2222-2222-2222-222222222222", "Depot Yard"),
+          makeCamera("33333333-3333-3333-3333-333333333333", "Office"),
+          makeCamera("44444444-4444-4444-4444-444444444444", "Warehouse"),
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await focusLiveScenes(["North Gate", "Depot Yard", "Office", "Warehouse"], user);
+    await screen.findByRole("heading", { name: "North Gate" });
+    const layoutSelect = screen.getByLabelText(/live wall layout/i);
+
+    await user.selectOptions(layoutSelect, "2x2");
+    expect(screen.getByTestId("scene-portal-grid")).toHaveAttribute(
+      "data-live-grid-layout",
+      "2x2",
+    );
+    expect(screen.getAllByTestId("scene-portal")).toHaveLength(4);
+
+    await user.selectOptions(layoutSelect, "single");
+    expect(screen.getByTestId("scene-portal-grid")).toHaveAttribute(
+      "data-live-grid-layout",
+      "single",
+    );
+    expect(screen.getAllByTestId("scene-portal")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "North Gate" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /next scene page/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Depot Yard" })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("heading", { name: "North Gate" })).not.toBeInTheDocument();
+  });
+
   test("lets operators disable browser-only overlays per live tile", async () => {
     const user = userEvent.setup();
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
