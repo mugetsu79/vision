@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pwd
 import re
 import subprocess
 import sys
@@ -199,7 +200,23 @@ def _write_credential(path: Path, credential_material: str) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as credential_file:
         credential_file.write(f"{credential_material}\n")
+    docker_owner = _docker_desktop_credential_owner()
+    if docker_owner is not None:
+        os.chown(path, docker_owner[0], docker_owner[1])
     path.chmod(0o600)
+
+
+def _docker_desktop_credential_owner() -> tuple[int, int] | None:
+    if sys.platform != "darwin":
+        return None
+    sudo_user = os.getenv("SUDO_USER")
+    if not sudo_user or sudo_user == "root":
+        return None
+    try:
+        owner = pwd.getpwnam(sudo_user)
+    except KeyError:
+        return None
+    return owner.pw_uid, owner.pw_gid
 
 
 def _preflight_config_update(path: Path | None) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import stat
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -131,6 +132,71 @@ def test_pair_claims_session_writes_credential_0600_without_printing_material(
     assert stat.S_IMODE(credential_path.stat().st_mode) == 0o600
     assert "vzcred_should_not_print" not in captured.out
     assert "credential written" in captured.out.lower()
+
+
+def test_pair_on_macos_sudo_chowns_credential_to_docker_desktop_user(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chowns: list[tuple[str, int, int]] = []
+
+    class FakeClient:
+        def __init__(self, api_url: str) -> None:
+            self.api_url = api_url
+
+        def claim_pairing_session(
+            self,
+            *,
+            session_id: str,
+            pairing_code: str,
+            supervisor_id: str,
+            hostname: str,
+        ) -> dict[str, object]:
+            return {
+                "credential_id": "00000000-0000-0000-0000-000000000901",
+                "credential_material": "vzcred_should_not_print",
+                "credential_hash": "a" * 64,
+                "credential_version": 1,
+                "node": {"id": "00000000-0000-0000-0000-000000000902"},
+            }
+
+    monkeypatch.setattr(cli, "InstallerHttpClient", FakeClient)
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setenv("SUDO_USER", "docker-user")
+    monkeypatch.setattr(
+        cli.pwd,
+        "getpwnam",
+        lambda name: SimpleNamespace(pw_uid=501, pw_gid=20),
+    )
+    monkeypatch.setattr(
+        cli.os,
+        "chown",
+        lambda path, uid, gid: chowns.append((str(path), uid, gid)),
+    )
+    credential_path = tmp_path / "supervisor.credential"
+
+    exit_code = cli.main(
+        [
+            "pair",
+            "--api-url",
+            "https://master.example",
+            "--session-id",
+            "00000000-0000-0000-0000-000000000111",
+            "--pairing-code",
+            "123456",
+            "--supervisor-id",
+            "1",
+            "--hostname",
+            "portable-master",
+            "--credential-path",
+            str(credential_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert credential_path.read_text(encoding="utf-8").strip() == "vzcred_should_not_print"
+    assert stat.S_IMODE(credential_path.stat().st_mode) == 0o600
+    assert chowns == [(str(credential_path), 501, 20)]
 
 
 def test_pair_updates_local_config_supervisor_identity(
