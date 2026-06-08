@@ -15,9 +15,11 @@ from argus.models.enums import (
     CountEventType,
     DeploymentCredentialStatus,
     DeploymentInstallStatus,
+    DeploymentModelAssignmentStatus,
     DeploymentNodeKind,
     DeploymentServiceManager,
     DetectorCapability,
+    EdgeConfigurationApplyStatus,
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
     EvidenceLedgerAction,
@@ -29,6 +31,8 @@ from argus.models.enums import (
     IncidentRuleSeverity,
     ModelAdmissionStatus,
     ModelFormat,
+    ModelImportSource,
+    ModelLifecycleJobStatus,
     ModelTask,
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
@@ -39,6 +43,7 @@ from argus.models.enums import (
     ProcessingMode,
     QueryResolutionMode,
     RuleAction,
+    RuntimeArtifactBuildFormat,
     RuntimeArtifactKind,
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
@@ -146,6 +151,100 @@ class ModelResponse(BaseModel):
     sha256: str
     size_bytes: int
     license: str | None = None
+
+
+class ModelImportRequest(BaseModel):
+    source: ModelImportSource
+    source_uri: str | None = Field(default=None, min_length=1)
+    expected_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    version: str = Field(min_length=1, max_length=64)
+    task: ModelTask
+    format: ModelFormat
+    capability: DetectorCapability = DetectorCapability.FIXED_VOCAB
+    capability_config: ModelCapabilityConfig = Field(default_factory=ModelCapabilityConfig)
+    input_shape: dict[str, int]
+    classes: list[str] = Field(default_factory=list)
+    license: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def validate_source(self) -> ModelImportRequest:
+        if (
+            self.source in {ModelImportSource.URL, ModelImportSource.MASTER_PATH}
+            and not self.source_uri
+        ):
+            raise ValueError("source_uri is required for URL and master path imports.")
+        if self.source is ModelImportSource.URL and not self.expected_sha256:
+            raise ValueError("expected_sha256 is required for URL imports.")
+        return self
+
+
+class ModelImportJobResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    catalog_id: str | None = None
+    source: ModelImportSource
+    status: ModelLifecycleJobStatus
+    actor_subject: str
+    model_id: UUID | None = None
+    source_uri: str | None = None
+    target_path: str
+    expected_sha256: str | None = None
+    observed_sha256: str | None = None
+    size_bytes: int | None = None
+    progress: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeploymentModelAssignmentCreate(BaseModel):
+    model_id: UUID
+    desired_path: str | None = None
+
+
+class DeploymentModelAssignmentResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    deployment_node_id: UUID
+    model_id: UUID
+    status: DeploymentModelAssignmentStatus
+    desired_path: str | None = None
+    last_sync_job_id: UUID | None = None
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeploymentModelSyncJobResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    deployment_node_id: UUID
+    assignment_id: UUID
+    model_id: UUID
+    status: ModelLifecycleJobStatus
+    payload: dict[str, Any] = Field(default_factory=dict)
+    claimed_by_supervisor_id: str | None = None
+    claimed_at: datetime | None = None
+    completed_at: datetime | None = None
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeploymentModelInventoryItem(BaseModel):
+    asset_kind: Literal["model", "runtime_artifact"]
+    asset_id: UUID
+    local_path: str = Field(min_length=1)
+    sha256: str = Field(min_length=64, max_length=64)
+    size_bytes: int = Field(gt=0)
+    target_profile: str | None = None
+    runtime_versions: dict[str, Any] = Field(default_factory=dict)
+    reported_at: datetime
+
+
+class DeploymentModelInventoryReport(BaseModel):
+    items: list[DeploymentModelInventoryItem] = Field(default_factory=list)
 
 
 RuntimeBackend = Literal[
@@ -440,6 +539,59 @@ class RuntimeArtifactResponse(RuntimeArtifactBase):
     model_id: UUID
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class RuntimeArtifactBuildJobCreate(BaseModel):
+    deployment_node_id: UUID
+    camera_id: UUID | None = None
+    build_format: RuntimeArtifactBuildFormat
+    target_profile: str = Field(min_length=1, max_length=128)
+    precision: RuntimeArtifactPrecision
+    input_shape: dict[str, int]
+    export_formats: list[RuntimeArtifactBuildFormat] = Field(default_factory=list)
+    builder_options: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeArtifactBuildJobResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    deployment_node_id: UUID
+    model_id: UUID
+    camera_id: UUID | None = None
+    artifact_id: UUID | None = None
+    status: ModelLifecycleJobStatus
+    build_format: RuntimeArtifactBuildFormat
+    target_profile: str
+    precision: RuntimeArtifactPrecision
+    payload: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupervisorModelJobEventCreate(BaseModel):
+    job_kind: Literal["model_sync", "artifact_build"]
+    status: ModelLifecycleJobStatus
+    message: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class EdgeConfigurationUpdate(BaseModel):
+    desired_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class EdgeConfigurationResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    deployment_node_id: UUID
+    revision: int
+    desired_config: dict[str, Any]
+    applied_revision: int | None = None
+    apply_status: EdgeConfigurationApplyStatus
+    last_applied_at: datetime | None = None
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class RuntimeArtifactSoakRunCreate(BaseModel):
