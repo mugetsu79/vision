@@ -1,5 +1,8 @@
 from uuid import uuid4
 
+import pytest
+from pydantic import ValidationError
+
 from argus.api.contracts import (
     EdgeConfigurationUpdate,
     ModelImportRequest,
@@ -22,6 +25,22 @@ def test_model_import_request_requires_checksum_for_url() -> None:
         license="AGPL-3.0",
     )
     assert payload.expected_sha256 == "a" * 64
+
+
+def test_model_import_request_rejects_url_without_checksum() -> None:
+    with pytest.raises(ValidationError, match="expected_sha256 is required"):
+        ModelImportRequest(
+            source="url",
+            source_uri="https://models.example/weights/yolo26n.onnx",
+            name="YOLO26n COCO",
+            version="2026.1",
+            task="detect",
+            format="onnx",
+            capability="fixed_vocab",
+            input_shape={"width": 640, "height": 640},
+            classes=[],
+            license="AGPL-3.0",
+        )
 
 
 def test_artifact_build_job_accepts_tensorrt_target_node() -> None:

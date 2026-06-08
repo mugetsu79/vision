@@ -98,6 +98,7 @@ class ModelCapabilityConfig(BaseModel):
     requires_gpu: bool = False
     supports_masks: bool = False
     source_url: str | None = None
+    source_sha256: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class RuntimeVocabularyState(BaseModel):

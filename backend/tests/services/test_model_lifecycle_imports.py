@@ -174,6 +174,53 @@ async def test_register_catalog_entry_resolves_path_hint(
     assert session_factory.models[0].capability_config["catalog_id"] == "test-yolo26n-coco-onnx"
 
 
+@pytest.mark.asyncio
+async def test_catalog_download_with_trusted_source_queues_url_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = uuid4()
+    source_url = "https://example.test/yolo26n.onnx"
+    expected_sha256 = "a" * 64
+    session_factory = _FakeSessionFactory()
+    service = ModelLifecycleService(session_factory=session_factory)
+    catalog_entry = ModelCatalogEntry(
+        id="trusted-yolo26n-coco-onnx",
+        name="Trusted YOLO26n COCO",
+        version="2026.1",
+        task=ModelTask.DETECT,
+        path_hint="models/yolo26n.onnx",
+        format=ModelFormat.ONNX,
+        capability=DetectorCapability.FIXED_VOCAB,
+        capability_config=ModelCapabilityConfig(
+            source_url=source_url,
+            source_sha256=expected_sha256,
+        ),
+        classes=(),
+        input_shape={"width": 640, "height": 640},
+        license="AGPL-3.0",
+        note="Trusted downloadable entry.",
+    )
+    monkeypatch.setattr(
+        model_lifecycle,
+        "get_model_catalog_entry",
+        lambda catalog_id: catalog_entry if catalog_id == catalog_entry.id else None,
+    )
+
+    response = await service.queue_catalog_download(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        catalog_id="trusted-yolo26n-coco-onnx",
+    )
+
+    assert response.status == ModelLifecycleJobStatus.QUEUED
+    assert response.source == ModelImportSource.URL
+    assert response.catalog_id == "trusted-yolo26n-coco-onnx"
+    assert response.source_uri == source_url
+    assert response.expected_sha256 == expected_sha256
+    assert response.model_id is None
+    assert session_factory.models == []
+
+
 class _FakeSession:
     def __init__(self, session_factory: _FakeSessionFactory) -> None:
         self.session_factory = session_factory

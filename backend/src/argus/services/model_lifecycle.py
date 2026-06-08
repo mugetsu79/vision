@@ -111,7 +111,7 @@ class ModelLifecycleService:
     ) -> ModelImportJobResponse:
         entry = _find_catalog_entry(catalog_id)
         source_url = entry.capability_config.source_url
-        expected_sha256 = _catalog_source_checksum(entry.capability_config)
+        expected_sha256 = entry.capability_config.source_sha256
         if source_url is None or expected_sha256 is None:
             raise ValueError(
                 "Model artifact is expected to be bundled or mounted at "
@@ -334,15 +334,6 @@ def _find_catalog_entry(catalog_id: str) -> ModelCatalogEntry:
     if entry is not None:
         return entry
     raise ValueError(f"Model catalog entry not found: {catalog_id}")
-
-
-def _catalog_source_checksum(capability_config: ModelCapabilityConfig) -> str | None:
-    config_data = capability_config.model_dump(mode="python")
-    for key in ("source_sha256", "expected_sha256", "sha256"):
-        value = getattr(capability_config, key, None) or config_data.get(key)
-        if isinstance(value, str) and len(value) == 64:
-            return value
-    return None
 
 
 def _target_path_for_url(source_uri: str, model_store_path: Path | None) -> str:
