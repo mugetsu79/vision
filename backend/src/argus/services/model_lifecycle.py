@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from uuid import UUID, uuid4
@@ -17,10 +18,14 @@ from argus.api.contracts import (
     DeploymentModelAssignmentResponse,
     DeploymentModelInventoryItem,
     DeploymentModelInventoryReport,
+    DeploymentModelSyncJobResponse,
     ModelCapabilityConfig,
     ModelImportJobResponse,
     ModelImportRequest,
+    SupervisorModelJobComplete,
+    SupervisorModelJobEventCreate,
 )
+from argus.compat import UTC
 from argus.models.enums import (
     DeploymentModelAssignmentStatus,
     DeploymentNodeKind,
@@ -33,9 +38,11 @@ from argus.models.enums import (
 from argus.models.tables import (
     DeploymentModelAssignment,
     DeploymentModelInventory,
+    DeploymentModelSyncJob,
     DeploymentNode,
     Model,
     ModelImportJob,
+    SupervisorModelJobEvent,
 )
 from argus.services.model_catalog import ModelCatalogEntry, get_model_catalog_entry
 
@@ -352,6 +359,198 @@ class ModelLifecycleService:
             items=[_model_to_inventory_item(row) for row in inventory_rows]
         )
 
+    async def create_model_sync_job(
+        self,
+        *,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+        actor_subject: str,
+    ) -> DeploymentModelSyncJobResponse:
+        async with self.session_factory() as session:
+            node = await _load_deployment_node(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            _require_assignable_deployment_node(node)
+            assignment = await _load_next_desired_model_assignment(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+            )
+            if assignment is None:
+                raise ValueError("Active deployment model assignment not found.")
+
+            model = await session.get(Model, assignment.model_id)
+            if not isinstance(model, Model):
+                raise ValueError("Model not found.")
+
+            job = DeploymentModelSyncJob(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                deployment_node_id=deployment_node_id,
+                assignment_id=assignment.id,
+                model_id=model.id,
+                status=ModelLifecycleJobStatus.QUEUED,
+                payload=_model_sync_job_payload(
+                    deployment_node_id=deployment_node_id,
+                    assignment=assignment,
+                    model=model,
+                ),
+                actor_subject=actor_subject,
+                error=None,
+            )
+            assignment.status = DeploymentModelAssignmentStatus.SYNCING
+            assignment.last_sync_job_id = job.id
+            assignment.error = None
+            session.add(job)
+            await session.commit()
+            await session.refresh(job)
+            await session.refresh(assignment)
+        return _model_to_sync_job_response(job)
+
+    async def poll_supervisor_model_jobs(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+        limit: int,
+    ) -> list[DeploymentModelSyncJobResponse]:
+        bounded_limit = max(1, min(limit, 100))
+        async with self.session_factory() as session:
+            node = await _load_supervisor_model_job_node(
+                session=session,
+                tenant_id=tenant_id,
+                supervisor_id=supervisor_id,
+                authenticated_node_id=authenticated_node_id,
+            )
+            statement = (
+                select(DeploymentModelSyncJob)
+                .where(DeploymentModelSyncJob.tenant_id == tenant_id)
+                .where(DeploymentModelSyncJob.deployment_node_id == node.id)
+                .where(
+                    DeploymentModelSyncJob.status.in_(
+                        [
+                            ModelLifecycleJobStatus.QUEUED,
+                            ModelLifecycleJobStatus.RUNNING,
+                        ]
+                    )
+                )
+                .order_by(DeploymentModelSyncJob.created_at.asc())
+                .limit(bounded_limit)
+            )
+            rows = (await session.execute(statement)).scalars().all()
+            jobs = [
+                row
+                for row in rows
+                if isinstance(row, DeploymentModelSyncJob)
+                and row.claimed_by_supervisor_id in {None, supervisor_id}
+            ]
+            now = datetime.now(tz=UTC)
+            for job in jobs:
+                if job.claimed_by_supervisor_id is None:
+                    job.claimed_by_supervisor_id = supervisor_id
+                    job.claimed_at = now
+                if job.status is ModelLifecycleJobStatus.QUEUED:
+                    job.status = ModelLifecycleJobStatus.ACCEPTED
+            await session.commit()
+            for job in jobs:
+                await session.refresh(job)
+        return [_model_to_sync_job_response(job) for job in jobs]
+
+    async def record_supervisor_model_job_event(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+        job_id: UUID,
+        payload: SupervisorModelJobEventCreate,
+    ) -> DeploymentModelSyncJobResponse:
+        if payload.job_kind != "model_sync":
+            raise ValueError("Supervisor model job event kind must be model_sync.")
+
+        async with self.session_factory() as session:
+            job = await _load_model_sync_job(
+                session=session,
+                tenant_id=tenant_id,
+                job_id=job_id,
+            )
+            await _require_supervisor_model_job_scope(
+                session=session,
+                tenant_id=tenant_id,
+                supervisor_id=supervisor_id,
+                authenticated_node_id=authenticated_node_id,
+                deployment_node_id=job.deployment_node_id,
+            )
+            event = SupervisorModelJobEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                deployment_node_id=job.deployment_node_id,
+                job_kind=payload.job_kind,
+                job_id=job.id,
+                status=payload.status,
+                message=payload.message,
+                payload=dict(payload.payload),
+            )
+            session.add(event)
+            _apply_model_job_event_status(job, payload)
+            await session.commit()
+            await session.refresh(job)
+        return _model_to_sync_job_response(job)
+
+    async def complete_supervisor_model_job(
+        self,
+        *,
+        tenant_id: UUID,
+        supervisor_id: str,
+        authenticated_node_id: UUID | None,
+        job_id: UUID,
+        payload: SupervisorModelJobComplete,
+    ) -> DeploymentModelSyncJobResponse:
+        if payload.status not in {
+            ModelLifecycleJobStatus.SUCCEEDED,
+            ModelLifecycleJobStatus.FAILED,
+        }:
+            raise ValueError("Supervisor model job completion status must be succeeded or failed.")
+
+        async with self.session_factory() as session:
+            job = await _load_model_sync_job(
+                session=session,
+                tenant_id=tenant_id,
+                job_id=job_id,
+            )
+            await _require_supervisor_model_job_scope(
+                session=session,
+                tenant_id=tenant_id,
+                supervisor_id=supervisor_id,
+                authenticated_node_id=authenticated_node_id,
+                deployment_node_id=job.deployment_node_id,
+            )
+            assignment = await _load_assignment_by_id(
+                session=session,
+                tenant_id=tenant_id,
+                deployment_node_id=job.deployment_node_id,
+                assignment_id=job.assignment_id,
+            )
+            now = datetime.now(tz=UTC)
+            job.status = payload.status
+            job.completed_at = now
+            job.error = payload.error if payload.status is ModelLifecycleJobStatus.FAILED else None
+            if payload.status is ModelLifecycleJobStatus.SUCCEEDED:
+                if assignment is not None and _completion_matches_sync_job(job, payload):
+                    assignment.status = DeploymentModelAssignmentStatus.SYNCED
+                    assignment.error = None
+            elif assignment is not None:
+                assignment.status = DeploymentModelAssignmentStatus.FAILED
+                assignment.error = payload.error
+            await session.commit()
+            await session.refresh(job)
+            if assignment is not None:
+                await session.refresh(assignment)
+        return _model_to_sync_job_response(job)
+
     async def _queue_url_import(
         self,
         *,
@@ -664,6 +863,162 @@ def _model_to_import_job_response(job: ModelImportJob) -> ModelImportJobResponse
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
+
+
+async def _load_next_desired_model_assignment(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+) -> DeploymentModelAssignment | None:
+    statement = (
+        select(DeploymentModelAssignment)
+        .where(DeploymentModelAssignment.tenant_id == tenant_id)
+        .where(DeploymentModelAssignment.deployment_node_id == deployment_node_id)
+        .where(DeploymentModelAssignment.status == DeploymentModelAssignmentStatus.DESIRED)
+        .order_by(DeploymentModelAssignment.created_at.asc())
+        .limit(1)
+    )
+    row = (await session.execute(statement)).scalars().first()
+    return row if isinstance(row, DeploymentModelAssignment) else None
+
+
+async def _load_model_sync_job(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    job_id: UUID,
+) -> DeploymentModelSyncJob:
+    statement = (
+        select(DeploymentModelSyncJob)
+        .where(DeploymentModelSyncJob.tenant_id == tenant_id)
+        .where(DeploymentModelSyncJob.id == job_id)
+    )
+    row = (await session.execute(statement)).scalars().first()
+    if not isinstance(row, DeploymentModelSyncJob):
+        raise ValueError("Deployment model sync job not found.")
+    return row
+
+
+async def _load_supervisor_model_job_node(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    supervisor_id: str,
+    authenticated_node_id: UUID | None,
+) -> DeploymentNode:
+    node = await _load_deployment_node_by_supervisor(
+        session=session,
+        tenant_id=tenant_id,
+        supervisor_id=supervisor_id,
+    )
+    if node is None:
+        raise ValueError("Deployment node not found.")
+    if authenticated_node_id is not None and authenticated_node_id != node.id:
+        raise PermissionError(
+            "Supervisor credential cannot manage model jobs for another deployment node."
+        )
+    return node
+
+
+async def _require_supervisor_model_job_scope(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    supervisor_id: str,
+    authenticated_node_id: UUID | None,
+    deployment_node_id: UUID,
+) -> None:
+    node = await _load_supervisor_model_job_node(
+        session=session,
+        tenant_id=tenant_id,
+        supervisor_id=supervisor_id,
+        authenticated_node_id=authenticated_node_id,
+    )
+    if node.id != deployment_node_id:
+        raise PermissionError(
+            "Supervisor credential cannot manage model jobs for another deployment node."
+        )
+
+
+def _model_sync_job_payload(
+    *,
+    deployment_node_id: UUID,
+    assignment: DeploymentModelAssignment,
+    model: Model,
+) -> dict[str, object]:
+    return {
+        "job_type": "model_sync",
+        "schema_version": 1,
+        "deployment_node_id": str(deployment_node_id),
+        "model_id": str(model.id),
+        "model_name": model.name,
+        "source_path": model.path,
+        "expected_sha256": model.sha256,
+        "size_bytes": model.size_bytes,
+        "target_path": assignment.desired_path or model.path,
+    }
+
+
+def _model_to_sync_job_response(job: DeploymentModelSyncJob) -> DeploymentModelSyncJobResponse:
+    return DeploymentModelSyncJobResponse(
+        id=job.id,
+        tenant_id=job.tenant_id,
+        deployment_node_id=job.deployment_node_id,
+        assignment_id=job.assignment_id,
+        model_id=job.model_id,
+        status=job.status,
+        payload=dict(job.payload or {}),
+        claimed_by_supervisor_id=job.claimed_by_supervisor_id,
+        claimed_at=job.claimed_at,
+        completed_at=job.completed_at,
+        error=job.error,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )
+
+
+def _apply_model_job_event_status(
+    job: DeploymentModelSyncJob,
+    payload: SupervisorModelJobEventCreate,
+) -> None:
+    if payload.status in {
+        ModelLifecycleJobStatus.ACCEPTED,
+        ModelLifecycleJobStatus.RUNNING,
+        ModelLifecycleJobStatus.SUCCEEDED,
+        ModelLifecycleJobStatus.FAILED,
+        ModelLifecycleJobStatus.CANCELLED,
+    }:
+        job.status = payload.status
+    if payload.status is ModelLifecycleJobStatus.FAILED:
+        job.error = payload.message or _payload_error(payload.payload)
+        job.completed_at = datetime.now(tz=UTC)
+    elif payload.status in {
+        ModelLifecycleJobStatus.ACCEPTED,
+        ModelLifecycleJobStatus.RUNNING,
+        ModelLifecycleJobStatus.SUCCEEDED,
+    }:
+        job.error = None
+        if payload.status is ModelLifecycleJobStatus.SUCCEEDED:
+            job.completed_at = datetime.now(tz=UTC)
+
+
+def _payload_error(payload: dict[str, object]) -> str | None:
+    error = payload.get("error")
+    return error if isinstance(error, str) else None
+
+
+def _completion_matches_sync_job(
+    job: DeploymentModelSyncJob,
+    payload: SupervisorModelJobComplete,
+) -> bool:
+    expected_sha256 = job.payload.get("expected_sha256") if job.payload else None
+    reported_sha256 = payload.sha256
+    if reported_sha256 is None:
+        payload_sha256 = payload.payload.get("sha256")
+        if isinstance(payload_sha256, str):
+            reported_sha256 = payload_sha256
+    return isinstance(expected_sha256, str) and reported_sha256 == expected_sha256
 
 
 async def _load_deployment_node(

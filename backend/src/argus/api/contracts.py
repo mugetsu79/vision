@@ -233,6 +233,24 @@ class DeploymentModelSyncJobResponse(BaseModel):
     updated_at: datetime
 
 
+class SupervisorModelJobPollRequest(BaseModel):
+    limit: int = Field(default=10, ge=1, le=100)
+
+
+class SupervisorModelJobPollResponse(BaseModel):
+    supervisor_id: str
+    jobs: list[DeploymentModelSyncJobResponse] = Field(default_factory=list)
+
+
+class SupervisorModelJobComplete(BaseModel):
+    status: ModelLifecycleJobStatus
+    error: str | None = None
+    local_path: str | None = Field(default=None, min_length=1)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    size_bytes: int | None = Field(default=None, gt=0)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class DeploymentModelInventoryItem(BaseModel):
     asset_kind: Literal["model", "runtime_artifact"]
     asset_id: UUID

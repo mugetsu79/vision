@@ -9,6 +9,7 @@ from argus.api.contracts import (
     DeploymentModelAssignmentCreate,
     DeploymentModelAssignmentResponse,
     DeploymentModelInventoryReport,
+    DeploymentModelSyncJobResponse,
     DeploymentNodeResponse,
     DeploymentSupportBundleResponse,
     MasterBootstrapComplete,
@@ -21,6 +22,10 @@ from argus.api.contracts import (
     NodePairingClaimResponse,
     NodePairingSessionCreate,
     NodePairingSessionResponse,
+    SupervisorModelJobComplete,
+    SupervisorModelJobEventCreate,
+    SupervisorModelJobPollRequest,
+    SupervisorModelJobPollResponse,
     SupervisorServiceReportCreate,
     SupervisorServiceReportResponse,
     TenantContext,
@@ -243,6 +248,27 @@ async def assign_model_to_node(
         raise _deployment_http_error(exc) from exc
 
 
+@router.post(
+    "/nodes/{node_id}/model-sync-jobs",
+    response_model=DeploymentModelSyncJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_model_sync_job(
+    node_id: UUID,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> DeploymentModelSyncJobResponse:
+    try:
+        return await services.model_lifecycle.create_model_sync_job(
+            tenant_id=tenant_context.tenant_id,
+            deployment_node_id=node_id,
+            actor_subject=current_user.subject,
+        )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
 @router.delete(
     "/nodes/{node_id}/model-assignments/{assignment_id}",
     response_model=DeploymentModelAssignmentResponse,
@@ -280,6 +306,90 @@ async def list_node_model_inventory(
             tenant_id=tenant_context.tenant_id,
             deployment_node_id=node_id,
         )
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.post(
+    "/supervisors/{supervisor_id}/model-jobs/poll",
+    response_model=SupervisorModelJobPollResponse,
+)
+async def poll_supervisor_model_jobs(
+    supervisor_id: str,
+    payload: SupervisorModelJobPollRequest,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> SupervisorModelJobPollResponse:
+    try:
+        jobs = await services.model_lifecycle.poll_supervisor_model_jobs(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
+            limit=payload.limit,
+        )
+        return SupervisorModelJobPollResponse(supervisor_id=supervisor_id, jobs=jobs)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.post(
+    "/supervisors/{supervisor_id}/model-jobs/{job_id}/events",
+    response_model=DeploymentModelSyncJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_supervisor_model_job_event(
+    supervisor_id: str,
+    job_id: UUID,
+    payload: SupervisorModelJobEventCreate,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> DeploymentModelSyncJobResponse:
+    try:
+        return await services.model_lifecycle.record_supervisor_model_job_event(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
+            job_id=job_id,
+            payload=payload,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise _deployment_http_error(exc) from exc
+
+
+@router.post(
+    "/supervisors/{supervisor_id}/model-jobs/{job_id}/complete",
+    response_model=DeploymentModelSyncJobResponse,
+)
+async def complete_supervisor_model_job(
+    supervisor_id: str,
+    job_id: UUID,
+    payload: SupervisorModelJobComplete,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> DeploymentModelSyncJobResponse:
+    try:
+        return await services.model_lifecycle.complete_supervisor_model_job(
+            tenant_id=tenant_context.tenant_id,
+            supervisor_id=supervisor_id,
+            authenticated_node_id=_authenticated_deployment_node_id(tenant_context),
+            job_id=job_id,
+            payload=payload,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise _deployment_http_error(exc) from exc
 
