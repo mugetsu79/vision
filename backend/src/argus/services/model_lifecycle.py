@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import anyio
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from argus.api.contracts import ModelCapabilityConfig, ModelImportJobResponse, ModelImportRequest
@@ -346,7 +347,23 @@ class ModelLifecycleService:
             )
             session.add(model)
             session.add(job)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                if catalog_id is None:
+                    raise
+                existing_response = await self._register_existing_catalog_model(
+                    tenant_id=tenant_id,
+                    actor_subject=actor_subject,
+                    source=source,
+                    source_uri=source_uri,
+                    expected_sha256=expected_sha256,
+                    catalog_id=catalog_id,
+                )
+                if existing_response is None:
+                    raise
+                return existing_response
             await session.refresh(job)
         return _model_to_import_job_response(job)
 

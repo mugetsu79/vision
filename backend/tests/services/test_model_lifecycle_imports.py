@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 import argus.services.model_lifecycle as model_lifecycle
 from argus.api.contracts import ModelCapabilityConfig, ModelImportRequest
@@ -314,6 +315,68 @@ async def test_repeated_catalog_registration_reuses_existing_model(
 
 
 @pytest.mark.asyncio
+async def test_catalog_registration_integrity_error_reloads_existing_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tenant_id = uuid4()
+    catalog_id = "race-yolo26n-coco-onnx"
+    model_path = tmp_path / "catalog-yolo26n.onnx"
+    model_path.write_bytes(b"catalog-onnx")
+    existing_model = Model(
+        id=uuid4(),
+        name="Existing YOLO26n COCO",
+        version="2026.1",
+        task=ModelTask.DETECT,
+        path=str(model_path),
+        format=ModelFormat.ONNX,
+        capability=DetectorCapability.FIXED_VOCAB,
+        capability_config={"catalog_id": catalog_id},
+        classes=[],
+        input_shape={"width": 640, "height": 640},
+        sha256=_sha256(b"catalog-onnx"),
+        size_bytes=len(b"catalog-onnx"),
+        license="AGPL-3.0",
+    )
+    session_factory = _CatalogInsertConflictSessionFactory(existing_model)
+    service = ModelLifecycleService(session_factory=session_factory)
+    _patch_model_class_resolver(monkeypatch)
+    catalog_entry = ModelCatalogEntry(
+        id=catalog_id,
+        name="Race YOLO26n COCO",
+        version="2026.1",
+        task=ModelTask.DETECT,
+        path_hint=str(model_path),
+        format=ModelFormat.ONNX,
+        capability=DetectorCapability.FIXED_VOCAB,
+        capability_config=ModelCapabilityConfig(),
+        classes=(),
+        input_shape={"width": 640, "height": 640},
+        license="AGPL-3.0",
+        note="Race test entry.",
+    )
+    monkeypatch.setattr(
+        model_lifecycle,
+        "get_model_catalog_entry",
+        lambda requested_id: catalog_entry if requested_id == catalog_id else None,
+    )
+
+    response = await service.register_catalog_entry(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        catalog_id=catalog_id,
+    )
+
+    assert response.status == ModelLifecycleJobStatus.SUCCEEDED
+    assert response.model_id == existing_model.id
+    assert len(session_factory.models) == 1
+    assert session_factory.models[0].id == existing_model.id
+    assert len(session_factory.import_jobs) == 1
+    assert session_factory.import_jobs[0].status == ModelLifecycleJobStatus.SUCCEEDED
+    assert session_factory.rollback_count == 1
+
+
+@pytest.mark.asyncio
 async def test_catalog_download_with_trusted_source_queues_url_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -487,7 +550,9 @@ class _FakeSession:
         return None
 
     async def execute(self, statement):  # noqa: ANN001
-        return _FakeExecuteResult(self.session_factory.models)
+        return _FakeExecuteResult(
+            _models_matching_statement(self.session_factory.models, statement)
+        )
 
 
 class _FakeSessionFactory:
@@ -517,3 +582,81 @@ class _FakeScalarResult:
 
     def all(self) -> list[Model]:
         return self.rows
+
+
+class _CatalogInsertConflictSessionFactory:
+    def __init__(self, existing_model: Model) -> None:
+        self.models = [existing_model]
+        self.import_jobs: list[ModelImportJob] = []
+        self.rollback_count = 0
+        self.conflict_raised = False
+
+    def __call__(self) -> _CatalogInsertConflictSession:
+        return _CatalogInsertConflictSession(self)
+
+
+class _CatalogInsertConflictSession:
+    def __init__(self, session_factory: _CatalogInsertConflictSessionFactory) -> None:
+        self.session_factory = session_factory
+        self.pending: list[Model | ModelImportJob] = []
+
+    async def __aenter__(self) -> _CatalogInsertConflictSession:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+        return None
+
+    def add(self, row: Model | ModelImportJob) -> None:
+        if row.id is None:
+            row.id = uuid4()
+        if isinstance(row, ModelImportJob):
+            now = datetime.now(UTC)
+            if row.created_at is None:
+                row.created_at = now
+            if row.updated_at is None:
+                row.updated_at = now
+        self.pending.append(row)
+
+    async def commit(self) -> None:
+        if not self.session_factory.conflict_raised and any(
+            isinstance(row, Model)
+            and (row.capability_config or {}).get("catalog_id")
+            == (self.session_factory.models[0].capability_config or {}).get("catalog_id")
+            for row in self.pending
+        ):
+            self.session_factory.conflict_raised = True
+            raise IntegrityError(
+                "duplicate catalog model",
+                params=None,
+                orig=Exception("unique catalog model"),
+            )
+        for row in self.pending:
+            if isinstance(row, ModelImportJob):
+                self.session_factory.import_jobs.append(row)
+        self.pending = []
+
+    async def rollback(self) -> None:
+        self.session_factory.rollback_count += 1
+        self.pending = []
+
+    async def refresh(self, row: Model | ModelImportJob) -> None:
+        return None
+
+    async def execute(self, statement):  # noqa: ANN001
+        if not self.session_factory.conflict_raised:
+            return _FakeExecuteResult([])
+        return _FakeExecuteResult(
+            _models_matching_statement(self.session_factory.models, statement)
+        )
+
+
+def _models_matching_statement(models: list[Model], statement) -> list[Model]:  # noqa: ANN001
+    params = statement.compile().params
+    if params.get("capability_config_1") != "catalog_id":
+        return models
+    catalog_id = params.get("param_1")
+    return [
+        model
+        for model in models
+        if (model.capability_config or {}).get("catalog_id") == catalog_id
+    ]
