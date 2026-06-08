@@ -96,6 +96,85 @@ def test_appliance_driver_handles_empty_extra_args_under_macos_bash() -> None:
     assert "Unsupported container engine: unsupported" in result.stderr
 
 
+def test_appliance_driver_can_use_docker_desktop_compose_plugin_directly(
+    tmp_path: Path,
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    driver_under_test = tmp_path / "vezor-appliance"
+    compose_file = tmp_path / "compose.yml"
+    config_file = tmp_path / "master.json"
+    env_file = tmp_path / "master.env"
+    plugin_calls = tmp_path / "plugin-calls.log"
+
+    path_export = (
+        'export PATH="/opt/homebrew/bin:/usr/local/bin:'
+        '/Applications/Docker.app/Contents/Resources/bin:'
+        '${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"'
+    )
+    driver_under_test.write_text(
+        _read(REPO_ROOT / "bin" / "vezor-appliance").replace(
+            path_export,
+            'export PATH="${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"',
+        ),
+        encoding="utf-8",
+    )
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+    config_file.write_text(
+        f'{{"config_dir": "{tmp_path}", "compose_file": "{compose_file}"}}\n',
+        encoding="utf-8",
+    )
+    env_file.write_text("", encoding="utf-8")
+
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+if [[ "$1" == "compose" ]]; then
+  echo "docker: unknown command: docker compose" >&2
+  exit 1
+fi
+echo "unexpected docker command: $*" >&2
+exit 2
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+
+    desktop_compose = tmp_path / "docker-compose"
+    desktop_compose.write_text(
+        f"""#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "{plugin_calls}"
+exit 0
+""",
+        encoding="utf-8",
+    )
+    desktop_compose.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(driver_under_test),
+            "master",
+            "status",
+            "--config",
+            str(config_file),
+        ],
+        check=False,
+        capture_output=True,
+        env={
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "VEZOR_MASTER_ENV_FILE": str(env_file),
+            "VEZOR_DOCKER_COMPOSE_PLUGIN": str(desktop_compose),
+        },
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert plugin_calls.read_text(encoding="utf-8").strip() == (
+        f"-f {compose_file} ps"
+    )
+
+
 def test_vezorctl_wrapper_uses_installer_tooling_without_static_tokens() -> None:
     wrapper = _read(REPO_ROOT / "bin" / "vezorctl")
 

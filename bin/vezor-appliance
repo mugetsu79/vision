@@ -25,6 +25,8 @@ Commands:
 
 Environment:
   VEZOR_CONTAINER_ENGINE     docker or podman. Defaults to config or docker.
+  VEZOR_DOCKER_COMPOSE_PLUGIN
+                             Override Docker Compose plugin executable.
   VEZOR_MASTER_COMPOSE       Override master compose file.
   VEZOR_EDGE_COMPOSE         Override edge compose file.
   VEZOR_MASTER_ENV_FILE      Override master env file. Default: /etc/vezor/master.env.
@@ -146,6 +148,42 @@ if [[ -z "$CONTAINER_ENGINE" ]]; then
   fi
 fi
 
+docker_compose_plugin_candidates() {
+  if [[ -n "${VEZOR_DOCKER_COMPOSE_PLUGIN:-}" ]]; then
+    printf '%s\n' "$VEZOR_DOCKER_COMPOSE_PLUGIN"
+  fi
+  printf '%s\n' \
+    "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-compose" \
+    "/usr/local/lib/docker/cli-plugins/docker-compose" \
+    "/usr/local/libexec/docker/cli-plugins/docker-compose" \
+    "/usr/lib/docker/cli-plugins/docker-compose" \
+    "/usr/libexec/docker/cli-plugins/docker-compose"
+}
+
+run_docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+    return $?
+  fi
+
+  local candidate=""
+  while IFS= read -r candidate; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      "$candidate" "$@"
+      return $?
+    fi
+  done < <(docker_compose_plugin_candidates)
+
+  if command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+    return $?
+  fi
+
+  echo "Docker is configured but Docker Compose is unavailable." >&2
+  echo "Install Docker Compose or set VEZOR_DOCKER_COMPOSE_PLUGIN to the compose plugin executable." >&2
+  exit 127
+}
+
 compose_command() {
   case "$CONTAINER_ENGINE" in
     docker)
@@ -153,7 +191,7 @@ compose_command() {
         echo "Docker is configured but the docker command is missing." >&2
         exit 127
       fi
-      docker compose "$@"
+      run_docker_compose "$@"
       ;;
     podman)
       if command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
