@@ -18,6 +18,7 @@ from argus.models.enums import (
     ModelTask,
 )
 from argus.models.tables import Model, ModelImportJob
+from argus.services import app as app_services
 from argus.services.model_catalog import ModelCatalogEntry
 from argus.services.model_lifecycle import ModelLifecycleService
 
@@ -26,14 +27,29 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _patch_model_class_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+    classes: list[str] | None = None,
+) -> None:
+    monkeypatch.setattr(
+        app_services,
+        "_resolve_model_classes_for_capability",
+        lambda **kwargs: list(classes or []),
+    )
+
+
 @pytest.mark.asyncio
-async def test_register_master_path_import_creates_model(tmp_path: Path) -> None:
+async def test_register_master_path_import_creates_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     tenant_id = uuid4()
     model_bytes = b"fake-onnx"
     model_path = tmp_path / "yolo26n.onnx"
     model_path.write_bytes(model_bytes)
     session_factory = _FakeSessionFactory()
     service = ModelLifecycleService(session_factory=session_factory)
+    _patch_model_class_resolver(monkeypatch)
 
     response = await service.import_model_from_request(
         tenant_id=tenant_id,
@@ -131,6 +147,37 @@ async def test_file_import_hash_mismatch_returns_failed_job(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_file_import_directory_path_returns_failed_job(tmp_path: Path) -> None:
+    tenant_id = uuid4()
+    session_factory = _FakeSessionFactory()
+    service = ModelLifecycleService(session_factory=session_factory)
+
+    response = await service.import_model_from_request(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        payload=ModelImportRequest(
+            source=ModelImportSource.MASTER_PATH,
+            source_uri=str(tmp_path),
+            expected_sha256="a" * 64,
+            name="YOLO26n COCO",
+            version="2026.1",
+            task=ModelTask.DETECT,
+            format=ModelFormat.ONNX,
+            capability=DetectorCapability.FIXED_VOCAB,
+            input_shape={"width": 640, "height": 640},
+            classes=[],
+            license="AGPL-3.0",
+        ),
+    )
+
+    assert response.status == ModelLifecycleJobStatus.FAILED
+    assert response.model_id is None
+    assert response.error is not None
+    assert "regular file" in response.error
+    assert session_factory.models == []
+
+
+@pytest.mark.asyncio
 async def test_register_catalog_entry_resolves_path_hint(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -140,6 +187,7 @@ async def test_register_catalog_entry_resolves_path_hint(
     model_path.write_bytes(b"catalog-onnx")
     session_factory = _FakeSessionFactory()
     service = ModelLifecycleService(session_factory=session_factory)
+    _patch_model_class_resolver(monkeypatch)
     catalog_entry = ModelCatalogEntry(
         id="test-yolo26n-coco-onnx",
         name="Test YOLO26n COCO",
@@ -172,6 +220,54 @@ async def test_register_catalog_entry_resolves_path_hint(
     assert response.model_id is not None
     assert response.observed_sha256 == _sha256(b"catalog-onnx")
     assert session_factory.models[0].capability_config["catalog_id"] == "test-yolo26n-coco-onnx"
+
+
+@pytest.mark.asyncio
+async def test_repeated_catalog_registration_reuses_existing_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tenant_id = uuid4()
+    model_path = tmp_path / "catalog-yolo26n.onnx"
+    model_path.write_bytes(b"catalog-onnx")
+    session_factory = _FakeSessionFactory()
+    service = ModelLifecycleService(session_factory=session_factory)
+    _patch_model_class_resolver(monkeypatch)
+    catalog_entry = ModelCatalogEntry(
+        id="dedup-yolo26n-coco-onnx",
+        name="Dedup YOLO26n COCO",
+        version="2026.1",
+        task=ModelTask.DETECT,
+        path_hint=str(model_path),
+        format=ModelFormat.ONNX,
+        capability=DetectorCapability.FIXED_VOCAB,
+        capability_config=ModelCapabilityConfig(),
+        classes=(),
+        input_shape={"width": 640, "height": 640},
+        license="AGPL-3.0",
+        note="Dedup test entry.",
+    )
+    monkeypatch.setattr(
+        model_lifecycle,
+        "get_model_catalog_entry",
+        lambda catalog_id: catalog_entry if catalog_id == catalog_entry.id else None,
+    )
+
+    first = await service.register_catalog_entry(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        catalog_id="dedup-yolo26n-coco-onnx",
+    )
+    second = await service.register_catalog_entry(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        catalog_id="dedup-yolo26n-coco-onnx",
+    )
+
+    assert second.status == ModelLifecycleJobStatus.SUCCEEDED
+    assert second.model_id == first.model_id
+    assert len(session_factory.models) == 1
+    assert len(session_factory.import_jobs) == 2
 
 
 @pytest.mark.asyncio
@@ -221,6 +317,103 @@ async def test_catalog_download_with_trusted_source_queues_url_job(
     assert session_factory.models == []
 
 
+@pytest.mark.asyncio
+async def test_url_import_with_unsafe_filename_returns_failed_job(tmp_path: Path) -> None:
+    tenant_id = uuid4()
+    session_factory = _FakeSessionFactory()
+    service = ModelLifecycleService(
+        session_factory=session_factory,
+        model_store_path=tmp_path / "model-store",
+    )
+
+    response = await service.import_model_from_request(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        payload=ModelImportRequest(
+            source=ModelImportSource.URL,
+            source_uri="https://example.test/%2e%2e",
+            expected_sha256="a" * 64,
+            name="YOLO26n COCO",
+            version="2026.1",
+            task=ModelTask.DETECT,
+            format=ModelFormat.ONNX,
+            capability=DetectorCapability.FIXED_VOCAB,
+            input_shape={"width": 640, "height": 640},
+            classes=[],
+            license="AGPL-3.0",
+        ),
+    )
+
+    assert response.status == ModelLifecycleJobStatus.FAILED
+    assert response.model_id is None
+    assert response.error is not None
+    assert "Unsafe model URL filename" in response.error
+    assert ".." not in Path(response.target_path).parts
+    assert session_factory.models == []
+
+
+@pytest.mark.asyncio
+async def test_file_import_reuses_model_service_class_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tenant_id = uuid4()
+    model_path = tmp_path / "yolo26n.onnx"
+    model_path.write_bytes(b"fake-onnx")
+    session_factory = _FakeSessionFactory()
+    service = ModelLifecycleService(session_factory=session_factory)
+    calls: list[
+        tuple[DetectorCapability, str, ModelFormat, list[str] | None, dict[str, object]]
+    ] = []
+
+    def fake_resolve_model_classes_for_capability(
+        *,
+        capability: DetectorCapability,
+        path: str,
+        format: ModelFormat,
+        classes: list[str] | None,
+        capability_config: dict[str, object],
+    ) -> list[str]:
+        calls.append((capability, path, format, classes, capability_config))
+        return ["person", "car"]
+
+    monkeypatch.setattr(
+        app_services,
+        "_resolve_model_classes_for_capability",
+        fake_resolve_model_classes_for_capability,
+    )
+
+    response = await service.import_model_from_request(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        payload=ModelImportRequest(
+            source=ModelImportSource.MASTER_PATH,
+            source_uri=str(model_path),
+            expected_sha256=_sha256(b"fake-onnx"),
+            name="YOLO26n COCO",
+            version="2026.1",
+            task=ModelTask.DETECT,
+            format=ModelFormat.ONNX,
+            capability=DetectorCapability.FIXED_VOCAB,
+            input_shape={"width": 640, "height": 640},
+            classes=[],
+            license="AGPL-3.0",
+        ),
+    )
+
+    assert response.status == ModelLifecycleJobStatus.SUCCEEDED
+    assert calls == [
+        (
+            DetectorCapability.FIXED_VOCAB,
+            str(model_path),
+            ModelFormat.ONNX,
+            [],
+            ModelCapabilityConfig().model_dump(mode="python"),
+        )
+    ]
+    assert session_factory.models[0].classes == ["person", "car"]
+
+
 class _FakeSession:
     def __init__(self, session_factory: _FakeSessionFactory) -> None:
         self.session_factory = session_factory
@@ -250,6 +443,9 @@ class _FakeSession:
     async def refresh(self, row: Model | ModelImportJob) -> None:
         return None
 
+    async def execute(self, statement):  # noqa: ANN001
+        return _FakeExecuteResult(self.session_factory.models)
+
 
 class _FakeSessionFactory:
     def __init__(self) -> None:
@@ -259,3 +455,22 @@ class _FakeSessionFactory:
 
     def __call__(self) -> _FakeSession:
         return _FakeSession(self)
+
+
+class _FakeExecuteResult:
+    def __init__(self, rows: list[Model]) -> None:
+        self.rows = rows
+
+    def scalars(self) -> _FakeScalarResult:
+        return _FakeScalarResult(self.rows)
+
+
+class _FakeScalarResult:
+    def __init__(self, rows: list[Model]) -> None:
+        self.rows = rows
+
+    def first(self) -> Model | None:
+        return self.rows[0] if self.rows else None
+
+    def all(self) -> list[Model]:
+        return self.rows

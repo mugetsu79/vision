@@ -6,6 +6,7 @@ from urllib.parse import unquote, urlsplit
 from uuid import UUID, uuid4
 
 import anyio
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -156,6 +157,20 @@ class ModelLifecycleService:
         payload: ModelImportRequest,
         catalog_id: str | None,
     ) -> ModelImportJobResponse:
+        try:
+            target_path = _target_path_for_url(payload.source_uri or "", self.model_store_path)
+        except ValueError as exc:
+            return await self._failed_import_job(
+                tenant_id=tenant_id,
+                actor_subject=actor_subject,
+                source=ModelImportSource.URL,
+                source_uri=payload.source_uri,
+                target_path=str(self.model_store_path or ""),
+                expected_sha256=payload.expected_sha256,
+                error=f"Unsafe model URL filename: {exc}",
+                catalog_id=catalog_id,
+            )
+
         async with self.session_factory() as session:
             job = ModelImportJob(
                 tenant_id=tenant_id,
@@ -164,7 +179,7 @@ class ModelLifecycleService:
                 status=ModelLifecycleJobStatus.QUEUED,
                 actor_subject=actor_subject,
                 source_uri=payload.source_uri,
-                target_path=_target_path_for_url(payload.source_uri or "", self.model_store_path),
+                target_path=target_path,
                 expected_sha256=payload.expected_sha256,
                 progress={},
             )
@@ -193,8 +208,34 @@ class ModelLifecycleService:
         license: str | None,
         catalog_id: str | None,
     ) -> ModelImportJobResponse:
+        if catalog_id is not None:
+            existing_response = await self._register_existing_catalog_model(
+                tenant_id=tenant_id,
+                actor_subject=actor_subject,
+                source=source,
+                source_uri=source_uri,
+                expected_sha256=expected_sha256,
+                catalog_id=catalog_id,
+            )
+            if existing_response is not None:
+                return existing_response
+
         path = Path(source_uri)
-        if not await anyio.to_thread.run_sync(path.exists):
+        try:
+            source_exists = await anyio.to_thread.run_sync(path.exists)
+            source_is_file = await anyio.to_thread.run_sync(path.is_file)
+        except OSError as exc:
+            return await self._failed_import_job(
+                tenant_id=tenant_id,
+                actor_subject=actor_subject,
+                source=source,
+                source_uri=source_uri,
+                target_path=target_path,
+                expected_sha256=expected_sha256,
+                error=f"Could not inspect model artifact: {exc}",
+                catalog_id=catalog_id,
+            )
+        if not source_exists:
             return await self._failed_import_job(
                 tenant_id=tenant_id,
                 actor_subject=actor_subject,
@@ -205,9 +246,32 @@ class ModelLifecycleService:
                 error=f"Model artifact does not exist: {source_uri}",
                 catalog_id=catalog_id,
             )
+        if not source_is_file:
+            return await self._failed_import_job(
+                tenant_id=tenant_id,
+                actor_subject=actor_subject,
+                source=source,
+                source_uri=source_uri,
+                target_path=target_path,
+                expected_sha256=expected_sha256,
+                error=f"Model artifact must be a regular file: {source_uri}",
+                catalog_id=catalog_id,
+            )
 
-        observed_sha256 = await anyio.to_thread.run_sync(_hash_file, path)
-        size_bytes = (await anyio.to_thread.run_sync(path.stat)).st_size
+        try:
+            observed_sha256 = await anyio.to_thread.run_sync(_hash_file, path)
+            size_bytes = (await anyio.to_thread.run_sync(path.stat)).st_size
+        except OSError as exc:
+            return await self._failed_import_job(
+                tenant_id=tenant_id,
+                actor_subject=actor_subject,
+                source=source,
+                source_uri=source_uri,
+                target_path=target_path,
+                expected_sha256=expected_sha256,
+                error=f"Could not read model artifact: {exc}",
+                catalog_id=catalog_id,
+            )
         if expected_sha256 is not None and observed_sha256 != expected_sha256:
             return await self._failed_import_job(
                 tenant_id=tenant_id,
@@ -229,6 +293,27 @@ class ModelLifecycleService:
         config_data = capability_config.model_dump(mode="python")
         if catalog_id is not None:
             config_data["catalog_id"] = catalog_id
+        try:
+            resolved_classes = _resolve_model_classes_for_import(
+                capability=capability,
+                path=target_path,
+                format=format,
+                classes=list(classes),
+                capability_config=config_data,
+            )
+        except HTTPException as exc:
+            return await self._failed_import_job(
+                tenant_id=tenant_id,
+                actor_subject=actor_subject,
+                source=source,
+                source_uri=source_uri,
+                target_path=target_path,
+                expected_sha256=expected_sha256,
+                observed_sha256=observed_sha256,
+                size_bytes=size_bytes,
+                error=str(exc.detail),
+                catalog_id=catalog_id,
+            )
         async with self.session_factory() as session:
             model = Model(
                 id=model_id,
@@ -239,7 +324,7 @@ class ModelLifecycleService:
                 format=format,
                 capability=capability,
                 capability_config=config_data,
-                classes=list(classes),
+                classes=resolved_classes,
                 input_shape=dict(input_shape),
                 sha256=observed_sha256,
                 size_bytes=size_bytes,
@@ -260,6 +345,39 @@ class ModelLifecycleService:
                 progress={},
             )
             session.add(model)
+            session.add(job)
+            await session.commit()
+            await session.refresh(job)
+        return _model_to_import_job_response(job)
+
+    async def _register_existing_catalog_model(
+        self,
+        *,
+        tenant_id: UUID,
+        actor_subject: str,
+        source: ModelImportSource,
+        source_uri: str,
+        expected_sha256: str | None,
+        catalog_id: str,
+    ) -> ModelImportJobResponse | None:
+        async with self.session_factory() as session:
+            existing_model = await _find_existing_catalog_model(session, catalog_id)
+            if existing_model is None:
+                return None
+            job = ModelImportJob(
+                tenant_id=tenant_id,
+                catalog_id=catalog_id,
+                source=source,
+                status=ModelLifecycleJobStatus.SUCCEEDED,
+                actor_subject=actor_subject,
+                model_id=existing_model.id,
+                source_uri=source_uri,
+                target_path=existing_model.path,
+                expected_sha256=expected_sha256,
+                observed_sha256=existing_model.sha256,
+                size_bytes=existing_model.size_bytes,
+                progress={},
+            )
             session.add(job)
             await session.commit()
             await session.refresh(job)
@@ -336,10 +454,45 @@ def _find_catalog_entry(catalog_id: str) -> ModelCatalogEntry:
     raise ValueError(f"Model catalog entry not found: {catalog_id}")
 
 
+async def _find_existing_catalog_model(
+    session: AsyncSession,
+    catalog_id: str,
+) -> Model | None:
+    statement = select(Model).where(Model.capability_config["catalog_id"].astext == catalog_id)
+    result = await session.execute(statement)
+    return result.scalars().first()
+
+
+def _resolve_model_classes_for_import(
+    *,
+    capability: DetectorCapability,
+    path: str,
+    format: ModelFormat,
+    classes: list[str] | None,
+    capability_config: dict[str, object],
+) -> list[str]:
+    from argus.services import app as app_services
+
+    return app_services._resolve_model_classes_for_capability(
+        capability=capability,
+        path=path,
+        format=format,
+        classes=classes,
+        capability_config=capability_config,
+    )
+
+
 def _target_path_for_url(source_uri: str, model_store_path: Path | None) -> str:
+    filename = _safe_url_target_filename(source_uri)
     if model_store_path is None:
         return source_uri
-    filename = Path(unquote(urlsplit(source_uri).path)).name
-    if not filename:
-        filename = "model"
     return str(model_store_path / filename)
+
+
+def _safe_url_target_filename(source_uri: str) -> str:
+    raw_path = urlsplit(source_uri).path
+    raw_basename = raw_path.rsplit("/", 1)[-1]
+    filename = unquote(raw_basename)
+    if filename in {"", ".", ".."} or "/" in filename or "\\" in filename:
+        raise ValueError(f"{filename!r} is not a safe filename.")
+    return filename
