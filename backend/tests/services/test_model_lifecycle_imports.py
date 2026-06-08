@@ -178,6 +178,49 @@ async def test_file_import_directory_path_returns_failed_job(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
+async def test_file_import_hash_oserror_persists_failed_job(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tenant_id = uuid4()
+    model_path = tmp_path / "yolo26n.onnx"
+    model_path.write_bytes(b"fake-onnx")
+    session_factory = _FakeSessionFactory()
+    service = ModelLifecycleService(session_factory=session_factory)
+
+    def raise_permission_denied(path: Path) -> str:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(model_lifecycle, "_hash_file", raise_permission_denied)
+
+    response = await service.import_model_from_request(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        payload=ModelImportRequest(
+            source=ModelImportSource.MASTER_PATH,
+            source_uri=str(model_path),
+            expected_sha256="a" * 64,
+            name="YOLO26n COCO",
+            version="2026.1",
+            task=ModelTask.DETECT,
+            format=ModelFormat.ONNX,
+            capability=DetectorCapability.FIXED_VOCAB,
+            input_shape={"width": 640, "height": 640},
+            classes=[],
+            license="AGPL-3.0",
+        ),
+    )
+
+    assert response.status == ModelLifecycleJobStatus.FAILED
+    assert response.model_id is None
+    assert response.error is not None
+    assert "permission denied" in response.error
+    assert session_factory.models == []
+    assert len(session_factory.import_jobs) == 1
+    assert session_factory.import_jobs[0].status == ModelLifecycleJobStatus.FAILED
+
+
+@pytest.mark.asyncio
 async def test_register_catalog_entry_resolves_path_hint(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
