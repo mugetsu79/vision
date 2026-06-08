@@ -242,6 +242,41 @@ class DeploymentServiceManager(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ModelImportSource(StrEnum):
+    CATALOG = "catalog"
+    URL = "url"
+    MASTER_PATH = "master_path"
+    UPLOAD = "upload"
+
+
+class ModelLifecycleJobStatus(StrEnum):
+    QUEUED = "queued"
+    ACCEPTED = "accepted"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class DeploymentModelAssignmentStatus(StrEnum):
+    DESIRED = "desired"
+    SYNCING = "syncing"
+    SYNCED = "synced"
+    FAILED = "failed"
+    REMOVED = "removed"
+
+
+class RuntimeArtifactBuildFormat(StrEnum):
+    ONNX_EXPORT = "onnx_export"
+    TENSORRT_ENGINE = "tensorrt_engine"
+
+
+class EdgeConfigurationApplyStatus(StrEnum):
+    PENDING = "pending"
+    APPLIED = "applied"
+    FAILED = "failed"
+
+
 class CountEventType(StrEnum):
     LINE_CROSS = "line_cross"
     ZONE_ENTER = "zone_enter"

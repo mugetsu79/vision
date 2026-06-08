@@ -26,9 +26,11 @@ from argus.models.enums import (
     CountEventType,
     DeploymentCredentialStatus,
     DeploymentInstallStatus,
+    DeploymentModelAssignmentStatus,
     DeploymentNodeKind,
     DeploymentServiceManager,
     DetectorCapability,
+    EdgeConfigurationApplyStatus,
     EvidenceArtifactKind,
     EvidenceArtifactStatus,
     EvidenceLedgerAction,
@@ -38,6 +40,8 @@ from argus.models.enums import (
     IncidentRuleSeverity,
     ModelAdmissionStatus,
     ModelFormat,
+    ModelImportSource,
+    ModelLifecycleJobStatus,
     ModelTask,
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
@@ -49,6 +53,7 @@ from argus.models.enums import (
     ProcessingMode,
     RoleEnum,
     RuleAction,
+    RuntimeArtifactBuildFormat,
     RuntimeArtifactKind,
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
@@ -994,6 +999,268 @@ class DeploymentNode(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
         nullable=True,
     )
     diagnostics: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class ModelImportJob(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "model_import_jobs"
+    __table_args__ = (
+        Index("ix_model_import_jobs_status", "status", "created_at"),
+        Index("ix_model_import_jobs_catalog", "catalog_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    catalog_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source: Mapped[ModelImportSource] = mapped_column(
+        enum_column(ModelImportSource, "model_import_source_enum"),
+        nullable=False,
+    )
+    status: Mapped[ModelLifecycleJobStatus] = mapped_column(
+        enum_column(ModelLifecycleJobStatus, "model_lifecycle_job_status_enum"),
+        nullable=False,
+    )
+    actor_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    model_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=True,
+    )
+    source_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target_path: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    observed_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    progress: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class DeploymentModelAssignment(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "deployment_model_assignments"
+    __table_args__ = (
+        UniqueConstraint("deployment_node_id", "model_id", name="uq_deployment_model_assignment"),
+        Index("ix_deployment_model_assignment_node", "deployment_node_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    model_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=False,
+    )
+    status: Mapped[DeploymentModelAssignmentStatus] = mapped_column(
+        enum_column(
+            DeploymentModelAssignmentStatus,
+            "deployment_model_assignment_status_enum",
+        ),
+        nullable=False,
+    )
+    desired_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_sync_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    actor_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class DeploymentModelSyncJob(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "deployment_model_sync_jobs"
+    __table_args__ = (
+        Index("ix_deployment_model_sync_jobs_node", "deployment_node_id", "status"),
+        Index("ix_deployment_model_sync_jobs_assignment", "assignment_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    assignment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_model_assignments.id"),
+        nullable=False,
+    )
+    model_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=False,
+    )
+    status: Mapped[ModelLifecycleJobStatus] = mapped_column(
+        enum_column(ModelLifecycleJobStatus, "deployment_model_sync_job_status_enum"),
+        nullable=False,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    actor_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    claimed_by_supervisor_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class DeploymentModelInventory(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "deployment_model_inventory"
+    __table_args__ = (
+        UniqueConstraint(
+            "deployment_node_id",
+            "asset_kind",
+            "asset_id",
+            "sha256",
+            name="uq_deployment_model_inventory_asset",
+        ),
+        Index("ix_deployment_model_inventory_node", "deployment_node_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    asset_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    asset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    local_path: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_profile: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    runtime_versions: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RuntimeArtifactBuildJob(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "runtime_artifact_build_jobs"
+    __table_args__ = (
+        Index("ix_runtime_artifact_build_jobs_node", "deployment_node_id", "status"),
+        Index("ix_runtime_artifact_build_jobs_model", "model_id", "created_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    model_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("models.id"),
+        nullable=False,
+    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=True,
+    )
+    artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("model_runtime_artifacts.id"),
+        nullable=True,
+    )
+    status: Mapped[ModelLifecycleJobStatus] = mapped_column(
+        enum_column(ModelLifecycleJobStatus, "runtime_artifact_build_job_status_enum"),
+        nullable=False,
+    )
+    build_format: Mapped[RuntimeArtifactBuildFormat] = mapped_column(
+        enum_column(RuntimeArtifactBuildFormat, "runtime_artifact_build_format_enum"),
+        nullable=False,
+    )
+    target_profile: Mapped[str] = mapped_column(String(128), nullable=False)
+    precision: Mapped[RuntimeArtifactPrecision] = mapped_column(
+        enum_column(RuntimeArtifactPrecision, "runtime_artifact_build_precision_enum"),
+        nullable=False,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    actor_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SupervisorModelJobEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "supervisor_model_job_events"
+    __table_args__ = (
+        Index("ix_supervisor_model_job_events_job", "job_kind", "job_id", "created_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    job_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    status: Mapped[ModelLifecycleJobStatus] = mapped_column(
+        enum_column(ModelLifecycleJobStatus, "supervisor_model_job_event_status_enum"),
+        nullable=False,
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class EdgeConfigurationAssignment(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "edge_configuration_assignments"
+    __table_args__ = (
+        UniqueConstraint("deployment_node_id", name="uq_edge_configuration_assignment_node"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+    deployment_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_nodes.id"),
+        nullable=False,
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    desired_config: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    applied_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    apply_status: Mapped[EdgeConfigurationApplyStatus] = mapped_column(
+        enum_column(EdgeConfigurationApplyStatus, "edge_configuration_apply_status_enum"),
+        nullable=False,
+    )
+    last_applied_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    actor_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class SupervisorServiceStatusReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
