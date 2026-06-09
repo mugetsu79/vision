@@ -2,186 +2,128 @@
 
 Date: 2026-06-09
 
-Branch/head during final smoke: `codex/sceneops-pack-registry` at `4c8e9e3a`, pushed to `origin/codex/sceneops-pack-registry`.
-Stack type: installed macOS master product stack plus real Jetson Orin edge stack rebuilt from the committed branch; targeted destructive reset completed earlier in this closure run without global Docker prune.
-URLs: frontend `http://192.168.1.166:3000`, backend `http://192.168.1.166:8000`, Keycloak `http://192.168.1.166:8080`, master MediaMTX RTSP `rtsp://192.168.1.166:8554`.
-Jetson: `192.168.1.203`, rebuilt after removing old Vezor stack and preserving model files under `/var/lib/vezor/models`.
-RTSP sources: Office/Test camera URLs on `192.168.1.195:8554/ch1`, `192.168.1.165:8554/ch1`, and `192.168.1.165:8554/ch2`; credentials are intentionally not recorded here.
-Deterministic smoke run id: `closure-20260609T110202Z`.
+Branch/head: `codex/sceneops-pack-registry` at `5fc19c1f`, pushed to `origin/codex/sceneops-pack-registry`.
+
+Stack type: installed macOS master product stack plus real Jetson Orin edge stack; master compose services and Jetson systemd services rebuilt/restarted from committed branch artifacts. No global Docker prune was run.
+
+Master URL: frontend `http://192.168.1.166:3000`, backend `http://192.168.1.166:8000`, Keycloak `http://192.168.1.166:8080`.
+
+Jetson: Orin at `192.168.1.203`, checkout fast-forwarded to `5fc19c1f`; packaged edge image rebuilt at `ac380eb` for the latest edge production change, and the final `5fc19c1f` commit is frontend-test-only.
+
+RTSP/source used: credentials redacted; central `192.168.1.195:8554/ch1`, edge `192.168.1.165:8554/ch1`, edge 720p lane `192.168.1.165:8554/ch2`.
+
+Fresh destructive reset proof: targeted master reset was run after the central supervisor credential fix; Jetson old Vezor stack was deleted and rebuilt; `/var/lib/vezor/models` was preserved; no unrelated Docker resources were deleted.
 
 ## Summary
 
-The remaining installed-product smoke gaps are closed for the macOS master plus
-real Jetson edge compose/systemd path, except where explicitly marked BLOCKED or
-NOT RUN below. The run proved a fresh first-run credential binding after the
-central supervisor credential fix, real Jetson supervisor/API sync, deterministic
-detection/history/evidence fixture data, billing usage generation, TensorRT
-engine build on Jetson, reflector secret distribution, a real Jetson-origin UDP
-edge-agent probe, packaged edge-agent systemd operation, rebuilt central images,
-and tenant-admin user management through the installed Users UI.
+The remaining whole-product live smoke gaps are closed except for the explicitly scoped-out live k3s/Helm deployment posture, external registry publishing, final-pass annotated-browser rendering, and the central camera worker runtime row still reporting `not_reported`. The fresh stack now has a product-created superadmin identity, tenant `CENTRAL`, control-plane site `Vezor Master`, edge site/node `EDGE`, central person scene, edge vehicle scene, Jetson TensorRT runtime artifact, real UDP Core Link samples with throughput, deterministic history/evidence/billing fixture data, and active systemd-managed edge services.
 
-Late live blocker fixed in this update:
+Two late live blockers were fixed with regressions:
 
-- `installer/linux/install-edge.sh` generated `/etc/vezor/edge-agent.env` with
-  an unquoted label containing spaces. `vezor-edge-agent.service` failed with
-  `/etc/vezor/edge-agent.env: line 7: Core: command not found`. A failing
-  regression test was added, env values are now shell-quoted, the fix was
-  pushed, the Jetson pulled `4c8e9e3a`, and the service now runs.
-
-Remaining product gap:
-
-- Platform-superadmin tenant/user management UI controls exist after a
-  platform-superadmin token is available, but the installed product does not yet
-  bootstrap the first platform-superadmin account or platform sign-in path from
-  UI. That is documented as a follow-up spec and plan.
+- Evidence artifact metadata existed but `/api/v1/incidents/{incident}/artifacts/{artifact}/content` returned 404 when the fixture wrote under `/var/lib/vezor/evidence/smoke`. Fixed by storing fixture object keys relative to the configured evidence root when the evidence directory is a subdirectory.
+- `vezor-edge-agent.service` entered an auto-restart loop because a stale `vezor-edge-agent` Docker container already owned the name. Fixed by making the wrapper remove a stale container before the foreground `docker run`.
 
 ## Pass/Fail Matrix
 
 | Area | Status | Evidence |
 |---|---|---|
-| Targeted destructive reset | PASS | Removed installed Vezor DB/config/secret state and old Jetson stack; no global Docker prune; unrelated Docker resources left alone; model files preserved. |
-| Fresh first-run and central credential | PASS | First-run completed after reset; central credential files existed and matched by hash; central supervisor authenticated without manual credential repair after the credential fix. |
-| Jetson destructive rebuild | PASS | Old Jetson Vezor stack deleted and rebuilt; `/var/lib/vezor/models` preserved; `vezor-edge.service` enabled/active. |
-| Real Jetson supervisor/API sync and inventory | PASS | Edge node `9ca35fc9-0c88-44f7-bf70-d59e1897a72b`; YOLO26n and YOLO26s assignments reached `synced`; inventory reported both ONNX model files with expected sizes/SHA256s. |
-| TensorRT engine build on Jetson | PASS | Build job `5664f4c4-3ef9-4685-ad28-7ffc3737bfa3` succeeded; artifact `abd16885-865f-408b-927a-396e63750324`, `/models/runtime-artifacts/.../yolo26n.engine`, size `8327412`, SHA256 `f34b01b38e90ce659f8148fa3d1e04e3637c53e9bc2443f94a7c276f9c78f6da`. |
-| Real RTSP 1296p lane | PASS | Jetson `ffprobe` and smoke harness passed for redacted `192.168.1.195:8554/ch1`: H.264, `2304x1296`, `20/1` fps. |
-| Real RTSP 720p lane | PASS | Smoke harness passed for redacted `192.168.1.165:8554/ch2`: H.264, `1280x720`, `20/1` fps. |
-| Real camera assigned to Jetson edge | PASS | Camera `376520ca-29ff-425b-adda-b091e6f3b314` created for Smoke Office site with `processing_mode=edge`; fleet worker row reported edge supervisor ownership and `runtime_status=running`; delivery diagnostics exposed native/passthrough profiles. |
-| Deterministic detection/history fixture | PASS | Fixture run `closure-20260609T110202Z`; history returned `person` detections for camera `376520ca-29ff-425b-adda-b091e6f3b314`; latest seeded incident present. |
-| Evidence artifact content | PASS | Artifact `d8941fc5-4b2e-50e4-82ca-d50daf60db05` content route returned 200 from `/var/lib/vezor/evidence`; content included smoke run id, camera id, and `class_name=person`; SHA256 matched fixture output. |
-| Billing usage and invoice | PASS | Billing usage generated for meters `evidence_pack_export` and `managed_edge_node`; invoice `3c6af742-55e2-4075-9c53-38991da8ea5d` present with two line items. |
-| Master reflector profile redaction | PASS | Normal reflector profile returned `secret_state=present` and did not expose raw secret material. |
-| Master reflector secret distribution | PASS | Admin and node-credential edge-agent config fetches returned 200; raw config stored only under local `/tmp`/Jetson `/tmp` with mode `0600`; report output redacted secret material. |
-| Real UDP edge-agent probe from Jetson | PASS | Packaged `vezor-edge-agent.service` posted a real UDP sample from Jetson using the supervisor node credential: `reachable=true`, `packet_loss_percent=0.0`, `packets_received=20/20`, average RTT about 5.3 ms. |
-| Edge-agent installed service packaging | PASS | Added `bin/vezor-edge-agent`, `infra/install/systemd/vezor-edge-agent.service`, installer wiring, node-credential bearer-token-file use, and regression tests. |
-| Edge-agent systemd service live run | PASS | After reinstall from `4c8e9e3a`, both `vezor-edge.service` and `vezor-edge-agent.service` were enabled/active; Docker showed `vezor-edge-agent`, `vezor-supervisor`, `vezor-edge-nats-leaf`, and `vezor-edge-mediamtx` running. |
-| Backend Docker cache-friendly layer order | PASS | Central and edge Dockerfiles copy dependency manifests before source; regression tests assert dependency install happens before `COPY src` / app source. |
-| Rebuild central images from committed branch | PASS | Rebuilt `vezor/backend:portable-demo` image `73ba717a0333` and `vezor/frontend:portable-demo` image `7f3ca4b9e84e` from branch head `4c8e9e3a`; recreated backend, frontend, and central supervisor containers from those images. |
-| Rebuild Jetson edge image from committed branch | PASS | Jetson pulled `4c8e9e3a`; packaged edge installer rebuilt `vezor/edge-worker:portable-demo` image `34c9c8dc2f68` using cached dependency layers and installed services. |
-| Jetson GPU ONNX Runtime packaging | BLOCKED | The dev edge image build still required `--allow-cpu-onnx-runtime` because no Jetson GPU ONNX Runtime wheel URL was configured. TensorRT build itself passed; this is a packaging input gap. |
-| Tenant/user/admin implementation | PASS | Added backend/API/UI for tenant-admin scoped user management and platform-superadmin tenant/user management once platform auth exists; full backend suite `1245 passed`, full frontend suite `493 passed`. |
-| Tenant-admin installed Users API smoke | PASS | On rebuilt stack, refreshed smoke admin auth locally, `GET /api/v1/users` returned 200, `POST /api/v1/users` created additional admin `live-smoke-admin-1781008625@vezor.local`, reset-password returned 200, and tenant admin `GET /api/v1/tenants` correctly returned 403. |
-| Tenant-admin installed Users UI smoke | PASS | Playwright rendered `http://192.168.1.166:3000/users` with a real tenant-admin OIDC session; Users nav/form/table rendered and listed the first-run admin plus the newly-created additional admin. Screenshot: `output/playwright/users-live-smoke.png`. |
-| Platform superadmin Users UI controls | PASS | Automated frontend tests verify platform-superadmin mode can create tenants and tenant users from Users UI when `realm=platform-admin` and role `superadmin` are present. |
-| First platform-superadmin bootstrap from UI | BLOCKED | Current installed Keycloak has only `master` and `argus-dev` realms; no `platform-admin` realm or platform sign-in authority is installed. Product UI cannot yet create/sign in the first platform superadmin. Follow-up spec/plan added. |
-| Helm render posture | PASS | `helm lint` passed for central and edge values; `helm template` rendered 371 central lines and 402 edge lines, including central backend/frontend deployments, reflector env, edge worker, NATS leaf, and `nvidia.com/gpu: "1"`. |
-| k3s live deployment posture | NOT RUN | No local kube context was configured, Jetson reported missing `k3s`, `kubectl`, and `helm`, and no live k3s cluster was available for apply/rollout. |
+| Fresh destructive reset after central credential fix | PASS | Targeted reset removed Vezor master state and old Jetson stack while preserving `/var/lib/vezor/models`; no global prune. |
+| First-run/auth/tenant claims | PASS | First-run created tenant `CENTRAL`; tenant-admin token can list users and is forbidden from tenant administration; platform token can list tenants/users. |
+| Central supervisor credential binding | PASS | Master node `f518f016-3215-4ba2-85d5-d22904a1421e` reports `install_status=healthy`, `credential_status=active`, `service_status=running`; credential file hash recorded without exposing secret. |
+| Real Jetson supervisor/API | PASS | Edge deployment node `80d5a1aa-e2d4-4f7c-b302-0e79c6c46fc6` reports `supervisor_id=EDGE`, `service_manager=systemd`, `service_status=running`, `host_profile=linux-aarch64-nvidia-jetson`. |
+| Jetson model sync and inventory | PASS | Sync job `b3220ea9-f615-48b7-925c-4a083070c551` moved YOLO26n assignment to `synced`; Jetson files preserved with ONNX SHA256s `44def...d3d` and `4ffdd...ab6`; runtime artifact inventory reports TensorRT engine SHA256 `d413...c9b`. |
+| TensorRT engine build on Jetson | PASS | Build job `2617d5cb-28c9-456f-a2fc-e18a19c317c3` succeeded on supervisor `EDGE`; artifact `4e849c27-f03e-4ec6-b575-9ba525a8763f`, size `8219692`, SHA256 `d4130e898ae0937e81aa9e28f2c7ab83e305720c1e0537bb131ac55cb2453c9b`, validation `valid`. |
+| Jetson GPU ONNX Runtime packaging | PASS | Packaged Jetson install resolved the GPU ORT wheel from manifest automatically; no manual wheel URL was supplied; build asserted GPU providers during cached dependency layer. |
+| CENTRAL scene configuration | PASS | Site `CENTRAL`; camera `CENTRAL persons RTSP`; processing `central`; active classes `["person"]`; RTSP probe from master backend saw H.264 `2304x1296` at `20/1` fps. |
+| EDGE scene configuration | PASS | Site/node `EDGE`; camera `EDGE vehicles RTSP`; processing `edge`; active classes `["car","truck","bus","motorcycle"]`; RTSP probe from Jetson saw H.264 `2304x1296` at `20/1` fps. |
+| Office real RTSP 720p lane | PASS | Jetson ffprobe on redacted `192.168.1.165:8554/ch2` returned H.264 `1280x720` at `20/1` fps. |
+| Worker lifecycle/runtime reports | FAIL | Fleet API reports central supervisor healthy and EDGE healthy; EDGE camera worker `runtime_status=running`, selected backend `tensorrt_engine`, artifact `4e849c27-f03e-4ec6-b575-9ba525a8763f`. Central camera is owned by central supervisor but still reports `runtime_status=not_reported`, so the full worker-runtime row is not a PASS. |
+| Annotated live browser rendering | NOT RUN | Final pass used real RTSP ffprobe plus API worker/runtime evidence. No final browser screenshot/canvas validation of annotated live output was captured. |
+| Deterministic detection/history | PASS | Fresh fixture `closure-20260609182441`; `/api/v1/history` returned one `person` occupancy point at `2026-06-09T18:24:00Z`; history classes returned `person` count `1`. |
+| Evidence/Incidents/artifact content | PASS | Incident `3dceaff7-a493-5bd0-b132-b299b9be810e` has one artifact and one ledger entry; scene/privacy/runtime snapshot routes returned 200; artifact content route returned 200, 136 bytes, SHA256 `7dcc3aa9440c77dd485015a2f9a4365fbf918f118a3151fcb9b3e922799592e8`. |
+| Real billing usage/invoice/FleetOps billing | PASS | Billing usage contains both `evidence_pack_export` and `managed_edge_node` records for `closure-20260609182441`; invoice run `df371d24-f22c-40cd-bce0-63d3f96b54af` has two line items totaling `5.00` and `25.00`. |
+| Master reflector secret distribution | PASS | Edge-agent config fetch used node credential and reflector profile exposed `secret_state` only in normal profile views; raw secret material not printed or committed. |
+| Real UDP edge-agent probe | PASS | Packaged install one-shot and service run posted real Jetson-origin samples; latest API sample at `2026-06-09T18:32:54Z` was `20/20`, `0%` loss, `4 ms`, `646.963 Mbps`, payload SHA256 `31dc9ecb7f6bd764a0b00289ce006ac393c46b18b67cb374db9043b80c14ac23`. |
+| Core Link master target-only behavior | PASS | Link summary shows `EDGE` and `Vezor Master` healthy using the master reflector target; active connection remains target-only/fallback sample, not a fake active link. |
+| Edge-agent installed service packaging | PASS | `/etc/systemd/system/vezor-edge-agent.service` enabled and active; `systemctl is-active vezor-edge.service vezor-edge-agent.service` returned `active`, `active`; service runs wrapper under Docker with node credential file. |
+| Backend Docker cache-friendly layer order | PASS | Jetson and master rebuilds reused dependency layers; only source layers rebuilt for source-only changes. |
+| Rebuild images from committed branch | PASS | Master backend image `sha256:439b18fd...7185d3`, frontend image `sha256:22df2957...983c9`, Jetson edge image `sha256:491f4e1f...59ee0`; frontend was rebuilt/recreated after final head `5fc19c1f`. |
+| Tenant/user/admin management | PASS | API and UI tests verify tenant-admin user management and platform-superadmin tenant/user management; installed API checks confirmed tenant admin users 200, tenant admin tenants 403, platform tenants/users 200. |
+| Platform-superadmin bootstrap/sign-in UI | PASS | Frontend `PlatformBootstrap.test.tsx` and full suite verify platform bootstrap form and platform sign-in entry point; installed platform token for `yann.moren@mugetsu.tech` can list tenants and users. |
+| FleetOps overview/vessels/evidence/support | PASS | Existing full frontend suite and API smoke cover FleetOps pages, billing, evidence, support, and link views; no new live blocker found in those surfaces. |
+| Compose/Helm/deployment posture | NOT RUN | User explicitly excluded the separate Helm/k3s smoke in this pass. Compose posture was exercised by master/edge reinstall; live k3s apply/rollout was not run. |
+| External registry publish | NOT RUN | No registry target/credentials were provided. Local master and edge images were rebuilt from committed branch artifacts. |
+| Docs consistency | PASS | Closure report updated; no raw secrets, RTSP credentials, bearer tokens, bootstrap tokens, node credentials, sudo passwords, or reflector secrets committed. |
 
-## Confirmed Bugs Fixed
+## Confirmed Bugs
 
-- `infra/install/compose/compose.supervisor.yml`: Jetson supervisor `/models`
-  mount is writable so synced artifacts and TensorRT engines can be written.
-- `installer/linux/install-edge.sh`: model directory ownership is adjusted
-  non-recursively, preserving model files while allowing supervisor writes.
-- `backend/src/argus/supervisor/tensorrt_builder.py`: `trtexec` now uses
-  equals-form flags accepted by the Jetson `trtexec` version.
-- `scripts/validation/whole_product_live_smoke.py`: real RTSP checks run
-  `ffprobe` and redact credentials.
-- `backend/src/argus/scripts/seed_whole_product_smoke_fixture.py`: default
-  evidence root follows `Settings().incident_local_storage_root`.
-- `backend/src/argus/services/app.py`: supervisor site-scope auth validates the
-  deployment credential's actual edge node site.
-- `backend/src/argus/link/api.py`: edge-agent config fetch reconciles an
-  enabled persisted master reflector profile into a live UDP listener after
-  backend restart.
-- `backend/src/argus/link/edge_agent.py`: supports bearer token files for
-  service packaging.
-- `backend/Dockerfile` and `backend/Dockerfile.edge`: dependency layers are
-  cache-friendly for source-only rebuilds.
-- `installer/linux/install-edge.sh`: edge-agent env values are shell-quoted so
-  labels with spaces do not break the sourced env file.
+- TensorRT artifact completion initially rejected camera-context jobs that produced model-scoped artifacts.
+- Python 3.10 edge-agent UDP timeout handling crashed on `asyncio.TimeoutError`.
+- Smoke fixture evidence content route returned 404 when evidence was seeded under a subdirectory root.
+- Edge-agent systemd restart conflicted with an already-running `vezor-edge-agent` Docker container.
+- Frontend App test assumed a single sign-in button after platform sign-in was intentionally added.
 
-## User And Admin Management
+## Fixes Implemented
 
-Current installed behavior after this branch:
+- `backend/src/argus/services/model_lifecycle.py` accepts model-scoped runtime artifacts produced from camera-context TensorRT build jobs.
+- `backend/src/argus/link/edge_agent.py` catches Python 3.10 timeout exceptions and keeps probes running.
+- `backend/src/argus/scripts/seed_whole_product_smoke_fixture.py` stores reviewable object keys when the evidence root is a configured-storage subdirectory.
+- `bin/vezor-edge-agent` removes stale `vezor-edge-agent` containers before systemd restarts the foreground Docker process.
+- `frontend/src/App.test.tsx` now expects both tenant sign-in and platform sign-in entry points.
 
-- First-run creates the first tenant and the first tenant admin.
-- Tenant admins can use Vezor `Users` to create additional tenant admins,
-  operators, and viewers; no Keycloak console is needed for tenant accounts.
-- Tenant admins remain tenant-scoped through token claims and cannot assign
-  `superadmin`.
-- Platform superadmin API/UI behavior is implemented for users authenticated
-  through the `platform-admin` realm with role `superadmin`.
-- Creating the first platform superadmin from UI is not implemented yet because
-  there is no installed platform bootstrap or platform sign-in path.
+## Remaining Gaps
 
-Follow-up design/plan for that missing product path:
+- Live k3s deployment posture is NOT RUN by user instruction.
+- External image publish is NOT RUN because no registry target was supplied.
+- Central camera worker runtime report remains `not_reported` while central supervisor/node health is healthy; the EDGE worker runtime path is the one verified with TensorRT.
 
-- Spec: `docs/superpowers/specs/2026-06-09-platform-superadmin-ui-bootstrap-design.md`
-- Plan: `docs/superpowers/plans/2026-06-09-platform-superadmin-ui-bootstrap-implementation-plan.md`
+## Security/Secret Handling
 
-## Security/Tenant Notes
+- Raw passwords, sudo passwords, RTSP credentials, bearer tokens, bootstrap tokens, node credentials, and reflector secrets were not committed or recorded in this report.
+- Local token files were kept under `/tmp` with mode `0600`.
+- RTSP sources are recorded by host/path only, with credentials redacted.
 
-- No raw admin passwords, sudo passwords, bearer tokens, RTSP credentials, node
-  credentials, bootstrap tokens, or reflector secrets are committed in this
-  report.
-- Temporary live auth material was stored only under `/tmp` with mode `0600` and
-  deleted after the Users UI Playwright smoke.
-- Profile APIs return `secret_state`; only the scoped edge-agent config route
-  returns reflector secret material to authorized admin/supervisor callers.
-- The edge-agent service uses the Jetson supervisor node credential, not an
-  admin bearer token.
+## Commands Run
 
-## Verification
-
-Commands run in this final closure pass:
+Representative verification commands:
 
 ```bash
-python3 -m uv run --project installer pytest installer/tests/test_edge_installer_artifacts.py -q
-# 11 passed
-
-scripts/validate-installers.sh
-# installer validation passed, 88 installer tests passed
-
+backend/.venv/bin/python -m pytest backend/tests/scripts/test_seed_whole_product_smoke_fixture.py -q
+installer/.venv/bin/python -m pytest installer/tests/test_edge_installer_artifacts.py -q
+corepack pnpm --dir frontend test
+git diff --check
 docker build -f backend/Dockerfile -t vezor/backend:portable-demo .
 docker build -f frontend/Dockerfile -t vezor/frontend:portable-demo frontend
-docker compose --env-file /etc/vezor/master.env \
-  -f infra/install/compose/compose.master.yml \
-  up -d --force-recreate backend frontend vezor-supervisor
-
-curl -fsS http://192.168.1.166:8000/healthz
-# {"status":"ok"}
-
-helm lint infra/helm/argus -f infra/helm/argus/values-central.yaml
-helm lint infra/helm/argus -f infra/helm/argus/values-edge.yaml
-helm template vezor-central infra/helm/argus -f infra/helm/argus/values-central.yaml
-helm template vezor-edge infra/helm/argus -f infra/helm/argus/values-edge.yaml
-
-python3 -m uv run --project backend pytest backend/tests -q
-# 1245 passed
-
-corepack pnpm --dir frontend test
-# 493 passed
-
-corepack pnpm --dir frontend exec tsc -b
-# passed
+docker compose --env-file /etc/vezor/master.env -f infra/install/compose/compose.master.yml up -d --force-recreate backend vezor-supervisor frontend
+ssh ai-user@192.168.1.203 'cd /home/ai-user/vision && git pull --rebase origin codex/sceneops-pack-registry'
+ssh ai-user@192.168.1.203 'systemctl is-active vezor-edge.service vezor-edge-agent.service'
 ```
 
-Representative live commands, with secrets redacted:
+Live probes and API checks:
 
 ```bash
-ssh ai-user@192.168.1.203 \
-  'cd /home/ai-user/vision && git pull --rebase origin codex/sceneops-pack-registry'
-
-ssh ai-user@192.168.1.203 \
-  'sudo installer/linux/install-edge.sh --unpaired --api-url [redacted] \
-   --edge-name jetson-orin-1 --model-dir /var/lib/vezor/models \
-   --public-mediamtx-rtsp-url rtsp://192.168.1.203:8554 \
-   --version 4c8e9e3a --allow-cpu-onnx-runtime'
-
-ssh ai-user@192.168.1.203 \
-  'sudo systemctl restart vezor-edge-agent.service && systemctl is-active vezor-edge-agent.service'
-
-curl -H "Authorization: Bearer [redacted]" http://192.168.1.166:8000/api/v1/users
-curl -H "Authorization: Bearer [node credential redacted]" \
-  http://192.168.1.166:8000/api/v1/link/control-targets/master/edge-agent-config
+ffprobe redacted CENTRAL 1296p RTSP
+ffprobe redacted EDGE 1296p RTSP
+ffprobe redacted EDGE 720p RTSP
+POST /api/v1/deployment/nodes/{EDGE}/model-sync-jobs
+GET /api/v1/deployment/nodes/{EDGE}/model-assignments
+GET /api/v1/link/sites/summary
+GET /api/v1/operations/fleet
+GET /api/v1/history
+GET /api/v1/incidents/{incident}/ledger
+GET /api/v1/incidents/{incident}/artifacts/{artifact}/content
+GET /api/v1/billing/usage
+GET /api/v1/billing/invoice-runs/{invoice_run_id}
 ```
 
-## Remaining Work
+## Screenshots/Logs Captured
 
-1. Implement the platform-superadmin UI bootstrap spec so the first
-   platform-superadmin account and platform sign-in path are product-managed.
-2. Provide or publish a Jetson GPU ONNX Runtime wheel artifact for dev packaged
-   edge builds so `--allow-cpu-onnx-runtime` is not needed.
-3. Exercise a true k3s live deployment on a reachable k3s cluster and record
-   apply/rollout evidence.
+- Systemd evidence: `vezor-edge-agent.service` active/running after stale-container fix; Docker process shown in service cgroup.
+- Core Link evidence: `20/20` packets, `0%` loss, `646.963 Mbps` throughput at `2026-06-09T18:32:54Z`.
+- TensorRT evidence: API runtime artifact and Jetson file SHA256 both `d4130e898ae0937e81aa9e28f2c7ab83e305720c1e0537bb131ac55cb2453c9b`.
+
+## Recommended Next Steps
+
+1. Run the separate Helm/k3s smoke on a reachable k3s cluster.
+2. Provide registry target/credentials and publish the rebuilt master/edge images.
+3. Decide whether central-supervisor-owned cameras should emit explicit `runtime_status=running`; today central health is healthy but the central camera worker row remains `not_reported`.
