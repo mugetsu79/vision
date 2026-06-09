@@ -265,15 +265,21 @@ class DeploymentNodeService:
                     raise ValueError(msg)
                 user = placeholder_user
                 user.email = payload.admin_email
+                user.first_name = payload.admin_first_name
+                user.last_name = payload.admin_last_name
                 user.oidc_sub = admin_subject
                 user.role = RoleEnum.ADMIN
+                user.enabled = True
                 cast(Any, user).updated_at = now
             else:
                 user = User(
                     tenant_id=tenant.id,
                     email=payload.admin_email,
+                    first_name=payload.admin_first_name,
+                    last_name=payload.admin_last_name,
                     oidc_sub=admin_subject,
                     role=RoleEnum.ADMIN,
+                    enabled=True,
                 )
                 _ensure_identity_and_timestamps(user, now=now)
                 session.add(user)

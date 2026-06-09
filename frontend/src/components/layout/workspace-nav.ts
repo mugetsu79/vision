@@ -12,6 +12,7 @@ import {
   Settings2,
   ShieldAlert,
   Ship,
+  Users,
   Video,
 } from "lucide-react";
 
@@ -54,9 +55,11 @@ const baseWorkspaceNavGroups = omniNavGroups.map((group) => ({
                   ? Package
                   : item.to === "/sites"
                     ? MapPinned
-                    : item.to === "/cameras"
-                      ? Video
-                      : Settings2,
+                    : item.to === "/users"
+                      ? Users
+                      : item.to === "/cameras"
+                        ? Video
+                        : Settings2,
   })),
 })) as readonly WorkspaceNavGroup[];
 
@@ -139,6 +142,10 @@ export function prefetchWorkspaceRoute(
 
   if (route === "/links") {
     void import("@/pages/Links");
+  }
+
+  if (route === "/users") {
+    void import("@/pages/Users");
   }
 
   if (route === "/fleetops") {

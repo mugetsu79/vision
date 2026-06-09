@@ -101,6 +101,12 @@ export const router = createBrowserRouter(
           }),
         },
         {
+          path: "users",
+          lazy: async () => ({
+            Component: (await import("@/pages/Users")).UsersPage,
+          }),
+        },
+        {
           path: "cameras",
           lazy: async () => ({
             Component: (await import("@/pages/Cameras")).CamerasPage,

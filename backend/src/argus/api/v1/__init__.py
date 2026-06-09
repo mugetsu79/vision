@@ -24,6 +24,7 @@ from argus.api.v1 import (
     streams,
     system,
     telemetry_ws,
+    users,
 )
 from argus.billing import api as billing
 from argus.fleet import api as fleet
@@ -34,6 +35,7 @@ from argus.support import api as support
 router = APIRouter()
 router.include_router(system.router)
 router.include_router(sites.router)
+router.include_router(users.router)
 router.include_router(cameras.router)
 router.include_router(configuration.router)
 router.include_router(deployment.router)

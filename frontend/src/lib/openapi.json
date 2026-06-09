@@ -6115,6 +6115,83 @@
         "title": "LinkMasterControlTargetCreate",
         "type": "object"
       },
+      "LinkMasterReflectorEdgeAgentConfigResponse": {
+        "properties": {
+          "dscp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dscp"
+          },
+          "loss_timeout_ms": {
+            "title": "Loss Timeout Ms",
+            "type": "integer"
+          },
+          "method": {
+            "const": "udp_sequence",
+            "title": "Method",
+            "type": "string"
+          },
+          "packet_count": {
+            "title": "Packet Count",
+            "type": "integer"
+          },
+          "packet_spacing_ms": {
+            "title": "Packet Spacing Ms",
+            "type": "integer"
+          },
+          "reflector_address": {
+            "title": "Reflector Address",
+            "type": "string"
+          },
+          "reflector_key_id": {
+            "title": "Reflector Key Id",
+            "type": "string"
+          },
+          "reflector_port": {
+            "title": "Reflector Port",
+            "type": "integer"
+          },
+          "reflector_secret": {
+            "title": "Reflector Secret",
+            "type": "string"
+          },
+          "site_id": {
+            "format": "uuid",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_site_id": {
+            "format": "uuid",
+            "title": "Target Site Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "site_id",
+          "target_id",
+          "target_site_id",
+          "method",
+          "reflector_address",
+          "reflector_port",
+          "reflector_key_id",
+          "reflector_secret",
+          "packet_count",
+          "packet_spacing_ms",
+          "loss_timeout_ms"
+        ],
+        "title": "LinkMasterReflectorEdgeAgentConfigResponse",
+        "type": "object"
+      },
       "LinkPolicyUpdate": {
         "properties": {
           "policy": {
@@ -6611,6 +6688,251 @@
           "passport_hash"
         ],
         "title": "LinkSiteSummaryResponse",
+        "type": "object"
+      },
+      "ManagedTenantCreate": {
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ManagedTenantCreate",
+        "type": "object"
+      },
+      "ManagedTenantResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "created_at"
+        ],
+        "title": "ManagedTenantResponse",
+        "type": "object"
+      },
+      "ManagedUserCreate": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/RoleEnum"
+          },
+          "temporary_password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Temporary Password",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "email",
+          "first_name",
+          "last_name",
+          "role",
+          "temporary_password"
+        ],
+        "title": "ManagedUserCreate",
+        "type": "object"
+      },
+      "ManagedUserPatch": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoleEnum"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ManagedUserPatch",
+        "type": "object"
+      },
+      "ManagedUserResetPassword": {
+        "properties": {
+          "temporary_password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Temporary Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "temporary_password"
+        ],
+        "title": "ManagedUserResetPassword",
+        "type": "object"
+      },
+      "ManagedUserResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "oidc_sub": {
+            "title": "Oidc Sub",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/RoleEnum"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "email",
+          "oidc_sub",
+          "role",
+          "enabled",
+          "created_at"
+        ],
+        "title": "ManagedUserResponse",
         "type": "object"
       },
       "MaritimeVesselLinkStatusResponse": {
@@ -10400,6 +10722,16 @@
         },
         "title": "ResolvedOperatorConfigResponse",
         "type": "object"
+      },
+      "RoleEnum": {
+        "enum": [
+          "viewer",
+          "operator",
+          "admin",
+          "superadmin"
+        ],
+        "title": "RoleEnum",
+        "type": "string"
       },
       "RotationGroupCreate": {
         "properties": {
@@ -21693,6 +22025,71 @@
         ]
       }
     },
+    "/api/v1/link/control-targets/master/edge-agent-config": {
+      "get": {
+        "operationId": "get_my_master_reflector_edge_agent_config_api_v1_link_control_targets_master_edge_agent_config_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "supervisor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkMasterReflectorEdgeAgentConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get My Master Reflector Edge Agent Config",
+        "tags": [
+          "link"
+        ]
+      }
+    },
     "/api/v1/link/evidence/{incident_id}/passport": {
       "get": {
         "operationId": "get_incident_link_passport_api_v1_link_evidence__incident_id__passport_get",
@@ -22825,6 +23222,81 @@
           }
         },
         "summary": "Post Master Control Target",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/sites/{site_id}/control-targets/master/edge-agent-config": {
+      "get": {
+        "operationId": "get_master_reflector_edge_agent_config_api_v1_link_sites__site_id__control_targets_master_edge_agent_config_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "supervisor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkMasterReflectorEdgeAgentConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Master Reflector Edge Agent Config",
         "tags": [
           "link"
         ]
@@ -29172,6 +29644,269 @@
         "summary": "Revoke Support Tunnel",
         "tags": [
           "support"
+        ]
+      }
+    },
+    "/api/v1/tenants": {
+      "get": {
+        "operationId": "list_managed_tenants_api_v1_tenants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ManagedTenantResponse"
+                  },
+                  "title": "Response List Managed Tenants Api V1 Tenants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Managed Tenants",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "create_managed_tenant_api_v1_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedTenantCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedTenantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Managed Tenant",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "list_managed_users_api_v1_users_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ManagedUserResponse"
+                  },
+                  "title": "Response List Managed Users Api V1 Users Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Managed Users",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "create_managed_user_api_v1_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedUserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Managed User",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "patch": {
+        "operationId": "update_managed_user_api_v1_users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedUserPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Managed User",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/reset-password": {
+      "post": {
+        "operationId": "reset_managed_user_password_api_v1_users__user_id__reset_password_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedUserResetPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Managed User Password",
+        "tags": [
+          "users"
         ]
       }
     },

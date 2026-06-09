@@ -42,6 +42,7 @@ from argus.models.enums import (
     PolicyDraftStatus,
     ProcessingMode,
     QueryResolutionMode,
+    RoleEnum,
     RuleAction,
     RuntimeArtifactBuildFormat,
     RuntimeArtifactKind,
@@ -1965,6 +1966,65 @@ class MasterBootstrapCompleteResponse(BaseModel):
     admin_subject: str
     completed_at: datetime
     central_node: DeploymentNodeResponse
+
+
+class ManagedTenantResponse(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+    created_at: datetime
+
+
+class ManagedTenantCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    slug: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ManagedUserResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+    oidc_sub: str
+    role: RoleEnum
+    enabled: bool
+    created_at: datetime
+
+
+class ManagedUserCreate(BaseModel):
+    tenant_id: UUID | None = None
+    email: str = Field(min_length=3, max_length=320)
+    first_name: str = Field(min_length=1, max_length=128)
+    last_name: str = Field(min_length=1, max_length=128)
+    role: RoleEnum
+    temporary_password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _normalize_name(cls, value: str) -> str:
+        return value.strip()
+
+
+class ManagedUserPatch(BaseModel):
+    first_name: str | None = Field(default=None, min_length=1, max_length=128)
+    last_name: str | None = Field(default=None, min_length=1, max_length=128)
+    role: RoleEnum | None = None
+    enabled: bool | None = None
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _normalize_optional_name(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+
+class ManagedUserResetPassword(BaseModel):
+    temporary_password: str = Field(min_length=12, max_length=256)
 
 
 class WorkerModelAdmissionRequest(BaseModel):

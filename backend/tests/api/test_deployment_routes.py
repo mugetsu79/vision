@@ -181,7 +181,10 @@ class _FakeDeploymentService:
                 realm="argus-dev",
                 is_superadmin=False,
                 tenant_context=str(tenant_id),
-                claims={"auth_type": "supervisor_node_credential"},
+                claims={
+                    "auth_type": "supervisor_node_credential",
+                    "deployment_node_id": "00000000-0000-0000-0000-000000000901",
+                },
             ),
         )
 

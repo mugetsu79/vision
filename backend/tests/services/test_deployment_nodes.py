@@ -215,6 +215,9 @@ async def test_master_bootstrap_complete_provisions_oidc_admin_identity() -> Non
 
     assert completed.admin_subject == "keycloak-user-123"
     assert users[0].oidc_sub == "keycloak-user-123"
+    assert users[0].first_name == "Vezor"
+    assert users[0].last_name == "Admin"
+    assert users[0].enabled is True
     assert provisioner.calls == [
         {
             "tenant_id": users[0].tenant_id,
@@ -286,6 +289,9 @@ async def test_master_bootstrap_repairs_preexisting_placeholder_admin_identity()
     assert len(users) == 1
     assert len(nodes) == 1
     assert users[0].oidc_sub == "keycloak-user-456"
+    assert users[0].first_name == "Vezor"
+    assert users[0].last_name == "Admin"
+    assert users[0].enabled is True
     assert provisioner.calls[0]["admin_password"] == "new-password"
 
 

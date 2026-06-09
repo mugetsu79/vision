@@ -31,7 +31,9 @@ describe("omnisight copy", () => {
         label: "Control",
         items: [
           { label: "Deployment", to: "/deployment" },
+          { label: "Models", to: "/models" },
           { label: "Sites", to: "/sites" },
+          { label: "Users", to: "/users" },
           { label: "Scenes", to: "/cameras" },
           { label: "Operations", to: "/settings" },
         ],

@@ -14,6 +14,9 @@ class KeycloakBootstrapError(RuntimeError):
     """Raised when first-run identity provisioning cannot complete."""
 
 
+_TENANT_USER_ROLES = {RoleEnum.VIEWER, RoleEnum.OPERATOR, RoleEnum.ADMIN}
+
+
 class KeycloakBootstrapProvisioner:
     def __init__(
         self,
@@ -60,17 +63,134 @@ class KeycloakBootstrapProvisioner:
         cli_client_id = await self._ensure_cli_client(token)
         await self._ensure_user_attribute_mapper(token, cli_client_id, "tenant_id")
         await self._ensure_user_attribute_mapper(token, cli_client_id, "tenant")
-        user_id = await self._ensure_admin_user(
+        user_id = await self._ensure_tenant_user(
             token,
             tenant_id=tenant_id,
             tenant_slug=tenant_slug,
-            admin_email=admin_email,
-            admin_password=admin_password,
-            admin_first_name=admin_first_name,
-            admin_last_name=admin_last_name,
+            email=admin_email,
+            password=admin_password,
+            first_name=admin_first_name,
+            last_name=admin_last_name,
+            password_temporary=False,
         )
         await self._ensure_realm_role_assignment(token, user_id, RoleEnum.ADMIN.value)
         return user_id
+
+    async def provision_tenant_user(
+        self,
+        *,
+        tenant_id: UUID,
+        tenant_slug: str,
+        email: str,
+        temporary_password: str,
+        first_name: str,
+        last_name: str,
+        role: RoleEnum,
+    ) -> str:
+        if role is RoleEnum.SUPERADMIN:
+            raise KeycloakBootstrapError("Tenant users cannot be assigned superadmin.")
+
+        token = await self._admin_token()
+        for required_role in (RoleEnum.VIEWER, RoleEnum.OPERATOR, RoleEnum.ADMIN):
+            await self._ensure_realm_role(token, required_role.value)
+        user_id = await self._ensure_tenant_user(
+            token,
+            tenant_id=tenant_id,
+            tenant_slug=tenant_slug,
+            email=email,
+            password=temporary_password,
+            first_name=first_name,
+            last_name=last_name,
+            password_temporary=True,
+        )
+        await self._ensure_realm_role_assignment(token, user_id, role.value)
+        return user_id
+
+    async def update_tenant_user(
+        self,
+        *,
+        user_id: str,
+        first_name: str,
+        last_name: str,
+        enabled: bool,
+    ) -> None:
+        token = await self._admin_token()
+        user = await self._read_user(token, user_id)
+        payload = {
+            **user,
+            "firstName": first_name,
+            "lastName": last_name,
+            "enabled": enabled,
+        }
+        response = await self.http_client.put(
+            f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}",
+            headers=self._headers(token),
+            json=payload,
+        )
+        self._raise_for_status(response, f"update Keycloak user {user_id}")
+
+    async def set_tenant_user_role(self, *, user_id: str, role: RoleEnum) -> None:
+        if role not in _TENANT_USER_ROLES:
+            raise KeycloakBootstrapError("Tenant users cannot be assigned superadmin.")
+
+        token = await self._admin_token()
+        desired_role = await self._ensure_realm_role(token, role.value)
+        response = await self.http_client.get(
+            f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}/role-mappings/realm",
+            headers=self._headers(token),
+        )
+        self._raise_for_status(response, "read Keycloak user role mappings")
+        mapped_roles = response.json()
+        if not isinstance(mapped_roles, list):
+            raise KeycloakBootstrapError("Keycloak user role mappings response was invalid.")
+
+        tenant_role_names = {tenant_role.value for tenant_role in _TENANT_USER_ROLES}
+        stale_roles = [
+            mapped
+            for mapped in mapped_roles
+            if isinstance(mapped, dict)
+            and mapped.get("name") in tenant_role_names
+            and mapped.get("name") != role.value
+        ]
+        if stale_roles:
+            remove = await self.http_client.request(
+                "DELETE",
+                f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}/role-mappings/realm",
+                headers=self._headers(token),
+                json=stale_roles,
+            )
+            self._raise_for_status(remove, f"remove Keycloak tenant roles for {user_id}")
+
+        if any(
+            isinstance(mapped, dict) and mapped.get("name") == role.value
+            for mapped in mapped_roles
+        ):
+            return
+
+        assign = await self.http_client.post(
+            f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}/role-mappings/realm",
+            headers=self._headers(token),
+            json=[desired_role],
+        )
+        self._raise_for_status(assign, f"assign Keycloak role {role.value}")
+
+    async def reset_tenant_user_password(
+        self,
+        *,
+        user_id: str,
+        temporary_password: str,
+    ) -> None:
+        token = await self._admin_token()
+        response = await self.http_client.put(
+            f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}/reset-password",
+            headers=self._headers(token),
+            json={
+                "type": "password",
+                "value": temporary_password,
+                "temporary": True,
+            },
+        )
+        self._raise_for_status(response, f"set Keycloak password for {user_id}")
 
     async def reconcile_frontend_client(self) -> bool:
         token = await self._admin_token()
@@ -342,23 +462,24 @@ class KeycloakBootstrapProvisioner:
         )
         self._raise_for_status(create, f"create Keycloak mapper {attribute_name}")
 
-    async def _ensure_admin_user(
+    async def _ensure_tenant_user(
         self,
         token: str,
         *,
         tenant_id: UUID,
         tenant_slug: str,
-        admin_email: str,
-        admin_password: str,
-        admin_first_name: str,
-        admin_last_name: str,
+        email: str,
+        password: str,
+        first_name: str,
+        last_name: str,
+        password_temporary: bool,
     ) -> str:
-        user = await self._find_user(token, admin_email)
+        user = await self._find_user(token, email)
         user_payload = {
-            "username": admin_email,
-            "email": admin_email,
-            "firstName": admin_first_name,
-            "lastName": admin_last_name,
+            "username": email,
+            "email": email,
+            "firstName": first_name,
+            "lastName": last_name,
             "enabled": True,
             "emailVerified": True,
             "requiredActions": [],
@@ -373,10 +494,10 @@ class KeycloakBootstrapProvisioner:
                 headers=self._headers(token),
                 json=user_payload,
             )
-            self._raise_for_status(response, f"create Keycloak user {admin_email}")
+            self._raise_for_status(response, f"create Keycloak user {email}")
             user_id = _user_id_from_location(response.headers.get("Location"))
             if user_id is None:
-                user = await self._find_user(token, admin_email)
+                user = await self._find_user(token, email)
                 user_id = str(user["id"]) if user is not None and "id" in user else None
         else:
             user_id = str(user["id"])
@@ -386,21 +507,21 @@ class KeycloakBootstrapProvisioner:
                 headers=self._headers(token),
                 json=merged,
             )
-            self._raise_for_status(response, f"update Keycloak user {admin_email}")
+            self._raise_for_status(response, f"update Keycloak user {email}")
 
         if not user_id:
-            raise KeycloakBootstrapError(f"Unable to resolve Keycloak user {admin_email}.")
+            raise KeycloakBootstrapError(f"Unable to resolve Keycloak user {email}.")
 
         reset = await self.http_client.put(
             f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}/reset-password",
             headers=self._headers(token),
             json={
                 "type": "password",
-                "value": admin_password,
-                "temporary": False,
+                "value": password,
+                "temporary": password_temporary,
             },
         )
-        self._raise_for_status(reset, f"set Keycloak password for {admin_email}")
+        self._raise_for_status(reset, f"set Keycloak password for {email}")
         return user_id
 
     async def _find_user(self, token: str, admin_email: str) -> dict[str, Any] | None:
@@ -415,6 +536,17 @@ class KeycloakBootstrapProvisioner:
             raise KeycloakBootstrapError("Keycloak user lookup response was invalid.")
         first = next((item for item in payload if isinstance(item, dict)), None)
         return dict(first) if first is not None else None
+
+    async def _read_user(self, token: str, user_id: str) -> dict[str, Any]:
+        response = await self.http_client.get(
+            f"{self.base_url}/admin/realms/{self.realm}/users/{user_id}",
+            headers=self._headers(token),
+        )
+        self._raise_for_status(response, f"read Keycloak user {user_id}")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise KeycloakBootstrapError(f"Keycloak user {user_id} response was invalid.")
+        return dict(payload)
 
     async def _ensure_realm_role_assignment(
         self,

@@ -51,7 +51,8 @@ verification.
 | Backend Docker cache-friendly layer order | PASS | Central and edge Dockerfiles now copy dependency manifests before source; regression tests assert dependency install happens before `COPY src` / app source. |
 | Edge-agent installed service packaging | PASS | Added `bin/vezor-edge-agent`, `infra/install/systemd/vezor-edge-agent.service`, installer wiring, and tests. |
 | Edge-agent systemd service live run | NOT RUN | The real live UDP proof used the current Jetson container module plus node credential; the newly packaged systemd service artifact was not installed and exercised as a service on the Jetson in this run. |
-| Tenant/user/admin product management | NOT RUN | First-run and Keycloak-backed first admin work; no Vezor UI/API exists yet for additional tenant users. Added spec and plan for this gap. |
+| Tenant/user/admin product management implementation | PASS | Added backend/API/UI for platform superadmin tenant creation and tenant-user management plus tenant-admin scoped user management; full backend suite `1245 passed`, full frontend suite `493 passed`. |
+| Tenant/user/admin installed live smoke | NOT RUN | Implementation is automated-test verified only; installed-stack UI/API smoke against real Keycloak is pending the final rebuild/publish and redeploy. |
 | Helm/k3s deployment posture | NOT RUN | This closure focused on the installed macOS master plus Jetson compose/service path. |
 
 ## Confirmed Bugs Fixed
@@ -99,10 +100,19 @@ attributes `tenant=<tenant slug>` and `tenant_id=<tenant UUID>`, assign the
 realm role `admin`, set/reset the password, and confirm the `argus-frontend`
 and `argus-cli` clients still map `tenant` and `tenant_id` into tokens.
 
-Product gap documented:
+Product implementation documented:
 
 - Spec: `docs/superpowers/specs/2026-06-09-tenant-user-admin-management-design.md`
 - Plan: `docs/superpowers/plans/2026-06-09-tenant-user-admin-management-implementation-plan.md`
+
+Follow-up implementation now adds:
+
+- `GET/POST /api/v1/tenants` for platform superadmins.
+- `GET/POST/PATCH /api/v1/users` and `POST /api/v1/users/{user_id}/reset-password`.
+- Vezor Users UI for tenant creation, tenant selection, user creation, role
+  changes, enable/disable, and temporary password reset.
+- Last-enabled-tenant-admin protection and rejection of `superadmin` assignment
+  to tenant users.
 
 ## Security/Tenant Notes
 
@@ -172,6 +182,15 @@ python3 -m uv run --project backend pytest \
   backend/tests/core/test_edge_dockerfile.py \
   -q
 # 17 passed
+
+python3 -m uv run --project backend pytest backend/tests -q
+# 1245 passed
+
+corepack pnpm --dir frontend test
+# 493 passed
+
+corepack pnpm --dir frontend exec tsc -b
+# passed
 ```
 
 Representative live commands, with secrets redacted:
@@ -191,8 +210,8 @@ ssh ai-user@192.168.1.203 docker exec vezor-supervisor \
 
 1. Install and run the new `vezor-edge-agent.service` on the Jetson after the
    next packaged/rebuilt edge install, then record service-manager evidence.
-2. Implement the tenant user/admin management spec so additional admins can be
-   created from Vezor instead of Keycloak administration.
+2. Rebuild/redeploy the installed stack and live-smoke the new Users UI/API
+   against real Keycloak.
 3. Exercise Helm/k3s deployment posture in a separate smoke.
 4. Rebuild/publish images from the final committed branch rather than relying
    on the live backend hot-patches used to close this session.

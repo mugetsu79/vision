@@ -2,7 +2,9 @@
 
 ## Status
 
-Draft for post-live-smoke product hardening.
+Implemented in `codex/sceneops-pack-registry` for backend/API/UI automated
+coverage. Installed-stack live smoke remains pending until images are rebuilt
+from the committed branch and redeployed.
 
 ## Problem
 
@@ -28,8 +30,10 @@ than a product workflow.
 
 ## Goals
 
-- Tenant admins can create, list, disable, and reset additional users for their
-  tenant from Vezor.
+- Platform superadmins can list tenants, create tenants, see users across every
+  tenant, and create tenant users from Vezor.
+- Tenant admins can create, list, disable, update, and reset additional users
+  for their tenant from Vezor.
 - New users are provisioned in Keycloak and mirrored in the local `users` table.
 - Roles remain tenant-scoped: `viewer`, `operator`, and `admin`.
 - The first-run user and later tenant admins have equivalent tenant-admin rights.
@@ -39,8 +43,9 @@ than a product workflow.
 ## Non-Goals
 
 - Replacing Keycloak as the identity provider.
-- Building full multi-tenant platform administration in this phase.
-- Implementing cross-tenant user assignment.
+- Replacing the Keycloak administration console for platform-realm superadmin
+  account bootstrap.
+- Assigning a single user account to multiple tenants.
 - Implementing self-service sign-up.
 
 ## Product Model
@@ -58,8 +63,13 @@ Each managed user has:
 
 ## API Requirements
 
-- `GET /api/v1/users` returns users for the current tenant.
-- `POST /api/v1/users` creates a Keycloak user and local user row.
+- `GET /api/v1/tenants` returns all tenants for platform superadmins.
+- `POST /api/v1/tenants` creates a tenant for platform superadmins.
+- `GET /api/v1/users` returns users for the current tenant; platform
+  superadmins can list across tenants.
+- `POST /api/v1/users` creates a Keycloak user and local user row. Tenant
+  admins create users in their current tenant; platform superadmins must choose
+  the target tenant.
 - `PATCH /api/v1/users/{user_id}` updates name, enabled state, and role.
 - `POST /api/v1/users/{user_id}/reset-password` sets a temporary password or
   creates a one-time reset action without returning sensitive material.
@@ -70,6 +80,9 @@ Each managed user has:
 ## UI Requirements
 
 - Add an Account or Users view reachable by tenant admins.
+- Platform superadmins see tenant creation, tenant selection, and cross-tenant
+  user rows.
+- Tenant admins see tenant-scoped user creation and rows only.
 - Show email, name, role, enabled state, and last known local metadata.
 - Provide create user, change role, disable user, and reset password actions.
 - Never show bootstrap tokens, bearer tokens, node credentials, or Keycloak

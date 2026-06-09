@@ -10,6 +10,31 @@
 
 ---
 
+## Implementation Status - 2026-06-09
+
+- [x] Added local user profile fields (`first_name`, `last_name`, `enabled`) and
+  migration `0044_user_mgmt_profile_fields`.
+- [x] Added `UserManagementService` with tenant creation, scoped user
+  create/list/update/reset, role assignment rules, and last-enabled-admin
+  protection.
+- [x] Added Keycloak tenant-user provisioning, profile update, tenant-role
+  replacement, and temporary password reset calls.
+- [x] Added `/api/v1/tenants` superadmin routes and `/api/v1/users` admin routes.
+- [x] Added Users UI route with superadmin tenant creation/tenant selection and
+  tenant-admin user management flows.
+- [x] Regenerated `frontend/src/lib/openapi.json` and
+  `frontend/src/lib/api.generated.ts`.
+- [x] Verified with full backend and frontend test suites:
+  `python3 -m uv run --project backend pytest backend/tests -q`
+  (`1245 passed`) and `corepack pnpm --dir frontend test` (`493 passed`).
+
+Pending live/product closure:
+
+- [ ] Rebuild and publish images from the committed branch.
+- [ ] Redeploy installed stack and smoke the Users UI/API against real Keycloak.
+- [ ] Keep platform-realm superadmin bootstrap documented; creating the first
+  platform superadmin remains an operator/bootstrap concern, not tenant UI.
+
 ## File Structure
 
 - Modify: `backend/src/argus/services/identity_bootstrap.py`

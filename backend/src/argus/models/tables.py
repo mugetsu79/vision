@@ -98,8 +98,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     oidc_sub: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     role: Mapped[RoleEnum] = mapped_column(enum_column(RoleEnum, "role_enum"), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
 
 
 class APIKey(UUIDPrimaryKeyMixin, Base):

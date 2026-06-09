@@ -243,6 +243,7 @@ from argus.services.supervisor_operations import (
     worker_assignment_response,
     worker_model_admission_response,
 )
+from argus.services.user_management import UserManagementService
 from argus.streaming.mediamtx import MediaMTXClient
 from argus.streaming.webrtc import (
     ConcurrencyLimitExceeded,
@@ -348,6 +349,7 @@ class AppServices:
     streams: StreamService
     query: QueryService
     telemetry: NatsTelemetryService
+    users: UserManagementService
     billing: BillingService
     link: LinkService
     fleet: FleetService
@@ -4625,9 +4627,10 @@ def build_app_services(
         db.session_factory,
         push_lifecycle_dispatcher=NatsPushLifecycleDispatcher(events),
     )
+    identity_provisioner = keycloak_bootstrap_provisioner_from_settings(settings)
     deployment_nodes = DeploymentNodeService(
         db.session_factory,
-        identity_provisioner=keycloak_bootstrap_provisioner_from_settings(settings),
+        identity_provisioner=identity_provisioner,
         central_supervisor_credential=(
             settings.central_supervisor_credential.get_secret_value()
             if settings.central_supervisor_credential is not None
@@ -4690,6 +4693,10 @@ def build_app_services(
             session_factory=db.session_factory,
             event_client=events,
             settings=settings,
+        ),
+        users=UserManagementService(
+            session_factory=db.session_factory,
+            identity_provisioner=identity_provisioner,
         ),
         billing=BillingService(db.session_factory),
         link=LinkService(db.session_factory, settings=settings),
