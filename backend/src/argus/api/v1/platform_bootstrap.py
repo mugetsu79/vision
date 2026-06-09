@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from argus.api.contracts import (
     PlatformBootstrapComplete,
     PlatformBootstrapCompleteResponse,
+    PlatformBootstrapRotateResponse,
     PlatformBootstrapStatusResponse,
 )
 from argus.api.dependencies import get_app_services
@@ -21,6 +22,21 @@ async def get_platform_bootstrap_status(
     services: ServicesDependency,
 ) -> PlatformBootstrapStatusResponse:
     return await services.platform_bootstrap.status()
+
+
+@router.post(
+    "/rotate-local-token",
+    response_model=PlatformBootstrapRotateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def rotate_local_platform_bootstrap_token(
+    request: Request,
+    services: ServicesDependency,
+) -> PlatformBootstrapRotateResponse:
+    _require_local_platform_bootstrap_request(request)
+    return await services.platform_bootstrap.rotate_local_bootstrap_token(
+        actor_subject="local-platform-bootstrap",
+    )
 
 
 @router.post("/complete", response_model=PlatformBootstrapCompleteResponse)

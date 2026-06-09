@@ -20,6 +20,9 @@ class InstallerHttpClient:
     def rotate_local_bootstrap_token(self) -> dict[str, Any]:
         return self._request("POST", "/api/v1/deployment/bootstrap/rotate-local-token")
 
+    def rotate_local_platform_bootstrap_token(self) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/platform/bootstrap/rotate-local-token")
+
     def claim_pairing_session(
         self,
         *,

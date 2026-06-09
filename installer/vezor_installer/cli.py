@@ -75,6 +75,15 @@ def _build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--json", action="store_true")
     bootstrap.set_defaults(handler=_cmd_bootstrap_master)
 
+    platform_bootstrap = subparsers.add_parser(
+        "bootstrap-platform",
+        help="Rotate local platform-superadmin bootstrap material.",
+    )
+    platform_bootstrap.add_argument("--api-url", required=True)
+    platform_bootstrap.add_argument("--rotate-local-token", action="store_true", required=True)
+    platform_bootstrap.add_argument("--json", action="store_true")
+    platform_bootstrap.set_defaults(handler=_cmd_bootstrap_platform)
+
     support = subparsers.add_parser("support-bundle", help="Print a local support bundle.")
     support.add_argument("--input", type=Path, required=True)
     support.add_argument("--redact", action="store_true")
@@ -142,6 +151,13 @@ def _cmd_bootstrap_master(args: argparse.Namespace) -> int:
         if args.rotate_local_token
         else client.bootstrap_status()
     )
+    _print_payload(payload, as_json=args.json)
+    return 0
+
+
+def _cmd_bootstrap_platform(args: argparse.Namespace) -> int:
+    client = InstallerHttpClient(args.api_url)
+    payload = client.rotate_local_platform_bootstrap_token()
     _print_payload(payload, as_json=args.json)
     return 0
 

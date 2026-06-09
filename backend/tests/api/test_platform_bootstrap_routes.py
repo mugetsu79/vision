@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from argus.api.contracts import (
     PlatformBootstrapComplete,
     PlatformBootstrapCompleteResponse,
+    PlatformBootstrapRotateResponse,
     PlatformBootstrapStatusResponse,
 )
 from argus.api.v1 import router
@@ -19,6 +20,14 @@ from argus.core.config import Settings
 class _FakePlatformBootstrapService:
     def __init__(self) -> None:
         self.complete_payload: PlatformBootstrapComplete | None = None
+
+    async def rotate_local_bootstrap_token(
+        self,
+        *,
+        actor_subject: str | None,
+    ) -> PlatformBootstrapRotateResponse:
+        assert actor_subject == "local-platform-bootstrap"
+        return PlatformBootstrapRotateResponse(bootstrap_token="vzplat_local_once")
 
     async def status(self) -> PlatformBootstrapStatusResponse:
         return PlatformBootstrapStatusResponse(available=True, consumed_at=None)
@@ -59,6 +68,33 @@ async def test_platform_bootstrap_status_is_unauthenticated_and_redacted() -> No
     assert response.status_code == 200
     assert response.json() == {"available": True, "consumed_at": None}
     assert "vzplat_" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_rotate_local_token_is_local_only_and_redacted() -> None:
+    app = _app(_FakePlatformBootstrapService())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post("/api/v1/platform/bootstrap/rotate-local-token")
+
+    assert response.status_code == 201
+    assert response.json() == {"bootstrap_token": "vzplat_local_once"}
+
+
+@pytest.mark.asyncio
+async def test_platform_bootstrap_rotate_local_token_rejects_lan_client() -> None:
+    app = _app(_FakePlatformBootstrapService())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, client=("192.168.1.40", 54123)),
+        base_url="http://127.0.0.1:8000",
+    ) as client:
+        response = await client.post("/api/v1/platform/bootstrap/rotate-local-token")
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

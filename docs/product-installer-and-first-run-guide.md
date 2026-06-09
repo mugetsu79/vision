@@ -34,6 +34,7 @@ From the release checkout on the master host:
 ```bash
 sudo ./bin/vezor install master --public-url http://MASTER_HOST_OR_IP:3000
 ./bin/vezor ctl bootstrap-master --api-url http://MASTER_HOST_OR_IP:8000 --rotate-local-token --json
+./bin/vezor ctl bootstrap-platform --api-url http://MASTER_HOST_OR_IP:8000 --rotate-local-token --json
 ./bin/vezor status
 ./bin/vezor validate
 ```
@@ -613,6 +614,27 @@ try to mint bootstrap tokens from another machine.
 `/opt/vezor/current/bin/vezorctl` remains available as the lower-level utility
 for automation and break-glass support; new operator docs prefer
 `/opt/vezor/current/bin/vezor ctl ...`.
+
+## Bootstrap First Platform Superadmin
+
+After first-run completes, generate a local one-time platform bootstrap token
+on the master host:
+
+```bash
+/opt/vezor/current/bin/vezor ctl bootstrap-platform \
+  --api-url http://127.0.0.1:8000 \
+  --rotate-local-token \
+  --json
+```
+
+Open `http://MASTER_HOST_OR_IP:3000/platform-bootstrap`, use the returned
+`vzplat_...` token, and create the first platform superadmin account. Platform
+superadmins sign in through the platform sign-in flow and can create tenants
+and tenant users from the Users area. Tenant admins remain scoped to their
+tenant.
+
+Rotating a platform bootstrap token revokes earlier unconsumed platform
+bootstrap tokens. Mint platform bootstrap tokens only from the master host.
 
 ## Register Models For Installed Product Testing
 

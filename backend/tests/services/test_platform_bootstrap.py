@@ -103,6 +103,32 @@ def _service(
 
 
 @pytest.mark.asyncio
+async def test_rotate_local_bootstrap_token_revokes_previous_pending_tokens() -> None:
+    session_factory = _MemorySessionFactory()
+    service = _service(session_factory)
+
+    first = await service.rotate_local_bootstrap_token(actor_subject="local-bootstrap")
+    second = await service.rotate_local_bootstrap_token(actor_subject="local-bootstrap")
+    status = await service.status()
+
+    sessions = [
+        row
+        for row in session_factory.session.rows
+        if isinstance(row, PlatformBootstrapSession)
+    ]
+    serialized_rows = str([row.__dict__ for row in sessions])
+    assert first.bootstrap_token.startswith("vzplat_")
+    assert second.bootstrap_token.startswith("vzplat_")
+    assert first.bootstrap_token != second.bootstrap_token
+    assert sessions[0].consumed_at == NOW
+    assert sessions[0].consumed_by_subject == "local-bootstrap"
+    assert sessions[1].consumed_at is None
+    assert status.available is True
+    assert first.bootstrap_token not in serialized_rows
+    assert second.bootstrap_token not in serialized_rows
+
+
+@pytest.mark.asyncio
 async def test_status_reports_available_before_consumption_and_stores_only_hash() -> None:
     session_factory = _MemorySessionFactory()
     service = _service(session_factory)

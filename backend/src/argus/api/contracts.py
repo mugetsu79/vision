@@ -1973,6 +1973,10 @@ class PlatformBootstrapStatusResponse(BaseModel):
     consumed_at: datetime | None = None
 
 
+class PlatformBootstrapRotateResponse(BaseModel):
+    bootstrap_token: str
+
+
 class PlatformBootstrapComplete(BaseModel):
     bootstrap_token: str = Field(min_length=8, max_length=256)
     email: str = Field(min_length=3, max_length=320)

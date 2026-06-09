@@ -1543,6 +1543,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-edge-throughput": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Edge Origin Throughput Sample */
+        post: operations["request_edge_origin_throughput_sample_api_v1_link_sites__site_id__probe_targets__target_id__measure_edge_throughput_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-throughput": {
         parameters: {
             query?: never;
@@ -1638,6 +1655,23 @@ export interface paths {
         };
         /** Get Link Status */
         get: operations["get_link_status_api_v1_link_sites__site_id__status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/throughput/payload.bin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Link Throughput Payload */
+        get: operations["get_link_throughput_payload_api_v1_link_throughput_payload_bin_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2600,6 +2634,57 @@ export interface paths {
         };
         /** Get Pack */
         get: operations["get_pack_api_v1_packs__pack_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/bootstrap/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Platform Bootstrap */
+        post: operations["complete_platform_bootstrap_api_v1_platform_bootstrap_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/bootstrap/rotate-local-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Local Platform Bootstrap Token */
+        post: operations["rotate_local_platform_bootstrap_token_api_v1_platform_bootstrap_rotate_local_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/bootstrap/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Bootstrap Status */
+        get: operations["get_platform_bootstrap_status_api_v1_platform_bootstrap_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5136,6 +5221,31 @@ export interface components {
             packet_count: number;
             /** Packets Received */
             packets_received: number;
+            /**
+             * Throughput Mbps
+             * @default 0
+             */
+            throughput_mbps: number;
+        };
+        /** LinkEdgeThroughputRunResponse */
+        LinkEdgeThroughputRunResponse: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "queued";
+            /** Target Id */
+            target_id: string;
         };
         /** LinkMasterControlTargetCreate */
         LinkMasterControlTargetCreate: {
@@ -5211,6 +5321,14 @@ export interface components {
              * Format: uuid
              */
             target_site_id: string;
+            /** Throughput Payload Sha256 */
+            throughput_payload_sha256?: string | null;
+            /** Throughput Payload Size Bytes */
+            throughput_payload_size_bytes?: number | null;
+            /** Throughput Test Max Bytes */
+            throughput_test_max_bytes?: number | null;
+            /** Throughput Test Url */
+            throughput_test_url?: string | null;
         };
         /** LinkPolicyUpdate */
         LinkPolicyUpdate: {
@@ -5350,6 +5468,10 @@ export interface components {
             };
             /** Connection Count */
             connection_count: number;
+            /** Fallback Active Path */
+            fallback_active_path?: {
+                [key: string]: unknown;
+            } | null;
             /** Last Sync At */
             last_sync_at?: string | null;
             /** Latest Probe */
@@ -6518,6 +6640,45 @@ export interface components {
             panels?: string[];
             /** Status */
             status?: string | null;
+        };
+        /** PlatformBootstrapComplete */
+        PlatformBootstrapComplete: {
+            /** Bootstrap Token */
+            bootstrap_token: string;
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Password */
+            password: string;
+        };
+        /** PlatformBootstrapCompleteResponse */
+        PlatformBootstrapCompleteResponse: {
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /** Email */
+            email: string;
+            /** Realm */
+            realm: string;
+            /** Role */
+            role: string;
+        };
+        /** PlatformBootstrapRotateResponse */
+        PlatformBootstrapRotateResponse: {
+            /** Bootstrap Token */
+            bootstrap_token: string;
+        };
+        /** PlatformBootstrapStatusResponse */
+        PlatformBootstrapStatusResponse: {
+            /** Available */
+            available: boolean;
+            /** Consumed At */
+            consumed_at?: string | null;
         };
         /** PolicyDraftCreate */
         PolicyDraftCreate: {
@@ -12561,6 +12722,40 @@ export interface operations {
             };
         };
     };
+    request_edge_origin_throughput_sample_api_v1_link_sites__site_id__probe_targets__target_id__measure_edge_throughput_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path: {
+                site_id: string;
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkEdgeThroughputRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     measure_link_probe_target_throughput_api_v1_link_sites__site_id__probe_targets__target_id__measure_throughput_post: {
         parameters: {
             query?: never;
@@ -12796,6 +12991,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_throughput_payload_api_v1_link_throughput_payload_bin_get: {
+        parameters: {
+            query?: {
+                supervisor_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15027,6 +15255,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_platform_bootstrap_api_v1_platform_bootstrap_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformBootstrapComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformBootstrapCompleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_local_platform_bootstrap_token_api_v1_platform_bootstrap_rotate_local_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformBootstrapRotateResponse"];
+                };
+            };
+        };
+    };
+    get_platform_bootstrap_status_api_v1_platform_bootstrap_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformBootstrapStatusResponse"];
                 };
             };
         };

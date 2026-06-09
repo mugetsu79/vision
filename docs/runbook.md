@@ -56,6 +56,7 @@ For new installs, prefer the repository-level front door:
 ```bash
 sudo ./bin/vezor install master --public-url http://MASTER_HOST_OR_IP:3000
 ./bin/vezor ctl bootstrap-master --api-url http://MASTER_HOST_OR_IP:8000 --rotate-local-token --json
+./bin/vezor ctl bootstrap-platform --api-url http://MASTER_HOST_OR_IP:8000 --rotate-local-token --json
 ./bin/vezor status --json
 ./bin/vezor validate
 ```
@@ -209,6 +210,8 @@ lower-level local host utility. Prefer:
   owner-only permissions
 - `vezor ctl bootstrap-master --api-url ... --rotate-local-token --json` to
   rotate the short-lived local master bootstrap token
+- `vezor ctl bootstrap-platform --api-url ... --rotate-local-token --json` to
+  rotate the local one-time platform-superadmin bootstrap token
 - `vezor ctl support-bundle --redact --json` to print local diagnostics with
   token-like values redacted
 - `vezor ctl doctor --json` to report local installer prerequisites
@@ -221,6 +224,8 @@ lower-level local host utility. Prefer:
   owner-only permissions
 - `vezorctl bootstrap-master --api-url ... --rotate-local-token --json` rotates
   the short-lived local master bootstrap token
+- `vezorctl bootstrap-platform --api-url ... --rotate-local-token --json`
+  rotates the local one-time platform-superadmin bootstrap token
 - `vezorctl support-bundle --redact --json` prints local diagnostics with
   token-like values redacted
 - `vezorctl doctor --json` reports local installer prerequisites

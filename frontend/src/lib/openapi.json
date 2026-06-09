@@ -6018,6 +6018,12 @@
             "minimum": 0.0,
             "title": "Packets Received",
             "type": "integer"
+          },
+          "throughput_mbps": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Throughput Mbps",
+            "type": "number"
           }
         },
         "required": [
@@ -6027,6 +6033,37 @@
           "latency_ms"
         ],
         "title": "LinkEdgeProbeSampleCreate",
+        "type": "object"
+      },
+      "LinkEdgeThroughputRunResponse": {
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "site_id": {
+            "format": "uuid",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "queued",
+            "title": "Status",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "site_id",
+          "target_id",
+          "request_id"
+        ],
+        "title": "LinkEdgeThroughputRunResponse",
         "type": "object"
       },
       "LinkMasterControlTargetCreate": {
@@ -6174,6 +6211,50 @@
             "format": "uuid",
             "title": "Target Site Id",
             "type": "string"
+          },
+          "throughput_payload_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Throughput Payload Sha256"
+          },
+          "throughput_payload_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Throughput Payload Size Bytes"
+          },
+          "throughput_test_max_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Throughput Test Max Bytes"
+          },
+          "throughput_test_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Throughput Test Url"
           }
         },
         "required": [
@@ -6606,6 +6687,18 @@
           "connection_count": {
             "title": "Connection Count",
             "type": "integer"
+          },
+          "fallback_active_path": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Active Path"
           },
           "last_sync_at": {
             "anyOf": [
@@ -9868,6 +9961,116 @@
           }
         },
         "title": "PackUiExtensionsResponse",
+        "type": "object"
+      },
+      "PlatformBootstrapComplete": {
+        "properties": {
+          "bootstrap_token": {
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Bootstrap Token",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bootstrap_token",
+          "email",
+          "first_name",
+          "last_name",
+          "password"
+        ],
+        "title": "PlatformBootstrapComplete",
+        "type": "object"
+      },
+      "PlatformBootstrapCompleteResponse": {
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "realm": {
+            "title": "Realm",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "realm",
+          "role",
+          "completed_at"
+        ],
+        "title": "PlatformBootstrapCompleteResponse",
+        "type": "object"
+      },
+      "PlatformBootstrapRotateResponse": {
+        "properties": {
+          "bootstrap_token": {
+            "title": "Bootstrap Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bootstrap_token"
+        ],
+        "title": "PlatformBootstrapRotateResponse",
+        "type": "object"
+      },
+      "PlatformBootstrapStatusResponse": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "consumed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed At"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "PlatformBootstrapStatusResponse",
         "type": "object"
       },
       "PolicyDraftCreate": {
@@ -23528,6 +23731,74 @@
         ]
       }
     },
+    "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-edge-throughput": {
+      "post": {
+        "operationId": "request_edge_origin_throughput_sample_api_v1_link_sites__site_id__probe_targets__target_id__measure_edge_throughput_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkEdgeThroughputRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Edge Origin Throughput Sample",
+        "tags": [
+          "link"
+        ]
+      }
+    },
     "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-throughput": {
       "post": {
         "operationId": "measure_link_probe_target_throughput_api_v1_link_sites__site_id__probe_targets__target_id__measure_throughput_post",
@@ -23983,6 +24254,69 @@
           }
         },
         "summary": "Get Link Status",
+        "tags": [
+          "link"
+        ]
+      }
+    },
+    "/api/v1/link/throughput/payload.bin": {
+      "get": {
+        "operationId": "get_link_throughput_payload_api_v1_link_throughput_payload_bin_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "supervisor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supervisor Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Link Throughput Payload",
         "tags": [
           "link"
         ]
@@ -27905,6 +28239,89 @@
         "summary": "Get Pack",
         "tags": [
           "packs"
+        ]
+      }
+    },
+    "/api/v1/platform/bootstrap/complete": {
+      "post": {
+        "operationId": "complete_platform_bootstrap_api_v1_platform_bootstrap_complete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformBootstrapComplete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformBootstrapCompleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Platform Bootstrap",
+        "tags": [
+          "platform-bootstrap"
+        ]
+      }
+    },
+    "/api/v1/platform/bootstrap/rotate-local-token": {
+      "post": {
+        "operationId": "rotate_local_platform_bootstrap_token_api_v1_platform_bootstrap_rotate_local_token_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformBootstrapRotateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rotate Local Platform Bootstrap Token",
+        "tags": [
+          "platform-bootstrap"
+        ]
+      }
+    },
+    "/api/v1/platform/bootstrap/status": {
+      "get": {
+        "operationId": "get_platform_bootstrap_status_api_v1_platform_bootstrap_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformBootstrapStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Platform Bootstrap Status",
+        "tags": [
+          "platform-bootstrap"
         ]
       }
     },

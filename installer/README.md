@@ -20,6 +20,7 @@ Use the repository-level `bin/vezor` wrapper for normal installs:
 ```bash
 sudo ./bin/vezor install master --public-url http://MASTER_IP:3000
 ./bin/vezor ctl bootstrap-master --api-url http://MASTER_IP:8000 --rotate-local-token --json
+./bin/vezor ctl bootstrap-platform --api-url http://MASTER_IP:8000 --rotate-local-token --json
 ./bin/vezor status
 ./bin/vezor validate
 ```

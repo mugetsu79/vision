@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 from collections.abc import Callable
 from datetime import datetime
 from typing import Protocol
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from argus.api.contracts import (
     PlatformBootstrapComplete,
     PlatformBootstrapCompleteResponse,
+    PlatformBootstrapRotateResponse,
     PlatformBootstrapStatusResponse,
 )
 from argus.compat import UTC
@@ -71,15 +73,54 @@ class PlatformBootstrapService:
             await session.refresh(row)
             return row
 
+    async def rotate_local_bootstrap_token(
+        self,
+        *,
+        actor_subject: str | None,
+    ) -> PlatformBootstrapRotateResponse:
+        raw_token = _new_platform_bootstrap_token()
+        token_hash = self.token_hasher(raw_token)
+        now = self.now_factory()
+        async with self.session_factory() as session:
+            rows = (
+                await session.execute(select(PlatformBootstrapSession))
+            ).scalars().all()
+            for row in rows:
+                if not isinstance(row, PlatformBootstrapSession):
+                    continue
+                if row.consumed_at is None:
+                    row.consumed_at = now
+                    row.consumed_by_subject = actor_subject
+                    _set_updated_at(row, now)
+            row = PlatformBootstrapSession(
+                token_hash=token_hash,
+                consumed_at=None,
+                consumed_by_subject=None,
+            )
+            _set_timestamps(row, now)
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return PlatformBootstrapRotateResponse(bootstrap_token=raw_token)
+
     async def status(self) -> PlatformBootstrapStatusResponse:
         async with self.session_factory() as session:
-            row = (
+            rows = (
                 await session.execute(
                     select(PlatformBootstrapSession).order_by(
                         PlatformBootstrapSession.created_at.desc()
                     )
                 )
-            ).scalars().first()
+            ).scalars().all()
+        row = next(
+            (
+                session_row
+                for session_row in rows
+                if isinstance(session_row, PlatformBootstrapSession)
+                and session_row.consumed_at is None
+            ),
+            rows[0] if rows else None,
+        )
         return PlatformBootstrapStatusResponse(
             available=isinstance(row, PlatformBootstrapSession) and row.consumed_at is None,
             consumed_at=row.consumed_at if isinstance(row, PlatformBootstrapSession) else None,
@@ -132,6 +173,10 @@ class PlatformBootstrapService:
 
 def _hash_secret(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _new_platform_bootstrap_token() -> str:
+    return f"vzplat_{secrets.token_urlsafe(24)}"
 
 
 def _set_timestamps(row: object, now: datetime) -> None:

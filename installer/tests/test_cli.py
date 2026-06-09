@@ -333,6 +333,39 @@ def test_pair_updates_edge_config_with_claimed_edge_node_id(
     assert stored_config["edge_node_id"] == edge_node_id
 
 
+def test_bootstrap_platform_rotates_local_token_without_redaction(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeClient:
+        def __init__(self, api_url: str) -> None:
+            self.api_url = api_url
+
+        def rotate_local_platform_bootstrap_token(self) -> dict[str, object]:
+            calls.append(self.api_url)
+            return {"bootstrap_token": "vzplat_local_once"}
+
+    monkeypatch.setattr(cli, "InstallerHttpClient", FakeClient)
+
+    exit_code = cli.main(
+        [
+            "bootstrap-platform",
+            "--api-url",
+            "http://127.0.0.1:8000",
+            "--rotate-local-token",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert calls == ["http://127.0.0.1:8000"]
+    assert json.loads(captured.out) == {"bootstrap_token": "vzplat_local_once"}
+    assert captured.err == ""
+
+
 def test_support_bundle_redacts_token_like_values(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
