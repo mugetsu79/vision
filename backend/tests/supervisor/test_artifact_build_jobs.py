@@ -27,13 +27,11 @@ async def test_tensorrt_artifact_build_invokes_engine_builder_with_bounded_optio
     output_dir = tmp_path / "artifacts"
     engine_path = output_dir / "model.engine"
     builder = _FakeTensorRTEngineBuilder(engine_path)
-    camera_id = uuid4()
     job = _artifact_job(
         payload={
             "job_type": "artifact_build",
             "schema_version": 1,
             "model_id": str(uuid4()),
-            "camera_id": str(camera_id),
             "source_model_path": str(source),
             "source_model_sha256": hashlib.sha256(b"source model").hexdigest(),
             "build_format": "tensorrt_engine",
@@ -66,7 +64,8 @@ async def test_tensorrt_artifact_build_invokes_engine_builder_with_bounded_optio
     assert completed.status is ModelLifecycleJobStatus.SUCCEEDED
     artifact = completed.payload["artifact"]
     assert artifact["kind"] == "tensorrt_engine"
-    assert artifact["camera_id"] == str(camera_id)
+    assert artifact["scope"] == "model"
+    assert "camera_id" not in artifact
     assert artifact["runtime_versions"] == {
         "tensorrt": "10.8.0",
         "cuda": "12.8",

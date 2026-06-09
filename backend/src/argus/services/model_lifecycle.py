@@ -43,6 +43,7 @@ from argus.models.enums import (
     ModelLifecycleJobStatus,
     ModelTask,
     RuntimeArtifactBuildFormat,
+    RuntimeArtifactScope,
     RuntimeArtifactValidationStatus,
 )
 from argus.models.tables import (
@@ -1931,7 +1932,7 @@ def _validate_runtime_artifact_matches_build_job(
     expected_input_shape = _mapping_or_none(job.payload.get("input_shape")) or {}
     if dict(artifact.input_shape) != dict(expected_input_shape):
         raise ValueError("Runtime artifact input_shape must match build job input_shape.")
-    if artifact.camera_id != job.camera_id:
+    if artifact.scope is RuntimeArtifactScope.SCENE and artifact.camera_id != job.camera_id:
         raise ValueError("Runtime artifact camera_id must match build job camera_id.")
     expected_source_hash = _optional_string(job.payload.get("source_model_sha256"))
     if expected_source_hash is not None and artifact.source_model_sha256 != expected_source_hash:

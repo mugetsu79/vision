@@ -170,6 +170,44 @@ async def test_complete_runtime_artifact_build_job_creates_artifact() -> None:
 
 
 @pytest.mark.asyncio
+async def test_camera_context_fixed_vocab_artifact_build_accepts_model_scoped_artifact() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    node.host_profile = "linux-aarch64-nvidia-jetson"
+    camera = _camera(model_id=model.id, runtime_vocabulary=[])
+    session_factory = _MemorySessionFactory([tenant, model, node, camera])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+    job = await service.create_runtime_artifact_build_job(
+        tenant_id=tenant.id,
+        model_id=model.id,
+        payload=_build_job_payload(node.id, camera_id=camera.id),
+        actor_subject="admin@example.test",
+    )
+
+    completed = await service.complete_runtime_artifact_build_job(
+        tenant_id=tenant.id,
+        authenticated_node_id=node.id,
+        job_id=job.id,
+        result=SupervisorModelJobComplete(
+            status=ModelLifecycleJobStatus.SUCCEEDED,
+            payload={"artifact": _artifact_payload(model)},
+        ),
+    )
+
+    artifact_rows = _rows(session_factory, ModelRuntimeArtifact)
+    assert completed.status is ModelLifecycleJobStatus.SUCCEEDED
+    assert completed.error is None
+    assert len(artifact_rows) == 1
+    assert artifact_rows[0].scope is RuntimeArtifactScope.MODEL
+    assert artifact_rows[0].camera_id is None
+
+
+@pytest.mark.asyncio
 async def test_artifact_completion_does_not_mark_valid_when_inventory_path_is_stale() -> None:
     tenant, model, node = _tenant_model_and_node()
     node.host_profile = "linux-aarch64-nvidia-jetson"
