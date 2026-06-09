@@ -138,6 +138,9 @@ def test_edge_install_script_resolves_manifest_jetson_ort_wheel_before_build() -
     assert "resolve_jetson_ort_wheel" in script
     assert "resolve_jetson_ort_from_manifest" in script
     assert "JETSON_PREFLIGHT_JSON" in script
+    assert "run_installer_python" in script
+    assert 'run_installer_python -m vezor_installer.jetson_ort' in script
+    assert "python3 -m vezor_installer.jetson_ort" not in script
     assert "--build-arg \"JETSON_ORT_WHEEL_SHA256=$JETSON_ORT_WHEEL_SHA256\"" in script
     assert "Resolved Jetson GPU ONNX Runtime wheel from manifest." in script
     assert "Pass --jetson-ort-wheel-url" not in script

@@ -142,6 +142,23 @@ require_command() {
   fi
 }
 
+run_installer_python() {
+  if [[ -x "$RELEASE_DIR/installer/.venv/bin/python" ]]; then
+    "$RELEASE_DIR/installer/.venv/bin/python" "$@"
+    return 0
+  fi
+  if command -v uv >/dev/null 2>&1; then
+    uv run --project "$RELEASE_DIR/installer" python "$@"
+    return 0
+  fi
+  if command -v python3.12 >/dev/null 2>&1 && python3.12 -m uv --version >/dev/null 2>&1; then
+    python3.12 -m uv run --project "$RELEASE_DIR/installer" python "$@"
+    return 0
+  fi
+  echo "Installer Python 3.12 environment is required. Run uv sync --project installer --python 3.12." >&2
+  exit 127
+}
+
 manifest_image_ref() {
   local image_key="$1"
   local fallback="$2"
@@ -300,7 +317,7 @@ resolve_jetson_ort_from_manifest() {
   fi
 
   local manifest_path
-  manifest_path="$(python3 - "$MANIFEST" <<'PY'
+  manifest_path="$(run_installer_python - "$MANIFEST" <<'PY'
 import sys
 from pathlib import Path
 
@@ -310,7 +327,7 @@ PY
   local exports
   exports="$(
     cd "$RELEASE_DIR/installer"
-    python3 -m vezor_installer.jetson_ort "$manifest_path" "$JETSON_PREFLIGHT_JSON"
+    run_installer_python -m vezor_installer.jetson_ort "$manifest_path" "$JETSON_PREFLIGHT_JSON"
   )"
   eval "$exports"
   if [[ -z "$JETSON_ORT_WHEEL_URL" || -z "$JETSON_ORT_WHEEL_SHA256" ]]; then
